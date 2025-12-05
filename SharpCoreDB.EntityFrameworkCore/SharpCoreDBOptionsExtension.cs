@@ -57,7 +57,11 @@ public class SharpCoreDBOptionsExtension : IDbContextOptionsExtension
     /// </summary>
     public void ApplyServices(IServiceCollection services)
     {
+        // Register EF Core services for SharpCoreDB
         services.AddEntityFrameworkSharpCoreDB();
+        
+        // Register SharpCoreDB's own services
+        services.AddSharpCoreDB();
     }
 
     /// <summary>

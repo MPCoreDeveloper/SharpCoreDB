@@ -1,8 +1,10 @@
-# PR: Complete EF Core Provider for CoralTime
+# PR: EF Core Provider Infrastructure for CoralTime
 
 ## Summary
 
-This PR implements a **fully functional Entity Framework Core 10 provider** for SharpCoreDB, enabling LINQ queries, migrations, and type-safe data access for time-tracking applications like CoralTime.
+This PR implements the **core infrastructure and SQL generation components** for an Entity Framework Core 10 provider for SharpCoreDB, including type mappings, migrations SQL generation, and LINQ query translation for time-tracking applications like CoralTime.
+
+**Current Status:** Infrastructure complete, end-to-end integration requires additional work for full functionality.
 
 ## Changes Made
 
