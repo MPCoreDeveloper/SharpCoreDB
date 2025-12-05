@@ -33,4 +33,10 @@ public interface IDatabase
     /// <param name="password">The password.</param>
     /// <returns>True if login successful.</returns>
     bool Login(string username, string password);
+
+    /// <summary>
+    /// Gets query cache statistics.
+    /// </summary>
+    /// <returns>A tuple containing cache hits, misses, hit rate, and total cached queries.</returns>
+    (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics();
 }
