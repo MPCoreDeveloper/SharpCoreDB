@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Core.File;
 
 namespace SharpCoreDB.Services;
 
@@ -14,6 +15,7 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     private readonly ICryptoService _crypto = crypto;
     private readonly byte[] _key = key;
     private readonly bool _noEncryption = config?.NoEncryptMode ?? false;
+    private readonly DatabaseConfig _config = config ?? DatabaseConfig.Default;
 
     /// <inheritdoc />
     public void Write(string path, string data)
@@ -57,11 +59,14 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     public string? ReadMemoryMapped(string path)
     {
         if (!File.Exists(path)) return null;
-        using var mmf = MemoryMappedFile.CreateFromFile(path, FileMode.Open);
-        using var accessor = mmf.CreateViewAccessor();
-        var length = accessor.Capacity;
-        var buffer = new byte[length];
-        accessor.ReadArray(0, buffer, 0, (int)length);
+        
+        // Use the new MemoryMappedFileHandler for improved performance
+        using var handler = new MemoryMappedFileHandler(path, true);
+        var buffer = handler.ReadAllBytes();
+        
+        if (buffer == null)
+            return null;
+
         if (_noEncryption)
         {
             return Encoding.UTF8.GetString(buffer);
@@ -111,7 +116,18 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     public byte[]? ReadBytes(string path)
     {
         if (!File.Exists(path)) return null;
-        var fileData = File.ReadAllBytes(path);
+
+        // Determine if we should use memory-mapped files based on config and file size
+        byte[] fileData;
+        if (_config.UseMemoryMapping && ShouldUseMemoryMapping(path))
+        {
+            using var handler = new MemoryMappedFileHandler(path, true);
+            fileData = handler.ReadAllBytes() ?? [];
+        }
+        else
+        {
+            fileData = File.ReadAllBytes(path);
+        }
         
         byte[] decrypted;
         if (_noEncryption)
@@ -138,6 +154,27 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         else
         {
             return data;
+        }
+    }
+
+    /// <summary>
+    /// Determines if memory mapping should be used for the given file based on configuration and file size.
+    /// </summary>
+    /// <param name="path">The file path to check.</param>
+    /// <returns>True if memory mapping should be used, false otherwise.</returns>
+    private bool ShouldUseMemoryMapping(string path)
+    {
+        if (!_config.UseMemoryMapping)
+            return false;
+
+        try
+        {
+            var fileInfo = new FileInfo(path);
+            return fileInfo.Length >= _config.MemoryMappingThreshold;
+        }
+        catch
+        {
+            return false;
         }
     }
 }
