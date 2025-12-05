@@ -110,7 +110,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state != ConnectionState.Open)
             throw new InvalidOperationException("Connection must be open to begin a transaction.");
 
-        return new SharpCoreDBTransaction(this, isolationLevel);
+        return new SharpCoreDBDbTransaction(this, isolationLevel);
     }
 
     /// <inheritdoc />

@@ -1,54 +1,80 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
 using System.Data.Common;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
-/// Represents a transaction for SharpCoreDB.
+/// Represents a transaction for SharpCoreDB that wraps EF Core transaction semantics.
 /// </summary>
-public class SharpCoreDBTransaction : DbTransaction
+public class SharpCoreDBTransaction : IDbContextTransaction
 {
-    private readonly SharpCoreDBConnection _connection;
-    private readonly IsolationLevel _isolationLevel;
+    private readonly IRelationalConnection _connection;
+    private readonly DbTransaction _dbTransaction;
+    private readonly IDiagnosticsLogger<DbLoggerCategory.Database.Connection> _logger;
     private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the SharpCoreDBTransaction class.
     /// </summary>
-    public SharpCoreDBTransaction(SharpCoreDBConnection connection, IsolationLevel isolationLevel)
+    public SharpCoreDBTransaction(
+        IRelationalConnection connection,
+        DbTransaction dbTransaction,
+        IDiagnosticsLogger<DbLoggerCategory.Database.Connection> logger,
+        Guid? transactionId = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        _isolationLevel = isolationLevel;
+        _dbTransaction = dbTransaction ?? throw new ArgumentNullException(nameof(dbTransaction));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        TransactionId = transactionId ?? Guid.NewGuid();
     }
 
     /// <inheritdoc />
-    protected override DbConnection? DbConnection => _connection;
+    public Guid TransactionId { get; }
 
     /// <inheritdoc />
-    public override IsolationLevel IsolationLevel => _isolationLevel;
-
-    /// <inheritdoc />
-    public override void Commit()
+    public void Commit()
     {
-        // SharpCoreDB uses WAL for transactions
-        // This is a simplified implementation
+        _dbTransaction.Commit();
     }
 
     /// <inheritdoc />
-    public override void Rollback()
+    public Task CommitAsync(CancellationToken cancellationToken = default)
     {
-        // SharpCoreDB WAL rollback
-        // Simplified implementation
+        return _dbTransaction.CommitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
-    protected override void Dispose(bool disposing)
+    public void Rollback()
     {
-        if (!_disposed && disposing)
+        _dbTransaction.Rollback();
+    }
+
+    /// <inheritdoc />
+    public Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+        return _dbTransaction.RollbackAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (!_disposed)
         {
+            _dbTransaction.Dispose();
             _disposed = true;
         }
+    }
 
-        base.Dispose(disposing);
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (!_disposed)
+        {
+            await _dbTransaction.DisposeAsync().ConfigureAwait(false);
+            _disposed = true;
+        }
     }
 }

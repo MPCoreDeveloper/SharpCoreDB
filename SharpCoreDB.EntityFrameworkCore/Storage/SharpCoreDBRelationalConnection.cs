@@ -1,117 +1,310 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 using System.Data.Common;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Relational connection implementation for SharpCoreDB.
-/// INCOMPLETE IMPLEMENTATION - Placeholder stub only.
+/// Manages database connections, transactions, and command execution.
 /// </summary>
 public class SharpCoreDBRelationalConnection : IRelationalConnection
 {
-    /// <inheritdoc />
-    public string? ConnectionString => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+    private DbConnection? _connection;
+    private IDbContextTransaction? _currentTransaction;
+    private readonly SemaphoreSlim _semaphore = new(1);
+    private int? _commandTimeout;
+    private readonly IDbContextOptions _options;
+    private readonly IDiagnosticsLogger<DbLoggerCategory.Database.Connection> _logger;
+    private readonly IServiceProvider _serviceProvider;
+
+    /// <summary>
+    /// Initializes a new instance of the SharpCoreDBRelationalConnection class.
+    /// </summary>
+    public SharpCoreDBRelationalConnection(
+        IDbContextOptions options,
+        IDiagnosticsLogger<DbLoggerCategory.Database.Connection> logger,
+        IServiceProvider serviceProvider)
+    {
+        _options = options;
+        _logger = logger;
+        _serviceProvider = serviceProvider;
+        ConnectionId = Guid.NewGuid();
+    }
 
     /// <inheritdoc />
-    public DbConnection? DbConnection => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+    public string? ConnectionString
+    {
+        get => _connection?.ConnectionString;
+        set
+        {
+            if (_connection == null)
+            {
+                _connection = new SharpCoreDBConnection(_serviceProvider, value ?? string.Empty);
+            }
+            else
+            {
+                _connection.ConnectionString = value ?? string.Empty;
+            }
+        }
+    }
 
     /// <inheritdoc />
-    public Guid ConnectionId => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+    public DbConnection? DbConnection
+    {
+        get => _connection;
+        set => _connection = value;
+    }
+
+    /// <inheritdoc />
+    public Guid ConnectionId { get; }
 
     /// <inheritdoc />
     public int? CommandTimeout
     {
-        get => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
-        set => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        get => _commandTimeout;
+        set => _commandTimeout = value;
     }
 
     /// <inheritdoc />
-    public IDbContextTransaction? CurrentTransaction => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+    public IDbContextTransaction? CurrentTransaction => _currentTransaction;
 
     /// <inheritdoc />
-    public SemaphoreSlim Semaphore => throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+    public SemaphoreSlim Semaphore => _semaphore;
+
+    /// <inheritdoc />
+    public DbContext? Context { get; set; }
+
+    /// <inheritdoc />
+    public void SetDbConnection(DbConnection? connection, bool contextOwnsConnection)
+    {
+        _connection = connection;
+    }
+
+    /// <inheritdoc />
+    public IRelationalCommand RentCommand()
+    {
+        // Return a command from the pool
+        throw new NotSupportedException("Command pooling not yet implemented");
+    }
+
+    /// <inheritdoc />
+    public void ReturnCommand(IRelationalCommand command)
+    {
+        // Return command to pool
+        // No-op for now
+    }
 
     /// <inheritdoc />
     public IDbContextTransaction BeginTransaction()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return BeginTransaction(IsolationLevel.Unspecified);
+    }
+
+    /// <inheritdoc />
+    public IDbContextTransaction BeginTransaction(IsolationLevel isolationLevel)
+    {
+        if (_connection == null)
+        {
+            throw new InvalidOperationException("Connection not initialized");
+        }
+
+        Open();
+        var dbTransaction = _connection.BeginTransaction(isolationLevel);
+        _currentTransaction = new SharpCoreDBTransaction(this, dbTransaction, _logger);
+        return _currentTransaction;
     }
 
     /// <inheritdoc />
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return BeginTransactionAsync(IsolationLevel.Unspecified, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default)
+    {
+        if (_connection == null)
+        {
+            throw new InvalidOperationException("Connection not initialized");
+        }
+
+        await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var dbTransaction = await _connection.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
+        _currentTransaction = new SharpCoreDBTransaction(this, dbTransaction, _logger);
+        return _currentTransaction;
     }
 
     /// <inheritdoc />
     public void CommitTransaction()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        _currentTransaction?.Commit();
+        _currentTransaction = null;
     }
 
     /// <inheritdoc />
-    public Task CommitTransactionAsync(CancellationToken cancellationToken = default)
+    public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_currentTransaction != null)
+        {
+            await _currentTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _currentTransaction = null;
+        }
     }
 
     /// <inheritdoc />
     public void RollbackTransaction()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        _currentTransaction?.Rollback();
+        _currentTransaction = null;
     }
 
     /// <inheritdoc />
-    public Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
+    public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_currentTransaction != null)
+        {
+            await _currentTransaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            _currentTransaction = null;
+        }
     }
 
     /// <inheritdoc />
     public IDbContextTransaction UseTransaction(DbTransaction? transaction)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return UseTransaction(transaction, Guid.NewGuid());
     }
 
     /// <inheritdoc />
-    public Task<IDbContextTransaction> UseTransactionAsync(DbTransaction? transaction, CancellationToken cancellationToken = default)
+    public IDbContextTransaction UseTransaction(DbTransaction? transaction, Guid transactionId)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (transaction == null)
+        {
+            throw new ArgumentNullException(nameof(transaction));
+        }
+
+        _currentTransaction = new SharpCoreDBTransaction(this, transaction, _logger, transactionId);
+        return _currentTransaction;
+    }
+
+    /// <inheritdoc />
+    public Task<IDbContextTransaction?> UseTransactionAsync(DbTransaction? transaction, CancellationToken cancellationToken = default)
+    {
+        return UseTransactionAsync(transaction, Guid.NewGuid(), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IDbContextTransaction?> UseTransactionAsync(DbTransaction? transaction, Guid transactionId, CancellationToken cancellationToken = default)
+    {
+        if (transaction == null)
+        {
+            return Task.FromResult<IDbContextTransaction?>(null);
+        }
+
+        _currentTransaction = new SharpCoreDBTransaction(this, transaction, _logger, transactionId);
+        return Task.FromResult<IDbContextTransaction?>(_currentTransaction);
     }
 
     /// <inheritdoc />
     public bool Open(bool errorsExpected = false)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_connection == null)
+        {
+            var extension = _options.FindExtension<SharpCoreDBOptionsExtension>();
+            if (extension == null)
+            {
+                throw new InvalidOperationException("SharpCoreDB options not configured");
+            }
+            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString);
+        }
+
+        if (_connection.State != ConnectionState.Open)
+        {
+            _connection.Open();
+            return true;
+        }
+        return false;
     }
 
     /// <inheritdoc />
-    public Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
+    public async Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_connection == null)
+        {
+            var extension = _options.FindExtension<SharpCoreDBOptionsExtension>();
+            if (extension == null)
+            {
+                throw new InvalidOperationException("SharpCoreDB options not configured");
+            }
+            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString);
+        }
+
+        if (_connection.State != ConnectionState.Open)
+        {
+            await _connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        return false;
     }
 
     /// <inheritdoc />
     public bool Close()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_connection?.State == ConnectionState.Open)
+        {
+            _connection.Close();
+            return true;
+        }
+        return false;
     }
 
     /// <inheritdoc />
-    public Task<bool> CloseAsync()
+    public async Task<bool> CloseAsync()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_connection?.State == ConnectionState.Open)
+        {
+            await _connection.CloseAsync().ConfigureAwait(false);
+            return true;
+        }
+        return false;
+    }
+
+    /// <inheritdoc />
+    public void ResetState()
+    {
+        // Reset connection state without closing
+        _currentTransaction = null;
+    }
+
+    /// <inheritdoc />
+    public Task ResetStateAsync(CancellationToken cancellationToken = default)
+    {
+        ResetState();
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        // No-op for skeleton implementation - actual disposal will be implemented in Phase 4
+        _currentTransaction?.Dispose();
+        _connection?.Dispose();
+        _semaphore.Dispose();
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        if (_currentTransaction != null)
+        {
+            await _currentTransaction.DisposeAsync().ConfigureAwait(false);
+        }
+        if (_connection != null)
+        {
+            await _connection.DisposeAsync().ConfigureAwait(false);
+        }
+        _semaphore.Dispose();
     }
 }

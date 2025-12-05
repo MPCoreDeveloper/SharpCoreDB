@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.EntityFrameworkCore.Infrastructure;
+using SharpCoreDB.EntityFrameworkCore.Migrations;
 using SharpCoreDB.EntityFrameworkCore.Query;
 using SharpCoreDB.EntityFrameworkCore.Storage;
 using SharpCoreDB.EntityFrameworkCore.Update;
@@ -30,7 +32,8 @@ public static class SharpCoreDBServiceCollectionExtensions
             .TryAdd<IRelationalTypeMappingSource, SharpCoreDBTypeMappingSource>()
             .TryAdd<IModificationCommandBatchFactory, SharpCoreDBModificationCommandBatchFactory>()
             .TryAdd<IQuerySqlGeneratorFactory, SharpCoreDBQuerySqlGeneratorFactory>()
-            .TryAdd<ISqlGenerationHelper, SharpCoreDBSqlGenerationHelper>();
+            .TryAdd<ISqlGenerationHelper, SharpCoreDBSqlGenerationHelper>()
+            .TryAdd<IMigrationsSqlGenerator, SharpCoreDBMigrationsSqlGenerator>();
 
         builder.TryAddCoreServices();
 
