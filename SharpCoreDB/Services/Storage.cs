@@ -9,28 +9,43 @@ namespace SharpCoreDB.Services;
 /// <summary>
 /// Implementation of IStorage using encrypted files and memory-mapped files for performance.
 /// </summary>
-public class Storage(ICryptoService crypto, byte[] key) : IStorage
+public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config = null) : IStorage
 {
     private readonly ICryptoService _crypto = crypto;
     private readonly byte[] _key = key;
+    private readonly bool _noEncryption = config?.NoEncryptMode ?? false;
 
     /// <inheritdoc />
     public void Write(string path, string data)
     {
         var plain = Encoding.UTF8.GetBytes(data);
-        var encrypted = _crypto.Encrypt(_key, plain);
-        File.WriteAllBytes(path, encrypted);
+        if (_noEncryption)
+        {
+            File.WriteAllBytes(path, plain);
+        }
+        else
+        {
+            var encrypted = _crypto.Encrypt(_key, plain);
+            File.WriteAllBytes(path, encrypted);
+        }
     }
 
     /// <inheritdoc />
     public string? Read(string path)
     {
         if (!File.Exists(path)) return null;
-        var encrypted = File.ReadAllBytes(path);
+        var data = File.ReadAllBytes(path);
         try
         {
-            var plain = _crypto.Decrypt(_key, encrypted);
-            return Encoding.UTF8.GetString(plain);
+            if (_noEncryption)
+            {
+                return Encoding.UTF8.GetString(data);
+            }
+            else
+            {
+                var plain = _crypto.Decrypt(_key, data);
+                return Encoding.UTF8.GetString(plain);
+            }
         }
         catch
         {
@@ -47,14 +62,21 @@ public class Storage(ICryptoService crypto, byte[] key) : IStorage
         var length = accessor.Capacity;
         var buffer = new byte[length];
         accessor.ReadArray(0, buffer, 0, (int)length);
-        var plain = _crypto.Decrypt(_key, buffer);
-        return Encoding.UTF8.GetString(plain);
+        if (_noEncryption)
+        {
+            return Encoding.UTF8.GetString(buffer);
+        }
+        else
+        {
+            var plain = _crypto.Decrypt(_key, buffer);
+            return Encoding.UTF8.GetString(plain);
+        }
     }
 
     /// <inheritdoc />
     public void WriteBytes(string path, byte[] data)
     {
-        byte[] toEncrypt;
+        byte[] toWrite;
         if (data.Length > 1024)
         {
             using var ms = new MemoryStream();
@@ -63,26 +85,44 @@ public class Storage(ICryptoService crypto, byte[] key) : IStorage
                 brotli.Write(data, 0, data.Length);
             }
             var compressed = ms.ToArray();
-            toEncrypt = new byte[compressed.Length + 1];
-            toEncrypt[0] = 1; // compressed
-            Array.Copy(compressed, 0, toEncrypt, 1, compressed.Length);
+            toWrite = new byte[compressed.Length + 1];
+            toWrite[0] = 1; // compressed
+            Array.Copy(compressed, 0, toWrite, 1, compressed.Length);
         }
         else
         {
-            toEncrypt = new byte[data.Length + 1];
-            toEncrypt[0] = 0; // uncompressed
-            Array.Copy(data, 0, toEncrypt, 1, data.Length);
+            toWrite = new byte[data.Length + 1];
+            toWrite[0] = 0; // uncompressed
+            Array.Copy(data, 0, toWrite, 1, data.Length);
         }
-        var encrypted = _crypto.Encrypt(_key, toEncrypt);
-        File.WriteAllBytes(path, encrypted);
+        
+        if (_noEncryption)
+        {
+            File.WriteAllBytes(path, toWrite);
+        }
+        else
+        {
+            var encrypted = _crypto.Encrypt(_key, toWrite);
+            File.WriteAllBytes(path, encrypted);
+        }
     }
 
     /// <inheritdoc />
     public byte[]? ReadBytes(string path)
     {
         if (!File.Exists(path)) return null;
-        var encrypted = File.ReadAllBytes(path);
-        var decrypted = _crypto.Decrypt(_key, encrypted);
+        var fileData = File.ReadAllBytes(path);
+        
+        byte[] decrypted;
+        if (_noEncryption)
+        {
+            decrypted = fileData;
+        }
+        else
+        {
+            decrypted = _crypto.Decrypt(_key, fileData);
+        }
+        
         if (decrypted.Length == 0) return [];
         var isCompressed = decrypted[0] == 1;
         var data = new byte[decrypted.Length - 1];

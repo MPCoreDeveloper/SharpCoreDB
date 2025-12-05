@@ -25,14 +25,15 @@ public class Database : IDatabase
     /// <param name="dbPath">The database path.</param>
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
-    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false)
+    /// <param name="config">Optional database configuration.</param>
+    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
     {
         _dbPath = dbPath;
         _isReadOnly = isReadOnly;
         Directory.CreateDirectory(_dbPath);
         _crypto = services.GetRequiredService<ICryptoService>();
         var masterKey = _crypto.DeriveKey(masterPassword, "salt");
-        _storage = new Storage(_crypto, masterKey);
+        _storage = new Storage(_crypto, masterKey, config);
         _userService = new UserService(_crypto, _storage, _dbPath);
         Load();
     }
@@ -148,9 +149,10 @@ public class DatabaseFactory(IServiceProvider services)
     /// <param name="dbPath">The database path.</param>
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
+    /// <param name="config">Optional database configuration.</param>
     /// <returns>The initialized database.</returns>
-    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false)
+    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
     {
-        return new Database(_services, dbPath, masterPassword, isReadOnly);
+        return new Database(_services, dbPath, masterPassword, isReadOnly, config);
     }
 }
