@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
+using SharpCoreDB.Interfaces;
 using System.Data.SQLite;
 
 namespace SharpCoreDB.Benchmarks;

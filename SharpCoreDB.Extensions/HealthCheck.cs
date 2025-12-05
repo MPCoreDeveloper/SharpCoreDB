@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Extensions;
