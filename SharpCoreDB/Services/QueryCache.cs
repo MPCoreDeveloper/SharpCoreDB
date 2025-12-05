@@ -42,7 +42,7 @@ public class QueryCache
         if (_cache.TryGetValue(sql, out var cached))
         {
             Interlocked.Increment(ref _hits);
-            Interlocked.Increment(ref cached.AccessCount);
+            cached.AccessCount++;
             return cached;
         }
 
