@@ -17,6 +17,7 @@ public class Database : IDatabase
     private readonly Dictionary<string, ITable> _tables = [];
     private readonly string _dbPath;
     private readonly bool _isReadOnly;
+    private readonly DatabaseConfig? _config;
 
     /// <summary>
     /// Initializes a new instance of the Database class.
@@ -25,14 +26,16 @@ public class Database : IDatabase
     /// <param name="dbPath">The database path.</param>
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
-    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false)
+    /// <param name="config">Optional database configuration.</param>
+    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
     {
         _dbPath = dbPath;
         _isReadOnly = isReadOnly;
+        _config = config;
         Directory.CreateDirectory(_dbPath);
         _crypto = services.GetRequiredService<ICryptoService>();
         var masterKey = _crypto.DeriveKey(masterPassword, "salt");
-        _storage = new Storage(_crypto, masterKey);
+        _storage = new Storage(_crypto, masterKey, config);
         _userService = new UserService(_crypto, _storage, _dbPath);
         Load();
     }
@@ -90,7 +93,7 @@ public class Database : IDatabase
         }
         else
         {
-            using var wal = new WAL(_dbPath);
+            using var wal = new WAL(_dbPath, _config);
             var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly);
             sqlParser.Execute(sql, wal);
             if (!_isReadOnly) Save(wal);
@@ -148,9 +151,10 @@ public class DatabaseFactory(IServiceProvider services)
     /// <param name="dbPath">The database path.</param>
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
+    /// <param name="config">Optional database configuration.</param>
     /// <returns>The initialized database.</returns>
-    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false)
+    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
     {
-        return new Database(_services, dbPath, masterPassword, isReadOnly);
+        return new Database(_services, dbPath, masterPassword, isReadOnly, config);
     }
 }

@@ -18,10 +18,21 @@ public class QueryCache
     /// </summary>
     public class CachedQuery
     {
+        private long _accessCount;
+        
         public string Sql { get; set; } = string.Empty;
         public string[] Parts { get; set; } = Array.Empty<string>();
         public DateTime CachedAt { get; set; }
-        public long AccessCount { get; set; }
+        public long AccessCount 
+        { 
+            get => Interlocked.Read(ref _accessCount);
+            set => Interlocked.Exchange(ref _accessCount, value);
+        }
+
+        internal void IncrementAccessCount()
+        {
+            Interlocked.Increment(ref _accessCount);
+        }
     }
 
     /// <summary>
@@ -42,7 +53,7 @@ public class QueryCache
         if (_cache.TryGetValue(sql, out var cached))
         {
             Interlocked.Increment(ref _hits);
-            Interlocked.Increment(ref cached.AccessCount);
+            cached.IncrementAccessCount();
             return cached;
         }
 
