@@ -2,7 +2,17 @@
 using SharpCoreDB.Benchmarks;
 
 // Check if benchmarks are requested via command-line args
-if (args.Length > 0 && args[0].Contains("ComprehensiveBench"))
+if (args.Length > 0 && args[0].Contains("Validate"))
+{
+    // Quick validation of all three optimizations (10k records, fast)
+    QuickValidationBench.RunQuickValidation();
+}
+else if (args.Length > 0 && args[0].Contains("Optimizations"))
+{
+    // Run the comprehensive optimizations benchmark (QueryCache, HashIndex, GC) - 100k records, slow
+    OptimizationsBenchmark.RunOptimizationsBenchmark();
+}
+else if (args.Length > 0 && args[0].Contains("ComprehensiveBench"))
 {
     BenchmarkRunner.Run<ComprehensiveBenchmark>();
 }
