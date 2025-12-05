@@ -106,7 +106,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     /// <inheritdoc />
     public void Dispose()
     {
-        // No-op for stub
+        // No-op for skeleton implementation - actual disposal will be implemented in Phase 4
     }
 
     /// <inheritdoc />

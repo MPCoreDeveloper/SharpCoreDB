@@ -124,7 +124,7 @@ public static class QuickValidationBench
         Console.WriteLine("  2. ✓ HashIndex - O(1) WHERE clause lookups with CREATE INDEX");
         Console.WriteLine("  3. ✓ GC Optimization - Span<byte> and ArrayPool in OptimizedRowParser");
         Console.WriteLine("\nFor full 100k benchmarks, run:");
-        Console.WriteLine("  dotnet run -c Release TimeTracking");
+        Console.WriteLine("  dotnet run -c Release Optimizations  # Full 100k benchmark");
         Console.WriteLine("\nExpected 100k performance (based on README):");
         Console.WriteLine("  - Inserts: ~240s (vs SQLite 130s)");
         Console.WriteLine("  - SELECT with index: ~45ms");

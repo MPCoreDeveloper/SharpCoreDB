@@ -5,7 +5,8 @@ using SharpCoreDB.DataStructures;
 namespace SharpCoreDB;
 
 /// <summary>
-/// JSON serializer context for SharpCoreDB to support Native AOT and .NET 10 source generation.
+/// JSON serializer context for SharpCoreDB to support Native AOT compilation and source generation features in .NET 5+.
+/// Required for .NET 10 when reflection-based serialization is disabled.
 /// </summary>
 [JsonSerializable(typeof(Dictionary<string, object>))]
 [JsonSerializable(typeof(List<Dictionary<string, object>>))]
