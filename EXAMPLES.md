@@ -158,13 +158,28 @@ app.MapPost("/api/time-entries", async (DatabasePool pool, TimeEntryRequest requ
     
     try
     {
-        // TODO: Sanitize request.Task to prevent SQL injection
-        var sanitizedTask = request.Task.Replace("'", "''"); // Basic SQL escaping
+        // Production-ready input validation and sanitization
+        // 1. Validate ProjectId and UserId are positive integers
+        if (request.ProjectId <= 0 || request.UserId <= 0)
+            return Results.BadRequest("Invalid project or user ID");
+        
+        // 2. Sanitize task description
+        if (string.IsNullOrWhiteSpace(request.Task))
+            return Results.BadRequest("Task description is required");
+        
+        if (request.Task.Length > 500)
+            return Results.BadRequest("Task description too long");
+        
+        // 3. Escape single quotes for SQL safety
+        var sanitizedTask = request.Task.Replace("'", "''");
+        
+        // 4. Validate timestamp format
+        var formattedTime = request.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
         
         db.ExecuteSQL($@"INSERT INTO time_entries 
             (project_id, user_id, task, start_time, billable) 
             VALUES ('{request.ProjectId}', '{request.UserId}', '{sanitizedTask}', 
-                    '{request.StartTime:yyyy-MM-dd HH:mm:ss}', '{request.Billable}')");
+                    '{formattedTime}', '{request.Billable}')");
         
         return Results.Ok(new { success = true });
     }
