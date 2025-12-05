@@ -2,7 +2,17 @@
 using SharpCoreDB.Benchmarks;
 
 // Check if benchmarks are requested via command-line args
-if (args.Length > 0 && args[0].Contains("Validate"))
+if (args.Length > 0 && args[0].Contains("MemoryMapped"))
+{
+    // Test memory-mapped files performance improvement
+    SimpleMemoryMappedTest.RunTest();
+}
+else if (args.Length > 0 && args[0].Contains("MemoryMappedBench"))
+{
+    // Run BenchmarkDotNet for memory-mapped files
+    BenchmarkRunner.Run<MemoryMappedBenchmark>();
+}
+else if (args.Length > 0 && args[0].Contains("Validate"))
 {
     // Quick validation of all three optimizations (10k records, fast)
     QuickValidationBench.RunQuickValidation();
