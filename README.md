@@ -365,6 +365,9 @@ dotnet run --configuration Release NoEncryption
 
 # Full BenchmarkDotNet suite
 dotnet run --configuration Release NoEncryptionBench
+
+# Time-tracking benchmarks (100k records, includes LiteDB)
+dotnet run --configuration Release TimeTracking
 ```
 
 ## Supported Data Types
