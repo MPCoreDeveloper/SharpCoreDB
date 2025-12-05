@@ -28,6 +28,20 @@ public interface IDatabase
     Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Executes multiple SQL commands in a batch for improved performance.
+    /// </summary>
+    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
+    void ExecuteBatchSQL(IEnumerable<string> sqlStatements);
+
+    /// <summary>
+    /// Executes multiple SQL commands in a batch asynchronously.
+    /// </summary>
+    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ExecuteBatchSQLAsync(IEnumerable<string> sqlStatements, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a user.
     /// </summary>
     /// <param name="username">The username.</param>
