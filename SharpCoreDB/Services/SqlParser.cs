@@ -182,7 +182,8 @@ public class SqlParser : ISqlParser
         else if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
             var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
-            var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !new[] { "WHERE", "ORDER" }.Contains(p.ToUpper())).ToArray();
+            string[] keywords = ["WHERE", "ORDER"];
+            var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
             var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
             var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
             string? whereStr = null;
