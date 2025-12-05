@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using SharpCoreDB.EntityFrameworkCore.Diagnostics;
 using SharpCoreDB.EntityFrameworkCore.Infrastructure;
 using SharpCoreDB.EntityFrameworkCore.Migrations;
 using SharpCoreDB.EntityFrameworkCore.Query;
@@ -25,7 +28,15 @@ public static class SharpCoreDBServiceCollectionExtensions
     public static IServiceCollection AddEntityFrameworkSharpCoreDB(
         this IServiceCollection serviceCollection)
     {
+        // Add logging if not already added
+        if (!serviceCollection.Any(sd => sd.ServiceType == typeof(ILoggerFactory)))
+        {
+            serviceCollection.AddLogging();
+        }
+
         var builder = new EntityFrameworkRelationalServicesBuilder(serviceCollection)
+            .TryAdd<LoggingDefinitions, SharpCoreDBLoggingDefinitions>()
+            .TryAdd<IDatabaseProvider, SharpCoreDBDatabaseProviderService>()
             .TryAdd<IDatabase, SharpCoreDBDatabaseProvider>()
             .TryAdd<IDatabaseCreator, SharpCoreDBDatabaseCreator>()
             .TryAdd<IRelationalConnection, SharpCoreDBRelationalConnection>()
@@ -33,7 +44,8 @@ public static class SharpCoreDBServiceCollectionExtensions
             .TryAdd<IModificationCommandBatchFactory, SharpCoreDBModificationCommandBatchFactory>()
             .TryAdd<IQuerySqlGeneratorFactory, SharpCoreDBQuerySqlGeneratorFactory>()
             .TryAdd<ISqlGenerationHelper, SharpCoreDBSqlGenerationHelper>()
-            .TryAdd<IMigrationsSqlGenerator, SharpCoreDBMigrationsSqlGenerator>();
+            .TryAdd<IMigrationsSqlGenerator, SharpCoreDBMigrationsSqlGenerator>()
+            .TryAdd<IUpdateSqlGenerator, SharpCoreDBUpdateSqlGenerator>();
 
         builder.TryAddCoreServices();
 
