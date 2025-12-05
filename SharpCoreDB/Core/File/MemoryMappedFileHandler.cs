@@ -7,7 +7,7 @@ namespace SharpCoreDB.Core.File;
 
 /// <summary>
 /// High-performance file handler using Memory-Mapped Files (MMF) for reduced disk I/O.
-/// Automatically falls back to FileStream for small files (&lt; 50 MB) or when MMF is not supported.
+/// Automatically falls back to FileStream for small files (&lt; 10 MB), large files (&gt; 50 MB), or when MMF is not supported.
 /// </summary>
 /// <remarks>
 /// Memory-mapped files map file contents directly into virtual memory, allowing:
@@ -148,7 +148,7 @@ public sealed class MemoryMappedFileHandler : IDisposable
     /// Reads data into a span using memory-mapped file access.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private int ReadViaMemoryMapping(long offset, Span<byte> buffer)
+    private unsafe int ReadViaMemoryMapping(long offset, Span<byte> buffer)
     {
         var remaining = _accessor!.Capacity - offset;
         var bytesToRead = (int)Math.Min(remaining, buffer.Length);
@@ -156,10 +156,22 @@ public sealed class MemoryMappedFileHandler : IDisposable
         if (bytesToRead <= 0)
             return 0;
 
-        // Read into a temporary array and copy to the span
-        var temp = new byte[bytesToRead];
-        _accessor.ReadArray(offset, temp, 0, bytesToRead);
-        temp.AsSpan(0, bytesToRead).CopyTo(buffer);
+        // Use unsafe pointer access for zero-allocation read
+        byte* ptr = null;
+        _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+        
+        try
+        {
+            fixed (byte* dest = buffer)
+            {
+                Buffer.MemoryCopy(ptr + offset, dest, buffer.Length, bytesToRead);
+            }
+        }
+        finally
+        {
+            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+        
         return bytesToRead;
     }
 
