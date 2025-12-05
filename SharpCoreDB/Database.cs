@@ -17,6 +17,7 @@ public class Database : IDatabase
     private readonly Dictionary<string, ITable> _tables = [];
     private readonly string _dbPath;
     private readonly bool _isReadOnly;
+    private readonly DatabaseConfig? _config;
 
     /// <summary>
     /// Initializes a new instance of the Database class.
@@ -30,6 +31,7 @@ public class Database : IDatabase
     {
         _dbPath = dbPath;
         _isReadOnly = isReadOnly;
+        _config = config;
         Directory.CreateDirectory(_dbPath);
         _crypto = services.GetRequiredService<ICryptoService>();
         var masterKey = _crypto.DeriveKey(masterPassword, "salt");
@@ -91,7 +93,7 @@ public class Database : IDatabase
         }
         else
         {
-            using var wal = new WAL(_dbPath);
+            using var wal = new WAL(_dbPath, _config);
             var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly);
             sqlParser.Execute(sql, wal);
             if (!_isReadOnly) Save(wal);
