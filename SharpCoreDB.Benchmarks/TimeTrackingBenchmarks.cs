@@ -102,8 +102,10 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SharpCoreDB_Insert()
     {
-        // Note: In production, use parameterized queries or proper sanitization
-        // This benchmark uses pre-generated fake data for realistic testing
+        // IMPORTANT: This is benchmark code for performance testing only.
+        // In production, always use parameterized queries or proper sanitization.
+        // We escape single quotes here to prevent SQL injection with controlled test data.
+        // This benchmark uses pre-generated fake data for realistic testing.
         foreach (var entry in _testData!)
         {
             var project = entry.Project.Replace("'", "''");
@@ -118,12 +120,18 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SQLite_Insert()
     {
+        // IMPORTANT: This is benchmark code for performance testing only.
+        // In production, always use SQLiteParameter for parameterized queries.
+        // The test data is controlled and pre-validated, no user input is used.
         foreach (var entry in _testData!)
         {
             using var cmd = _sqliteConn!.CreateCommand();
+            var project = entry.Project.Replace("'", "''");
+            var task = entry.Task.Replace("'", "''");
+            var user = entry.User.Replace("'", "''");
             var startTime = entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
             var endTime = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss");
-            cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{entry.Project}', '{entry.Task}', '{startTime}', '{endTime}', {entry.Duration}, '{entry.User}')";
+            cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{project}', '{task}', '{startTime}', '{endTime}', {entry.Duration}, '{user}')";
             cmd.ExecuteNonQuery();
         }
     }
