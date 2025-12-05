@@ -118,11 +118,17 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         if (!File.Exists(path)) return null;
 
         // Determine if we should use memory-mapped files based on config and file size
-        byte[] fileData;
+        byte[]? fileData;
         if (_config.UseMemoryMapping && ShouldUseMemoryMapping(path))
         {
             using var handler = new MemoryMappedFileHandler(path, true);
-            fileData = handler.ReadAllBytes() ?? [];
+            fileData = handler.ReadAllBytes();
+            
+            // If memory mapping fails, fall back to standard file read
+            if (fileData == null)
+            {
+                fileData = File.ReadAllBytes(path);
+            }
         }
         else
         {

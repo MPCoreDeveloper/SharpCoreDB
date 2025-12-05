@@ -93,7 +93,9 @@ public sealed class MemoryMappedFileHandler(string filePath, bool useMemoryMappi
             return null;
 
         var fileInfo = new FileInfo(_filePath);
-        if (offset + length > fileInfo.Length)
+        
+        // Check for potential overflow and validate range
+        if (offset > fileInfo.Length || length > fileInfo.Length || offset + length > fileInfo.Length)
             return null;
 
         try
@@ -166,6 +168,12 @@ public sealed class MemoryMappedFileHandler(string filePath, bool useMemoryMappi
 
         if (length == 0)
             return Array.Empty<byte>();
+
+        // Check for files larger than int.MaxValue (2GB)
+        if (length > int.MaxValue)
+        {
+            throw new NotSupportedException($"Memory-mapped files larger than 2GB are not supported. File size: {length:N0} bytes");
+        }
 
         using var mmf = MemoryMappedFile.CreateFromFile(_filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
         using var accessor = mmf.CreateViewAccessor(0, length, MemoryMappedFileAccess.Read);
