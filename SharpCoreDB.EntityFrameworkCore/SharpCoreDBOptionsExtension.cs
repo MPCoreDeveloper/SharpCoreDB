@@ -18,9 +18,7 @@ public class SharpCoreDBOptionsExtension : IDbContextOptionsExtension
     public string ConnectionString { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Initializes a new instance of the Sharp
-
-CoreDBOptionsExtension class.
+    /// Initializes a new instance of the SharpCoreDBOptionsExtension class.
     /// </summary>
     public SharpCoreDBOptionsExtension()
     {

@@ -1,14 +1,14 @@
 # EF Core Provider - Partial Implementation Status
 
-**Branch**: `efcore-provider-partial`  
-**Status**: Incomplete - Infrastructure Only  
-**Date**: December 5, 2025
+**Branch**: `copilot/expand-benchmarks-and-implement-fixes`  
+**Status**: Framework Compatibility Fixed, Implementation Incomplete  
+**Date**: December 5, 2025 (Updated)
 
 ## Summary
 
-Partial EF Core provider – needs relational type mapping, migrations generator and query translator fixes.
+SharpCoreDB now supports multi-targeting (.NET 8.0 and .NET 10.0) to enable EF Core 8 compatibility. However, the EF Core provider implementation remains incomplete with significant components still required.
 
-This implementation is **NOT FUNCTIONAL**. Basic infrastructure only.
+This implementation is **NOT FUNCTIONAL**. Basic infrastructure only with ~25-30 additional files needed.
 
 ## What's Implemented ✅
 
@@ -29,11 +29,12 @@ This implementation is **NOT FUNCTIONAL**. Basic infrastructure only.
 ## Critical Issues ❌
 
 ### 1. Framework Compatibility Problem
-- **SharpCoreDB**: Targets .NET 10
+- **SharpCoreDB**: Now multi-targets .NET 8.0 and .NET 10.0 ✅
 - **EF Core 8**: Requires .NET 8
-- **Result**: Project won't build due to framework mismatch
+- **Result**: Framework compatibility RESOLVED
 
-**Build Error**: `Project SharpCoreDB is not compatible with net8.0`
+**Previous Build Error**: `Project SharpCoreDB is not compatible with net8.0` - **FIXED**
+**Solution Applied**: Multi-targeting in SharpCoreDB.csproj with conditional package references
 
 ### 2. Missing Components (25-30 files needed)
 
@@ -79,18 +80,19 @@ This implementation is **NOT FUNCTIONAL**. Basic infrastructure only.
 - **Effort**: Multiple dedicated sessions (20-40 hours)
 - **Complexity**: High - requires deep EF Core internals knowledge
 
-## Solutions for Framework Compatibility
+## Framework Compatibility Solution Applied ✅
 
-### Option 1: Multi-Target SharpCoreDB
+### Multi-Targeting Implemented
+SharpCoreDB.csproj now contains:
 ```xml
 <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 ```
 
-### Option 2: SharpCoreDB.Compat Package
-Create a separate .NET 8 compatibility shim package.
+With conditional package references:
+- .NET 8.0: Microsoft.Extensions.DependencyInjection 8.0.1
+- .NET 10.0: Microsoft.Extensions.DependencyInjection 10.0.0
 
-### Option 3: Wait for EF Core 10
-Wait for Microsoft to release EF Core 10 with .NET 10 support.
+This enables EF Core 8 projects to reference SharpCoreDB without compatibility issues.
 
 ## Files in This Branch
 
