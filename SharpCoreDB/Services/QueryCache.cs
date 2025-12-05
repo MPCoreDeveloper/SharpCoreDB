@@ -47,9 +47,9 @@ public class QueryCache
 
     /// <summary>
     /// Gets or adds a cached query.
-    /// .NET 10: AggressiveInlining + AggressiveOptimization for maximum speed.
+    /// .NET 10: AggressiveInlining for hot path - called on every query.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CachedQuery GetOrAdd(string sql, Func<string, CachedQuery> factory)
     {
         if (_cache.TryGetValue(sql, out var cached))
