@@ -5,6 +5,7 @@ namespace SharpCoreDB.Services;
 
 /// <summary>
 /// Caches parsed SQL queries for improved performance.
+/// .NET 10 optimizations: AggressiveInlining, AggressiveOptimization for hot paths.
 /// </summary>
 public class QueryCache
 {
@@ -46,8 +47,9 @@ public class QueryCache
 
     /// <summary>
     /// Gets or adds a cached query.
+    /// .NET 10: AggressiveInlining + AggressiveOptimization for maximum speed.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public CachedQuery GetOrAdd(string sql, Func<string, CachedQuery> factory)
     {
         if (_cache.TryGetValue(sql, out var cached))

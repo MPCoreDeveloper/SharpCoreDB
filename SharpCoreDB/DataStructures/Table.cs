@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.DataStructures;
@@ -56,7 +57,8 @@ public class Table : ITable
     private readonly Dictionary<string, HashIndex> _hashIndexes = new();
 
     private IStorage _storage;
-    private readonly ReaderWriterLockSlim _lock = new();
+    // .NET 10: Use Lock instead of ReaderWriterLockSlim for better performance
+    private readonly Lock _lock = new();
     private bool _isReadOnly;
 
     /// <summary>
@@ -70,11 +72,13 @@ public class Table : ITable
     public void SetReadOnly(bool isReadOnly) => _isReadOnly = isReadOnly;
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Insert(Dictionary<string, object> row)
     {
         if (_isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
-        _lock.EnterWriteLock();
-        try
+        
+        // .NET 10: Use lock statement with Lock type for better performance
+        lock (_lock)
         {
             // Validate types
             for (int i = 0; i < Columns.Count; i++)
@@ -136,91 +140,96 @@ public class Table : ITable
                 index.Add(row);
             }
         }
-        finally
-        {
-            _lock.ExitWriteLock();
-        }
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true)
     {
-        if (!_isReadOnly) _lock.EnterReadLock();
-        try
+        // .NET 10: Lock type provides better performance than ReaderWriterLockSlim
+        // For read-only mode, skip locking entirely for maximum throughput
+        if (_isReadOnly)
         {
-            var results = new List<Dictionary<string, object>>();
-            
-            // Try to use hash index for WHERE clause if available
-            bool usedHashIndex = false;
+            return SelectInternal(where, orderBy, asc);
+        }
+        
+        lock (_lock)
+        {
+            return SelectInternal(where, orderBy, asc);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc)
+    {
+        var results = new List<Dictionary<string, object>>();
+        
+        // Try to use hash index for WHERE clause if available
+        bool usedHashIndex = false;
+        if (where != null)
+        {
+            var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (whereParts.Length == 3 && whereParts[1] == "=")
+            {
+                var col = whereParts[0];
+                var val = whereParts[2].Trim('\'');
+                
+                // Check if we have a hash index for this column
+                if (_hashIndexes.TryGetValue(col, out var hashIndex))
+                {
+                    // O(1) hash lookup instead of full table scan!
+                    // Parse the value to the correct type for lookup
+                    var colIdx = Columns.IndexOf(col);
+                    if (colIdx >= 0)
+                    {
+                        var typedValue = ParseValueForHashLookup(val, ColumnTypes[colIdx]);
+                        results = hashIndex.Lookup(typedValue);
+                        usedHashIndex = true;
+                    }
+                }
+            }
+        }
+
+        // Fall back to full table scan if hash index wasn't used
+        if (!usedHashIndex)
+        {
+            var data = _storage.ReadBytes(DataFile);
+            if (data == null || data.Length == 0) return results;
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+            while (ms.Position < ms.Length)
+            {
+                var row = new Dictionary<string, object>();
+                for (int i = 0; i < Columns.Count; i++)
+                {
+                    row[Columns[i]] = ReadTypedValue(reader, ColumnTypes[i]);
+                }
+                results.Add(row);
+            }
+
             if (where != null)
             {
+                // parse where
                 var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (whereParts.Length == 3 && whereParts[1] == "=")
                 {
                     var col = whereParts[0];
                     var val = whereParts[2].Trim('\'');
-                    
-                    // Check if we have a hash index for this column
-                    if (_hashIndexes.TryGetValue(col, out var hashIndex))
-                    {
-                        // O(1) hash lookup instead of full table scan!
-                        // Parse the value to the correct type for lookup
-                        var colIdx = Columns.IndexOf(col);
-                        if (colIdx >= 0)
-                        {
-                            var typedValue = ParseValueForHashLookup(val, ColumnTypes[colIdx]);
-                            results = hashIndex.Lookup(typedValue);
-                            usedHashIndex = true;
-                        }
-                    }
+                    results = results.Where(r => string.Equals(r[col]?.ToString() ?? "NULL", val, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
             }
-
-            // Fall back to full table scan if hash index wasn't used
-            if (!usedHashIndex)
-            {
-                var data = _storage.ReadBytes(DataFile);
-                if (data == null || data.Length == 0) return results;
-                using var ms = new MemoryStream(data);
-                using var reader = new BinaryReader(ms);
-                while (ms.Position < ms.Length)
-                {
-                    var row = new Dictionary<string, object>();
-                    for (int i = 0; i < Columns.Count; i++)
-                    {
-                        row[Columns[i]] = ReadTypedValue(reader, ColumnTypes[i]);
-                    }
-                    results.Add(row);
-                }
-
-                if (where != null)
-                {
-                    // parse where
-                    var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (whereParts.Length == 3 && whereParts[1] == "=")
-                    {
-                        var col = whereParts[0];
-                        var val = whereParts[2].Trim('\'');
-                        results = results.Where(r => string.Equals(r[col]?.ToString() ?? "NULL", val, StringComparison.OrdinalIgnoreCase)).ToList();
-                    }
-                }
-            }
-
-            if (orderBy != null)
-            {
-                var idx = Columns.IndexOf(orderBy);
-                if (idx >= 0)
-                {
-                    results = asc ? [.. results.OrderBy(r => r[Columns[idx]])] : [.. results.OrderByDescending(r => r[Columns[idx]])];
-
-                }
-            }
-            return results;
         }
-        finally
+
+        if (orderBy != null)
         {
-            if (!_isReadOnly) _lock.ExitReadLock();
+            var idx = Columns.IndexOf(orderBy);
+            if (idx >= 0)
+            {
+                results = asc ? [.. results.OrderBy(r => r[Columns[idx]])] : [.. results.OrderByDescending(r => r[Columns[idx]])];
+
+            }
         }
+        return results;
     }
 
     /// <summary>
@@ -242,6 +251,7 @@ public class Table : ITable
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Update(string where, Dictionary<string, object> updates)
     {
         var allRows = Select(); // load outside lock
@@ -266,8 +276,8 @@ public class Table : ITable
             updatedRows.Add(row);
         }
         
-        _lock.EnterWriteLock();
-        try
+        // .NET 10: Use lock statement with Lock type
+        lock (_lock)
         {
             // Rewrite file
             using var ms = new MemoryStream();
@@ -291,13 +301,10 @@ public class Table : ITable
                 }
             }
         }
-        finally
-        {
-            _lock.ExitWriteLock();
-        }
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Delete(string where)
     {
         var allRows = Select(); // load outside lock
@@ -316,8 +323,8 @@ public class Table : ITable
             }
         }
         
-        _lock.EnterWriteLock();
-        try
+        // .NET 10: Use lock statement with Lock type
+        lock (_lock)
         {
             // Rewrite
             using var ms = new MemoryStream();
@@ -339,10 +346,6 @@ public class Table : ITable
                     index.Remove(deletedRow);
                 }
             }
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
         }
     }
 

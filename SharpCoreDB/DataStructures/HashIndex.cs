@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace SharpCoreDB.DataStructures;
 
 /// <summary>
 /// High-performance hash-based index for fast WHERE clause lookups.
 /// Provides O(1) lookups for equality conditions on indexed columns.
+/// .NET 10 optimizations: AggressiveInlining on hot paths for maximum throughput.
 /// </summary>
 public class HashIndex
 {
@@ -62,9 +64,11 @@ public class HashIndex
 
     /// <summary>
     /// Looks up rows by key value in O(1) time.
+    /// .NET 10: AggressiveInlining for hot path performance.
     /// </summary>
     /// <param name="key">The key value to search for.</param>
     /// <returns>List of matching rows, or empty list if not found.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<Dictionary<string, object>> Lookup(object key)
     {
         if (key == null)
