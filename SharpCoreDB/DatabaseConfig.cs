@@ -2,7 +2,7 @@ namespace SharpCoreDB;
 
 /// <summary>
 /// Configuration options for database performance and behavior.
-/// Uses C# 14 init-only properties for immutable configuration.
+/// Uses C# 9.0+ init-only properties for immutable configuration.
 /// </summary>
 public class DatabaseConfig
 {

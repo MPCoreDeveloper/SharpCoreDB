@@ -125,7 +125,18 @@ public class Database : IDatabase
         if (statements.Length == 0) return;
 
         // Check if any statement is a SELECT - if so, process individually
-        var hasSelect = statements.Any(s => s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].ToUpper() == SqlConstants.SELECT);
+        // Optimized: Use ReadOnlySpan to avoid allocations during check
+        var hasSelect = false;
+        foreach (var sql in statements)
+        {
+            var trimmed = sql.AsSpan().Trim();
+            if (trimmed.Length >= 6 && trimmed[..6].Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                hasSelect = true;
+                break;
+            }
+        }
+
         if (hasSelect)
         {
             // Process individually if there are SELECTs
