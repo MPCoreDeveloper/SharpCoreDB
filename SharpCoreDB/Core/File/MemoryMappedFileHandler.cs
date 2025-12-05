@@ -156,7 +156,10 @@ public sealed class MemoryMappedFileHandler : IDisposable
         if (bytesToRead <= 0)
             return 0;
 
-        _accessor.ReadArray(offset, buffer.ToArray(), 0, bytesToRead);
+        // Read into a temporary array and copy to the span
+        var temp = new byte[bytesToRead];
+        _accessor.ReadArray(offset, temp, 0, bytesToRead);
+        temp.AsSpan(0, bytesToRead).CopyTo(buffer);
         return bytesToRead;
     }
 
