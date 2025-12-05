@@ -50,6 +50,11 @@ public class Table : ITable
     /// </summary>
     public IIndex<string, long> Index { get; set; } = new BTree<string, long>();
 
+    /// <summary>
+    /// Hash indexes for fast WHERE clause lookups on specific columns.
+    /// </summary>
+    private readonly Dictionary<string, HashIndex> _hashIndexes = new();
+
     private IStorage _storage;
     private readonly ReaderWriterLockSlim _lock = new();
     private bool _isReadOnly;
@@ -124,6 +129,12 @@ public class Table : ITable
             ms.Write(data, 0, data.Length);
             ms.Write(rowData, 0, rowData.Length);
             _storage.WriteBytes(DataFile, ms.ToArray());
+
+            // Update hash indexes
+            foreach (var index in _hashIndexes.Values)
+            {
+                index.Add(row);
+            }
         }
         finally
         {
@@ -138,29 +149,60 @@ public class Table : ITable
         try
         {
             var results = new List<Dictionary<string, object>>();
-            var data = _storage.ReadBytes(DataFile);
-            if (data == null || data.Length == 0) return results;
-            using var ms = new MemoryStream(data);
-            using var reader = new BinaryReader(ms);
-            while (ms.Position < ms.Length)
-            {
-                var row = new Dictionary<string, object>();
-                for (int i = 0; i < Columns.Count; i++)
-                {
-                    row[Columns[i]] = ReadTypedValue(reader, ColumnTypes[i]);
-                }
-                results.Add(row);
-            }
-
+            
+            // Try to use hash index for WHERE clause if available
+            bool usedHashIndex = false;
             if (where != null)
             {
-                // parse where
                 var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (whereParts.Length == 3 && whereParts[1] == "=")
                 {
                     var col = whereParts[0];
                     var val = whereParts[2].Trim('\'');
-                    results = results.Where(r => string.Equals(r[col]?.ToString() ?? "NULL", val, StringComparison.OrdinalIgnoreCase)).ToList();
+                    
+                    // Check if we have a hash index for this column
+                    if (_hashIndexes.TryGetValue(col, out var hashIndex))
+                    {
+                        // O(1) hash lookup instead of full table scan!
+                        // Parse the value to the correct type for lookup
+                        var colIdx = Columns.IndexOf(col);
+                        if (colIdx >= 0)
+                        {
+                            var typedValue = ParseValueForHashLookup(val, ColumnTypes[colIdx]);
+                            results = hashIndex.Lookup(typedValue);
+                            usedHashIndex = true;
+                        }
+                    }
+                }
+            }
+
+            // Fall back to full table scan if hash index wasn't used
+            if (!usedHashIndex)
+            {
+                var data = _storage.ReadBytes(DataFile);
+                if (data == null || data.Length == 0) return results;
+                using var ms = new MemoryStream(data);
+                using var reader = new BinaryReader(ms);
+                while (ms.Position < ms.Length)
+                {
+                    var row = new Dictionary<string, object>();
+                    for (int i = 0; i < Columns.Count; i++)
+                    {
+                        row[Columns[i]] = ReadTypedValue(reader, ColumnTypes[i]);
+                    }
+                    results.Add(row);
+                }
+
+                if (where != null)
+                {
+                    // parse where
+                    var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (whereParts.Length == 3 && whereParts[1] == "=")
+                    {
+                        var col = whereParts[0];
+                        var val = whereParts[2].Trim('\'');
+                        results = results.Where(r => string.Equals(r[col]?.ToString() ?? "NULL", val, StringComparison.OrdinalIgnoreCase)).ToList();
+                    }
                 }
             }
 
@@ -179,6 +221,24 @@ public class Table : ITable
         {
             if (!_isReadOnly) _lock.ExitReadLock();
         }
+    }
+
+    /// <summary>
+    /// Parses a string value to the appropriate type for hash index lookup.
+    /// </summary>
+    private object ParseValueForHashLookup(string value, DataType type)
+    {
+        return type switch
+        {
+            DataType.Integer => int.TryParse(value, out var i) ? i : value,
+            DataType.Long => long.TryParse(value, out var l) ? l : value,
+            DataType.Real => double.TryParse(value, out var d) ? d : value,
+            DataType.Decimal => decimal.TryParse(value, out var dec) ? dec : value,
+            DataType.Boolean => bool.TryParse(value, out var b) ? b : value,
+            DataType.DateTime => DateTime.TryParse(value, out var dt) ? dt : value,
+            DataType.Guid => Guid.TryParse(value, out var g) ? g : value,
+            _ => value // String, Ulid, Blob, etc.
+        };
     }
 
     /// <inheritdoc />
@@ -212,6 +272,12 @@ public class Table : ITable
                 }
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
+
+            // Rebuild hash indexes after update
+            foreach (var index in _hashIndexes.Values)
+            {
+                index.Rebuild(updatedRows);
+            }
         }
         finally
         {
@@ -238,6 +304,12 @@ public class Table : ITable
                 }
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
+
+            // Rebuild hash indexes after delete
+            foreach (var index in _hashIndexes.Values)
+            {
+                index.Rebuild(remainingRows);
+            }
         }
         finally
         {
@@ -321,5 +393,45 @@ public class Table : ITable
             return row[col]?.ToString() == val;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Creates a hash index on the specified column for fast WHERE clause lookups.
+    /// </summary>
+    /// <param name="columnName">The column name to index.</param>
+    public void CreateHashIndex(string columnName)
+    {
+        if (!Columns.Contains(columnName))
+            throw new InvalidOperationException($"Column {columnName} does not exist in table {Name}");
+
+        if (_hashIndexes.ContainsKey(columnName))
+            return; // Already indexed
+
+        var index = new HashIndex(Name, columnName);
+        
+        // Build index from existing data
+        var allRows = Select();
+        index.Rebuild(allRows);
+        
+        _hashIndexes[columnName] = index;
+    }
+
+    /// <summary>
+    /// Checks if a hash index exists for the specified column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>True if index exists.</returns>
+    public bool HasHashIndex(string columnName) => _hashIndexes.ContainsKey(columnName);
+
+    /// <summary>
+    /// Gets hash index statistics for a column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>Index statistics or null if no index exists.</returns>
+    public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName)
+    {
+        if (_hashIndexes.TryGetValue(columnName, out var index))
+            return index.GetStatistics();
+        return null;
     }
 }

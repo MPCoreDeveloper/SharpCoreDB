@@ -62,4 +62,24 @@ public interface ITable
     /// </summary>
     /// <param name="where">The where clause string.</param>
     void Delete(string where);
+
+    /// <summary>
+    /// Creates a hash index on the specified column for fast WHERE clause lookups.
+    /// </summary>
+    /// <param name="columnName">The column name to index.</param>
+    void CreateHashIndex(string columnName);
+
+    /// <summary>
+    /// Checks if a hash index exists for the specified column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>True if index exists.</returns>
+    bool HasHashIndex(string columnName);
+
+    /// <summary>
+    /// Gets hash index statistics for a column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>Index statistics or null if no index exists.</returns>
+    (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName);
 }
