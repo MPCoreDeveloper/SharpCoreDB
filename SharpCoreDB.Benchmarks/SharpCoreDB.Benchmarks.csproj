@@ -17,7 +17,8 @@
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
+    <!-- PublishAot disabled for now to enable JSON reflection - will add source generation later -->
+    <PublishAot>false</PublishAot>
   </PropertyGroup>
 
 </Project>
