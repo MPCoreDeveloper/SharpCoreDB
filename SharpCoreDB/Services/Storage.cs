@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Core.File;
 
 namespace SharpCoreDB.Services;
 
@@ -14,6 +15,7 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     private readonly ICryptoService _crypto = crypto;
     private readonly byte[] _key = key;
     private readonly bool _noEncryption = config?.NoEncryptMode ?? false;
+    private readonly bool _useMemoryMapping = config?.UseMemoryMapping ?? true;
 
     /// <inheritdoc />
     public void Write(string path, string data)
@@ -111,7 +113,26 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     public byte[]? ReadBytes(string path)
     {
         if (!File.Exists(path)) return null;
-        var fileData = File.ReadAllBytes(path);
+        
+        // Use memory-mapped file handler for improved performance on large files
+        byte[] fileData;
+        if (_useMemoryMapping)
+        {
+            using var handler = MemoryMappedFileHandler.TryCreate(path, _useMemoryMapping);
+            if (handler != null && handler.IsMemoryMapped)
+            {
+                fileData = handler.ReadAllBytes();
+            }
+            else
+            {
+                // Fallback to traditional file reading
+                fileData = File.ReadAllBytes(path);
+            }
+        }
+        else
+        {
+            fileData = File.ReadAllBytes(path);
+        }
         
         byte[] decrypted;
         if (_noEncryption)
