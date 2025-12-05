@@ -10,8 +10,10 @@ namespace SharpCoreDB.Benchmarks;
 
 /// <summary>
 /// Benchmarks comparing SharpCoreDB with SQLite and LiteDB for time-tracking scenarios.
+/// Scaled to 100k inserts with GC/allocation metrics and Native AOT support.
 /// </summary>
 [MemoryDiagnoser]
+[GcServer(true)]
 [SimpleJob(warmupCount: 1, iterationCount: 3)]
 public class TimeTrackingBenchmarks
 {
@@ -62,12 +64,12 @@ public class TimeTrackingBenchmarks
 
         _testData = faker.Generate(EntryCount);
 
-        // Setup SharpCoreDB
+        // Setup SharpCoreDB with HighPerformance config (NoEncryption mode)
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
-        _sharpCoreDb = factory.Create(_sharpCoreDbPath, "benchmarkPassword");
+        _sharpCoreDb = factory.Create(_sharpCoreDbPath, "benchmarkPassword", false, DatabaseConfig.HighPerformance);
         
         _sharpCoreDb.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT)");
 

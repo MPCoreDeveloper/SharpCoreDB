@@ -18,6 +18,7 @@ public class Database : IDatabase
     private readonly string _dbPath;
     private readonly bool _isReadOnly;
     private readonly DatabaseConfig? _config;
+    private readonly QueryCache? _queryCache;
 
     /// <summary>
     /// Initializes a new instance of the Database class.
@@ -31,12 +32,19 @@ public class Database : IDatabase
     {
         _dbPath = dbPath;
         _isReadOnly = isReadOnly;
-        _config = config;
+        _config = config ?? DatabaseConfig.Default;
         Directory.CreateDirectory(_dbPath);
         _crypto = services.GetRequiredService<ICryptoService>();
         var masterKey = _crypto.DeriveKey(masterPassword, "salt");
-        _storage = new Storage(_crypto, masterKey, config);
+        _storage = new Storage(_crypto, masterKey, _config);
         _userService = new UserService(_crypto, _storage, _dbPath);
+        
+        // Initialize query cache if enabled
+        if (_config.EnableQueryCache)
+        {
+            _queryCache = new QueryCache(_config.QueryCacheSize);
+        }
+        
         Load();
     }
 
@@ -88,13 +96,13 @@ public class Database : IDatabase
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
-            var sqlParser = new SqlParser(_tables, null, _dbPath, _storage, _isReadOnly);
+            var sqlParser = new SqlParser(_tables, null, _dbPath, _storage, _isReadOnly, _queryCache);
             sqlParser.Execute(sql, null);
         }
         else
         {
             using var wal = new WAL(_dbPath, _config);
-            var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly);
+            var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly, _queryCache);
             sqlParser.Execute(sql, wal);
             if (!_isReadOnly) Save(wal);
         }
@@ -117,6 +125,16 @@ public class Database : IDatabase
     {
         // Already initialized in constructor
         return this;
+    }
+
+    /// <inheritdoc />
+    public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics()
+    {
+        if (_queryCache == null)
+        {
+            return (0, 0, 0, 0);
+        }
+        return _queryCache.GetStatistics();
     }
 }
 

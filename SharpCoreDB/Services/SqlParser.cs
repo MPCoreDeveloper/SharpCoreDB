@@ -12,23 +12,41 @@ public class SqlParser : ISqlParser
     private readonly string _dbPath;
     private readonly IStorage _storage;
     private readonly bool _isReadOnly;
+    private readonly QueryCache? _queryCache;
 
     /// <summary>
     /// Simple SQL parser and executor.
     /// </summary>
-    public SqlParser(Dictionary<string, ITable> tables, IWAL wal, string dbPath, IStorage storage, bool isReadOnly = false)
+    public SqlParser(Dictionary<string, ITable> tables, IWAL wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null)
     {
         _tables = tables;
         _wal = wal;
         _dbPath = dbPath;
         _storage = storage;
         _isReadOnly = isReadOnly;
+        _queryCache = queryCache;
     }
 
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)
     {
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // Use query cache for parsed SQL parts if available
+        string[] parts;
+        if (_queryCache != null)
+        {
+            var cached = _queryCache.GetOrAdd(sql, s => new QueryCache.CachedQuery
+            {
+                Sql = s,
+                Parts = s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries),
+                CachedAt = DateTime.UtcNow,
+                AccessCount = 1
+            });
+            parts = cached.Parts;
+        }
+        else
+        {
+            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
         if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == SqlConstants.TABLE)
         {
             if (_isReadOnly) throw new InvalidOperationException("Cannot create table in readonly mode");
