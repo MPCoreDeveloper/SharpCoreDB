@@ -15,4 +15,9 @@ public interface IWAL
     /// Commits the log, clearing it after successful write.
     /// </summary>
     void Commit();
+
+    /// <summary>
+    /// Asynchronously flushes buffered data to disk.
+    /// </summary>
+    Task FlushAsync();
 }

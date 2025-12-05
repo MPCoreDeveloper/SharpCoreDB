@@ -77,8 +77,8 @@ public class WAL : IWAL, IDisposable
         if (!_disposed)
         {
             _writer?.Flush();
-            _writer?.Close();
-            _fileStream?.Close();
+            _writer?.Dispose();
+            _fileStream?.Dispose();
             _disposed = true;
         }
     }
