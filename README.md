@@ -18,6 +18,8 @@ A lightweight, encrypted, file-based database engine for .NET that supports SQL 
 - **B-Tree Indexing**: Efficient data indexing using B-tree data structures
 
 ### New Production-Ready Features
+- **Async/Await Support**: Full async support with `ExecuteSQLAsync` for non-blocking database operations
+- **Batch Operations**: `ExecuteBatchSQL` for high-performance bulk inserts/updates with single WAL transaction
 - **Connection Pooling**: Built-in DatabasePool class for connection reuse and resource management
 - **Connection Strings**: Parse and build connection strings with ConnectionStringBuilder
 - **Auto Maintenance**: Automatic VACUUM and WAL checkpointing with AutoMaintenanceService
@@ -27,6 +29,7 @@ A lightweight, encrypted, file-based database engine for .NET that supports SQL 
 - **Date/Time Functions**: NOW(), DATE(), STRFTIME(), DATEADD() functions
 - **Aggregate Functions**: SUM(), AVG(), COUNT(DISTINCT), GROUP_CONCAT()
 - **PRAGMA Commands**: table_info(), index_list(), foreign_key_list() for metadata queries
+- **Modern C# 14**: Init-only properties, nullable reference types, and collection expressions
 
 ### Extensions Package (SharpCoreDB.Extensions)
 - **Dapper Integration**: IDbConnection wrapper for using Dapper with SharpCoreDB
@@ -123,6 +126,53 @@ dbReadonly.ExecuteSQL("SELECT * FROM users"); // Works
 // dbReadonly.ExecuteSQL("INSERT INTO users VALUES ('2', 'Bob')"); // Throws exception
 ```
 
+### Async/Await Operations
+
+```csharp
+// Execute SQL asynchronously
+await db.ExecuteSQLAsync("CREATE TABLE async_users (id INTEGER, name TEXT)");
+await db.ExecuteSQLAsync("INSERT INTO async_users VALUES ('1', 'Alice')");
+
+// With cancellation token
+using var cts = new CancellationTokenSource();
+await db.ExecuteSQLAsync("SELECT * FROM async_users", cts.Token);
+
+// Parallel async operations
+var tasks = new List<Task>();
+for (int i = 0; i < 10; i++)
+{
+    int id = i;
+    tasks.Add(db.ExecuteSQLAsync($"INSERT INTO async_users VALUES ('{id}', 'User{id}')"));
+}
+await Task.WhenAll(tasks);
+```
+
+### Batch Operations for High Performance
+
+```csharp
+// Create batch of SQL statements
+var statements = new List<string>();
+for (int i = 0; i < 1000; i++)
+{
+    statements.Add($"INSERT INTO users VALUES ('{i}', 'User{i}')");
+}
+
+// Execute batch in a single WAL transaction (much faster than individual inserts)
+db.ExecuteBatchSQL(statements);
+
+// Async batch operations
+await db.ExecuteBatchSQLAsync(statements);
+
+// Mixed operations in batch
+var mixedBatch = new[]
+{
+    "INSERT INTO products VALUES ('1', 'Widget')",
+    "UPDATE products SET price = '19.99' WHERE id = '1'",
+    "INSERT INTO products VALUES ('2', 'Gadget')"
+};
+db.ExecuteBatchSQL(mixedBatch);
+```
+
 ### User Management
 
 ```csharp
@@ -177,20 +227,27 @@ var newBuilder = new ConnectionStringBuilder
 string connStr = newBuilder.BuildConnectionString();
 ```
 
-### Query Caching (NEW)
+### Performance Configuration
 
 ```csharp
-// Query caching is enabled by default in DatabaseConfig
+// Default configuration with encryption enabled
+var defaultConfig = DatabaseConfig.Default;
+var db = factory.Create(dbPath, password, false, defaultConfig);
+
+// Custom configuration
 var config = new DatabaseConfig 
 { 
-    EnableQueryCache = true,
-    QueryCacheSize = 1000  // Cache up to 1000 unique queries
+    EnableQueryCache = true,     // Enable query caching
+    QueryCacheSize = 1000,       // Cache up to 1000 unique queries
+    EnableHashIndexes = true,    // Enable hash indexes
+    WalBufferSize = 1024 * 1024, // 1MB WAL buffer
+    UseBufferedIO = false        // Standard I/O
 };
-var db = factory.Create(dbPath, password, false, config);
+var customDb = factory.Create(dbPath, password, false, config);
 
-// Repeated queries benefit from caching
-db.ExecuteSQL("SELECT project, SUM(duration) FROM time_entries GROUP BY project"); // Cache miss
-db.ExecuteSQL("SELECT project, SUM(duration) FROM time_entries GROUP BY project"); // Cache hit!
+// High-performance mode (disables encryption - use only in trusted environments!)
+var highPerfConfig = DatabaseConfig.HighPerformance;
+var fastDb = factory.Create(dbPath, password, false, highPerfConfig);
 
 // Get cache statistics
 var stats = db.GetQueryCacheStatistics();

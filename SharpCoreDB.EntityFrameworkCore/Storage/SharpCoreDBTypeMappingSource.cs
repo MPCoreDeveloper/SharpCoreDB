@@ -1,3 +1,6 @@
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
@@ -5,37 +8,97 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 /// <summary>
 /// Type mapping source for SharpCoreDB.
 /// Maps .NET types to SharpCoreDB SQL types (INTEGER, TEXT, REAL, DATETIME, etc.).
-/// INCOMPLETE IMPLEMENTATION - Placeholder stub only.
 /// </summary>
-public class SharpCoreDBTypeMappingSource : IRelationalTypeMappingSource
+public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
 {
-    /// <inheritdoc />
-    public RelationalTypeMapping? FindMapping(Type type)
+    private static readonly Dictionary<Type, RelationalTypeMapping> _typeMappings = new()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        [typeof(int)] = new IntTypeMapping("INTEGER"),
+        [typeof(long)] = new LongTypeMapping("LONG"),
+        [typeof(string)] = new StringTypeMapping("TEXT"),
+        [typeof(bool)] = new BoolTypeMapping("BOOLEAN"),
+        [typeof(double)] = new DoubleTypeMapping("REAL"),
+        [typeof(decimal)] = new DecimalTypeMapping("DECIMAL"),
+        [typeof(DateTime)] = new DateTimeTypeMapping("DATETIME"),
+        [typeof(Guid)] = new GuidTypeMapping("GUID"),
+        [typeof(byte[])] = new ByteArrayTypeMapping("BLOB")
+    };
+
+    /// <summary>
+    /// Initializes a new instance of the SharpCoreDBTypeMappingSource class.
+    /// </summary>
+    public SharpCoreDBTypeMappingSource(TypeMappingSourceDependencies dependencies, RelationalTypeMappingSourceDependencies relationalDependencies)
+        : base(dependencies, relationalDependencies)
+    {
     }
 
     /// <inheritdoc />
-    public RelationalTypeMapping? FindMapping(string storeTypeName)
+    protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        var clrType = mappingInfo.ClrType;
+        if (clrType != null && _typeMappings.TryGetValue(clrType, out var mapping))
+        {
+            return mapping;
+        }
+
+        if (mappingInfo.StoreTypeName != null)
+        {
+            return mappingInfo.StoreTypeName.ToUpperInvariant() switch
+            {
+                "INTEGER" => new IntTypeMapping("INTEGER"),
+                "LONG" => new LongTypeMapping("LONG"),
+                "TEXT" => new StringTypeMapping("TEXT"),
+                "BOOLEAN" => new BoolTypeMapping("BOOLEAN"),
+                "REAL" => new DoubleTypeMapping("REAL"),
+                "DECIMAL" => new DecimalTypeMapping("DECIMAL"),
+                "DATETIME" => new DateTimeTypeMapping("DATETIME"),
+                "GUID" => new GuidTypeMapping("GUID"),
+                "ULID" => new StringTypeMapping("ULID"),
+                "BLOB" => new ByteArrayTypeMapping("BLOB"),
+                _ => null
+            };
+        }
+
+        return base.FindMapping(mappingInfo);
     }
 
     /// <inheritdoc />
-    public RelationalTypeMapping? FindMapping(IProperty property)
+    public override CoreTypeMapping? FindMapping(IProperty property)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return FindMapping(property.ClrType);
     }
 
     /// <inheritdoc />
-    public RelationalTypeMapping? FindMapping(IProperty property, IEntityType entityType)
+    public override CoreTypeMapping? FindMapping(IElementType elementType)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return FindMapping(elementType.ClrType);
     }
 
     /// <inheritdoc />
-    public CoreTypeMapping? FindMapping(IElementType elementType)
+    public override CoreTypeMapping? FindMapping(Type type)
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        if (_typeMappings.TryGetValue(type, out var mapping))
+        {
+            return mapping;
+        }
+        return base.FindMapping(type);
+    }
+
+    /// <inheritdoc />
+    public override CoreTypeMapping? FindMapping(MemberInfo member)
+    {
+        return FindMapping(member.GetMemberType());
+    }
+
+    /// <inheritdoc />
+    public override CoreTypeMapping? FindMapping(Type type, IModel model, CoreTypeMapping? elementMapping = null)
+    {
+        return FindMapping(type);
+    }
+
+    /// <inheritdoc />
+    public override CoreTypeMapping? FindMapping(MemberInfo member, IModel model, bool useAttributes)
+    {
+        return FindMapping(member);
     }
 }

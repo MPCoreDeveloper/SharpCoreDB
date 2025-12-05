@@ -2,34 +2,40 @@ namespace SharpCoreDB;
 
 /// <summary>
 /// Configuration options for database performance and behavior.
+/// Uses C# 9.0+ init-only properties for immutable configuration.
 /// </summary>
 public class DatabaseConfig
 {
     /// <summary>
-    /// Gets or sets whether encryption should be disabled for maximum performance.
+    /// Gets whether encryption should be disabled for maximum performance.
     /// WARNING: Disabling encryption removes AES-256-GCM protection. Use only for trusted environments.
     /// </summary>
-    public bool NoEncryptMode { get; set; } = false;
+    public bool NoEncryptMode { get; init; } = false;
 
     /// <summary>
-    /// Gets or sets whether query caching is enabled.
+    /// Gets whether query caching is enabled.
     /// </summary>
-    public bool EnableQueryCache { get; set; } = true;
+    public bool EnableQueryCache { get; init; } = true;
 
     /// <summary>
-    /// Gets or sets the query cache size limit.
+    /// Gets the query cache size limit.
     /// </summary>
-    public int QueryCacheSize { get; set; } = 1000;
+    public int QueryCacheSize { get; init; } = 1000;
 
     /// <summary>
-    /// Gets or sets the WAL buffer size in bytes.
+    /// Gets the WAL buffer size in bytes.
     /// </summary>
-    public int WalBufferSize { get; set; } = 1024 * 1024; // 1MB
+    public int WalBufferSize { get; init; } = 1024 * 1024; // 1MB
 
     /// <summary>
-    /// Gets or sets whether hash indexes should be used.
+    /// Gets whether hash indexes should be used.
     /// </summary>
-    public bool EnableHashIndexes { get; set; } = true;
+    public bool EnableHashIndexes { get; init; } = true;
+
+    /// <summary>
+    /// Gets whether to use buffered I/O for high-performance mode.
+    /// </summary>
+    public bool UseBufferedIO { get; init; } = false;
 
     /// <summary>
     /// Default configuration with encryption enabled.
@@ -44,6 +50,7 @@ public class DatabaseConfig
         NoEncryptMode = true,
         EnableQueryCache = true,
         EnableHashIndexes = true,
-        WalBufferSize = 2 * 1024 * 1024 // 2MB
+        WalBufferSize = 2 * 1024 * 1024, // 2MB
+        UseBufferedIO = true
     };
 }

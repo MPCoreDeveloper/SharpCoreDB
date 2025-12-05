@@ -109,6 +109,66 @@ public class Database : IDatabase
     }
 
     /// <inheritdoc />
+    public async Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() => ExecuteSQL(sql), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Executes multiple SQL commands in a batch for improved performance.
+    /// Uses a single WAL transaction for all commands.
+    /// </summary>
+    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
+    public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
+    {
+        var statements = sqlStatements as string[] ?? sqlStatements.ToArray();
+        if (statements.Length == 0) return;
+
+        // Check if any statement is a SELECT - if so, process individually
+        // Optimized: Use ReadOnlySpan to avoid allocations during check
+        var hasSelect = false;
+        foreach (var sql in statements)
+        {
+            var trimmed = sql.AsSpan().Trim();
+            if (trimmed.Length >= 6 && trimmed[..6].Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                hasSelect = true;
+                break;
+            }
+        }
+
+        if (hasSelect)
+        {
+            // Process individually if there are SELECTs
+            foreach (var sql in statements)
+            {
+                ExecuteSQL(sql);
+            }
+            return;
+        }
+
+        // Batch all non-SELECT statements in a single WAL transaction
+        using var wal = new WAL(_dbPath, _config);
+        foreach (var sql in statements)
+        {
+            var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly, _queryCache);
+            sqlParser.Execute(sql, wal);
+        }
+        if (!_isReadOnly) Save(wal);
+    }
+
+    /// <summary>
+    /// Executes multiple SQL commands in a batch asynchronously.
+    /// </summary>
+    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task ExecuteBatchSQLAsync(IEnumerable<string> sqlStatements, CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() => ExecuteBatchSQL(sqlStatements), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public void CreateUser(string username, string password)
     {
         _userService.CreateUser(username, password);
