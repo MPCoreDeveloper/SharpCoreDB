@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.DataStructures;
@@ -50,8 +51,14 @@ public class Table : ITable
     /// </summary>
     public IIndex<string, long> Index { get; set; } = new BTree<string, long>();
 
+    /// <summary>
+    /// Hash indexes for fast WHERE clause lookups on specific columns.
+    /// </summary>
+    private readonly Dictionary<string, HashIndex> _hashIndexes = new();
+
     private IStorage _storage;
-    private readonly ReaderWriterLockSlim _lock = new();
+    // .NET 10: Use Lock instead of ReaderWriterLockSlim for better performance
+    private readonly Lock _lock = new();
     private bool _isReadOnly;
 
     /// <summary>
@@ -65,11 +72,13 @@ public class Table : ITable
     public void SetReadOnly(bool isReadOnly) => _isReadOnly = isReadOnly;
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Insert(Dictionary<string, object> row)
     {
         if (_isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
-        _lock.EnterWriteLock();
-        try
+        
+        // .NET 10: Use lock statement with Lock type for better performance
+        lock (_lock)
         {
             // Validate types
             for (int i = 0; i < Columns.Count; i++)
@@ -124,20 +133,66 @@ public class Table : ITable
             ms.Write(data, 0, data.Length);
             ms.Write(rowData, 0, rowData.Length);
             _storage.WriteBytes(DataFile, ms.ToArray());
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
+
+            // Update hash indexes
+            foreach (var index in _hashIndexes.Values)
+            {
+                index.Add(row);
+            }
         }
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true)
     {
-        if (!_isReadOnly) _lock.EnterReadLock();
-        try
+        // .NET 10: Lock type provides better performance than ReaderWriterLockSlim
+        // For read-only mode, skip locking entirely for maximum throughput
+        if (_isReadOnly)
         {
-            var results = new List<Dictionary<string, object>>();
+            return SelectInternal(where, orderBy, asc);
+        }
+        
+        lock (_lock)
+        {
+            return SelectInternal(where, orderBy, asc);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc)
+    {
+        var results = new List<Dictionary<string, object>>();
+        
+        // Try to use hash index for WHERE clause if available
+        bool usedHashIndex = false;
+        if (where != null)
+        {
+            var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (whereParts.Length == 3 && whereParts[1] == "=")
+            {
+                var col = whereParts[0];
+                var val = whereParts[2].Trim('\'');
+                
+                // Check if we have a hash index for this column
+                if (_hashIndexes.TryGetValue(col, out var hashIndex))
+                {
+                    // O(1) hash lookup instead of full table scan!
+                    // Parse the value to the correct type for lookup
+                    var colIdx = Columns.IndexOf(col);
+                    if (colIdx >= 0)
+                    {
+                        var typedValue = ParseValueForHashLookup(val, ColumnTypes[colIdx]);
+                        results = hashIndex.Lookup(typedValue);
+                        usedHashIndex = true;
+                    }
+                }
+            }
+        }
+
+        // Fall back to full table scan if hash index wasn't used
+        if (!usedHashIndex)
+        {
             var data = _storage.ReadBytes(DataFile);
             if (data == null || data.Length == 0) return results;
             using var ms = new MemoryStream(data);
@@ -163,43 +218,66 @@ public class Table : ITable
                     results = results.Where(r => string.Equals(r[col]?.ToString() ?? "NULL", val, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
             }
-
-            if (orderBy != null)
-            {
-                var idx = Columns.IndexOf(orderBy);
-                if (idx >= 0)
-                {
-                    results = asc ? [.. results.OrderBy(r => r[Columns[idx]])] : [.. results.OrderByDescending(r => r[Columns[idx]])];
-
-                }
-            }
-            return results;
         }
-        finally
+
+        if (orderBy != null)
         {
-            if (!_isReadOnly) _lock.ExitReadLock();
+            var idx = Columns.IndexOf(orderBy);
+            if (idx >= 0)
+            {
+                results = asc ? [.. results.OrderBy(r => r[Columns[idx]])] : [.. results.OrderByDescending(r => r[Columns[idx]])];
+
+            }
         }
+        return results;
+    }
+
+    /// <summary>
+    /// Parses a string value to the appropriate type for hash index lookup.
+    /// </summary>
+    private object ParseValueForHashLookup(string value, DataType type)
+    {
+        return type switch
+        {
+            DataType.Integer => int.TryParse(value, out var i) ? i : value,
+            DataType.Long => long.TryParse(value, out var l) ? l : value,
+            DataType.Real => double.TryParse(value, out var d) ? d : value,
+            DataType.Decimal => decimal.TryParse(value, out var dec) ? dec : value,
+            DataType.Boolean => bool.TryParse(value, out var b) ? b : value,
+            DataType.DateTime => DateTime.TryParse(value, out var dt) ? dt : value,
+            DataType.Guid => Guid.TryParse(value, out var g) ? g : value,
+            _ => value // String, Ulid, Blob, etc.
+        };
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Update(string where, Dictionary<string, object> updates)
     {
         var allRows = Select(); // load outside lock
         var updatedRows = new List<Dictionary<string, object>>();
+        var modifiedRows = new List<(Dictionary<string, object> oldRow, Dictionary<string, object> newRow)>();
+        
         foreach (var row in allRows)
         {
             var matches = EvaluateWhere(row, where);
             if (matches)
             {
+                // Keep a copy of the old row for index updates
+                var oldRow = new Dictionary<string, object>(row);
+                
                 foreach (var update in updates)
                 {
                     row[update.Key] = update.Value;
                 }
+                
+                modifiedRows.Add((oldRow, row));
             }
             updatedRows.Add(row);
         }
-        _lock.EnterWriteLock();
-        try
+        
+        // .NET 10: Use lock statement with Lock type
+        lock (_lock)
         {
             // Rewrite file
             using var ms = new MemoryStream();
@@ -212,20 +290,41 @@ public class Table : ITable
                 }
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
+
+            // Optimize: Only update modified rows in indexes (O(k) instead of O(n))
+            foreach (var index in _hashIndexes.Values)
+            {
+                foreach (var (oldRow, newRow) in modifiedRows)
+                {
+                    index.Remove(oldRow);  // Remove old key
+                    index.Add(newRow);      // Add new key
+                }
+            }
         }
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Delete(string where)
     {
         var allRows = Select(); // load outside lock
-        var remainingRows = allRows.Where(r => !EvaluateWhere(r, where)).ToList();
-        _lock.EnterWriteLock();
-        try
+        var deletedRows = new List<Dictionary<string, object>>();
+        var remainingRows = new List<Dictionary<string, object>>();
+        
+        foreach (var row in allRows)
+        {
+            if (EvaluateWhere(row, where))
+            {
+                deletedRows.Add(row);
+            }
+            else
+            {
+                remainingRows.Add(row);
+            }
+        }
+        
+        // .NET 10: Use lock statement with Lock type
+        lock (_lock)
         {
             // Rewrite
             using var ms = new MemoryStream();
@@ -238,10 +337,15 @@ public class Table : ITable
                 }
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
+
+            // Optimize: Only remove deleted rows from indexes (O(k) instead of O(n))
+            foreach (var index in _hashIndexes.Values)
+            {
+                foreach (var deletedRow in deletedRows)
+                {
+                    index.Remove(deletedRow);
+                }
+            }
         }
     }
 
@@ -321,5 +425,50 @@ public class Table : ITable
             return row[col]?.ToString() == val;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Creates a hash index on the specified column for fast WHERE clause lookups.
+    /// </summary>
+    /// <param name="columnName">The column name to index.</param>
+    /// <remarks>
+    /// This method loads all table rows into memory to build the index.
+    /// For large tables (>1M rows), consider creating indexes before bulk data loading.
+    /// Once created, the index is maintained incrementally on INSERT/UPDATE/DELETE.
+    /// </remarks>
+    public void CreateHashIndex(string columnName)
+    {
+        if (!Columns.Contains(columnName))
+            throw new InvalidOperationException($"Column {columnName} does not exist in table {Name}");
+
+        if (_hashIndexes.ContainsKey(columnName))
+            return; // Already indexed
+
+        var index = new HashIndex(Name, columnName);
+        
+        // Build index from existing data (one-time operation)
+        var allRows = Select();
+        index.Rebuild(allRows);
+        
+        _hashIndexes[columnName] = index;
+    }
+
+    /// <summary>
+    /// Checks if a hash index exists for the specified column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>True if index exists.</returns>
+    public bool HasHashIndex(string columnName) => _hashIndexes.ContainsKey(columnName);
+
+    /// <summary>
+    /// Gets hash index statistics for a column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>Index statistics or null if no index exists.</returns>
+    public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName)
+    {
+        if (_hashIndexes.TryGetValue(columnName, out var index))
+            return index.GetStatistics();
+        return null;
     }
 }

@@ -97,6 +97,33 @@ public class SqlParser : ISqlParser
             _tables[tableName] = table;
             wal?.Log(sql);
         }
+        else if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == "INDEX")
+        {
+            if (_isReadOnly) throw new InvalidOperationException("Cannot create index in readonly mode");
+            // CREATE INDEX idx_name ON table_name (column_name)
+            // or CREATE UNIQUE INDEX idx_name ON table_name (column_name)
+            
+            var indexNameIdx = parts[1].ToUpper() == "UNIQUE" ? 3 : 2;
+            var onIdx = Array.IndexOf(parts.Select(p => p.ToUpper()).ToArray(), "ON");
+            if (onIdx < 0)
+                throw new InvalidOperationException("CREATE INDEX requires ON clause");
+            
+            var tableName = parts[onIdx + 1];
+            if (!_tables.ContainsKey(tableName))
+                throw new InvalidOperationException($"Table {tableName} does not exist");
+            
+            // Extract column name from parentheses
+            var columnStart = sql.IndexOf('(');
+            var columnEnd = sql.IndexOf(')');
+            if (columnStart < 0 || columnEnd < 0)
+                throw new InvalidOperationException("CREATE INDEX requires column name in parentheses");
+            
+            var columnName = sql.Substring(columnStart + 1, columnEnd - columnStart - 1).Trim();
+            
+            // Create hash index on the table
+            _tables[tableName].CreateHashIndex(columnName);
+            wal?.Log(sql);
+        }
         else if (parts[0].ToUpper() == SqlConstants.INSERT && parts[1].ToUpper() == SqlConstants.INTO)
         {
             if (_isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
