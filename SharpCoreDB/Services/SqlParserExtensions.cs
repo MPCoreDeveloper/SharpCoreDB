@@ -139,7 +139,11 @@ public static class SqlParserExtensions
                 break;
 
             default:
-                Console.WriteLine($"PRAGMA {pragmaCommand} not implemented");
+                // Only log recognized pragma commands to prevent log injection
+                if (pragmaCommand.All(c => char.IsLetterOrDigit(c) || c == '_'))
+                {
+                    Console.WriteLine($"PRAGMA {pragmaCommand} not implemented");
+                }
                 break;
         }
     }

@@ -61,6 +61,8 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SharpCoreDB_Insert()
     {
+        // Note: In production, use parameterized queries or proper sanitization
+        // This benchmark uses string interpolation for performance testing only
         for (int i = 0; i < EntryCount; i++)
         {
             _sharpCoreDb!.ExecuteSQL($"INSERT INTO time_entries VALUES ('{i}', 'Project{i % 10}', 'Task{i % 5}', '2024-01-{(i % 28) + 1:00} 09:00:00', '2024-01-{(i % 28) + 1:00} 17:00:00', '480', 'User{i % 3}')");

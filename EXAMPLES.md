@@ -2,6 +2,18 @@
 
 This document provides practical examples for using SharpCoreDB in time-tracking, invoicing, and project management applications.
 
+## ⚠️ Security Notice
+
+**Important:** The examples in this document use string interpolation for clarity and simplicity. In production applications:
+
+1. **Always sanitize and validate all user input** before using it in SQL statements
+2. **Escape single quotes** in string values: `userInput.Replace("'", "''")`
+3. **Validate input types, lengths, and formats**
+4. **Use allowlists** for identifiers (table names, column names)
+5. **Never trust user input** in SQL statements
+
+SharpCoreDB currently does not support parameterized queries. Future versions will add this security feature.
+
 ## Time Tracking Application Example
 
 ### Schema Setup
@@ -136,16 +148,23 @@ builder.Services.AddSingleton<DatabasePool>(sp =>
 var app = builder.Build();
 
 // Example API endpoint
+// WARNING: This is a simplified example. In production, you MUST:
+// 1. Validate and sanitize all user input
+// 2. Use parameterized queries or proper escaping
+// 3. Implement authentication and authorization
 app.MapPost("/api/time-entries", async (DatabasePool pool, TimeEntryRequest request) =>
 {
     var db = pool.GetDatabase("timetracker.db", "secure_password");
     
     try
     {
+        // TODO: Sanitize request.Task to prevent SQL injection
+        var sanitizedTask = request.Task.Replace("'", "''"); // Basic SQL escaping
+        
         db.ExecuteSQL($@"INSERT INTO time_entries 
             (project_id, user_id, task, start_time, billable) 
-            VALUES ('{request.ProjectId}', '{request.UserId}', '{request.Task}', 
-                    '{request.StartTime}', '{request.Billable}')");
+            VALUES ('{request.ProjectId}', '{request.UserId}', '{sanitizedTask}', 
+                    '{request.StartTime:yyyy-MM-dd HH:mm:ss}', '{request.Billable}')");
         
         return Results.Ok(new { success = true });
     }

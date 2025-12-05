@@ -306,6 +306,34 @@ services.AddHealthChecks()
 | ULID | Universally Unique Lexicographically Sortable Identifier |
 | GUID | Globally Unique Identifier |
 
+## Security Considerations
+
+**Important:** SharpCoreDB currently does not support parameterized queries. When building SQL statements:
+
+1. **Always sanitize user input** before including it in SQL statements
+2. **Escape single quotes** in string values by replacing `'` with `''`
+3. **Validate input** against expected formats and patterns
+4. **Use allowlists** for column names, table names, and other identifiers
+5. **Never directly interpolate** untrusted user input into SQL statements
+
+Example of safe SQL construction:
+```csharp
+// BAD - Vulnerable to SQL injection
+var username = userInput;
+db.ExecuteSQL($"SELECT * FROM users WHERE name = '{username}'");
+
+// GOOD - Sanitized input
+var username = userInput.Replace("'", "''"); // Escape single quotes
+if (username.Length > 50) throw new ArgumentException("Username too long");
+db.ExecuteSQL($"SELECT * FROM users WHERE name = '{username}'");
+
+// BETTER - Validate against allowlist
+var allowedUsernames = new[] { "alice", "bob", "charlie" };
+if (!allowedUsernames.Contains(userInput))
+    throw new ArgumentException("Invalid username");
+db.ExecuteSQL($"SELECT * FROM users WHERE name = '{userInput}'");
+```
+
 ## Requirements
 
 - .NET 10.0 or later

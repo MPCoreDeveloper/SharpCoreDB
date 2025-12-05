@@ -115,7 +115,8 @@ public static class SqlFunctions
     {
         var items = values
             .Where(v => v != null && v != DBNull.Value)
-            .Select(v => v.ToString());
+            .Select(v => v.ToString() ?? string.Empty)
+            .Where(s => !string.IsNullOrEmpty(s));
         return string.Join(separator, items);
     }
 
