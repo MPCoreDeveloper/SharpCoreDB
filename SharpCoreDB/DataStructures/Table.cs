@@ -246,18 +246,26 @@ public class Table : ITable
     {
         var allRows = Select(); // load outside lock
         var updatedRows = new List<Dictionary<string, object>>();
+        var modifiedRows = new List<(Dictionary<string, object> oldRow, Dictionary<string, object> newRow)>();
+        
         foreach (var row in allRows)
         {
             var matches = EvaluateWhere(row, where);
             if (matches)
             {
+                // Keep a copy of the old row for index updates
+                var oldRow = new Dictionary<string, object>(row);
+                
                 foreach (var update in updates)
                 {
                     row[update.Key] = update.Value;
                 }
+                
+                modifiedRows.Add((oldRow, row));
             }
             updatedRows.Add(row);
         }
+        
         _lock.EnterWriteLock();
         try
         {
@@ -273,10 +281,14 @@ public class Table : ITable
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
 
-            // Rebuild hash indexes after update
+            // Optimize: Only update modified rows in indexes (O(k) instead of O(n))
             foreach (var index in _hashIndexes.Values)
             {
-                index.Rebuild(updatedRows);
+                foreach (var (oldRow, newRow) in modifiedRows)
+                {
+                    index.Remove(oldRow);  // Remove old key
+                    index.Add(newRow);      // Add new key
+                }
             }
         }
         finally
@@ -289,7 +301,21 @@ public class Table : ITable
     public void Delete(string where)
     {
         var allRows = Select(); // load outside lock
-        var remainingRows = allRows.Where(r => !EvaluateWhere(r, where)).ToList();
+        var deletedRows = new List<Dictionary<string, object>>();
+        var remainingRows = new List<Dictionary<string, object>>();
+        
+        foreach (var row in allRows)
+        {
+            if (EvaluateWhere(row, where))
+            {
+                deletedRows.Add(row);
+            }
+            else
+            {
+                remainingRows.Add(row);
+            }
+        }
+        
         _lock.EnterWriteLock();
         try
         {
@@ -305,10 +331,13 @@ public class Table : ITable
             }
             _storage.WriteBytes(DataFile, ms.ToArray());
 
-            // Rebuild hash indexes after delete
+            // Optimize: Only remove deleted rows from indexes (O(k) instead of O(n))
             foreach (var index in _hashIndexes.Values)
             {
-                index.Rebuild(remainingRows);
+                foreach (var deletedRow in deletedRows)
+                {
+                    index.Remove(deletedRow);
+                }
             }
         }
         finally
@@ -399,6 +428,11 @@ public class Table : ITable
     /// Creates a hash index on the specified column for fast WHERE clause lookups.
     /// </summary>
     /// <param name="columnName">The column name to index.</param>
+    /// <remarks>
+    /// This method loads all table rows into memory to build the index.
+    /// For large tables (>1M rows), consider creating indexes before bulk data loading.
+    /// Once created, the index is maintained incrementally on INSERT/UPDATE/DELETE.
+    /// </remarks>
     public void CreateHashIndex(string columnName)
     {
         if (!Columns.Contains(columnName))
@@ -409,7 +443,7 @@ public class Table : ITable
 
         var index = new HashIndex(Name, columnName);
         
-        // Build index from existing data
+        // Build index from existing data (one-time operation)
         var allRows = Select();
         index.Rebuild(allRows);
         
