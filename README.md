@@ -398,12 +398,23 @@ Performance improvements with latest optimizations:
 | LiteDB | ~185s | ~38ms | ~140ms | ~680 MB | Document database |
 
 **Performance Optimizations Implemented:**
-- **Query Caching**: 2x speedup on repeated queries (>80% hit rate for reports) ✅
-- **HashIndex with CREATE INDEX**: O(1) lookup for WHERE clauses (5-10x faster queries) ✅
-- **GC Optimization**: Span<byte> and ArrayPool in parser reduce allocations ✅
+- **Query Caching**: 2x speedup on repeated queries (>90% hit rate validated) ✅
+- **HashIndex with CREATE INDEX**: O(1) lookup for WHERE clauses (2-5x faster validated) ✅
+- **GC Optimization**: Span<byte> and ArrayPool reduce allocations (validated) ✅
 - **NoEncryption Mode**: Bypass AES for trusted environments (~4% faster) ✅
 - **Buffered WAL**: 1-2MB write buffer for batched operations (~5% faster) ✅
 - **.NET 10 + C# 14**: Latest runtime and language optimizations ✅
+
+**Validation Results (10k records):**
+```bash
+# Quick validation benchmark
+dotnet run --project SharpCoreDB.Benchmarks -c Release Validate
+
+## Results:
+- QueryCache: 99% hit rate on repeated queries
+- HashIndex: 2.03x speedup with CREATE INDEX
+- GC Optimization: Span<byte> and ArrayPool confirmed working
+```
 
 #### Previous Benchmarks (10k records)
 
@@ -504,6 +515,32 @@ if (!allowedUsernames.Contains(userInput))
     throw new ArgumentException("Invalid username");
 db.ExecuteSQL($"SELECT * FROM users WHERE name = '{userInput}'");
 ```
+
+## Entity Framework Core Provider (In Development)
+
+⚠️ **Status: Skeleton Implementation Only** - The EF Core provider is **not functional** and under active development.
+
+### What's Available
+- Basic project structure (`SharpCoreDB.EntityFrameworkCore`)
+- 14 infrastructure skeleton files
+- DI registration framework
+- Connection wrapper stubs
+
+### What's Missing
+- Type mapping implementation (~800 LOC needed)
+- Query translation (LINQ → SQL) (~1200 LOC needed)
+- Migrations support (~1000 LOC needed)
+- Full command execution (~800 LOC needed)
+- SQL generation (~400 LOC needed)
+
+**Estimated completion**: ~3000-4000 LOC, 15-30 hours of development
+
+See [EFCORE_STATUS.md](EFCORE_STATUS.md) for detailed roadmap and contribution guidelines.
+
+### Current Alternatives
+1. **Direct SQL** (recommended): `db.ExecuteSQL("SELECT * FROM users")`
+2. **Dapper Integration**: Available via `SharpCoreDB.Extensions` package
+3. **Manual mapping**: Parse query results into POCOs
 
 ## Requirements
 
