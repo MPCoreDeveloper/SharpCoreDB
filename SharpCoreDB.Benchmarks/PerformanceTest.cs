@@ -29,7 +29,7 @@ public static class PerformanceTest
         Console.WriteLine($"{"Operation",-30} {"SharpCoreDB",-15} {"SQLite",-15} {"Difference",-15}");
         Console.WriteLine(new string('-', 75));
         
-        DisplayComparison("Insert 100k records", sharpResults.InsertTime, sqliteResults.InsertTime);
+        DisplayComparison("Insert 10k records", sharpResults.InsertTime, sqliteResults.InsertTime);
         DisplayComparison("Select with WHERE", sharpResults.SelectTime, sqliteResults.SelectTime);
         DisplayComparison("Select 1000 records", sharpResults.SelectMultipleTime, sqliteResults.SelectMultipleTime);
         
