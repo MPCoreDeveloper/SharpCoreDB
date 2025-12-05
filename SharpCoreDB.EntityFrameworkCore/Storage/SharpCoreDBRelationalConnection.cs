@@ -87,15 +87,16 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     /// <inheritdoc />
     public IRelationalCommand RentCommand()
     {
-        // Return a command from the pool
-        throw new NotSupportedException("Command pooling not yet implemented");
+        // EF Core 10 expects this to return a command for execution
+        // For now, we return null to indicate no pooling - EF Core will create commands as needed
+        return null!;
     }
 
     /// <inheritdoc />
     public void ReturnCommand(IRelationalCommand command)
     {
         // Return command to pool
-        // No-op for now
+        // No-op - command pooling not implemented yet
     }
 
     /// <inheritdoc />

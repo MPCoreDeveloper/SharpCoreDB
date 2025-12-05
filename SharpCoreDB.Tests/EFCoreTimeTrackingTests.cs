@@ -142,6 +142,9 @@ public class EFCoreTimeTrackingTests : IDisposable
         Assert.Equal(2, projectA.Count);
     }
 
+    /// <summary>
+    /// Cleans up test resources.
+    /// </summary>
     public void Dispose()
     {
         // Clean up test database
@@ -156,6 +159,7 @@ public class EFCoreTimeTrackingTests : IDisposable
                 // Ignore cleanup errors
             }
         }
+        GC.SuppressFinalize(this);
     }
 }
 

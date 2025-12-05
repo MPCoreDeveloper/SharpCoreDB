@@ -87,13 +87,20 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     /// <inheritdoc />
     public override RelationalTypeMapping? FindMapping(MemberInfo member)
     {
-        var memberType = member switch
+        return FindMapping(GetMemberType(member));
+    }
+
+    /// <summary>
+    /// Gets the CLR type from a MemberInfo (property or field).
+    /// </summary>
+    private static Type GetMemberType(MemberInfo member)
+    {
+        return member switch
         {
             PropertyInfo propertyInfo => propertyInfo.PropertyType,
             FieldInfo fieldInfo => fieldInfo.FieldType,
-            _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}")
+            _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}", nameof(member))
         };
-        return FindMapping(memberType);
     }
 
     /// <inheritdoc />
