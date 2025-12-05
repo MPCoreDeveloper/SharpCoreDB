@@ -109,6 +109,12 @@ public class Database : IDatabase
     }
 
     /// <inheritdoc />
+    public async Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() => ExecuteSQL(sql), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public void CreateUser(string username, string password)
     {
         _userService.CreateUser(username, password);

@@ -20,6 +20,14 @@ public interface IDatabase
     void ExecuteSQL(string sql);
 
     /// <summary>
+    /// Executes a SQL command asynchronously.
+    /// </summary>
+    /// <param name="sql">The SQL command.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a user.
     /// </summary>
     /// <param name="username">The username.</param>
