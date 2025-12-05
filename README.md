@@ -291,6 +291,32 @@ services.AddHealthChecks()
 // Health check endpoint will verify database connectivity
 ```
 
+## Performance Benchmarks
+
+Performance comparison between SharpCoreDB and SQLite on time-tracking workloads (10,000 records):
+
+| Operation | SharpCoreDB | SQLite | Difference |
+|-----------|-------------|--------|------------|
+| Insert 10k records | 21.8s | 14.8s | +47.7% slower |
+| Select with WHERE (avg) | 11ms | 1ms | +636% slower |
+| Select 1000 records | 42ms | 4ms | +1021% slower |
+
+**Notes:**
+- SharpCoreDB prioritizes encryption and security over raw performance
+- All data is AES-256-GCM encrypted at rest
+- Performance varies based on hardware and workload
+- Connection pooling and indexes can significantly improve query performance
+- For production use with large datasets (100k+ records), consider:
+  - Creating indexes on frequently queried columns
+  - Using connection pooling to reuse database instances
+  - Enabling auto-maintenance for optimal performance
+
+**Running Benchmarks:**
+```bash
+cd SharpCoreDB.Benchmarks
+dotnet run --configuration Release
+```
+
 ## Supported Data Types
 
 | Type | Description |

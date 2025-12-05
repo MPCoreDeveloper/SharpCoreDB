@@ -1,4 +1,5 @@
-﻿using BenchmarkDotNet.Running;
-using SharpCoreDB.Benchmarks;
+﻿using SharpCoreDB.Benchmarks;
 
-BenchmarkRunner.Run<TimeTrackingBenchmarks>();
+// Run simple performance test instead of full benchmarks
+// Full benchmarks can be run with: BenchmarkRunner.Run<TimeTrackingBenchmarks>();
+PerformanceTest.RunPerformanceTest();
