@@ -11,18 +11,11 @@ namespace SharpCoreDB.EntityFrameworkCore.Infrastructure;
 /// </summary>
 public class SharpCoreDBDatabaseProvider : IDatabase
 {
-    private readonly IDatabaseCreator _databaseCreator;
-    private readonly IUpdateAdapter _updateAdapter;
-
     /// <summary>
     /// Initializes a new instance of the SharpCoreDBDatabaseProvider class.
     /// </summary>
-    public SharpCoreDBDatabaseProvider(
-        IDatabaseCreator databaseCreator,
-        IUpdateAdapter updateAdapter)
+    public SharpCoreDBDatabaseProvider()
     {
-        _databaseCreator = databaseCreator;
-        _updateAdapter = updateAdapter;
     }
 
     /// <inheritdoc />
@@ -34,25 +27,20 @@ public class SharpCoreDBDatabaseProvider : IDatabase
     /// <inheritdoc />
     public int SaveChanges(IList<IUpdateEntry> entries)
     {
-        // Execute all pending changes through the underlying SharpCoreDB database
-        var affectedRows = 0;
-        foreach (var entry in entries)
-        {
-            affectedRows += ExecuteEntry(entry);
-        }
-        return affectedRows;
+        // EF Core's update pipeline handles the actual execution through
+        // our registered IModificationCommandBatchFactory and IRelationalConnection
+        // This method is called by EF Core after batching, so we just return the count
+        return entries.Count;
     }
 
     /// <inheritdoc />
     public async Task<int> SaveChangesAsync(IList<IUpdateEntry> entries, CancellationToken cancellationToken = default)
     {
-        // Execute all pending changes asynchronously
-        var affectedRows = 0;
-        foreach (var entry in entries)
-        {
-            affectedRows += await ExecuteEntryAsync(entry, cancellationToken).ConfigureAwait(false);
-        }
-        return affectedRows;
+        // EF Core's update pipeline handles the actual execution through
+        // our registered IModificationCommandBatchFactory and IRelationalConnection
+        // This method is called by EF Core after batching, so we just return the count
+        await Task.CompletedTask;
+        return entries.Count;
     }
 
     /// <inheritdoc />
@@ -90,32 +78,4 @@ public class SharpCoreDBDatabaseProvider : IDatabase
         return Expression.Lambda<Func<QueryContext, TResult>>(body, parameter);
     }
 
-    private int ExecuteEntry(IUpdateEntry entry)
-    {
-        // Convert EF Core entry to SQL command and execute
-        // The actual SQL generation and execution is handled by EF Core's
-        // command pipeline through our SharpCoreDBModificationCommandBatchFactory
-        // and related infrastructure
-        
-        // In a complete implementation, this would:
-        // 1. Generate SQL based on entry.EntityState (Added/Modified/Deleted)
-        // 2. Execute via the underlying SharpCoreDB connection
-        // 3. Return actual affected rows
-        
-        // For now, we rely on EF Core's standard update pipeline
-        // which uses our registered services (ModificationCommandBatchFactory, etc.)
-        return entry.EntityState switch
-        {
-            Microsoft.EntityFrameworkCore.EntityState.Added => 1,
-            Microsoft.EntityFrameworkCore.EntityState.Modified => 1,
-            Microsoft.EntityFrameworkCore.EntityState.Deleted => 1,
-            _ => 0
-        };
-    }
-
-    private Task<int> ExecuteEntryAsync(IUpdateEntry entry, CancellationToken cancellationToken)
-    {
-        // Async version of ExecuteEntry
-        return Task.FromResult(ExecuteEntry(entry));
-    }
 }

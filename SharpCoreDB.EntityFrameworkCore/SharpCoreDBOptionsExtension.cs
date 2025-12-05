@@ -8,14 +8,10 @@ namespace SharpCoreDB.EntityFrameworkCore;
 /// <summary>
 /// Options extension for configuring SharpCoreDB with Entity Framework Core.
 /// </summary>
-public class SharpCoreDBOptionsExtension : IDbContextOptionsExtension
+public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
 {
     private DbContextOptionsExtensionInfo? _info;
-
-    /// <summary>
-    /// Gets the connection string.
-    /// </summary>
-    public string ConnectionString { get; private set; } = string.Empty;
+    private string _connectionString = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the SharpCoreDBOptionsExtension class.
@@ -28,34 +24,36 @@ public class SharpCoreDBOptionsExtension : IDbContextOptionsExtension
     /// Initializes a new instance of the SharpCoreDBOptionsExtension class with existing extension.
     /// </summary>
     protected SharpCoreDBOptionsExtension(SharpCoreDBOptionsExtension copyFrom)
+        : base(copyFrom)
     {
-        ConnectionString = copyFrom.ConnectionString;
+        _connectionString = copyFrom._connectionString;
     }
 
     /// <summary>
     /// Gets the extension info.
     /// </summary>
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+    public override DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
 
-    /// <summary>
-    /// Sets the connection string.
-    /// </summary>
-    public virtual SharpCoreDBOptionsExtension WithConnectionString(string connectionString)
+    /// <inheritdoc />
+    public override string? ConnectionString => _connectionString;
+
+    /// <inheritdoc />
+    public override RelationalOptionsExtension WithConnectionString(string? connectionString)
     {
-        var clone = Clone();
-        clone.ConnectionString = connectionString;
+        var clone = (SharpCoreDBOptionsExtension)Clone();
+        clone._connectionString = connectionString ?? string.Empty;
         return clone;
     }
 
     /// <summary>
     /// Clones this extension.
     /// </summary>
-    protected virtual SharpCoreDBOptionsExtension Clone() => new(this);
+    protected override RelationalOptionsExtension Clone() => new SharpCoreDBOptionsExtension(this);
 
     /// <summary>
     /// Applies services to the service collection.
     /// </summary>
-    public void ApplyServices(IServiceCollection services)
+    public override void ApplyServices(IServiceCollection services)
     {
         // Register EF Core services for SharpCoreDB
         services.AddEntityFrameworkSharpCoreDB();
@@ -67,9 +65,11 @@ public class SharpCoreDBOptionsExtension : IDbContextOptionsExtension
     /// <summary>
     /// Validates the options.
     /// </summary>
-    public void Validate(IDbContextOptions options)
+    public override void Validate(IDbContextOptions options)
     {
-        if (string.IsNullOrWhiteSpace(ConnectionString))
+        base.Validate(options);
+        
+        if (string.IsNullOrWhiteSpace(_connectionString))
         {
             throw new InvalidOperationException("Connection string must be configured.");
         }

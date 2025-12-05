@@ -21,7 +21,7 @@ public static class SharpCoreDBDbContextOptionsExtensions
         Action<SharpCoreDBDbContextOptionsBuilder>? configure = null)
     {
         var extension = GetOrCreateExtension(optionsBuilder);
-        extension = extension.WithConnectionString(connectionString);
+        extension = (SharpCoreDBOptionsExtension)extension.WithConnectionString(connectionString);
 
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
 
