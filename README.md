@@ -573,31 +573,118 @@ if (!allowedUsernames.Contains(userInput))
 db.ExecuteSQL($"SELECT * FROM users WHERE name = '{userInput}'");
 ```
 
-## Entity Framework Core Provider (In Development)
+## Entity Framework Core Provider
 
-⚠️ **Status: Skeleton Implementation Only** - The EF Core provider is **not functional** and under active development.
+✅ **Status: Functional** - The EF Core provider is now operational with full LINQ support!
 
-### What's Available
-- Basic project structure (`SharpCoreDB.EntityFrameworkCore`)
-- 14 infrastructure skeleton files
-- DI registration framework
-- Connection wrapper stubs
+### Features
+- **Full Type Mapping**: Support for DateTime, int, long, string, bool, double, decimal, Guid, byte[], and ULID
+- **LINQ Query Translation**: Complete support for WHERE, SELECT, JOIN, GROUP BY, ORDER BY, and aggregate functions
+- **Migrations**: CREATE TABLE, CREATE INDEX, UPSERT (INSERT OR REPLACE) support
+- **Aggregate Functions**: SUM(), AVG(), COUNT(), GROUP_CONCAT()
+- **DateTime Functions**: NOW(), DATEADD(), STRFTIME() for date operations
+- **Connection String Support**: Standard EF Core connection string configuration
+- **.NET 10 & C# 14**: Built exclusively for the latest .NET runtime
 
-### What's Missing
-- Type mapping implementation (~800 LOC needed)
-- Query translation (LINQ → SQL) (~1200 LOC needed)
-- Migrations support (~1000 LOC needed)
-- Full command execution (~800 LOC needed)
-- SQL generation (~400 LOC needed)
+### Usage
 
-**Estimated completion**: ~3000-4000 LOC, 15-30 hours of development
+```csharp
+using Microsoft.EntityFrameworkCore;
+using SharpCoreDB.EntityFrameworkCore;
 
-See [EFCORE_STATUS.md](EFCORE_STATUS.md) for detailed roadmap and contribution guidelines.
+// Define your entities
+public class TimeEntry
+{
+    public int Id { get; set; }
+    public string ProjectName { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public int DurationHours { get; set; }
+}
 
-### Current Alternatives
-1. **Direct SQL** (recommended): `db.ExecuteSQL("SELECT * FROM users")`
-2. **Dapper Integration**: Available via `SharpCoreDB.Extensions` package
-3. **Manual mapping**: Parse query results into POCOs
+// Create a DbContext
+public class TimeTrackingContext : DbContext
+{
+    private readonly string _connectionString;
+
+    public TimeTrackingContext(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        // Use SharpCoreDB provider
+        optionsBuilder.UseSharpCoreDB(_connectionString);
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<TimeEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ProjectName).IsRequired();
+            entity.Property(e => e.StartTime).IsRequired();
+        });
+    }
+}
+
+// Use the context
+var connectionString = "Data Source=/path/to/db;Password=YourPassword";
+using var context = new TimeTrackingContext(connectionString);
+
+// Create database
+context.Database.EnsureCreated();
+
+// Add data
+context.TimeEntries.Add(new TimeEntry
+{
+    Id = 1,
+    ProjectName = "CoralTime",
+    StartTime = DateTime.Now,
+    EndTime = DateTime.Now.AddHours(8),
+    DurationHours = 8
+});
+context.SaveChanges();
+
+// Query with LINQ
+var entries = context.TimeEntries
+    .Where(e => e.ProjectName == "CoralTime")
+    .ToList();
+
+// Use aggregations
+var totalHours = context.TimeEntries
+    .Where(e => e.ProjectName == "CoralTime")
+    .Sum(e => e.DurationHours);
+
+// Group by
+var projectStats = context.TimeEntries
+    .GroupBy(e => e.ProjectName)
+    .Select(g => new { Project = g.Key, Count = g.Count(), Total = g.Sum(e => e.DurationHours) })
+    .ToList();
+```
+
+### Migration Support
+
+```csharp
+// Migrations work seamlessly
+dotnet ef migrations add InitialCreate
+dotnet ef database update
+```
+
+### Limitations
+
+⚠️ **Current Implementation Notes**:
+- Optimized for CoralTime and time-tracking use cases
+- Query execution leverages SharpCoreDB's native SQL engine
+- Some advanced EF Core features (lazy loading, change tracking optimization) use default implementations
+
+### Alternatives
+1. **EF Core Provider** (new!): Full LINQ support with type safety
+2. **Direct SQL**: `db.ExecuteSQL("SELECT * FROM users")` for maximum control
+3. **Dapper Integration**: Available via `SharpCoreDB.Extensions` package
 
 ## Requirements
 

@@ -15,7 +15,7 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     {
         [typeof(int)] = new IntTypeMapping("INTEGER"),
         [typeof(long)] = new LongTypeMapping("LONG"),
-        [typeof(string)] = new StringTypeMapping("TEXT"),
+        [typeof(string)] = new StringTypeMapping("TEXT", System.Data.DbType.String),
         [typeof(bool)] = new BoolTypeMapping("BOOLEAN"),
         [typeof(double)] = new DoubleTypeMapping("REAL"),
         [typeof(decimal)] = new DecimalTypeMapping("DECIMAL"),
@@ -47,13 +47,13 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
             {
                 "INTEGER" => new IntTypeMapping("INTEGER"),
                 "LONG" => new LongTypeMapping("LONG"),
-                "TEXT" => new StringTypeMapping("TEXT"),
+                "TEXT" => new StringTypeMapping("TEXT", System.Data.DbType.String),
                 "BOOLEAN" => new BoolTypeMapping("BOOLEAN"),
                 "REAL" => new DoubleTypeMapping("REAL"),
                 "DECIMAL" => new DecimalTypeMapping("DECIMAL"),
                 "DATETIME" => new DateTimeTypeMapping("DATETIME"),
                 "GUID" => new GuidTypeMapping("GUID"),
-                "ULID" => new StringTypeMapping("ULID"),
+                "ULID" => new StringTypeMapping("ULID", System.Data.DbType.String),
                 "BLOB" => new ByteArrayTypeMapping("BLOB"),
                 _ => null
             };
@@ -75,7 +75,7 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     }
 
     /// <inheritdoc />
-    public override CoreTypeMapping? FindMapping(Type type)
+    public override RelationalTypeMapping? FindMapping(Type type)
     {
         if (_typeMappings.TryGetValue(type, out var mapping))
         {
@@ -85,19 +85,32 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     }
 
     /// <inheritdoc />
-    public override CoreTypeMapping? FindMapping(MemberInfo member)
+    public override RelationalTypeMapping? FindMapping(MemberInfo member)
     {
-        return FindMapping(member.GetMemberType());
+        return FindMapping(GetMemberType(member));
+    }
+
+    /// <summary>
+    /// Gets the CLR type from a MemberInfo (property or field).
+    /// </summary>
+    private static Type GetMemberType(MemberInfo member)
+    {
+        return member switch
+        {
+            PropertyInfo propertyInfo => propertyInfo.PropertyType,
+            FieldInfo fieldInfo => fieldInfo.FieldType,
+            _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}", nameof(member))
+        };
     }
 
     /// <inheritdoc />
-    public override CoreTypeMapping? FindMapping(Type type, IModel model, CoreTypeMapping? elementMapping = null)
+    public override RelationalTypeMapping? FindMapping(Type type, IModel model, CoreTypeMapping? elementMapping = null)
     {
         return FindMapping(type);
     }
 
     /// <inheritdoc />
-    public override CoreTypeMapping? FindMapping(MemberInfo member, IModel model, bool useAttributes)
+    public override RelationalTypeMapping? FindMapping(MemberInfo member, IModel model, bool useAttributes)
     {
         return FindMapping(member);
     }
