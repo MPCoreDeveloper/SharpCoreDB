@@ -126,7 +126,17 @@ public class SharpCoreDBDataReader : DbDataReader
     public override Guid GetGuid(int ordinal)
     {
         var value = GetValue(ordinal);
-        return value is Guid g ? g : Guid.Parse(value?.ToString() ?? string.Empty);
+        if (value is Guid g)
+            return g;
+
+        var stringValue = value?.ToString();
+        if (string.IsNullOrEmpty(stringValue))
+            throw new InvalidCastException($"Cannot convert null or empty value to Guid at ordinal {ordinal}");
+
+        if (Guid.TryParse(stringValue, out var result))
+            return result;
+
+        throw new InvalidCastException($"Cannot convert '{stringValue}' to Guid at ordinal {ordinal}");
     }
 
     /// <inheritdoc />

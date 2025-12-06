@@ -283,7 +283,7 @@ public class Database : IDatabase
             throw new InvalidOperationException("SELECT statement must have FROM clause");
         }
 
-        string[] keywords = ["WHERE", "ORDER", "LIMIT", "GROUP"];
+        string[] keywords = [SqlConstants.WHERE, SqlConstants.ORDER, "LIMIT", "GROUP"];
         var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
         var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
@@ -312,10 +312,17 @@ public class Database : IDatabase
             var limitParts = parts.Skip(limitIdx + 1).ToArray();
             if (limitParts.Length > 0)
             {
-                limit = int.Parse(limitParts[0]);
+                if (int.TryParse(limitParts[0], out var limitValue))
+                {
+                    limit = limitValue;
+                }
+
                 if (limitParts.Length > 2 && limitParts[1].ToUpper() == "OFFSET")
                 {
-                    offset = int.Parse(limitParts[2]);
+                    if (int.TryParse(limitParts[2], out var offsetValue))
+                    {
+                        offset = offsetValue;
+                    }
                 }
             }
         }
