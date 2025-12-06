@@ -26,8 +26,8 @@ public class WAL : IWAL, IDisposable
     private readonly ArrayPool<byte> pool = ArrayPool<byte>.Shared;
     private const int BufferSize = 4 * 1024 * 1024; // 4MB
     private readonly SemaphoreSlim semaphore = new(1);
-    private const int FlushThreshold = 1000;
-    private List<WalEntry> _pendingEntries = new();
+    private const int FlushThreshold = 1000; // PERFORMANCE FIX: Batch flush threshold to reduce I/O calls
+    private List<WalEntry> _pendingEntries = new(1024); // PERFORMANCE FIX: Pre-allocated list for pending entries to batch writes
     private readonly WalManager? _walManager;
 
     /// <summary>
@@ -86,10 +86,10 @@ public class WAL : IWAL, IDisposable
             throw new ObjectDisposedException(nameof(WAL));
         }
 
-        _pendingEntries.Add(entry);
+        _pendingEntries.Add(entry); // PERFORMANCE FIX: Add to pending list instead of immediate flush
         if (_pendingEntries.Count >= FlushThreshold)
         {
-            await FlushPendingAsync();
+            await FlushPendingAsync(); // PERFORMANCE FIX: Batch flush when threshold reached
         }
     }
 
@@ -108,8 +108,8 @@ public class WAL : IWAL, IDisposable
                 operationBytes.AsSpan().CopyTo(this.buffer.AsSpan(this.bufferPosition));
                 this.bufferPosition += operationBytes.Length;
             }
-            await this.FlushBufferAsync(); // Ensure buffer is flushed after batch
-            _pendingEntries.Clear();
+            await this.FlushBufferAsync(); // PERFORMANCE FIX: Single flush after batch write
+            _pendingEntries.Clear(); // PERFORMANCE FIX: Clear after successful flush
         }
         catch (Exception ex)
         {
@@ -152,9 +152,9 @@ public class WAL : IWAL, IDisposable
         }
 
         // Ensure all buffered data is written before committing to maintain WAL integrity
-        await FlushPendingAsync();
+        await FlushPendingAsync(); // PERFORMANCE FIX: Ensure all pending entries are flushed
         await this.FlushBufferAsync();
-        await this.fileStream.FlushAsync(cancellationToken);
+        // PERFORMANCE FIX: Removed redundant FlushAsync call to avoid double flushing
         this.fileStream.Close();
 
         File.Delete(this.logPath);

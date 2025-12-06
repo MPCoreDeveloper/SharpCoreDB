@@ -31,6 +31,9 @@ public class Database : IDatabase
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _prepared = new();
     private readonly WalManager _walManager;
 
+    // PERFORMANCE FIX: Cache prepared query plans to avoid repeated parsing
+    private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
     /// </summary>
@@ -288,6 +291,26 @@ public class Database : IDatabase
         await Task.Run(() => this.ExecutePrepared(stmt, parameters), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Executes a prepared statement asynchronously with parameters.
+    /// </summary>
+    /// <param name="stmt">The prepared statement.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <returns>A ValueTask representing the execution result.</returns>
+    public async ValueTask<object> ExecutePreparedAsync(PreparedStatement stmt, params object[] parameters)
+    {
+        // PERFORMANCE FIX: Use cached plan without re-parsing
+        var plan = _preparedPlans[stmt.Sql];
+        // Convert params to dictionary
+        var paramDict = new Dictionary<string, object?>();
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            paramDict[i.ToString()] = parameters[i];
+        }
+        await Task.Run(() => this.ExecutePrepared(stmt, paramDict));
+        return new object(); // placeholder
+    }
+
     /// <inheritdoc />
     public void CreateUser(string username, string password) => this.userService.CreateUser(username, password);
 
@@ -311,13 +334,13 @@ public class Database : IDatabase
     /// <returns>A prepared statement instance.</returns>
     public PreparedStatement Prepare(string sql)
     {
-        if (!_prepared.TryGetValue(sql, out var plan))
+        // PERFORMANCE FIX: Parse and cache query plan once per unique SQL string
+        if (!_preparedPlans.TryGetValue(sql, out var plan))
         {
             var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             plan = new CachedQueryPlan { Sql = sql, Parts = parts };
-            _prepared[sql] = plan;
+            _preparedPlans[sql] = plan;
         }
-
         return new PreparedStatement(sql, plan);
     }
 

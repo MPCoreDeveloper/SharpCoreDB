@@ -37,6 +37,9 @@ public class Table : ITable, IDisposable
         {
             this.indexManager = new IndexManager();
         }
+
+        // PERFORMANCE FIX: Start background task for asynchronous index updates
+        Task.Run(ProcessIndexUpdatesAsync);
     }
 
     /// <inheritdoc />
@@ -83,6 +86,9 @@ public class Table : ITable, IDisposable
     /// Index manager for asynchronous index updates.
     /// </summary>
     private IndexManager? indexManager;
+
+    // PERFORMANCE FIX: Asynchronous index updates via channel to avoid blocking operations
+    private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
 
     /// <summary>
     /// Sets the storage for this table.
@@ -164,7 +170,8 @@ public class Table : ITable, IDisposable
             // Queue index updates asynchronously
             if (this.indexManager != null && this.hashIndexes.Count > 0)
             {
-                this.indexManager.QueueUpdate(new IndexManager.IndexUpdate(row, this.hashIndexes.Values.ToList()));
+                // PERFORMANCE FIX: Fire-and-forget index update via channel
+                _ = _indexQueue.Writer.WriteAsync(new IndexUpdate(row, this.hashIndexes.Values.ToList()));
             }
         }
     }
@@ -552,6 +559,24 @@ public class Table : ITable, IDisposable
     public void Dispose()
     {
         this.indexManager?.Dispose();
+        _indexQueue.Writer.Complete();
         GC.SuppressFinalize(this);
     }
+
+    private async Task ProcessIndexUpdatesAsync()
+    {
+        await foreach (var update in _indexQueue.Reader.ReadAllAsync())
+        {
+            // PERFORMANCE FIX: Process index updates asynchronously in background
+            foreach (var index in update.Indexes)
+            {
+                index.Add(update.Row);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents an index update operation.
+    /// </summary>
+    private record IndexUpdate(Dictionary<string, object> Row, IEnumerable<HashIndex> Indexes);
 }

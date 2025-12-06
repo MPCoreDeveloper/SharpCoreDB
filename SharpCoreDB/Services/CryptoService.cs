@@ -42,4 +42,24 @@ public class CryptoService : ICryptoService
         aes.Decrypt(nonce, cipher, tag, plain);
         return plain;
     }
+
+    /// <inheritdoc />
+    public void EncryptPage(Span<byte> page)
+    {
+        // Not implemented in CryptoService, use GetAesGcmEncryption
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public void DecryptPage(Span<byte> page)
+    {
+        // Not implemented in CryptoService, use GetAesGcmEncryption
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public SharpCoreDB.Services.AesGcmEncryption GetAesGcmEncryption(byte[] key)
+    {
+        return new AesGcmEncryption(key, false);
+    }
 }

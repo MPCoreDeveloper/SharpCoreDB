@@ -4,6 +4,8 @@
 
 namespace SharpCoreDB.Interfaces;
 
+using SharpCoreDB.Services;
+
 /// <summary>
 /// Interface for cryptographic operations including password hashing and data encryption/decryption.
 /// </summary>
@@ -32,4 +34,23 @@ public interface ICryptoService
     /// <param name="encryptedData">The encrypted data.</param>
     /// <returns>The decrypted data as a byte array.</returns>
     byte[] Decrypt(byte[] key, byte[] encryptedData);
+
+    /// <summary>
+    /// Encrypts a page using AES-256-GCM.
+    /// </summary>
+    /// <param name="page">The page data to encrypt (modified in place if buffer is large enough).</param>
+    void EncryptPage(Span<byte> page);
+
+    /// <summary>
+    /// Decrypts a page using AES-256-GCM.
+    /// </summary>
+    /// <param name="page">The encrypted page data (modified in place to decrypted data).</param>
+    void DecryptPage(Span<byte> page);
+
+    /// <summary>
+    /// Gets an AesGcmEncryption instance for the specified key.
+    /// </summary>
+    /// <param name="key">The encryption key.</param>
+    /// <returns>An AesGcmEncryption instance.</returns>
+    SharpCoreDB.Services.AesGcmEncryption GetAesGcmEncryption(byte[] key);
 }

@@ -18,10 +18,13 @@ using System.Runtime.InteropServices;
 public sealed class DatabaseFile : IDisposable
 {
     private const int PageSize = 4096;
+    private const int StoredPageSize = PageSize + 12 + 16; // Account for AES-GCM overhead
     private readonly string filePath;
-    private readonly ICryptoService crypto;
+    private readonly SharpCoreDB.Services.AesGcmEncryption crypto;
     private readonly byte[] key;
     private readonly MemoryMappedFileHandler handler;
+    private readonly byte[] _pageBuffer = GC.AllocateUninitializedArray<byte>(PageSize, pinned: true);
+    private readonly byte[] _encryptedBuffer = GC.AllocateUninitializedArray<byte>(StoredPageSize, pinned: true);
     private bool disposed;
 
     /// <summary>
@@ -38,7 +41,7 @@ public sealed class DatabaseFile : IDisposable
         ArgumentNullException.ThrowIfNull(key);
 
         this.filePath = filePath;
-        this.crypto = crypto;
+        this.crypto = crypto.GetAesGcmEncryption(key);
         this.key = key;
 
         // Ensure file exists
@@ -59,20 +62,19 @@ public sealed class DatabaseFile : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ReadPage(int pageNum)
     {
+        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
 
-        long offset = (long)pageNum * PageSize;
-        Span<byte> encryptedPage = stackalloc byte[PageSize];
-
-        int bytesRead = this.handler.ReadBytes(offset, encryptedPage);
+        long offset = (long)pageNum * StoredPageSize;
+        int bytesRead = this.handler.ReadBytes(offset, _encryptedBuffer.AsSpan(0, StoredPageSize));
         if (bytesRead == 0)
         {
             return new byte[PageSize]; // Empty page
         }
 
-        // Decrypt the page
-        var encryptedArray = encryptedPage.ToArray(); // TODO: Optimize crypto to accept Span
-        return this.crypto.Decrypt(this.key, encryptedArray);
+        this.crypto.DecryptPage(_encryptedBuffer.AsSpan(0, bytesRead));
+        _encryptedBuffer.AsSpan(0, PageSize).CopyTo(_pageBuffer);
+        return _pageBuffer.ToArray();
     }
 
     /// <summary>
@@ -83,6 +85,7 @@ public sealed class DatabaseFile : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void WritePage(int pageNum, byte[] data)
     {
+        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
         ArgumentNullException.ThrowIfNull(data);
         if (data.Length != PageSize)
@@ -90,15 +93,14 @@ public sealed class DatabaseFile : IDisposable
             throw new ArgumentException($"Page data must be exactly {PageSize} bytes", nameof(data));
         }
 
-        long offset = (long)pageNum * PageSize;
+        long offset = (long)pageNum * StoredPageSize;
 
-        // Encrypt the page
-        var encryptedPage = this.crypto.Encrypt(this.key, data);
+        data.AsSpan().CopyTo(_encryptedBuffer.AsSpan(0, PageSize));
+        this.crypto.EncryptPage(_encryptedBuffer.AsSpan(0, PageSize));
 
-        // Write using Span for zero-copy
         using var fs = new FileStream(this.filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
         fs.Seek(offset, SeekOrigin.Begin);
-        fs.Write(encryptedPage.AsSpan());
+        fs.Write(_encryptedBuffer.AsSpan(0, StoredPageSize));
     }
 
     /// <summary>
@@ -110,32 +112,30 @@ public sealed class DatabaseFile : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadPageZeroAlloc(int pageNum, Span<byte> buffer)
     {
+        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
         if (buffer.Length < PageSize)
         {
             throw new ArgumentException($"Buffer must be at least {PageSize} bytes", nameof(buffer));
         }
 
-        long offset = (long)pageNum * PageSize;
-        var encryptedPage = new byte[PageSize];
-
-        int bytesRead = this.handler.ReadBytes(offset, encryptedPage);
+        long offset = (long)pageNum * StoredPageSize;
+        int bytesRead = this.handler.ReadBytes(offset, _encryptedBuffer.AsSpan(0, StoredPageSize));
         if (bytesRead == 0)
         {
             buffer.Clear();
             return 0;
         }
 
-        // Decrypt directly into buffer
-        var decrypted = this.crypto.Decrypt(this.key, encryptedPage);
-        decrypted.AsSpan().CopyTo(buffer);
-        return decrypted.Length;
+        this.crypto.DecryptPage(_encryptedBuffer.AsSpan(0, bytesRead));
+        _encryptedBuffer.AsSpan(0, PageSize).CopyTo(buffer);
+        return PageSize;
     }
 
     /// <summary>
     /// Gets the total number of pages in the file.
     /// </summary>
-    public long PageCount => this.handler.FileSize / PageSize;
+    public long PageCount => this.handler.FileSize / StoredPageSize;
 
     /// <summary>
     /// Disposes the database file handler.

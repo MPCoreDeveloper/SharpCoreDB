@@ -59,6 +59,19 @@ public class IndexManager : IDisposable
     }
 
     /// <summary>
+    /// Updates indexes asynchronously for a given update.
+    /// </summary>
+    /// <param name="update">The index update.</param>
+    public async Task UpdateIndexesAsync(IndexUpdate update)
+    {
+        foreach (var index in update.Indexes)
+        {
+            index.Add(update.Row);
+        }
+        await Task.CompletedTask; // Placeholder for async
+    }
+
+    /// <summary>
     /// Disposes the index manager and completes asynchronous operations.
     /// </summary>
     public void Dispose()
