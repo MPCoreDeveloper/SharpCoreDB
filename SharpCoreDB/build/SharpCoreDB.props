@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2025 MPCoreDeveloper. Licensed under the MIT License. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <SharpCoreDBVersion>1.0.0</SharpCoreDBVersion>
+  </PropertyGroup>
+</Project>

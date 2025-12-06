@@ -23,8 +23,10 @@
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,6 +44,10 @@
     <None Include="SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
     <None Include="SharpCoreDB.Samples\SharpCoreDB.Samples.csproj" />
     <None Include="SharpCoreDB.Tests\SharpCoreDB.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\*.props" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
 </Project>

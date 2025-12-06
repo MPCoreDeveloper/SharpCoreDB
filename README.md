@@ -1,6 +1,36 @@
 # SharpCoreDB
 
+![SharpCoreDB Logo](sharpcoredb.jpg)
+
+[![Build Status](https://github.com/MPCoreDeveloper/SharpCoreDB/workflows/CI/badge.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/actions)
+[![codecov](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB/branch/master/graph/badge.svg)](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB)
+
 A lightweight, encrypted, file-based database engine for .NET that supports SQL operations with built-in security features. Perfect for time-tracking, invoicing, and project management applications.
+
+## Quickstart
+
+Install the NuGet package:
+
+```bash
+dotnet add package SharpCoreDB
+```
+
+Basic usage:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB;
+
+var services = new ServiceCollection();
+services.AddSharpCoreDB();
+var provider = services.BuildServiceProvider();
+var factory = provider.GetRequiredService<DatabaseFactory>();
+
+var db = factory.Create("mydb.db", "password");
+db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
+var result = db.ExecuteSQL("SELECT * FROM users");
+```
 
 ## Features
 
@@ -31,14 +61,21 @@ A lightweight, encrypted, file-based database engine for .NET that supports SQL 
 - **PRAGMA Commands**: table_info(), index_list(), foreign_key_list() for metadata queries
 - **Modern C# 14**: Init-only properties, nullable reference types, and collection expressions
 
-### Extensions Package (SharpCoreDB.Extensions)
-- **Dapper Integration**: IDbConnection wrapper for using Dapper with SharpCoreDB
-- **Health Checks**: Built-in health check provider for ASP.NET Core
-- **Monitoring**: Database health and connectivity checks
+## Architecture
 
-### Benchmarks
-- **Performance Testing**: Compare SharpCoreDB with SQLite, LiteDB, and DuckDB
-- **Time-Tracking Scenarios**: Specialized benchmarks for time-tracking applications
+```
++----------------+     +-----------------+     +-----------------+
+|   Application  | --> |  SharpCoreDB    | --> |   File System   |
+|   (C#, .NET)   |     |  SQL Engine     |     |   (.db files)   |
++----------------+     +-----------------+     +-----------------+
+                        |                       |
+                        |   +-----------------+ |
+                        +-->|   Encryption     |<+
+                            |   (AES-256-GCM)  |
+                            +-----------------+
+```
+
+SharpCoreDB provides a SQL-compatible interface over encrypted file-based storage, with optional connection pooling and auto-maintenance features.
 
 ## Installation
 
@@ -686,6 +723,80 @@ dotnet ef database update
 2. **Direct SQL**: `db.ExecuteSQL("SELECT * FROM users")` for maximum control
 3. **Dapper Integration**: Available via `SharpCoreDB.Extensions` package
 
+## Migrating from SQLite
+
+If you're migrating from SQLite to SharpCoreDB, follow these steps:
+
+### 1. Export SQLite Data
+
+Use SQLite's `.dump` command or a tool like `sqlite3` to export your schema and data:
+
+```bash
+sqlite3 mydb.sqlite .schema > schema.sql
+sqlite3 mydb.sqlite .dump > data.sql
+```
+
+### 2. Convert Schema
+
+SharpCoreDB supports most SQLite data types. Key differences:
+- Use `ULID` or `GUID` for auto-generated identifiers instead of `AUTOINCREMENT`
+- `DECIMAL` type for high-precision numbers
+- No foreign key enforcement (use application logic)
+
+Example conversion:
+```sql
+-- SQLite
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+);
+
+-- SharpCoreDB
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT
+);
+```
+
+### 3. Import to SharpCoreDB
+
+```csharp
+using SharpCoreDB;
+
+// Create SharpCoreDB instance
+var db = factory.Create("migrated.db", "password");
+
+// Execute converted schema
+db.ExecuteSQL(convertedSchema);
+
+// Import data (adapt INSERT statements)
+foreach (var insert in dataInserts)
+{
+    db.ExecuteSQL(insert);
+}
+```
+
+### 4. Update Connection Strings
+
+Replace SQLite connection strings:
+```csharp
+// From: "Data Source=mydb.sqlite"
+// To: "Data Source=mydb.db;Password=your_password"
+```
+
+### 5. Test and Validate
+
+- Verify data integrity
+- Test performance with your workload
+- Update any SQLite-specific queries
+
+### Key Benefits of Migration
+
+- **Encryption**: AES-256-GCM encryption at rest
+- **Performance**: Optimized for .NET 10 with query caching and hash indexes
+- **Features**: Built-in connection pooling, auto-maintenance, async support
+- **Security**: User authentication and access control
+
 ## Requirements
 
 - **.NET 10.0** - Built exclusively for .NET 10 with latest runtime optimizations
@@ -695,3 +806,11 @@ dotnet ef database update
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history

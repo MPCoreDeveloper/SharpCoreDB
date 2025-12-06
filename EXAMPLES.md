@@ -338,107 +338,225 @@ db.ExecuteSQL(@"UPDATE invoices
                     WHERE invoice_id = '1001'
                 )
                 WHERE id = '1001'");
-```
 
-## Performance Tips
+## Console Application with Dependency Injection
 
-### 1. Use Indexes for Frequently Queried Columns
-
-```csharp
-// Create indexes on columns used in WHERE clauses
-db.ExecuteSQL("CREATE INDEX idx_entries_date ON time_entries (start_time)");
-db.ExecuteSQL("CREATE INDEX idx_entries_user ON time_entries (user_id)");
-
-// Check if index is being used
-db.ExecuteSQL("EXPLAIN SELECT * FROM time_entries WHERE start_time > '2024-01-01'");
-```
-
-### 2. Use Connection Pooling for Web Applications
+This example demonstrates setting up SharpCoreDB in a console application using Microsoft.Extensions.DependencyInjection.
 
 ```csharp
-// Initialize pool once at startup
-var pool = new DatabasePool(services, maxPoolSize: 50);
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB;
 
-// Reuse connections
-var db = pool.GetDatabase(dbPath, password);
-// ... use database ...
-pool.ReturnDatabase(db);
-```
-
-### 3. Batch Operations
-
-```csharp
-// Instead of multiple individual inserts
-for (int i = 0; i < 1000; i++)
+class Program
 {
-    db.ExecuteSQL($"INSERT INTO logs VALUES ('{i}', 'message')");
-}
+    static void Main(string[] args)
+    {
+        // Set up dependency injection
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var serviceProvider = services.BuildServiceProvider();
 
-// Consider batching or using UPSERT
-db.ExecuteSQL("INSERT OR REPLACE INTO logs VALUES ('1', 'message')");
-```
+        // Get database factory
+        var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
 
-### 4. Regular Maintenance
+        // Create database
+        var db = factory.Create("console.db", "secure_password");
 
-```csharp
-// Set up automatic maintenance
-var maintenance = new AutoMaintenanceService(
-    db,
-    intervalSeconds: 600,     // 10 minutes
-    writeThreshold: 5000      // Or 5000 writes
-);
+        // Create table
+        db.ExecuteSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY, content TEXT, timestamp DATETIME)");
 
-// This keeps the database optimized automatically
-```
+        // Insert data
+        db.ExecuteSQL("INSERT INTO messages VALUES (1, 'Hello from SharpCoreDB!', NOW())");
 
-## Connection String Examples
+        // Query data
+        var result = db.ExecuteSQL("SELECT * FROM messages");
+        Console.WriteLine("Database contents:");
+        Console.WriteLine(result);
 
-```csharp
-// Simple connection string
-var connStr = "Data Source=myapp.db;Password=secret";
+        // Async operations
+        Task.Run(async () =>
+        {
+            await db.ExecuteSQLAsync("INSERT INTO messages VALUES (2, 'Async message', NOW())");
+            var asyncResult = await db.ExecuteSQLAsync("SELECT COUNT(*) FROM messages");
+            Console.WriteLine($"Total messages: {asyncResult}");
+        }).Wait();
 
-// Full options
-var connStr = "Data Source=timetracker.sharpcoredb;Password=MySecret123;ReadOnly=False;Cache=Shared";
-
-// Parse and modify
-var builder = new ConnectionStringBuilder(connStr);
-builder.ReadOnly = true;
-var readOnlyConnStr = builder.BuildConnectionString();
-```
-
-## Error Handling
-
-```csharp
-try
-{
-    db.ExecuteSQL("INSERT INTO users VALUES ('1', 'Alice')");
-}
-catch (InvalidOperationException ex)
-{
-    Console.WriteLine($"Database error: {ex.Message}");
-}
-
-// Read-only mode protection
-try
-{
-    var readOnlyDb = factory.Create(dbPath, password, isReadOnly: true);
-    readOnlyDb.ExecuteSQL("INSERT INTO users VALUES ('2', 'Bob')");
-}
-catch (InvalidOperationException ex)
-{
-    Console.WriteLine("Cannot modify database in read-only mode");
+        Console.WriteLine("Console app completed successfully!");
+    }
 }
 ```
 
-## Best Practices
+To run this example:
+1. Create a new console project: `dotnet new console`
+2. Add SharpCoreDB: `dotnet add package SharpCoreDB`
+3. Replace Program.cs with the code above
+4. Run: `dotnet run`
 
-1. **Always use connection pooling** for web applications to manage resources efficiently
-2. **Create indexes** on columns frequently used in WHERE clauses and JOINs
-3. **Enable auto maintenance** to keep the database optimized
-4. **Use read-only mode** when you only need to query data
-5. **Implement health checks** to monitor database connectivity
-6. **Use UPSERT** instead of separate INSERT/UPDATE logic
-7. **Leverage date/time functions** for time-based queries
-8. **Use aggregate functions** to calculate summaries efficiently
-9. **Regular backups** of your database files
-10. **Monitor pool statistics** to tune pool size appropriately
+## Entity Framework Core Migration Example
+
+SharpCoreDB supports EF Core with full migration capabilities. Here's how to set up migrations:
+
+### 1. Create EF Core Project
+
+```bash
+dotnet new classlib -n MyApp.Data
+cd MyApp.Data
+dotnet add package Microsoft.EntityFrameworkCore.Design
+dotnet add package SharpCoreDB.EntityFrameworkCore
+```
+
+### 2. Define DbContext
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using SharpCoreDB.EntityFrameworkCore;
+
+public class AppDbContext : DbContext
+{
+    private readonly string _connectionString;
+
+    public AppDbContext(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    public DbSet<User> Users { get; set; }
+    public DbSet<Project> Projects { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.UseSharpCoreDB(_connectionString);
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.Email).IsRequired();
+        });
+
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired();
+            entity.HasMany(e => e.Users).WithMany(e => e.Projects);
+        });
+    }
+}
+
+public class User
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Email { get; set; }
+    public ICollection<Project> Projects { get; set; }
+}
+
+public class Project
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public ICollection<User> Users { get; set; }
+}
+```
+
+### 3. Add Migration
+
+```bash
+# Install EF Core tools globally if not already installed
+dotnet tool install --global dotnet-ef
+
+# Add migration
+dotnet ef migrations add InitialCreate --project MyApp.Data --startup-project MyApp.Console
+
+# Update database
+dotnet ef database update --project MyApp.Data --startup-project MyApp.Console
+```
+
+### 4. Use in Application
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+
+class Program
+{
+    static void Main()
+    {
+        var connectionString = "Data Source=app.db;Password=MySecret123";
+        using var context = new AppDbContext(connectionString);
+
+        // Ensure database is created
+        context.Database.EnsureCreated();
+
+        // Add data
+        context.Users.Add(new User { Name = "Alice", Email = "alice@example.com" });
+        context.SaveChanges();
+
+        // Query data
+        var users = context.Users.ToList();
+        foreach (var user in users)
+        {
+            Console.WriteLine($"{user.Name} - {user.Email}");
+        }
+    }
+}
+```
+
+### Migration Commands
+
+```bash
+# Add new migration
+dotnet ef migrations add AddUserProjects
+
+# Apply migrations
+dotnet ef database update
+
+# Revert last migration
+dotnet ef database update LastMigrationName
+
+# Remove last migration (if not applied)
+dotnet ef migrations remove
+
+# Generate SQL script
+dotnet ef migrations script --output migration.sql
+```
+
+## Performance Tuning Guide
+
+### 1. Database Configuration
+
+Choose the right configuration for your use case:
+
+```csharp
+// High-performance mode (no encryption, trusted environments)
+var config = DatabaseConfig.HighPerformance;
+var db = factory.Create(dbPath, password, false, config);
+
+// Default encrypted mode
+var config = DatabaseConfig.Default;
+var db = factory.Create(dbPath, password, false, config);
+
+// Custom configuration
+var config = new DatabaseConfig 
+{ 
+    EnableQueryCache = true,     // Cache repeated queries
+    QueryCacheSize = 1000,       // Cache size
+    EnableHashIndexes = true,    // Enable hash indexes
+    WalBufferSize = 1024 * 1024, // 1MB WAL buffer
+    UseBufferedIO = true         // Buffered I/O
+};
+```
+
+### 2. Indexing Strategy
+
+Create indexes on frequently queried columns:
+
+```csharp
+// Hash indexes for O(1) lookups
+db.ExecuteSQL("CREATE INDEX idx_user_email ON users (email)");
+db.ExecuteSQL("CREATE INDEX idx_orders_status ON orders (status)");
+
+// Composite indexes
+db.ExecuteSQL("CREATE INDEX idx_time_user_date ON time_entries (user_id, start_time)");
