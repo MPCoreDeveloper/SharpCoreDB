@@ -104,19 +104,20 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SharpCoreDB_Insert()
     {
-        // IMPORTANT: This is benchmark code for performance testing only.
-        // In production, always use parameterized queries or proper sanitization.
-        // We escape single quotes here to prevent SQL injection with controlled test data.
-        // This benchmark uses pre-generated fake data for realistic testing.
+        // Use parameterized queries for security and performance
         for (int i = 0; i < _testData.Count; i++)
         {
             var entry = _testData[i];
-            var project = entry.Project.Replace("'", "''");
-            var task = entry.Task.Replace("'", "''");
-            var user = entry.User.Replace("'", "''");
-            var startTime = entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
-            var endTime = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss");
-            _sharpCoreDb!.ExecuteSQL($"INSERT INTO time_entries VALUES ('{entry.Id}', '{project}', '{task}', '{startTime}', '{endTime}', '{entry.Duration}', '{user}')");
+            _sharpCoreDb!.ExecuteSQL("INSERT INTO time_entries VALUES (?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?>
+            {
+                ["0"] = entry.Id,
+                ["1"] = entry.Project,
+                ["2"] = entry.Task,
+                ["3"] = entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["4"] = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["5"] = entry.Duration,
+                ["6"] = entry.User
+            });
 
             // Progress indicator
             if ((i + 1) % 10000 == 0)
@@ -129,19 +130,19 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SQLite_Insert()
     {
-        // IMPORTANT: This is benchmark code for performance testing only.
-        // In production, always use SQLiteParameter for parameterized queries.
-        // The test data is controlled and pre-validated, no user input is used.
+        // Use parameterized queries for security
         for (int i = 0; i < _testData.Count; i++)
         {
             var entry = _testData[i];
             using var cmd = _sqliteConn!.CreateCommand();
-            var project = entry.Project.Replace("'", "''");
-            var task = entry.Task.Replace("'", "''");
-            var user = entry.User.Replace("'", "''");
-            var startTime = entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
-            var endTime = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss");
-            cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{project}', '{task}', '{startTime}', '{endTime}', {entry.Duration}, '{user}')";
+            cmd.CommandText = "INSERT INTO time_entries VALUES (?, ?, ?, ?, ?, ?, ?)";
+            cmd.Parameters.AddWithValue("@p0", entry.Id);
+            cmd.Parameters.AddWithValue("@p1", entry.Project);
+            cmd.Parameters.AddWithValue("@p2", entry.Task);
+            cmd.Parameters.AddWithValue("@p3", entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@p4", entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@p5", entry.Duration);
+            cmd.Parameters.AddWithValue("@p6", entry.User);
             cmd.ExecuteNonQuery();
 
             // Progress indicator
@@ -163,14 +164,15 @@ public class TimeTrackingBenchmarks
     [Benchmark]
     public void SharpCoreDB_Select()
     {
-        _sharpCoreDb!.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'Alpha Project'");
+        _sharpCoreDb!.ExecuteSQL("SELECT * FROM time_entries WHERE project = ?", new Dictionary<string, object?> { ["0"] = "Alpha Project" });
     }
 
     [Benchmark]
     public void SQLite_Select()
     {
         using var cmd = _sqliteConn!.CreateCommand();
-        cmd.CommandText = "SELECT * FROM time_entries WHERE project = 'Alpha Project'";
+        cmd.CommandText = "SELECT * FROM time_entries WHERE project = ?";
+        cmd.Parameters.AddWithValue("@p0", "Alpha Project");
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
