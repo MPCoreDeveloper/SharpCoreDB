@@ -108,14 +108,21 @@ public class TimeTrackingBenchmarks
         // In production, always use parameterized queries or proper sanitization.
         // We escape single quotes here to prevent SQL injection with controlled test data.
         // This benchmark uses pre-generated fake data for realistic testing.
-        foreach (var entry in _testData!)
+        for (int i = 0; i < _testData.Count; i++)
         {
+            var entry = _testData[i];
             var project = entry.Project.Replace("'", "''");
             var task = entry.Task.Replace("'", "''");
             var user = entry.User.Replace("'", "''");
             var startTime = entry.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
             var endTime = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss");
             _sharpCoreDb!.ExecuteSQL($"INSERT INTO time_entries VALUES ('{entry.Id}', '{project}', '{task}', '{startTime}', '{endTime}', '{entry.Duration}', '{user}')");
+
+            // Progress indicator
+            if ((i + 1) % 10000 == 0)
+            {
+                Console.WriteLine($"SharpCoreDB Insert Progress: {i + 1}/{_testData.Count}");
+            }
         }
     }
 
@@ -125,8 +132,9 @@ public class TimeTrackingBenchmarks
         // IMPORTANT: This is benchmark code for performance testing only.
         // In production, always use SQLiteParameter for parameterized queries.
         // The test data is controlled and pre-validated, no user input is used.
-        foreach (var entry in _testData!)
+        for (int i = 0; i < _testData.Count; i++)
         {
+            var entry = _testData[i];
             using var cmd = _sqliteConn!.CreateCommand();
             var project = entry.Project.Replace("'", "''");
             var task = entry.Task.Replace("'", "''");
@@ -135,13 +143,21 @@ public class TimeTrackingBenchmarks
             var endTime = entry.EndTime.ToString("yyyy-MM-dd HH:mm:ss");
             cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{project}', '{task}', '{startTime}', '{endTime}', {entry.Duration}, '{user}')";
             cmd.ExecuteNonQuery();
+
+            // Progress indicator
+            if ((i + 1) % 10000 == 0)
+            {
+                Console.WriteLine($"SQLite Insert Progress: {i + 1}/{_testData.Count}");
+            }
         }
     }
 
     [Benchmark]
     public void LiteDB_Insert()
     {
+        Console.WriteLine("Starting LiteDB bulk insert...");
         _liteCollection!.InsertBulk(_testData!);
+        Console.WriteLine("LiteDB bulk insert completed.");
     }
 
     [Benchmark]

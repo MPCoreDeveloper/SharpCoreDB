@@ -28,7 +28,7 @@ public class Table : ITable
     /// Initializes a new instance of the <see cref="Table"/> class.
     /// Constructor with storage.
     /// </summary>
-    public Table(IStorage storage, bool isReadOnly = false) => (storage, isReadOnly) = (storage, isReadOnly);
+    public Table(IStorage storage, bool isReadOnly = false) => (this.storage, this.isReadOnly) = (storage, isReadOnly);
 
     /// <inheritdoc />
     public string Name { get; set; } = string.Empty;
@@ -391,7 +391,7 @@ public class Table : ITable
 
     private void WriteTypedValue(BinaryWriter writer, object val, DataType type)
     {
-        if (val is null)
+        if (val is null || val == DBNull.Value)
         {
             writer.Write((byte)0); // null flag
             return;
