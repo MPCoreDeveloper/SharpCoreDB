@@ -53,6 +53,7 @@ public class DatabaseTests : IDisposable
         var serviceProvider = services.BuildServiceProvider();
 
         var db = new Database(serviceProvider, _testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
         var parameters = new Dictionary<string, object?> { { "0", "Alice" }, { "1", 25 } };
 
         // Act
