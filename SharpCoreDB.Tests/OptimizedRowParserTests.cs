@@ -1,6 +1,5 @@
 using SharpCoreDB.Services;
 using System.Text;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 
@@ -224,7 +223,7 @@ public class OptimizedRowParserTests
         {
             var row = OptimizedRowParser.ParseRowOptimized(jsonBytes.AsSpan());
             Assert.NotNull(row);
-            
+
             var serialized = OptimizedRowParser.SerializeRowOptimized(row);
             Assert.NotNull(serialized);
         }

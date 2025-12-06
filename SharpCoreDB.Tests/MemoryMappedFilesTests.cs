@@ -1,6 +1,3 @@
-using System;
-using System.IO;
-using Xunit;
 using SharpCoreDB.Core.File;
 
 namespace SharpCoreDB.Tests;
@@ -16,11 +13,11 @@ public class MemoryMappedFilesTests : IDisposable
     public MemoryMappedFilesTests()
     {
         _testFilePath = Path.Combine(Path.GetTempPath(), $"test_mmf_{Guid.NewGuid():N}.dat");
-        
+
         // Create test data (15 MB to exceed the 10MB threshold for memory mapping)
         _testData = new byte[15 * 1024 * 1024];
         new Random(42).NextBytes(_testData);
-        
+
         File.WriteAllBytes(_testFilePath, _testData);
     }
 
@@ -144,13 +141,13 @@ public class MemoryMappedFilesTests : IDisposable
     {
         // Arrange
         var handler = new MemoryMappedFileHandler(_testFilePath, useMemoryMapping: true);
-        
+
         // Act
         handler.Dispose();
 
         // Assert - Should not throw when calling Dispose multiple times
         handler.Dispose();
-        
+
         // Should throw when trying to use disposed handler
         Assert.Throws<ObjectDisposedException>(() => handler.ReadAllBytes());
     }

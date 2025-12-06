@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Diagnostics;
 
 namespace SharpCoreDB.Benchmarks;
@@ -20,7 +18,7 @@ public static class NoEncryptionPerformanceTest
         var factory = provider.GetRequiredService<DatabaseFactory>();
 
         const int insertCount = 10000;
-        
+
         // Test with encryption
         var encryptedPath = Path.Combine(Path.GetTempPath(), "perf_test_encrypted");
         if (Directory.Exists(encryptedPath))

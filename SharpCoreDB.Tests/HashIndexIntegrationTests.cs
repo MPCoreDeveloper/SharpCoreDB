@@ -1,7 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 
@@ -52,7 +49,7 @@ public class HashIndexIntegrationTests
         var db = factory.Create(_testDbPath, "test123", false, config);
 
         db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER, project TEXT, duration INTEGER)");
-        
+
         // Insert test data
         for (int i = 1; i <= 100; i++)
         {
@@ -62,7 +59,7 @@ public class HashIndexIntegrationTests
 
         // Act - Create index and query
         db.ExecuteSQL("CREATE INDEX idx_project ON time_entries (project)");
-        
+
         // Query should use hash index for O(1) lookup
         db.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'Alpha'");
 

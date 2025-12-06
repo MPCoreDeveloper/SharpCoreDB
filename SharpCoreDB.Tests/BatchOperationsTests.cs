@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 

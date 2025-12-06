@@ -1,8 +1,6 @@
 using Bogus;
 using LiteDB;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Data.SQLite;
 using System.Diagnostics;
 
@@ -68,16 +66,26 @@ public static class ComprehensivePerformanceTest
         services.AddSharpCoreDB();
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
-        
+
         var gcBefore = GC.GetTotalMemory(true);
         var dbEncrypted = factory.Create(sharpCoreEncryptedPath, "testPassword", false, DatabaseConfig.Default);
         dbEncrypted.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT, description TEXT)");
-        
+
         var sw = Stopwatch.StartNew();
         foreach (var entry in testData)
         {
-            // Note: Using positional VALUES matching the CREATE TABLE column order
-            dbEncrypted.ExecuteSQL($"INSERT INTO time_entries VALUES ('{entry.Id}', '{EscapeSql(entry.Project)}', '{EscapeSql(entry.Task)}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', '{entry.Duration}', '{EscapeSql(entry.User)}', '{EscapeSql(entry.Description)}')");
+            var parameters = new Dictionary<string, object?>
+            {
+                { "0", entry.Id },
+                { "1", entry.Project },
+                { "2", entry.Task },
+                { "3", entry.StartTime },
+                { "4", entry.EndTime },
+                { "5", entry.Duration },
+                { "6", entry.User },
+                { "7", entry.Description }
+            };
+            dbEncrypted.ExecuteSQL("INSERT INTO time_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)", parameters);
         }
         sw.Stop();
         var insertEncrypted = sw.ElapsedMilliseconds;
@@ -91,7 +99,7 @@ public static class ComprehensivePerformanceTest
         var selectEncrypted = sw.ElapsedMilliseconds / 10;
         var gcAfter = GC.GetTotalMemory(false);
         var allocEncrypted = (gcAfter - gcBefore) / 1024 / 1024;
-        
+
         results["SharpCoreDB (Encrypted)"] = (insertEncrypted, selectEncrypted, allocEncrypted);
         Console.WriteLine($"  Insert: {insertEncrypted}ms, Select: {selectEncrypted}ms, Allocs: {allocEncrypted}MB");
 
@@ -100,12 +108,22 @@ public static class ComprehensivePerformanceTest
         gcBefore = GC.GetTotalMemory(true);
         var dbNoEncrypt = factory.Create(sharpCoreNoEncryptPath, "testPassword", false, DatabaseConfig.HighPerformance);
         dbNoEncrypt.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT, description TEXT)");
-        
+
         sw.Restart();
         foreach (var entry in testData)
         {
-            // Note: Using positional VALUES matching the CREATE TABLE column order
-            dbNoEncrypt.ExecuteSQL($"INSERT INTO time_entries VALUES ('{entry.Id}', '{EscapeSql(entry.Project)}', '{EscapeSql(entry.Task)}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', '{entry.Duration}', '{EscapeSql(entry.User)}', '{EscapeSql(entry.Description)}')");
+            var parameters = new Dictionary<string, object?>
+            {
+                { "0", entry.Id },
+                { "1", entry.Project },
+                { "2", entry.Task },
+                { "3", entry.StartTime },
+                { "4", entry.EndTime },
+                { "5", entry.Duration },
+                { "6", entry.User },
+                { "7", entry.Description }
+            };
+            dbNoEncrypt.ExecuteSQL("INSERT INTO time_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)", parameters);
         }
         sw.Stop();
         var insertNoEncrypt = sw.ElapsedMilliseconds;
@@ -119,7 +137,7 @@ public static class ComprehensivePerformanceTest
         var selectNoEncrypt = sw.ElapsedMilliseconds / 10;
         gcAfter = GC.GetTotalMemory(false);
         var allocNoEncrypt = (gcAfter - gcBefore) / 1024 / 1024;
-        
+
         results["SharpCoreDB (NoEncrypt)"] = (insertNoEncrypt, selectNoEncrypt, allocNoEncrypt);
         Console.WriteLine($"  Insert: {insertNoEncrypt}ms, Select: {selectNoEncrypt}ms, Allocs: {allocNoEncrypt}MB");
 
@@ -128,7 +146,7 @@ public static class ComprehensivePerformanceTest
         gcBefore = GC.GetTotalMemory(true);
         var sqliteConn = new SQLiteConnection($"Data Source={sqlitePath};Version=3;");
         sqliteConn.Open();
-        
+
         using (var cmd = sqliteConn.CreateCommand())
         {
             cmd.CommandText = "CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT, description TEXT)";
@@ -158,7 +176,7 @@ public static class ComprehensivePerformanceTest
         gcAfter = GC.GetTotalMemory(false);
         var allocSqlite = (gcAfter - gcBefore) / 1024 / 1024;
         sqliteConn.Close();
-        
+
         results["SQLite"] = (insertSqlite, selectSqlite, allocSqlite);
         Console.WriteLine($"  Insert: {insertSqlite}ms, Select: {selectSqlite}ms, Allocs: {allocSqlite}MB");
 
@@ -186,7 +204,7 @@ public static class ComprehensivePerformanceTest
         gcAfter = GC.GetTotalMemory(false);
         var allocLiteDb = (gcAfter - gcBefore) / 1024 / 1024;
         liteDb.Dispose();
-        
+
         results["LiteDB"] = (insertLiteDb, selectLiteDb, allocLiteDb);
         Console.WriteLine($"  Insert: {insertLiteDb}ms, Select: {selectLiteDb}ms, Allocs: {allocLiteDb}MB\n");
 
@@ -194,7 +212,7 @@ public static class ComprehensivePerformanceTest
         Console.WriteLine("=== Performance Comparison Table (README.md format) ===\n");
         Console.WriteLine($"| Database | Inserts ({recordCount}) | Select (avg) | Allocs (MB) |");
         Console.WriteLine("|----------|----------------|--------------|-------------|");
-        
+
         foreach (var (name, metrics) in results.OrderBy(x => x.Value.InsertMs))
         {
             Console.WriteLine($"| {name,-28} | {metrics.InsertMs,7}ms | {metrics.SelectMs,7}ms | {metrics.AllocMB,6} |");

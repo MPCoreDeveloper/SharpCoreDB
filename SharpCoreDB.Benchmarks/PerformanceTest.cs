@@ -1,8 +1,6 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Data.SQLite;
+using System.Diagnostics;
 
 namespace SharpCoreDB.Benchmarks;
 
@@ -20,19 +18,19 @@ public static class PerformanceTest
 
         // Test SharpCoreDB
         var sharpResults = TestSharpCoreDB(recordCount);
-        
+
         // Test SQLite
         var sqliteResults = TestSQLite(recordCount);
-        
+
         // Display results
         Console.WriteLine("\n=== Results ===");
         Console.WriteLine($"{"Operation",-30} {"SharpCoreDB",-15} {"SQLite",-15} {"Difference",-15}");
         Console.WriteLine(new string('-', 75));
-        
+
         DisplayComparison("Insert 10k records", sharpResults.InsertTime, sqliteResults.InsertTime);
         DisplayComparison("Select with WHERE", sharpResults.SelectTime, sqliteResults.SelectTime);
         DisplayComparison("Select 1000 records", sharpResults.SelectMultipleTime, sqliteResults.SelectMultipleTime);
-        
+
         Console.WriteLine();
         Console.WriteLine("Note: Results may vary based on system performance.");
     }
@@ -42,14 +40,14 @@ public static class PerformanceTest
         var difference = sharpTime - sqliteTime;
         var percentDiff = sqliteTime > 0 ? (difference / sqliteTime) * 100 : 0;
         var diffStr = difference > 0 ? $"+{difference:F0}ms ({percentDiff:+0.0}%)" : $"{difference:F0}ms ({percentDiff:0.0}%)";
-        
+
         Console.WriteLine($"{operation,-30} {sharpTime:F0}ms{"",-8} {sqliteTime:F0}ms{"",-8} {diffStr}");
     }
 
     private static (double InsertTime, double SelectTime, double SelectMultipleTime) TestSharpCoreDB(int recordCount)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"perf_test_sharp_{Guid.NewGuid()}");
-        
+
         try
         {
             var services = new ServiceCollection();
@@ -57,9 +55,9 @@ public static class PerformanceTest
             var provider = services.BuildServiceProvider();
             var factory = provider.GetRequiredService<DatabaseFactory>();
             var db = factory.Create(dbPath, "perfTestPassword");
-            
+
             db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, duration INTEGER, user TEXT)");
-            
+
             // Test Insert
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < recordCount; i++)
@@ -69,7 +67,7 @@ public static class PerformanceTest
             sw.Stop();
             var insertTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SharpCoreDB Insert: {insertTime:F0}ms");
-            
+
             // Test Select with WHERE
             sw.Restart();
             for (int i = 0; i < 10; i++)
@@ -79,14 +77,14 @@ public static class PerformanceTest
             sw.Stop();
             var selectTime = sw.Elapsed.TotalMilliseconds / 10;
             Console.WriteLine($"SharpCoreDB Select WHERE: {selectTime:F0}ms (avg of 10)");
-            
+
             // Test Select multiple records
             sw.Restart();
             db.ExecuteSQL("SELECT * FROM time_entries WHERE duration = '480'");
             sw.Stop();
             var selectMultipleTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SharpCoreDB Select Multiple: {selectMultipleTime:F0}ms");
-            
+
             return (insertTime, selectTime, selectMultipleTime);
         }
         finally
@@ -99,18 +97,18 @@ public static class PerformanceTest
     private static (double InsertTime, double SelectTime, double SelectMultipleTime) TestSQLite(int recordCount)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"perf_test_sqlite_{Guid.NewGuid()}.db");
-        
+
         try
         {
             using var conn = new SQLiteConnection($"Data Source={dbPath};Version=3;");
             conn.Open();
-            
+
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, duration INTEGER, user TEXT)";
                 cmd.ExecuteNonQuery();
             }
-            
+
             // Test Insert
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < recordCount; i++)
@@ -122,7 +120,7 @@ public static class PerformanceTest
             sw.Stop();
             var insertTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SQLite Insert: {insertTime:F0}ms");
-            
+
             // Test Select with WHERE
             sw.Restart();
             for (int i = 0; i < 10; i++)
@@ -135,7 +133,7 @@ public static class PerformanceTest
             sw.Stop();
             var selectTime = sw.Elapsed.TotalMilliseconds / 10;
             Console.WriteLine($"SQLite Select WHERE: {selectTime:F0}ms (avg of 10)");
-            
+
             // Test Select multiple records
             sw.Restart();
             using (var cmd = conn.CreateCommand())
@@ -147,7 +145,7 @@ public static class PerformanceTest
             sw.Stop();
             var selectMultipleTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SQLite Select Multiple: {selectMultipleTime:F0}ms");
-            
+
             return (insertTime, selectTime, selectMultipleTime);
         }
         finally

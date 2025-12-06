@@ -133,7 +133,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
     public override void CreateTables()
     {
         _connection.Open();
-        
+
         try
         {
             // Create tables for each entity type in the model
@@ -145,7 +145,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
 
                 // Build CREATE TABLE SQL
                 var sql = BuildCreateTableSql(entityType);
-                
+
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&
                     sharpConnection.DbInstance != null)
@@ -164,7 +164,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
     public override async Task CreateTablesAsync(CancellationToken cancellationToken = default)
     {
         await _connection.OpenAsync(cancellationToken);
-        
+
         try
         {
             // Create tables for each entity type in the model
@@ -176,7 +176,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
 
                 // Build CREATE TABLE SQL
                 var sql = BuildCreateTableSql(entityType);
-                
+
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&
                     sharpConnection.DbInstance != null)
@@ -202,7 +202,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
             var columnType = GetColumnType(property);
             var nullable = property.IsNullable ? "" : " NOT NULL";
             var primaryKey = property.IsPrimaryKey() ? " PRIMARY KEY" : "";
-            
+
             columns.Add($"{columnName} {columnType}{nullable}{primaryKey}");
         }
 

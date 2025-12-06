@@ -4,8 +4,8 @@
 
 namespace SharpCoreDB.Services;
 
-using System.Text.Json;
 using SharpCoreDB.Interfaces;
+using System.Text.Json;
 
 /// <summary>
 /// Implementation of IUserService.

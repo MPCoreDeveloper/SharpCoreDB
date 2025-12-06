@@ -4,8 +4,8 @@
 
 namespace SharpCoreDB.DataStructures;
 
-using System.Collections.Generic;
 using SharpCoreDB.Interfaces;
+using System.Collections.Generic;
 
 /// <summary>
 /// B-tree implementation for indexing.

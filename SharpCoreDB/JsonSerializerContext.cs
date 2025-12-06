@@ -4,9 +4,8 @@
 
 namespace SharpCoreDB;
 
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using SharpCoreDB.DataStructures;
+using System.Text.Json.Serialization;
 
 /// <summary>
 /// JSON serializer context for SharpCoreDB to support Native AOT compilation and source generation features in .NET 5+.

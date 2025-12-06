@@ -1,5 +1,4 @@
 using SharpCoreDB.DataStructures;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 
@@ -62,7 +61,7 @@ public class HashIndexTests
         index.Add(row1);
         index.Add(row2);
         var beforeRemove = index.Lookup(1);
-        
+
         index.Remove(row1);
         var afterRemove = index.Lookup(1);
 
@@ -84,7 +83,7 @@ public class HashIndexTests
         index.Add(row1);
         index.Add(row2);
         Assert.Equal(2, index.Count);
-        
+
         index.Clear();
 
         // Assert
@@ -184,7 +183,7 @@ public class HashIndexTests
         // Assert
         Assert.Equal(uniqueUsers, index.Count); // 100 unique users
         Assert.Equal(rowCount / uniqueUsers, lookupResults.Count); // Each user has 100 events
-        
+
         var stats = index.GetStatistics();
         Assert.Equal(uniqueUsers, stats.UniqueKeys);
         Assert.Equal(rowCount, stats.TotalRows);

@@ -4,12 +4,12 @@
 
 namespace SharpCoreDB;
 
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Constants;
 using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
+using System.Text.Json;
 
 /// <summary>
 /// Implementation of IDatabase.

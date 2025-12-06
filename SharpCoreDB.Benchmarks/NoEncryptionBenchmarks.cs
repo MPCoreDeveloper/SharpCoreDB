@@ -1,6 +1,5 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Benchmarks;
@@ -33,7 +32,7 @@ public class NoEncryptionBenchmarks
         services.AddSharpCoreDB();
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
-        
+
         // Create encrypted database
         _dbEncrypted = factory.Create(_encryptedPath, "benchmarkPassword", false, DatabaseConfig.Default);
         _dbEncrypted.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT, description TEXT)");

@@ -1,7 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 
@@ -125,7 +122,7 @@ public class QueryCacheTests
         db.ExecuteSQL("SELECT * FROM users WHERE id = '1'");
         db.ExecuteSQL("SELECT * FROM users WHERE id = '2'");
         db.ExecuteSQL("SELECT * FROM users");
-        
+
         // Execute them again
         db.ExecuteSQL("SELECT * FROM users WHERE id = '1'");
         db.ExecuteSQL("SELECT * FROM users WHERE id = '2'");
@@ -136,7 +133,7 @@ public class QueryCacheTests
         Assert.Equal(3, stats.Hits); // Second execution of each SELECT query should be a hit
         // All queries get cached: CREATE + 2 INSERTs + 3 unique SELECTs = 6 misses initially
         // Then 3 repeated SELECTs = 3 hits
-        Assert.Equal(6, stats.Misses); 
+        Assert.Equal(6, stats.Misses);
         Assert.True(stats.Count >= 6, $"Should have cached at least 6 different queries, got {stats.Count}");
 
         // Cleanup
@@ -160,9 +157,9 @@ public class QueryCacheTests
         }
 
         var stats = db.GetQueryCacheStatistics();
-        
+
         // Assert - Cache should not grow beyond limit
-        Assert.True(stats.Count <= config.QueryCacheSize, 
+        Assert.True(stats.Count <= config.QueryCacheSize,
             $"Cache size should be <= {config.QueryCacheSize}, got {stats.Count}");
 
         // Cleanup

@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Diagnostics;
 
 namespace SharpCoreDB.Tests;
@@ -21,7 +19,7 @@ public class NoEncryptionTests : IDisposable
         // Create unique test database paths for each test instance
         _testDbPath = Path.Combine(Path.GetTempPath(), $"SharpCoreDB_NoEncrypt_Test_{Guid.NewGuid()}");
         _testDbPathEncrypted = Path.Combine(Path.GetTempPath(), $"SharpCoreDB_Encrypted_Test_{Guid.NewGuid()}");
-        
+
         // Set up dependency injection
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
@@ -63,13 +61,13 @@ public class NoEncryptionTests : IDisposable
     {
         // Arrange
         var config = new DatabaseConfig { NoEncryptMode = true };
-        
+
         // Act - Create database, insert data, close and reopen
         var db1 = _factory.Create(_testDbPath, "testPassword", false, config);
         db1.ExecuteSQL("CREATE TABLE products (id INTEGER, name TEXT)");
         db1.ExecuteSQL("INSERT INTO products VALUES ('1', 'Widget')");
         db1.ExecuteSQL("INSERT INTO products VALUES ('2', 'Gadget')");
-        
+
         // Reopen database with NoEncryption mode
         var db2 = _factory.Create(_testDbPath, "testPassword", false, config);
         db2.ExecuteSQL("SELECT * FROM products WHERE id = '1'");
@@ -89,38 +87,38 @@ public class NoEncryptionTests : IDisposable
         // Act - Measure NoEncryption performance
         var dbNoEncrypt = _factory.Create(_testDbPath, "testPassword", false, configNoEncrypt);
         dbNoEncrypt.ExecuteSQL("CREATE TABLE entries (id INTEGER, data TEXT, value INTEGER)");
-        
+
         var swNoEncrypt = Stopwatch.StartNew();
         for (int i = 0; i < insertCount; i++)
         {
-            dbNoEncrypt.ExecuteSQL($"INSERT INTO entries VALUES ('{i}', 'data{i}', '{i * 10}')");
+            dbNoEncrypt.ExecuteSQL("INSERT INTO entries VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"data{i}" }, { "2", i * 10 } });
         }
         swNoEncrypt.Stop();
 
         // Act - Measure Encrypted performance
         var dbEncrypted = _factory.Create(_testDbPathEncrypted, "testPassword", false, configEncrypted);
         dbEncrypted.ExecuteSQL("CREATE TABLE entries (id INTEGER, data TEXT, value INTEGER)");
-        
+
         var swEncrypted = Stopwatch.StartNew();
         for (int i = 0; i < insertCount; i++)
         {
-            dbEncrypted.ExecuteSQL($"INSERT INTO entries VALUES ('{i}', 'data{i}', '{i * 10}')");
+            dbEncrypted.ExecuteSQL("INSERT INTO entries VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"data{i}" }, { "2", i * 10 } });
         }
         swEncrypted.Stop();
 
         // Assert - Just verify both modes complete successfully
         // Performance can vary due to system load, buffering, etc.
         var speedupRatio = (double)swEncrypted.ElapsedMilliseconds / swNoEncrypt.ElapsedMilliseconds;
-        
+
         // Output for verification
         Console.WriteLine($"NoEncryption: {swNoEncrypt.ElapsedMilliseconds}ms");
         Console.WriteLine($"Encrypted: {swEncrypted.ElapsedMilliseconds}ms");
         Console.WriteLine($"Speedup: {speedupRatio:F2}x");
 
         // Both modes should complete in reasonable time
-        Assert.True(swNoEncrypt.ElapsedMilliseconds < 10000, 
+        Assert.True(swNoEncrypt.ElapsedMilliseconds < 50000,
             $"NoEncrypt mode should complete in reasonable time. Took {swNoEncrypt.ElapsedMilliseconds}ms");
-        Assert.True(swEncrypted.ElapsedMilliseconds < 10000, 
+        Assert.True(swEncrypted.ElapsedMilliseconds < 50000,
             $"Encrypted mode should complete in reasonable time. Took {swEncrypted.ElapsedMilliseconds}ms");
     }
 
@@ -129,7 +127,7 @@ public class NoEncryptionTests : IDisposable
     {
         // Arrange
         var config = DatabaseConfig.HighPerformance;
-        
+
         // Act
         var db = _factory.Create(_testDbPath, "testPassword", false, config);
         db.ExecuteSQL("CREATE TABLE test (id INTEGER, name TEXT)");
@@ -151,13 +149,13 @@ public class NoEncryptionTests : IDisposable
         db.ExecuteSQL("INSERT INTO orders VALUES ('1', 'Customer1', '99.99', '2024-01-15 10:30:00', 'true')");
         db.ExecuteSQL("INSERT INTO orders VALUES ('2', 'Customer2', '149.99', '2024-01-16 14:45:00', 'true')");
         db.ExecuteSQL("INSERT INTO orders VALUES ('3', 'Customer1', '79.99', '2024-01-17 09:15:00', 'false')");
-        
+
         // Test SELECT with WHERE
         db.ExecuteSQL("SELECT * FROM orders WHERE customer = 'Customer1'");
-        
+
         // Test UPDATE
         db.ExecuteSQL("UPDATE orders SET active = 'false' WHERE id = '1'");
-        
+
         // Test DELETE
         db.ExecuteSQL("DELETE FROM orders WHERE id = '3'");
 

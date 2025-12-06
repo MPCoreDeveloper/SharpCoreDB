@@ -4,8 +4,8 @@
 
 namespace SharpCoreDB;
 
-using System.Security.Cryptography;
 using SharpCoreDB.Base32Encoding;
+using System.Security.Cryptography;
 
 /// <summary>
 /// Represents a Universally Unique Lexicographically Sortable Identifier (ULID).

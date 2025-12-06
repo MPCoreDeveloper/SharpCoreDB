@@ -4,12 +4,12 @@
 
 namespace SharpCoreDB.DataStructures;
 
+using SharpCoreDB.Interfaces;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Implementation of ITable.

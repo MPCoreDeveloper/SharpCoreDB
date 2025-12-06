@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using SharpCoreDB.EntityFrameworkCore;
-using Xunit;
 
 namespace SharpCoreDB.Tests;
 
@@ -33,7 +32,7 @@ public class EFCoreTimeTrackingTests : IDisposable
         // Arrange
         var connectionString = $"Data Source={_testDbPath};Password=TestPassword123";
         using var context = new TimeTrackingContext(connectionString);
-        
+
         // Ensure database is created
         context.Database.EnsureCreated();
 

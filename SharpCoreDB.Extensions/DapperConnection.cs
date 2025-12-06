@@ -1,7 +1,6 @@
+using SharpCoreDB.Interfaces;
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
-using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Extensions;
 

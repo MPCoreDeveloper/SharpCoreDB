@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 
 // This demo showcases the capabilities of SharpCoreDB, a lightweight, encrypted, file-based database
 // that supports basic SQL operations like CREATE TABLE, INSERT, and SELECT with WHERE and ORDER BY clauses.

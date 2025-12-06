@@ -1,5 +1,5 @@
-using System.Text;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Text;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 

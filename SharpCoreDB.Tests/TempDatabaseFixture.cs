@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Tests;

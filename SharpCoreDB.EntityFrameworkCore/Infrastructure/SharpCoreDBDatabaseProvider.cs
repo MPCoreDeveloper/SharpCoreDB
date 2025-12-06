@@ -66,13 +66,13 @@ public class SharpCoreDBDatabaseProvider : IDatabase
         // EF Core's query pipeline processes this through our SharpCoreDBQuerySqlGenerator
         // Return the expression as-is - the query compiler will handle it
         var parameter = Expression.Parameter(typeof(QueryContext), "context");
-        
+
         // For simple expressions, wrap in a lambda
         if (query is LambdaExpression lambda)
         {
             return (Expression<Func<QueryContext, TResult>>)lambda;
         }
-        
+
         // Otherwise create a new lambda with QueryContext parameter
         var body = Expression.Convert(query, typeof(TResult));
         return Expression.Lambda<Func<QueryContext, TResult>>(body, parameter);

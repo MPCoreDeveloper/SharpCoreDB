@@ -1,5 +1,3 @@
-using SharpCoreDB;
-
 namespace SharpCoreDB.Tests;
 
 /// <summary>
@@ -109,7 +107,7 @@ public class UlidTests
             Assert.NotNull(ulid.Value);
             Assert.Equal(26, ulid.Value.Length);
         }
-        
+
         // Verify all are unique
         var uniqueValues = ulids.Select(u => u.Value).Distinct().Count();
         Assert.Equal(100, uniqueValues);

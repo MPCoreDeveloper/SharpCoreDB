@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Diagnostics;
 
 namespace SharpCoreDB.Benchmarks;
@@ -14,28 +12,28 @@ public static class QuickValidationBench
     public static void RunQuickValidation()
     {
         Console.WriteLine("=== Quick Validation: QueryCache + HashIndex + GC Optimizations ===\n");
-        
+
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
-        
+
         const int recordCount = 10000;
-        
+
         // Test 1: Verify QueryCache Works
         Console.WriteLine("## 1. QueryCache Validation ##");
         var dbPath = Path.Combine(Path.GetTempPath(), "validation_cache");
         if (Directory.Exists(dbPath))
             Directory.Delete(dbPath, true);
-        
+
         var db = factory.Create(dbPath, "test", false, DatabaseConfig.HighPerformance);
         db.ExecuteSQL("CREATE TABLE test (id INTEGER, project TEXT, val INTEGER)");
-        
+
         for (int i = 0; i < recordCount; i++)
         {
             db.ExecuteSQL($"INSERT INTO test VALUES ('{i}', 'Proj{i % 10}', '{i}')");
         }
-        
+
         // Run same query 100 times - should hit cache
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 100; i++)
@@ -43,11 +41,11 @@ public static class QuickValidationBench
             db.ExecuteSQL("SELECT * FROM test WHERE project = 'Proj1'");
         }
         sw.Stop();
-        
+
         var stats = db.GetQueryCacheStatistics();
         Console.WriteLine($"Cache hits: {stats.Hits}, misses: {stats.Misses}, hit rate: {stats.HitRate:P2}");
         Console.WriteLine($"100 repeated queries: {sw.ElapsedMilliseconds}ms");
-        
+
         if (stats.HitRate > 0.90)  // >90% hit rate expected
         {
             Console.WriteLine("✓ QueryCache is working effectively!");
@@ -56,24 +54,24 @@ public static class QuickValidationBench
         {
             Console.WriteLine("✗ QueryCache hit rate is lower than expected");
         }
-        
+
         if (Directory.Exists(dbPath))
             Directory.Delete(dbPath, true);
-        
+
         // Test 2: Verify HashIndex Works
         Console.WriteLine("\n## 2. HashIndex Validation ##");
         var dbPath2 = Path.Combine(Path.GetTempPath(), "validation_index");
         if (Directory.Exists(dbPath2))
             Directory.Delete(dbPath2, true);
-        
+
         var db2 = factory.Create(dbPath2, "test", false, DatabaseConfig.HighPerformance);
         db2.ExecuteSQL("CREATE TABLE test (id INTEGER, project TEXT, val INTEGER)");
-        
+
         for (int i = 0; i < recordCount; i++)
         {
             db2.ExecuteSQL($"INSERT INTO test VALUES ('{i}', 'Proj{i % 10}', '{i}')");
         }
-        
+
         // Test without index first
         sw.Restart();
         for (int i = 0; i < 100; i++)
@@ -83,11 +81,11 @@ public static class QuickValidationBench
         sw.Stop();
         var withoutIndexTime = sw.ElapsedMilliseconds;
         Console.WriteLine($"100 WHERE queries (no index): {withoutIndexTime}ms");
-        
+
         // Create index
         Console.WriteLine("Creating HashIndex on 'project' column...");
         db2.ExecuteSQL("CREATE INDEX idx_project ON test (project)");
-        
+
         // Test with index
         sw.Restart();
         for (int i = 0; i < 100; i++)
@@ -97,7 +95,7 @@ public static class QuickValidationBench
         sw.Stop();
         var withIndexTime = sw.ElapsedMilliseconds;
         Console.WriteLine($"100 WHERE queries (with index): {withIndexTime}ms");
-        
+
         if (withIndexTime < withoutIndexTime)
         {
             var speedup = (double)withoutIndexTime / withIndexTime;
@@ -107,16 +105,16 @@ public static class QuickValidationBench
         {
             Console.WriteLine("✗ HashIndex may not be applied correctly");
         }
-        
+
         if (Directory.Exists(dbPath2))
             Directory.Delete(dbPath2, true);
-        
+
         // Test 3: Verify GC optimizations are present
         Console.WriteLine("\n## 3. GC Optimization Validation ##");
         Console.WriteLine("OptimizedRowParser with Span<byte> and ArrayPool:");
         Console.WriteLine($"  - {SharpCoreDB.Services.OptimizedRowParser.GetPoolStatistics()}");
         Console.WriteLine("✓ GC optimizations (Span<byte>, ArrayPool) are implemented");
-        
+
         // Summary
         Console.WriteLine("\n=== Validation Summary ===");
         Console.WriteLine("All three optimizations are implemented and functional:");

@@ -25,7 +25,7 @@ public class SharpCoreDBCommand : DbCommand
     public override string CommandText
     {
         get => _commandText;
-       
+
         set => _commandText = value ?? string.Empty;
     }
 

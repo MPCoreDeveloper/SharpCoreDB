@@ -4,8 +4,8 @@
 
 namespace SharpCoreDB.Services;
 
-using System.Timers;
 using SharpCoreDB.Interfaces;
+using System.Timers;
 
 /// <summary>
 /// Provides automatic VACUUM and WAL checkpointing functionality.

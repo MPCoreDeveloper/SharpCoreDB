@@ -4,9 +4,9 @@
 
 namespace SharpCoreDB.Services;
 
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Interfaces;
+using System.Collections.Concurrent;
 
 /// <summary>
 /// Provides connection pooling and reuse of Database instances.

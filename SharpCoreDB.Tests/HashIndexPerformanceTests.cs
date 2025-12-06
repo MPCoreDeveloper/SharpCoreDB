@@ -1,8 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-using SharpCoreDB.Interfaces;
 using System.Diagnostics;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace SharpCoreDB.Tests;
@@ -75,10 +72,10 @@ public class HashIndexPerformanceTests
 
         // Assert - hash index should provide at least 2x speedup
         Assert.True(speedup >= 2.0, $"Expected at least 2x speedup, got {speedup:F2}x");
-        
+
         // Ideal speedup should be 5-10x for this dataset
-        _output.WriteLine(speedup >= 5.0 
-            ? $"✓ Achieved target 5-10x speedup ({speedup:F2}x)" 
+        _output.WriteLine(speedup >= 5.0
+            ? $"✓ Achieved target 5-10x speedup ({speedup:F2}x)"
             : $"⚠ Speedup {speedup:F2}x is below target 5-10x, but still significant");
 
         // Cleanup

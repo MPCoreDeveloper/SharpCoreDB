@@ -1,9 +1,7 @@
-using Xunit;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
+using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
-using SharpCoreDB.DataStructures;
 
 namespace SharpCoreDB.Tests;
 
@@ -82,7 +80,7 @@ public class NewFeaturesTests : IDisposable
         var db = pool.GetDatabase(_testDbPath + "_pool2", "password");
 
         pool.ReturnDatabase(db);
-        
+
         var stats = pool.GetPoolStatistics();
         Assert.True(stats["TotalConnections"] > 0);
     }
@@ -100,7 +98,7 @@ public class NewFeaturesTests : IDisposable
     {
         var baseDate = new DateTime(2024, 1, 1);
         var result = SqlFunctions.DateAdd(baseDate, 5, "days");
-        
+
         Assert.Equal(new DateTime(2024, 1, 6), result);
     }
 
@@ -109,7 +107,7 @@ public class NewFeaturesTests : IDisposable
     {
         object[] values = [1, 2, 3, 4, 5];
         var sum = SqlFunctions.Sum(values);
-        
+
         Assert.Equal(15m, sum);
     }
 
@@ -118,7 +116,7 @@ public class NewFeaturesTests : IDisposable
     {
         object[] values = [10, 20, 30];
         var avg = SqlFunctions.Avg(values);
-        
+
         Assert.Equal(20m, avg);
     }
 
@@ -127,7 +125,7 @@ public class NewFeaturesTests : IDisposable
     {
         object[] values = [1, 2, 2, 3, 3, 3];
         var count = SqlFunctions.CountDistinct(values);
-        
+
         Assert.Equal(3, count);
     }
 
@@ -136,7 +134,7 @@ public class NewFeaturesTests : IDisposable
     {
         object[] values = ["apple", "banana", "cherry"];
         var result = SqlFunctions.GroupConcat(values, "|");
-        
+
         Assert.Equal("apple|banana|cherry", result);
     }
 
@@ -144,11 +142,11 @@ public class NewFeaturesTests : IDisposable
     public void DatabaseIndex_AddAndLookup_Success()
     {
         var index = new DatabaseIndex("idx_test", "test_table", "test_column");
-        
+
         index.Add("key1", 1);
         index.Add("key2", 2);
         index.Add("key1", 3); // Duplicate key allowed for non-unique index
-        
+
         var results = index.Lookup("key1");
         Assert.Equal(2, results.Count);
         Assert.Contains(1, results);
@@ -159,9 +157,9 @@ public class NewFeaturesTests : IDisposable
     public void DatabaseIndex_UniqueConstraint_Throws()
     {
         var index = new DatabaseIndex("idx_unique", "test_table", "test_column", isUnique: true);
-        
+
         index.Add("key1", 1);
-        
+
         Assert.Throws<InvalidOperationException>(() => index.Add("key1", 2));
     }
 
@@ -169,12 +167,12 @@ public class NewFeaturesTests : IDisposable
     public void DatabaseIndex_Remove_Success()
     {
         var index = new DatabaseIndex("idx_test", "test_table", "test_column");
-        
+
         index.Add("key1", 1);
         index.Add("key1", 2);
-        
+
         index.Remove("key1", 1);
-        
+
         var results = index.Lookup("key1");
         Assert.Single(results);
         Assert.Contains(2, results);
@@ -184,10 +182,10 @@ public class NewFeaturesTests : IDisposable
     public void AutoMaintenanceService_IncrementWriteCount_Success()
     {
         using var service = new AutoMaintenanceService(_db, intervalSeconds: 60, writeThreshold: 10);
-        
+
         service.IncrementWriteCount();
         Assert.Equal(1, service.WriteCount);
-        
+
         service.IncrementWriteCount();
         Assert.Equal(2, service.WriteCount);
     }
@@ -196,7 +194,7 @@ public class NewFeaturesTests : IDisposable
     public void AutoMaintenanceService_TriggerMaintenance_Success()
     {
         using var service = new AutoMaintenanceService(_db, intervalSeconds: 3600, writeThreshold: 1000);
-        
+
         // Should not throw
         service.TriggerMaintenance();
     }

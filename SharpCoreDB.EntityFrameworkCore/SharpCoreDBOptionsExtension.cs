@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB.Services;
 
 namespace SharpCoreDB.EntityFrameworkCore;
 
@@ -57,7 +55,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     {
         // Register EF Core services for SharpCoreDB
         services.AddEntityFrameworkSharpCoreDB();
-        
+
         // Register SharpCoreDB's own services
         services.AddSharpCoreDB();
     }
@@ -68,7 +66,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     public override void Validate(IDbContextOptions options)
     {
         base.Validate(options);
-        
+
         if (string.IsNullOrWhiteSpace(_connectionString))
         {
             throw new InvalidOperationException("Connection string must be configured.");

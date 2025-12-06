@@ -2,7 +2,6 @@ using BenchmarkDotNet.Attributes;
 using Bogus;
 using LiteDB;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 using System.Data.SQLite;
 
@@ -70,13 +69,13 @@ public class TimeTrackingBenchmarks
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
         _sharpCoreDb = factory.Create(_sharpCoreDbPath, "benchmarkPassword", false, DatabaseConfig.HighPerformance);
-        
+
         _sharpCoreDb.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT)");
 
         // Setup SQLite
         _sqliteConn = new SQLiteConnection($"Data Source={_sqlitePath};Version=3;");
         _sqliteConn.Open();
-        
+
         using var cmd = _sqliteConn.CreateCommand();
         cmd.CommandText = "CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT)";
         cmd.ExecuteNonQuery();
@@ -92,7 +91,7 @@ public class TimeTrackingBenchmarks
         _sqliteConn?.Close();
         _sqliteConn?.Dispose();
         _liteDb?.Dispose();
-        
+
         if (Directory.Exists(_sharpCoreDbPath))
             Directory.Delete(_sharpCoreDbPath, true);
         if (File.Exists(_sqlitePath))

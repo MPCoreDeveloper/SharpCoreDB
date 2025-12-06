@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
-using System.Data;
 using System.Data.Common;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;

@@ -2,7 +2,6 @@ using BenchmarkDotNet.Attributes;
 using Bogus;
 using LiteDB;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 using System.Data.SQLite;
 
@@ -33,12 +32,12 @@ public class ComprehensiveBenchmark
     private SQLiteConnection? _sqliteConn;
     private LiteDatabase? _liteDb;
     private List<TimeEntry> _testData = new();
-    
+
     private readonly string _sharpCoreEncryptedPath = Path.Combine(Path.GetTempPath(), "bench_sharpcoredb_encrypted");
     private readonly string _sharpCoreNoEncryptPath = Path.Combine(Path.GetTempPath(), "bench_sharpcoredb_noencrypt");
     private readonly string _sqlitePath = Path.Combine(Path.GetTempPath(), "bench_sqlite.db");
     private readonly string _liteDbPath = Path.Combine(Path.GetTempPath(), "bench_litedb.db");
-    
+
     private const int DataCount = 100000;
 
     [GlobalSetup]
@@ -58,7 +57,7 @@ public class ComprehensiveBenchmark
             .RuleFor(t => t.Description, f => f.Lorem.Sentence());
 
         _testData = faker.Generate(DataCount);
-        
+
         // Calculate end times
         foreach (var entry in _testData)
         {
@@ -70,7 +69,7 @@ public class ComprehensiveBenchmark
         services.AddSharpCoreDB();
         var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<DatabaseFactory>();
-        
+
         _sharpCoreDbEncrypted = factory.Create(_sharpCoreEncryptedPath, "benchmarkPassword", false, DatabaseConfig.Default);
         _sharpCoreDbEncrypted.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, end_time DATETIME, duration INTEGER, user TEXT, description TEXT)");
 
@@ -178,7 +177,7 @@ public class ComprehensiveBenchmark
     [Benchmark]
     public void SharpCoreDB_NoEncrypt_BatchInsert()
     {
-        var batch = _testData.Select(entry => 
+        var batch = _testData.Select(entry =>
             $"INSERT INTO time_entries VALUES ('{entry.Id}', '{entry.Project.Replace("'", "''")}', '{entry.Task.Replace("'", "''")}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', '{entry.Duration}', '{entry.User.Replace("'", "''")}', '{entry.Description.Replace("'", "''")}')");
         _sharpCoreDbNoEncrypt!.ExecuteBatchSQL(batch);
     }

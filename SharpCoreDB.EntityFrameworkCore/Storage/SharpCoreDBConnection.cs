@@ -1,8 +1,8 @@
-using System.Data;
-using System.Data.Common;
+using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
-using Microsoft.Extensions.DependencyInjection;
+using System.Data;
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
@@ -32,11 +32,11 @@ public class SharpCoreDBConnection : DbConnection
 
     /// <inheritdoc />
     [AllowNull]
-    public override string ConnectionString 
-    { 
-        get; 
-       
-        set; 
+    public override string ConnectionString
+    {
+        get;
+
+        set;
     }
 
     /// <inheritdoc />

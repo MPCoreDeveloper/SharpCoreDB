@@ -4,12 +4,12 @@
 
 namespace SharpCoreDB.Services;
 
+using SharpCoreDB.Constants;
+using SharpCoreDB.Interfaces;
 using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using SharpCoreDB.Constants;
-using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Implementation of IWAL using a log file with buffered I/O for improved performance.

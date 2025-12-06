@@ -58,7 +58,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     public DbConnection DbConnection
     {
         get => _connection!;
-       
+
         set => _connection = value;
     }
 
