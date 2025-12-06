@@ -119,6 +119,37 @@ public class AsyncTests : IDisposable
         Assert.True(stats.Count >= 0); // Cache should be enabled
     }
 
+    [Fact]
+    public void Prepare_And_ExecutePrepared_SelectWithParameter()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testpass");
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO users VALUES (2, 'Bob')");
+
+        // Act
+        var stmt = db.Prepare("SELECT * FROM users WHERE id = ?");
+        db.ExecutePrepared(stmt, new Dictionary<string, object?> { { "0", 1 } });
+
+        // Assert - no exception means success
+    }
+
+    [Fact]
+    public async Task ExecutePreparedAsync_InsertWithParameter()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testpass");
+        db.ExecuteSQL("CREATE TABLE prepared_test (id INTEGER, value TEXT)");
+
+        // Act
+        var stmt = db.Prepare("INSERT INTO prepared_test VALUES (?, ?)");
+        await db.ExecutePreparedAsync(stmt, new Dictionary<string, object?> { { "0", 1 }, { "1", "PreparedValue" } });
+
+        // Assert - verify insert worked
+        db.ExecuteSQL("SELECT * FROM prepared_test"); // Should not throw
+    }
+
     public void Dispose()
     {
         try

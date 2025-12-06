@@ -10,6 +10,9 @@ using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 using System.Text.Json;
+using System.Collections.Concurrent;
+using System.Buffers;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Implementation of IDatabase.
@@ -25,6 +28,8 @@ public class Database : IDatabase
     private readonly SecurityConfig? securityConfig;
     private readonly QueryCache? queryCache;
     private readonly object _walLock = new object();
+    private readonly ConcurrentDictionary<string, CachedQueryPlan> _prepared = new();
+    private readonly WalManager _walManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
@@ -46,6 +51,9 @@ public class Database : IDatabase
         var masterKey = crypto.DeriveKey(masterPassword, "salt");
         this.storage = new Storage(crypto, masterKey, this.config);
         this.userService = new UserService(crypto, this.storage, this._dbPath);
+
+        // Get WalManager from services for pooled streams
+        this._walManager = services.GetRequiredService<WalManager>();
 
         // Initialize query cache if enabled
         if (this.config.EnableQueryCache)
@@ -115,7 +123,7 @@ public class Database : IDatabase
         {
             lock (this._walLock)
             {
-                using var wal = new WAL(this._dbPath, this.config);
+                using var wal = new WAL(this._dbPath, this.config, this._walManager);
                 var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
                 sqlParser.Execute(sql, wal);
                 if (!this.isReadOnly)
@@ -149,7 +157,7 @@ public class Database : IDatabase
         {
             lock (this._walLock)
             {
-                using var wal = new WAL(this._dbPath, this.config);
+                using var wal = new WAL(this._dbPath, this.config, this._walManager);
                 var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
                 sqlParser.Execute(sql, parameters, wal);
                 if (!this.isReadOnly)
@@ -209,7 +217,7 @@ public class Database : IDatabase
         // Batch all non-SELECT statements in a single WAL transaction
         lock (this._walLock)
         {
-            using var wal = new WAL(this._dbPath, this.config);
+            using var wal = new WAL(this._dbPath, this.config, this._walManager);
             foreach (var sql in statements)
             {
                 var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
@@ -240,6 +248,46 @@ public class Database : IDatabase
         await Task.Run(() => this.ExecuteBatchSQL(sqlStatements), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Executes a prepared statement with parameters.
+    /// </summary>
+    /// <param name="stmt">The prepared statement.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    public void ExecutePrepared(PreparedStatement stmt, Dictionary<string, object?> parameters)
+    {
+        var parts = stmt.Plan.Parts;
+        if (parts[0].ToUpper() == SqlConstants.SELECT)
+        {
+            var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+            sqlParser.Execute(stmt.Plan, parameters, null);
+        }
+        else
+        {
+            lock (this._walLock)
+            {
+                using var wal = new WAL(this._dbPath, this.config, this._walManager);
+                var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+                sqlParser.Execute(stmt.Plan, parameters, wal);
+                if (!this.isReadOnly)
+                {
+                    this.Save(wal);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes a prepared statement asynchronously with parameters.
+    /// </summary>
+    /// <param name="stmt">The prepared statement.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task ExecutePreparedAsync(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() => this.ExecutePrepared(stmt, parameters), cancellationToken).ConfigureAwait(false);
+    }
+
     /// <inheritdoc />
     public void CreateUser(string username, string password) => this.userService.CreateUser(username, password);
 
@@ -256,7 +304,27 @@ public class Database : IDatabase
         return this;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Prepares a SQL statement for efficient repeated execution.
+    /// </summary>
+    /// <param name="sql">The SQL statement to prepare.</param>
+    /// <returns>A prepared statement instance.</returns>
+    public PreparedStatement Prepare(string sql)
+    {
+        if (!_prepared.TryGetValue(sql, out var plan))
+        {
+            var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            plan = new CachedQueryPlan { Sql = sql, Parts = parts };
+            _prepared[sql] = plan;
+        }
+
+        return new PreparedStatement(sql, plan);
+    }
+
+    /// <summary>
+    /// Gets query cache statistics.
+    /// </summary>
+    /// <returns>A tuple containing cache hits, misses, hit rate, and total cached queries.</returns>
     public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics()
     {
         if (this.queryCache == null)
@@ -265,6 +333,59 @@ public class Database : IDatabase
         }
 
         return this.queryCache.GetStatistics();
+    }
+
+    /// <summary>
+    /// Executes a query asynchronously and returns the results as a streaming enumerable.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An asynchronous enumerable of rows.</returns>
+    public async IAsyncEnumerable<Dictionary<string, object>> ExecuteQueryAsync(string sql, Dictionary<string, object?> parameters = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts[0].ToUpper() != SqlConstants.SELECT)
+        {
+            yield break;
+        }
+
+        var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+        var results = await Task.Run(() => sqlParser.ExecuteQuery(sql, parameters), cancellationToken);
+        int capacity = EstimateCapacity(sql);
+        var buffer = ArrayPool<Dictionary<string, object>>.Shared.Rent(capacity);
+        try
+        {
+            int i = 0;
+            foreach (var row in results)
+            {
+                if (i >= capacity) break;
+                buffer[i] = row;
+                yield return buffer[i];
+                i++;
+            }
+        }
+        finally
+        {
+            ArrayPool<Dictionary<string, object>>.Shared.Return(buffer);
+        }
+    }
+
+    private int EstimateCapacity(string sql)
+    {
+        if (sql.Contains("LIMIT"))
+        {
+            var parts = sql.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var limitIdx = Array.IndexOf(parts, "LIMIT");
+            if (limitIdx >= 0 && limitIdx + 1 < parts.Length)
+            {
+                if (int.TryParse(parts[limitIdx + 1], out var limit))
+                {
+                    return limit;
+                }
+            }
+        }
+        return 1000;
     }
 }
 
@@ -282,6 +403,7 @@ public static class DatabaseExtensions
     {
         services.AddSingleton<ICryptoService, CryptoService>();
         services.AddTransient<DatabaseFactory>();
+        services.AddSingleton<WalManager>();
         return services;
     }
 }

@@ -10,11 +10,13 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 /// <summary>
 /// Implementation of ITable.
 /// </summary>
-public class Table : ITable
+public class Table : ITable, IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="Table"/> class.
@@ -28,7 +30,14 @@ public class Table : ITable
     /// Initializes a new instance of the <see cref="Table"/> class.
     /// Constructor with storage.
     /// </summary>
-    public Table(IStorage storage, bool isReadOnly = false) => (this.storage, this.isReadOnly) = (storage, isReadOnly);
+    public Table(IStorage storage, bool isReadOnly = false) : this()
+    {
+        (this.storage, this.isReadOnly) = (storage, isReadOnly);
+        if (!isReadOnly)
+        {
+            this.indexManager = new IndexManager();
+        }
+    }
 
     /// <inheritdoc />
     public string Name { get; set; } = string.Empty;
@@ -69,6 +78,11 @@ public class Table : ITable
     // .NET 10: Use Lock instead of ReaderWriterLockSlim for better performance
     private readonly Lock @lock = new();
     private bool isReadOnly;
+
+    /// <summary>
+    /// Index manager for asynchronous index updates.
+    /// </summary>
+    private IndexManager? indexManager;
 
     /// <summary>
     /// Sets the storage for this table.
@@ -147,10 +161,10 @@ public class Table : ITable
             ms.Write(rowData, 0, rowData.Length);
             this.storage.WriteBytes(this.DataFile, ms.ToArray());
 
-            // Update hash indexes
-            foreach (var index in this.hashIndexes.Values)
+            // Queue index updates asynchronously
+            if (this.indexManager != null && this.hashIndexes.Count > 0)
             {
-                index.Add(row);
+                this.indexManager.QueueUpdate(new IndexManager.IndexUpdate(row, this.hashIndexes.Values.ToList()));
             }
         }
     }
@@ -530,5 +544,14 @@ public class Table : ITable
             DataType.Guid => default(Guid?),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Disposes the table and completes asynchronous operations.
+    /// </summary>
+    public void Dispose()
+    {
+        this.indexManager?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

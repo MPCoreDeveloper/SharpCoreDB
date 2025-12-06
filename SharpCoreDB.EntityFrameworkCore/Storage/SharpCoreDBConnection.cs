@@ -112,6 +112,41 @@ public class SharpCoreDBConnection : DbConnection
     }
 
     /// <inheritdoc />
+    public override async Task OpenAsync(CancellationToken cancellationToken = default)
+    {
+        if (_state == ConnectionState.Open)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_connectionStringBuilder.DataSource))
+            throw new InvalidOperationException("Data source must be specified in connection string.");
+
+        // Check if pooling is enabled
+        var usePooling = _connectionStringBuilder.Cache?.Equals("Shared", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (usePooling)
+        {
+            _pool = _services.GetService<DatabasePool>();
+            if (_pool == null)
+            {
+                // Create a new pool if not in DI
+                _pool = new DatabasePool(_services, maxPoolSize: 10);
+            }
+
+            _database = await Task.Run(() => _pool.GetDatabase(ConnectionString), cancellationToken);
+        }
+        else
+        {
+            var factory = _services.GetRequiredService<DatabaseFactory>();
+            _database = await Task.Run(() => factory.Create(
+                _connectionStringBuilder.DataSource,
+                _connectionStringBuilder.Password ?? "default",
+                _connectionStringBuilder.ReadOnly), cancellationToken);
+        }
+
+        _state = ConnectionState.Open;
+    }
+
+    /// <inheritdoc />
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
     {
         if (_state != ConnectionState.Open)

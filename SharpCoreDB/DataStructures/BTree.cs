@@ -15,10 +15,15 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 {
     private sealed class Node
     {
+        private const int InitialCapacity = 1024;
+        public TKey[] keysArray = new TKey[InitialCapacity];
+        public TValue[] valuesArray = new TValue[InitialCapacity];
+        public Node[] childrenArray = new Node[InitialCapacity];
+        public int keysCount = 0;
+        public int valuesCount = 0;
+        public int childrenCount = 0;
+
         public bool IsLeaf;
-        public List<TKey> Keys = [];
-        public List<TValue> Values = [];
-        public List<Node> Children = [];
     }
 
     private Node? root;
@@ -30,8 +35,10 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         if (this.root == null)
         {
             this.root = new Node { IsLeaf = true };
-            this.root.Keys.Add(key);
-            this.root.Values.Add(value);
+            this.root.keysArray[0] = key;
+            this.root.valuesArray[0] = value;
+            this.root.keysCount = 1;
+            this.root.valuesCount = 1;
             return;
         }
 
@@ -40,55 +47,71 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
     private void InsertNonFull(Node node, TKey key, TValue value)
     {
-        int i = node.Keys.Count - 1;
+        int i = node.keysCount - 1;
         if (node.IsLeaf)
         {
-            while (i >= 0 && key.CompareTo(node.Keys[i]) < 0)
+            while (i >= 0 && key.CompareTo(node.keysArray[i]) < 0)
             {
                 i--;
             }
 
-            node.Keys.Insert(i + 1, key);
-            node.Values.Insert(i + 1, value);
+            InsertKey(node, i + 1, key);
+            InsertValue(node, i + 1, value);
         }
         else
         {
-            while (i >= 0 && key.CompareTo(node.Keys[i]) < 0)
+            while (i >= 0 && key.CompareTo(node.keysArray[i]) < 0)
             {
                 i--;
             }
 
             i++;
-            if (node.Children[i].Keys.Count == (2 * this.degree) - 1)
+            if (node.childrenArray[i].keysCount == (2 * this.degree) - 1)
             {
                 this.SplitChild(node, i);
-                if (key.CompareTo(node.Keys[i]) > 0)
+                if (key.CompareTo(node.keysArray[i]) > 0)
                 {
                     i++;
                 }
             }
 
-            this.InsertNonFull(node.Children[i], key, value);
+            this.InsertNonFull(node.childrenArray[i], key, value);
         }
     }
 
     private void SplitChild(Node parent, int i)
     {
-        var y = parent.Children[i];
+        var y = parent.childrenArray[i];
         var z = new Node { IsLeaf = y.IsLeaf };
-        parent.Children.Insert(i + 1, z);
-        parent.Keys.Insert(i, y.Keys[this.degree - 1]);
-        z.Keys.AddRange(y.Keys.GetRange(this.degree, this.degree - 1));
-        y.Keys.RemoveRange(this.degree - 1, this.degree);
+        InsertChild(parent, i + 1, z);
+        InsertKey(parent, i, y.keysArray[this.degree - 1]);
+        int t = this.degree;
+        for (int j = 0; j < t - 1; j++)
+        {
+            z.keysArray[j] = y.keysArray[j + t];
+            if (y.IsLeaf)
+            {
+                z.valuesArray[j] = y.valuesArray[j + t];
+            }
+        }
+        z.keysCount = t - 1;
+        if (y.IsLeaf)
+        {
+            z.valuesCount = t - 1;
+        }
+        y.keysCount = t - 1;
+        if (y.IsLeaf)
+        {
+            y.valuesCount = t - 1;
+        }
         if (!y.IsLeaf)
         {
-            z.Children.AddRange(y.Children.GetRange(this.degree, this.degree));
-            y.Children.RemoveRange(this.degree, this.degree);
-        }
-        else
-        {
-            z.Values.AddRange(y.Values.GetRange(this.degree, this.degree - 1));
-            y.Values.RemoveRange(this.degree - 1, this.degree);
+            for (int j = 0; j < t; j++)
+            {
+                z.childrenArray[j] = y.childrenArray[j + t];
+            }
+            z.childrenCount = t;
+            y.childrenCount = t;
         }
     }
 
@@ -106,14 +129,14 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         }
 
         int i = 0;
-        while (i < node.Keys.Count && key.CompareTo(node.Keys[i]) > 0)
+        while (i < node.keysCount && key.CompareTo(node.keysArray[i]) > 0)
         {
             i++;
         }
 
-        if (i < node.Keys.Count && key.CompareTo(node.Keys[i]) == 0)
+        if (i < node.keysCount && key.CompareTo(node.keysArray[i]) == 0)
         {
-            return (true, node.Values[i]);
+            return (true, node.valuesArray[i]);
         }
 
         if (node.IsLeaf)
@@ -121,6 +144,54 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             return (false, default);
         }
 
-        return Search(node.Children[i], key);
+        return Search(node.childrenArray[i], key);
+    }
+
+    private void InsertKey(Node node, int pos, TKey key)
+    {
+        if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
+        var span = node.keysArray.AsSpan(0, node.keysCount);
+        span.Slice(pos, node.keysCount - pos).CopyTo(span.Slice(pos + 1, node.keysCount - pos));
+        node.keysArray[pos] = key;
+        node.keysCount++;
+    }
+
+    private void InsertValue(Node node, int pos, TValue value)
+    {
+        if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
+        var span = node.valuesArray.AsSpan(0, node.valuesCount);
+        span.Slice(pos, node.valuesCount - pos).CopyTo(span.Slice(pos + 1, node.valuesCount - pos));
+        node.valuesArray[pos] = value;
+        node.valuesCount++;
+    }
+
+    private void InsertChild(Node node, int pos, Node child)
+    {
+        if (node.childrenCount == node.childrenArray.Length) ResizeChildren(node);
+        var span = node.childrenArray.AsSpan(0, node.childrenCount);
+        span.Slice(pos, node.childrenCount - pos).CopyTo(span.Slice(pos + 1, node.childrenCount - pos));
+        node.childrenArray[pos] = child;
+        node.childrenCount++;
+    }
+
+    private void ResizeKeys(Node node)
+    {
+        var newArray = new TKey[node.keysArray.Length * 2];
+        node.keysArray.AsSpan(0, node.keysCount).CopyTo(newArray);
+        node.keysArray = newArray;
+    }
+
+    private void ResizeValues(Node node)
+    {
+        var newArray = new TValue[node.valuesArray.Length * 2];
+        node.valuesArray.AsSpan(0, node.valuesCount).CopyTo(newArray);
+        node.valuesArray = newArray;
+    }
+
+    private void ResizeChildren(Node node)
+    {
+        var newArray = new Node[node.childrenArray.Length * 2];
+        node.childrenArray.AsSpan(0, node.childrenCount).CopyTo(newArray);
+        node.childrenArray = newArray;
     }
 }

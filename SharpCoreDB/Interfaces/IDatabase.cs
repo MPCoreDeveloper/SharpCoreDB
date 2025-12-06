@@ -4,6 +4,8 @@
 
 namespace SharpCoreDB.Interfaces;
 
+using SharpCoreDB.DataStructures;
+
 /// <summary>
 /// Interface for the database engine.
 /// </summary>
@@ -81,4 +83,27 @@ public interface IDatabase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Prepares a SQL statement for efficient repeated execution.
+    /// </summary>
+    /// <param name="sql">The SQL statement to prepare.</param>
+    /// <returns>A prepared statement instance.</returns>
+    PreparedStatement Prepare(string sql);
+
+    /// <summary>
+    /// Executes a prepared statement with parameters.
+    /// </summary>
+    /// <param name="stmt">The prepared statement.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    void ExecutePrepared(PreparedStatement stmt, Dictionary<string, object?> parameters);
+
+    /// <summary>
+    /// Executes a prepared statement asynchronously with parameters.
+    /// </summary>
+    /// <param name="stmt">The prepared statement.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ExecutePreparedAsync(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
 }

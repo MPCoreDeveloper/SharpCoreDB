@@ -58,28 +58,55 @@ public class SqlParser : ISqlParser
         }
 
         // Proceed with existing logic
-        this.ExecuteInternal(sql, wal);
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        this.ExecuteInternal(sql, parts, wal);
     }
 
-    private void ExecuteInternal(string sql, IWAL? wal = null)
+    /// <summary>
+    /// Executes a prepared statement with the cached query plan.
+    /// </summary>
+    /// <param name="plan">The cached query plan.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="wal">The WAL instance.</param>
+    public void Execute(CachedQueryPlan plan, Dictionary<string, object?> parameters, IWAL? wal = null)
     {
-        // Use query cache for parsed SQL parts if available
-        string[] parts;
-        if (this.queryCache != null)
+        var sql = plan.Sql;
+        if (parameters != null && parameters.Count > 0)
         {
-            var cached = this.queryCache.GetOrAdd(sql, s => new QueryCache.CachedQuery
-            {
-                Sql = s,
-                Parts = s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries),
-                CachedAt = DateTime.UtcNow,
-                AccessCount = 1,
-            });
-            parts = cached.Parts;
+            sql = this.BindParameters(sql, parameters);
         }
         else
         {
-            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            sql = this.SanitizeSql(sql);
         }
+
+        this.ExecuteInternal(sql, plan.Parts, wal);
+    }
+
+    /// <summary>
+    /// Executes a query and returns the results.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <returns>The query results.</returns>
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters = null)
+    {
+        if (parameters != null && parameters.Count > 0)
+        {
+            sql = this.BindParameters(sql, parameters);
+        }
+        else
+        {
+            sql = this.SanitizeSql(sql);
+        }
+
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return this.ExecuteQueryInternal(sql, parts);
+    }
+
+    private void ExecuteInternal(string sql, string[] parts, IWAL? wal = null)
+    {
+        // Parts are already provided, no need to parse again
 
         if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == SqlConstants.TABLE)
         {
@@ -648,5 +675,175 @@ public class SqlParser : ISqlParser
             decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => $"'{value.ToString()?.Replace("'", "''")}'",
         };
+    }
+
+    private List<Dictionary<string, object>> ExecuteQueryInternal(string sql, string[] parts)
+    {
+        if (parts[0].ToUpper() == SqlConstants.SELECT)
+        {
+            var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
+            string[] keywords = ["WHERE", "ORDER", "LIMIT"];
+            var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
+            var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
+            var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
+            var limitIdx = Array.IndexOf(parts, "LIMIT");
+            string? whereStr = null;
+            if (whereIdx > 0)
+            {
+                var endIdx = orderIdx > 0 ? orderIdx : limitIdx > 0 ? limitIdx : parts.Length;
+                whereStr = string.Join(" ", parts.Skip(whereIdx + 1).Take(endIdx - whereIdx - 1));
+            }
+
+            string? orderBy = null;
+            bool asc = true;
+            if (orderIdx > 0 && parts.Length > orderIdx + 3 && parts[orderIdx + 1].ToUpper() == SqlConstants.BY)
+            {
+                orderBy = parts[orderIdx + 2];
+                asc = parts[orderIdx + 3].ToUpper() != SqlConstants.DESC;
+            }
+
+            int? limit = null;
+            int? offset = null;
+            if (limitIdx > 0)
+            {
+                var limitParts = parts.Skip(limitIdx + 1).ToArray();
+                if (limitParts.Length > 0)
+                {
+                    limit = int.Parse(limitParts[0]);
+                    if (limitParts.Length > 2 && limitParts[1].ToUpper() == "OFFSET")
+                    {
+                        offset = int.Parse(limitParts[2]);
+                    }
+                }
+            }
+
+            if (fromParts.Any(p => p.ToUpper() == "JOIN"))
+            {
+                // Parse JOIN
+                var table1 = fromParts[0];
+                var joinType = fromParts.Contains("LEFT") ? "LEFT" : "INNER";
+                var joinIdx = Array.IndexOf(fromParts, joinType == "LEFT" ? "LEFT" : "JOIN");
+                if (joinType == "LEFT")
+                {
+                    joinIdx = Array.IndexOf(fromParts, "JOIN");
+                }
+
+                var table2 = fromParts[joinIdx + 1];
+                var onIdx = Array.IndexOf(fromParts, "ON");
+                var onStr = string.Join(" ", fromParts.Skip(onIdx + 1));
+
+                // Assume ON t1.col = t2.col
+                var onParts = onStr.Split('=');
+                var left = onParts[0].Trim().Split('.')[1];
+                var right = onParts[1].Trim().Split('.')[1];
+                var rows1 = this.tables[table1].Select();
+                var rows2 = this.tables[table2].Select();
+
+                // Create dict for fast lookup
+                var dict2 = new Dictionary<object, List<Dictionary<string, object>>>();
+                foreach (var r2 in rows2)
+                {
+                    var key = r2[right];
+                    if (!dict2.ContainsKey(key ?? new object()))
+                    {
+                        dict2[key ?? new object()] = new List<Dictionary<string, object>>();
+                    }
+
+                    dict2[key ?? new object()].Add(r2);
+                }
+
+                var results = new List<Dictionary<string, object>>();
+                foreach (var r1 in rows1)
+                {
+                    var key = r1[left];
+                    if (dict2.ContainsKey(key ?? new object()))
+                    {
+                        foreach (var r2 in dict2[key ?? new object()])
+                        {
+                            var combined = new Dictionary<string, object>();
+                            foreach (var kv in r1)
+                            {
+                                combined[table1 + "." + kv.Key] = kv.Value;
+                            }
+
+                            foreach (var kv in r2)
+                            {
+                                combined[table2 + "." + kv.Key] = kv.Value;
+                            }
+
+                            results.Add(combined);
+                        }
+                    }
+                    else if (joinType == "LEFT")
+                    {
+                        var combined = new Dictionary<string, object>();
+                        foreach (var kv in r1)
+                        {
+                            combined[table1 + "." + kv.Key] = kv.Value;
+                        }
+
+                        // Null for table2
+                        foreach (var col in this.tables[table2].Columns)
+                        {
+                            combined[table2 + "." + col] = null;
+                        }
+
+                        results.Add(combined);
+                    }
+                }
+
+                // Apply where
+                if (!string.IsNullOrEmpty(whereStr))
+                {
+                    results = results.Where(r => this.EvaluateJoinWhere(r, whereStr)).ToList();
+                }
+
+                // Order
+                if (orderBy != null)
+                {
+                    var key = results.FirstOrDefault()?.Keys.FirstOrDefault(k => k.Contains(orderBy));
+                    if (key != null)
+                    {
+                        results = asc ? [.. results.OrderBy(r => r[key])] : [.. results.OrderByDescending(r => r[key])];
+                    }
+                }
+
+                // Apply limit and offset
+                if (offset.HasValue)
+                {
+                    results = results.Skip(offset.Value).ToList();
+                }
+
+                if (limit.HasValue)
+                {
+                    results = results.Take(limit.Value).ToList();
+                }
+
+                return results;
+            }
+            else
+            {
+                var tableName = fromParts[0];
+                var results = this.tables[tableName].Select(whereStr, orderBy, asc);
+
+                // Apply limit and offset
+                if (offset.HasValue)
+                {
+                    results = results.Skip(offset.Value).ToList();
+                }
+
+                if (limit.HasValue)
+                {
+                    results = results.Take(limit.Value).ToList();
+                }
+
+                return results;
+            }
+        }
+        else
+        {
+            // For non-SELECT, return empty list
+            return new List<Dictionary<string, object>>();
+        }
     }
 }
