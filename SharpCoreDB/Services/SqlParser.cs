@@ -453,7 +453,12 @@ public class SqlParser : ISqlParser
                 DataType.String => val,
                 DataType.Real => double.Parse(val),
                 DataType.Blob => Convert.FromBase64String(val),
-                DataType.Boolean => bool.Parse(val),
+                DataType.Boolean => val.ToLower() switch
+                {
+                    "1" or "true" => true,
+                    "0" or "false" => false,
+                    _ => bool.Parse(val),
+                },
                 DataType.DateTime => DateTime.Parse(val),
                 DataType.Long => long.Parse(val),
                 DataType.Decimal => decimal.Parse(val),
