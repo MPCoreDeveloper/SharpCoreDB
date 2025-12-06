@@ -31,7 +31,13 @@ public class SharpCoreDBConnection : DbConnection
     }
 
     /// <inheritdoc />
-    public override string ConnectionString { get; set; }
+    [AllowNull]
+    public override string ConnectionString 
+    { 
+        get; 
+       
+        set; 
+    }
 
     /// <inheritdoc />
     public override string Database => _connectionStringBuilder.DataSource;

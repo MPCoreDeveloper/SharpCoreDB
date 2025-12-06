@@ -1,56 +1,64 @@
-using SharpCoreDB.Services;
-using System.Text.Json;
-using SharpCoreDB.Constants;
-using SharpCoreDB.Interfaces;
-using SharpCoreDB.DataStructures;
-using Microsoft.Extensions.DependencyInjection;
+// <copyright file="Database.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB;
+
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.Constants;
+using SharpCoreDB.DataStructures;
+using SharpCoreDB.Interfaces;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// Implementation of IDatabase.
 /// </summary>
 public class Database : IDatabase
 {
-    private readonly IStorage _storage;
-    private readonly IUserService _userService;
-    private readonly Dictionary<string, ITable> _tables = [];
+    private readonly IStorage storage;
+    private readonly IUserService userService;
+    private readonly Dictionary<string, ITable> tables = [];
     private readonly string _dbPath;
-    private readonly bool _isReadOnly;
-    private readonly DatabaseConfig? _config;
-    private readonly QueryCache? _queryCache;
+    private readonly bool isReadOnly;
+    private readonly DatabaseConfig? config;
+    private readonly SecurityConfig? securityConfig;
+    private readonly QueryCache? queryCache;
 
     /// <summary>
-    /// Initializes a new instance of the Database class.
+    /// Initializes a new instance of the <see cref="Database"/> class.
     /// </summary>
     /// <param name="services">The service provider.</param>
     /// <param name="dbPath">The database path.</param>
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
     /// <param name="config">Optional database configuration.</param>
-    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
+    /// <param name="securityConfig">Optional security configuration.</param>
+    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null, SecurityConfig? securityConfig = null)
     {
-        _dbPath = dbPath;
-        _isReadOnly = isReadOnly;
-        _config = config ?? DatabaseConfig.Default;
-        Directory.CreateDirectory(_dbPath);
+        this._dbPath = dbPath;
+        this.isReadOnly = isReadOnly;
+        this.config = config ?? DatabaseConfig.Default;
+        this.securityConfig = securityConfig ?? SecurityConfig.Default;
+        Directory.CreateDirectory(this._dbPath);
         var crypto = services.GetRequiredService<ICryptoService>();
         var masterKey = crypto.DeriveKey(masterPassword, "salt");
-        _storage = new Storage(crypto, masterKey, _config);
-        _userService = new UserService(crypto, _storage, _dbPath);
-        
+        this.storage = new Storage(crypto, masterKey, this.config);
+        this.userService = new UserService(crypto, this.storage, this._dbPath);
+
         // Initialize query cache if enabled
-        if (_config.EnableQueryCache)
+        if (this.config.EnableQueryCache)
         {
-            _queryCache = new QueryCache(_config.QueryCacheSize);
+            this.queryCache = new QueryCache(this.config.QueryCacheSize);
         }
-        
-        Load();
+
+        this.Load();
     }
 
     private void Load()
     {
-        var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
-        var metaJson = _storage.Read(metaPath);
+        var metaPath = Path.Combine(this._dbPath, PersistenceConstants.MetaFileName);
+        var metaJson = this.storage.Read(metaPath);
         if (metaJson != null)
         {
             var meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
@@ -67,9 +75,9 @@ public class Database : IDatabase
                             var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict));
                             if (table != null)
                             {
-                                table.SetStorage(_storage);
-                                table.SetReadOnly(_isReadOnly);
-                                _tables[table.Name] = table;
+                                table.SetStorage(this.storage);
+                                table.SetReadOnly(this.isReadOnly);
+                                this.tables[table.Name] = table;
                             }
                         }
                     }
@@ -80,16 +88,16 @@ public class Database : IDatabase
 
     private void Save(WAL wal)
     {
-        var tablesList = _tables.Values.Select(t => new
+        var tablesList = this.tables.Values.Select(t => new
         {
             t.Name,
             t.Columns,
             t.ColumnTypes,
             t.PrimaryKeyIndex,
-            t.DataFile
+            t.DataFile,
         }).ToList();
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
-        _storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), JsonSerializer.Serialize(meta));
+        this.storage.Write(Path.Combine(this._dbPath, PersistenceConstants.MetaFileName), JsonSerializer.Serialize(meta));
         wal.Commit();
     }
 
@@ -99,23 +107,60 @@ public class Database : IDatabase
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
-            var sqlParser = new SqlParser(_tables, null, _dbPath, _storage, _isReadOnly, _queryCache);
+            var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
             sqlParser.Execute(sql, null);
         }
         else
         {
-            using var wal = new WAL(_dbPath, _config);
-            var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly, _queryCache);
+            using var wal = new WAL(this._dbPath, this.config);
+            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
             sqlParser.Execute(sql, wal);
-            if (!_isReadOnly) Save(wal);
+            if (!this.isReadOnly)
+            {
+                this.Save(wal);
+            }
         }
     }
 
     /// <inheritdoc />
     public async Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default)
     {
-        await Task.Run(() => ExecuteSQL(sql), cancellationToken).ConfigureAwait(false);
+        await Task.Run(() => this.ExecuteSQL(sql), cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Executes a parameterized SQL command.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    public void ExecuteSQL(string sql, Dictionary<string, object?> parameters)
+    {
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts[0].ToUpper() == SqlConstants.SELECT)
+        {
+            var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+            sqlParser.Execute(sql, parameters, null);
+        }
+        else
+        {
+            using var wal = new WAL(this._dbPath, this.config);
+            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+            sqlParser.Execute(sql, parameters, wal);
+            if (!this.isReadOnly)
+            {
+                this.Save(wal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes a parameterized SQL command asynchronously.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default) => await Task.Run(() => this.ExecuteSQL(sql, parameters), cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Executes multiple SQL commands in a batch for improved performance.
@@ -125,7 +170,10 @@ public class Database : IDatabase
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
     {
         var statements = sqlStatements as string[] ?? sqlStatements.ToArray();
-        if (statements.Length == 0) return;
+        if (statements.Length == 0)
+        {
+            return;
+        }
 
         // Check if any statement is a SELECT - if so, process individually
         // Optimized: Use ReadOnlySpan to avoid allocations during check
@@ -145,19 +193,30 @@ public class Database : IDatabase
             // Process individually if there are SELECTs
             foreach (var sql in statements)
             {
-                ExecuteSQL(sql);
+                this.ExecuteSQL(sql);
             }
+
             return;
         }
 
         // Batch all non-SELECT statements in a single WAL transaction
-        using var wal = new WAL(_dbPath, _config);
+        using var wal = new WAL(this._dbPath, this.config);
         foreach (var sql in statements)
         {
-            var sqlParser = new SqlParser(_tables, wal, _dbPath, _storage, _isReadOnly, _queryCache);
+            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
             sqlParser.Execute(sql, wal);
         }
-        if (!_isReadOnly) Save(wal);
+
+        if (!this.isReadOnly)
+        {
+            this.Save(wal);
+        }
+
+        // Perform GC.Collect if configured for high-performance mode
+        if (this.config.CollectGCAfterBatches)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
+        }
     }
 
     /// <summary>
@@ -168,19 +227,16 @@ public class Database : IDatabase
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task ExecuteBatchSQLAsync(IEnumerable<string> sqlStatements, CancellationToken cancellationToken = default)
     {
-        await Task.Run(() => ExecuteBatchSQL(sqlStatements), cancellationToken).ConfigureAwait(false);
+        await Task.Run(() => this.ExecuteBatchSQL(sqlStatements), cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public void CreateUser(string username, string password)
-    {
-        _userService.CreateUser(username, password);
-    }
+    public void CreateUser(string username, string password) => this.userService.CreateUser(username, password);
 
     /// <inheritdoc />
     public bool Login(string username, string password)
     {
-        return _userService.Login(username, password);
+        return this.userService.Login(username, password);
     }
 
     /// <inheritdoc />
@@ -193,11 +249,12 @@ public class Database : IDatabase
     /// <inheritdoc />
     public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics()
     {
-        if (_queryCache == null)
+        if (this.queryCache == null)
         {
             return (0, 0, 0, 0);
         }
-        return _queryCache.GetStatistics();
+
+        return this.queryCache.GetStatistics();
     }
 }
 
@@ -224,7 +281,7 @@ public static class DatabaseExtensions
 /// </summary>
 public class DatabaseFactory(IServiceProvider services)
 {
-    private readonly IServiceProvider _services = services;
+    private readonly IServiceProvider services = services;
 
     /// <summary>
     /// Creates a new Database instance and initializes it.
@@ -233,9 +290,10 @@ public class DatabaseFactory(IServiceProvider services)
     /// <param name="masterPassword">The master password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
     /// <param name="config">Optional database configuration.</param>
+    /// <param name="securityConfig">Optional security configuration.</param>
     /// <returns>The initialized database.</returns>
-    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
+    public IDatabase Create(string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null, SecurityConfig? securityConfig = null)
     {
-        return new Database(_services, dbPath, masterPassword, isReadOnly, config);
+        return new Database(this.services, dbPath, masterPassword, isReadOnly, config, securityConfig);
     }
 }

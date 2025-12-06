@@ -21,9 +21,11 @@ public class SharpCoreDBCommand : DbCommand
     }
 
     /// <inheritdoc />
+    [AllowNull]
     public override string CommandText
     {
         get => _commandText;
+       
         set => _commandText = value ?? string.Empty;
     }
 
@@ -125,7 +127,7 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
     /// <summary>Adds a parameter to the collection.</summary>
     /// <param name="value">The parameter to add.</param>
     /// <returns>The index of the added parameter.</returns>
-    public override int Add([DisallowNull] object value)
+    public override int Add([AllowNull] object value)
     {
         if (value is DbParameter param)
         {
@@ -166,14 +168,14 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
     /// <summary>Inserts a parameter at the specified index.</summary>
     /// <param name="index">The index to insert at.</param>
     /// <param name="value">The parameter to insert.</param>
-    public override void Insert(int index, [DisallowNull] object value)
+    public override void Insert(int index, [AllowNull] object value)
     {
         if (value is DbParameter param)
             _parameters.Insert(index, param);
     }
     /// <summary>Removes the specified parameter.</summary>
     /// <param name="value">The parameter to remove.</param>
-    public override void Remove([DisallowNull] object value)
+    public override void Remove([AllowNull] object value)
     {
         if (value is DbParameter param)
             _parameters.Remove(param);

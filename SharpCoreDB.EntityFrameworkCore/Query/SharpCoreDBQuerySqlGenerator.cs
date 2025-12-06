@@ -27,7 +27,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         {
             Sql.Append("SUM(");
             if (sqlFunctionExpression.Arguments.Count > 0)
-                Visit(sqlFunctionExpression.Arguments[0]);
+                Visit(sqlFunctionExpression.Arguments[0]!);
             Sql.Append(")");
             return sqlFunctionExpression;
         }
@@ -36,7 +36,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         {
             Sql.Append("AVG(");
             if (sqlFunctionExpression.Arguments.Count > 0)
-                Visit(sqlFunctionExpression.Arguments[0]);
+                Visit(sqlFunctionExpression.Arguments[0]!);
             Sql.Append(")");
             return sqlFunctionExpression;
         }
@@ -46,7 +46,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
             Sql.Append("COUNT(");
             if (sqlFunctionExpression.Arguments.Count > 0)
             {
-                Visit(sqlFunctionExpression.Arguments[0]);
+                Visit(sqlFunctionExpression.Arguments[0]!);
             }
             else
             {
@@ -73,7 +73,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
                 {
                     Sql.Append(", ");
                 }
-                Visit(sqlFunctionExpression.Arguments[i]);
+                Visit(sqlFunctionExpression.Arguments[i]!);
             }
             Sql.Append(")");
             return sqlFunctionExpression;
@@ -89,7 +89,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
                 {
                     Sql.Append(", ");
                 }
-                Visit(sqlFunctionExpression.Arguments[i]);
+                Visit(sqlFunctionExpression.Arguments[i]!);
             }
             Sql.Append(")");
             return sqlFunctionExpression;
@@ -105,7 +105,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
                 {
                     Sql.Append(", ");
                 }
-                Visit(sqlFunctionExpression.Arguments[i]);
+                Visit(sqlFunctionExpression.Arguments[i]!);
             }
             Sql.Append(")");
             return sqlFunctionExpression;
@@ -121,7 +121,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         if (selectExpression.Limit != null)
         {
             Sql.AppendLine().Append("LIMIT ");
-            Visit(selectExpression.Limit);
+            Visit(selectExpression.Limit!);
         }
 
         if (selectExpression.Offset != null)
@@ -132,7 +132,7 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
             }
 
             Sql.Append(" OFFSET ");
-            Visit(selectExpression.Offset);
+            Visit(selectExpression.Offset!);
         }
     }
 

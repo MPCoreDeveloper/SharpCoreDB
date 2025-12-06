@@ -1,35 +1,39 @@
-using System.Timers;
-using SharpCoreDB.Interfaces;
+// <copyright file="AutoMaintenanceService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using System.Timers;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Provides automatic VACUUM and WAL checkpointing functionality.
 /// </summary>
 public class AutoMaintenanceService : IDisposable
 {
-    private readonly IDatabase _database;
-    private readonly System.Timers.Timer _timer;
-    private int _writeCount = 0;
-    private readonly int _writeThreshold;
-    private readonly object _lock = new();
-    private bool _disposed = false;
+    private readonly IDatabase database;
+    private readonly System.Timers.Timer timer;
+    private int writeCount = 0;
+    private readonly int writeThreshold;
+    private readonly object @lock = new();
+    private bool disposed = false;
 
     /// <summary>
-    /// Initializes a new instance of the AutoMaintenanceService class.
+    /// Initializes a new instance of the <see cref="AutoMaintenanceService"/> class.
     /// </summary>
     /// <param name="database">The database instance to maintain.</param>
     /// <param name="intervalSeconds">Interval in seconds for automatic maintenance (default 300 = 5 minutes).</param>
     /// <param name="writeThreshold">Number of writes before triggering maintenance (default 1000).</param>
     public AutoMaintenanceService(IDatabase database, int intervalSeconds = 300, int writeThreshold = 1000)
     {
-        _database = database ?? throw new ArgumentNullException(nameof(database));
-        _writeThreshold = writeThreshold;
+        this.database = database ?? throw new ArgumentNullException(nameof(database));
+        this.writeThreshold = writeThreshold;
 
-        _timer = new System.Timers.Timer(intervalSeconds * 1000);
-        _timer.Elapsed += OnTimerElapsed;
-        _timer.AutoReset = true;
-        _timer.Start();
+        this.timer = new System.Timers.Timer(intervalSeconds * 1000);
+        this.timer.Elapsed += this.OnTimerElapsed;
+        this.timer.AutoReset = true;
+        this.timer.Start();
     }
 
     /// <summary>
@@ -37,15 +41,17 @@ public class AutoMaintenanceService : IDisposable
     /// </summary>
     public void IncrementWriteCount()
     {
-        if (_disposed)
-            return;
-
-        lock (_lock)
+        if (this.disposed)
         {
-            _writeCount++;
-            if (_writeCount >= _writeThreshold)
+            return;
+        }
+
+        lock (this.@lock)
+        {
+            this.writeCount++;
+            if (this.writeCount >= this.writeThreshold)
             {
-                PerformMaintenance();
+                this.PerformMaintenance();
             }
         }
     }
@@ -60,11 +66,11 @@ public class AutoMaintenanceService : IDisposable
             // In a production system, these would execute actual VACUUM and CHECKPOINT commands
             // For now, we'll log that maintenance was triggered
             Console.WriteLine($"[AutoMaintenance] Performing maintenance at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
-            
+
             // Reset write count
-            lock (_lock)
+            lock (this.@lock)
             {
-                _writeCount = 0;
+                this.writeCount = 0;
             }
 
             // Note: Actual VACUUM and CHECKPOINT implementation would go here
@@ -84,7 +90,7 @@ public class AutoMaintenanceService : IDisposable
     /// </summary>
     private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        PerformMaintenance();
+        this.PerformMaintenance();
     }
 
     /// <summary>
@@ -92,10 +98,12 @@ public class AutoMaintenanceService : IDisposable
     /// </summary>
     public void TriggerMaintenance()
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             return;
+        }
 
-        PerformMaintenance();
+        this.PerformMaintenance();
     }
 
     /// <summary>
@@ -105,9 +113,9 @@ public class AutoMaintenanceService : IDisposable
     {
         get
         {
-            lock (_lock)
+            lock (this.@lock)
             {
-                return _writeCount;
+                return this.writeCount;
             }
         }
     }
@@ -117,12 +125,14 @@ public class AutoMaintenanceService : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             return;
+        }
 
-        _disposed = true;
-        _timer?.Stop();
-        _timer?.Dispose();
+        this.disposed = true;
+        this.timer?.Stop();
+        this.timer?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

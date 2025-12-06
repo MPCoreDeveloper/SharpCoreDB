@@ -1,11 +1,11 @@
-// Michel Posseth - 2024-05-20 YYYY-MM-DD
-// MOD : Michel Posseth - 2024-05-26 YYYY-MM-DD
-// made type methods static / more robust 
-// Handy ULID factory
-using System.Security.Cryptography;
-using SharpCoreDB.Base32Encoding;
+// <copyright file="Ulid.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB;
+
+using System.Security.Cryptography;
+using SharpCoreDB.Base32Encoding;
 
 /// <summary>
 /// Represents a Universally Unique Lexicographically Sortable Identifier (ULID).
@@ -14,9 +14,13 @@ namespace SharpCoreDB;
 public record Ulid(string Value)
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="Ulid"/> class.
     /// Initializes a new instance of Ulid with an empty value.
     /// </summary>
-    public Ulid() : this(string.Empty) { }
+    public Ulid()
+        : this(string.Empty)
+    {
+    }
 
     /// <summary>
     /// Creates a new ULID with the current timestamp.
@@ -68,7 +72,9 @@ public record Ulid(string Value)
         }
 
         using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
+        {
             rng.GetBytes(ulidBytes[6..]);
+        }
 
         string ulid = Base32.Encode(ulidBytes.ToArray());
         return new Ulid(ulid);
@@ -108,22 +114,23 @@ public record Ulid(string Value)
     /// <returns>The timestamp in milliseconds since Unix epoch.</returns>
     public long ToEpoch()
     {
-        if (string.IsNullOrEmpty(Value) || Value.Length != 26)
+        if (string.IsNullOrEmpty(this.Value) || this.Value.Length != 26)
         {
-            return 0;// if the value is empty or not 26 characters long, return 0
+            return 0; // if the value is empty or not 26 characters long, return 0
         }
 
-        ReadOnlySpan<byte> bytes = Base32.Decode(Value[..10]);
+        ReadOnlySpan<byte> bytes = Base32.Decode(this.Value[..10]);
 
         return ExtractTimestamp(bytes);
     }
+
     /// <summary>
     /// Converts the ULID to Unix time in milliseconds.
     /// </summary>
     /// <returns>The timestamp in milliseconds since Unix epoch.</returns>
     public long ToUnixTime()
     {
-        return ToEpoch();
+        return this.ToEpoch();
     }
 
     private static long ExtractTimestamp(ReadOnlySpan<byte> bytes)
@@ -133,6 +140,7 @@ public record Ulid(string Value)
         {
             timestamp = timestamp << 8 | bytes[i];
         }
+
         return timestamp;
     }
 
@@ -142,7 +150,7 @@ public record Ulid(string Value)
     /// <returns>The ULID value.</returns>
     public override string ToString()
     {
-        return Value;
+        return this.Value;
     }
 
     /// <summary>
@@ -151,7 +159,7 @@ public record Ulid(string Value)
     /// <returns>True if the ULID has a value, otherwise false.</returns>
     public bool HasValue()
     {
-        return !string.IsNullOrEmpty(Value);
+        return !string.IsNullOrEmpty(this.Value);
     }
 
     /// <summary>
@@ -177,6 +185,7 @@ public record Ulid(string Value)
             {
                 return false;
             }
+
             ulid = new Ulid(ulidString);
             return true;
         }
@@ -189,6 +198,7 @@ public record Ulid(string Value)
             return false;
         }
     }
+
     /// <summary>
     /// Parses a string into a ULID.
     /// </summary>
@@ -210,6 +220,7 @@ public record Ulid(string Value)
             {
                 throw new ArgumentException("Invalid ULID string.");
             }
+
             return new Ulid(ulidString);
         }
         catch (FormatException)

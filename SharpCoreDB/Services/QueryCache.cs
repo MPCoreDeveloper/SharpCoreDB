@@ -1,7 +1,11 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
+// <copyright file="QueryCache.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Caches parsed SQL queries for improved performance.
@@ -9,83 +13,88 @@ namespace SharpCoreDB.Services;
 /// </summary>
 public class QueryCache
 {
-    private readonly ConcurrentDictionary<string, CachedQuery> _cache = new();
-    private readonly int _maxSize;
-    private long _hits = 0;
-    private long _misses = 0;
+    private readonly ConcurrentDictionary<string, CachedQuery> cache = new();
+    private readonly int maxSize;
+    private long hits = 0;
+    private long misses = 0;
 
     /// <summary>
     /// Represents a cached query execution plan.
     /// </summary>
     public class CachedQuery
     {
-        private long _accessCount;
-        
-        /// <summary>The original SQL query string.</summary>
+        private long accessCount;
+
+        /// <summary>Gets or sets the original SQL query string.</summary>
         public string Sql { get; set; } = string.Empty;
-        /// <summary>The parsed parts of the SQL query.</summary>
+
+        /// <summary>Gets or sets the parsed parts of the SQL query.</summary>
         public string[] Parts { get; set; } = [];
-        /// <summary>The timestamp when the query was cached.</summary>
+
+        /// <summary>Gets or sets the timestamp when the query was cached.</summary>
         public DateTime CachedAt { get; set; }
-        /// <summary>The number of times this query has been accessed.</summary>
-        public long AccessCount 
-        { 
-            get => Interlocked.Read(ref _accessCount);
-            set => Interlocked.Exchange(ref _accessCount, value);
+
+        /// <summary>Gets or sets the number of times this query has been accessed.</summary>
+        public long AccessCount
+        {
+            get => Interlocked.Read(ref this.accessCount);
+            set => Interlocked.Exchange(ref this.accessCount, value);
         }
 
         internal void IncrementAccessCount()
         {
-            Interlocked.Increment(ref _accessCount);
+            Interlocked.Increment(ref this.accessCount);
         }
     }
 
     /// <summary>
-    /// Initializes a new instance of the QueryCache class.
+    /// Initializes a new instance of the <see cref="QueryCache"/> class.
     /// </summary>
     /// <param name="maxSize">Maximum number of cached queries.</param>
-    public QueryCache(int maxSize = 1000)
+    public QueryCache(int maxSize = 1024)
     {
-        _maxSize = maxSize;
+        this.maxSize = maxSize;
     }
 
     /// <summary>
     /// Gets or adds a cached query.
     /// .NET 10: AggressiveInlining for hot path - called on every query.
     /// </summary>
+    /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CachedQuery GetOrAdd(string sql, Func<string, CachedQuery> factory)
     {
-        if (_cache.TryGetValue(sql, out var cached))
+        if (this.cache.TryGetValue(sql, out var cached))
         {
-            Interlocked.Increment(ref _hits);
+            Interlocked.Increment(ref this.hits);
             cached.IncrementAccessCount();
             return cached;
         }
 
-        Interlocked.Increment(ref _misses);
+        Interlocked.Increment(ref this.misses);
 
         // Check cache size before adding
-        if (_cache.Count >= _maxSize)
+        if (this.cache.Count >= this.maxSize)
         {
-            EvictLeastUsed();
+            this.EvictLeastUsed();
         }
 
         var query = factory(sql);
-        _cache.TryAdd(sql, query);
+        this.cache.TryAdd(sql, query);
         return query;
     }
 
     /// <summary>
     /// Gets cache statistics.
     /// </summary>
+    /// <returns></returns>
     public (long Hits, long Misses, double HitRate, int Count) GetStatistics()
     {
-        var hits = Interlocked.Read(ref _hits);
-        var misses = Interlocked.Read(ref _misses);
+        var hits = Interlocked.Read(ref this.hits);
+        var misses = Interlocked.Read(ref this.misses);
         var total = hits + misses;
         var hitRate = total > 0 ? (double)hits / total : 0;
-        return (hits, misses, hitRate, _cache.Count);
+        return (hits, misses, hitRate, this.cache.Count);
     }
 
     /// <summary>
@@ -93,16 +102,16 @@ public class QueryCache
     /// </summary>
     public void Clear()
     {
-        _cache.Clear();
-        Interlocked.Exchange(ref _hits, 0);
-        Interlocked.Exchange(ref _misses, 0);
+        this.cache.Clear();
+        Interlocked.Exchange(ref this.hits, 0);
+        Interlocked.Exchange(ref this.misses, 0);
     }
 
     private void EvictLeastUsed()
     {
         // Simple LRU: remove 10% of least accessed entries
-        var toRemove = _maxSize / 10;
-        var leastUsed = _cache
+        var toRemove = this.maxSize / 10;
+        var leastUsed = this.cache
             .OrderBy(kv => kv.Value.AccessCount)
             .Take(toRemove)
             .Select(kv => kv.Key)
@@ -110,7 +119,7 @@ public class QueryCache
 
         foreach (var key in leastUsed)
         {
-            _cache.TryRemove(key, out _);
+            this.cache.TryRemove(key, out _);
         }
     }
 }

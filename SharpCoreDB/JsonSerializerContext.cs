@@ -1,8 +1,12 @@
+// <copyright file="JsonSerializerContext.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+namespace SharpCoreDB;
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SharpCoreDB.DataStructures;
-
-namespace SharpCoreDB;
 
 /// <summary>
 /// JSON serializer context for SharpCoreDB to support Native AOT compilation and source generation features in .NET 5+.

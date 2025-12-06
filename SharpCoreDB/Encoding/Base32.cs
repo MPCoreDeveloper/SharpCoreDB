@@ -1,8 +1,11 @@
-// Michel Posseth - 2024-05-20 YYYY-MM-DD
-// Encode and decode Base32 
-using System.Text;
+// <copyright file="Base32.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Base32Encoding
 {
+    using System.Text;
+
     /// <summary>
     /// Provides Base32 encoding and decoding functionality.
     /// </summary>
@@ -24,7 +27,7 @@ namespace SharpCoreDB.Base32Encoding
                 return string.Empty;
             }
 
-            StringBuilder result = new(data.Length * 8 / 5 + 1);
+            StringBuilder result = new((data.Length * 8 / 5) + 1);
             int hi = 0, bitsRemaining = 0, index = 0;
 
             while (index < data.Length)
@@ -42,19 +45,18 @@ namespace SharpCoreDB.Base32Encoding
 
                 while (bitsRemaining >= 5)
                 {
-                    result.Append(Base32Chars[hi >> bitsRemaining - 5 & 0x1F]);
+                    result.Append(Base32Chars[hi >> (bitsRemaining - 5) & 0x1F]);
                     bitsRemaining -= 5;
                 }
             }
 
             if (bitsRemaining > 0)
             {
-                result.Append(Base32Chars[hi << 5 - bitsRemaining & 0x1F]);
+                result.Append(Base32Chars[hi << (5 - bitsRemaining) & 0x1F]);
             }
 
             return result.ToString();
         }
-
 
         /// <summary>
         /// Decodes a Base32 string into a byte array.
@@ -95,15 +97,12 @@ namespace SharpCoreDB.Base32Encoding
 
                 if (bitsRemaining >= 8)
                 {
-                    output[outputIndex++] = (byte)(bits >> bitsRemaining - 8);
+                    output[outputIndex++] = (byte)(bits >> (bitsRemaining - 8));
                     bitsRemaining -= 8;
                 }
             }
 
             return output;
         }
-
-
-
     }
 }

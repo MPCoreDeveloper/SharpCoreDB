@@ -1,18 +1,22 @@
-using System.Collections.Concurrent;
-using SharpCoreDB.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
+// <copyright file="DatabasePool.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Provides connection pooling and reuse of Database instances.
 /// </summary>
 public class DatabasePool : IDisposable
 {
-    private readonly IServiceProvider _services;
-    private readonly ConcurrentDictionary<string, PooledDatabase> _pool = new();
-    private readonly int _maxPoolSize;
-    private bool _disposed = false;
+    private readonly IServiceProvider services;
+    private readonly ConcurrentDictionary<string, PooledDatabase> pool = new();
+    private readonly int maxPoolSize;
+    private bool disposed = false;
 
     /// <summary>
     /// Represents a pooled database with reference counting.
@@ -20,28 +24,31 @@ public class DatabasePool : IDisposable
     private class PooledDatabase
     {
         public IDatabase Database { get; set; }
+
         public string ConnectionString { get; set; }
+
         public int ReferenceCount { get; set; }
+
         public DateTime LastUsed { get; set; }
 
         public PooledDatabase(IDatabase database, string connectionString)
         {
-            Database = database;
-            ConnectionString = connectionString;
-            ReferenceCount = 0;
-            LastUsed = DateTime.UtcNow;
+            this.Database = database;
+            this.ConnectionString = connectionString;
+            this.ReferenceCount = 0;
+            this.LastUsed = DateTime.UtcNow;
         }
     }
 
     /// <summary>
-    /// Initializes a new instance of the DatabasePool class.
+    /// Initializes a new instance of the <see cref="DatabasePool"/> class.
     /// </summary>
     /// <param name="services">The service provider.</param>
     /// <param name="maxPoolSize">Maximum number of pooled connections (default 10).</param>
     public DatabasePool(IServiceProvider services, int maxPoolSize = 10)
     {
-        _services = services;
-        _maxPoolSize = maxPoolSize;
+        this.services = services;
+        this.maxPoolSize = maxPoolSize;
     }
 
     /// <summary>
@@ -51,11 +58,13 @@ public class DatabasePool : IDisposable
     /// <returns>A database instance.</returns>
     public IDatabase GetDatabase(string connectionString)
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             throw new ObjectDisposedException(nameof(DatabasePool));
+        }
 
         var builder = new ConnectionStringBuilder(connectionString);
-        return GetDatabase(builder.DataSource, builder.Password, builder.ReadOnly);
+        return this.GetDatabase(builder.DataSource, builder.Password, builder.ReadOnly);
     }
 
     /// <summary>
@@ -67,14 +76,16 @@ public class DatabasePool : IDisposable
     /// <returns>A database instance.</returns>
     public IDatabase GetDatabase(string dbPath, string masterPassword, bool isReadOnly = false)
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             throw new ObjectDisposedException(nameof(DatabasePool));
+        }
 
         var key = $"{dbPath}|{isReadOnly}";
 
-        var pooled = _pool.GetOrAdd(key, _ =>
+        var pooled = this.pool.GetOrAdd(key, _ =>
         {
-            var factory = _services.GetRequiredService<DatabaseFactory>();
+            var factory = this.services.GetRequiredService<DatabaseFactory>();
             var db = factory.Create(dbPath, masterPassword, isReadOnly);
             return new PooledDatabase(db, key);
         });
@@ -94,10 +105,12 @@ public class DatabasePool : IDisposable
     /// <param name="database">The database instance.</param>
     public void ReturnDatabase(IDatabase database)
     {
-        if (_disposed || database == null)
+        if (this.disposed || database == null)
+        {
             return;
+        }
 
-        var pooled = _pool.Values.FirstOrDefault(p => p.Database == database);
+        var pooled = this.pool.Values.FirstOrDefault(p => p.Database == database);
         if (pooled != null)
         {
             lock (pooled)
@@ -114,14 +127,16 @@ public class DatabasePool : IDisposable
     /// <param name="idleTimeout">The idle timeout duration (default 5 minutes).</param>
     public void ClearIdleConnections(TimeSpan? idleTimeout = null)
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             return;
+        }
 
         var timeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         var cutoff = DateTime.UtcNow - timeout;
 
         var keysToRemove = new List<string>();
-        foreach (var kvp in _pool)
+        foreach (var kvp in this.pool)
         {
             lock (kvp.Value)
             {
@@ -134,7 +149,7 @@ public class DatabasePool : IDisposable
 
         foreach (var key in keysToRemove)
         {
-            if (_pool.TryRemove(key, out var pooled))
+            if (this.pool.TryRemove(key, out var pooled))
             {
                 // Database instances don't have explicit dispose, but we remove from pool
             }
@@ -144,7 +159,7 @@ public class DatabasePool : IDisposable
     /// <summary>
     /// Gets the current pool size.
     /// </summary>
-    public int PoolSize => _pool.Count;
+    public int PoolSize => this.pool.Count;
 
     /// <summary>
     /// Gets statistics about the pool.
@@ -154,9 +169,9 @@ public class DatabasePool : IDisposable
     {
         var stats = new Dictionary<string, int>
         {
-            ["TotalConnections"] = _pool.Count,
-            ["ActiveConnections"] = _pool.Values.Count(p => p.ReferenceCount > 0),
-            ["IdleConnections"] = _pool.Values.Count(p => p.ReferenceCount == 0)
+            ["TotalConnections"] = this.pool.Count,
+            ["ActiveConnections"] = this.pool.Values.Count(p => p.ReferenceCount > 0),
+            ["IdleConnections"] = this.pool.Values.Count(p => p.ReferenceCount == 0),
         };
 
         return stats;
@@ -167,11 +182,13 @@ public class DatabasePool : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             return;
+        }
 
-        _disposed = true;
-        _pool.Clear();
+        this.disposed = true;
+        this.pool.Clear();
         GC.SuppressFinalize(this);
     }
 }

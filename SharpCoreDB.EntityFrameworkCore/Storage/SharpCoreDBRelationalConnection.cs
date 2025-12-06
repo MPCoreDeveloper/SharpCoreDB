@@ -54,9 +54,11 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     }
 
     /// <inheritdoc />
+    [AllowNull]
     public DbConnection DbConnection
     {
         get => _connection!;
+       
         set => _connection = value;
     }
 

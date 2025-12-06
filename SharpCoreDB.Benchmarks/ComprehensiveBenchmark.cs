@@ -39,7 +39,7 @@ public class ComprehensiveBenchmark
     private readonly string _sqlitePath = Path.Combine(Path.GetTempPath(), "bench_sqlite.db");
     private readonly string _liteDbPath = Path.Combine(Path.GetTempPath(), "bench_litedb.db");
     
-    private const int DataCount = 10000;
+    private const int DataCount = 100000;
 
     [GlobalSetup]
     public void Setup()
@@ -173,5 +173,34 @@ public class ComprehensiveBenchmark
     {
         var col = _liteDb!.GetCollection<TimeEntry>("time_entries");
         var results = col.Find(x => x.Duration == 60).ToList();
+    }
+
+    [Benchmark]
+    public void SharpCoreDB_NoEncrypt_BatchInsert()
+    {
+        var batch = _testData.Select(entry => 
+            $"INSERT INTO time_entries VALUES ('{entry.Id}', '{entry.Project.Replace("'", "''")}', '{entry.Task.Replace("'", "''")}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', '{entry.Duration}', '{entry.User.Replace("'", "''")}', '{entry.Description.Replace("'", "''")}')");
+        _sharpCoreDbNoEncrypt!.ExecuteBatchSQL(batch);
+    }
+
+    [Benchmark]
+    public void SQLite_BatchInsert()
+    {
+        using var transaction = _sqliteConn!.BeginTransaction();
+        foreach (var entry in _testData)
+        {
+            using var cmd = _sqliteConn.CreateCommand();
+            cmd.Transaction = transaction;
+            cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{entry.Project.Replace("'", "''")}', '{entry.Task.Replace("'", "''")}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', {entry.Duration}, '{entry.User.Replace("'", "''")}', '{entry.Description.Replace("'", "''")}')";
+            cmd.ExecuteNonQuery();
+        }
+        transaction.Commit();
+    }
+
+    [Benchmark]
+    public void LiteDB_BatchInsert()
+    {
+        var col = _liteDb!.GetCollection<TimeEntry>("time_entries");
+        col.InsertBulk(_testData);
     }
 }

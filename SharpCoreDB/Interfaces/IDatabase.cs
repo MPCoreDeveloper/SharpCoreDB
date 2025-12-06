@@ -1,3 +1,7 @@
+// <copyright file="IDatabase.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Interfaces;
 
 /// <summary>
@@ -61,4 +65,20 @@ public interface IDatabase
     /// </summary>
     /// <returns>A tuple containing cache hits, misses, hit rate, and total cached queries.</returns>
     (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics();
+
+    /// <summary>
+    /// Executes a parameterized SQL command.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    void ExecuteSQL(string sql, Dictionary<string, object?> parameters);
+
+    /// <summary>
+    /// Executes a parameterized SQL command asynchronously.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
 }

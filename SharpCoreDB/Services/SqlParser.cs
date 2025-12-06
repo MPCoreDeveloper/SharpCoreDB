@@ -1,48 +1,78 @@
-using SharpCoreDB.Interfaces;
-using SharpCoreDB.DataStructures;
-using SharpCoreDB;
-using SharpCoreDB.Constants;
+// <copyright file="SqlParser.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using SharpCoreDB;
+using SharpCoreDB.Constants;
+using SharpCoreDB.DataStructures;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Simple SQL parser and executor.
 /// </summary>
 public class SqlParser : ISqlParser
 {
-    private readonly Dictionary<string, ITable> _tables;
-    private readonly IWAL _wal;
-    private readonly string _dbPath;
-    private readonly IStorage _storage;
-    private readonly bool _isReadOnly;
-    private readonly QueryCache? _queryCache;
+    private readonly Dictionary<string, ITable> tables;
+    private readonly IWAL wal;
+    private readonly string dbPath;
+    private readonly IStorage storage;
+    private readonly bool isReadOnly;
+    private readonly QueryCache? queryCache;
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="SqlParser"/> class.
     /// Simple SQL parser and executor.
     /// </summary>
     public SqlParser(Dictionary<string, ITable> tables, IWAL wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null)
     {
-        _tables = tables;
-        _wal = wal;
-        _dbPath = dbPath;
-        _storage = storage;
-        _isReadOnly = isReadOnly;
-        _queryCache = queryCache;
+        this.tables = tables;
+        this.wal = wal;
+        this.dbPath = dbPath;
+        this.storage = storage;
+        this.isReadOnly = isReadOnly;
+        this.queryCache = queryCache;
     }
 
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)
     {
+        this.Execute(sql, null, wal);
+    }
+
+    /// <inheritdoc />
+    public void Execute(string sql, Dictionary<string, object?> parameters, IWAL? wal = null)
+    {
+        // If parameters are provided, bind them to ? placeholders
+        if (parameters != null && parameters.Count > 0)
+        {
+            sql = this.BindParameters(sql, parameters);
+        }
+        else
+        {
+            // Fallback to string interpolation with warnings
+            Console.WriteLine("Warning: Using string interpolation for SQL execution. Consider using parameterized queries for security.");
+            // Sanitize inputs automatically (basic sanitization)
+            sql = this.SanitizeSql(sql);
+        }
+
+        // Proceed with existing logic
+        this.ExecuteInternal(sql, wal);
+    }
+
+    private void ExecuteInternal(string sql, IWAL? wal = null)
+    {
         // Use query cache for parsed SQL parts if available
         string[] parts;
-        if (_queryCache != null)
+        if (this.queryCache != null)
         {
-            var cached = _queryCache.GetOrAdd(sql, s => new QueryCache.CachedQuery
+            var cached = this.queryCache.GetOrAdd(sql, s => new QueryCache.CachedQuery
             {
                 Sql = s,
                 Parts = s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 CachedAt = DateTime.UtcNow,
-                AccessCount = 1
+                AccessCount = 1,
             });
             parts = cached.Parts;
         }
@@ -50,9 +80,14 @@ public class SqlParser : ISqlParser
         {
             parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         }
+
         if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == SqlConstants.TABLE)
         {
-            if (_isReadOnly) throw new InvalidOperationException("Cannot create table in readonly mode");
+            if (this.isReadOnly)
+            {
+                throw new InvalidOperationException("Cannot create table in readonly mode");
+            }
+
             var tableName = parts[2];
             var colsStart = sql.IndexOf('(');
             var colsEnd = sql.LastIndexOf(')');
@@ -68,7 +103,7 @@ public class SqlParser : ISqlParser
                 var partsDef = def.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var colName = partsDef[0];
                 var typeStr = partsDef[1].ToUpper();
-                var isPrimary = def.Contains(SqlConstants.PRIMARY_KEY);
+                var isPrimary = def.Contains(SqlConstants.PRIMARYKEY);
                 var isAutoGen = def.Contains("AUTO");
                 columns.Add(colName);
                 columnTypes.Add(typeStr switch
@@ -83,57 +118,78 @@ public class SqlParser : ISqlParser
                     "DECIMAL" => DataType.Decimal,
                     "ULID" => DataType.Ulid,
                     "GUID" => DataType.Guid,
-                    _ => DataType.String
+                    _ => DataType.String,
                 });
                 isAuto.Add(isAutoGen);
-                if (isPrimary) primaryKeyIndex = i;
+                if (isPrimary)
+                {
+                    primaryKeyIndex = i;
+                }
             }
-            var table = new Table(_storage, _isReadOnly)
+
+            var table = new Table(this.storage, this.isReadOnly)
             {
                 Name = tableName,
                 Columns = columns,
                 ColumnTypes = columnTypes,
                 IsAuto = isAuto,
                 PrimaryKeyIndex = primaryKeyIndex,
-                DataFile = Path.Combine(_dbPath, tableName + PersistenceConstants.TableFileExtension)
+                DataFile = Path.Combine(this.dbPath, tableName + PersistenceConstants.TableFileExtension),
             };
-            _tables[tableName] = table;
+            this.tables[tableName] = table;
             wal?.Log(sql);
         }
         else if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == "INDEX")
         {
-            if (_isReadOnly) throw new InvalidOperationException("Cannot create index in readonly mode");
+            if (this.isReadOnly)
+            {
+                throw new InvalidOperationException("Cannot create index in readonly mode");
+            }
+
             // CREATE INDEX idx_name ON table_name (column_name)
             // or CREATE UNIQUE INDEX idx_name ON table_name (column_name)
-            
             var indexNameIdx = parts[1].ToUpper() == "UNIQUE" ? 3 : 2;
             var onIdx = Array.IndexOf(parts.Select(p => p.ToUpper()).ToArray(), "ON");
             if (onIdx < 0)
+            {
                 throw new InvalidOperationException("CREATE INDEX requires ON clause");
-            
+            }
+
             var tableName = parts[onIdx + 1];
-            if (!_tables.ContainsKey(tableName))
+            if (!this.tables.ContainsKey(tableName))
+            {
                 throw new InvalidOperationException($"Table {tableName} does not exist");
-            
+            }
+
             // Extract column name from parentheses
             var columnStart = sql.IndexOf('(');
             var columnEnd = sql.IndexOf(')');
             if (columnStart < 0 || columnEnd < 0)
+            {
                 throw new InvalidOperationException("CREATE INDEX requires column name in parentheses");
-            
+            }
+
             var columnName = sql.Substring(columnStart + 1, columnEnd - columnStart - 1).Trim();
-            
+
             // Create hash index on the table
-            _tables[tableName].CreateHashIndex(columnName);
+            this.tables[tableName].CreateHashIndex(columnName);
             wal?.Log(sql);
         }
         else if (parts[0].ToUpper() == SqlConstants.INSERT && parts[1].ToUpper() == SqlConstants.INTO)
         {
-            if (_isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+            if (this.isReadOnly)
+            {
+                throw new InvalidOperationException("Cannot insert in readonly mode");
+            }
+
             var insertSql = sql[sql.IndexOf("INSERT INTO")..];
             var tableStart = "INSERT INTO ".Length;
             var tableEnd = insertSql.IndexOf(' ', tableStart);
-            if (tableEnd == -1) tableEnd = insertSql.IndexOf('(', tableStart);
+            if (tableEnd == -1)
+            {
+                tableEnd = insertSql.IndexOf('(', tableStart);
+            }
+
             var tableName = insertSql[tableStart..tableEnd].Trim();
             var rest = insertSql[tableEnd..];
             List<string> insertColumns = null;
@@ -145,6 +201,7 @@ public class SqlParser : ISqlParser
                 insertColumns = colStr.Split(',').Select(c => c.Trim()).ToList();
                 rest = rest[(colEnd + 1)..];
             }
+
             var valuesStart = rest.IndexOf(SqlConstants.VALUES) + SqlConstants.VALUES.Length;
             var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
             var values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
@@ -152,11 +209,11 @@ public class SqlParser : ISqlParser
             if (insertColumns == null)
             {
                 // All columns
-                for (int i = 0; i < _tables[tableName].Columns.Count; i++)
+                for (int i = 0; i < this.tables[tableName].Columns.Count; i++)
                 {
-                    var col = _tables[tableName].Columns[i];
-                    var type = _tables[tableName].ColumnTypes[i];
-                    row[col] = ParseValue(values[i], type);
+                    var col = this.tables[tableName].Columns[i];
+                    var type = this.tables[tableName].ColumnTypes[i];
+                    row[col] = this.ParseValue(values[i], type);
                 }
             }
             else
@@ -165,36 +222,40 @@ public class SqlParser : ISqlParser
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
                     var col = insertColumns[i];
-                    var idx = _tables[tableName].Columns.IndexOf(col);
-                    var type = _tables[tableName].ColumnTypes[idx];
-                    row[col] = ParseValue(values[i], type);
+                    var idx = this.tables[tableName].Columns.IndexOf(col);
+                    var type = this.tables[tableName].ColumnTypes[idx];
+                    row[col] = this.ParseValue(values[i], type);
                 }
+
                 // For auto columns not specified
-                for (int i = 0; i < _tables[tableName].Columns.Count; i++)
+                for (int i = 0; i < this.tables[tableName].Columns.Count; i++)
                 {
-                    var col = _tables[tableName].Columns[i];
-                    if (!row.ContainsKey(col) && _tables[tableName].IsAuto[i])
+                    var col = this.tables[tableName].Columns[i];
+                    if (!row.ContainsKey(col) && this.tables[tableName].IsAuto[i])
                     {
-                        row[col] = GenerateAutoValue(_tables[tableName].ColumnTypes[i]);
+                        row[col] = this.GenerateAutoValue(this.tables[tableName].ColumnTypes[i]);
                     }
                 }
             }
-            _tables[tableName].Insert(row);
+
+            this.tables[tableName].Insert(row);
             wal?.Log(sql);
         }
         else if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
             var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
-            string[] keywords = ["WHERE", "ORDER"];
+            string[] keywords = ["WHERE", "ORDER", "LIMIT"];
             var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
             var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
             var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
+            var limitIdx = Array.IndexOf(parts, "LIMIT");
             string? whereStr = null;
             if (whereIdx > 0)
             {
-                var endIdx = orderIdx > 0 ? orderIdx : parts.Length;
+                var endIdx = orderIdx > 0 ? orderIdx : limitIdx > 0 ? limitIdx : parts.Length;
                 whereStr = string.Join(" ", parts.Skip(whereIdx + 1).Take(endIdx - whereIdx - 1));
             }
+
             string? orderBy = null;
             bool asc = true;
             if (orderIdx > 0 && parts.Length > orderIdx + 3 && parts[orderIdx + 1].ToUpper() == SqlConstants.BY)
@@ -202,30 +263,57 @@ public class SqlParser : ISqlParser
                 orderBy = parts[orderIdx + 2];
                 asc = parts[orderIdx + 3].ToUpper() != SqlConstants.DESC;
             }
+
+            int? limit = null;
+            int? offset = null;
+            if (limitIdx > 0)
+            {
+                var limitParts = parts.Skip(limitIdx + 1).ToArray();
+                if (limitParts.Length > 0)
+                {
+                    limit = int.Parse(limitParts[0]);
+                    if (limitParts.Length > 2 && limitParts[1].ToUpper() == "OFFSET")
+                    {
+                        offset = int.Parse(limitParts[2]);
+                    }
+                }
+            }
+
             if (fromParts.Any(p => p.ToUpper() == "JOIN"))
             {
                 // Parse JOIN
                 var table1 = fromParts[0];
                 var joinType = fromParts.Contains("LEFT") ? "LEFT" : "INNER";
                 var joinIdx = Array.IndexOf(fromParts, joinType == "LEFT" ? "LEFT" : "JOIN");
-                if (joinType == "LEFT") joinIdx = Array.IndexOf(fromParts, "JOIN");
+                if (joinType == "LEFT")
+                {
+                    joinIdx = Array.IndexOf(fromParts, "JOIN");
+                }
+
                 var table2 = fromParts[joinIdx + 1];
                 var onIdx = Array.IndexOf(fromParts, "ON");
                 var onStr = string.Join(" ", fromParts.Skip(onIdx + 1));
+
                 // Assume ON t1.col = t2.col
                 var onParts = onStr.Split('=');
                 var left = onParts[0].Trim().Split('.')[1];
                 var right = onParts[1].Trim().Split('.')[1];
-                var rows1 = _tables[table1].Select();
-                var rows2 = _tables[table2].Select();
+                var rows1 = this.tables[table1].Select();
+                var rows2 = this.tables[table2].Select();
+
                 // Create dict for fast lookup
                 var dict2 = new Dictionary<object, List<Dictionary<string, object>>>();
                 foreach (var r2 in rows2)
                 {
                     var key = r2[right];
-                    if (!dict2.ContainsKey(key ?? new object())) dict2[key ?? new object()] = new List<Dictionary<string, object>>();
+                    if (!dict2.ContainsKey(key ?? new object()))
+                    {
+                        dict2[key ?? new object()] = new List<Dictionary<string, object>>();
+                    }
+
                     dict2[key ?? new object()].Add(r2);
                 }
+
                 var results = new List<Dictionary<string, object>>();
                 foreach (var r1 in rows1)
                 {
@@ -235,28 +323,43 @@ public class SqlParser : ISqlParser
                         foreach (var r2 in dict2[key ?? new object()])
                         {
                             var combined = new Dictionary<string, object>();
-                            foreach (var kv in r1) combined[table1 + "." + kv.Key] = kv.Value;
-                            foreach (var kv in r2) combined[table2 + "." + kv.Key] = kv.Value;
+                            foreach (var kv in r1)
+                            {
+                                combined[table1 + "." + kv.Key] = kv.Value;
+                            }
+
+                            foreach (var kv in r2)
+                            {
+                                combined[table2 + "." + kv.Key] = kv.Value;
+                            }
+
                             results.Add(combined);
                         }
                     }
                     else if (joinType == "LEFT")
                     {
                         var combined = new Dictionary<string, object>();
-                        foreach (var kv in r1) combined[table1 + "." + kv.Key] = kv.Value;
+                        foreach (var kv in r1)
+                        {
+                            combined[table1 + "." + kv.Key] = kv.Value;
+                        }
+
                         // Null for table2
-                        foreach (var col in _tables[table2].Columns)
+                        foreach (var col in this.tables[table2].Columns)
                         {
                             combined[table2 + "." + col] = null;
                         }
+
                         results.Add(combined);
                     }
                 }
+
                 // Apply where
                 if (!string.IsNullOrEmpty(whereStr))
                 {
-                    results = results.Where(r => EvaluateJoinWhere(r, whereStr)).ToList();
+                    results = results.Where(r => this.EvaluateJoinWhere(r, whereStr)).ToList();
                 }
+
                 // Order
                 if (orderBy != null)
                 {
@@ -266,6 +369,18 @@ public class SqlParser : ISqlParser
                         results = asc ? [.. results.OrderBy(r => r[key])] : [.. results.OrderByDescending(r => r[key])];
                     }
                 }
+
+                // Apply limit and offset
+                if (offset.HasValue)
+                {
+                    results = results.Skip(offset.Value).ToList();
+                }
+
+                if (limit.HasValue)
+                {
+                    results = results.Take(limit.Value).ToList();
+                }
+
                 foreach (var row in results)
                 {
                     Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));
@@ -274,7 +389,19 @@ public class SqlParser : ISqlParser
             else
             {
                 var tableName = fromParts[0];
-                var results = _tables[tableName].Select(whereStr, orderBy, asc);
+                var results = this.tables[tableName].Select(whereStr, orderBy, asc);
+
+                // Apply limit and offset
+                if (offset.HasValue)
+                {
+                    results = results.Skip(offset.Value).ToList();
+                }
+
+                if (limit.HasValue)
+                {
+                    results = results.Take(limit.Value).ToList();
+                }
+
                 foreach (var row in results)
                 {
                     Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));
@@ -293,11 +420,12 @@ public class SqlParser : ISqlParser
             foreach (var set in sets)
             {
                 var col = set.Key;
-                var idx = _tables[tableName].Columns.IndexOf(col);
-                var type = _tables[tableName].ColumnTypes[idx];
-                updates[col] = ParseValue(set.Value, type);
+                var idx = this.tables[tableName].Columns.IndexOf(col);
+                var type = this.tables[tableName].ColumnTypes[idx];
+                updates[col] = this.ParseValue(set.Value, type);
             }
-            _tables[tableName].Update(whereStr, updates);
+
+            this.tables[tableName].Update(whereStr, updates);
             wal?.Log(sql);
         }
         else if (parts[0].ToUpper() == "DELETE" && parts[1].ToUpper() == "FROM")
@@ -305,14 +433,18 @@ public class SqlParser : ISqlParser
             var tableName = parts[2];
             var whereIdx = Array.IndexOf(parts, "WHERE");
             var whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
-            _tables[tableName].Delete(whereStr);
+            this.tables[tableName].Delete(whereStr);
             wal?.Log(sql);
         }
     }
 
     private object ParseValue(string val, DataType type)
     {
-        if (val == "NULL") return null;
+        if (val == "NULL")
+        {
+            return null;
+        }
+
         try
         {
             return type switch
@@ -327,7 +459,7 @@ public class SqlParser : ISqlParser
                 DataType.Decimal => decimal.Parse(val),
                 DataType.Ulid => Ulid.Parse(val),
                 DataType.Guid => Guid.Parse(val),
-                _ => val
+                _ => val,
             };
         }
         catch (Exception ex)
@@ -340,12 +472,16 @@ public class SqlParser : ISqlParser
     {
         DataType.Ulid => Ulid.NewUlid(),
         DataType.Guid => Guid.NewGuid(),
-        _ => throw new InvalidOperationException($"Auto generation not supported for type {type}")
+        _ => throw new InvalidOperationException($"Auto generation not supported for type {type}"),
     };
 
     private bool EvaluateJoinWhere(Dictionary<string, object> row, string where)
     {
-        if (string.IsNullOrEmpty(where)) return true;
+        if (string.IsNullOrEmpty(where))
+        {
+            return true;
+        }
+
         var parts = where.Split(' ');
         if (parts.Length == 3 && parts[1] == "=")
         {
@@ -353,6 +489,54 @@ public class SqlParser : ISqlParser
             var val = parts[2].Trim('\'');
             return row[col]?.ToString() == val;
         }
+
         return true;
+    }
+
+    private string BindParameters(string sql, Dictionary<string, object?> parameters)
+    {
+        var result = sql;
+        var paramIndex = 0;
+        var index = 0;
+        while ((index = result.IndexOf('?', index)) != -1)
+        {
+            if (paramIndex >= parameters.Count)
+            {
+                throw new InvalidOperationException("Not enough parameters provided for SQL query.");
+            }
+
+            var paramKey = paramIndex.ToString();
+            if (!parameters.TryGetValue(paramKey, out var value))
+            {
+                throw new InvalidOperationException($"Parameter '{paramKey}' not found.");
+            }
+
+            var valueStr = this.FormatValue(value);
+            result = result.Remove(index, 1).Insert(index, valueStr);
+            paramIndex++;
+        }
+
+        return result;
+    }
+
+    private string SanitizeSql(string sql)
+    {
+        // Basic sanitization: escape single quotes
+        return sql.Replace("'", "''");
+    }
+
+    private string FormatValue(object? value)
+    {
+        return value switch
+        {
+            null => "NULL",
+            string s => $"'{s.Replace("'", "''")}'",
+            int i => i.ToString(),
+            long l => l.ToString(),
+            double d => d.ToString(),
+            bool b => b ? "1" : "0",
+            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+            _ => $"'{value.ToString()?.Replace("'", "''")}'",
+        };
     }
 }

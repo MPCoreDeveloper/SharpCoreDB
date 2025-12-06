@@ -1,3 +1,7 @@
+// <copyright file="IWAL.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Interfaces;
 
 /// <summary>
@@ -19,5 +23,6 @@ public interface IWAL
     /// <summary>
     /// Asynchronously flushes buffered data to disk.
     /// </summary>
+    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     Task FlushAsync();
 }

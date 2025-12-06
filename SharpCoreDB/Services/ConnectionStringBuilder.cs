@@ -1,3 +1,7 @@
+// <copyright file="ConnectionStringBuilder.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Services;
 
 /// <summary>
@@ -16,7 +20,7 @@ public class ConnectionStringBuilder
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets whether the database should be opened in read-only mode.
+    /// Gets or sets a value indicating whether gets or sets whether the database should be opened in read-only mode.
     /// </summary>
     public bool ReadOnly { get; set; } = false;
 
@@ -26,19 +30,19 @@ public class ConnectionStringBuilder
     public string Cache { get; set; } = "Private";
 
     /// <summary>
-    /// Initializes a new instance of the ConnectionStringBuilder class.
+    /// Initializes a new instance of the <see cref="ConnectionStringBuilder"/> class.
     /// </summary>
     public ConnectionStringBuilder()
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the ConnectionStringBuilder class with a connection string.
+    /// Initializes a new instance of the <see cref="ConnectionStringBuilder"/> class with a connection string.
     /// </summary>
     /// <param name="connectionString">The connection string to parse.</param>
     public ConnectionStringBuilder(string connectionString)
     {
-        ParseConnectionString(connectionString);
+        this.ParseConnectionString(connectionString);
     }
 
     /// <summary>
@@ -48,14 +52,18 @@ public class ConnectionStringBuilder
     public void ParseConnectionString(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
+        {
             return;
+        }
 
         var parts = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries);
         foreach (var part in parts)
         {
             var keyValue = part.Split('=', 2);
             if (keyValue.Length != 2)
+            {
                 continue;
+            }
 
             var key = keyValue[0].Trim();
             var value = keyValue[1].Trim();
@@ -64,18 +72,18 @@ public class ConnectionStringBuilder
             {
                 case "data source":
                 case "datasource":
-                    DataSource = value;
+                    this.DataSource = value;
                     break;
                 case "password":
                 case "pwd":
-                    Password = value;
+                    this.Password = value;
                     break;
                 case "readonly":
                 case "read only":
-                    ReadOnly = bool.TryParse(value, out var ro) && ro;
+                    this.ReadOnly = bool.TryParse(value, out var ro) && ro;
                     break;
                 case "cache":
-                    Cache = value;
+                    this.Cache = value;
                     break;
             }
         }
@@ -89,17 +97,25 @@ public class ConnectionStringBuilder
     {
         var parts = new List<string>();
 
-        if (!string.IsNullOrEmpty(DataSource))
-            parts.Add($"Data Source={DataSource}");
+        if (!string.IsNullOrEmpty(this.DataSource))
+        {
+            parts.Add($"Data Source={this.DataSource}");
+        }
 
-        if (!string.IsNullOrEmpty(Password))
-            parts.Add($"Password={Password}");
+        if (!string.IsNullOrEmpty(this.Password))
+        {
+            parts.Add($"Password={this.Password}");
+        }
 
-        if (ReadOnly)
+        if (this.ReadOnly)
+        {
             parts.Add("ReadOnly=True");
+        }
 
-        if (!string.IsNullOrEmpty(Cache))
-            parts.Add($"Cache={Cache}");
+        if (!string.IsNullOrEmpty(this.Cache))
+        {
+            parts.Add($"Cache={this.Cache}");
+        }
 
         return string.Join(";", parts);
     }
@@ -108,5 +124,5 @@ public class ConnectionStringBuilder
     /// Returns the connection string representation.
     /// </summary>
     /// <returns>The connection string.</returns>
-    public override string ToString() => BuildConnectionString();
+    public override string ToString() => this.BuildConnectionString();
 }

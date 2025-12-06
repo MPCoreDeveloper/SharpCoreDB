@@ -47,7 +47,7 @@ public class HashIndexTests
         // Assert
         Assert.True(index.ContainsKey("Electronics"));
         Assert.False(index.ContainsKey("Books"));
-        Assert.False(index.ContainsKey((object)null));
+        Assert.False(index.ContainsKey(null!));
     }
 
     [Fact]

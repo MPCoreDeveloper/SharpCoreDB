@@ -1,8 +1,12 @@
+// <copyright file="CryptoService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+namespace SharpCoreDB.Services;
+
 using System.Security.Cryptography;
 using System.Text;
 using SharpCoreDB.Interfaces;
-
-namespace SharpCoreDB.Services;
 
 /// <summary>
 /// Implementation of ICryptoService using PBKDF2 for key derivation and AES-256-GCM for encryption.

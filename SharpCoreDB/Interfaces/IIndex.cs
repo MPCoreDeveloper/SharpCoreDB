@@ -1,9 +1,14 @@
+// <copyright file="IIndex.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Interface for indexing data, using B-tree for fast lookups.
 /// </summary>
-public interface IIndex<TKey, TValue> where TKey : IComparable<TKey>
+public interface IIndex<TKey, TValue>
+    where TKey : IComparable<TKey>
 {
     /// <summary>
     /// Inserts a key-value pair into the index.

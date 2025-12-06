@@ -1,3 +1,7 @@
+// <copyright file="ITable.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Interfaces;
 
 /// <summary>
@@ -6,32 +10,32 @@ namespace SharpCoreDB.Interfaces;
 public interface ITable
 {
     /// <summary>
-    /// The table name.
+    /// Gets the table name.
     /// </summary>
     string Name { get; }
 
     /// <summary>
-    /// The column names.
+    /// Gets the column names.
     /// </summary>
     List<string> Columns { get; }
 
     /// <summary>
-    /// The column types.
+    /// Gets the column types.
     /// </summary>
     List<DataType> ColumnTypes { get; }
 
     /// <summary>
-    /// The data file path.
+    /// Gets the data file path.
     /// </summary>
     string DataFile { get; }
 
     /// <summary>
-    /// The primary key column index.
+    /// Gets the primary key column index.
     /// </summary>
     int PrimaryKeyIndex { get; }
 
     /// <summary>
-    /// Whether columns are auto-generated.
+    /// Gets whether columns are auto-generated.
     /// </summary>
     List<bool> IsAuto { get; }
 

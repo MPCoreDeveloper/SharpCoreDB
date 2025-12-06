@@ -1,3 +1,7 @@
+// <copyright file="IStorage.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Interfaces;
 
 /// <summary>

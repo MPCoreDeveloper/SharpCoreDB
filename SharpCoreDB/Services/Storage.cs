@@ -1,33 +1,37 @@
+// <copyright file="Storage.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+namespace SharpCoreDB.Services;
+
 using System.IO;
 using System.IO.Compression;
 using System.IO.MemoryMappedFiles;
 using System.Text;
-using SharpCoreDB.Interfaces;
 using SharpCoreDB.Core.File;
-
-namespace SharpCoreDB.Services;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Implementation of IStorage using encrypted files and memory-mapped files for performance.
 /// </summary>
 public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config = null) : IStorage
 {
-    private readonly ICryptoService _crypto = crypto;
-    private readonly byte[] _key = key;
-    private readonly bool _noEncryption = config?.NoEncryptMode ?? false;
-    private readonly bool _useMemoryMapping = config?.UseMemoryMapping ?? true;
+    private readonly ICryptoService crypto = crypto;
+    private readonly byte[] key = key;
+    private readonly bool noEncryption = config?.NoEncryptMode ?? false;
+    private readonly bool useMemoryMapping = config?.UseMemoryMapping ?? true;
 
     /// <inheritdoc />
     public void Write(string path, string data)
     {
         var plain = Encoding.UTF8.GetBytes(data);
-        if (_noEncryption)
+        if (this.noEncryption)
         {
             File.WriteAllBytes(path, plain);
         }
         else
         {
-            var encrypted = _crypto.Encrypt(_key, plain);
+            var encrypted = this.crypto.Encrypt(this.key, plain);
             File.WriteAllBytes(path, encrypted);
         }
     }
@@ -35,17 +39,21 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public string? Read(string path)
     {
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
         var data = File.ReadAllBytes(path);
         try
         {
-            if (_noEncryption)
+            if (this.noEncryption)
             {
                 return Encoding.UTF8.GetString(data);
             }
             else
             {
-                var plain = _crypto.Decrypt(_key, data);
+                var plain = this.crypto.Decrypt(this.key, data);
                 return Encoding.UTF8.GetString(plain);
             }
         }
@@ -58,19 +66,23 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public string? ReadMemoryMapped(string path)
     {
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
         using var mmf = MemoryMappedFile.CreateFromFile(path, FileMode.Open);
         using var accessor = mmf.CreateViewAccessor();
         var length = accessor.Capacity;
         var buffer = new byte[length];
         accessor.ReadArray(0, buffer, 0, (int)length);
-        if (_noEncryption)
+        if (this.noEncryption)
         {
             return Encoding.UTF8.GetString(buffer);
         }
         else
         {
-            var plain = _crypto.Decrypt(_key, buffer);
+            var plain = this.crypto.Decrypt(this.key, buffer);
             return Encoding.UTF8.GetString(plain);
         }
     }
@@ -86,6 +98,7 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
             {
                 brotli.Write(data, 0, data.Length);
             }
+
             var compressed = ms.ToArray();
             toWrite = new byte[compressed.Length + 1];
             toWrite[0] = 1; // compressed
@@ -97,14 +110,14 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
             toWrite[0] = 0; // uncompressed
             Array.Copy(data, 0, toWrite, 1, data.Length);
         }
-        
-        if (_noEncryption)
+
+        if (this.noEncryption)
         {
             File.WriteAllBytes(path, toWrite);
         }
         else
         {
-            var encrypted = _crypto.Encrypt(_key, toWrite);
+            var encrypted = this.crypto.Encrypt(this.key, toWrite);
             File.WriteAllBytes(path, encrypted);
         }
     }
@@ -112,13 +125,16 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public byte[]? ReadBytes(string path)
     {
-        if (!File.Exists(path)) return null;
-        
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
         // Use memory-mapped file handler for improved performance on large files
         byte[] fileData;
-        if (_useMemoryMapping)
+        if (this.useMemoryMapping)
         {
-            using var handler = MemoryMappedFileHandler.TryCreate(path, _useMemoryMapping);
+            using var handler = MemoryMappedFileHandler.TryCreate(path, this.useMemoryMapping);
             if (handler != null && handler.IsMemoryMapped)
             {
                 fileData = handler.ReadAllBytes();
@@ -133,18 +149,22 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         {
             fileData = File.ReadAllBytes(path);
         }
-        
+
         byte[] decrypted;
-        if (_noEncryption)
+        if (this.noEncryption)
         {
             decrypted = fileData;
         }
         else
         {
-            decrypted = _crypto.Decrypt(_key, fileData);
+            decrypted = this.crypto.Decrypt(this.key, fileData);
         }
-        
-        if (decrypted.Length == 0) return [];
+
+        if (decrypted.Length == 0)
+        {
+            return [];
+        }
+
         var isCompressed = decrypted[0] == 1;
         var data = new byte[decrypted.Length - 1];
         Array.Copy(decrypted, 1, data, 0, data.Length);

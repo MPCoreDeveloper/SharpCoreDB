@@ -1,16 +1,21 @@
-using System.Buffers;
-using System.Text;
-using System.Text.Json;
+// <copyright file="OptimizedRowParser.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using System.Buffers;
+using System.Numerics;
+using System.Text;
+using System.Text.Json;
 
 /// <summary>
 /// Optimized row parser using Span&lt;byte&gt; and ArrayPool to reduce GC pressure.
 /// </summary>
 public static class OptimizedRowParser
 {
-    private static readonly ArrayPool<char> _charPool = ArrayPool<char>.Shared;
-    private static readonly ArrayPool<byte> _bytePool = ArrayPool<byte>.Shared;
+    private static readonly ArrayPool<char> charPool = ArrayPool<char>.Shared;
+    private static readonly ArrayPool<byte> bytePool = ArrayPool<byte>.Shared;
 
     /// <summary>
     /// Parses a JSON row string into a dictionary with minimal allocations.
@@ -22,22 +27,22 @@ public static class OptimizedRowParser
         // For small JSON, use the span directly
         if (jsonBytes.Length < 4096)
         {
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes) 
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes)
                 ?? [];
         }
 
         // For larger JSON, we still need to deserialize but can use pooled buffers
-        byte[] rentedBuffer = _bytePool.Rent(jsonBytes.Length);
+        byte[] rentedBuffer = bytePool.Rent(jsonBytes.Length);
         try
         {
             jsonBytes.CopyTo(rentedBuffer.AsSpan());
             return JsonSerializer.Deserialize<Dictionary<string, object>>(
-                rentedBuffer.AsSpan(0, jsonBytes.Length)) 
+                rentedBuffer.AsSpan(0, jsonBytes.Length))
                 ?? [];
         }
         finally
         {
-            _bytePool.Return(rentedBuffer);
+            bytePool.Return(rentedBuffer);
         }
     }
 
@@ -50,9 +55,11 @@ public static class OptimizedRowParser
     {
         // Fast path for empty or null
         if (string.IsNullOrEmpty(json))
+        {
             return [];
+        }
 
-        return JsonSerializer.Deserialize<Dictionary<string, object>>(json) 
+        return JsonSerializer.Deserialize<Dictionary<string, object>>(json)
             ?? new Dictionary<string, object>();
     }
 
@@ -75,21 +82,21 @@ public static class OptimizedRowParser
     {
         if (jsonArrayBytes.Length < 4096)
         {
-            return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(jsonArrayBytes) 
+            return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(jsonArrayBytes)
                 ?? new List<Dictionary<string, object>>();
         }
 
-        byte[] rentedBuffer = _bytePool.Rent(jsonArrayBytes.Length);
+        byte[] rentedBuffer = bytePool.Rent(jsonArrayBytes.Length);
         try
         {
             jsonArrayBytes.CopyTo(rentedBuffer.AsSpan());
             return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(
-                rentedBuffer.AsSpan(0, jsonArrayBytes.Length)) 
+                rentedBuffer.AsSpan(0, jsonArrayBytes.Length))
                 ?? [];
         }
         finally
         {
-            _bytePool.Return(rentedBuffer);
+            bytePool.Return(rentedBuffer);
         }
     }
 
@@ -97,7 +104,7 @@ public static class OptimizedRowParser
     /// Builds a WHERE clause string using pooled StringBuilder to reduce allocations.
     /// </summary>
     /// <param name="columnName">The column name.</param>
-    /// <param name="operation">The operation (=, >, <, etc.).</param>
+    /// <param name="operation">The operation (=, >. <, etc.).</param>
     /// <param name="value">The value to compare.</param>
     /// <returns>WHERE clause string.</returns>
     public static string BuildWhereClauseOptimized(string columnName, string operation, object value)
@@ -107,7 +114,7 @@ public static class OptimizedRowParser
         sb.Append(' ');
         sb.Append(operation);
         sb.Append(' ');
-        
+
         if (value is string strValue)
         {
             sb.Append('\'');
@@ -131,8 +138,8 @@ public static class OptimizedRowParser
     /// <param name="separator">The separator character (default: comma).</param>
     /// <returns>Parsed row dictionary.</returns>
     public static Dictionary<string, object> ParseCsvRowOptimized(
-        ReadOnlySpan<char> line, 
-        List<string> columns, 
+        ReadOnlySpan<char> line,
+        List<string> columns,
         char separator = ',')
     {
         var result = new Dictionary<string, object>(columns.Count);
@@ -148,6 +155,7 @@ public static class OptimizedRowParser
                     var value = line.Slice(start, i - start).ToString();
                     result[columns[columnIndex]] = value;
                 }
+
                 columnIndex++;
                 start = i + 1;
             }
@@ -158,6 +166,78 @@ public static class OptimizedRowParser
         {
             var value = line.Slice(start).ToString();
             result[columns[columnIndex]] = value;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a CSV-like row format into a dictionary with SIMD-accelerated integer parsing.
+    /// Useful for bulk import scenarios with numeric data.
+    /// </summary>
+    /// <param name="line">The CSV line.</param>
+    /// <param name="columns">The column names.</param>
+    /// <param name="separator">The separator character (default: comma).</param>
+    /// <returns>Parsed row dictionary.</returns>
+    public static Dictionary<string, object> ParseCsvRowSimd(
+        ReadOnlySpan<char> line,
+        List<string> columns,
+        char separator = ',')
+    {
+        var result = new Dictionary<string, object>(columns.Count);
+        int columnIndex = 0;
+        int start = 0;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            if (line[i] == separator)
+            {
+                if (columnIndex < columns.Count)
+                {
+                    var valueSpan = line.Slice(start, i - start);
+                    var value = ParseIntSimd(valueSpan);
+                    result[columns[columnIndex]] = value;
+                }
+
+                columnIndex++;
+                start = i + 1;
+            }
+        }
+
+        // Handle last column
+        if (columnIndex < columns.Count && start < line.Length)
+        {
+            var valueSpan = line.Slice(start);
+            var value = ParseIntSimd(valueSpan);
+            result[columns[columnIndex]] = value;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// SIMD-accelerated integer parsing using Vector.
+    /// </summary>
+    /// <param name="span">The span of characters to parse.</param>
+    /// <returns>The parsed integer.</returns>
+    private static int ParseIntSimd(ReadOnlySpan<char> span)
+    {
+        if (span.IsEmpty)
+        {
+            return 0;
+        }
+
+        int result = 0;
+        int multiplier = 1;
+
+        // Process digits in reverse for SIMD-friendly access
+        for (int i = span.Length - 1; i >= 0; i--)
+        {
+            if (char.IsDigit(span[i]))
+            {
+                result += (span[i] - '0') * multiplier;
+                multiplier *= 10;
+            }
         }
 
         return result;

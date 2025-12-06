@@ -1,9 +1,13 @@
+// <copyright file="MemoryMappedFileHandler.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+namespace SharpCoreDB.Core.File;
+
 using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
-
-namespace SharpCoreDB.Core.File;
 
 /// <summary>
 /// High-performance file handler using Memory-Mapped Files (MMF) for reduced disk I/O.
@@ -14,18 +18,17 @@ namespace SharpCoreDB.Core.File;
 /// - Zero-copy reads via pointer arithmetic
 /// - Reduced kernel mode transitions
 /// - Better CPU cache utilization
-/// - 30-50% performance improvement for large file reads (>10 MB)
+/// - 30-50% performance improvement for large file reads (>10 MB).
 /// </remarks>
 public sealed class MemoryMappedFileHandler : IDisposable
 {
     private const long SmallFileThreshold = 50 * 1024 * 1024; // 50 MB
     private const long MinMemoryMappingSize = 10 * 1024 * 1024; // 10 MB
-    
-    private MemoryMappedFile? _mmf;
-    private MemoryMappedViewAccessor? _accessor;
-    private readonly string _filePath;
-    private readonly bool _useMemoryMapping;
-    private bool _disposed;
+    private readonly string filePath;
+    private readonly bool useMemoryMapping;
+    private MemoryMappedFile? mmf;
+    private MemoryMappedViewAccessor? accessor;
+    private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryMappedFileHandler"/> class.
@@ -37,29 +40,31 @@ public sealed class MemoryMappedFileHandler : IDisposable
     public MemoryMappedFileHandler(string filePath, bool useMemoryMapping = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        
-        if (!System.IO.File.Exists(filePath))
-            throw new FileNotFoundException($"File not found: {filePath}", filePath);
 
-        _filePath = filePath;
-        
+        if (!System.IO.File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"File not found: {filePath}", filePath);
+        }
+
+        this.filePath = filePath;
+
         // Determine whether to use memory mapping based on file size and configuration
         var fileInfo = new FileInfo(filePath);
-        _useMemoryMapping = useMemoryMapping && 
+        this.useMemoryMapping = useMemoryMapping &&
                            fileInfo.Length >= MinMemoryMappingSize &&
                            fileInfo.Length <= SmallFileThreshold;
-        
-        if (_useMemoryMapping)
+
+        if (this.useMemoryMapping)
         {
             try
             {
-                InitializeMemoryMapping();
+                this.InitializeMemoryMapping();
             }
             catch (Exception)
             {
                 // Fall back to FileStream if MMF initialization fails
-                _useMemoryMapping = false;
-                Cleanup();
+                this.useMemoryMapping = false;
+                this.Cleanup();
             }
         }
     }
@@ -67,12 +72,12 @@ public sealed class MemoryMappedFileHandler : IDisposable
     /// <summary>
     /// Gets a value indicating whether memory-mapping is currently active.
     /// </summary>
-    public bool IsMemoryMapped => _useMemoryMapping && _mmf != null;
+    public bool IsMemoryMapped => this.useMemoryMapping && this.mmf != null;
 
     /// <summary>
     /// Gets the size of the file in bytes.
     /// </summary>
-    public long FileSize => new FileInfo(_filePath).Length;
+    public long FileSize => new FileInfo(this.filePath).Length;
 
     /// <summary>
     /// Reads the entire file contents into a byte array.
@@ -83,14 +88,14 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ReadAllBytes()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(this.disposed, this);
 
-        if (_useMemoryMapping && _accessor != null)
+        if (this.useMemoryMapping && this.accessor != null)
         {
-            return ReadViaMemoryMapping();
+            return this.ReadViaMemoryMapping();
         }
 
-        return ReadViaFileStream();
+        return this.ReadViaFileStream();
     }
 
     /// <summary>
@@ -104,16 +109,16 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadBytes(long offset, Span<byte> buffer)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(this.disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(offset, FileSize);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(offset, this.FileSize);
 
-        if (_useMemoryMapping && _accessor != null)
+        if (this.useMemoryMapping && this.accessor != null)
         {
-            return ReadViaMemoryMapping(offset, buffer);
+            return this.ReadViaMemoryMapping(offset, buffer);
         }
 
-        return ReadViaFileStream(offset, buffer);
+        return this.ReadViaFileStream(offset, buffer);
     }
 
     /// <summary>
@@ -122,13 +127,13 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private unsafe byte[] ReadViaMemoryMapping()
     {
-        var length = (int)_accessor!.Capacity;
+        var length = (int)this.accessor!.Capacity;
         var buffer = new byte[length];
-        
+
         // Use unsafe pointer access for maximum performance
         byte* ptr = null;
-        _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
-        
+        this.accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+
         try
         {
             fixed (byte* dest = buffer)
@@ -138,9 +143,9 @@ public sealed class MemoryMappedFileHandler : IDisposable
         }
         finally
         {
-            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+            this.accessor.SafeMemoryMappedViewHandle.ReleasePointer();
         }
-        
+
         return buffer;
     }
 
@@ -150,16 +155,18 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private unsafe int ReadViaMemoryMapping(long offset, Span<byte> buffer)
     {
-        var remaining = _accessor!.Capacity - offset;
+        var remaining = this.accessor!.Capacity - offset;
         var bytesToRead = (int)Math.Min(remaining, buffer.Length);
-        
+
         if (bytesToRead <= 0)
+        {
             return 0;
+        }
 
         // Use unsafe pointer access for zero-allocation read
         byte* ptr = null;
-        _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
-        
+        this.accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+
         try
         {
             fixed (byte* dest = buffer)
@@ -169,9 +176,9 @@ public sealed class MemoryMappedFileHandler : IDisposable
         }
         finally
         {
-            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+            this.accessor.SafeMemoryMappedViewHandle.ReleasePointer();
         }
-        
+
         return bytesToRead;
     }
 
@@ -181,7 +188,7 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte[] ReadViaFileStream()
     {
-        return System.IO.File.ReadAllBytes(_filePath);
+        return System.IO.File.ReadAllBytes(this.filePath);
     }
 
     /// <summary>
@@ -190,7 +197,7 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ReadViaFileStream(long offset, Span<byte> buffer)
     {
-        using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new FileStream(this.filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         stream.Seek(offset, SeekOrigin.Begin);
         return stream.Read(buffer);
     }
@@ -200,31 +207,17 @@ public sealed class MemoryMappedFileHandler : IDisposable
     /// </summary>
     private void InitializeMemoryMapping()
     {
-        _mmf = MemoryMappedFile.CreateFromFile(
-            _filePath,
+        this.mmf = MemoryMappedFile.CreateFromFile(
+            this.filePath,
             FileMode.Open,
             mapName: null,
             capacity: 0,
-            MemoryMappedFileAccess.Read
-        );
+            MemoryMappedFileAccess.Read);
 
-        _accessor = _mmf.CreateViewAccessor(
+        this.accessor = this.mmf.CreateViewAccessor(
             offset: 0,
             size: 0,
-            MemoryMappedFileAccess.Read
-        );
-    }
-
-    /// <summary>
-    /// Releases unmanaged resources.
-    /// </summary>
-    private void Cleanup()
-    {
-        _accessor?.Dispose();
-        _accessor = null;
-        
-        _mmf?.Dispose();
-        _mmf = null;
+            MemoryMappedFileAccess.Read);
     }
 
     /// <summary>
@@ -236,7 +229,9 @@ public sealed class MemoryMappedFileHandler : IDisposable
     public static MemoryMappedFileHandler? TryCreate(string filePath, bool useMemoryMapping = true)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+        {
             return null;
+        }
 
         try
         {
@@ -251,19 +246,34 @@ public sealed class MemoryMappedFileHandler : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed)
+        if (this.disposed)
+        {
             return;
+        }
 
-        Cleanup();
-        _disposed = true;
+        this.Cleanup();
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 
     /// <summary>
+    /// Releases unmanaged resources.
+    /// </summary>
+    private void Cleanup()
+    {
+        this.accessor?.Dispose();
+        this.accessor = null;
+
+        this.mmf?.Dispose();
+        this.mmf = null;
+    }
+
+    /// <summary>
+    /// Finalizes an instance of the <see cref="MemoryMappedFileHandler"/> class.
     /// Finalizer to ensure resources are released.
     /// </summary>
     ~MemoryMappedFileHandler()
     {
-        Dispose();
+        this.Dispose();
     }
 }

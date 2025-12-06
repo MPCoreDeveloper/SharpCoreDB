@@ -1,7 +1,11 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
+// <copyright file="HashIndex.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.DataStructures;
+
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// High-performance hash-based index for fast WHERE clause lookups.
@@ -10,34 +14,34 @@ namespace SharpCoreDB.DataStructures;
 /// </summary>
 public class HashIndex
 {
-    private readonly ConcurrentDictionary<object, List<Dictionary<string, object>>> _hashMap = new();
-    private readonly string _columnName;
-    private readonly string _tableName;
+    private readonly ConcurrentDictionary<object, List<Dictionary<string, object>>> hashMap = new();
+    private readonly string columnName;
+    private readonly string tableName;
 
     /// <summary>
     /// Gets the column name this hash index is on.
     /// </summary>
-    public string ColumnName => _columnName;
+    public string ColumnName => this.columnName;
 
     /// <summary>
     /// Gets the table name this hash index belongs to.
     /// </summary>
-    public string TableName => _tableName;
+    public string TableName => this.tableName;
 
     /// <summary>
     /// Gets the number of unique keys in the index.
     /// </summary>
-    public int Count => _hashMap.Count;
+    public int Count => this.hashMap.Count;
 
     /// <summary>
-    /// Initializes a new instance of the HashIndex class.
+    /// Initializes a new instance of the <see cref="HashIndex"/> class.
     /// </summary>
     /// <param name="tableName">The table name.</param>
     /// <param name="columnName">The column name to index.</param>
     public HashIndex(string tableName, string columnName)
     {
-        _tableName = tableName;
-        _columnName = columnName;
+        this.tableName = tableName;
+        this.columnName = columnName;
     }
 
     /// <summary>
@@ -46,10 +50,12 @@ public class HashIndex
     /// <param name="row">The row data.</param>
     public void Add(Dictionary<string, object> row)
     {
-        if (!row.TryGetValue(_columnName, out var key) || key == null)
+        if (!row.TryGetValue(this.columnName, out var key) || key == null)
+        {
             return;
+        }
 
-        _hashMap.AddOrUpdate(
+        this.hashMap.AddOrUpdate(
             key,
             _ => new List<Dictionary<string, object>> { row },
             (_, existing) =>
@@ -58,6 +64,7 @@ public class HashIndex
                 {
                     existing.Add(row);
                 }
+
                 return existing;
             });
     }
@@ -72,9 +79,11 @@ public class HashIndex
     public List<Dictionary<string, object>> Lookup(object key)
     {
         if (key == null)
+        {
             return [];
+        }
 
-        if (_hashMap.TryGetValue(key, out var rows))
+        if (this.hashMap.TryGetValue(key, out var rows))
         {
             lock (rows)
             {
@@ -91,17 +100,19 @@ public class HashIndex
     /// <param name="row">The row to remove.</param>
     public void Remove(Dictionary<string, object> row)
     {
-        if (!row.TryGetValue(_columnName, out var key) || key == null)
+        if (!row.TryGetValue(this.columnName, out var key) || key == null)
+        {
             return;
+        }
 
-        if (_hashMap.TryGetValue(key, out var rows))
+        if (this.hashMap.TryGetValue(key, out var rows))
         {
             lock (rows)
             {
                 rows.Remove(row);
                 if (rows.Count == 0)
                 {
-                    _hashMap.TryRemove(key, out _);
+                    this.hashMap.TryRemove(key, out _);
                 }
             }
         }
@@ -112,7 +123,7 @@ public class HashIndex
     /// </summary>
     public void Clear()
     {
-        _hashMap.Clear();
+        this.hashMap.Clear();
     }
 
     /// <summary>
@@ -121,10 +132,10 @@ public class HashIndex
     /// <param name="rows">All rows from the table.</param>
     public void Rebuild(List<Dictionary<string, object>> rows)
     {
-        Clear();
+        this.Clear();
         foreach (var row in rows)
         {
-            Add(row);
+            this.Add(row);
         }
     }
 
@@ -135,7 +146,7 @@ public class HashIndex
     /// <returns>True if the index contains the key.</returns>
     public bool ContainsKey(object key)
     {
-        return key != null && _hashMap.ContainsKey(key);
+        return key != null && this.hashMap.ContainsKey(key);
     }
 
     /// <summary>
@@ -144,17 +155,17 @@ public class HashIndex
     /// <returns>Tuple containing (unique keys, total rows, average rows per key).</returns>
     public (int UniqueKeys, int TotalRows, double AvgRowsPerKey) GetStatistics()
     {
-        var uniqueKeys = _hashMap.Count;
+        var uniqueKeys = this.hashMap.Count;
         var totalRows = 0;
-        
-        foreach (var kvp in _hashMap)
+
+        foreach (var kvp in this.hashMap)
         {
             lock (kvp.Value)
             {
                 totalRows += kvp.Value.Count;
             }
         }
-        
+
         var avgRowsPerKey = uniqueKeys > 0 ? (double)totalRows / uniqueKeys : 0;
         return (uniqueKeys, totalRows, avgRowsPerKey);
     }

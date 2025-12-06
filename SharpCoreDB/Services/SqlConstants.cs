@@ -1,3 +1,7 @@
+// <copyright file="SqlConstants.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Services;
 
 /// <summary>
@@ -7,28 +11,40 @@ public static class SqlConstants
 {
     /// <summary>CREATE keyword.</summary>
     public const string CREATE = "CREATE";
+
     /// <summary>TABLE keyword.</summary>
     public const string TABLE = "TABLE";
+
     /// <summary>INSERT keyword.</summary>
     public const string INSERT = "INSERT";
+
     /// <summary>INTO keyword.</summary>
     public const string INTO = "INTO";
+
     /// <summary>VALUES keyword.</summary>
     public const string VALUES = "VALUES";
+
     /// <summary>SELECT keyword.</summary>
     public const string SELECT = "SELECT";
+
     /// <summary>FROM keyword.</summary>
     public const string FROM = "FROM";
+
     /// <summary>WHERE keyword.</summary>
     public const string WHERE = "WHERE";
+
     /// <summary>ORDER keyword.</summary>
     public const string ORDER = "ORDER";
+
     /// <summary>BY keyword.</summary>
     public const string BY = "BY";
+
     /// <summary>ASC keyword.</summary>
     public const string ASC = "ASC";
+
     /// <summary>DESC keyword.</summary>
     public const string DESC = "DESC";
+
     /// <summary>PRIMARY KEY keyword.</summary>
-    public const string PRIMARY_KEY = "PRIMARY KEY";
+    public const string PRIMARYKEY = "PRIMARY KEY";
 }

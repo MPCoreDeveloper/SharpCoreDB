@@ -1,3 +1,7 @@
+// <copyright file="SqlFunctions.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 namespace SharpCoreDB.Services;
 
 /// <summary>
@@ -46,7 +50,7 @@ public static class SqlFunctions
             "hour" or "hours" => dateTime.AddHours(value),
             "minute" or "minutes" => dateTime.AddMinutes(value),
             "second" or "seconds" => dateTime.AddSeconds(value),
-            _ => throw new ArgumentException($"Unknown date unit: {unit}")
+            _ => throw new ArgumentException($"Unknown date unit: {unit}"),
         };
     }
 
@@ -65,6 +69,7 @@ public static class SqlFunctions
                 sum += Convert.ToDecimal(val);
             }
         }
+
         return sum;
     }
 
@@ -77,13 +82,16 @@ public static class SqlFunctions
     {
         var list = values.Where(v => v != null && v != DBNull.Value).ToList();
         if (list.Count == 0)
+        {
             return 0;
+        }
 
         decimal sum = 0;
         foreach (var val in list)
         {
             sum += Convert.ToDecimal(val);
         }
+
         return sum / list.Count;
     }
 
@@ -102,6 +110,7 @@ public static class SqlFunctions
                 distinct.Add(val);
             }
         }
+
         return distinct.Count;
     }
 
@@ -132,11 +141,11 @@ public static class SqlFunctions
         {
             "NOW" => Now(),
             "DATE" => arguments.Count > 0 && arguments[0] is DateTime dt ? Date(dt) : null,
-            "STRFTIME" => arguments.Count >= 2 && arguments[0] is DateTime dt2 && arguments[1] is string fmt 
+            "STRFTIME" => arguments.Count >= 2 && arguments[0] is DateTime dt2 && arguments[1] is string fmt
                 ? StrFTime(dt2, fmt) : null,
-            "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit 
+            "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit
                 ? DateAdd(dt3, val, unit) : null,
-            _ => throw new NotSupportedException($"Function {functionName} is not supported")
+            _ => throw new NotSupportedException($"Function {functionName} is not supported"),
         };
     }
 }

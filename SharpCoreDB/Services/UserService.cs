@@ -1,73 +1,82 @@
-using System.Text.Json;
-using SharpCoreDB.Interfaces;
+// <copyright file="UserService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace SharpCoreDB.Services;
+
+using System.Text.Json;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Implementation of IUserService.
 /// </summary>
 public class UserService : IUserService
 {
-    private readonly ICryptoService _crypto;
-    private readonly IStorage _storage;
-    private readonly string _dbPath;
-    private Dictionary<string, string> _users = new();
+    private readonly ICryptoService crypto;
+    private readonly IStorage storage;
+    private readonly string dbPath;
+    private Dictionary<string, string> users = new();
 
     /// <summary>
-    /// Initializes a new instance of the UserService class.
+    /// Initializes a new instance of the <see cref="UserService"/> class.
     /// </summary>
     /// <param name="crypto">The crypto service.</param>
     /// <param name="storage">The storage service.</param>
     /// <param name="dbPath">The database path.</param>
     public UserService(ICryptoService crypto, IStorage storage, string dbPath)
     {
-        _crypto = crypto;
-        _storage = storage;
-        _dbPath = dbPath;
-        LoadUsers();
+        this.crypto = crypto;
+        this.storage = storage;
+        this.dbPath = dbPath;
+        this.LoadUsers();
     }
 
     private void LoadUsers()
     {
-        var path = Path.Combine(_dbPath, "users.json");
-        var data = _storage.Read(path);
+        var path = Path.Combine(this.dbPath, "users.json");
+        var data = this.storage.Read(path);
         if (data != null)
         {
             try
             {
-                _users = JsonSerializer.Deserialize<Dictionary<string, string>>(data) ?? new();
+                this.users = JsonSerializer.Deserialize<Dictionary<string, string>>(data) ?? new();
             }
             catch
             {
-                _users = new();
+                this.users = new();
             }
         }
     }
 
     private void SaveUsers()
     {
-        var path = Path.Combine(_dbPath, "users.json");
-        _storage.Write(path, JsonSerializer.Serialize(_users));
+        var path = Path.Combine(this.dbPath, "users.json");
+        this.storage.Write(path, JsonSerializer.Serialize(this.users));
     }
 
     /// <inheritdoc />
     public void CreateUser(string username, string password)
     {
-        var hash = Convert.ToBase64String(_crypto.DeriveKey(password, username));
-        _users[username] = hash;
-        SaveUsers();
+        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, username));
+        this.users[username] = hash;
+        this.SaveUsers();
     }
 
     /// <inheritdoc />
     public bool Login(string username, string password)
     {
-        if (!_users.ContainsKey(username)) return false;
-        var hash = Convert.ToBase64String(_crypto.DeriveKey(password, username));
-        if (_users[username] == hash)
+        if (!this.users.ContainsKey(username))
         {
-            CurrentUser = username;
+            return false;
+        }
+
+        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, username));
+        if (this.users[username] == hash)
+        {
+            this.CurrentUser = username;
             return true;
         }
+
         return false;
     }
 
