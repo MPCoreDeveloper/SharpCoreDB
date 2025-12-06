@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
@@ -39,9 +40,9 @@ public class SharpCoreDBCommand : DbCommand
     public override UpdateRowSource UpdatedRowSource { get; set; }
 
     /// <inheritdoc />
-    protected override DbConnection? DbConnection
+    protected override DbConnection DbConnection
     {
-        get => _connection;
+        get => _connection!;
         set => throw new NotSupportedException();
     }
 
@@ -114,12 +115,17 @@ public class SharpCoreDBCommand : DbCommand
 /// </summary>
 public class SharpCoreDBParameterCollection : DbParameterCollection
 {
-    private readonly List<DbParameter> _parameters = new();
+    private readonly List<DbParameter> _parameters = [];
 
+    /// <summary>Gets the number of parameters in the collection.</summary>
     public override int Count => _parameters.Count;
+    /// <summary>Gets the synchronization root.</summary>
     public override object SyncRoot => _parameters;
 
-    public override int Add(object value)
+    /// <summary>Adds a parameter to the collection.</summary>
+    /// <param name="value">The parameter to add.</param>
+    /// <returns>The index of the added parameter.</returns>
+    public override int Add([DisallowNull] object value)
     {
         if (value is DbParameter param)
         {
@@ -129,38 +135,79 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
         throw new ArgumentException("Value must be a DbParameter");
     }
 
+    /// <summary>Adds a range of parameters to the collection.</summary>
+    /// <param name="values">The parameters to add.</param>
     public override void AddRange(Array values) => _parameters.AddRange(values.Cast<DbParameter>());
+    /// <summary>Clears the collection.</summary>
     public override void Clear() => _parameters.Clear();
+    /// <summary>Determines whether the collection contains the specified parameter.</summary>
+    /// <param name="value">The parameter to check.</param>
+    /// <returns>True if the parameter is in the collection, otherwise false.</returns>
     public override bool Contains(object value) => value is DbParameter param && _parameters.Contains(param);
+    /// <summary>Determines whether the collection contains a parameter with the specified name.</summary>
+    /// <param name="value">The parameter name to check.</param>
+    /// <returns>True if the parameter is in the collection, otherwise false.</returns>
     public override bool Contains(string value) => _parameters.Any(p => p.ParameterName == value);
+    /// <summary>Copies the parameters to an array.</summary>
+    /// <param name="array">The array to copy to.</param>
+    /// <param name="index">The starting index.</param>
     public override void CopyTo(Array array, int index) => throw new NotImplementedException();
+    /// <summary>Gets an enumerator for the collection.</summary>
+    /// <returns>An enumerator.</returns>
     public override System.Collections.IEnumerator GetEnumerator() => _parameters.GetEnumerator();
+    /// <summary>Gets the index of the specified parameter.</summary>
+    /// <param name="value">The parameter to find.</param>
+    /// <returns>The index of the parameter.</returns>
     public override int IndexOf(object value) => value is DbParameter param ? _parameters.IndexOf(param) : -1;
+    /// <summary>Gets the index of the parameter with the specified name.</summary>
+    /// <param name="parameterName">The parameter name.</param>
+    /// <returns>The index of the parameter.</returns>
     public override int IndexOf(string parameterName) => _parameters.FindIndex(p => p.ParameterName == parameterName);
-    public override void Insert(int index, object value)
+    /// <summary>Inserts a parameter at the specified index.</summary>
+    /// <param name="index">The index to insert at.</param>
+    /// <param name="value">The parameter to insert.</param>
+    public override void Insert(int index, [DisallowNull] object value)
     {
         if (value is DbParameter param)
             _parameters.Insert(index, param);
     }
-    public override void Remove(object value)
+    /// <summary>Removes the specified parameter.</summary>
+    /// <param name="value">The parameter to remove.</param>
+    public override void Remove([DisallowNull] object value)
     {
         if (value is DbParameter param)
             _parameters.Remove(param);
     }
+    /// <summary>Removes the parameter at the specified index.</summary>
+    /// <param name="index">The index to remove at.</param>
     public override void RemoveAt(int index) => _parameters.RemoveAt(index);
+    /// <summary>Removes the parameter with the specified name.</summary>
+    /// <param name="parameterName">The parameter name.</param>
     public override void RemoveAt(string parameterName)
     {
         var index = IndexOf(parameterName);
         if (index >= 0)
             RemoveAt(index);
     }
+    /// <summary>Gets the parameter at the specified index.</summary>
+    /// <param name="index">The index.</param>
+    /// <returns>The parameter.</returns>
     protected override DbParameter GetParameter(int index) => _parameters[index];
+    /// <summary>Gets the parameter with the specified name.</summary>
+    /// <param name="parameterName">The parameter name.</param>
+    /// <returns>The parameter.</returns>
     protected override DbParameter GetParameter(string parameterName)
     {
         return _parameters.FirstOrDefault(p => p.ParameterName == parameterName)
                ?? throw new ArgumentException($"Parameter {parameterName} not found");
     }
+    /// <summary>Sets the parameter at the specified index.</summary>
+    /// <param name="index">The index.</param>
+    /// <param name="value">The parameter.</param>
     protected override void SetParameter(int index, DbParameter value) => _parameters[index] = value;
+    /// <summary>Sets the parameter with the specified name.</summary>
+    /// <param name="parameterName">The parameter name.</param>
+    /// <param name="value">The parameter.</param>
     protected override void SetParameter(string parameterName, DbParameter value)
     {
         var index = IndexOf(parameterName);
@@ -174,15 +221,24 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
 /// </summary>
 public class SharpCoreDBParameter : DbParameter
 {
+    /// <summary>Gets or sets the database type.</summary>
     public override DbType DbType { get; set; }
+    /// <summary>Gets or sets the parameter direction.</summary>
     public override ParameterDirection Direction { get; set; }
+    /// <summary>Gets or sets whether the parameter is nullable.</summary>
     public override bool IsNullable { get; set; }
+    /// <summary>Gets or sets the parameter name.</summary>
     public override string ParameterName { get; set; } = string.Empty;
+    /// <summary>Gets or sets the source column.</summary>
     public override string SourceColumn { get; set; } = string.Empty;
+    /// <summary>Gets or sets the parameter value.</summary>
     public override object? Value { get; set; }
+    /// <summary>Gets or sets whether the source column null mapping is used.</summary>
     public override bool SourceColumnNullMapping { get; set; }
+    /// <summary>Gets or sets the parameter size.</summary>
     public override int Size { get; set; }
 
+    /// <summary>Resets the database type to string.</summary>
     public override void ResetDbType()
     {
         DbType = DbType.String;

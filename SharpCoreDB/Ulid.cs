@@ -7,25 +7,51 @@ using SharpCoreDB.Base32Encoding;
 
 namespace SharpCoreDB;
 
+/// <summary>
+/// Represents a Universally Unique Lexicographically Sortable Identifier (ULID).
+/// </summary>
+/// <param name="Value">The string value of the ULID.</param>
 public record Ulid(string Value)
 {
+    /// <summary>
+    /// Initializes a new instance of Ulid with an empty value.
+    /// </summary>
     public Ulid() : this(string.Empty) { }
 
+    /// <summary>
+    /// Creates a new ULID with the current timestamp.
+    /// </summary>
+    /// <returns>A new Ulid instance.</returns>
     public static Ulid NewUlid()
     {
         return NewUlid(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     }
 
+    /// <summary>
+    /// Creates a new ULID with the specified timestamp.
+    /// </summary>
+    /// <param name="timestamp">The timestamp to use.</param>
+    /// <returns>A new Ulid instance.</returns>
     public static Ulid NewUlid(DateTimeOffset timestamp)
     {
         return NewUlid(timestamp.ToUnixTimeMilliseconds());
     }
 
+    /// <summary>
+    /// Creates a new ULID with the specified timestamp.
+    /// </summary>
+    /// <param name="timestamp">The timestamp to use.</param>
+    /// <returns>A new Ulid instance.</returns>
     public static Ulid NewUlid(DateTime timestamp)
     {
         return NewUlid(new DateTimeOffset(timestamp).ToUnixTimeMilliseconds());
     }
 
+    /// <summary>
+    /// Creates a new ULID with the specified timestamp in milliseconds since Unix epoch.
+    /// </summary>
+    /// <param name="timestamp">The timestamp in milliseconds.</param>
+    /// <returns>A new Ulid instance.</returns>
     public static Ulid NewUlid(long timestamp)
     {
         if (timestamp < 0)
@@ -48,6 +74,11 @@ public record Ulid(string Value)
         return new Ulid(ulid);
     }
 
+    /// <summary>
+    /// Extracts the timestamp from a ULID.
+    /// </summary>
+    /// <param name="ulid">The ULID to extract from.</param>
+    /// <returns>The timestamp as a DateTime.</returns>
     public static DateTime GetTimestampFromUlid(Ulid ulid)
     {
         if (ulid.Value.Length != 26)
@@ -62,11 +93,19 @@ public record Ulid(string Value)
         return DateTime.UnixEpoch.AddMilliseconds(timestamp);
     }
 
+    /// <summary>
+    /// Converts the ULID to a DateTime.
+    /// </summary>
+    /// <returns>The timestamp as a DateTime.</returns>
     public DateTime ToDateTime()
     {
         return GetTimestampFromUlid(this);
     }
 
+    /// <summary>
+    /// Converts the ULID to epoch milliseconds.
+    /// </summary>
+    /// <returns>The timestamp in milliseconds since Unix epoch.</returns>
     public long ToEpoch()
     {
         if (string.IsNullOrEmpty(Value) || Value.Length != 26)
@@ -78,6 +117,10 @@ public record Ulid(string Value)
 
         return ExtractTimestamp(bytes);
     }
+    /// <summary>
+    /// Converts the ULID to Unix time in milliseconds.
+    /// </summary>
+    /// <returns>The timestamp in milliseconds since Unix epoch.</returns>
     public long ToUnixTime()
     {
         return ToEpoch();
@@ -93,16 +136,30 @@ public record Ulid(string Value)
         return timestamp;
     }
 
+    /// <summary>
+    /// Returns the string representation of the ULID.
+    /// </summary>
+    /// <returns>The ULID value.</returns>
     public override string ToString()
     {
         return Value;
     }
 
+    /// <summary>
+    /// Checks if the ULID has a value.
+    /// </summary>
+    /// <returns>True if the ULID has a value, otherwise false.</returns>
     public bool HasValue()
     {
         return !string.IsNullOrEmpty(Value);
     }
 
+    /// <summary>
+    /// Tries to parse a string into a ULID.
+    /// </summary>
+    /// <param name="ulidString">The string to parse.</param>
+    /// <param name="ulid">The parsed ULID if successful.</param>
+    /// <returns>True if parsing was successful, otherwise false.</returns>
     public static bool TryParse(string ulidString, out Ulid? ulid)
     {
         ulid = null;
@@ -132,6 +189,12 @@ public record Ulid(string Value)
             return false;
         }
     }
+    /// <summary>
+    /// Parses a string into a ULID.
+    /// </summary>
+    /// <param name="ulidString">The string to parse.</param>
+    /// <returns>The parsed ULID.</returns>
+    /// <exception cref="ArgumentException">Thrown when the ULID string is not valid.</exception>
     public static Ulid Parse(string ulidString)
     {
         if (string.IsNullOrEmpty(ulidString) || ulidString.Length != 26)

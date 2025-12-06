@@ -216,7 +216,7 @@ public class SharpCoreDBMigrationsSqlGenerator : MigrationsSqlGenerator
     /// <summary>
     /// Generates primary key constraint SQL.
     /// </summary>
-    protected virtual void PrimaryKeyConstraint(AddPrimaryKeyOperation operation, IModel? model, MigrationCommandListBuilder builder)
+    protected override void PrimaryKeyConstraint(AddPrimaryKeyOperation operation, IModel? model, MigrationCommandListBuilder builder)
     {
         builder
             .Append("PRIMARY KEY (");

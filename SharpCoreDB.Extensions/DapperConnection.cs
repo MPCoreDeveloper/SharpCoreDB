@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Extensions;
@@ -159,7 +160,7 @@ internal class DapperCommand : DbCommand
 /// </summary>
 internal class DapperParameterCollection : DbParameterCollection
 {
-    private readonly List<DbParameter> _parameters = new();
+    private readonly List<DbParameter> _parameters = [];
 
     public override int Count => _parameters.Count;
     public override object SyncRoot => _parameters;

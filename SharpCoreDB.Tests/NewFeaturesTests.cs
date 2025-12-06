@@ -107,7 +107,7 @@ public class NewFeaturesTests : IDisposable
     [Fact]
     public void SqlFunctions_Sum_Success()
     {
-        var values = new object[] { 1, 2, 3, 4, 5 };
+        object[] values = [1, 2, 3, 4, 5];
         var sum = SqlFunctions.Sum(values);
         
         Assert.Equal(15m, sum);
@@ -116,7 +116,7 @@ public class NewFeaturesTests : IDisposable
     [Fact]
     public void SqlFunctions_Avg_Success()
     {
-        var values = new object[] { 10, 20, 30 };
+        object[] values = [10, 20, 30];
         var avg = SqlFunctions.Avg(values);
         
         Assert.Equal(20m, avg);
@@ -125,7 +125,7 @@ public class NewFeaturesTests : IDisposable
     [Fact]
     public void SqlFunctions_CountDistinct_Success()
     {
-        var values = new object[] { 1, 2, 2, 3, 3, 3 };
+        object[] values = [1, 2, 2, 3, 3, 3];
         var count = SqlFunctions.CountDistinct(values);
         
         Assert.Equal(3, count);
@@ -134,7 +134,7 @@ public class NewFeaturesTests : IDisposable
     [Fact]
     public void SqlFunctions_GroupConcat_Success()
     {
-        var values = new object[] { "apple", "banana", "cherry" };
+        object[] values = ["apple", "banana", "cherry"];
         var result = SqlFunctions.GroupConcat(values, "|");
         
         Assert.Equal("apple|banana|cherry", result);

@@ -12,8 +12,7 @@ public class CryptoService : ICryptoService
     /// <inheritdoc />
     public byte[] DeriveKey(string password, string salt)
     {
-        using var pbkdf2 = new Rfc2898DeriveBytes(password, Encoding.UTF8.GetBytes(salt), 10000, HashAlgorithmName.SHA256);
-        return pbkdf2.GetBytes(32);
+        return Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(salt), 10000, HashAlgorithmName.SHA256, 32);
     }
 
     /// <inheritdoc />

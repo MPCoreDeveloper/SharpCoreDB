@@ -47,7 +47,7 @@ public class HashIndexTests
         // Assert
         Assert.True(index.ContainsKey("Electronics"));
         Assert.False(index.ContainsKey("Books"));
-        Assert.False(index.ContainsKey(null));
+        Assert.False(index.ContainsKey((object)null));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class HashIndexTests
     {
         // Arrange
         var index = new HashIndex("users", "email");
-        var row1 = new Dictionary<string, object> { { "email", null }, { "name", "Alice" } };
+        var row1 = new Dictionary<string, object> { { "email", (object)null }, { "name", "Alice" } };
         var row2 = new Dictionary<string, object> { { "name", "Bob" } }; // Missing email key
 
         // Act

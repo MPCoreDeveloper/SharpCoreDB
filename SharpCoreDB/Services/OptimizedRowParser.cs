@@ -23,7 +23,7 @@ public static class OptimizedRowParser
         if (jsonBytes.Length < 4096)
         {
             return JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes) 
-                ?? new Dictionary<string, object>();
+                ?? [];
         }
 
         // For larger JSON, we still need to deserialize but can use pooled buffers
@@ -33,7 +33,7 @@ public static class OptimizedRowParser
             jsonBytes.CopyTo(rentedBuffer.AsSpan());
             return JsonSerializer.Deserialize<Dictionary<string, object>>(
                 rentedBuffer.AsSpan(0, jsonBytes.Length)) 
-                ?? new Dictionary<string, object>();
+                ?? [];
         }
         finally
         {
@@ -50,7 +50,7 @@ public static class OptimizedRowParser
     {
         // Fast path for empty or null
         if (string.IsNullOrEmpty(json))
-            return new Dictionary<string, object>();
+            return [];
 
         return JsonSerializer.Deserialize<Dictionary<string, object>>(json) 
             ?? new Dictionary<string, object>();
@@ -85,7 +85,7 @@ public static class OptimizedRowParser
             jsonArrayBytes.CopyTo(rentedBuffer.AsSpan());
             return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(
                 rentedBuffer.AsSpan(0, jsonArrayBytes.Length)) 
-                ?? new List<Dictionary<string, object>>();
+                ?? [];
         }
         finally
         {

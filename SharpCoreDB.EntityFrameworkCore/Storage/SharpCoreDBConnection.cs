@@ -3,6 +3,7 @@ using System.Data.Common;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 

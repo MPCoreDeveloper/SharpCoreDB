@@ -72,6 +72,9 @@ public class WAL : IWAL, IDisposable
         _logCount = 0;
     }
 
+    /// <summary>
+    /// Disposes the WAL instance and releases resources.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

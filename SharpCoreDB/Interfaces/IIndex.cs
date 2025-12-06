@@ -17,5 +17,5 @@ public interface IIndex<TKey, TValue> where TKey : IComparable<TKey>
     /// </summary>
     /// <param name="key">The key.</param>
     /// <returns>True if found, and the value.</returns>
-    (bool Found, TValue Value) Search(TKey key);
+    (bool Found, TValue? Value) Search(TKey key);
 }

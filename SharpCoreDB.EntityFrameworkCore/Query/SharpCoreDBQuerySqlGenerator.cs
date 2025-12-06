@@ -26,7 +26,8 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         if (sqlFunctionExpression.Name.Equals("SUM", StringComparison.OrdinalIgnoreCase))
         {
             Sql.Append("SUM(");
-            Visit(sqlFunctionExpression.Arguments[0]);
+            if (sqlFunctionExpression.Arguments.Count > 0)
+                Visit(sqlFunctionExpression.Arguments[0]);
             Sql.Append(")");
             return sqlFunctionExpression;
         }
@@ -34,7 +35,8 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         if (sqlFunctionExpression.Name.Equals("AVG", StringComparison.OrdinalIgnoreCase))
         {
             Sql.Append("AVG(");
-            Visit(sqlFunctionExpression.Arguments[0]);
+            if (sqlFunctionExpression.Arguments.Count > 0)
+                Visit(sqlFunctionExpression.Arguments[0]);
             Sql.Append(")");
             return sqlFunctionExpression;
         }
@@ -171,7 +173,12 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         return sqlBinaryExpression;
     }
 
-    private static string GetOperator(SqlBinaryExpression binaryExpression)
+    /// <summary>
+    /// Gets the operator string for the given binary expression.
+    /// </summary>
+    /// <param name="binaryExpression">The binary expression.</param>
+    /// <returns>The operator string.</returns>
+    protected override string GetOperator(SqlBinaryExpression binaryExpression)
     {
         return binaryExpression.OperatorType switch
         {

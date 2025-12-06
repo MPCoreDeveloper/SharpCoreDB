@@ -80,6 +80,6 @@ public static class HealthCheckExtensions
             name,
             new SharpCoreDBHealthCheck(database, testQuery),
             failureStatus,
-            tags);
+            tags ?? []);
     }
 }

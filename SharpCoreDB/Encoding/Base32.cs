@@ -3,10 +3,18 @@
 using System.Text;
 namespace SharpCoreDB.Base32Encoding
 {
+    /// <summary>
+    /// Provides Base32 encoding and decoding functionality.
+    /// </summary>
     public static class Base32
     {
         private const string Base32Chars = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
+        /// <summary>
+        /// Encodes a byte array into a Base32 string.
+        /// </summary>
+        /// <param name="data">The byte array to encode.</param>
+        /// <returns>The Base32 encoded string.</returns>
         public static string Encode(byte[] data)
         {
             ArgumentNullException.ThrowIfNull(data);
@@ -48,6 +56,11 @@ namespace SharpCoreDB.Base32Encoding
         }
 
 
+        /// <summary>
+        /// Decodes a Base32 string into a byte array.
+        /// </summary>
+        /// <param name="input">The Base32 string to decode.</param>
+        /// <returns>The decoded byte array.</returns>
         public static byte[] Decode(string input)
         {
             ArgumentNullException.ThrowIfNull(input);

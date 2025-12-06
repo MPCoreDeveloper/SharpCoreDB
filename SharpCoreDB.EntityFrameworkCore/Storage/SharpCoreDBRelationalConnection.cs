@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
@@ -53,9 +54,9 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     }
 
     /// <inheritdoc />
-    public DbConnection? DbConnection
+    public DbConnection DbConnection
     {
-        get => _connection;
+        get => _connection!;
         set => _connection = value;
     }
 
@@ -76,7 +77,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     public SemaphoreSlim Semaphore => _semaphore;
 
     /// <inheritdoc />
-    public DbContext? Context { get; set; }
+    public DbContext Context { get; set; } = null!;
 
     /// <inheritdoc />
     public void SetDbConnection(DbConnection? connection, bool contextOwnsConnection)
@@ -219,7 +220,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
             {
                 throw new InvalidOperationException("SharpCoreDB options not configured");
             }
-            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString);
+            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString ?? string.Empty);
         }
 
         if (_connection.State != ConnectionState.Open)
@@ -240,7 +241,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
             {
                 throw new InvalidOperationException("SharpCoreDB options not configured");
             }
-            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString);
+            _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString ?? string.Empty);
         }
 
         if (_connection.State != ConnectionState.Open)

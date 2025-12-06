@@ -72,17 +72,17 @@ public class HashIndex
     public List<Dictionary<string, object>> Lookup(object key)
     {
         if (key == null)
-            return new List<Dictionary<string, object>>();
+            return [];
 
         if (_hashMap.TryGetValue(key, out var rows))
         {
             lock (rows)
             {
-                return new List<Dictionary<string, object>>(rows);
+                return [.. rows];
             }
         }
 
-        return new List<Dictionary<string, object>>();
+        return [];
     }
 
     /// <summary>

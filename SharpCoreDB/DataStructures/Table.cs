@@ -39,7 +39,7 @@ public class Table : ITable
     /// <summary>
     /// Whether columns are auto-generated.
     /// </summary>
-    public List<bool> IsAuto { get; set; } = [];
+    public List<bool> IsAuto { get; set; } = new();
 
     /// <summary>
     /// The data file path.
@@ -54,9 +54,9 @@ public class Table : ITable
     /// <summary>
     /// Hash indexes for fast WHERE clause lookups on specific columns.
     /// </summary>
-    private readonly Dictionary<string, HashIndex> _hashIndexes = new();
+    private readonly Dictionary<string, HashIndex> _hashIndexes = [];
 
-    private IStorage _storage;
+    private IStorage? _storage;
     // .NET 10: Use Lock instead of ReaderWriterLockSlim for better performance
     private readonly Lock _lock = new();
     private bool _isReadOnly;
@@ -75,6 +75,7 @@ public class Table : ITable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Insert(Dictionary<string, object> row)
     {
+        ArgumentNullException.ThrowIfNull(_storage);
         if (_isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
         
         // .NET 10: Use lock statement with Lock type for better performance
@@ -83,10 +84,9 @@ public class Table : ITable
             // Validate types
             for (int i = 0; i < Columns.Count; i++)
             {
-                if (row.TryGetValue(Columns[i], out var val))
+                if (row.TryGetValue(Columns[i], out var val) && !IsValidType(val, ColumnTypes[i]))
                 {
-                    if (!IsValidType(val, ColumnTypes[i]))
-                        throw new InvalidOperationException($"Type mismatch for column {Columns[i]}");
+                    throw new InvalidOperationException($"Type mismatch for column {Columns[i]}");
                 }
             }
 
@@ -102,7 +102,7 @@ public class Table : ITable
                     }
                     else
                     {
-                        row[col] = null; // assume nullable
+                        row[col] = GetDefaultValue(ColumnTypes[i]) ?? DBNull.Value;
                     }
                 }
             }
@@ -146,6 +146,7 @@ public class Table : ITable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true)
     {
+        ArgumentNullException.ThrowIfNull(_storage);
         // .NET 10: Lock type provides better performance than ReaderWriterLockSlim
         // For read-only mode, skip locking entirely for maximum throughput
         if (_isReadOnly)
@@ -162,7 +163,7 @@ public class Table : ITable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc)
     {
-        var results = new List<Dictionary<string, object>>();
+        List<Dictionary<string, object>> results = [];
         
         // Try to use hash index for WHERE clause if available
         bool usedHashIndex = false;
@@ -252,11 +253,12 @@ public class Table : ITable
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Update(string where, Dictionary<string, object> updates)
+    public void Update(string? where, Dictionary<string, object> updates)
     {
+        ArgumentNullException.ThrowIfNull(_storage);
         var allRows = Select(); // load outside lock
-        var updatedRows = new List<Dictionary<string, object>>();
-        var modifiedRows = new List<(Dictionary<string, object> oldRow, Dictionary<string, object> newRow)>();
+        List<Dictionary<string, object>> updatedRows = [];
+        List<(Dictionary<string, object> oldRow, Dictionary<string, object> newRow)> modifiedRows = [];
         
         foreach (var row in allRows)
         {
@@ -305,11 +307,12 @@ public class Table : ITable
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void Delete(string where)
+    public void Delete(string? where)
     {
+        ArgumentNullException.ThrowIfNull(_storage);
         var allRows = Select(); // load outside lock
-        var deletedRows = new List<Dictionary<string, object>>();
-        var remainingRows = new List<Dictionary<string, object>>();
+        List<Dictionary<string, object>> deletedRows = [];
+        List<Dictionary<string, object>> remainingRows = [];
         
         foreach (var row in allRows)
         {
@@ -414,7 +417,7 @@ public class Table : ITable
         _ => throw new InvalidOperationException($"Auto generation not supported for type {type}")
     };
 
-    private bool EvaluateWhere(Dictionary<string, object> row, string where)
+    private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;
         var parts = where.Split(' ');
@@ -470,5 +473,23 @@ public class Table : ITable
         if (_hashIndexes.TryGetValue(columnName, out var index))
             return index.GetStatistics();
         return null;
+    }
+
+    private static object? GetDefaultValue(DataType type)
+    {
+        return type switch
+        {
+            DataType.Integer => default(int?),
+            DataType.String => default(string),
+            DataType.Real => default(double?),
+            DataType.Blob => default(byte[]),
+            DataType.Boolean => default(bool?),
+            DataType.DateTime => default(DateTime?),
+            DataType.Long => default(long?),
+            DataType.Decimal => default(decimal?),
+            DataType.Ulid => default(Ulid?),
+            DataType.Guid => default(Guid?),
+            _ => null
+        };
     }
 }

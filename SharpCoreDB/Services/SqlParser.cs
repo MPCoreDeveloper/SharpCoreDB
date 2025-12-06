@@ -5,6 +5,9 @@ using SharpCoreDB.Constants;
 
 namespace SharpCoreDB.Services;
 
+/// <summary>
+/// Simple SQL parser and executor.
+/// </summary>
 public class SqlParser : ISqlParser
 {
     private readonly Dictionary<string, ITable> _tables;

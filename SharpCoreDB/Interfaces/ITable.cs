@@ -55,13 +55,13 @@ public interface ITable
     /// </summary>
     /// <param name="where">The where clause string.</param>
     /// <param name="updates">The updates to apply.</param>
-    void Update(string where, Dictionary<string, object> updates);
+    void Update(string? where, Dictionary<string, object> updates);
 
     /// <summary>
     /// Deletes rows from the table.
     /// </summary>
     /// <param name="where">The where clause string.</param>
-    void Delete(string where);
+    void Delete(string? where);
 
     /// <summary>
     /// Creates a hash index on the specified column for fast WHERE clause lookups.

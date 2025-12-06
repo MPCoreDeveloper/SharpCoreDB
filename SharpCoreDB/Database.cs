@@ -11,7 +11,6 @@ namespace SharpCoreDB;
 /// </summary>
 public class Database : IDatabase
 {
-    private readonly ICryptoService _crypto;
     private readonly IStorage _storage;
     private readonly IUserService _userService;
     private readonly Dictionary<string, ITable> _tables = [];
@@ -34,10 +33,10 @@ public class Database : IDatabase
         _isReadOnly = isReadOnly;
         _config = config ?? DatabaseConfig.Default;
         Directory.CreateDirectory(_dbPath);
-        _crypto = services.GetRequiredService<ICryptoService>();
-        var masterKey = _crypto.DeriveKey(masterPassword, "salt");
-        _storage = new Storage(_crypto, masterKey, _config);
-        _userService = new UserService(_crypto, _storage, _dbPath);
+        var crypto = services.GetRequiredService<ICryptoService>();
+        var masterKey = crypto.DeriveKey(masterPassword, "salt");
+        _storage = new Storage(crypto, masterKey, _config);
+        _userService = new UserService(crypto, _storage, _dbPath);
         
         // Initialize query cache if enabled
         if (_config.EnableQueryCache)
@@ -55,19 +54,23 @@ public class Database : IDatabase
         if (metaJson != null)
         {
             var meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
-            if (meta != null && meta.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj))
+            if (meta != null && meta.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) && tablesObj != null)
             {
-                var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObj.ToString());
-                if (tablesList != null)
+                var tablesObjString = tablesObj.ToString();
+                if (!string.IsNullOrEmpty(tablesObjString))
                 {
-                    foreach (var tableDict in tablesList)
+                    var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString);
+                    if (tablesList != null)
                     {
-                        var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict));
-                        table.SetStorage(_storage);
-                        table.SetReadOnly(_isReadOnly);
-                        if (table != null)
+                        foreach (var tableDict in tablesList)
                         {
-                            _tables[table.Name] = table;
+                            var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict));
+                            if (table != null)
+                            {
+                                table.SetStorage(_storage);
+                                table.SetReadOnly(_isReadOnly);
+                                _tables[table.Name] = table;
+                            }
                         }
                     }
                 }

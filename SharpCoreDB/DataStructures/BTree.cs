@@ -75,12 +75,12 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue> where TKey : IComparable
     }
 
     /// <inheritdoc />
-    public (bool Found, TValue Value) Search(TKey key)
+    public (bool Found, TValue? Value) Search(TKey key)
     {
         return Search(_root, key);
     }
 
-    private static (bool Found, TValue Value) Search(Node? node, TKey key)
+    private static (bool Found, TValue? Value) Search(Node? node, TKey key)
     {
         if (node == null) return (false, default);
         int i = 0;

@@ -45,7 +45,7 @@ public class EdgeCaseTests : IDisposable
     [Fact]
     public void SqlFunctions_Avg_EmptyCollection_ReturnsZero()
     {
-        var values = Array.Empty<object>();
+        object[] values = [];
         var avg = SqlFunctions.Avg(values);
         
         Assert.Equal(0m, avg);
@@ -54,7 +54,7 @@ public class EdgeCaseTests : IDisposable
     [Fact]
     public void SqlFunctions_Avg_WithNulls_IgnoresNulls()
     {
-        var values = new object?[] { 10, null, 20, null, 30 };
+        object?[] values = [10, null, 20, null, 30];
         // Null-forgiving operator is safe here as SqlFunctions.Avg filters out nulls
         var avg = SqlFunctions.Avg(values!);
         
@@ -64,7 +64,7 @@ public class EdgeCaseTests : IDisposable
     [Fact]
     public void SqlFunctions_Sum_WithNulls_IgnoresNulls()
     {
-        var values = new object?[] { 5, null, 10, null, 15 };
+        object?[] values = [5, null, 10, null, 15];
         // Null-forgiving operator is safe here as SqlFunctions.Sum filters out nulls
         var sum = SqlFunctions.Sum(values!);
         
@@ -74,7 +74,7 @@ public class EdgeCaseTests : IDisposable
     [Fact]
     public void SqlFunctions_CountDistinct_WithNulls_IgnoresNulls()
     {
-        var values = new object?[] { 1, null, 2, null, 2, 3 };
+        object?[] values = [1, null, 2, null, 2, 3];
         // Null-forgiving operator is safe here as SqlFunctions.CountDistinct filters out nulls
         var count = SqlFunctions.CountDistinct(values!);
         
@@ -93,7 +93,7 @@ public class EdgeCaseTests : IDisposable
     [Fact]
     public void SqlFunctions_GroupConcat_WithNulls_IgnoresNulls()
     {
-        var values = new object?[] { "a", null, "b", null, "c" };
+        object?[] values = ["a", null, "b", null, "c"];
         // Null-forgiving operator is safe here as SqlFunctions.GroupConcat filters out nulls
         var result = SqlFunctions.GroupConcat(values!, "|");
         

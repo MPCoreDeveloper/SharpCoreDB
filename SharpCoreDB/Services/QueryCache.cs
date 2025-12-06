@@ -21,9 +21,13 @@ public class QueryCache
     {
         private long _accessCount;
         
+        /// <summary>The original SQL query string.</summary>
         public string Sql { get; set; } = string.Empty;
-        public string[] Parts { get; set; } = Array.Empty<string>();
+        /// <summary>The parsed parts of the SQL query.</summary>
+        public string[] Parts { get; set; } = [];
+        /// <summary>The timestamp when the query was cached.</summary>
         public DateTime CachedAt { get; set; }
+        /// <summary>The number of times this query has been accessed.</summary>
         public long AccessCount 
         { 
             get => Interlocked.Read(ref _accessCount);
