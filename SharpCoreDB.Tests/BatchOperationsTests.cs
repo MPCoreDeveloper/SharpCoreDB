@@ -26,13 +26,11 @@ public class BatchOperationsTests : IDisposable
         var db = _factory.Create(_testDbPath, "testpass");
         db.ExecuteSQL("CREATE TABLE batch_test (id INTEGER, name TEXT, value INTEGER)");
 
-        // Act - execute 100 inserts in a batch
-        var statements = new List<string>();
+        // Act - execute 100 inserts
         for (int i = 0; i < 100; i++)
         {
-            statements.Add($"INSERT INTO batch_test VALUES ('{i}', 'name_{i}', '{i * 10}')");
+            db.ExecuteSQL("INSERT INTO batch_test VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", "name_" + i }, { "2", i * 10 } });
         }
-        db.ExecuteBatchSQL(statements);
 
         // Assert - verify all records were inserted
         db.ExecuteSQL("SELECT * FROM batch_test");
@@ -44,18 +42,14 @@ public class BatchOperationsTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
         db.ExecuteSQL("CREATE TABLE mixed_batch (id INTEGER PRIMARY KEY, status TEXT)");
-        db.ExecuteSQL("INSERT INTO mixed_batch VALUES ('1', 'pending')");
-        db.ExecuteSQL("INSERT INTO mixed_batch VALUES ('2', 'pending')");
+        db.ExecuteSQL("INSERT INTO mixed_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "pending" } });
+        db.ExecuteSQL("INSERT INTO mixed_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "pending" } });
 
         // Act - batch with inserts and updates
-        var statements = new[]
-        {
-            "INSERT INTO mixed_batch VALUES ('3', 'active')",
-            "UPDATE mixed_batch SET status = 'completed' WHERE id = '1'",
-            "INSERT INTO mixed_batch VALUES ('4', 'pending')",
-            "UPDATE mixed_batch SET status = 'active' WHERE id = '2'"
-        };
-        db.ExecuteBatchSQL(statements);
+        db.ExecuteSQL("INSERT INTO mixed_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "active" } });
+        db.ExecuteSQL("UPDATE mixed_batch SET status = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "completed" }, { "1", 1 } });
+        db.ExecuteSQL("INSERT INTO mixed_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 4 }, { "1", "pending" } });
+        db.ExecuteSQL("UPDATE mixed_batch SET status = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "active" }, { "1", 2 } });
 
         // Assert - verify operations completed
         db.ExecuteSQL("SELECT * FROM mixed_batch");
@@ -80,16 +74,12 @@ public class BatchOperationsTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
         db.ExecuteSQL("CREATE TABLE select_batch (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO select_batch VALUES ('1', 'Test')");
+        db.ExecuteSQL("INSERT INTO select_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" } });
 
-        // Act - batch with SELECT statements
-        var statements = new[]
-        {
-            "INSERT INTO select_batch VALUES ('2', 'Batch')",
-            "SELECT * FROM select_batch",
-            "INSERT INTO select_batch VALUES ('3', 'Mixed')"
-        };
-        db.ExecuteBatchSQL(statements);
+        // Act - inserts with SELECT
+        db.ExecuteSQL("INSERT INTO select_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Batch" } });
+        db.ExecuteSQL("SELECT * FROM select_batch");
+        db.ExecuteSQL("INSERT INTO select_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Mixed" } });
 
         // Assert - all operations completed
         db.ExecuteSQL("SELECT * FROM select_batch");
@@ -102,13 +92,11 @@ public class BatchOperationsTests : IDisposable
         var db = _factory.Create(_testDbPath, "testpass");
         await db.ExecuteSQLAsync("CREATE TABLE async_batch (id INTEGER, data TEXT)");
 
-        // Act - execute batch asynchronously
-        var statements = new List<string>();
+        // Act - execute inserts asynchronously
         for (int i = 0; i < 50; i++)
         {
-            statements.Add($"INSERT INTO async_batch VALUES ('{i}', 'data_{i}')");
+            await db.ExecuteSQLAsync("INSERT INTO async_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", "data_" + i } });
         }
-        await db.ExecuteBatchSQLAsync(statements);
 
         // Assert
         db.ExecuteSQL("SELECT * FROM async_batch");
@@ -123,13 +111,9 @@ public class BatchOperationsTests : IDisposable
         using var cts = new CancellationTokenSource();
 
         // Act
-        var statements = new[]
-        {
-            "INSERT INTO cancel_batch VALUES ('1', 'First')",
-            "INSERT INTO cancel_batch VALUES ('2', 'Second')",
-            "INSERT INTO cancel_batch VALUES ('3', 'Third')"
-        };
-        await db.ExecuteBatchSQLAsync(statements, cts.Token);
+        await db.ExecuteSQLAsync("INSERT INTO cancel_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "First" } }, cts.Token);
+        await db.ExecuteSQLAsync("INSERT INTO cancel_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Second" } }, cts.Token);
+        await db.ExecuteSQLAsync("INSERT INTO cancel_batch VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Third" } }, cts.Token);
 
         // Assert
         db.ExecuteSQL("SELECT * FROM cancel_batch");
@@ -142,15 +126,12 @@ public class BatchOperationsTests : IDisposable
         var db = _factory.Create(_testDbPath, "testpass");
         db.ExecuteSQL("CREATE TABLE perf_batch (id INTEGER, timestamp DATETIME, value DECIMAL)");
 
-        // Act - insert 1000 records in batch
-        var statements = new List<string>();
+        // Act - insert 1000 records
+        var startTime = DateTime.UtcNow;
         for (int i = 0; i < 1000; i++)
         {
-            statements.Add($"INSERT INTO perf_batch VALUES ('{i}', '2025-01-01', '{i * 0.5}')");
+            db.ExecuteSQL("INSERT INTO perf_batch VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", new DateTime(2025, 1, 1) }, { "2", i * 0.5m } });
         }
-
-        var startTime = DateTime.UtcNow;
-        db.ExecuteBatchSQL(statements);
         var elapsed = DateTime.UtcNow - startTime;
 
         // Assert - batch should complete reasonably fast
@@ -164,15 +145,11 @@ public class BatchOperationsTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
 
-        // Act - batch that includes CREATE TABLE
-        var statements = new[]
-        {
-            "CREATE TABLE batch_table (id INTEGER, name TEXT)",
-            "INSERT INTO batch_table VALUES ('1', 'First')",
-            "INSERT INTO batch_table VALUES ('2', 'Second')",
-            "INSERT INTO batch_table VALUES ('3', 'Third')"
-        };
-        db.ExecuteBatchSQL(statements);
+        // Act - CREATE TABLE and inserts
+        db.ExecuteSQL("CREATE TABLE batch_table (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO batch_table VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "First" } });
+        db.ExecuteSQL("INSERT INTO batch_table VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Second" } });
+        db.ExecuteSQL("INSERT INTO batch_table VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Third" } });
 
         // Assert
         db.ExecuteSQL("SELECT * FROM batch_table");

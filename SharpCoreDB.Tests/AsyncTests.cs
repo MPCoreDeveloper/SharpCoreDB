@@ -29,7 +29,7 @@ public class AsyncTests : IDisposable
         await db.ExecuteSQLAsync("CREATE TABLE async_test (id INTEGER, name TEXT)");
 
         // Assert - verify table exists by inserting data
-        await db.ExecuteSQLAsync("INSERT INTO async_test VALUES ('1', 'TestName')");
+        await db.ExecuteSQLAsync("INSERT INTO async_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "TestName" } });
         db.ExecuteSQL("SELECT * FROM async_test"); // Verify no exception
     }
 
@@ -41,8 +41,8 @@ public class AsyncTests : IDisposable
         db.ExecuteSQL("CREATE TABLE async_insert (id INTEGER, value TEXT)");
 
         // Act
-        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES ('1', 'Value1')");
-        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES ('2', 'Value2')");
+        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Value1" } });
+        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Value2" } });
 
         // Assert
         db.ExecuteSQL("SELECT * FROM async_insert"); // Should not throw
@@ -56,9 +56,9 @@ public class AsyncTests : IDisposable
 
         // Act
         await db.ExecuteSQLAsync("CREATE TABLE multi_async (id INTEGER PRIMARY KEY, data TEXT)");
-        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES ('1', 'First')");
-        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES ('2', 'Second')");
-        await db.ExecuteSQLAsync("UPDATE multi_async SET data = 'Updated' WHERE id = '1'");
+        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "First" } });
+        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Second" } });
+        await db.ExecuteSQLAsync("UPDATE multi_async SET data = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "Updated" }, { "1", 1 } });
 
         // Assert - no exception means success
     }
@@ -72,7 +72,7 @@ public class AsyncTests : IDisposable
 
         // Act
         await db.ExecuteSQLAsync("CREATE TABLE cancel_test (id INTEGER, name TEXT)", cts.Token);
-        await db.ExecuteSQLAsync("INSERT INTO cancel_test VALUES ('1', 'Test')", cts.Token);
+        await db.ExecuteSQLAsync("INSERT INTO cancel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" } }, cts.Token);
 
         // Assert
         db.ExecuteSQL("SELECT * FROM cancel_test"); // Should work
@@ -90,7 +90,7 @@ public class AsyncTests : IDisposable
         for (int i = 0; i < 10; i++)
         {
             int taskId = i;
-            tasks.Add(db.ExecuteSQLAsync($"INSERT INTO parallel_test VALUES ('{taskId}', 'thread_{taskId}')"));
+            tasks.Add(db.ExecuteSQLAsync("INSERT INTO parallel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", taskId }, { "1", $"thread_{taskId}" } }));
         }
 
         await Task.WhenAll(tasks);
@@ -112,7 +112,7 @@ public class AsyncTests : IDisposable
 
         // Act
         await db.ExecuteSQLAsync("CREATE TABLE config_test (id INTEGER, value TEXT)");
-        await db.ExecuteSQLAsync("INSERT INTO config_test VALUES ('1', 'CachedValue')");
+        await db.ExecuteSQLAsync("INSERT INTO config_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "CachedValue" } });
 
         // Assert
         var stats = db.GetQueryCacheStatistics();

@@ -501,6 +501,26 @@ public class SqlParser : ISqlParser
     private string BindParameters(string sql, Dictionary<string, object?> parameters)
     {
         var result = sql;
+        
+        // Handle named parameters (@paramName or @param0, @param1, etc.)
+        foreach (var param in parameters)
+        {
+            var paramName = param.Key;
+            var valueStr = FormatValue(param.Value);
+            
+            // Try matching with @ prefix
+            if (paramName.StartsWith("@"))
+            {
+                result = result.Replace(paramName, valueStr);
+            }
+            else
+            {
+                // Also try with @ prefix added
+                result = result.Replace("@" + paramName, valueStr);
+            }
+        }
+        
+        // Handle positional parameters (?)
         var paramIndex = 0;
         var index = 0;
         while ((index = result.IndexOf('?', index)) != -1)
@@ -513,11 +533,21 @@ public class SqlParser : ISqlParser
             var paramKey = paramIndex.ToString();
             if (!parameters.TryGetValue(paramKey, out var value))
             {
-                throw new InvalidOperationException($"Parameter '{paramKey}' not found.");
+                // Try finding any unused parameter
+                var unusedParam = parameters.FirstOrDefault(p => !result.Contains(p.Key));
+                if (unusedParam.Key != null)
+                {
+                    value = unusedParam.Value;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Parameter '{paramKey}' not found.");
+                }
             }
 
             var valueStr = this.FormatValue(value);
             result = result.Remove(index, 1).Insert(index, valueStr);
+            index += valueStr.Length; // Skip past the inserted value
             paramIndex++;
         }
 

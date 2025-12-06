@@ -45,16 +45,27 @@ class Program
 
         // Step 4: Insert Data
         Console.WriteLine("\n--- Inserting Data ---");
-        db.ExecuteSQL("INSERT INTO users VALUES ('1', 'Alice')");
-        db.ExecuteSQL("INSERT INTO users VALUES ('2', 'Bob')");
-        db.ExecuteSQL("INSERT INTO users VALUES ('3', 'Charlie')");
+        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Charlie" } });
         var newUlid = Ulid.NewUlid().Value;
         Console.WriteLine($"Generated ULID: {newUlid}");
         var parsedUlid = Ulid.Parse(newUlid);
         Console.WriteLine($"Parsed timestamp: {parsedUlid.ToDateTime()}");
-        db.ExecuteSQL($"INSERT INTO test VALUES ('1', 'Test1', 'true', '2023-01-01', '10.5', '123456789012345', '99.99', '{newUlid}', '{Guid.NewGuid()}')");
-        db.ExecuteSQL("INSERT INTO test VALUES ('2', 'Test2', NULL, NULL, NULL, NULL, NULL, NULL, NULL)");
-        db.ExecuteSQL("INSERT INTO test (id, name) VALUES ('3', 'AutoTest')");
+        db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+            new Dictionary<string, object?> { 
+                { "0", 1 }, 
+                { "1", "Test1" }, 
+                { "2", true }, 
+                { "3", new DateTime(2023, 1, 1) }, 
+                { "4", 10.5 }, 
+                { "5", 123456789012345L }, 
+                { "6", 99.99m }, 
+                { "7", newUlid }, 
+                { "8", Guid.NewGuid().ToString() } 
+            });
+        db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Test2" }, { "2", null }, { "3", null }, { "4", null }, { "5", null }, { "6", null }, { "7", null }, { "8", null } });
+        db.ExecuteSQL("INSERT INTO test (id, name) VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "AutoTest" } });
         Console.WriteLine("Inserted data");
 
         // Step 5: Query Data
@@ -70,12 +81,12 @@ class Program
 
         // Test UPDATE
         Console.WriteLine("\nTesting UPDATE:");
-        db.ExecuteSQL("UPDATE test SET name = 'UpdatedTest' WHERE id = '1'");
-        db.ExecuteSQL("SELECT * FROM test WHERE id = '1'");
+        db.ExecuteSQL("UPDATE test SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "UpdatedTest" }, { "1", 1 } });
+        db.ExecuteSQL("SELECT * FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
 
         // Test DELETE
         Console.WriteLine("\nTesting DELETE:");
-        db.ExecuteSQL("DELETE FROM test WHERE id = '2'");
+        db.ExecuteSQL("DELETE FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 2 } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Test JOIN
@@ -94,7 +105,7 @@ class Program
         // Try to insert in readonly (should fail)
         try
         {
-            dbReadonly.ExecuteSQL("INSERT INTO test VALUES ('3', 'Readonly Test', 'false', '2023-01-02', '20.0')");
+            dbReadonly.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Readonly Test" }, { "2", false }, { "3", new DateTime(2023, 1, 2) }, { "4", 20.0 } });
         }
         catch (Exception ex)
         {

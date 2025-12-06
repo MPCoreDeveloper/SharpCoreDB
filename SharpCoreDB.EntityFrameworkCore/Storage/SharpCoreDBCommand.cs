@@ -69,7 +69,13 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance == null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        _connection.DbInstance.ExecuteSQL(_commandText);
+        var parameters = new Dictionary<string, object?>();
+        foreach (SharpCoreDBParameter param in DbParameterCollection)
+        {
+            parameters[param.ParameterName] = param.Value;
+        }
+
+        _connection.DbInstance.ExecuteSQL(_commandText, parameters);
         return 1; // Simplified: return 1 for success
     }
 
@@ -105,9 +111,15 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance == null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
+        var parameters = new Dictionary<string, object?>();
+        foreach (SharpCoreDBParameter param in DbParameterCollection)
+        {
+            parameters[param.ParameterName] = param.Value;
+        }
+
         // For now, execute and return empty reader
         // In a full implementation, this would parse and return query results
-        _connection.DbInstance.ExecuteSQL(_commandText);
+        _connection.DbInstance.ExecuteSQL(_commandText, parameters);
         return new SharpCoreDBDataReader();
     }
 }

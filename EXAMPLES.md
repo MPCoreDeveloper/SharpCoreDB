@@ -4,15 +4,12 @@ This document provides practical examples for using SharpCoreDB in time-tracking
 
 ## ⚠️ Security Notice
 
-**Important:** The examples in this document use string interpolation for clarity and simplicity. In production applications:
+**Important:** SharpCoreDB now supports parameterized queries for security. Always use parameterized queries in production:
 
-1. **Always sanitize and validate all user input** before using it in SQL statements
-2. **Escape single quotes** in string values: `userInput.Replace("'", "''")`
+1. **Use parameterized queries** with `?` placeholders
+2. **Pass parameters as Dictionary** to ExecuteSQL methods
 3. **Validate input types, lengths, and formats**
-4. **Use allowlists** for identifiers (table names, column names)
-5. **Never trust user input** in SQL statements
-
-SharpCoreDB currently does not support parameterized queries. Future versions will add this security feature.
+4. **Never concatenate user input** directly into SQL strings
 
 ## Time Tracking Application Example
 
@@ -69,15 +66,30 @@ db.ExecuteSQL("CREATE INDEX idx_time_entries_start ON time_entries (start_time)"
 ### Recording Time Entries
 
 ```csharp
-// Start a time entry
+// Start a time entry - using parameterized query
 db.ExecuteSQL(@"INSERT INTO time_entries (project_id, user_id, task, start_time, billable, notes) 
-                VALUES ('1', '101', 'Feature Development', NOW(), 'true', 'Working on user authentication')");
+                VALUES (?, ?, ?, ?, ?, ?)", 
+    new Dictionary<string, object?> {
+        { "0", 1 },
+        { "1", 101 },
+        { "2", "Feature Development" },
+        { "3", DateTime.Now },
+        { "4", true },
+        { "5", "Working on user authentication" }
+    });
 
 // Stop a time entry and calculate duration
+var entryId = "some_ulid_here";
+var endTime = DateTime.Now;
 db.ExecuteSQL(@"UPDATE time_entries 
-                SET end_time = NOW(), 
-                    duration = DATEDIFF(NOW(), start_time, 'minutes')
-                WHERE id = 'entry_id_here'");
+                SET end_time = ?, 
+                    duration = ?
+                WHERE id = ?",
+    new Dictionary<string, object?> {
+        { "0", endTime },
+        { "1", CalculateDurationMinutes(startTime, endTime) },
+        { "2", entryId }
+    });
 ```
 
 ### Querying Time Data
@@ -88,46 +100,17 @@ db.ExecuteSQL(@"SELECT * FROM time_entries
                 WHERE DATE(start_time) = DATE(NOW())");
 
 // Get time entries for a specific project this week
+var projectId = 1;
 db.ExecuteSQL(@"SELECT * FROM time_entries 
-                WHERE project_id = '1' 
-                AND start_time >= DATEADD(NOW(), -7, 'days')");
+                WHERE project_id = ? 
+                AND start_time >= DATEADD(NOW(), -7, 'days')",
+    new Dictionary<string, object?> { { "0", projectId } });
 
 // Calculate total hours by project this month
 db.ExecuteSQL(@"SELECT project_id, SUM(duration) as total_minutes 
                 FROM time_entries 
                 WHERE start_time >= DATEADD(NOW(), -30, 'days')
                 GROUP BY project_id");
-
-// Get billable vs non-billable hours
-db.ExecuteSQL(@"SELECT billable, SUM(duration) as total_minutes 
-                FROM time_entries 
-                GROUP BY billable");
-```
-
-### Reporting Queries
-
-```csharp
-// Weekly report by user
-db.ExecuteSQL(@"SELECT 
-    users.full_name,
-    COUNT(*) as entry_count,
-    SUM(duration) as total_minutes,
-    AVG(duration) as avg_minutes
-FROM time_entries
-JOIN users ON time_entries.user_id = users.id
-WHERE start_time >= DATEADD(NOW(), -7, 'days')
-GROUP BY users.full_name");
-
-// Project profitability report
-db.ExecuteSQL(@"SELECT 
-    projects.name,
-    projects.hourly_rate,
-    SUM(time_entries.duration) / 60.0 as total_hours,
-    (SUM(time_entries.duration) / 60.0) * projects.hourly_rate as total_revenue
-FROM time_entries
-JOIN projects ON time_entries.project_id = projects.id
-WHERE time_entries.billable = 'true'
-GROUP BY projects.name, projects.hourly_rate");
 ```
 
 ## Using Connection Pooling for Web Applications
@@ -147,39 +130,34 @@ builder.Services.AddSingleton<DatabasePool>(sp =>
 
 var app = builder.Build();
 
-// Example API endpoint
-// WARNING: This is a simplified example. In production, you MUST:
-// 1. Validate and sanitize all user input
-// 2. Use parameterized queries or proper escaping
-// 3. Implement authentication and authorization
+// Example API endpoint with proper parameterized queries
 app.MapPost("/api/time-entries", async (DatabasePool pool, TimeEntryRequest request) =>
 {
     var db = pool.GetDatabase("timetracker.db", "secure_password");
     
     try
     {
-        // Production-ready input validation and sanitization
-        // 1. Validate ProjectId and UserId are positive integers
+        // Validate input
         if (request.ProjectId <= 0 || request.UserId <= 0)
             return Results.BadRequest("Invalid project or user ID");
         
-        // 2. Sanitize task description
         if (string.IsNullOrWhiteSpace(request.Task))
             return Results.BadRequest("Task description is required");
         
         if (request.Task.Length > 500)
             return Results.BadRequest("Task description too long");
         
-        // 3. Escape single quotes for SQL safety
-        var sanitizedTask = request.Task.Replace("'", "''");
-        
-        // 4. Validate timestamp format
-        var formattedTime = request.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
-        
-        db.ExecuteSQL($@"INSERT INTO time_entries 
+        // Use parameterized query - SAFE from SQL injection
+        db.ExecuteSQL(@"INSERT INTO time_entries 
             (project_id, user_id, task, start_time, billable) 
-            VALUES ('{request.ProjectId}', '{request.UserId}', '{sanitizedTask}', 
-                    '{formattedTime}', '{request.Billable}')");
+            VALUES (?, ?, ?, ?, ?)",
+            new Dictionary<string, object?> {
+                { "0", request.ProjectId },
+                { "1", request.UserId },
+                { "2", request.Task },
+                { "3", request.StartTime },
+                { "4", request.Billable }
+            });
         
         return Results.Ok(new { success = true });
     }
@@ -194,100 +172,71 @@ app.Run();
 public record TimeEntryRequest(int ProjectId, int UserId, string Task, DateTime StartTime, bool Billable);
 ```
 
-## Using Auto Maintenance
+## Console Application with Dependency Injection
 
 ```csharp
-using SharpCoreDB.Services;
-
-// Set up automatic database maintenance
-var db = factory.Create("timetracker.db", "password");
-using var maintenance = new AutoMaintenanceService(
-    db,
-    intervalSeconds: 300,    // Run maintenance every 5 minutes
-    writeThreshold: 1000     // Or after 1000 write operations
-);
-
-// Track writes in your application
-void LogTimeEntry(string sql)
-{
-    db.ExecuteSQL(sql);
-    maintenance.IncrementWriteCount();
-}
-
-// Maintenance happens automatically in the background
-// Manual trigger if needed
-maintenance.TriggerMaintenance();
-```
-
-## Dapper Integration Example
-
-```csharp
-using SharpCoreDB.Extensions;
-using Dapper;
-
-// Define models
-public class Project
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public string Client { get; set; }
-    public decimal HourlyRate { get; set; }
-    public DateTime Created { get; set; }
-}
-
-public class TimeEntry
-{
-    public string Id { get; set; }
-    public int ProjectId { get; set; }
-    public int UserId { get; set; }
-    public string Task { get; set; }
-    public DateTime StartTime { get; set; }
-    public DateTime? EndTime { get; set; }
-    public int Duration { get; set; }
-    public bool Billable { get; set; }
-}
-
-// Use Dapper for queries
-var connection = db.GetDapperConnection();
-
-// Query with Dapper
-var projects = connection.Query<Project>("SELECT * FROM projects");
-
-// Parameterized queries (basic implementation)
-// Note: Full parameter support requires extending the implementation
-var entries = connection.Query<TimeEntry>(
-    "SELECT * FROM time_entries WHERE project_id = '1'");
-```
-
-## Health Monitoring Setup
-
-```csharp
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB.Extensions;
+using SharpCoreDB;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Add database with health checks
-builder.Services.AddSharpCoreDB();
-builder.Services.AddHealthChecks()
-    .AddSharpCoreDB(
-        db, 
-        name: "database",
-        testQuery: "SELECT COUNT(*) FROM users",
-        tags: new[] { "db", "ready" }
-    );
-
-var app = builder.Build();
-
-// Health check endpoints
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+class Program
 {
-    Predicate = check => check.Tags.Contains("ready")
-});
+    static void Main(string[] args)
+    {
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var serviceProvider = services.BuildServiceProvider();
+        var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
+        var db = factory.Create("console.db", "secure_password");
 
-app.Run();
+        // Create table
+        db.ExecuteSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY, content TEXT, timestamp DATETIME)");
+
+        // Insert data with parameterized query
+        db.ExecuteSQL("INSERT INTO messages VALUES (?, ?, ?)", 
+            new Dictionary<string, object?> {
+                { "0", 1 },
+                { "1", "Hello from SharpCoreDB!" },
+                { "2", DateTime.Now }
+            });
+
+        // Query data
+        db.ExecuteSQL("SELECT * FROM messages");
+
+        // Async operations
+        Task.Run(async () =>
+        {
+            await db.ExecuteSQLAsync("INSERT INTO messages VALUES (?, ?, ?)", 
+                new Dictionary<string, object?> {
+                    { "0", 2 },
+                    { "1", "Async message" },
+                    { "2", DateTime.Now }
+                });
+            
+            await db.ExecuteSQLAsync("SELECT COUNT(*) FROM messages");
+        }).Wait();
+
+        Console.WriteLine("Console app completed successfully!");
+    }
+}
+```
+
+## Batch Operations Example
+
+```csharp
+// Create database
+var db = factory.Create("batch.db", "password");
+db.ExecuteSQL("CREATE TABLE bulk_data (id INTEGER, value TEXT, timestamp DATETIME)"));
+
+// Use parameterized queries for safety - even in batch operations
+for (int i = 0; i < 1000; i++)
+{
+    db.ExecuteSQL("INSERT INTO bulk_data VALUES (?, ?, ?)",
+        new Dictionary<string, object?> {
+            { "0", i },
+            { "1", $"Value_{i}" },
+            { "2", DateTime.Now }
+        });
+}
 ```
 
 ## Invoice Generation Example
@@ -312,251 +261,119 @@ db.ExecuteSQL(@"CREATE TABLE invoice_items (
     amount DECIMAL
 )");
 
-// Generate invoice from time entries
+// Generate invoice with parameterized queries
+var invoiceId = 1001;
+var clientName = "Acme Corp";
+var dueDate = DateTime.Now.AddDays(30);
+
 db.ExecuteSQL(@"INSERT INTO invoices (id, client, invoice_date, due_date, status)
-                VALUES ('1001', 'Acme Corp', NOW(), DATEADD(NOW(), 30, 'days'), 'draft')");
+                VALUES (?, ?, ?, ?, ?)",
+    new Dictionary<string, object?> {
+        { "0", invoiceId },
+        { "1", clientName },
+        { "2", DateTime.Now },
+        { "3", dueDate },
+        { "4", "draft" }
+    });
 
-// Add invoice items from billable time entries
+// Add invoice items
 db.ExecuteSQL(@"INSERT INTO invoice_items (invoice_id, description, hours, rate, amount)
-                SELECT 
-                    '1001',
-                    GROUP_CONCAT(task, ', '),
-                    SUM(duration) / 60.0,
-                    '150.00',
-                    (SUM(duration) / 60.0) * 150.00
-                FROM time_entries
-                WHERE project_id = '1' 
-                AND billable = 'true'
-                AND start_time >= '2024-01-01'
-                AND start_time < '2024-02-01'");
-
-// Calculate invoice total
-db.ExecuteSQL(@"UPDATE invoices
-                SET total_amount = (
-                    SELECT SUM(amount) 
-                    FROM invoice_items 
-                    WHERE invoice_id = '1001'
-                )
-                WHERE id = '1001'");
-
-## Console Application with Dependency Injection
-
-This example demonstrates setting up SharpCoreDB in a console application using Microsoft.Extensions.DependencyInjection.
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        // Set up dependency injection
-        var services = new ServiceCollection();
-        services.AddSharpCoreDB();
-        var serviceProvider = services.BuildServiceProvider();
-
-        // Get database factory
-        var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
-
-        // Create database
-        var db = factory.Create("console.db", "secure_password");
-
-        // Create table
-        db.ExecuteSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY, content TEXT, timestamp DATETIME)");
-
-        // Insert data
-        db.ExecuteSQL("INSERT INTO messages VALUES (1, 'Hello from SharpCoreDB!', NOW())");
-
-        // Query data
-        var result = db.ExecuteSQL("SELECT * FROM messages");
-        Console.WriteLine("Database contents:");
-        Console.WriteLine(result);
-
-        // Async operations
-        Task.Run(async () =>
-        {
-            await db.ExecuteSQLAsync("INSERT INTO messages VALUES (2, 'Async message', NOW())");
-            var asyncResult = await db.ExecuteSQLAsync("SELECT COUNT(*) FROM messages");
-            Console.WriteLine($"Total messages: {asyncResult}");
-        }).Wait();
-
-        Console.WriteLine("Console app completed successfully!");
-    }
-}
+                VALUES (?, ?, ?, ?, ?)",
+    new Dictionary<string, object?> {
+        { "0", invoiceId },
+        { "1", "Development Services" },
+        { "2", 40.0m },
+        { "3", 150.00m },
+        { "4", 6000.00m }
+    });
 ```
 
-To run this example:
-1. Create a new console project: `dotnet new console`
-2. Add SharpCoreDB: `dotnet add package SharpCoreDB`
-3. Replace Program.cs with the code above
-4. Run: `dotnet run`
-
-## Entity Framework Core Migration Example
-
-SharpCoreDB supports EF Core with full migration capabilities. Here's how to set up migrations:
-
-### 1. Create EF Core Project
-
-```bash
-dotnet new classlib -n MyApp.Data
-cd MyApp.Data
-dotnet add package Microsoft.EntityFrameworkCore.Design
-dotnet add package SharpCoreDB.EntityFrameworkCore
-```
-
-### 2. Define DbContext
-
-```csharp
-using Microsoft.EntityFrameworkCore;
-using SharpCoreDB.EntityFrameworkCore;
-
-public class AppDbContext : DbContext
-{
-    private readonly string _connectionString;
-
-    public AppDbContext(string connectionString)
-    {
-        _connectionString = connectionString;
-    }
-
-    public DbSet<User> Users { get; set; }
-    public DbSet<Project> Projects { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        optionsBuilder.UseSharpCoreDB(_connectionString);
-    }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired();
-            entity.Property(e => e.Email).IsRequired();
-        });
-
-        modelBuilder.Entity<Project>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired();
-            entity.HasMany(e => e.Users).WithMany(e => e.Projects);
-        });
-    }
-}
-
-public class User
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public string Email { get; set; }
-    public ICollection<Project> Projects { get; set; }
-}
-
-public class Project
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public ICollection<User> Users { get; set; }
-}
-```
-
-### 3. Add Migration
-
-```bash
-# Install EF Core tools globally if not already installed
-dotnet tool install --global dotnet-ef
-
-# Add migration
-dotnet ef migrations add InitialCreate --project MyApp.Data --startup-project MyApp.Console
-
-# Update database
-dotnet ef database update --project MyApp.Data --startup-project MyApp.Console
-```
-
-### 4. Use in Application
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-
-class Program
-{
-    static void Main()
-    {
-        var connectionString = "Data Source=app.db;Password=MySecret123";
-        using var context = new AppDbContext(connectionString);
-
-        // Ensure database is created
-        context.Database.EnsureCreated();
-
-        // Add data
-        context.Users.Add(new User { Name = "Alice", Email = "alice@example.com" });
-        context.SaveChanges();
-
-        // Query data
-        var users = context.Users.ToList();
-        foreach (var user in users)
-        {
-            Console.WriteLine($"{user.Name} - {user.Email}");
-        }
-    }
-}
-```
-
-### Migration Commands
-
-```bash
-# Add new migration
-dotnet ef migrations add AddUserProjects
-
-# Apply migrations
-dotnet ef database update
-
-# Revert last migration
-dotnet ef database update LastMigrationName
-
-# Remove last migration (if not applied)
-dotnet ef migrations remove
-
-# Generate SQL script
-dotnet ef migrations script --output migration.sql
-```
-
-## Performance Tuning Guide
-
-### 1. Database Configuration
-
-Choose the right configuration for your use case:
+## Performance Configuration
 
 ```csharp
 // High-performance mode (no encryption, trusted environments)
 var config = DatabaseConfig.HighPerformance;
 var db = factory.Create(dbPath, password, false, config);
 
-// Default encrypted mode
-var config = DatabaseConfig.Default;
-var db = factory.Create(dbPath, password, false, config);
-
 // Custom configuration
-var config = new DatabaseConfig 
+var customConfig = new DatabaseConfig 
 { 
-    EnableQueryCache = true,     // Cache repeated queries
-    QueryCacheSize = 1000,       // Cache size
-    EnableHashIndexes = true,    // Enable hash indexes
-    WalBufferSize = 1024 * 1024, // 1MB WAL buffer
-    UseBufferedIO = true         // Buffered I/O
+    EnableQueryCache = true,
+    QueryCacheSize = 1000,
+    EnableHashIndexes = true,
+    WalBufferSize = 1024 * 1024,
+    UseBufferedIO = true
 };
+var customDb = factory.Create(dbPath, password, false, customConfig);
 ```
 
-### 2. Indexing Strategy
-
-Create indexes on frequently queried columns:
+## Hash Indexes for Fast Queries
 
 ```csharp
-// Hash indexes for O(1) lookups
-db.ExecuteSQL("CREATE INDEX idx_user_email ON users (email)");
-db.ExecuteSQL("CREATE INDEX idx_orders_status ON orders (status)");
+// Create table and index
+db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER, project TEXT, duration INTEGER)");
+db.ExecuteSQL("CREATE INDEX idx_project ON time_entries (project)");
 
-// Composite indexes
-db.ExecuteSQL("CREATE INDEX idx_time_user_date ON time_entries (user_id, start_time)");
+// Insert data with parameterized queries
+for (int i = 0; i < 1000; i++)
+{
+    db.ExecuteSQL("INSERT INTO time_entries VALUES (?, ?, ?)",
+        new Dictionary<string, object?> {
+            { "0", i },
+            { "1", $"Project_{i % 10}" },
+            { "2", i * 60 }
+        });
+}
+
+// Query uses hash index automatically - 5-10x faster!
+db.ExecuteSQL("SELECT * FROM time_entries WHERE project = ?",
+    new Dictionary<string, object?> { { "0", "Project_5" } });
+```
+
+## Best Practices
+
+### ✅ DO: Use Parameterized Queries
+
+```csharp
+// GOOD - Safe from SQL injection
+var userId = GetUserInput();
+db.ExecuteSQL("SELECT * FROM users WHERE id = ?",
+    new Dictionary<string, object?> { { "0", userId } });
+```
+
+### ❌ DON'T: Concatenate User Input
+
+```csharp
+// BAD - Vulnerable to SQL injection!
+var userId = GetUserInput();
+db.ExecuteSQL($"SELECT * FROM users WHERE id = '{userId}'");
+```
+
+### ✅ DO: Validate Input First
+
+```csharp
+// Validate before using
+if (userId <= 0 || userId > int.MaxValue)
+    throw new ArgumentException("Invalid user ID");
+
+db.ExecuteSQL("INSERT INTO logs VALUES (?, ?)",
+    new Dictionary<string, object?> {
+        { "0", userId },
+        { "1", DateTime.Now }
+    });
+```
+
+### ✅ DO: Use Async for Web Apps
+
+```csharp
+// Non-blocking operations
+await db.ExecuteSQLAsync("INSERT INTO users VALUES (?, ?)",
+    new Dictionary<string, object?> {
+        { "0", 1 },
+        { "1", "Alice" }
+    });
+```
+
+---
+
+**Note**: All examples use parameterized queries to prevent SQL injection vulnerabilities. This is the recommended approach for all production applications.
