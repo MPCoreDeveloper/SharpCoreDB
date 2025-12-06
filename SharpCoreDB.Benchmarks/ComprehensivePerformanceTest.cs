@@ -93,7 +93,7 @@ public static class ComprehensivePerformanceTest
         sw.Restart();
         for (int i = 0; i < 10; i++)
         {
-            dbEncrypted.ExecuteSQL("SELECT * FROM time_entries WHERE duration = '60'");
+            dbEncrypted.ExecuteSQL("SELECT * FROM time_entries WHERE duration = 60");
         }
         sw.Stop();
         var selectEncrypted = sw.ElapsedMilliseconds / 10;
@@ -131,7 +131,7 @@ public static class ComprehensivePerformanceTest
         sw.Restart();
         for (int i = 0; i < 10; i++)
         {
-            dbNoEncrypt.ExecuteSQL("SELECT * FROM time_entries WHERE duration = '60'");
+            dbNoEncrypt.ExecuteSQL("SELECT * FROM time_entries WHERE duration = 60");
         }
         sw.Stop();
         var selectNoEncrypt = sw.ElapsedMilliseconds / 10;
@@ -157,7 +157,15 @@ public static class ComprehensivePerformanceTest
         foreach (var entry in testData)
         {
             using var cmd = sqliteConn.CreateCommand();
-            cmd.CommandText = $"INSERT INTO time_entries VALUES ({entry.Id}, '{EscapeSql(entry.Project)}', '{EscapeSql(entry.Task)}', '{entry.StartTime:yyyy-MM-dd HH:mm:ss}', '{entry.EndTime:yyyy-MM-dd HH:mm:ss}', {entry.Duration}, '{EscapeSql(entry.User)}', '{EscapeSql(entry.Description)}')";
+            cmd.CommandText = "INSERT INTO time_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            cmd.Parameters.AddWithValue("@id", entry.Id);
+            cmd.Parameters.AddWithValue("@project", entry.Project);
+            cmd.Parameters.AddWithValue("@task", entry.Task);
+            cmd.Parameters.AddWithValue("@start_time", entry.StartTime);
+            cmd.Parameters.AddWithValue("@end_time", entry.EndTime);
+            cmd.Parameters.AddWithValue("@duration", entry.Duration);
+            cmd.Parameters.AddWithValue("@user", entry.User);
+            cmd.Parameters.AddWithValue("@description", entry.Description);
             cmd.ExecuteNonQuery();
         }
         sw.Stop();
@@ -167,7 +175,8 @@ public static class ComprehensivePerformanceTest
         for (int i = 0; i < 10; i++)
         {
             using var cmd = sqliteConn.CreateCommand();
-            cmd.CommandText = "SELECT * FROM time_entries WHERE duration = 60";
+            cmd.CommandText = "SELECT * FROM time_entries WHERE duration = ?";
+            cmd.Parameters.AddWithValue("@duration", 60);
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) { }
         }
@@ -225,10 +234,5 @@ public static class ComprehensivePerformanceTest
         if (Directory.Exists(sharpCoreNoEncryptPath)) Directory.Delete(sharpCoreNoEncryptPath, true);
         if (File.Exists(sqlitePath)) File.Delete(sqlitePath);
         if (File.Exists(liteDbPath)) File.Delete(liteDbPath);
-    }
-
-    private static string EscapeSql(string value)
-    {
-        return value?.Replace("'", "''") ?? string.Empty;
     }
 }
