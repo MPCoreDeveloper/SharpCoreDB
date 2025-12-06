@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/MPCoreDeveloper/SharpCoreDB/workflows/CI/badge.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/actions)
 [![codecov](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB/branch/master/graph/badge.svg)](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB)
 
-A lightweight, encrypted, file-based database engine for .NET that supports SQL operations with built-in security features. Perfect for time-tracking, invoicing, and project management applications.
+A lightweight, encrypted, file-based database engine for .NET 10 that supports SQL operations with built-in security features. Perfect for time-tracking, invoicing, and project management applications.
 
 ## Quickstart
 
@@ -77,9 +77,30 @@ var result = db.ExecuteSQL("SELECT * FROM users");
 
 SharpCoreDB provides a SQL-compatible interface over encrypted file-based storage, with optional connection pooling and auto-maintenance features.
 
+## Project Components
+
+This repository contains several components:
+
+- **SharpCoreDB**: Core database engine library
+- **SharpCoreDB.EntityFrameworkCore**: Entity Framework Core provider for SharpCoreDB
+- **SharpCoreDB.Extensions**: Additional extensions and utilities
+- **SharpCoreDB.Demo**: Console application demonstrating SharpCoreDB usage
+- **SharpCoreDB.Benchmarks**: Performance benchmarks comparing with SQLite and LiteDB
+- **SharpCoreDB.Tests**: Unit tests and integration tests
+
 ## Installation
 
 Add the SharpCoreDB project to your solution and reference it from your application.
+
+For the core database engine:
+```bash
+dotnet add package SharpCoreDB
+```
+
+For Entity Framework Core support:
+```bash
+dotnet add package SharpCoreDB.EntityFrameworkCore
+```
 
 ## Usage
 
@@ -388,10 +409,36 @@ db.ExecuteSQL("CREATE INDEX idx_user_email ON users (email)");
 
 // Create a unique index
 db.ExecuteSQL("CREATE UNIQUE INDEX idx_user_id ON users (id)");
+```
 
-````````
+### Entity Framework Core Support
 
-⚠️ **Current Implementation Notes**:
-- Optimized for DummyTimeProject and time-tracking use cases
-- Query execution leverages SharpCoreDB's native SQL engine
-- Some advanced EF Core features (lazy loading, change tracking optimization) use default implementations
+SharpCoreDB provides an Entity Framework Core provider for ORM-style database access:
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using SharpCoreDB.EntityFrameworkCore;
+
+// Install package: dotnet add package SharpCoreDB.EntityFrameworkCore
+
+// Define your DbContext
+public class MyDbContext : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.UseSharpCoreDB("Data Source=mydb.db;Password=MySecret123");
+    }
+}
+
+// Use it like any EF Core context
+using var context = new MyDbContext();
+context.Database.EnsureCreated();
+
+var user = new User { Name = "Alice", Email = "alice@example.com" };
+context.Users.Add(user);
+context.SaveChanges();
+
+var users = context.Users.Where(u => u.Name == "Alice").ToList();
+```
+
+**Note**: The EF Core provider is in active development. Some advanced features like complex LINQ queries and lazy loading may use default implementations.
