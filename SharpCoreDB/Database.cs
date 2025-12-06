@@ -24,6 +24,7 @@ public class Database : IDatabase
     private readonly DatabaseConfig? config;
     private readonly SecurityConfig? securityConfig;
     private readonly QueryCache? queryCache;
+    private readonly object _walLock = new object();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
@@ -112,12 +113,15 @@ public class Database : IDatabase
         }
         else
         {
-            using var wal = new WAL(this._dbPath, this.config);
-            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
-            sqlParser.Execute(sql, wal);
-            if (!this.isReadOnly)
+            lock (this._walLock)
             {
-                this.Save(wal);
+                using var wal = new WAL(this._dbPath, this.config);
+                var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+                sqlParser.Execute(sql, wal);
+                if (!this.isReadOnly)
+                {
+                    this.Save(wal);
+                }
             }
         }
     }
@@ -143,12 +147,15 @@ public class Database : IDatabase
         }
         else
         {
-            using var wal = new WAL(this._dbPath, this.config);
-            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
-            sqlParser.Execute(sql, parameters, wal);
-            if (!this.isReadOnly)
+            lock (this._walLock)
             {
-                this.Save(wal);
+                using var wal = new WAL(this._dbPath, this.config);
+                var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+                sqlParser.Execute(sql, parameters, wal);
+                if (!this.isReadOnly)
+                {
+                    this.Save(wal);
+                }
             }
         }
     }
@@ -200,16 +207,19 @@ public class Database : IDatabase
         }
 
         // Batch all non-SELECT statements in a single WAL transaction
-        using var wal = new WAL(this._dbPath, this.config);
-        foreach (var sql in statements)
+        lock (this._walLock)
         {
-            var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
-            sqlParser.Execute(sql, wal);
-        }
+            using var wal = new WAL(this._dbPath, this.config);
+            foreach (var sql in statements)
+            {
+                var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+                sqlParser.Execute(sql, wal);
+            }
 
-        if (!this.isReadOnly)
-        {
-            this.Save(wal);
+            if (!this.isReadOnly)
+            {
+                this.Save(wal);
+            }
         }
 
         // Perform GC.Collect if configured for high-performance mode

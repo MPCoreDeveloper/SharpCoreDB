@@ -1,6 +1,6 @@
 # SharpCoreDB
 
-![SharpCoreDB Logo](https://github.com/MPCoreDeveloper/SharpCoreDB/raw/master/SharpCoreDB.jpg)
+<img src="https://github.com/MPCoreDeveloper/SharpCoreDB/raw/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="250">
 
 [![Build Status](https://github.com/MPCoreDeveloper/SharpCoreDB/workflows/CI/badge.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/actions)
 [![codecov](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB/branch/master/graph/badge.svg)](https://codecov.io/gh/MPCoreDeveloper/SharpCoreDB)

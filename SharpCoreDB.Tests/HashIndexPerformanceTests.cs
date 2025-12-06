@@ -35,9 +35,9 @@ public class HashIndexPerformanceTests
 
         db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER, project TEXT, task TEXT, duration INTEGER)");
 
-        // Insert 10,000 rows with 10 unique projects
+        // Insert 10,000 rows with 100 unique projects
         _output.WriteLine("Inserting 10,000 test rows...");
-        var projects = new[] { "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa" };
+        var projects = Enumerable.Range(0, 100).Select(i => $"project_{i}").ToArray();
         for (int i = 1; i <= 10000; i++)
         {
             var project = projects[i % projects.Length];
@@ -49,7 +49,7 @@ public class HashIndexPerformanceTests
         var sw1 = Stopwatch.StartNew();
         for (int i = 0; i < 100; i++)
         {
-            db.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'Alpha'");
+            db.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'project_0'");
         }
         sw1.Stop();
         var withoutIndexMs = sw1.ElapsedMilliseconds;
@@ -63,7 +63,7 @@ public class HashIndexPerformanceTests
         var sw2 = Stopwatch.StartNew();
         for (int i = 0; i < 100; i++)
         {
-            db.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'Alpha'");
+            db.ExecuteSQL("SELECT * FROM time_entries WHERE project = 'project_0'");
         }
         sw2.Stop();
         var withIndexMs = sw2.ElapsedMilliseconds;
@@ -97,7 +97,7 @@ public class HashIndexPerformanceTests
 
         // Insert 5,000 rows
         _output.WriteLine("Inserting 5,000 test rows...");
-        var statuses = new[] { "pending", "processing", "shipped", "delivered", "cancelled" };
+        var statuses = Enumerable.Range(0, 50).Select(i => $"status_{i}").ToArray();
         for (int i = 1; i <= 5000; i++)
         {
             var status = statuses[i % statuses.Length];
