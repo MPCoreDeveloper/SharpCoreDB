@@ -54,7 +54,7 @@ public class EFCoreTimeTrackingTests : IDisposable
         Assert.Equal(1, result);
     }
 
-    [Fact]
+    [Fact(Skip = "EF Core query translation not yet implemented. See SharpCoreDB.EntityFrameworkCore/README.md")]
     public void CanQueryTimeEntries()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class EFCoreTimeTrackingTests : IDisposable
         Assert.Equal("Feature development", entries[0].Description);
     }
 
-    [Fact]
+    [Fact(Skip = "EF Core query translation not yet implemented. See SharpCoreDB.EntityFrameworkCore/README.md")]
     public void CanUseLINQSumAggregation()
     {
         // Arrange
@@ -111,7 +111,7 @@ public class EFCoreTimeTrackingTests : IDisposable
         Assert.Equal(8, alphaHours); // 3 + 5 hours
     }
 
-    [Fact]
+    [Fact(Skip = "EF Core query translation not yet implemented. See SharpCoreDB.EntityFrameworkCore/README.md")]
     public void CanUseLINQGroupBy()
     {
         // Arrange

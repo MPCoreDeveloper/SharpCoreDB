@@ -81,4 +81,11 @@ public interface IDatabase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a query and returns the results.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <returns>The query results as a list of dictionaries.</returns>
+    List<Dictionary<string, object>> ExecuteQuery(string sql);
 }

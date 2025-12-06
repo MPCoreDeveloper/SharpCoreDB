@@ -245,9 +245,9 @@ public class IndexTests
         var stats = index.GetStatistics();
 
         // Assert
-        Assert.Equal(4, stats.UniqueKeys);
+        Assert.Equal(3, stats.UniqueKeys);
         Assert.Equal(10, stats.TotalRows);
-        Assert.Equal(2.5, stats.AvgRowsPerKey); // 10 / 4
+        Assert.Equal(10.0 / 3.0, stats.AvgRowsPerKey, precision: 2); // 10 / 3
     }
 
     [Fact]

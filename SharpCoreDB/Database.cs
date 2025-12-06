@@ -266,6 +266,83 @@ public class Database : IDatabase
 
         return this.queryCache.GetStatistics();
     }
+
+    /// <inheritdoc />
+    public List<Dictionary<string, object>> ExecuteQuery(string sql)
+    {
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts[0].ToUpper() != SqlConstants.SELECT)
+        {
+            throw new InvalidOperationException("ExecuteQuery only supports SELECT statements");
+        }
+
+        // Parse the SELECT statement
+        var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
+        if (fromIdx < 0)
+        {
+            throw new InvalidOperationException("SELECT statement must have FROM clause");
+        }
+
+        string[] keywords = ["WHERE", "ORDER", "LIMIT", "GROUP"];
+        var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
+        var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
+        var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
+        var limitIdx = Array.IndexOf(parts, "LIMIT");
+        var groupIdx = Array.IndexOf(parts, "GROUP");
+
+        string? whereStr = null;
+        if (whereIdx > 0)
+        {
+            var endIdx = orderIdx > 0 ? orderIdx : limitIdx > 0 ? limitIdx : groupIdx > 0 ? groupIdx : parts.Length;
+            whereStr = string.Join(" ", parts.Skip(whereIdx + 1).Take(endIdx - whereIdx - 1));
+        }
+
+        string? orderBy = null;
+        bool asc = true;
+        if (orderIdx > 0 && parts.Length > orderIdx + 3 && parts[orderIdx + 1].ToUpper() == SqlConstants.BY)
+        {
+            orderBy = parts[orderIdx + 2];
+            asc = parts[orderIdx + 3].ToUpper() != SqlConstants.DESC;
+        }
+
+        int? limit = null;
+        int? offset = null;
+        if (limitIdx > 0)
+        {
+            var limitParts = parts.Skip(limitIdx + 1).ToArray();
+            if (limitParts.Length > 0)
+            {
+                limit = int.Parse(limitParts[0]);
+                if (limitParts.Length > 2 && limitParts[1].ToUpper() == "OFFSET")
+                {
+                    offset = int.Parse(limitParts[2]);
+                }
+            }
+        }
+
+        // Get table name
+        var tableName = fromParts[0];
+        if (!this.tables.ContainsKey(tableName))
+        {
+            throw new InvalidOperationException($"Table '{tableName}' does not exist");
+        }
+
+        // Execute the query
+        var results = this.tables[tableName].Select(whereStr, orderBy, asc);
+
+        // Apply limit and offset
+        if (offset.HasValue)
+        {
+            results = results.Skip(offset.Value).ToList();
+        }
+
+        if (limit.HasValue)
+        {
+            results = results.Take(limit.Value).ToList();
+        }
+
+        return results;
+    }
 }
 
 /// <summary>

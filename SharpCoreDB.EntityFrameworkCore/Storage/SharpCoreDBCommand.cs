@@ -105,10 +105,20 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance == null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        // For now, execute and return empty reader
-        // In a full implementation, this would parse and return query results
-        _connection.DbInstance.ExecuteSQL(_commandText);
-        return new SharpCoreDBDataReader();
+        // Check if this is a SELECT query
+        var trimmedCommand = _commandText.Trim();
+        if (trimmedCommand.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        {
+            // Execute query and get results
+            var results = _connection.DbInstance.ExecuteQuery(_commandText);
+            return new SharpCoreDBDataReader(results);
+        }
+        else
+        {
+            // For non-SELECT queries, execute and return empty reader
+            _connection.DbInstance.ExecuteSQL(_commandText);
+            return new SharpCoreDBDataReader();
+        }
     }
 }
 
