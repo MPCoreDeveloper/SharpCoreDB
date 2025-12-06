@@ -235,7 +235,7 @@ public class IndexTests
         var index = new HashIndex("stats_test", "group");
 
         // Act - Add rows with varying distribution
-        var distributions = new[] { 1, 1, 1, 2, 2, 5, 5, 5, 5, 5 }; // 4 unique keys, 10 total rows
+        var distributions = new[] { 1, 1, 1, 2, 2, 5, 5, 5, 5, 5 }; // Expect 3 unique keys: 1,2,5
         foreach (var key in distributions)
         {
             var row = new Dictionary<string, object> { { "group", key }, { "data", $"item_{key}" } };
@@ -245,9 +245,9 @@ public class IndexTests
         var stats = index.GetStatistics();
 
         // Assert
-        Assert.Equal(4, stats.UniqueKeys);
+        Assert.Equal(3, stats.UniqueKeys);
         Assert.Equal(10, stats.TotalRows);
-        Assert.Equal(2.5, stats.AvgRowsPerKey); // 10 / 4
+        Assert.Equal(10.0 / 3.0, stats.AvgRowsPerKey);
     }
 
     [Fact]

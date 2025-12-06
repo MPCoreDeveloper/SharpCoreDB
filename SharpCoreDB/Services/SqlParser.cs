@@ -447,18 +447,25 @@ public class SqlParser : ISqlParser
 
         try
         {
+            if (type == DataType.Boolean)
+            {
+                var lower = val.ToLower();
+                if (lower == "1" || lower == "true") return true;
+                if (lower == "0" || lower == "false") return false;
+                // Accept numeric strings: non-zero => true, zero => false
+                if (int.TryParse(val, out var intBool))
+                {
+                    return intBool != 0;
+                }
+                return bool.Parse(val);
+            }
+
             return type switch
             {
                 DataType.Integer => int.Parse(val),
                 DataType.String => val,
                 DataType.Real => double.Parse(val),
                 DataType.Blob => Convert.FromBase64String(val),
-                DataType.Boolean => val.ToLower() switch
-                {
-                    "1" or "true" => true,
-                    "0" or "false" => false,
-                    _ => bool.Parse(val),
-                },
                 DataType.DateTime => DateTime.Parse(val),
                 DataType.Long => long.Parse(val),
                 DataType.Decimal => decimal.Parse(val),
@@ -488,14 +495,81 @@ public class SqlParser : ISqlParser
         }
 
         var parts = where.Split(' ');
-        if (parts.Length == 3 && parts[1] == "=")
+        if (parts.Length <= 3)
         {
-            var col = parts[0];
-            var val = parts[2].Trim('\'');
-            return row[col]?.ToString() == val;
-        }
+            // Simple case: key op value
+            var key = parts[0].Trim();
+            var op = parts[1].Trim();
+            var value = parts[2].Trim().Trim('\'');
 
-        return true;
+            // Support for null values
+            if (value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+            {
+                value = null;
+            }
+
+            if (row.ContainsKey(key))
+            {
+                var rowValue = row[key];
+
+                return op switch
+                {
+                    "=" => (rowValue?.ToString() == value),
+                    "!=" => (rowValue?.ToString() != value),
+                    "<" => Comparer<object>.Default.Compare(rowValue, value) < 0,
+                    "<=" => Comparer<object>.Default.Compare(rowValue, value) <= 0,
+                    ">" => Comparer<object>.Default.Compare(rowValue, value) > 0,
+                    ">=" => Comparer<object>.Default.Compare(rowValue, value) >= 0,
+                    "LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) == true,
+                    "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) != true,
+                    "IN" => value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
+                    "NOT IN" => !value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
+                    _ => throw new InvalidOperationException($"Unsupported operator {op}"),
+                };
+            }
+
+            return false;
+        }
+        else
+        {
+            // Complex case: multiple conditions
+            var subConditions = new List<bool>();
+            for (int i = 0; i < parts.Length; i += 4)
+            {
+                var key = parts[i].Trim();
+                var op = parts[i + 1].Trim();
+                var value = parts[i + 2].Trim().Trim('\'');
+
+                // Support for null values
+                if (value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = null;
+                }
+
+                if (row.ContainsKey(key))
+                {
+                    var rowValue = row[key];
+
+                    subConditions.Add(op switch
+                    {
+                        "=" => (rowValue?.ToString() == value),
+                        "!=" => (rowValue?.ToString() != value),
+                        "<" => Comparer<object>.Default.Compare(rowValue, value) < 0,
+                        "<=" => Comparer<object>.Default.Compare(rowValue, value) <= 0,
+                        ">" => Comparer<object>.Default.Compare(rowValue, value) > 0,
+                        ">=" => Comparer<object>.Default.Compare(rowValue, value) >= 0,
+                        "LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) == true,
+                        "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) != true,
+                        "IN" => value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
+                        "NOT IN" => !value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
+                        _ => throw new InvalidOperationException($"Unsupported operator {op}"),
+                    });
+                }
+            }
+
+            // Combine sub-conditions with AND
+            return subConditions.All(c => c);
+        }
     }
 
     private string BindParameters(string sql, Dictionary<string, object?> parameters)
@@ -566,11 +640,12 @@ public class SqlParser : ISqlParser
         {
             null => "NULL",
             string s => $"'{s.Replace("'", "''")}'",
-            int i => i.ToString(),
-            long l => l.ToString(),
-            double d => d.ToString(),
+            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
             bool b => b ? "1" : "0",
             DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+            decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => $"'{value.ToString()?.Replace("'", "''")}'",
         };
     }
