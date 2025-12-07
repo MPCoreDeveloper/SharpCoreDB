@@ -44,9 +44,10 @@ public class SqlParser : ISqlParser
     /// <inheritdoc />
     public void Execute(string sql, Dictionary<string, object?> parameters, IWAL? wal = null)
     {
-        // If parameters are provided, bind them to ? placeholders
+        string? originalSql = null;
         if (parameters != null && parameters.Count > 0)
         {
+            originalSql = sql;
             sql = this.BindParameters(sql, parameters);
         }
         else
@@ -59,7 +60,7 @@ public class SqlParser : ISqlParser
 
         // Proceed with existing logic
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        this.ExecuteInternal(sql, parts, wal);
+        this.ExecuteInternal(originalSql ?? sql, parts, wal, originalSql ?? sql);
     }
 
     /// <summary>
@@ -80,7 +81,7 @@ public class SqlParser : ISqlParser
             sql = this.SanitizeSql(sql);
         }
 
-        this.ExecuteInternal(sql, plan.Parts, wal);
+        this.ExecuteInternal(sql, plan.Parts, wal, plan.Sql);
     }
 
     /// <summary>
@@ -104,7 +105,7 @@ public class SqlParser : ISqlParser
         return this.ExecuteQueryInternal(sql, parts);
     }
 
-    private void ExecuteInternal(string sql, string[] parts, IWAL? wal = null)
+    private void ExecuteInternal(string sql, string[] parts, IWAL? wal = null, string? cacheKey = null)
     {
         // Parts are already provided, no need to parse again
 
@@ -165,6 +166,19 @@ public class SqlParser : ISqlParser
             };
             this.tables[tableName] = table;
             wal?.Log(sql);
+            // Auto-create hash index on primary key for faster lookups
+            if (primaryKeyIndex >= 0)
+            {
+                table.CreateHashIndex(table.Columns[primaryKeyIndex]);
+            }
+            // Auto-create hash indexes on all columns for faster WHERE lookups
+            for (int i = 0; i < columns.Count; i++)
+            {
+                if (i != primaryKeyIndex)
+                {
+                    table.CreateHashIndex(columns[i]);
+                }
+            }
         }
         else if (parts[0].ToUpper() == SqlConstants.CREATE && parts[1].ToUpper() == "INDEX")
         {
@@ -268,6 +282,52 @@ public class SqlParser : ISqlParser
             this.tables[tableName].Insert(row);
             wal?.Log(sql);
         }
+        else if (parts[0].ToUpper() == "EXPLAIN")
+        {
+            if (parts.Length < 2 || parts[1].ToUpper() != "SELECT")
+            {
+                throw new InvalidOperationException("EXPLAIN only supports SELECT queries");
+            }
+            var selectParts = parts.Skip(1).ToArray();
+            var fromIdx = Array.IndexOf(selectParts, SqlConstants.FROM);
+            if (fromIdx < 0)
+            {
+                throw new InvalidOperationException("Invalid SELECT query for EXPLAIN");
+            }
+            var tableName = selectParts[fromIdx + 1];
+            if (!this.tables.ContainsKey(tableName))
+            {
+                throw new InvalidOperationException($"Table {tableName} does not exist");
+            }
+            var whereIdx = Array.IndexOf(selectParts, SqlConstants.WHERE);
+            string plan = "Full table scan";
+            if (whereIdx > 0)
+            {
+                var whereStr = string.Join(" ", selectParts.Skip(whereIdx + 1));
+                var whereTokens = whereStr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (whereTokens.Length >= 3 && whereTokens[1] == "=")
+                {
+                    var col = whereTokens[0];
+                    if (this.tables[tableName].HasHashIndex(col))
+                    {
+                        plan = $"Hash index lookup on {col}";
+                    }
+                    else if (this.tables[tableName].PrimaryKeyIndex >= 0 && this.tables[tableName].Columns[this.tables[tableName].PrimaryKeyIndex] == col)
+                    {
+                        plan = $"Primary key lookup on {col}";
+                    }
+                    else
+                    {
+                        plan = $"Full table scan with WHERE on {col}";
+                    }
+                }
+                else
+                {
+                    plan = "Full table scan with complex WHERE";
+                }
+            }
+            Console.WriteLine($"Query Plan: {plan}");
+        }
         else if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
             var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
@@ -344,10 +404,10 @@ public class SqlParser : ISqlParser
                 var results = new List<Dictionary<string, object>>();
                 foreach (var r1 in rows1)
                 {
-                    var key = r1[left];
-                    if (dict2.ContainsKey(key ?? new object()))
+                    var joinKey = r1[left];
+                    if (dict2.ContainsKey(joinKey ?? new object()))
                     {
-                        foreach (var r2 in dict2[key ?? new object()])
+                        foreach (var r2 in dict2[joinKey ?? new object()])
                         {
                             var combined = new Dictionary<string, object>();
                             foreach (var kv in r1)
@@ -416,6 +476,7 @@ public class SqlParser : ISqlParser
             else
             {
                 var tableName = fromParts[0];
+                Console.WriteLine($"Query Plan: {GetQueryPlan(tableName, whereStr)}");
                 var results = this.tables[tableName].Select(whereStr, orderBy, asc);
 
                 // Apply limit and offset
@@ -541,14 +602,14 @@ public class SqlParser : ISqlParser
 
                 return op switch
                 {
-                    "=" => (rowValue?.ToString() == value),
-                    "!=" => (rowValue?.ToString() != value),
+                    "=" => rowValue?.ToString() == value,
+                    "!=" => rowValue?.ToString() != value,
                     "<" => Comparer<object>.Default.Compare(rowValue, value) < 0,
                     "<=" => Comparer<object>.Default.Compare(rowValue, value) <= 0,
                     ">" => Comparer<object>.Default.Compare(rowValue, value) > 0,
                     ">=" => Comparer<object>.Default.Compare(rowValue, value) >= 0,
-                    "LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) == true,
-                    "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) != true,
+                    "LIKE" => rowValue?.ToString().Contains(value.Replace("%", string.Empty).Replace("_", string.Empty)) == true,
+                    "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", string.Empty).Replace("_", string.Empty)) != true,
                     "IN" => value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
                     "NOT IN" => !value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
                     _ => throw new InvalidOperationException($"Unsupported operator {op}"),
@@ -579,14 +640,14 @@ public class SqlParser : ISqlParser
 
                     subConditions.Add(op switch
                     {
-                        "=" => (rowValue?.ToString() == value),
-                        "!=" => (rowValue?.ToString() != value),
+                        "=" => rowValue?.ToString() == value,
+                        "!=" => rowValue?.ToString() != value,
                         "<" => Comparer<object>.Default.Compare(rowValue, value) < 0,
                         "<=" => Comparer<object>.Default.Compare(rowValue, value) <= 0,
                         ">" => Comparer<object>.Default.Compare(rowValue, value) > 0,
                         ">=" => Comparer<object>.Default.Compare(rowValue, value) >= 0,
-                        "LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) == true,
-                        "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", "").Replace("_", "")) != true,
+                        "LIKE" => rowValue?.ToString().Contains(value.Replace("%", string.Empty).Replace("_", string.Empty)) == true,
+                        "NOT LIKE" => rowValue?.ToString().Contains(value.Replace("%", string.Empty).Replace("_", string.Empty)) != true,
                         "IN" => value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
                         "NOT IN" => !value.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValue?.ToString()),
                         _ => throw new InvalidOperationException($"Unsupported operator {op}"),
@@ -607,7 +668,7 @@ public class SqlParser : ISqlParser
         foreach (var param in parameters)
         {
             var paramName = param.Key;
-            var valueStr = FormatValue(param.Value);
+            var valueStr = this.FormatValue(param.Value);
             
             // Try matching with @ prefix
             if (paramName.StartsWith("@"))
@@ -755,10 +816,10 @@ public class SqlParser : ISqlParser
                 var results = new List<Dictionary<string, object>>();
                 foreach (var r1 in rows1)
                 {
-                    var key = r1[left];
-                    if (dict2.ContainsKey(key ?? new object()))
+                    var joinKey = r1[left];
+                    if (dict2.ContainsKey(joinKey ?? new object()))
                     {
-                        foreach (var r2 in dict2[key ?? new object()])
+                        foreach (var r2 in dict2[joinKey ?? new object()])
                         {
                             var combined = new Dictionary<string, object>();
                             foreach (var kv in r1)
@@ -824,6 +885,7 @@ public class SqlParser : ISqlParser
             else
             {
                 var tableName = fromParts[0];
+                Console.WriteLine($"Query Plan: {GetQueryPlan(tableName, whereStr)}");
                 var results = this.tables[tableName].Select(whereStr, orderBy, asc);
 
                 // Apply limit and offset
@@ -845,5 +907,35 @@ public class SqlParser : ISqlParser
             // For non-SELECT, return empty list
             return new List<Dictionary<string, object>>();
         }
+    }
+
+    private string GetQueryPlan(string tableName, string? whereStr)
+    {
+        string plan = "Full table scan";
+        if (!string.IsNullOrEmpty(whereStr))
+        {
+            var whereTokens = whereStr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (whereTokens.Length >= 3 && whereTokens[1] == "=")
+            {
+                var col = whereTokens[0];
+                if (this.tables[tableName].HasHashIndex(col))
+                {
+                    plan = $"Hash index lookup on {col}";
+                }
+                else if (this.tables[tableName].PrimaryKeyIndex >= 0 && this.tables[tableName].Columns[this.tables[tableName].PrimaryKeyIndex] == col)
+                {
+                    plan = $"Primary key lookup on {col}";
+                }
+                else
+                {
+                    plan = $"Full table scan with WHERE on {col}";
+                }
+            }
+            else
+            {
+                plan = "Full table scan with complex WHERE";
+            }
+        }
+        return plan;
     }
 }

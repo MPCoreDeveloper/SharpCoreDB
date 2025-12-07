@@ -165,4 +165,36 @@ public class QueryCacheTests
         // Cleanup
         Directory.Delete(_testDbPath, true);
     }
+
+    [Fact]
+    public void QueryCache_ParameterizedQueries_ImprovesHitRate()
+    {
+        // Arrange
+        var factory = _serviceProvider.GetRequiredService<DatabaseFactory>();
+        var config = new DatabaseConfig { EnableQueryCache = true, QueryCacheSize = 1024 };
+        var db = factory.Create(_testDbPath, "test123", false, config);
+
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+        for (int i = 0; i < 100; i++)
+        {
+            db.ExecuteSQL($"INSERT INTO users VALUES ({i}, 'User{i}')");
+        }
+
+        // Act - Execute same parameterized SELECT query multiple times with different @id
+        var sql = "SELECT * FROM users WHERE id = ?";
+        for (int i = 0; i < 50; i++)
+        {
+            db.ExecuteSQL(sql, new Dictionary<string, object?> { ["0"] = i % 100 });
+        }
+
+        // Assert
+        var stats = db.GetQueryCacheStatistics();
+        Assert.True(stats.Hits > 0, "Cache should have hits from repeated parameterized queries");
+        // With 1 CREATE + 100 INSERTs + 50 SELECTs (49 repeated) = 151 total queries
+        // Cache should improve hit rate for repeated parameterized queries
+        Assert.True(stats.HitRate > 0.3, $"Hit rate should be >30% for repeated parameterized queries, got {stats.HitRate:P2}");
+
+        // Cleanup
+        Directory.Delete(_testDbPath, true);
+    }
 }

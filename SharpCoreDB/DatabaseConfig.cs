@@ -24,7 +24,7 @@ public class DatabaseConfig
     /// <summary>
     /// Gets the query cache size limit.
     /// </summary>
-    public int QueryCacheSize { get; init; } = 1000;
+    public int QueryCacheSize { get; init; } = 1024;
 
     /// <summary>
     /// Gets the WAL buffer size in bytes.

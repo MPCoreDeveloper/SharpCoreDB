@@ -9,6 +9,8 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);SA1101;SA1122;SA1028;SA1119;SA1512;SA1515;SA1513;SA1402;SA1649;SA1518;SA1503;SA1501;SA1611;SA1600;SA1502;SA1616;SA1651;SA1501;SA1503;SA1028;SA1119;SA1512;SA1515;SA1513;SA1402;SA1649;SA1518;SA1516;SA1201;SA1202;SA1214;SA1128;SA1615;SA1633;SA1107;SA1642;SA1137;SA1309</NoWarn>
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>

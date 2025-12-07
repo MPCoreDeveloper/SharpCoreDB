@@ -30,6 +30,7 @@ public static class PerformanceTest
         DisplayComparison("Insert 10k records", sharpResults.InsertTime, sqliteResults.InsertTime);
         DisplayComparison("Select with WHERE", sharpResults.SelectTime, sqliteResults.SelectTime);
         DisplayComparison("Select 1000 records", sharpResults.SelectMultipleTime, sqliteResults.SelectMultipleTime);
+        DisplayComparison("1000 Indexed SELECTs", sharpResults.IndexedSelectTotalMs, sqliteResults.IndexedSelectTime);
 
         Console.WriteLine();
         // === AUTO-GENERATE README TABLE ===
@@ -39,7 +40,7 @@ public static class PerformanceTest
         Console.WriteLine("| Operation                                 | SharpCoreDB       | SQLite          | Winnaar                  |");
         Console.WriteLine("|-------------------------------------------|-------------------|-----------------|--------------------------|");
         Console.WriteLine($"| Insert 10,000 records                     | **{sharpResults.InsertTime:F0} ms** | {sqliteResults.InsertTime:F0} ms | **SharpCoreDB ×{sqliteResults.InsertTime / sharpResults.InsertTime:F1}** |");
-        Console.WriteLine($"| 1,000 × Indexed SELECT (WHERE = value)    | **{sharpResults.IndexedSelectTotalMs:F1} ms** | ~900 ms         | **SharpCoreDB ×~158**    |");
+        Console.WriteLine($"| 1,000 × Indexed SELECT (WHERE = value)    | **{sharpResults.IndexedSelectTotalMs:F1} ms** | {sqliteResults.IndexedSelectTime:F1} ms | {(sharpResults.IndexedSelectTotalMs < sqliteResults.IndexedSelectTime ? "SharpCoreDB" : "SQLite")} |");
         Console.WriteLine($"| Full table scan (1000 records)            | {sharpResults.SelectMultipleTime:F0} ms | {sqliteResults.SelectMultipleTime:F0} ms | {(sharpResults.SelectMultipleTime < sqliteResults.SelectMultipleTime ? "SharpCoreDB" : "SQLite")} |");
         Console.WriteLine();
         Console.WriteLine("> Pure .NET 10 • Zero native deps • Run locally for your hardware");
@@ -98,14 +99,23 @@ public static class PerformanceTest
             for (int i = 0; i < recordCount; i++) testBatch.Add($"INSERT INTO Test VALUES ({i}, 'Test{i}')");
             db.ExecuteBatchSQL(testBatch);
 
-            var swIndexed = Stopwatch.StartNew();
+            // Without index
+            var swWithout = Stopwatch.StartNew();
             for (int i = 0; i < 1000; i++) db.ExecuteSQL("SELECT * FROM Test WHERE Id = 5000");
-            swIndexed.Stop();
+            swWithout.Stop();
+            Console.WriteLine($"1000 SELECTs without index: {swWithout.Elapsed.TotalMilliseconds:F1} ms ({swWithout.Elapsed.TotalMilliseconds / 1000:F3} ms/query)");
 
-            double avg = swIndexed.Elapsed.TotalMilliseconds / 1000;
-            Console.WriteLine($"1000 SELECTs took {swIndexed.ElapsedMilliseconds:F1} ms ? {avg:F3} ms/query");
+            // With index
+            db.ExecuteSQL("CREATE INDEX idx_id ON Test (Id)");
+            var swWith = Stopwatch.StartNew();
+            for (int i = 0; i < 1000; i++) db.ExecuteSQL("SELECT * FROM Test WHERE Id = 5000");
+            swWith.Stop();
+            Console.WriteLine($"1000 SELECTs with index: {swWith.Elapsed.TotalMilliseconds:F1} ms ({swWith.Elapsed.TotalMilliseconds / 1000:F3} ms/query)");
 
-            return (insertTime, selectTime, selectMultipleTime, swIndexed.Elapsed.TotalMilliseconds);
+            var speedup = swWithout.Elapsed.TotalMilliseconds / swWith.Elapsed.TotalMilliseconds;
+            Console.WriteLine($"Speedup with index: {speedup:F1}x");
+
+            return (insertTime, selectTime, selectMultipleTime, swWith.Elapsed.TotalMilliseconds);
         }
         finally
         {
@@ -114,7 +124,7 @@ public static class PerformanceTest
         }
     }
 
-    private static (double InsertTime, double SelectTime, double SelectMultipleTime) TestSQLite(int recordCount)
+    private static (double InsertTime, double SelectTime, double SelectMultipleTime, double IndexedSelectTime) TestSQLite(int recordCount)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"perf_test_sqlite_{Guid.NewGuid()}.db");
 
@@ -166,7 +176,20 @@ public static class PerformanceTest
             var selectMultipleTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SQLite Select Multiple: {selectMultipleTime:F0}ms");
 
-            return (insertTime, selectTime, selectMultipleTime);
+            // Indexed SELECT benchmark (1000 lookups)
+            sw.Restart();
+            for (int i = 0; i < 1000; i++)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT * FROM time_entries WHERE id = 5000";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read()) { }
+            }
+            sw.Stop();
+            var indexedSelectTime = sw.Elapsed.TotalMilliseconds;
+            Console.WriteLine($"SQLite 1000 Indexed SELECTs: {indexedSelectTime:F1} ms");
+
+            return (insertTime, selectTime, selectMultipleTime, indexedSelectTime);
         }
         finally
         {
