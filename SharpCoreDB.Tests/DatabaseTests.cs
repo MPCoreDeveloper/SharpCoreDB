@@ -56,7 +56,7 @@ public class DatabaseTests : IDisposable
         var parameters = new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } };
 
         // Act
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", parameters);
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", parameters);
 
         // Assert - Verify that parameters were bound (mock verification would be complex, 
         // but in real scenario we'd verify the SQL parser received bound parameters)
@@ -74,7 +74,7 @@ public class DatabaseTests : IDisposable
         // Act
         for (int i = 0; i < 100; i++)
         {
-            tasks.Add(db.ExecuteSQLAsync("INSERT INTO batch_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"value{i}" } }));
+            tasks.Add(db.ExecuteSQLAsync("INSERT INTO batch_test VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", $"value{i}" } }));
         }
 
         var sw = Stopwatch.StartNew();
@@ -97,7 +97,7 @@ public class DatabaseTests : IDisposable
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < batchSize; i++)
         {
-            db.ExecuteSQL("INSERT INTO perf_test VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" }, { "2", DateTime.UtcNow } });
+            db.ExecuteSQL("INSERT INTO perf_test VALUES (@0, @1, @2)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" }, { "2", DateTime.UtcNow } });
         }
         sw.Stop();
 
@@ -139,7 +139,7 @@ public class DatabaseTests : IDisposable
         // Insert test data
         for (int i = 0; i < 1000; i++)
         {
-            db.ExecuteSQL("INSERT INTO indexed_table VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"cat_{i % 10}" }, { "2", i * 10 } });
+            db.ExecuteSQL("INSERT INTO indexed_table VALUES (@0, @1, @2)", new Dictionary<string, object?> { { "0", i }, { "1", $"cat_{i % 10}" }, { "2", i * 10 } });
         }
 
         // Act - Measure indexed query performance
@@ -172,7 +172,7 @@ public class DatabaseTests : IDisposable
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < dataSize; i++)
         {
-            dbEncrypted.ExecuteSQL("INSERT INTO encrypt_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" } });
+            dbEncrypted.ExecuteSQL("INSERT INTO encrypt_test VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" } });
         }
         sw.Stop();
         var encryptedTime = sw.ElapsedMilliseconds;
@@ -183,7 +183,7 @@ public class DatabaseTests : IDisposable
         sw.Restart();
         for (int i = 0; i < dataSize; i++)
         {
-            dbNoEncrypt.ExecuteSQL("INSERT INTO encrypt_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" } });
+            dbNoEncrypt.ExecuteSQL("INSERT INTO encrypt_test VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", $"data_{i}" } });
         }
         sw.Stop();
         var noEncryptTime = sw.ElapsedMilliseconds;
@@ -207,7 +207,7 @@ public class DatabaseTests : IDisposable
             {
                 for (int j = 0; j < 10; j++)
                 {
-                    await db.ExecuteSQLAsync("INSERT INTO async_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", i * 10 + j }, { "1", $"async_data_{i}_{j}" } });
+                    await db.ExecuteSQLAsync("INSERT INTO async_test VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i * 10 + j }, { "1", $"async_data_{i}_{j}" } });
                 }
             }));
         }
@@ -227,7 +227,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE cache_test (id INTEGER, name TEXT)");
         for (int i = 0; i < 100; i++)
         {
-            db.ExecuteSQL("INSERT INTO cache_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"name_{i}" } });
+            db.ExecuteSQL("INSERT INTO cache_test VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", $"name_{i}" } });
         }
 
         // Act - Execute same query multiple times
@@ -256,8 +256,8 @@ public class DatabaseTests : IDisposable
         // Insert test data
         for (int i = 0; i < 100; i++)
         {
-            db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"User{i}" } });
-            db.ExecuteSQL("INSERT INTO orders VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", i % 10 }, { "2", i * 10.5 } });
+            db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", $"User{i}" } });
+            db.ExecuteSQL("INSERT INTO orders VALUES (@0, @1, @2)", new Dictionary<string, object?> { { "0", i }, { "1", i % 10 }, { "2", i * 10.5 } });
         }
 
         // Act - Measure JOIN performance
@@ -275,8 +275,8 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE sales (id INTEGER, amount DECIMAL)");
-        db.ExecuteSQL("INSERT INTO sales VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", 100.50m } });
-        db.ExecuteSQL("INSERT INTO sales VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", 200.75m } });
+        db.ExecuteSQL("INSERT INTO sales VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", 100.50m } });
+        db.ExecuteSQL("INSERT INTO sales VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", 200.75m } });
 
         // Act
         db.ExecuteSQL("SELECT SUM(amount) FROM sales");
@@ -291,9 +291,9 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE products (id INTEGER, category TEXT)");
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "A" } });
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "B" } });
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "A" } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "A" } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", "B" } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 3 }, { "1", "A" } });
 
         // Act
         db.ExecuteSQL("SELECT COUNT(DISTINCT category) FROM products");
@@ -311,7 +311,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE data (id INTEGER, value INTEGER)");
         for (int i = 0; i < 100; i++)
         {
-            db.ExecuteSQL("INSERT INTO data VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", i % 10 } });
+            db.ExecuteSQL("INSERT INTO data VALUES (@0, @1)", new Dictionary<string, object?> { { "0", i }, { "1", i % 10 } });
         }
 
         // Act - Execute aggregate queries multiple times
@@ -400,7 +400,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -414,9 +414,9 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Charlie" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Charlie" } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -430,7 +430,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (id INTEGER, name TEXT, active BOOLEAN)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" }, { "2", null } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0, @1, @2)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" }, { "2", null } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -472,11 +472,11 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
 
         // Act
-        db.ExecuteSQL("SELECT * FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+        db.ExecuteSQL("SELECT * FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -505,10 +505,10 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
 
         // Act
-        db.ExecuteSQL("UPDATE users SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "UpdatedAlice" }, { "1", 1 } });
+        db.ExecuteSQL("UPDATE users SET name = @0 WHERE id = @1", new Dictionary<string, object?> { { "0", "UpdatedAlice" }, { "1", 1 } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -520,11 +520,11 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
 
         // Act
-        db.ExecuteSQL("DELETE FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+        db.ExecuteSQL("DELETE FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
 
         // Assert - No exception thrown means success
         Assert.True(true);
@@ -595,7 +595,7 @@ public class DatabaseTests : IDisposable
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
-            dbReadonly.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } }));
+            dbReadonly.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } }));
     }
 
     [Fact]
@@ -604,17 +604,17 @@ public class DatabaseTests : IDisposable
         // Arrange - Create database with data first
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
 
         // Create readonly connection
         var dbReadonly = _factory.Create(_testDbPath, "testPassword", isReadOnly: true);
 
         // Act - Update operation on readonly doesn't throw but doesn't persist either
-        dbReadonly.ExecuteSQL("UPDATE users SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "Bob" }, { "1", 1 } });
+        dbReadonly.ExecuteSQL("UPDATE users SET name = @0 WHERE id = @1", new Dictionary<string, object?> { { "0", "Bob" }, { "1", 1 } });
 
         // Assert - Verify data hasn't changed by reading from a new connection
         var db2 = _factory.Create(_testDbPath, "testPassword");
-        db2.ExecuteSQL("SELECT * FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+        db2.ExecuteSQL("SELECT * FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
 
         // Test passes if no exception is thrown during readonly update
         Assert.True(true);
@@ -626,17 +626,17 @@ public class DatabaseTests : IDisposable
         // Arrange - Create database with data first
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+        db.ExecuteSQL("INSERT INTO users VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
 
         // Create readonly connection
         var dbReadonly = _factory.Create(_testDbPath, "testPassword", isReadOnly: true);
 
         // Act - Delete operation on readonly doesn't throw but doesn't persist either
-        dbReadonly.ExecuteSQL("DELETE FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+        dbReadonly.ExecuteSQL("DELETE FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
 
         // Assert - Verify data hasn't changed by reading from a new connection
         var db2 = _factory.Create(_testDbPath, "testPassword");
-        db2.ExecuteSQL("SELECT * FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+        db2.ExecuteSQL("SELECT * FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
 
         // Test passes if no exception is thrown during readonly delete
         Assert.True(true);
@@ -705,7 +705,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (id INTEGER)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", 42 } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", 42 } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -720,7 +720,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (name TEXT)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", "Hello World" } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", "Hello World" } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -735,7 +735,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (score REAL)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", 3.14159 } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", 3.14159 } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -750,8 +750,8 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (active BOOLEAN)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", true } });
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", false } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", true } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", false } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -766,7 +766,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (created DATETIME)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", new DateTime(2023, 12, 3, 10, 30, 0) } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", new DateTime(2023, 12, 3, 10, 30, 0) } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -781,7 +781,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (bigNum LONG)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", 9223372036854775807L } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", 9223372036854775807L } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -796,7 +796,7 @@ public class DatabaseTests : IDisposable
         db.ExecuteSQL("CREATE TABLE test (price DECIMAL)");
 
         // Act
-        db.ExecuteSQL("INSERT INTO test VALUES (?)", new Dictionary<string, object?> { { "0", 99.99m } });
+        db.ExecuteSQL("INSERT INTO test VALUES (@0)", new Dictionary<string, object?> { { "0", 99.99m } });
         db.ExecuteSQL("SELECT * FROM test");
 
         // Assert - No exception thrown means success
@@ -854,9 +854,9 @@ public class DatabaseTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testPassword");
         db.ExecuteSQL("CREATE TABLE products (id INTEGER, name TEXT, price DECIMAL, active BOOLEAN)");
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Product1" }, { "2", 10.99m }, { "3", true } });
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Product2" }, { "2", 20.99m }, { "3", false } });
-        db.ExecuteSQL("INSERT INTO products VALUES (?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Product3" }, { "2", 15.99m }, { "3", true } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1, @2, @3)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Product1" }, { "2", 10.99m }, { "3", true } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1, @2, @3)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Product2" }, { "2", 20.99m }, { "3", false } });
+        db.ExecuteSQL("INSERT INTO products VALUES (@0, @1, @2, @3)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Product3" }, { "2", 15.99m }, { "3", true } });
 
         // Act - Use WHERE clause with string literal comparison to avoid type parsing issues
         db.ExecuteSQL("SELECT * FROM products WHERE active = 'true'");
@@ -886,7 +886,7 @@ public class DatabaseTests : IDisposable
         var newUlid = Ulid.NewUlid().Value;
         var newGuid = Guid.NewGuid().ToString();
         // Use parameterized SQL for safety and to avoid interpolation warnings
-        db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?>
+        db.ExecuteSQL("INSERT INTO test VALUES (@0, @1, @2, @3, @4, @5, @6, @7, @8)", new Dictionary<string, object?>
         {
             { "0", 1 },
             { "1", "Test1" },
@@ -898,10 +898,10 @@ public class DatabaseTests : IDisposable
             { "7", newUlid },
             { "8", newGuid }
         });
-        db.ExecuteSQL("INSERT INTO test (id, name) VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "AutoTest" } });
+        db.ExecuteSQL("INSERT INTO test (id, name) VALUES (@0, @1)", new Dictionary<string, object?> { { "0", 2 }, { "1", "AutoTest" } });
         db.ExecuteSQL("SELECT * FROM test");
-        db.ExecuteSQL("SELECT * FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
-        db.ExecuteSQL("UPDATE test SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "UpdatedTest" }, { "1", 1 } });
+        db.ExecuteSQL("SELECT * FROM test WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
+        db.ExecuteSQL("UPDATE test SET name = @0 WHERE id = @1", new Dictionary<string, object?> { { "0", "UpdatedTest" }, { "1", 1 } });
         db.ExecuteSQL("SELECT * FROM test ORDER BY name ASC");
 
         // Assert - No exception thrown means success
