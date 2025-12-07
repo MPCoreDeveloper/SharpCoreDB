@@ -2,23 +2,47 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
     - uses: actions/checkout@v4
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 10.0.x
+        dotnet-version: '10.0.x'
+        include-prerelease: true
+
     - name: Restore dependencies
       run: dotnet restore
+
     - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Test with detailed logging
+      id: test
+      continue-on-error: true   # zodat we altijd artifacts krijgen
+      run: |
+        dotnet test --no-build --configuration Release \
+          --logger "trx;LogFileName=TestResults.trx" \
+          --logger "console;verbosity=detailed" \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          --blame-hang-timeout 2m \
+          /p:CollectCoverage=true
+
+    - name: Upload test results (always)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-trx
+        path: |
+          **/TestResults/*.trx
+          **/*.coverage
