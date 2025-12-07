@@ -69,6 +69,11 @@ public interface IDatabase
     (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics();
 
     /// <summary>
+    /// Clears the query cache.
+    /// </summary>
+    void ClearQueryCache();
+
+    /// <summary>
     /// Executes a parameterized SQL command.
     /// </summary>
     /// <param name="sql">The SQL command with ? placeholders.</param>
@@ -106,4 +111,21 @@ public interface IDatabase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task ExecutePreparedAsync(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a query and returns the results.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <returns>The query results.</returns>
+    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters = null);
+
+    /// <summary>
+    /// Executes a query and returns the results with optional encryption bypass.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
+    /// <returns>The query results.</returns>
+    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt);
 }

@@ -197,4 +197,34 @@ public class QueryCacheTests
         // Cleanup
         Directory.Delete(_testDbPath, true);
     }
+
+    [Fact]
+    public void QueryCache_1000RepeatedQueries_HighHitRate()
+    {
+        // Arrange
+        var factory = _serviceProvider.GetRequiredService<DatabaseFactory>();
+        var config = new DatabaseConfig { EnableQueryCache = true, QueryCacheSize = 1024 };
+        var db = factory.Create(_testDbPath, "test123", false, config);
+
+        db.ExecuteSQL("CREATE TABLE test_data (id INTEGER, value TEXT)");
+        for (int i = 0; i < 100; i++)
+        {
+            db.ExecuteSQL($"INSERT INTO test_data VALUES ({i}, 'Value{i}')");
+        }
+
+        // Act - Execute the same SELECT query 1000 times
+        var sql = "SELECT * FROM test_data WHERE id = 50";
+        for (int i = 0; i < 1000; i++)
+        {
+            db.ExecuteSQL(sql);
+        }
+
+        // Assert
+        var stats = db.GetQueryCacheStatistics();
+        Assert.True(stats.Hits >= 999, $"Should have at least 999 cache hits, got {stats.Hits}");
+        Assert.True(stats.HitRate > 0.80, $"Hit rate should be >80% for 1000 repeated queries, got {stats.HitRate:P2}");
+
+        // Cleanup
+        Directory.Delete(_testDbPath, true);
+    }
 }

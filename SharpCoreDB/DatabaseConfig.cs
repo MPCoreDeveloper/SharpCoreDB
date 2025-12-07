@@ -66,7 +66,7 @@ public class DatabaseConfig
         NoEncryptMode = true,
         EnableQueryCache = true,
         EnableHashIndexes = true,
-        WalBufferSize = 4 * 1024 * 1024, // 4MB
+        WalBufferSize = 128 * 1024, // 128KB
         UseBufferedIO = true,
         UseMemoryMapping = true,
         CollectGCAfterBatches = true,

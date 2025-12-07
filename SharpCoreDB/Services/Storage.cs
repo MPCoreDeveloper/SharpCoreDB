@@ -104,6 +104,12 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public byte[]? ReadBytes(string path)
     {
+        return ReadBytes(path, false);
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytes(string path, bool noEncrypt)
+    {
         if (!File.Exists(path))
         {
             return null;
@@ -130,7 +136,8 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
             fileData = File.ReadAllBytes(path);
         // }
 
-        if (this.noEncryption)
+        var effectiveNoEncrypt = noEncrypt || this.noEncryption;
+        if (effectiveNoEncrypt)
         {
             return fileData;
         }
@@ -179,6 +186,12 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public byte[]? ReadBytesAt(string path, long position, int maxLength)
     {
+        return ReadBytesAt(path, position, maxLength, false);
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesAt(string path, long position, int maxLength, bool noEncrypt)
+    {
         if (!File.Exists(path))
         {
             return null;
@@ -198,6 +211,21 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
             Array.Resize(ref buffer, bytesRead);
         }
 
-        return buffer;
+        var effectiveNoEncrypt = noEncrypt || this.noEncryption;
+        if (effectiveNoEncrypt)
+        {
+            return buffer;
+        }
+        else
+        {
+            try
+            {
+                return this.crypto.Decrypt(this.key, buffer);
+            }
+            catch
+            {
+                return buffer;
+            }
+        }
     }
 }

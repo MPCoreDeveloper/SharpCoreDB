@@ -55,6 +55,16 @@ public interface ITable
     List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true);
 
     /// <summary>
+    /// Selects rows from the table with optional filtering, ordering, and encryption bypass.
+    /// </summary>
+    /// <param name="where">The where clause string.</param>
+    /// <param name="orderBy">The column to order by.</param>
+    /// <param name="asc">Whether to order ascending.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this select.</param>
+    /// <returns>The selected rows.</returns>
+    List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt);
+
+    /// <summary>
     /// Updates rows in the table.
     /// </summary>
     /// <param name="where">The where clause string.</param>
@@ -86,4 +96,27 @@ public interface ITable
     /// <param name="columnName">The column name.</param>
     /// <returns>Index statistics or null if no index exists.</returns>
     (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName);
+
+    /// <summary>
+    /// Increments the usage count for a column in WHERE clauses.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    void IncrementColumnUsage(string columnName);
+
+    /// <summary>
+    /// Gets the column usage statistics.
+    /// </summary>
+    /// <returns>Dictionary of column names to usage counts.</returns>
+    IReadOnlyDictionary<string, long> GetColumnUsage();
+
+    /// <summary>
+    /// Tracks usage for all columns (e.g., SELECT *).
+    /// </summary>
+    void TrackAllColumnsUsage();
+
+    /// <summary>
+    /// Tracks usage for a specific column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    void TrackColumnUsage(string columnName);
 }

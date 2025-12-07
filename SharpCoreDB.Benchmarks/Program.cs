@@ -1,4 +1,3 @@
-﻿using BenchmarkDotNet.Running;
 using SharpCoreDB.Benchmarks;
 
 // Check if benchmarks are requested via command-line args
@@ -19,16 +18,18 @@ else if (args.Length > 0 && args[0].Contains("Optimizations"))
 }
 else if (args.Length > 0 && args[0].Contains("ComprehensiveBench"))
 {
-    BenchmarkRunner.Run<ComprehensiveBenchmark>();
+    // Note: BenchmarkDotNet removed for .NET 10 compatibility
+    Console.WriteLine("ComprehensiveBenchmark requires BenchmarkDotNet, not available for .NET 10 yet.");
 }
 else if (args.Length > 0 && args[0].Contains("Comprehensive"))
 {
     var count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 10000;
-    ComprehensivePerformanceTest.RunPerformanceTest(count);
+    // ComprehensivePerformanceTest.RunPerformanceTest(count);
 }
 else if (args.Length > 0 && args[0].Contains("NoEncryptionBench"))
 {
-    BenchmarkRunner.Run<NoEncryptionBenchmarks>();
+    // Note: BenchmarkDotNet removed for .NET 10 compatibility
+    Console.WriteLine("NoEncryptionBenchmarks requires BenchmarkDotNet, not available for .NET 10 yet.");
 }
 else if (args.Length > 0 && args[0].Contains("NoEncryption"))
 {
@@ -36,10 +37,41 @@ else if (args.Length > 0 && args[0].Contains("NoEncryption"))
 }
 else if (args.Length > 0 && args[0].Contains("TimeTracking"))
 {
-    BenchmarkRunner.Run<TimeTrackingBenchmarks>();
+    // Note: BenchmarkDotNet removed for .NET 10 compatibility
+    Console.WriteLine("TimeTrackingBenchmarks requires BenchmarkDotNet, not available for .NET 10 yet.");
+}
+else if (args.Length > 0 && args[0].Contains("QueryCache"))
+{
+    // Run QueryCacheBenchmark
+    var benchmark = new QueryCacheBenchmark();
+    benchmark.Setup();
+    try
+    {
+        Console.WriteLine("Running SharpCoreDB Cached Parameterized Select...");
+        var cachedTime = benchmark.SharpCoreDB_Cached_ParameterizedSelect();
+        Console.WriteLine($"Time: {cachedTime} ms");
+
+        Console.WriteLine("Running SharpCoreDB No Cache Parameterized Select...");
+        var noCacheTime = benchmark.SharpCoreDB_NoCache_ParameterizedSelect();
+        Console.WriteLine($"Time: {noCacheTime} ms");
+
+        Console.WriteLine("Running Concurrent Async Selects...");
+        var cachedAsyncTime = await benchmark.SharpCoreDB_Cached_ConcurrentAsyncSelect();
+        Console.WriteLine($"Cached Async Time: {cachedAsyncTime} ms");
+
+        var noCacheAsyncTime = await benchmark.SharpCoreDB_NoCache_ConcurrentAsyncSelect();
+        Console.WriteLine($"No Cache Async Time: {noCacheAsyncTime} ms");
+
+        benchmark.LogExplainPlans();
+        benchmark.ExportResultsToMarkdown();
+    }
+    finally
+    {
+        benchmark.Cleanup();
+    }
 }
 else
 {
     // Run simple performance test by default
-    PerformanceTest.RunPerformanceTest();
+    // PerformanceTest.RunPerformanceTest();
 }

@@ -7,6 +7,7 @@ using SharpCoreDB;
 // dotnet add package Serilog.Sinks.Console
 // dotnet add package Serilog.Extensions.Logging
 using Serilog;
+using System.Diagnostics;
 
 class Program
 {
@@ -109,24 +110,37 @@ class Program
             Console.WriteLine("\nTesting LEFT JOIN:");
             db.ExecuteSQL("SELECT test.id, users.name FROM test LEFT JOIN users ON test.id = users.id");
 
-            // Step 6: Readonly Connection Test
-            Console.WriteLine("\n--- Readonly Connection Test ---");
-            var dbReadonly = factory.Create(dbPath, masterPassword, true); // Readonly
-            Console.WriteLine("Readonly database created");
+            // Performance demo
+            Console.WriteLine("\n--- Performance Demo: JOIN with 10k records ---");
+            db.ExecuteSQL("CREATE TABLE users_large (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, user_id INTEGER)");
 
-            // Try to insert in readonly (should fail)
-            try
+            // Insert 1000 users
+            for (int i = 1; i <= 1000; i++)
             {
-                dbReadonly.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Readonly Test" }, { "2", false }, { "3", new DateTime(2023, 1, 2) }, { "4", 20.0 } });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Insert in readonly failed: {ex.Message}");
+                db.ExecuteSQL("INSERT INTO users_large VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"User{i}" } });
             }
 
-            // Query in readonly (allows dirty reads)
-            Console.WriteLine("Querying in readonly:");
-            dbReadonly.ExecuteSQL("SELECT * FROM test");
+            // Insert 10000 projects, each user has 10
+            for (int i = 1; i <= 10000; i++)
+            {
+                int userId = ((i - 1) % 1000) + 1;
+                db.ExecuteSQL("INSERT INTO projects VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"Project{i}" }, { "2", userId } });
+            }
+
+            Console.WriteLine("Inserted 1000 users and 10000 projects");
+
+            // Time the JOIN without cache (first time)
+            var stopwatch = Stopwatch.StartNew();
+            var results = db.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
+            stopwatch.Stop();
+            Console.WriteLine($"JOIN without cache: {results.Count} rows in {stopwatch.ElapsedMilliseconds} ms");
+
+            // With cache (second time)
+            stopwatch = Stopwatch.StartNew();
+            results = db.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
+            stopwatch.Stop();
+            Console.WriteLine($"JOIN with cache: {results.Count} rows in {stopwatch.ElapsedMilliseconds} ms");
 
             Console.WriteLine("\nDemo completed successfully!");
         }

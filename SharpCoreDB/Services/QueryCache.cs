@@ -17,6 +17,7 @@ public class QueryCache
     private readonly int maxSize;
     private long hits = 0;
     private long misses = 0;
+    private readonly ConcurrentDictionary<string, string> resultCache = new();
 
     /// <summary>
     /// Represents a cached query execution plan.
@@ -103,8 +104,17 @@ public class QueryCache
     public void Clear()
     {
         this.cache.Clear();
+        this.resultCache.Clear();
         Interlocked.Exchange(ref this.hits, 0);
         Interlocked.Exchange(ref this.misses, 0);
+    }
+
+    public string? GetCachedResult(string sql) => this.resultCache.TryGetValue(sql, out var res) ? res : null;
+
+    public void CacheResult(string sql, List<Dictionary<string, object>> results)
+    {
+        var json = OptimizedRowParser.SerializeRowsOptimized(results);
+        this.resultCache[sql] = json;
     }
 
     private void EvictLeastUsed()

@@ -73,6 +73,16 @@ public static class OptimizedRowParser
     }
 
     /// <summary>
+    /// Serializes multiple rows to JSON array with minimal allocations.
+    /// </summary>
+    /// <param name="rows">The rows to serialize.</param>
+    /// <returns>JSON array string.</returns>
+    public static string SerializeRowsOptimized(List<Dictionary<string, object>> rows)
+    {
+        return JsonSerializer.Serialize(rows);
+    }
+
+    /// <summary>
     /// Parses multiple rows from a JSON array with reduced allocations.
     /// </summary>
     /// <param name="jsonArrayBytes">The JSON array bytes.</param>

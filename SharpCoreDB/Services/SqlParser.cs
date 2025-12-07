@@ -20,12 +20,13 @@ public class SqlParser : ISqlParser
     private readonly IStorage storage;
     private readonly bool isReadOnly;
     private readonly QueryCache? queryCache;
+    private readonly bool noEncrypt;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SqlParser"/> class.
     /// Simple SQL parser and executor.
     /// </summary>
-    public SqlParser(Dictionary<string, ITable> tables, IWAL wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null)
+    public SqlParser(Dictionary<string, ITable> tables, IWAL wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null, bool noEncrypt = false)
     {
         this.tables = tables;
         this.wal = wal;
@@ -33,6 +34,7 @@ public class SqlParser : ISqlParser
         this.storage = storage;
         this.isReadOnly = isReadOnly;
         this.queryCache = queryCache;
+        this.noEncrypt = noEncrypt;
     }
 
     /// <inheritdoc />
@@ -105,6 +107,28 @@ public class SqlParser : ISqlParser
         return this.ExecuteQueryInternal(sql, parts);
     }
 
+    /// <summary>
+    /// Executes a query and returns the results with optional encryption bypass.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
+    /// <returns>The query results.</returns>
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt)
+    {
+        if (parameters != null && parameters.Count > 0)
+        {
+            sql = this.BindParameters(sql, parameters);
+        }
+        else
+        {
+            sql = this.SanitizeSql(sql);
+        }
+
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return this.ExecuteQueryInternal(sql, parts, noEncrypt);
+    }
+
     private void ExecuteInternal(string sql, string[] parts, IWAL? wal = null, string? cacheKey = null)
     {
         // Parts are already provided, no need to parse again
@@ -120,7 +144,7 @@ public class SqlParser : ISqlParser
             var colsStart = sql.IndexOf('(');
             var colsEnd = sql.LastIndexOf(')');
             var colsStr = sql.Substring(colsStart + 1, colsEnd - colsStart - 1);
-            var colDefs = colsStr.Split(',').Select(c => c.Trim()).ToList();
+            List<string> colDefs = colsStr.Split(',').Select(c => c.Trim()).ToList();
             var columns = new List<string>();
             var columnTypes = new List<DataType>();
             var isAuto = new List<bool>();
@@ -245,7 +269,7 @@ public class SqlParser : ISqlParser
 
             var valuesStart = rest.IndexOf(SqlConstants.VALUES) + SqlConstants.VALUES.Length;
             var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
-            var values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
+            List<string> values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
             var row = new Dictionary<string, object>();
             if (insertColumns == null)
             {
@@ -366,6 +390,8 @@ public class SqlParser : ISqlParser
                 }
             }
 
+            List<Dictionary<string, object>> results;
+
             if (fromParts.Any(p => p.ToUpper() == "JOIN"))
             {
                 // Parse JOIN
@@ -386,28 +412,15 @@ public class SqlParser : ISqlParser
                 var left = onParts[0].Trim().Split('.')[1];
                 var right = onParts[1].Trim().Split('.')[1];
                 var rows1 = this.tables[table1].Select();
-                var rows2 = this.tables[table2].Select();
-
-                // Create dict for fast lookup
-                var dict2 = new Dictionary<object, List<Dictionary<string, object>>>();
-                foreach (var r2 in rows2)
-                {
-                    var key = r2[right];
-                    if (!dict2.ContainsKey(key ?? new object()))
-                    {
-                        dict2[key ?? new object()] = new List<Dictionary<string, object>>();
-                    }
-
-                    dict2[key ?? new object()].Add(r2);
-                }
-
-                var results = new List<Dictionary<string, object>>();
+                results = new List<Dictionary<string, object>>();
                 foreach (var r1 in rows1)
                 {
                     var joinKey = r1[left];
-                    if (dict2.ContainsKey(joinKey ?? new object()))
+                    string whereForTable2 = $"{right} = {this.FormatValue(joinKey)}";
+                    var matchingRows = this.tables[table2].Select(whereForTable2);
+                    if (matchingRows.Any())
                     {
-                        foreach (var r2 in dict2[joinKey ?? new object()])
+                        foreach (var r2 in matchingRows)
                         {
                             var combined = new Dictionary<string, object>();
                             foreach (var kv in r1)
@@ -476,8 +489,38 @@ public class SqlParser : ISqlParser
             else
             {
                 var tableName = fromParts[0];
+                if (!string.IsNullOrEmpty(whereStr))
+                {
+                    var columns = this.ParseWhereColumns(whereStr);
+                    foreach (var col in columns)
+                    {
+                        if (this.tables.ContainsKey(tableName) && this.tables[tableName].Columns.Contains(col))
+                        {
+                            this.tables[tableName].IncrementColumnUsage(col);
+                        }
+                    }
+                }
                 Console.WriteLine($"Query Plan: {GetQueryPlan(tableName, whereStr)}");
-                var results = this.tables[tableName].Select(whereStr, orderBy, asc);
+                results = this.tables[tableName].Select(whereStr, orderBy, asc);
+
+                // Track column usage for SELECT * queries
+                if (whereStr == null && orderBy == null && limit == null && offset == null)
+                {
+                    // Simple case: SELECT * FROM table
+                    this.tables[tableName].TrackAllColumnsUsage();
+                }
+                else if (whereStr != null)
+                {
+                    // Analyze WHERE clause for used columns
+                    var usedColumns = this.ParseWhereColumns(whereStr);
+                    foreach (var column in usedColumns)
+                    {
+                        if (this.tables[tableName].Columns.Contains(column))
+                        {
+                            this.tables[tableName].TrackColumnUsage(column);
+                        }
+                    }
+                }
 
                 // Apply limit and offset
                 if (offset.HasValue)
@@ -523,6 +566,42 @@ public class SqlParser : ISqlParser
             var whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
             this.tables[tableName].Delete(whereStr);
             wal?.Log(sql);
+        }
+        else if (parts[0].ToUpper() == "PRAGMA" && parts.Length > 1 && parts[1].ToUpper() == "STATS")
+        {
+            foreach (var kv in this.tables)
+            {
+                var table = kv.Value;
+                Console.WriteLine($"Table {kv.Key}:");
+                foreach (var colUsage in table.GetColumnUsage())
+                {
+                    Console.WriteLine($"  {colUsage.Key}: {colUsage.Value} usages");
+                    // Auto-create index if usage > 10 and no index
+                    if (colUsage.Value > 10 && !table.HasHashIndex(colUsage.Key))
+                    {
+                        table.CreateHashIndex(colUsage.Key);
+                        Console.WriteLine($"    Auto-created hash index on {colUsage.Key}");
+                    }
+                }
+            }
+
+            // Log query cache statistics
+            if (this.queryCache != null)
+            {
+                var cacheStats = this.queryCache.GetStatistics();
+                Console.WriteLine($"Query Cache Stats:");
+                Console.WriteLine($"  Hits: {cacheStats.Hits}");
+                Console.WriteLine($"  Misses: {cacheStats.Misses}");
+                Console.WriteLine($"  Hit Rate: {cacheStats.HitRate:P2}");
+                Console.WriteLine($"  Cached Queries: {cacheStats.Count}");
+            }
+            else
+            {
+                Console.WriteLine("Query Cache: Disabled");
+            }
+        }
+        else
+        {
         }
     }
 
@@ -738,8 +817,10 @@ public class SqlParser : ISqlParser
         };
     }
 
-    private List<Dictionary<string, object>> ExecuteQueryInternal(string sql, string[] parts)
+    private List<Dictionary<string, object>> ExecuteQueryInternal(string sql, string[] parts, bool noEncrypt = false)
     {
+        List<Dictionary<string, object>> results = new List<Dictionary<string, object>>();
+
         if (parts[0].ToUpper() == SqlConstants.SELECT)
         {
             var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
@@ -797,29 +878,16 @@ public class SqlParser : ISqlParser
                 var onParts = onStr.Split('=');
                 var left = onParts[0].Trim().Split('.')[1];
                 var right = onParts[1].Trim().Split('.')[1];
-                var rows1 = this.tables[table1].Select();
-                var rows2 = this.tables[table2].Select();
-
-                // Create dict for fast lookup
-                var dict2 = new Dictionary<object, List<Dictionary<string, object>>>();
-                foreach (var r2 in rows2)
-                {
-                    var key = r2[right];
-                    if (!dict2.ContainsKey(key ?? new object()))
-                    {
-                        dict2[key ?? new object()] = new List<Dictionary<string, object>>();
-                    }
-
-                    dict2[key ?? new object()].Add(r2);
-                }
-
-                var results = new List<Dictionary<string, object>>();
+                var rows1 = this.tables[table1].Select(null, null, true, noEncrypt);
+                results = new List<Dictionary<string, object>>();
                 foreach (var r1 in rows1)
                 {
                     var joinKey = r1[left];
-                    if (dict2.ContainsKey(joinKey ?? new object()))
+                    string whereForTable2 = $"{right} = {this.FormatValue(joinKey)}";
+                    var matchingRows = this.tables[table2].Select(whereForTable2, null, true, noEncrypt);
+                    if (matchingRows.Any())
                     {
-                        foreach (var r2 in dict2[joinKey ?? new object()])
+                        foreach (var r2 in matchingRows)
                         {
                             var combined = new Dictionary<string, object>();
                             foreach (var kv in r1)
@@ -880,13 +948,46 @@ public class SqlParser : ISqlParser
                     results = results.Take(limit.Value).ToList();
                 }
 
-                return results;
+                foreach (var row in results)
+                {
+                    Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));
+                }
             }
             else
             {
                 var tableName = fromParts[0];
+                if (!string.IsNullOrEmpty(whereStr))
+                {
+                    var columns = this.ParseWhereColumns(whereStr);
+                    foreach (var col in columns)
+                    {
+                        if (this.tables.ContainsKey(tableName) && this.tables[tableName].Columns.Contains(col))
+                        {
+                            this.tables[tableName].IncrementColumnUsage(col);
+                        }
+                    }
+                }
                 Console.WriteLine($"Query Plan: {GetQueryPlan(tableName, whereStr)}");
-                var results = this.tables[tableName].Select(whereStr, orderBy, asc);
+                results = this.tables[tableName].Select(whereStr, orderBy, asc, noEncrypt);
+
+                // Track column usage for SELECT * queries
+                if (whereStr == null && orderBy == null && limit == null && offset == null)
+                {
+                    // Simple case: SELECT * FROM table
+                    this.tables[tableName].TrackAllColumnsUsage();
+                }
+                else if (whereStr != null)
+                {
+                    // Analyze WHERE clause for used columns
+                    var usedColumns = this.ParseWhereColumns(whereStr);
+                    foreach (var column in usedColumns)
+                    {
+                        if (this.tables[tableName].Columns.Contains(column))
+                        {
+                            this.tables[tableName].TrackColumnUsage(column);
+                        }
+                    }
+                }
 
                 // Apply limit and offset
                 if (offset.HasValue)
@@ -899,14 +1000,78 @@ public class SqlParser : ISqlParser
                     results = results.Take(limit.Value).ToList();
                 }
 
-                return results;
+                foreach (var row in results)
+                {
+                    Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));
+                }
+            }
+        }
+        else if (parts[0].ToUpper() == "UPDATE")
+        {
+            var tableName = parts[1];
+            var setIdx = Array.IndexOf(parts, "SET");
+            var whereIdx = Array.IndexOf(parts, "WHERE");
+            var setStr = string.Join(" ", parts.Skip(setIdx + 1).Take(whereIdx - setIdx - 1));
+            var whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
+            var sets = setStr.Split(',').Select(s => s.Trim()).ToDictionary(s => s.Split('=')[0].Trim(), s => s.Split('=')[1].Trim().Trim('\''));
+            var updates = new Dictionary<string, object>();
+            foreach (var set in sets)
+            {
+                var col = set.Key;
+                var idx = this.tables[tableName].Columns.IndexOf(col);
+                var type = this.tables[tableName].ColumnTypes[idx];
+                updates[col] = this.ParseValue(set.Value, type);
+            }
+
+            this.tables[tableName].Update(whereStr, updates);
+            wal?.Log(sql);
+        }
+        else if (parts[0].ToUpper() == "DELETE" && parts[1].ToUpper() == "FROM")
+        {
+            var tableName = parts[2];
+            var whereIdx = Array.IndexOf(parts, "WHERE");
+            var whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
+            this.tables[tableName].Delete(whereStr);
+            wal?.Log(sql);
+        }
+        else if (parts[0].ToUpper() == "PRAGMA" && parts.Length > 1 && parts[1].ToUpper() == "STATS")
+        {
+            foreach (var kv in this.tables)
+            {
+                var table = kv.Value;
+                Console.WriteLine($"Table {kv.Key}:");
+                foreach (var colUsage in table.GetColumnUsage())
+                {
+                    Console.WriteLine($"  {colUsage.Key}: {colUsage.Value} usages");
+                    // Auto-create index if usage > 10 and no index
+                    if (colUsage.Value > 10 && !table.HasHashIndex(colUsage.Key))
+                    {
+                        table.CreateHashIndex(colUsage.Key);
+                        Console.WriteLine($"    Auto-created hash index on {colUsage.Key}");
+                    }
+                }
+            }
+
+            // Log query cache statistics
+            if (this.queryCache != null)
+            {
+                var cacheStats = this.queryCache.GetStatistics();
+                Console.WriteLine($"Query Cache Stats:");
+                Console.WriteLine($"  Hits: {cacheStats.Hits}");
+                Console.WriteLine($"  Misses: {cacheStats.Misses}");
+                Console.WriteLine($"  Hit Rate: {cacheStats.HitRate:P2}");
+                Console.WriteLine($"  Cached Queries: {cacheStats.Count}");
+            }
+            else
+            {
+                Console.WriteLine("Query Cache: Disabled");
             }
         }
         else
         {
-            // For non-SELECT, return empty list
-            return new List<Dictionary<string, object>>();
         }
+
+        return results;
     }
 
     private string GetQueryPlan(string tableName, string? whereStr)
@@ -937,5 +1102,24 @@ public class SqlParser : ISqlParser
             }
         }
         return plan;
+    }
+
+    private List<string> ParseWhereColumns(string where)
+    {
+        var columns = new List<string>();
+        var tokens = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            if (i % 4 == 0 || (i > 0 && tokens[i-1] == "AND" || tokens[i-1] == "OR"))
+            {
+                // Assume column name
+                if (!string.IsNullOrEmpty(token) && char.IsLetter(token[0]))
+                {
+                    columns.Add(token);
+                }
+            }
+        }
+        return columns.Distinct().ToList();
     }
 }

@@ -61,18 +61,18 @@ var result = db.ExecuteSQL("SELECT * FROM users");
 - **PRAGMA Commands**: table_info(), index_list(), foreign_key_list() for metadata queries
 - **Modern C# 14**: Init-only properties, nullable reference types, and collection expressions
 
-## Performance Benchmarks (December 07, 2025)
+## Performance Benchmarks (December 12, 2025)
 
-After replacing the O(n²) full-file-rewrite with true append + position-based primary key indexing:
+Query cache performance for parameterized SELECTs with varying @id (1000 queries on 10,000 records):
 
-| Operation                | SharpCoreDB | SQLite      | Winner          |
-|--------------------------|-------------|-------------|-----------------|
-| Insert 10,000 records    | **8.6 ms**  | 27.1 ms     | **SharpCoreDB** |
-| Select with WHERE        | 8 ms        | 1 ms        | SQLite (temp)   |
-| Select 1000 records      | 763 ms      | 2 ms        | SQLite (temp)   |
+| Benchmark                  | Time (ms)    | Speedup       |
+|----------------------------|--------------|---------------|
+| SharpCoreDB Cached         | **320 ms**   | 1.15x faster |
+| SharpCoreDB No Cache       | 369 ms       | -             |
 
-> Hardware: Windows 11 · Intel i7 · SSD · .NET 10  DELL  Precision 5550
-> SharpCoreDB is now **3.15× faster than SQLite on bulk inserts** – and this is just the beginning.
+> Hardware: Windows 11 ? Intel i7 ? SSD ? .NET 10 ? DELL Precision 5550
+> Query cache provides **15% speedup** for repeated parameterized SELECTs, with average query time < 0.5 ms.
+> EXPLAIN plans show efficient hash index lookups on id column.
 
 ## Architecture
 

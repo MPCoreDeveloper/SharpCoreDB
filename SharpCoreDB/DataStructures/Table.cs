@@ -8,6 +8,8 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 
 /// <summary>
 /// Implementation of ITable.
@@ -35,10 +37,12 @@ public class Table : ITable, IDisposable
 
     private readonly Dictionary<string, HashIndex> hashIndexes = [];
     private IStorage? storage;
-    private readonly Lock @lock = new();
+    private readonly ReaderWriterLockSlim rwLock = new();
     private bool isReadOnly;
     private IndexManager? indexManager;
     private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
+    private readonly Dictionary<string, long> columnUsage = new();
+    private readonly object usageLock = new();
 
     public void SetStorage(IStorage storage) => this.storage = storage;
     public void SetReadOnly(bool isReadOnly) => this.isReadOnly = isReadOnly;
@@ -49,7 +53,8 @@ public class Table : ITable, IDisposable
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
-        lock (this.@lock)
+        this.rwLock.EnterWriteLock();
+        try
         {
             // Validate + fill defaults
             for (int i = 0; i < this.Columns.Count; i++)
@@ -96,22 +101,40 @@ public class Table : ITable, IDisposable
                 _ = _indexQueue.Writer.WriteAsync(new IndexUpdate(row, this.hashIndexes.Values, position));
             }
         }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true)
     {
-        ArgumentNullException.ThrowIfNull(this.storage);
-        return this.isReadOnly ? SelectInternal(where, orderBy, asc) : SelectWithLock(where, orderBy, asc);
+        return Select(where, orderBy, asc, false);
     }
 
-    private List<Dictionary<string, object>> SelectWithLock(string? where, string? orderBy, bool asc)
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt)
     {
-        lock (this.@lock) return SelectInternal(where, orderBy, asc);
+        ArgumentNullException.ThrowIfNull(this.storage);
+        return this.isReadOnly ? SelectInternal(where, orderBy, asc, noEncrypt) : SelectWithLock(where, orderBy, asc, noEncrypt);
+    }
+
+    private List<Dictionary<string, object>> SelectWithLock(string? where, string? orderBy, bool asc, bool noEncrypt)
+    {
+        this.rwLock.EnterReadLock();
+        try
+        {
+            return SelectInternal(where, orderBy, asc, noEncrypt);
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc)
+    private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc, bool noEncrypt)
     {
         var results = new List<Dictionary<string, object>>();
 
@@ -132,7 +155,7 @@ public class Table : ITable, IDisposable
                         var positions = hashIndex.LookupPositions(key);
                         foreach (var pos in positions)
                         {
-                            var row = ReadRowAtPosition(pos);
+                            var row = ReadRowAtPosition(pos, noEncrypt);
                             if (row != null) results.Add(row);
                         }
                         if (results.Count > 0) goto ApplyOrderBy;
@@ -153,7 +176,7 @@ public class Table : ITable, IDisposable
                 if (searchResult.Found)
                 {
                     long position = searchResult.Value;
-                    var row = ReadRowAtPosition(position);
+                    var row = ReadRowAtPosition(position, noEncrypt);
                     if (row != null) results.Add(row);
                     goto ApplyOrderBy;
                 }
@@ -163,7 +186,7 @@ public class Table : ITable, IDisposable
         // 3. Full scan fallback
         if (results.Count == 0)
         {
-            var data = this.storage.ReadBytes(this.DataFile);
+            var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
             if (data != null && data.Length > 0)
             {
                 using var ms = new MemoryStream(data);
@@ -193,9 +216,9 @@ public class Table : ITable, IDisposable
         return results;
     }
 
-    private Dictionary<string, object>? ReadRowAtPosition(long position)
+    private Dictionary<string, object>? ReadRowAtPosition(long position, bool noEncrypt = false)
     {
-        var data = this.storage.ReadBytesAt(this.DataFile, position, 8192);
+        var data = this.storage.ReadBytesAt(this.DataFile, position, 8192, noEncrypt);
         if (data == null || data.Length == 0) return null;
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
@@ -233,9 +256,10 @@ public class Table : ITable, IDisposable
     {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
 
-        lock (this.@lock)
+        this.rwLock.EnterWriteLock();
+        try
         {
-            var rows = this.SelectInternal(where, null, true);
+            var rows = this.SelectInternal(where, null, true, false);
             foreach (var row in rows)
             {
                 foreach (var update in updates)
@@ -245,16 +269,25 @@ public class Table : ITable, IDisposable
                 // Note: In a real implementation, this would update the storage
             }
         }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
     }
 
     public void Delete(string? where)
     {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
 
-        lock (this.@lock)
+        this.rwLock.EnterWriteLock();
+        try
         {
-            var rows = this.SelectInternal(where, null, true);
+            var rows = this.SelectInternal(where, null, true, false);
             // Note: In a real implementation, this would remove from storage
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
         }
     }
 
@@ -402,6 +435,7 @@ public class Table : ITable, IDisposable
     {
         this.indexManager?.Dispose();
         _indexQueue.Writer.Complete();
+        this.rwLock.Dispose();
     }
 
     public bool HasHashIndex(string columnName) => this.hashIndexes.ContainsKey(columnName);
@@ -413,6 +447,50 @@ public class Table : ITable, IDisposable
             return index.GetStatistics();
         }
         return null;
+    }
+
+    public void IncrementColumnUsage(string columnName)
+    {
+        lock (usageLock)
+        {
+            if (!columnUsage.TryGetValue(columnName, out var count))
+                columnUsage[columnName] = 1;
+            else
+                columnUsage[columnName] = count + 1;
+        }
+    }
+
+    public IReadOnlyDictionary<string, long> GetColumnUsage()
+    {
+        lock (this.usageLock)
+        {
+            return new ReadOnlyDictionary<string, long>(this.columnUsage);
+        }
+    }
+
+    public void TrackAllColumnsUsage()
+    {
+        lock (this.usageLock)
+        {
+            foreach (var col in this.Columns)
+            {
+                if (this.columnUsage.ContainsKey(col))
+                    this.columnUsage[col]++;
+                else
+                    this.columnUsage[col] = 1;
+            }
+        }
+    }
+
+    public void TrackColumnUsage(string columnName)
+    {
+        lock (this.usageLock)
+        {
+            if (this.columnUsage.ContainsKey(columnName))
+                this.columnUsage[columnName]++;
+            else
+                this.columnUsage[columnName] = 1;
+        }
     }
 
     private async Task ProcessIndexUpdatesAsync()

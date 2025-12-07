@@ -23,16 +23,17 @@ public class Database : IDatabase
     private readonly IUserService userService;
     private readonly Dictionary<string, ITable> tables = [];
     private readonly string _dbPath;
+    public string DbPath => _dbPath;
     private readonly bool isReadOnly;
     private readonly DatabaseConfig? config;
     private readonly SecurityConfig? securityConfig;
     private readonly QueryCache? queryCache;
     private readonly object _walLock = new object();
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _prepared = new();
+    private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
     private readonly WalManager _walManager;
 
     // PERFORMANCE FIX: Cache prepared query plans to avoid repeated parsing
-    private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
@@ -338,7 +339,7 @@ public class Database : IDatabase
         if (!_preparedPlans.TryGetValue(sql, out var plan))
         {
             var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            plan = new CachedQueryPlan { Sql = sql, Parts = parts };
+            plan = new CachedQueryPlan(sql, parts);
             _preparedPlans[sql] = plan;
         }
         return new PreparedStatement(sql, plan);
@@ -359,56 +360,74 @@ public class Database : IDatabase
     }
 
     /// <summary>
-    /// Executes a query asynchronously and returns the results as a streaming enumerable.
+    /// Clears the query cache.
+    /// </summary>
+    public void ClearQueryCache()
+    {
+        this.queryCache?.Clear();
+    }
+
+    /// <summary>
+    /// Gets database statistics including performance metrics.
+    /// </summary>
+    /// <returns>A dictionary of statistics.</returns>
+    public Dictionary<string, object> GetDatabaseStatistics()
+    {
+        var stats = new Dictionary<string, object>
+        {
+            ["TablesCount"] = this.tables.Count,
+            ["IsReadOnly"] = this.isReadOnly,
+            ["QueryCacheEnabled"] = this.config.EnableQueryCache,
+            ["NoEncryptMode"] = this.config.NoEncryptMode,
+            ["UseMemoryMapping"] = this.config.UseMemoryMapping,
+            ["WalBufferSize"] = this.config.WalBufferSize,
+        };
+
+        if (this.queryCache != null)
+        {
+            var cacheStats = this.queryCache.GetStatistics();
+            stats["QueryCacheHits"] = cacheStats.Hits;
+            stats["QueryCacheMisses"] = cacheStats.Misses;
+            stats["QueryCacheHitRate"] = cacheStats.HitRate;
+            stats["QueryCacheCount"] = cacheStats.Count;
+        }
+
+        // Add table-specific stats
+        foreach (var kv in this.tables)
+        {
+            var table = kv.Value;
+            stats[$"Table_{kv.Key}_Columns"] = table.Columns.Count;
+            stats[$"Table_{kv.Key}_Rows"] = table.Select().Count; // Rough estimate
+            var usage = table.GetColumnUsage();
+            stats[$"Table_{kv.Key}_ColumnUsage"] = usage;
+        }
+
+        return stats;
+    }
+
+    /// <summary>
+    /// Executes a query and returns the results.
     /// </summary>
     /// <param name="sql">The SQL query.</param>
     /// <param name="parameters">The parameters.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>An asynchronous enumerable of rows.</returns>
-    public async IAsyncEnumerable<Dictionary<string, object>> ExecuteQueryAsync(string sql, Dictionary<string, object?> parameters = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    /// <returns>The query results.</returns>
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters = null)
     {
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].ToUpper() != SqlConstants.SELECT)
-        {
-            yield break;
-        }
-
         var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
-        var results = await Task.Run(() => sqlParser.ExecuteQuery(sql, parameters), cancellationToken);
-        int capacity = EstimateCapacity(sql);
-        var buffer = ArrayPool<Dictionary<string, object>>.Shared.Rent(capacity);
-        try
-        {
-            int i = 0;
-            foreach (var row in results)
-            {
-                if (i >= capacity) break;
-                buffer[i] = row;
-                yield return buffer[i];
-                i++;
-            }
-        }
-        finally
-        {
-            ArrayPool<Dictionary<string, object>>.Shared.Return(buffer);
-        }
+        return sqlParser.ExecuteQuery(sql, parameters);
     }
 
-    private int EstimateCapacity(string sql)
+    /// <summary>
+    /// Executes a query and returns the results with optional encryption bypass.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
+    /// <returns>The query results.</returns>
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt)
     {
-        if (sql.Contains("LIMIT"))
-        {
-            var parts = sql.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var limitIdx = Array.IndexOf(parts, "LIMIT");
-            if (limitIdx >= 0 && limitIdx + 1 < parts.Length)
-            {
-                if (int.TryParse(parts[limitIdx + 1], out var limit))
-                {
-                    return limit;
-                }
-            }
-        }
-        return 1000;
+        var sqlParser = new SqlParser(this.tables, null, this._dbPath, this.storage, this.isReadOnly, this.queryCache, noEncrypt);
+        return sqlParser.ExecuteQuery(sql, parameters, noEncrypt);
     }
 }
 

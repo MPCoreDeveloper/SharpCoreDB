@@ -23,7 +23,8 @@ public class AutoMaintenanceService : IDisposable
     /// Initializes a new instance of the <see cref="AutoMaintenanceService"/> class.
     /// </summary>
     /// <param name="database">The database instance to maintain.</param>
-    /// <param name="intervalSeconds">Interval in seconds for automatic maintenance (default 300 = 5 minutes).</param>
+    /// <param name="intervalSeconds">Interval in seconds for automatic maintenance (default 300 = 5 minutes).
+    /// For read-heavy workloads, consider increasing this interval (e.g., 1800 = 30 minutes) to reduce checkpoint frequency.</param>
     /// <param name="writeThreshold">Number of writes before triggering maintenance (default 1000).</param>
     public AutoMaintenanceService(IDatabase database, int intervalSeconds = 300, int writeThreshold = 1000)
     {
@@ -72,6 +73,9 @@ public class AutoMaintenanceService : IDisposable
             {
                 this.writeCount = 0;
             }
+
+            // Clear query cache at WAL checkpoint to ensure consistency
+            this.database.ClearQueryCache();
 
             // Note: Actual VACUUM and CHECKPOINT implementation would go here
             // This would typically involve:

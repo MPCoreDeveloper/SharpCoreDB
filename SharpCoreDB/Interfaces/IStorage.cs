@@ -45,6 +45,14 @@ public interface IStorage
     byte[]? ReadBytes(string path);
 
     /// <summary>
+    /// Reads binary data from an encrypted file with optional encryption bypass.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this operation.</param>
+    /// <returns>The read data, or null if file does not exist.</returns>
+    byte[]? ReadBytes(string path, bool noEncrypt);
+
+    /// <summary>
     /// Appends binary data to a file (used for high-performance inserts).
     /// </summary>
     /// <param name="path">The file path.</param>
@@ -68,4 +76,14 @@ public interface IStorage
     /// <param name="maxLength">The maximum number of bytes to read.</param>
     /// <returns>The read data, or null if file does not exist or position is invalid.</returns>
     byte[]? ReadBytesAt(string path, long position, int maxLength);
+
+    /// <summary>
+    /// Reads binary data from a file starting at the specified position with a maximum length, with optional encryption bypass.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="position">The position to start reading from.</param>
+    /// <param name="maxLength">The maximum number of bytes to read.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this operation.</param>
+    /// <returns>The read data, or null if file does not exist or position is invalid.</returns>
+    byte[]? ReadBytesAt(string path, long position, int maxLength, bool noEncrypt);
 }

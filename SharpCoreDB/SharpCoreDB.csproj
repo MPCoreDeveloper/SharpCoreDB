@@ -54,5 +54,9 @@
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="SharpCoreDB.Benchmarks\Benchmark.cs" />
+  </ItemGroup>
+
 </Project>
 

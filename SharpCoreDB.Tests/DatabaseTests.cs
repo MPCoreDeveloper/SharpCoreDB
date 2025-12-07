@@ -269,6 +269,64 @@ public class DatabaseTests : IDisposable
         Assert.True(sw.ElapsedMilliseconds < 5000, $"JOIN took {sw.ElapsedMilliseconds}ms");
     }
 
+    [Fact]
+    public void Database_Select_WithAggregates_SUM_Success()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testPassword");
+        db.ExecuteSQL("CREATE TABLE sales (id INTEGER, amount DECIMAL)");
+        db.ExecuteSQL("INSERT INTO sales VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", 100.50m } });
+        db.ExecuteSQL("INSERT INTO sales VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", 200.75m } });
+
+        // Act
+        db.ExecuteSQL("SELECT SUM(amount) FROM sales");
+
+        // Assert - No exception thrown means success
+        Assert.True(true);
+    }
+
+    [Fact]
+    public void Database_Select_WithAggregates_COUNT_DISTINCT_Success()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testPassword");
+        db.ExecuteSQL("CREATE TABLE products (id INTEGER, category TEXT)");
+        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "A" } });
+        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "B" } });
+        db.ExecuteSQL("INSERT INTO products VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "A" } });
+
+        // Act
+        db.ExecuteSQL("SELECT COUNT(DISTINCT category) FROM products");
+
+        // Assert - No exception thrown means success
+        Assert.True(true);
+    }
+
+    [Fact]
+    public void Database_QueryCache_Aggregates_HighHitRate()
+    {
+        // Arrange
+        var config = new DatabaseConfig { EnableQueryCache = true, QueryCacheSize = 100 };
+        var db = _factory.Create(_testDbPath, "testPassword", config: config);
+        db.ExecuteSQL("CREATE TABLE data (id INTEGER, value INTEGER)");
+        for (int i = 0; i < 100; i++)
+        {
+            db.ExecuteSQL("INSERT INTO data VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", i % 10 } });
+        }
+
+        // Act - Execute aggregate queries multiple times
+        for (int i = 0; i < 10; i++)
+        {
+            db.ExecuteSQL("SELECT SUM(value) FROM data");
+            db.ExecuteSQL("SELECT COUNT(DISTINCT value) FROM data");
+        }
+
+        // Assert
+        var stats = db.GetQueryCacheStatistics();
+        Assert.True(stats.Hits > 10, $"Should have cache hits for repeated aggregates, got {stats.Hits}");
+        Assert.True(stats.HitRate > 0.5, $"Hit rate should be >50%, got {stats.HitRate:P2}");
+    }
+
     // Existing Integration Tests
 
     [Fact]
