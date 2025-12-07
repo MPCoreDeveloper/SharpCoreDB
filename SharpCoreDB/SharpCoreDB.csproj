@@ -44,7 +44,6 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
-    <None Include=".github\workflows\ci.yml" />
     <None Include="SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
     <None Include="SharpCoreDB.Samples\SharpCoreDB.Samples.csproj" />
     <None Include="SharpCoreDB.Tests\SharpCoreDB.Tests.csproj" />
@@ -56,6 +55,10 @@
 
   <ItemGroup>
     <Compile Include="SharpCoreDB.Benchmarks\Benchmark.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include=".github\workflows\" />
   </ItemGroup>
 
 </Project>

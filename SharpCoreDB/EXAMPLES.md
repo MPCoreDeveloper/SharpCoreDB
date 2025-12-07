@@ -64,6 +64,36 @@ class Program
 }
 ```
 
+## Parameterized Queries (NEW)
+
+Safer queries using positional or named parameters:
+
+```csharp
+var parameters = new Dictionary<string, object?>
+{
+    ["0"] = "John Doe",
+    ["1"] = 30
+};
+await db.ExecuteSQLAsync("INSERT INTO users (name, age) VALUES (?, ?)", parameters);
+
+var named = new Dictionary<string, object?> { ["id"] = 123 };
+var rows = await db.ExecuteSQLAsync("SELECT * FROM users WHERE id = @id", named);
+```
+
+## Hash Indexes and Query Cache (NEW)
+
+Create indexes and enable cache for fast lookups:
+
+```csharp
+// Enable cache
+var config = new DatabaseConfig { EnableQueryCache = true, QueryCacheSize = 1024 };
+var fastDb = factory.Create("fast.db", "pw", false, config);
+
+// Indexes
+fastDb.ExecuteSQL("CREATE INDEX idx_email ON users (email)");
+var r = fastDb.ExecuteSQL("SELECT * FROM users WHERE email = 'alice@example.com'");
+```
+
 ## Entity Framework Core Migration Example
 
 Using SharpCoreDB with EF Core for migrations:
@@ -212,34 +242,6 @@ SharpCoreDB uses memory-mapped files for efficient I/O.
 ```csharp
 var stats = db.GetQueryCacheStatistics();
 Console.WriteLine($"Cache hit rate: {stats.HitRate:P2}");
-```
-
-## Parameterized Queries
-
-Parameterized queries help prevent SQL injection by separating SQL code from data.
-
-### Example: Insert with Parameters
-
-```csharp
-using SharpCoreDB;
-
-var db = new DatabaseFactory(services).Create("path/to/db", "password");
-var parameters = new Dictionary<string, object?>
-{
-    ["0"] = "John Doe",
-    ["1"] = 30
-};
-await db.ExecuteSQLAsync("INSERT INTO users (name, age) VALUES (?, ?)", parameters);
-```
-
-### Example: Select with Parameters
-
-```csharp
-var parameters = new Dictionary<string, object?>
-{
-    ["0"] = "John Doe"
-};
-await db.ExecuteSQLAsync("SELECT * FROM users WHERE name = ?", parameters);
 ```
 
 ## Extended SQL Support
