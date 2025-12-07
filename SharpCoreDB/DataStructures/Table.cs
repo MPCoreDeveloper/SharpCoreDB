@@ -110,7 +110,7 @@ public class Table : ITable, IDisposable
             throw new InvalidOperationException("Cannot insert in readonly mode");
         }
 
-        // .NET 10: Use lock statement with Lock type for better performance
+        // PERFORMANCE: True append with position tracking – O(1) disk writes per insert
         lock (this.@lock)
         {
             // Validate types
@@ -160,12 +160,15 @@ public class Table : ITable, IDisposable
 
             var rowData = rowMs.ToArray();
 
-            // Append to file
-            var data = this.storage.ReadBytes(this.DataFile) ?? [];
-            using var ms = new MemoryStream();
-            ms.Write(data, 0, data.Length);
-            ms.Write(rowData, 0, rowData.Length);
-            this.storage.WriteBytes(this.DataFile, ms.ToArray());
+            // Append to file (O(1) disk write)
+            long position = this.storage.AppendBytes(this.DataFile, rowData);
+
+            // Store position in primary key index
+            if (this.PrimaryKeyIndex >= 0)
+            {
+                var pkVal = row[this.Columns[this.PrimaryKeyIndex]];
+                this.Index.Insert(pkVal?.ToString() ?? string.Empty, position);
+            }
 
             // Queue index updates asynchronously
             if (this.indexManager != null && this.hashIndexes.Count > 0)
@@ -226,8 +229,37 @@ public class Table : ITable, IDisposable
             }
         }
 
-        // Fall back to full table scan if hash index wasn't used
-        if (!usedHashIndex)
+        // Try to use primary key index for WHERE clause if available
+        bool usedPkIndex = false;
+        if (!usedHashIndex && where != null && this.PrimaryKeyIndex >= 0)
+        {
+            var whereParts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (whereParts.Length == 3 && whereParts[1] == "=" && whereParts[0] == this.Columns[this.PrimaryKeyIndex])
+            {
+                var val = whereParts[2].Trim('\'');
+                var (found, position) = this.Index.Search(val);
+                if (found)
+                {
+                    // Read the row at position
+                    var data = this.storage.ReadBytesFrom(this.DataFile, position);
+                    if (data != null)
+                    {
+                        using var ms = new MemoryStream(data);
+                        using var reader = new BinaryReader(ms);
+                        var row = new Dictionary<string, object>();
+                        for (int i = 0; i < this.Columns.Count; i++)
+                        {
+                            row[this.Columns[i]] = this.ReadTypedValue(reader, this.ColumnTypes[i]);
+                        }
+                        results.Add(row);
+                        usedPkIndex = true;
+                    }
+                }
+            }
+        }
+
+        // Fall back to full table scan if indexes weren't used
+        if (!usedHashIndex && !usedPkIndex)
         {
             var data = this.storage.ReadBytes(this.DataFile);
             if (data == null || data.Length == 0)

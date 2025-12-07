@@ -181,4 +181,30 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
             return data;
         }
     }
+
+    /// <inheritdoc />
+    public long AppendBytes(string path, byte[] data)
+    {
+        // PERFORMANCE: True append for O(1) inserts - no compression/encryption for speed
+        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+        long position = fs.Position;
+        fs.Write(data, 0, data.Length);
+        return position;
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesFrom(string path, long offset)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        // PERFORMANCE: Read from offset for position-based access
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        fs.Seek(offset, SeekOrigin.Begin);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
 }

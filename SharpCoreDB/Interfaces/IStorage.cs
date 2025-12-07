@@ -43,4 +43,20 @@ public interface IStorage
     /// <param name="path">The file path.</param>
     /// <returns>The read data, or null if file does not exist.</returns>
     byte[]? ReadBytes(string path);
+
+    /// <summary>
+    /// Appends binary data to a file (used for high-performance inserts).
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="data">The data to append.</param>
+    /// <returns>The offset where the data was appended.</returns>
+    long AppendBytes(string path, byte[] data);
+
+    /// <summary>
+    /// Reads binary data from a file starting from the specified offset.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="offset">The offset to start reading from.</param>
+    /// <returns>The read data from offset to end, or null if file does not exist.</returns>
+    byte[]? ReadBytesFrom(string path, long offset);
 }
