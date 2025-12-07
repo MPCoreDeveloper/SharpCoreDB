@@ -36,7 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**/*.cs" Exclude="SharpCoreDB.Test/**;obj/**" />
+    <Compile Include="**/*.cs" Exclude="SharpCoreDB.Test/**;obj/**;SharpCoreDB.Benchmarks/**" />
     <Compile Remove="obj/**/*.cs" />
   </ItemGroup>
 

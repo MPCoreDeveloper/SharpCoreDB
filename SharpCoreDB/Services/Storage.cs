@@ -175,4 +175,29 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         int length = reader.ReadInt32();
         return reader.ReadBytes(length);
     }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesAt(string path, long position, int maxLength)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        fs.Seek(position, SeekOrigin.Begin);
+        var buffer = new byte[maxLength];
+        int bytesRead = fs.Read(buffer, 0, maxLength);
+        if (bytesRead == 0)
+        {
+            return null;
+        }
+
+        if (bytesRead < maxLength)
+        {
+            Array.Resize(ref buffer, bytesRead);
+        }
+
+        return buffer;
+    }
 }

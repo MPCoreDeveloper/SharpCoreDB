@@ -17,20 +17,18 @@ public class HashIndexTests
         var row3 = new Dictionary<string, object> { { "id", 1 }, { "name", "Alice2" } };
 
         // Act
-        index.Add(row1);
-        index.Add(row2);
-        index.Add(row3);
+        index.Add(row1, 0);
+        index.Add(row2, 1);
+        index.Add(row3, 2);
 
-        var results1 = index.Lookup(1);
-        var results2 = index.Lookup(2);
-        var results3 = index.Lookup(999);
+        var positions1 = index.LookupPositions(1);
+        var positions2 = index.LookupPositions(2);
+        var positions3 = index.LookupPositions(999);
 
         // Assert
-        Assert.Equal(2, results1.Count); // Two rows with id=1
-        Assert.Single(results2); // One row with id=2
-        Assert.Empty(results3); // No rows with id=999
-        Assert.Equal("Alice", results1[0]["name"]);
-        Assert.Equal("Bob", results2[0]["name"]);
+        Assert.Equal(2, positions1.Count); // Two rows with id=1
+        Assert.Single(positions2); // One row with id=2
+        Assert.Empty(positions3); // No rows with id=999
     }
 
     [Fact]
@@ -41,7 +39,7 @@ public class HashIndexTests
         var row1 = new Dictionary<string, object> { { "category", "Electronics" }, { "name", "Laptop" } };
 
         // Act
-        index.Add(row1);
+        index.Add(row1, 0);
 
         // Assert
         Assert.True(index.ContainsKey("Electronics"));
@@ -58,17 +56,16 @@ public class HashIndexTests
         var row2 = new Dictionary<string, object> { { "id", 1 }, { "name", "Alice2" } };
 
         // Act
-        index.Add(row1);
-        index.Add(row2);
-        var beforeRemove = index.Lookup(1);
+        index.Add(row1, 0);
+        index.Add(row2, 1);
+        var beforeRemove = index.LookupPositions(1);
 
         index.Remove(row1);
-        var afterRemove = index.Lookup(1);
+        var afterRemove = index.LookupPositions(1);
 
         // Assert
         Assert.Equal(2, beforeRemove.Count);
         Assert.Single(afterRemove);
-        Assert.Equal("Alice2", afterRemove[0]["name"]);
     }
 
     [Fact]
@@ -80,16 +77,16 @@ public class HashIndexTests
         var row2 = new Dictionary<string, object> { { "id", 2 }, { "name", "Bob" } };
 
         // Act
-        index.Add(row1);
-        index.Add(row2);
+        index.Add(row1, 0);
+        index.Add(row2, 1);
         Assert.Equal(2, index.Count);
 
         index.Clear();
 
         // Assert
         Assert.Equal(0, index.Count);
-        Assert.Empty(index.Lookup(1));
-        Assert.Empty(index.Lookup(2));
+        Assert.Empty(index.LookupPositions(1));
+        Assert.Empty(index.LookupPositions(2));
     }
 
     [Fact]
@@ -109,8 +106,8 @@ public class HashIndexTests
 
         // Assert
         Assert.Equal(2, index.Count); // Two unique projects
-        Assert.Equal(2, index.Lookup("Alpha").Count);
-        Assert.Single(index.Lookup("Beta"));
+        Assert.Equal(2, index.LookupPositions("Alpha").Count);
+        Assert.Single(index.LookupPositions("Beta"));
     }
 
     [Fact]
@@ -130,7 +127,7 @@ public class HashIndexTests
         // Act
         foreach (var row in rows)
         {
-            index.Add(row);
+            index.Add(row, 0); // Dummy position
         }
 
         var stats = index.GetStatistics();
@@ -150,12 +147,12 @@ public class HashIndexTests
         var row2 = new Dictionary<string, object> { { "name", "Bob" } }; // Missing email key
 
         // Act
-        index.Add(row1);
-        index.Add(row2);
+        index.Add(row1, 0);
+        index.Add(row2, 1);
 
         // Assert
         Assert.Equal(0, index.Count); // No keys added
-        Assert.Empty(index.Lookup(null));
+        Assert.Empty(index.LookupPositions(null));
     }
 
     [Fact]
@@ -175,10 +172,10 @@ public class HashIndexTests
                 { "eventId", i },
                 { "timestamp", DateTime.UtcNow }
             };
-            index.Add(row);
+            index.Add(row, i);
         }
 
-        var lookupResults = index.Lookup(42); // Look up a specific user
+        var lookupResults = index.LookupPositions(42); // Look up a specific user
 
         // Assert
         Assert.Equal(uniqueUsers, index.Count); // 100 unique users
@@ -197,20 +194,20 @@ public class HashIndexTests
 
         // Act & Assert - Integer keys
         var row1 = new Dictionary<string, object> { { "price", 100 }, { "name", "Item1" } };
-        index.Add(row1);
-        Assert.Single(index.Lookup(100));
+        index.Add(row1, 0);
+        Assert.Single(index.LookupPositions(100));
 
         // String keys
         index.Clear();
         var row2 = new Dictionary<string, object> { { "price", "expensive" }, { "name", "Item2" } };
-        index.Add(row2);
-        Assert.Single(index.Lookup("expensive"));
+        index.Add(row2, 0);
+        Assert.Single(index.LookupPositions("expensive"));
 
         // DateTime keys
         index.Clear();
         var date = DateTime.Parse("2024-01-01");
         var row3 = new Dictionary<string, object> { { "price", date }, { "name", "Item3" } };
-        index.Add(row3);
-        Assert.Single(index.Lookup(date));
+        index.Add(row3, 0);
+        Assert.Single(index.LookupPositions(date));
     }
 }

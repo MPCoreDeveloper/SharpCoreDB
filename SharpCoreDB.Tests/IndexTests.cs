@@ -27,7 +27,7 @@ public class IndexTests
                 { "value", i },
                 { "data", $"data_{i}" }
             };
-            index.Add(row);
+            index.Add(row, i);
         }
         sw.Stop();
         var buildTime = sw.ElapsedMilliseconds;
@@ -37,8 +37,8 @@ public class IndexTests
         var lookupCount = 1000;
         for (int i = 0; i < lookupCount; i++)
         {
-            var results = index.Lookup($"key_{i % uniqueKeys}");
-            Assert.NotEmpty(results);
+            var positions = index.LookupPositions($"key_{i % uniqueKeys}");
+            Assert.NotEmpty(positions);
         }
         sw.Stop();
         var lookupTime = sw.ElapsedMilliseconds;
@@ -72,7 +72,7 @@ public class IndexTests
                         { "thread", t },
                         { "data", $"data_{t}_{i}" }
                     };
-                    index.Add(row);
+                    index.Add(row, i + t * 100);
                 }
             }));
         }
@@ -83,9 +83,9 @@ public class IndexTests
         var totalRows = 0;
         for (int i = 0; i < 100; i++)
         {
-            var results = index.Lookup(i);
-            Assert.Equal(10, results.Count); // 10 threads added same id
-            totalRows += results.Count;
+            var positions = index.LookupPositions(i);
+            Assert.Equal(10, positions.Count); // 10 threads added same id
+            totalRows += positions.Count;
         }
         Assert.Equal(1000, totalRows);
     }
@@ -105,7 +105,7 @@ public class IndexTests
                 { "key", $"key_{i % 1000}" },
                 { "value", i }
             };
-            index.Add(row);
+            index.Add(row, i);
         }
 
         var finalMemory = GC.GetTotalMemory(true);
@@ -135,7 +135,7 @@ public class IndexTests
 
         // Act - Index lookup
         var sw = Stopwatch.StartNew();
-        var indexResults = index.Lookup("cat_5");
+        var indexPositions = index.LookupPositions("cat_5");
         sw.Stop();
         var indexTime = sw.ElapsedTicks;
 
@@ -146,7 +146,7 @@ public class IndexTests
         var scanTime = sw.ElapsedTicks;
 
         // Assert - Index should be significantly faster
-        Assert.Equal(scanResults.Count, indexResults.Count);
+        Assert.Equal(scanResults.Count, indexPositions.Count);
         Assert.True(indexTime < scanTime / 10, $"Index lookup should be at least 10x faster. Index: {indexTime} ticks, Scan: {scanTime} ticks");
     }
 
@@ -192,17 +192,17 @@ public class IndexTests
 
         foreach (var row in rows)
         {
-            index.Add(row);
+            index.Add(row, 0); // Dummy position
         }
 
         // Act - Update status
         var updatedRow = new Dictionary<string, object> { { "id", 1 }, { "status", "inactive" }, { "name", "Item1" } };
         index.Remove(rows[0]);
-        index.Add(updatedRow);
+        index.Add(updatedRow, 0);
 
         // Assert - Index should reflect changes
-        Assert.Single(index.Lookup("active"));
-        Assert.Equal(2, index.Lookup("inactive").Count);
+        Assert.Single(index.LookupPositions("active"));
+        Assert.Equal(2, index.LookupPositions("inactive").Count);
     }
 
     [Fact]
@@ -213,18 +213,18 @@ public class IndexTests
 
         // Act & Assert - Null keys should be ignored
         var nullRow = new Dictionary<string, object> { { "key", (object)null! }, { "value", 1 } };
-        index.Add(nullRow);
+        index.Add(nullRow, 0);
         Assert.Equal(0, index.Count);
 
         // Empty string keys should work
         var emptyRow = new Dictionary<string, object> { { "key", "" }, { "value", 2 } };
-        index.Add(emptyRow);
-        Assert.Single(index.Lookup(""));
+        index.Add(emptyRow, 0);
+        Assert.Single(index.LookupPositions(""));
         Assert.Equal(1, index.Count);
 
         // Missing key column should be ignored
         var missingKeyRow = new Dictionary<string, object> { { "value", 3 } };
-        index.Add(missingKeyRow);
+        index.Add(missingKeyRow, 0);
         Assert.Equal(1, index.Count); // Still only the empty string key
     }
 
@@ -239,7 +239,7 @@ public class IndexTests
         foreach (var key in distributions)
         {
             var row = new Dictionary<string, object> { { "group", key }, { "data", $"item_{key}" } };
-            index.Add(row);
+            index.Add(row, 0); // Dummy position
         }
 
         var stats = index.GetStatistics();
@@ -259,7 +259,7 @@ public class IndexTests
         for (int i = 0; i < 100; i++)
         {
             initialRows.Add(new Dictionary<string, object> { { "id", i }, { "value", $"val_{i}" } });
-            index.Add(initialRows[i]);
+            index.Add(initialRows[i], i);
         }
 
         // Act - Clear and rebuild with different data
@@ -275,11 +275,11 @@ public class IndexTests
         Assert.Equal(50, index.Count);
         for (int i = 0; i < 50; i++)
         {
-            Assert.Single(index.Lookup(i + 100));
+            Assert.Single(index.LookupPositions(i + 100));
         }
         for (int i = 0; i < 100; i++)
         {
-            Assert.Empty(index.Lookup(i));
+            Assert.Empty(index.LookupPositions(i));
         }
     }
 }

@@ -59,4 +59,13 @@ public interface IStorage
     /// <param name="offset">The offset to start reading from.</param>
     /// <returns>The read data from offset to end, or null if file does not exist.</returns>
     byte[]? ReadBytesFrom(string path, long offset);
+
+    /// <summary>
+    /// Reads binary data from a file starting at the specified position with a maximum length.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="position">The position to start reading from.</param>
+    /// <param name="maxLength">The maximum number of bytes to read.</param>
+    /// <returns>The read data, or null if file does not exist or position is invalid.</returns>
+    byte[]? ReadBytesAt(string path, long position, int maxLength);
 }

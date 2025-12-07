@@ -15,7 +15,7 @@ public class IndexManager : IDisposable
     /// <summary>
     /// Record for index update operations.
     /// </summary>
-    public record IndexUpdate(Dictionary<string, object> Row, IEnumerable<HashIndex> Indexes);
+    public record IndexUpdate(Dictionary<string, object> Row, IEnumerable<HashIndex> Indexes, long Position);
 
     /// <summary>
     /// Channel for asynchronous index updates.
@@ -53,7 +53,7 @@ public class IndexManager : IDisposable
         {
             foreach (var index in update.Indexes)
             {
-                index.Add(update.Row);
+                index.Add(update.Row, update.Position);
             }
         }
     }
@@ -66,7 +66,7 @@ public class IndexManager : IDisposable
     {
         foreach (var index in update.Indexes)
         {
-            index.Add(update.Row);
+            index.Add(update.Row, update.Position);
         }
         await Task.CompletedTask; // Placeholder for async
     }
