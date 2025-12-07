@@ -62,7 +62,7 @@ public class SqlParser : ISqlParser
 
         // Proceed with existing logic
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        this.ExecuteInternal(originalSql ?? sql, parts, wal, originalSql ?? sql);
+        this.ExecuteInternal(sql, parts, wal, originalSql ?? sql);
     }
 
     /// <summary>
