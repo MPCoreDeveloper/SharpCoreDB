@@ -199,16 +199,18 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
 
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         fs.Seek(position, SeekOrigin.Begin);
-        var buffer = new byte[maxLength];
-        int bytesRead = fs.Read(buffer, 0, maxLength);
-        if (bytesRead == 0)
+        using var reader = new BinaryReader(fs);
+        
+        // Read the length prefix that was written by AppendBytes
+        int length = reader.ReadInt32();
+        
+        // Read the actual data
+        int bytesToRead = Math.Min(length, maxLength);
+        var buffer = reader.ReadBytes(bytesToRead);
+        
+        if (buffer.Length == 0)
         {
             return null;
-        }
-
-        if (bytesRead < maxLength)
-        {
-            Array.Resize(ref buffer, bytesRead);
         }
 
         var effectiveNoEncrypt = noEncrypt || this.noEncryption;

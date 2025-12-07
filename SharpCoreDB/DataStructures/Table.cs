@@ -193,15 +193,33 @@ public class Table : ITable, IDisposable
                 using var reader = new BinaryReader(ms);
                 while (ms.Position < ms.Length)
                 {
-                    var row = new Dictionary<string, object>();
-                    bool valid = true;
-                    for (int i = 0; i < this.Columns.Count; i++)
+                    try
                     {
-                        try { row[this.Columns[i]] = this.ReadTypedValue(reader, this.ColumnTypes[i]); }
-                        catch { valid = false; break; }
+                        // Read the length prefix that was written by AppendBytes
+                        int recordLength = reader.ReadInt32();
+                        
+                        // Read the record data
+                        var recordData = reader.ReadBytes(recordLength);
+                        
+                        // Deserialize the record
+                        using var recordMs = new MemoryStream(recordData);
+                        using var recordReader = new BinaryReader(recordMs);
+                        
+                        var row = new Dictionary<string, object>();
+                        bool valid = true;
+                        for (int i = 0; i < this.Columns.Count; i++)
+                        {
+                            try { row[this.Columns[i]] = this.ReadTypedValue(recordReader, this.ColumnTypes[i]); }
+                            catch { valid = false; break; }
+                        }
+                        if (valid && (string.IsNullOrEmpty(where) || EvaluateWhere(row, where)))
+                            results.Add(row);
                     }
-                    if (valid && (string.IsNullOrEmpty(where) || EvaluateWhere(row, where)))
-                        results.Add(row);
+                    catch
+                    {
+                        // End of file or corrupted record
+                        break;
+                    }
                 }
             }
         }
