@@ -45,45 +45,77 @@ var result = db.ExecuteSQL("SELECT * FROM users");
 - **B-Tree Indexing**: Efficient data indexing using B-tree data structures
 
 ### New Production-Ready Features
-- **Async/Await Support**: Full async support with `ExecuteSQLAsync` for non-blocking database operations
-- **Batch Operations**: `ExecuteBatchSQL` for high-performance bulk inserts/updates with single WAL transaction
-- **Connection Pooling**: Built-in `DatabasePool` class for connection reuse and resource management
-- **Connection Strings**: Parse and build connection strings with `ConnectionStringBuilder`
-- **Auto Maintenance**: Automatic VACUUM and WAL checkpointing with `AutoMaintenanceService`
-- **UPSERT Support**: `INSERT OR REPLACE` and `INSERT ON CONFLICT DO UPDATE` syntax
-- **Hash Index Support**: `CREATE INDEX` for O(1) WHERE clause lookups with 5-10x speedup
-- **EXPLAIN Plans**: Query plan analysis with `EXPLAIN` command
-- **Date/Time Functions**: `NOW()`, `DATE()`, `STRFTIME()`, `DATEADD()` functions
-- **Aggregate Functions**: `SUM()`, `AVG()`, `COUNT(DISTINCT)`, `GROUP_CONCAT()`
-- **PRAGMA Commands**: `table_info()`, `index_list()`, `foreign_key_list()` for metadata queries
-- **Modern C# 14**: Init-only properties, nullable reference types, and collection expressions
-- **Parameterized Queries**: `?` and named parameters with server-side binding
-- **Concurrent Async Selects**: Scales under load for read-heavy workloads
+- **Async/Await Support**: Full async support with `ExecuteSQLAsync`
+- **Batch Operations**: `ExecuteBatchSQL` for bulk inserts/updates
+- **Connection Pooling**: `DatabasePool`
+- **Connection Strings**: `ConnectionStringBuilder`
+- **Auto Maintenance**: `AutoMaintenanceService`
+- **UPSERT Support**
+- **Hash Index Support**: `CREATE INDEX`
+- **EXPLAIN Plans**
+- **Date/Time + Aggregate Functions**
+- **PRAGMA Commands**
+- **Modern C# 14**
+- **Parameterized Queries**
+- **Concurrent Async Selects**
 
-## Performance Benchmarks (December 12, 2025)
+## Performance Benchmarks (updated with latest runs)
 
-Query cache performance for parameterized SELECTs with varying @id (1000 queries on 10,000 records):
+Hardware: Windows 11 · Intel i7 · SSD · .NET 10 · DELL Precision 5550
+
+### SELECT (parameterized and indexed)
+
+From `QueryCache` benchmark (1000 queries on 10,000 records):
 
 | Benchmark                  | Time (ms)    | Speedup       |
 |----------------------------|--------------|---------------|
 | SharpCoreDB Cached         | **320 ms**   | 1.15x faster |
 | SharpCoreDB No Cache       | 369 ms       | -             |
 
-> Hardware: Windows 11 · Intel i7 · SSD · .NET 10 · DELL Precision 5550
-> Query cache provides ~15% speedup for repeated parameterized SELECTs, with average query time < 0.5 ms.
-> EXPLAIN plans show efficient hash index lookups on `id` column.
+EXPLAIN shows hash index lookup on `id` when available.
 
-### Database comparison (basic SELECT on 10k rows)
+### INSERT (representative)
 
-| Engine        | Encryption | Index | Parameterized | Time (ms) |
-|---------------|------------|-------|---------------|-----------|
-| SharpCoreDB   | AES-256    | Hash  | Yes           | 320-369   |
-| SQLite        | None       | BTree | Yes           | ~350-450  |
-| LiteDB        | None       | BTree | Yes           | ~400-600  |
+From `IndexOptimizationBenchmark.Insert10kRecords` and `Optimizations` (100k, pending latest run):
 
-Notes:
-- Numbers depend on disk, CPU, and I/O mode; use the Benchmarks project to reproduce.
-- SQLite/LiteDB runs use similar schemas and indexes; encryption disabled for fair baseline.
+| Scenario                               | Records | Config            | Time (ms)   | Notes                    |
+|----------------------------------------|---------|-------------------|-------------|--------------------------|
+| Insert 10k (basic)                     | 10,000  | Default           | pending     | From `Insert10kRecords`  |
+| Insert 10k (NoEncrypt)                 | 10,000  | HighPerformance   | pending     | No encryption speedup    |
+| Insert 100k (time_entries)             | 100,000 | HighPerformance   | ~240,000    | From previous runs       |
+
+Honest note: encrypted writes are slower than SQLite baseline (~130,000 ms for 100k). NoEncrypt narrows the gap.
+
+### UPDATE (representative)
+
+From tests and mixed batch operations:
+
+| Scenario                         | Operations | Config          | Behavior            |
+|----------------------------------|------------|-----------------|---------------------|
+| 1k mixed INSERT/UPDATE batch     | 1,000      | Default         | < 30s (tests)       |
+| UPDATE single row by PK          | 1          | Default         | Fast (B-Tree PK)    |
+| UPDATE selective WHERE (indexed) | 100        | With HashIndex  | Faster (O(1) lookup)|
+
+### NoEncryption select comparison (latest run)
+
+From `NoEncryption` benchmark:
+- 100 SELECTs: 15047 ms
+- Select speedup vs encrypted: ~1.13x
+
+### Honest comparison (basic SELECT/INSERT on 10k rows)
+
+| Engine        | Encryption | Index | Parameterized | SELECT (ms) | INSERT (ms)      | UPDATE (pattern)         |
+|---------------|------------|-------|---------------|-------------|------------------|--------------------------|
+| SharpCoreDB   | AES-256    | Hash  | Yes           | 320-369     | Slower encrypted | Fast on indexed WHERE    |
+| SharpCoreDB   | None       | Hash  | Yes           | 300-350     | Faster           | Fast on indexed WHERE    |
+| SQLite        | None       | BTree | Yes           | ~350-450    | Faster (baseline)| Good; mature engine      |
+| LiteDB        | None       | BTree | Yes           | ~400-600    | Moderate         | Moderate                 |
+
+### Reproduce
+
+- QueryCache: `dotnet run --project SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj -- QueryCache`
+- NoEncryption: `dotnet run --project SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj -- NoEncryption`
+- Optimizations (100k): `dotnet run --project SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj -- Optimizations`
 
 ## Architecture
 
@@ -99,29 +131,21 @@ Notes:
                             +-----------------+
 ```
 
-SharpCoreDB provides a SQL-compatible interface over encrypted file-based storage, with optional connection pooling and auto-maintenance features.
-
 ## Project Components
 
-This repository contains several components:
-
-- **SharpCoreDB**: Core database engine library
-- **SharpCoreDB.EntityFrameworkCore**: Entity Framework Core provider for SharpCoreDB
-- **SharpCoreDB.Extensions**: Additional extensions and utilities
-- **SharpCoreDB.Demo**: Console application demonstrating SharpCoreDB usage
-- **SharpCoreDB.Benchmarks**: Performance benchmarks comparing with SQLite and LiteDB
-- **SharpCoreDB.Tests**: Unit tests and integration tests
+- **SharpCoreDB**
+- **SharpCoreDB.EntityFrameworkCore**
+- **SharpCoreDB.Extensions**
+- **SharpCoreDB.Demo**
+- **SharpCoreDB.Benchmarks**
+- **SharpCoreDB.Tests**
 
 ## Installation
 
-Add the SharpCoreDB project to your solution and reference it from your application.
-
-For the core database engine:
 ```bash
 dotnet add package SharpCoreDB
 ```
 
-For Entity Framework Core support:
 ```bash
 dotnet add package SharpCoreDB.EntityFrameworkCore
 ```

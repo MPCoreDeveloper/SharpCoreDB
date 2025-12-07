@@ -9,11 +9,11 @@ Benchmarks for query cache performance on parameterized SELECTs with varying @id
 ## Results
 | Benchmark | Time (ms) |
 |-----------|-----------|
-| SharpCoreDB Cached | 311 |
-| SharpCoreDB No Cache | 315 |
+| SharpCoreDB Cached | 333 |
+| SharpCoreDB No Cache | 328 |
 
 ## Speedup Estimation
-- Cached vs No Cache: 1,01x faster
+- Cached vs No Cache: 0,98x faster
 
 ## EXPLAIN Plans
 - SharpCoreDB: Uses index on id
