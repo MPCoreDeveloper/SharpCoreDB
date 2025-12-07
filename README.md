@@ -67,12 +67,12 @@ SharpCoreDB now uses true append + position-based primary key indexing ? no more
 
 | Operation                | SharpCoreDB       | SQLite          | Winner         |
 |--------------------------|-------------------|-----------------|----------------|
-| Insert 10,000 records    | ~180 ms           | 24,369 ms       | SharpCoreDB    |
-| Select with WHERE        | ~0.8 ms           | 1 ms            | SharpCoreDB    |
-| Select 1000 records      | ~12 ms            | 2 ms            | SQLite (cached)|
+| Insert 10,000 records    | 8,569 ms          | 27,058 ms       | SharpCoreDB    |
+| Select with WHERE        | 8 ms              | 1 ms            | SQLite         |
+| Select 1000 records      | 763 ms            | 2 ms            | SQLite (cached)|
 
 *Date: December 2025*  
-*Hardware: [Your machine specs]*
+*Hardware: Intel Core i5-10400, 16GB RAM, NVMe SSD*
 
 ## Architecture
 

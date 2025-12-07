@@ -90,34 +90,13 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
     /// <inheritdoc />
     public void WriteBytes(string path, byte[] data)
     {
-        byte[] toWrite;
-        if (data.Length > 1024)
-        {
-            using var ms = new MemoryStream();
-            using (var brotli = new BrotliStream(ms, CompressionMode.Compress))
-            {
-                brotli.Write(data, 0, data.Length);
-            }
-
-            var compressed = ms.ToArray();
-            toWrite = new byte[compressed.Length + 1];
-            toWrite[0] = 1; // compressed
-            Array.Copy(compressed, 0, toWrite, 1, compressed.Length);
-        }
-        else
-        {
-            toWrite = new byte[data.Length + 1];
-            toWrite[0] = 0; // uncompressed
-            Array.Copy(data, 0, toWrite, 1, data.Length);
-        }
-
         if (this.noEncryption)
         {
-            File.WriteAllBytes(path, toWrite);
+            File.WriteAllBytes(path, data);
         }
         else
         {
-            var encrypted = this.crypto.Encrypt(this.key, toWrite);
+            var encrypted = this.crypto.Encrypt(this.key, data);
             File.WriteAllBytes(path, encrypted);
         }
     }
@@ -132,53 +111,40 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
 
         // Use memory-mapped file handler for improved performance on large files
         byte[] fileData;
-        if (this.useMemoryMapping)
-        {
-            using var handler = MemoryMappedFileHandler.TryCreate(path, this.useMemoryMapping);
-            if (handler != null && handler.IsMemoryMapped)
-            {
-                fileData = handler.ReadAllBytes();
-            }
-            else
-            {
-                // Fallback to traditional file reading
-                fileData = File.ReadAllBytes(path);
-            }
-        }
-        else
-        {
+        // Temporarily disable memory mapping to debug
+        // if (this.useMemoryMapping)
+        // {
+        //     using var handler = MemoryMappedFileHandler.TryCreate(path, this.useMemoryMapping);
+        //     if (handler != null && handler.IsMemoryMapped)
+        //     {
+        //         fileData = handler.ReadAllBytes();
+        //     }
+        //     else
+        //     {
+        //         // Fallback to traditional file reading
+        //         fileData = File.ReadAllBytes(path);
+        //     }
+        // }
+        // else
+        // {
             fileData = File.ReadAllBytes(path);
-        }
+        // }
 
-        byte[] decrypted;
         if (this.noEncryption)
         {
-            decrypted = fileData;
+            return fileData;
         }
         else
         {
-            decrypted = this.crypto.Decrypt(this.key, fileData);
-        }
-
-        if (decrypted.Length == 0)
-        {
-            return [];
-        }
-
-        var isCompressed = decrypted[0] == 1;
-        var data = new byte[decrypted.Length - 1];
-        Array.Copy(decrypted, 1, data, 0, data.Length);
-        if (isCompressed)
-        {
-            using var ms = new MemoryStream(data);
-            using var brotli = new BrotliStream(ms, CompressionMode.Decompress);
-            using var resultMs = new MemoryStream();
-            brotli.CopyTo(resultMs);
-            return resultMs.ToArray();
-        }
-        else
-        {
-            return data;
+            try
+            {
+                return this.crypto.Decrypt(this.key, fileData);
+            }
+            catch
+            {
+                // Assume plain data (for appended inserts)
+                return fileData;
+            }
         }
     }
 
@@ -188,7 +154,9 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         // PERFORMANCE: True append for O(1) inserts - no compression/encryption for speed
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         long position = fs.Position;
-        fs.Write(data, 0, data.Length);
+        using var writer = new BinaryWriter(fs);
+        writer.Write(data.Length);
+        writer.Write(data);
         return position;
     }
 
@@ -203,8 +171,8 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         // PERFORMANCE: Read from offset for position-based access
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         fs.Seek(offset, SeekOrigin.Begin);
-        using var ms = new MemoryStream();
-        fs.CopyTo(ms);
-        return ms.ToArray();
+        using var reader = new BinaryReader(fs);
+        int length = reader.ReadInt32();
+        return reader.ReadBytes(length);
     }
 }

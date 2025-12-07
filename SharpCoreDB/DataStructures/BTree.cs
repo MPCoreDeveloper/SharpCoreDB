@@ -15,7 +15,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 {
     private sealed class Node
     {
-        private const int InitialCapacity = 1024;
+        private const int InitialCapacity = 16384;
         public TKey[] keysArray = new TKey[InitialCapacity];
         public TValue[] valuesArray = new TValue[InitialCapacity];
         public Node[] childrenArray = new Node[InitialCapacity];
@@ -150,7 +150,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     private void InsertKey(Node node, int pos, TKey key)
     {
         if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
-        var span = node.keysArray.AsSpan(0, node.keysCount);
+        var span = node.keysArray.AsSpan();
         span.Slice(pos, node.keysCount - pos).CopyTo(span.Slice(pos + 1, node.keysCount - pos));
         node.keysArray[pos] = key;
         node.keysCount++;
@@ -159,7 +159,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     private void InsertValue(Node node, int pos, TValue value)
     {
         if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
-        var span = node.valuesArray.AsSpan(0, node.valuesCount);
+        var span = node.valuesArray.AsSpan();
         span.Slice(pos, node.valuesCount - pos).CopyTo(span.Slice(pos + 1, node.valuesCount - pos));
         node.valuesArray[pos] = value;
         node.valuesCount++;
@@ -168,7 +168,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     private void InsertChild(Node node, int pos, Node child)
     {
         if (node.childrenCount == node.childrenArray.Length) ResizeChildren(node);
-        var span = node.childrenArray.AsSpan(0, node.childrenCount);
+        var span = node.childrenArray.AsSpan();
         span.Slice(pos, node.childrenCount - pos).CopyTo(span.Slice(pos + 1, node.childrenCount - pos));
         node.childrenArray[pos] = child;
         node.childrenCount++;

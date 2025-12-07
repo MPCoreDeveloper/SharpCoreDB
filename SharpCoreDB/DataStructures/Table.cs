@@ -271,10 +271,14 @@ public class Table : ITable, IDisposable
             using var reader = new BinaryReader(ms);
             while (ms.Position < ms.Length)
             {
+                int length = reader.ReadInt32();
+                var rowData = reader.ReadBytes(length);
+                using var rowMs = new MemoryStream(rowData);
+                using var rowReader = new BinaryReader(rowMs);
                 var row = new Dictionary<string, object>();
                 for (int i = 0; i < this.Columns.Count; i++)
                 {
-                    row[this.Columns[i]] = this.ReadTypedValue(reader, this.ColumnTypes[i]);
+                    row[this.Columns[i]] = this.ReadTypedValue(rowReader, this.ColumnTypes[i]);
                 }
 
                 results.Add(row);
@@ -458,7 +462,7 @@ public class Table : ITable, IDisposable
             case DataType.Real: writer.Write((double)val); break;
             case DataType.Blob: var bytes = (byte[])val; writer.Write(bytes.Length); writer.Write(bytes); break;
             case DataType.Boolean: writer.Write((bool)val); break;
-            case DataType.DateTime: writer.Write(((DateTime)val).Ticks); break;
+            case DataType.DateTime: writer.Write(((DateTime)val).ToString("o")); break;
             case DataType.Long: writer.Write((long)val); break;
             case DataType.Decimal: var bits = decimal.GetBits((decimal)val); foreach (var bit in bits) { writer.Write(bit); } break;
             case DataType.Ulid: writer.Write(((Ulid)val).Value); break;
@@ -481,7 +485,7 @@ public class Table : ITable, IDisposable
             case DataType.Real: return reader.ReadDouble();
             case DataType.Blob: var length = reader.ReadInt32(); return reader.ReadBytes(length);
             case DataType.Boolean: return reader.ReadBoolean();
-            case DataType.DateTime: return new DateTime(reader.ReadInt64());
+            case DataType.DateTime: return DateTime.Parse(reader.ReadString());
             case DataType.Long: return reader.ReadInt64();
             case DataType.Decimal: var bits = new int[4]; for (int i = 0; i < 4; i++) { bits[i] = reader.ReadInt32(); } return new decimal(bits);
             case DataType.Ulid: return Ulid.Parse(reader.ReadString());

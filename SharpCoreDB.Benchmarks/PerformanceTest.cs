@@ -57,13 +57,16 @@ public static class PerformanceTest
             var db = factory.Create(dbPath, "perfTestPassword");
 
             db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER PRIMARY KEY, project TEXT, task TEXT, start_time DATETIME, duration INTEGER, user TEXT)");
+            db.ExecuteSQL("CREATE INDEX idx_project ON time_entries (project)");
 
             // Test Insert
             var sw = Stopwatch.StartNew();
+            var statements = new List<string>();
             for (int i = 0; i < recordCount; i++)
             {
-                db.ExecuteSQL($"INSERT INTO time_entries VALUES ('{i}', 'Project{i % 100}', 'Task{i % 20}', '2024-01-{(i % 28) + 1:00} 09:00:00', '480', 'User{i % 10}')");
+                statements.Add($"INSERT INTO time_entries VALUES ('{i}', 'Project{i % 100}', 'Task{i % 20}', '2024-01-{(i % 28) + 1:00} 09:00:00', '480', 'User{i % 10}')");
             }
+            db.ExecuteBatchSQL(statements);
             sw.Stop();
             var insertTime = sw.Elapsed.TotalMilliseconds;
             Console.WriteLine($"SharpCoreDB Insert: {insertTime:F0}ms");
