@@ -198,6 +198,12 @@ public class Table : ITable, IDisposable
                         // Read the length prefix that was written by AppendBytes
                         int recordLength = reader.ReadInt32();
                         
+                        // Validate length to prevent issues with corrupted data
+                        if (recordLength < 0 || recordLength > data.Length)
+                        {
+                            break; // Corrupted record, stop scanning
+                        }
+                        
                         // Read the record data
                         var recordData = reader.ReadBytes(recordLength);
                         
@@ -215,9 +221,14 @@ public class Table : ITable, IDisposable
                         if (valid && (string.IsNullOrEmpty(where) || EvaluateWhere(row, where)))
                             results.Add(row);
                     }
-                    catch
+                    catch (EndOfStreamException)
                     {
-                        // End of file or corrupted record
+                        // Reached end of file
+                        break;
+                    }
+                    catch (Exception)
+                    {
+                        // Corrupted record, skip and continue
                         break;
                     }
                 }

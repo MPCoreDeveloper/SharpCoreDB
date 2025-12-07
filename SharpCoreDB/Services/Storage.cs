@@ -204,7 +204,13 @@ public class Storage(ICryptoService crypto, byte[] key, DatabaseConfig? config =
         // Read the length prefix that was written by AppendBytes
         int length = reader.ReadInt32();
         
-        // Read the actual data
+        // Validate length to prevent excessive memory allocation
+        if (length < 0 || length > maxLength * 10) // Allow some buffer but prevent abuse
+        {
+            throw new InvalidDataException($"Invalid record length: {length}");
+        }
+        
+        // Read the actual data (maxLength is for the data portion, not including prefix)
         int bytesToRead = Math.Min(length, maxLength);
         var buffer = reader.ReadBytes(bytesToRead);
         
