@@ -346,7 +346,7 @@ SharpCoreDB is licensed under the **MIT License**.
 ```
 MIT License
 
-Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot
+Copyright (c) 2025 MPCoreDeveloper and GitHub Copilot
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -391,4 +391,4 @@ We believe in the power of human-AI collaboration to build better software! ??
 ---
 
 **Made with ?? by MPCoreDeveloper & GitHub Copilot**  
-**December 2024**
+**December 2025**
