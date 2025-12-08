@@ -55,10 +55,12 @@
 
   <ItemGroup>
     <Compile Include="SharpCoreDB.Benchmarks\Benchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\PageCacheQuickTest.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include=".github\workflows\" />
+    <Folder Include="TestPageCache\" />
   </ItemGroup>
 
 </Project>

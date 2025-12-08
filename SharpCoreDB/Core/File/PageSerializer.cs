@@ -53,6 +53,30 @@ public static class PageSerializer
     }
 
     /// <summary>
+    /// Reads a page header from a span using zero-allocation BinaryPrimitives.
+    /// Helper function that wraps DeserializeHeader for convenience.
+    /// </summary>
+    /// <param name="source">The source span (must be at least PageHeader.Size bytes).</param>
+    /// <returns>The deserialized page header.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PageHeader ReadHeader(ReadOnlySpan<byte> source)
+    {
+        return DeserializeHeader(source);
+    }
+
+    /// <summary>
+    /// Writes a page header to a span using zero-allocation BinaryPrimitives.
+    /// Helper function that wraps SerializeHeader for convenience.
+    /// </summary>
+    /// <param name="destination">The destination span (must be at least PageHeader.Size bytes).</param>
+    /// <param name="header">The page header to write.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteHeader(Span<byte> destination, PageHeader header)
+    {
+        SerializeHeader(ref header, destination);
+    }
+
+    /// <summary>
     /// Writes an integer to a span using BinaryPrimitives (little-endian).
     /// </summary>
     /// <param name="destination">The destination span.</param>

@@ -21,7 +21,7 @@ public class BenchmarkDatabaseHelper : IDisposable
     private readonly HashSet<int> insertedIds = new();
     private readonly bool isEncrypted;
 
-    public BenchmarkDatabaseHelper(string dbPath, string password = "benchmark_password", bool enableEncryption = true)
+    public BenchmarkDatabaseHelper(string dbPath, string password = "benchmark_password", bool enableEncryption = true, DatabaseConfig? config = null)
     {
         this.isEncrypted = enableEncryption;
         
@@ -32,9 +32,21 @@ public class BenchmarkDatabaseHelper : IDisposable
 
         // Create database with appropriate config
         var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
-        var config = enableEncryption ? DatabaseConfig.Default : DatabaseConfig.HighPerformance;
         
-        database = (Database)factory.Create(dbPath, password, false, config, null);
+        // Use provided config or create high-performance config with GroupCommitWAL enabled
+        var dbConfig = config ?? new DatabaseConfig
+        {
+            NoEncryptMode = !enableEncryption,
+            UseGroupCommitWal = true,  // NEW: Enable group commit by default for benchmarks!
+            WalDurabilityMode = DurabilityMode.FullSync,  // Balance performance and durability
+            WalMaxBatchSize = 100,
+            WalMaxBatchDelayMs = 10,
+            EnablePageCache = true,
+            PageCacheCapacity = 1000,
+            EnableQueryCache = false,  // Disable for pure write performance
+        };
+        
+        database = (Database)factory.Create(dbPath, password, false, dbConfig, null);
     }
 
     /// <summary>
