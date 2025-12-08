@@ -297,13 +297,11 @@ public static class SqlParserExtensions
 
         if (startIdx < 0 || endIdx < 0)
         {
-            return new List<object>();
+            return [];
         }
 
         var valuesStr = remaining.Substring(startIdx + 1, endIdx - startIdx - 1);
 
-        return valuesStr.Split(',')
-            .Select(v => v.Trim().Trim('\'') as object)
-            .ToList();
+        return [.. valuesStr.Split(',').Select(v => v.Trim().Trim('\'') as object)];
     }
 }

@@ -63,11 +63,13 @@ public class CryptoService : ICryptoService
             int passwordLen = Encoding.UTF8.GetBytes(password, passwordBytes);
             int saltLen = Encoding.UTF8.GetBytes(salt, saltBytes);
             
-            // Derive key using PBKDF2
+            // SECURITY FIX: Derive key using PBKDF2 with 600,000 iterations (OWASP/NIST 2024 recommendation)
+            // Previous value of 10,000 was dangerously low against GPU brute force attacks
+            // See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
             var key = Rfc2898DeriveBytes.Pbkdf2(
                 passwordBytes.Slice(0, passwordLen), 
                 saltBytes.Slice(0, saltLen), 
-                10000, 
+                600000,  // SECURITY: Increased from 10,000 to 600,000 iterations
                 HashAlgorithmName.SHA256, 
                 32);
             

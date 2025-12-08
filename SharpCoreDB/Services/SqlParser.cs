@@ -11,6 +11,27 @@ using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Simple SQL parser and executor.
+// 
+/// SECURITY WARNING: This parser has basic SQL injection protections but is NOT fully safe.
+/// Always use parameterized queries for untrusted input. Never use string concatenation or interpolation.
+/// 
+/// SAFE PATTERNS:
+///   - ExecuteSQL(sql, parameters) with Dictionary parameters
+///   - Use @paramName or ? placeholders in SQL
+/// 
+/// UNSAFE PATTERNS (DO NOT USE):
+///   - String interpolation: $"SELECT * FROM users WHERE name = '{userName}'"
+///   - String concatenation: "DELETE FROM users WHERE id = " + userId
+/// 
+/// See SECURITY.md for detailed security guidelines.
+/// 
+/// ENHANCED PARSER:
+/// This parser now includes enhanced parsing capabilities through EnhancedSqlParser:
+///   - Support for RIGHT JOIN, FULL OUTER JOIN
+///   - Subqueries in FROM and WHERE clauses
+///   - Advanced error recovery
+///   - Multiple SQL dialect support
+/// Use ParseWithEnhancedParser() for complex queries.
 /// </summary>
 public class SqlParser : ISqlParser
 {
@@ -21,6 +42,7 @@ public class SqlParser : ISqlParser
     private readonly bool isReadOnly;
     private readonly QueryCache? queryCache;
     private readonly bool noEncrypt;
+    private readonly EnhancedSqlParser? enhancedParser;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SqlParser"/> class.
@@ -54,9 +76,10 @@ public class SqlParser : ISqlParser
         }
         else
         {
-            // Fallback to string interpolation with warnings
-            Console.WriteLine("Warning: Using string interpolation for SQL execution. Consider using parameterized queries for security.");
-            // Sanitize inputs automatically (basic sanitization)
+            // SECURITY WARNING: Fallback to string interpolation is UNSAFE
+            // This warning alerts developers to use parameterized queries
+            Console.WriteLine("⚠️  SECURITY WARNING: Executing SQL without parameters. This is unsafe for untrusted input. Use parameterized queries.");
+            // Sanitize inputs automatically (basic sanitization - NOT SUFFICIENT for security)
             sql = this.SanitizeSql(sql);
         }
 
@@ -603,6 +626,55 @@ public class SqlParser : ISqlParser
         else
         {
         }
+    }
+
+    /// <summary>
+    /// Parses SQL using the enhanced parser with full dialect support and error recovery.
+    /// </summary>
+    /// <param name="sql">The SQL statement to parse.</param>
+    /// <param name="dialect">The SQL dialect to use (defaults to SharpCoreDB).</param>
+    /// <returns>The parsed AST node, or null if parsing failed.</returns>
+    public SqlNode? ParseWithEnhancedParser(string sql, ISqlDialect? dialect = null)
+    {
+        var parser = new EnhancedSqlParser(dialect ?? SqlDialectFactory.Default);
+        var ast = parser.Parse(sql);
+
+        if (parser.HasErrors)
+        {
+            Console.WriteLine("⚠️  SQL Parser Warnings:");
+            foreach (var error in parser.Errors)
+            {
+                Console.WriteLine($"  - {error}");
+            }
+        }
+
+        return ast;
+    }
+
+    /// <summary>
+    /// Converts an AST node back to SQL string for debugging.
+    /// </summary>
+    /// <param name="node">The AST node to convert.</param>
+    /// <param name="dialect">The SQL dialect to use.</param>
+    /// <returns>The SQL string representation.</returns>
+    public string? AstToSql(SqlNode node, ISqlDialect? dialect = null)
+    {
+        var visitor = new SqlToStringVisitor(dialect ?? SqlDialectFactory.Default);
+        return node.Accept(visitor)?.ToString();
+    }
+
+    /// <summary>
+    /// Validates SQL syntax without executing it.
+    /// </summary>
+    /// <param name="sql">The SQL to validate.</param>
+    /// <param name="errors">Output list of validation errors.</param>
+    /// <returns>True if SQL is valid, false otherwise.</returns>
+    public bool ValidateSql(string sql, out List<string> errors)
+    {
+        var parser = new EnhancedSqlParser();
+        var ast = parser.Parse(sql);
+        errors = new List<string>(parser.Errors);
+        return ast != null && !parser.HasErrors;
     }
 
     private object ParseValue(string val, DataType type)

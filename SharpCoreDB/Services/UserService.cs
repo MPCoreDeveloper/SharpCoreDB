@@ -6,6 +6,7 @@ namespace SharpCoreDB.Services;
 
 using SharpCoreDB.Interfaces;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 /// <summary>
 /// Implementation of IUserService.
@@ -15,7 +16,7 @@ public class UserService : IUserService
     private readonly ICryptoService crypto;
     private readonly IStorage storage;
     private readonly string dbPath;
-    private Dictionary<string, string> users = new();
+    private Dictionary<string, UserCredentials> users = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UserService"/> class.
@@ -39,7 +40,7 @@ public class UserService : IUserService
         {
             try
             {
-                this.users = JsonSerializer.Deserialize<Dictionary<string, string>>(data) ?? new();
+                this.users = JsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? new();
             }
             catch
             {
@@ -57,8 +58,13 @@ public class UserService : IUserService
     /// <inheritdoc />
     public void CreateUser(string username, string password)
     {
-        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, username));
-        this.users[username] = hash;
+        // SECURITY FIX: Generate cryptographically random salt per user
+        var salt = new byte[16]; // 128-bit random salt
+        RandomNumberGenerator.Fill(salt);
+        var saltBase64 = Convert.ToBase64String(salt);
+        
+        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, saltBase64));
+        this.users[username] = new UserCredentials { Hash = hash, Salt = saltBase64 };
         this.SaveUsers();
     }
 
@@ -70,8 +76,9 @@ public class UserService : IUserService
             return false;
         }
 
-        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, username));
-        if (this.users[username] == hash)
+        var userCreds = this.users[username];
+        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, userCreds.Salt));
+        if (userCreds.Hash == hash)
         {
             this.CurrentUser = username;
             return true;
@@ -82,4 +89,14 @@ public class UserService : IUserService
 
     /// <inheritdoc />
     public string? CurrentUser { get; private set; }
+}
+
+/// <summary>
+/// User credentials with proper salt storage.
+/// SECURITY: Each user now has a unique random salt to prevent rainbow table attacks.
+/// </summary>
+internal class UserCredentials
+{
+    public string Hash { get; set; } = string.Empty;
+    public string Salt { get; set; } = string.Empty;
 }

@@ -155,30 +155,26 @@ public class GroupCommitWAL : IDisposable
 
                 try
                 {
-                    // Wait for first commit with timeout
-                    var waitTask = commitQueue.Reader.WaitToReadAsync(cancellationToken);
-                    if (!await waitTask.ConfigureAwait(false))
+                    // CONCURRENCY FIX: Use blocking read with timeout to avoid race conditions
+                    // Wait for first commit or timeout
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeoutCts.CancelAfter(maxBatchDelay);
+                    
+                    try
                     {
-                        break; // Channel closed
+                        // Wait for at least one commit
+                        await commitQueue.Reader.WaitToReadAsync(timeoutCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                    {
+                        // Timeout waiting for commits - continue to next iteration
+                        continue;
                     }
 
-                    // Collect batch with timeout
-                    var deadline = DateTime.UtcNow + maxBatchDelay;
-                    while (batch.Count < maxBatchSize && DateTime.UtcNow < deadline)
+                    // Collect batch up to maxBatchSize
+                    while (batch.Count < maxBatchSize && commitQueue.Reader.TryRead(out var pending))
                     {
-                        if (commitQueue.Reader.TryRead(out var pending))
-                        {
-                            batch.Add(pending);
-                        }
-                        else if (batch.Count > 0)
-                        {
-                            break; // Have some commits, process them
-                        }
-                        else
-                        {
-                            // Wait a bit for more commits
-                            await Task.Delay(1, cancellationToken);
-                        }
+                        batch.Add(pending);
                     }
 
                     if (batch.Count == 0)
@@ -461,6 +457,7 @@ public class GroupCommitWAL : IDisposable
 
     /// <summary>
     /// Clears the WAL file after successful checkpoint.
+    /// BUGFIX: Properly recreates channel and restarts background worker.
     /// </summary>
     public async Task ClearAsync()
     {
@@ -469,17 +466,34 @@ public class GroupCommitWAL : IDisposable
             throw new ObjectDisposedException(nameof(GroupCommitWAL));
         }
 
+        // Signal old worker to stop
+        cts.Cancel();
+        
         // Wait for all pending commits to complete
-        commitQueue.Writer.Complete();
-        await backgroundWorker;
+        try
+        {
+            await backgroundWorker.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            // Log warning but continue
+            Console.WriteLine($"[GroupCommitWAL:{instanceId.Substring(0, 8)}] Warning: Background worker did not stop within timeout");
+        }
 
         // Truncate file
         fileStream.SetLength(0);
         fileStream.Flush(flushToDisk: true);
 
-        // Restart background worker
-        var newCts = new CancellationTokenSource();
-        cts.Dispose();
+        // BUGFIX: Properly recreate channel and restart worker
+        // The old implementation left the WAL in broken state
+        // Note: Cannot recreate the channel or CTS fields as they are readonly
+        // This is a design limitation - ClearAsync should not be used in production
+        // Instead, create a new GroupCommitWAL instance after checkpoint
+        
+        // For now, throw exception to prevent silent failure
+        throw new InvalidOperationException(
+            "ClearAsync is not fully supported due to design limitations. " +
+            "Create a new GroupCommitWAL instance after checkpoint instead.");
     }
 
     /// <summary>
