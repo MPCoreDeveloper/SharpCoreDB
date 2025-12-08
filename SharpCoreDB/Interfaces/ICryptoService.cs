@@ -12,11 +12,11 @@ using SharpCoreDB.Services;
 public interface ICryptoService
 {
     /// <summary>
-    /// Derives a key from a password using Argon2id.
+    /// Derives a key from a password using PBKDF2 with SHA-256 (10,000 iterations).
     /// </summary>
     /// <param name="password">The password to derive from.</param>
     /// <param name="salt">The salt to use.</param>
-    /// <returns>The derived key as a byte array.</returns>
+    /// <returns>The derived key as a byte array (32 bytes).</returns>
     byte[] DeriveKey(string password, string salt);
 
     /// <summary>

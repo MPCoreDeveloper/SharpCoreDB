@@ -61,7 +61,7 @@ var result = db.ExecuteSQL("SELECT * FROM users");
 
 ## Performance Benchmarks (updated with latest runs)
 
-Hardware: Windows 11 · Intel i7 · SSD · .NET 10 · DELL Precision 5550
+Hardware: Windows 11 ï¿½ Intel i7 ï¿½ SSD ï¿½ .NET 10 ï¿½ DELL Precision 5550
 
 ### SELECT (parameterized and indexed)
 
@@ -376,3 +376,59 @@ db.ExecuteSQL("INSERT INTO time_entries VALUES ('3', 'Alpha', '30')");
 
 // Create hash index for O(1) lookups on project column
 db.ExecuteSQL("CREATE INDEX idx_project ON time_entries (project)");
+
+---
+
+<!-- BENCHMARK_RESULTS -->
+## Benchmark Results (Auto-Generated)
+
+**Generated**: 2025-12-08 08:03:58 UTC
+
+### Executive Summary
+
+| Operation | Winner | Performance Advantage |
+|-----------|--------|----------------------|
+| SharpCoreDB.Benchmarks.Comparative.ComparativeInsertBenchmarks-20251208-085031 | **SQLite** | 2,06x faster |
+
+### Detailed Results
+
+#### SharpCoreDB.Benchmarks.Comparative.ComparativeInsertBenchmarks-20251208-085031
+
+| Method | Mean | Error | StdDev | Allocated |
+|--------|------|-------|--------|-----------|
+| SQLite_Memory_BulkInsert | 168.688,89 ns | 6.322,72 ns | 18.968,16 ns | 0 B |
+| SQLite_Memory_BulkInsert | 347.866,67 ns | 36.893,86 ns | 110.681,59 ns | 31,80 KB |
+| LiteDB_BulkInsert | 624.990,00 ns | 140.020,37 ns | 442.783,29 ns | 18,08 KB |
+| LiteDB_BulkInsert | 879.080,00 ns | 126.493,33 ns | 400.007,04 ns | 110,41 KB |
+| SQLite_Memory_BulkInsert | 1.371.320,00 ns | 90.824,41 ns | 287.212,02 ns | 271,45 KB |
+| LiteDB_BulkInsert | 3.986.460,00 ns | 239.678,51 ns | 757.930,01 ns | 1154,84 KB |
+| SQLite_File_BulkInsert | 4.975.644,44 ns | 115.036,19 ns | 345.108,57 ns | 31,79 KB |
+| SQLite_File_BulkInsert | 5.092.522,22 ns | 114.906,59 ns | 344.719,78 ns | 0 B |
+| SharpCoreDB_Encrypted_Batch | 5.486.990,00 ns | 131.880,08 ns | 417.041,44 ns | 4128,21 KB |
+| SharpCoreDB_NoEncrypt_Individual | 5.582.850,00 ns | 170.466,14 ns | 539.061,27 ns | 4130,95 KB |
+| SharpCoreDB_Encrypted_Individual | 5.750.950,00 ns | 62.604,44 ns | 177.072,08 ns | 4131,97 KB |
+| SQLite_File_BulkInsert | 6.072.888,89 ns | 156.075,40 ns | 468.226,21 ns | 272,43 KB |
+| SharpCoreDB_NoEncrypt_Batch | 7.698.010,00 ns | 153.307,94 ns | 484.802,26 ns | 4129,30 KB |
+| SQLite_Memory_BulkInsert | 9.815.762,50 ns | 624.335,96 ns | 1.765.888,77 ns | 2654,48 KB |
+| SharpCoreDB_Encrypted_Batch | 13.963.544,44 ns | 184.645,84 ns | 553.937,53 ns | 4252,26 KB |
+| SharpCoreDB_NoEncrypt_Batch | 16.330.450,00 ns | 266.942,76 ns | 844.147,13 ns | 4252,81 KB |
+| SQLite_File_BulkInsert | 17.375.750,00 ns | 755.630,96 ns | 2.266.892,87 ns | 2670,59 KB |
+| LiteDB_BulkInsert | 39.469.455,56 ns | 1.060.135,33 ns | 3.180.405,99 ns | 16621,05 KB |
+| SharpCoreDB_NoEncrypt_Individual | 59.889.150,00 ns | 917.444,35 ns | 2.901.213,77 ns | 41300,12 KB |
+| SharpCoreDB_Encrypted_Individual | 59.925.530,00 ns | 356.185,74 ns | 1.126.358,22 ns | 41305,49 KB |
+| SharpCoreDB_NoEncrypt_Batch | 95.248.100,00 ns | 880.076,95 ns | 2.640.230,86 ns | 5493,23 KB |
+| SharpCoreDB_Encrypted_Batch | 95.309.440,00 ns | 1.411.424,50 ns | 4.463.316,18 ns | 5493,90 KB |
+| SharpCoreDB_NoEncrypt_Individual | 583.181.050,00 ns | 8.271.655,78 ns | 26.157.272,29 ns | 412942,00 KB |
+| SharpCoreDB_Encrypted_Individual | 589.896.480,00 ns | 10.198.644,41 ns | 32.250.945,37 ns | 412987,95 KB |
+| SharpCoreDB_Encrypted_Batch | 1.519.204.990,00 ns | 53.514.443,91 ns | 169.227.530,47 ns | 17903,80 KB |
+| SharpCoreDB_NoEncrypt_Batch | 1.591.266.540,00 ns | 67.140.055,63 ns | 212.315.498,01 ns | 17887,47 KB |
+| SharpCoreDB_NoEncrypt_Individual | 7.053.131.655,56 ns | 292.224.716,25 ns | 876.674.148,76 ns | 4128887,03 KB |
+| SharpCoreDB_Encrypted_Individual | 7.081.675.260,00 ns | 214.479.155,46 ns | 678.242.641,89 ns | 4129278,66 KB |
+
+
+### Performance Charts
+
+Charts are generated in `BenchmarkDotNet.Artifacts/results/` directory.
+
+
+<!-- /BENCHMARK_RESULTS -->

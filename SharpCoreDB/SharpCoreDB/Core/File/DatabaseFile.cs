@@ -12,8 +12,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 /// <summary>
-/// High-performance paged file handler with encryption support.
-/// Uses 4096-byte pages with zero-allocation reads via Span&lt;byte&gt; and MemoryMarshal.
+/// High-performance paged file handler with encryption support and zero-allocation page I/O.
+/// Uses PageSerializer with MemoryMarshal for struct serialization and stackalloc for temp buffers.
 /// </summary>
 public sealed class DatabaseFile : IDisposable
 {
@@ -23,9 +23,12 @@ public sealed class DatabaseFile : IDisposable
     private readonly SharpCoreDB.Services.AesGcmEncryption crypto;
     private readonly byte[] key;
     private readonly MemoryMappedFileHandler handler;
+    
+    // Pinned buffers for reuse (eliminates per-call allocations)
     private readonly byte[] _pageBuffer = GC.AllocateUninitializedArray<byte>(PageSize, pinned: true);
     private readonly byte[] _encryptedBuffer = GC.AllocateUninitializedArray<byte>(StoredPageSize, pinned: true);
     private bool disposed;
+    private ulong _currentTransactionId;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DatabaseFile"/> class.
@@ -43,6 +46,7 @@ public sealed class DatabaseFile : IDisposable
         this.filePath = filePath;
         this.crypto = crypto.GetAesGcmEncryption(key);
         this.key = key;
+        this._currentTransactionId = (ulong)DateTime.UtcNow.Ticks;
 
         // Ensure file exists
         if (!System.IO.File.Exists(filePath))
@@ -55,37 +59,49 @@ public sealed class DatabaseFile : IDisposable
     }
 
     /// <summary>
-    /// Reads a page from the database file.
+    /// Reads a page from the database file using zero-allocation PageSerializer.
     /// </summary>
     /// <param name="pageNum">The page number to read (0-based).</param>
     /// <returns>The decrypted page data.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[] ReadPage(int pageNum)
     {
-        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
 
         long offset = (long)pageNum * StoredPageSize;
         int bytesRead = this.handler.ReadBytes(offset, _encryptedBuffer.AsSpan(0, StoredPageSize));
         if (bytesRead == 0)
         {
-            return new byte[PageSize]; // Empty page
+            // Return empty page with valid header
+            var header = PageHeader.Create((byte)PageType.Data, _currentTransactionId);
+            Span<byte> resultBuffer = stackalloc byte[PageSize];
+            PageSerializer.SerializeHeader(ref header, resultBuffer);
+            return resultBuffer.ToArray();
         }
 
+        // Decrypt page
         this.crypto.DecryptPage(_encryptedBuffer.AsSpan(0, bytesRead));
-        _encryptedBuffer.AsSpan(0, PageSize).CopyTo(_pageBuffer);
-        return _pageBuffer.ToArray();
+        
+        // Validate page integrity using PageSerializer
+        if (!PageSerializer.ValidatePage(_encryptedBuffer.AsSpan(0, PageSize)))
+        {
+            throw new InvalidOperationException($"Page {pageNum} failed integrity check");
+        }
+
+        // Return copy
+        var result = new byte[PageSize];
+        _encryptedBuffer.AsSpan(0, PageSize).CopyTo(result);
+        return result;
     }
 
     /// <summary>
-    /// Writes a page to the database file.
+    /// Writes a page using zero-allocation PageSerializer with MemoryMarshal.
     /// </summary>
     /// <param name="pageNum">The page number to write (0-based).</param>
     /// <param name="data">The page data to write (must be exactly PageSize bytes).</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void WritePage(int pageNum, byte[] data)
     {
-        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
         ArgumentNullException.ThrowIfNull(data);
         if (data.Length != PageSize)
@@ -93,26 +109,45 @@ public sealed class DatabaseFile : IDisposable
             throw new ArgumentException($"Page data must be exactly {PageSize} bytes", nameof(data));
         }
 
-        long offset = (long)pageNum * StoredPageSize;
-
-        data.AsSpan().CopyTo(_encryptedBuffer.AsSpan(0, PageSize));
-        this.crypto.EncryptPage(_encryptedBuffer.AsSpan(0, PageSize));
-
-        using var fs = new FileStream(this.filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
-        fs.Seek(offset, SeekOrigin.Begin);
-        fs.Write(_encryptedBuffer.AsSpan(0, StoredPageSize));
+        WritePageFromSpan(pageNum, data.AsSpan());
     }
 
     /// <summary>
-    /// Zero-allocation read of a page into a provided buffer.
+    /// Writes a page from a Span using zero-allocation PageSerializer.
+    /// </summary>
+    /// <param name="pageNum">The page number to write (0-based).</param>
+    /// <param name="data">The page data to write (must be exactly PageSize bytes).</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void WritePageFromSpan(int pageNum, ReadOnlySpan<byte> data)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
+        if (data.Length != PageSize)
+        {
+            throw new ArgumentException($"Page data must be exactly {PageSize} bytes", nameof(data));
+        }
+
+        long offset = (long)pageNum * StoredPageSize;
+
+        // Copy to encryption buffer and encrypt in-place
+        data.CopyTo(_encryptedBuffer.AsSpan(0, PageSize));
+        this.crypto.EncryptPage(_encryptedBuffer.AsSpan(0, PageSize));
+
+        // Write to disk
+        using var fs = new FileStream(this.filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough);
+        fs.Seek(offset, SeekOrigin.Begin);
+        fs.Write(_encryptedBuffer.AsSpan(0, StoredPageSize));
+        fs.Flush(flushToDisk: true);
+    }
+
+    /// <summary>
+    /// Zero-allocation read of a page into a provided buffer using PageSerializer.
     /// </summary>
     /// <param name="pageNum">The page number to read.</param>
     /// <param name="buffer">The buffer to read into (must be at least PageSize).</param>
     /// <returns>The number of bytes read.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int ReadPageZeroAlloc(int pageNum, Span<byte> buffer)
     {
-        // ZERO-ALLOC PAGE I/O
         ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
         if (buffer.Length < PageSize)
         {
@@ -128,8 +163,61 @@ public sealed class DatabaseFile : IDisposable
         }
 
         this.crypto.DecryptPage(_encryptedBuffer.AsSpan(0, bytesRead));
+        
+        // Validate with PageSerializer
+        if (!PageSerializer.ValidatePage(_encryptedBuffer.AsSpan(0, PageSize)))
+        {
+            throw new InvalidOperationException($"Page {pageNum} failed integrity check");
+        }
+
         _encryptedBuffer.AsSpan(0, PageSize).CopyTo(buffer);
         return PageSize;
+    }
+
+    /// <summary>
+    /// Creates and writes a new page with header using PageSerializer.
+    /// </summary>
+    /// <param name="pageNum">The page number.</param>
+    /// <param name="pageType">The page type.</param>
+    /// <param name="data">The page data (excluding header).</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void WritePageWithHeader(int pageNum, PageType pageType, ReadOnlySpan<byte> data)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pageNum);
+
+        // Create header
+        var header = PageHeader.Create((byte)pageType, ++_currentTransactionId);
+
+        // Build complete page using stackalloc
+        Span<byte> pageBuffer = stackalloc byte[PageSize];
+        PageSerializer.CreatePage(ref header, data, pageBuffer);
+
+        // Write page
+        WritePageFromSpan(pageNum, pageBuffer);
+    }
+
+    /// <summary>
+    /// Reads page data (excluding header) using PageSerializer.
+    /// </summary>
+    /// <param name="pageNum">The page number.</param>
+    /// <param name="dataBuffer">Buffer to receive data.</param>
+    /// <returns>Number of data bytes read.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public int ReadPageData(int pageNum, Span<byte> dataBuffer)
+    {
+        // Read full page using zero-alloc method
+        Span<byte> pageBuffer = stackalloc byte[PageSize];
+        int bytesRead = ReadPageZeroAlloc(pageNum, pageBuffer);
+        if (bytesRead == 0)
+            return 0;
+
+        // Extract data using PageSerializer
+        var data = PageSerializer.GetPageData(pageBuffer, out int dataLength);
+        if (dataLength > dataBuffer.Length)
+            throw new ArgumentException("Data buffer too small", nameof(dataBuffer));
+
+        data.CopyTo(dataBuffer);
+        return dataLength;
     }
 
     /// <summary>
@@ -148,12 +236,14 @@ public sealed class DatabaseFile : IDisposable
         }
 
         this.handler.Dispose();
+        this.crypto.Dispose();
         this.disposed = true;
         GC.SuppressFinalize(this);
     }
 
     /// <summary>
     /// Ref struct for page buffer to avoid allocations.
+    /// OPTIMIZED: Uses PageSerializer for all operations.
     /// </summary>
     public ref struct PageBuffer
     {
@@ -174,23 +264,47 @@ public sealed class DatabaseFile : IDisposable
         public Span<byte> Span => this.buffer;
 
         /// <summary>
-        /// Reads a uint32 from the buffer at the specified offset.
+        /// Reads a uint32 from the buffer using PageSerializer.
         /// </summary>
         /// <param name="offset">The offset.</param>
         /// <returns>The uint32 value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint ReadUInt32LittleEndian(int offset)
         {
-            return BinaryPrimitives.ReadUInt32LittleEndian(this.buffer[offset..]);
+            return PageSerializer.ReadUInt32(this.buffer[offset..]);
         }
 
         /// <summary>
-        /// Writes a uint32 to the buffer at the specified offset.
+        /// Writes a uint32 to the buffer using PageSerializer.
         /// </summary>
         /// <param name="offset">The offset.</param>
         /// <param name="value">The value.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteUInt32LittleEndian(int offset, uint value)
         {
-            BinaryPrimitives.WriteUInt32LittleEndian(this.buffer[offset..], value);
+            PageSerializer.WriteUInt32(this.buffer[offset..], value);
+        }
+
+        /// <summary>
+        /// Reads an int32 from the buffer using PageSerializer.
+        /// </summary>
+        /// <param name="offset">The offset.</param>
+        /// <returns>The int32 value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int ReadInt32LittleEndian(int offset)
+        {
+            return PageSerializer.ReadInt32(this.buffer[offset..]);
+        }
+
+        /// <summary>
+        /// Writes an int32 to the buffer using PageSerializer.
+        /// </summary>
+        /// <param name="offset">The offset.</param>
+        /// <param name="value">The value.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteInt32LittleEndian(int offset, int value)
+        {
+            PageSerializer.WriteInt32(this.buffer[offset..], value);
         }
     }
 }

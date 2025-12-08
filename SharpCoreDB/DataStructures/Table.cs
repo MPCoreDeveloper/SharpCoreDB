@@ -47,62 +47,9 @@ public class Table : ITable, IDisposable
     private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
     private readonly Dictionary<string, long> columnUsage = new();
     private readonly object usageLock = new();
-    
-    // OPTIMIZATION: Batch insert mode with deferred index updates
-    private bool _batchInsertMode = false;
-    private readonly List<(Dictionary<string, object> row, long position)> _pendingIndexUpdates = new();
-    private readonly object _batchLock = new();
 
     public void SetStorage(IStorage storage) => this.storage = storage;
     public void SetReadOnly(bool isReadOnly) => this.isReadOnly = isReadOnly;
-
-    /// <summary>
-    /// Enables batch insert mode. Hash index updates are deferred until EndBatchInsert() is called.
-    /// This significantly improves performance for bulk inserts (150-200ms saved for 1000 inserts).
-    /// </summary>
-    public void BeginBatchInsert()
-    {
-        lock (_batchLock)
-        {
-            _batchInsertMode = true;
-            _pendingIndexUpdates.Clear();
-        }
-    }
-
-    /// <summary>
-    /// Flushes all pending index updates in a single bulk operation.
-    /// Call this after batch insert is complete.
-    /// </summary>
-    public void EndBatchInsert()
-    {
-        lock (_batchLock)
-        {
-            if (!_batchInsertMode) return;
-            
-            // PERFORMANCE FIX: Bulk insert all pending updates at once
-            // This is much faster than updating indexes per insert
-            if (_pendingIndexUpdates.Count > 0 && hashIndexes.Count > 0)
-            {
-                foreach (var (row, position) in _pendingIndexUpdates)
-                {
-                    foreach (var kvp in hashIndexes)
-                    {
-                        var columnName = kvp.Key;
-                        var index = kvp.Value;
-                        
-                        if (row.TryGetValue(columnName, out var val))
-                        {
-                            index.Add(row, position);
-                        }
-                    }
-                }
-                
-                _pendingIndexUpdates.Clear();
-            }
-            
-            _batchInsertMode = false;
-        }
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Insert(Dictionary<string, object> row)
@@ -172,22 +119,10 @@ public class Table : ITable, IDisposable
                     this.Index.Insert(pkVal, position);
                 }
 
-                // OPTIMIZATION: Handle hash index updates based on batch mode
+                // Async hash index update with position
                 if (this.hashIndexes.Count > 0)
                 {
-                    lock (_batchLock)
-                    {
-                        if (_batchInsertMode)
-                        {
-                            // BATCH MODE: Defer index update
-                            _pendingIndexUpdates.Add((new Dictionary<string, object>(row), position));
-                        }
-                        else
-                        {
-                            // NORMAL MODE: Update index immediately (async)
-                            _ = _indexQueue.Writer.WriteAsync(new IndexUpdate(row, this.hashIndexes.Values, position));
-                        }
-                    }
+                    _ = _indexQueue.Writer.WriteAsync(new IndexUpdate(row, this.hashIndexes.Values, position));
                 }
             }
             finally

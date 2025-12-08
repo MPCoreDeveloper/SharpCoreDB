@@ -5,8 +5,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.14.0" />
     <PackageReference Include="Bogus" Version="35.6.5" />
+    
+    <!-- Comparative Database Engines -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="LiteDB" Version="5.0.21" />
+    
+    <!-- Charting and Visualization -->
+    <PackageReference Include="ScottPlot" Version="5.0.47" />
+    <PackageReference Include="Markdig" Version="0.37.0" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -14,9 +23,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable><TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <!-- PublishAot disabled for now to enable JSON reflection - will add source generation later -->
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- PublishAot disabled for benchmarks to enable reflection -->
     <PublishAot>false</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
 </Project>

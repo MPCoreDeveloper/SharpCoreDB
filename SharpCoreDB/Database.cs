@@ -184,8 +184,6 @@ public class Database : IDatabase
     /// <summary>
     /// Executes multiple SQL commands in a batch for improved performance.
     /// Uses a single WAL transaction for all commands.
-    /// OPTIMIZED: Uses cached prepared statements + lazy index updates.
-    /// Expected: 14% from caching + 18% from lazy indexes = 32% total improvement.
     /// </summary>
     /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
@@ -220,46 +218,14 @@ public class Database : IDatabase
             return;
         }
 
-        // OPTIMIZATION: Batch all non-SELECT statements with lazy index updates
-        // Uses prepared statement cache (14% improvement) + deferred indexing (18% improvement)
+        // Batch all non-SELECT statements in a single WAL transaction
         lock (this._walLock)
         {
             using var wal = new WAL(this._dbPath, this.config, this._walManager);
-            
-            // OPTIMIZATION #2: Enable batch insert mode for all tables
-            // This defers hash index updates until the end of the batch
-            foreach (var table in this.tables.Values)
+            foreach (var sql in statements)
             {
-                if (table is Table t)
-                {
-                    t.BeginBatchInsert();
-                }
-            }
-
-            try
-            {
-                foreach (var sql in statements)
-                {
-                    // PERFORMANCE FIX #1: Use Prepare() to get cached query plan
-                    // This avoids parsing the same SQL statement multiple times (14% improvement)
-                    var stmt = this.Prepare(sql);
-                    
-                    // Create parser and execute with cached plan
-                    var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
-                    sqlParser.Execute(stmt.Plan, null, wal);
-                }
-            }
-            finally
-            {
-                // PERFORMANCE FIX #2: Flush deferred index updates in bulk (18% improvement)
-                // This performs all index updates in one operation instead of N operations
-                foreach (var table in this.tables.Values)
-                {
-                    if (table is Table t)
-                    {
-                        t.EndBatchInsert();
-                    }
-                }
+                var sqlParser = new SqlParser(this.tables, wal, this._dbPath, this.storage, this.isReadOnly, this.queryCache);
+                sqlParser.Execute(sql, wal);
             }
 
             if (!this.isReadOnly)
