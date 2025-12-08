@@ -1,7 +1,7 @@
-// <copyright file="GroupCommitComparisonRunner.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
+// <copyright file="GroupCommitComparisonRunner.cs" company="MPCoreDeveloper">
+// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
-
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Reports;
 using SharpCoreDB.Benchmarks.Comparative;
@@ -21,11 +21,11 @@ public static class GroupCommitComparisonRunner
         Console.WriteLine("?  SharpCoreDB Group Commit WAL - Performance Comparison Suite    ?");
         Console.WriteLine("?                                                                  ?");
         Console.WriteLine("?  Comparing:                                                      ?");
-        Console.WriteLine("?    • SharpCoreDB (Legacy WAL)                                   ?");
-        Console.WriteLine("?    • SharpCoreDB (Group Commit FullSync)                        ?");
-        Console.WriteLine("?    • SharpCoreDB (Group Commit Async)                           ?");
-        Console.WriteLine("?    • SQLite (Memory, WAL mode, No-WAL mode)                     ?");
-        Console.WriteLine("?    • LiteDB                                                      ?");
+        Console.WriteLine("?    â€¢ SharpCoreDB (Legacy WAL)                                   ?");
+        Console.WriteLine("?    â€¢ SharpCoreDB (Group Commit FullSync)                        ?");
+        Console.WriteLine("?    â€¢ SharpCoreDB (Group Commit Async)                           ?");
+        Console.WriteLine("?    â€¢ SQLite (Memory, WAL mode, No-WAL mode)                     ?");
+        Console.WriteLine("?    â€¢ LiteDB                                                      ?");
         Console.WriteLine("????????????????????????????????????????????????????????????????????");
         Console.WriteLine();
 

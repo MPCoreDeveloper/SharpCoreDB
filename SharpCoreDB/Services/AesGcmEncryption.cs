@@ -1,7 +1,7 @@
-// <copyright file="AesGcmEncryption.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
+// <copyright file="AesGcmEncryption.cs" company="MPCoreDeveloper">
+// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
-
 namespace SharpCoreDB.Services;
 
 using System;
@@ -71,7 +71,7 @@ public class AesGcmEncryption : IDisposable
             cipherArray = _pool.Rent(data.Length);
             Span<byte> cipher = cipherArray.AsSpan(0, data.Length);
             
-            // Encrypt: plaintext → ciphertext + tag
+            // Encrypt: plaintext â†’ ciphertext + tag
             aes.Encrypt(nonce, data, cipher, tag);
             
             // Build result: [nonce][cipher][tag]
@@ -240,7 +240,7 @@ public class AesGcmEncryption : IDisposable
 
     /// <summary>
     /// Encrypts a page in-place using AES-256-GCM (zero-allocation).
-    /// Page format: [plaintext...] → [nonce(12)][ciphertext...][tag(16)]
+    /// Page format: [plaintext...] â†’ [nonce(12)][ciphertext...][tag(16)]
     /// </summary>
     /// <param name="page">The page buffer (must have space for nonce + tag overhead).</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -271,7 +271,7 @@ public class AesGcmEncryption : IDisposable
             // Copy plaintext to temp
             page.Slice(0, dataSize).CopyTo(temp);
             
-            // Encrypt: temp → temp (in-place in temp buffer)
+            // Encrypt: temp â†’ temp (in-place in temp buffer)
             aes.Encrypt(nonce, temp, temp, tag);
             
             // Write back: [nonce][ciphertext][tag]
@@ -294,7 +294,7 @@ public class AesGcmEncryption : IDisposable
 
     /// <summary>
     /// Decrypts a page in-place using AES-256-GCM (zero-allocation).
-    /// Page format: [nonce(12)][ciphertext...][tag(16)] → [plaintext...]
+    /// Page format: [nonce(12)][ciphertext...][tag(16)] â†’ [plaintext...]
     /// </summary>
     /// <param name="page">The encrypted page buffer.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

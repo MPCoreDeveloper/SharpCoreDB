@@ -1,7 +1,7 @@
-// <copyright file="PageCacheQuickTest.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
+// <copyright file="PageCacheQuickTest.cs" company="MPCoreDeveloper">
+// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
-
 namespace SharpCoreDB.Benchmarks;
 
 using SharpCoreDB.Core.Cache;
@@ -28,7 +28,7 @@ public class PageCacheQuickTest
 
         Console.WriteLine();
         Console.WriteLine("==============================================");
-        Console.WriteLine("  ✅ Alle tests geslaagd!");
+        Console.WriteLine("  âœ… Alle tests geslaagd!");
         Console.WriteLine("==============================================");
     }
 
@@ -53,7 +53,7 @@ public class PageCacheQuickTest
         Console.WriteLine($"   - {opsPerSecond:N0} ops/sec");
         Console.WriteLine($"   - {sw.ElapsedTicks / 10000.0:F1} ticks per operatie");
         Console.WriteLine($"   - Hit Rate: {cache.Statistics.HitRate:P1}");
-        Console.WriteLine($"   ✅ Sequential access werkt!");
+        Console.WriteLine($"   âœ… Sequential access werkt!");
         Console.WriteLine();
     }
 
@@ -80,7 +80,7 @@ public class PageCacheQuickTest
         Console.WriteLine($"   - 10,000 operaties (8 threads) in {sw.ElapsedMilliseconds} ms");
         Console.WriteLine($"   - {opsPerSecond:N0} ops/sec");
         Console.WriteLine($"   - Hit Rate: {cache.Statistics.HitRate:P1}");
-        Console.WriteLine($"   ✅ Concurrent access werkt!");
+        Console.WriteLine($"   âœ… Concurrent access werkt!");
         Console.WriteLine();
     }
 
@@ -120,7 +120,7 @@ public class PageCacheQuickTest
             long gen0Collections = gen0After - gen0Before;
             
             Console.WriteLine($"   - Gen0 collections tijdens 10K ops: {gen0Collections}");
-            Console.WriteLine($"   ✅ Memory usage is efficient!");
+            Console.WriteLine($"   âœ… Memory usage is efficient!");
         }
         
         Console.WriteLine();
@@ -159,7 +159,7 @@ public class PageCacheQuickTest
         
         string diag = cache.GetDiagnostics();
         Console.WriteLine($"   - Diagnostics: {diag.Substring(0, Math.Min(100, diag.Length))}...");
-        Console.WriteLine($"   ✅ Statistics tracking werkt!");
+        Console.WriteLine($"   âœ… Statistics tracking werkt!");
         Console.WriteLine();
     }
 
@@ -172,7 +172,7 @@ public class PageCacheQuickTest
         catch (Exception ex)
         {
             Console.WriteLine();
-            Console.WriteLine("❌ ERROR:");
+            Console.WriteLine("âŒ ERROR:");
             Console.WriteLine(ex.Message);
             Console.WriteLine(ex.StackTrace);
         }

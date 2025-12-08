@@ -1,7 +1,7 @@
-// <copyright file="SecurityConfig.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
+// <copyright file="SecurityConfig.cs" company="MPCoreDeveloper">
+// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
-
 namespace SharpCoreDB;
 
 /// <summary>
