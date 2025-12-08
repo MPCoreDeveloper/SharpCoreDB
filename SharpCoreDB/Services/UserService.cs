@@ -11,48 +11,35 @@ using System.Security.Cryptography;
 /// <summary>
 /// Implementation of IUserService.
 /// </summary>
-public class UserService : IUserService
+/// <param name="crypto">The crypto service.</param>
+/// <param name="storage">The storage service.</param>
+/// <param name="dbPath">The database path.</param>
+public sealed class UserService(ICryptoService crypto, IStorage storage, string dbPath) : IUserService
 {
-    private readonly ICryptoService crypto;
-    private readonly IStorage storage;
-    private readonly string dbPath;
-    private Dictionary<string, UserCredentials> users = new();
+    private Dictionary<string, UserCredentials> users = LoadUsersInternal(storage, dbPath);
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="UserService"/> class.
-    /// </summary>
-    /// <param name="crypto">The crypto service.</param>
-    /// <param name="storage">The storage service.</param>
-    /// <param name="dbPath">The database path.</param>
-    public UserService(ICryptoService crypto, IStorage storage, string dbPath)
+    private static Dictionary<string, UserCredentials> LoadUsersInternal(IStorage storage, string dbPath)
     {
-        this.crypto = crypto;
-        this.storage = storage;
-        this.dbPath = dbPath;
-        this.LoadUsers();
-    }
-
-    private void LoadUsers()
-    {
-        var path = Path.Combine(this.dbPath, "users.json");
-        var data = this.storage.Read(path);
+        var path = Path.Combine(dbPath, "users.json");
+        var data = storage.Read(path);
         if (data != null)
         {
             try
             {
-                this.users = JsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? new();
+                return JsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? [];
             }
             catch
             {
-                this.users = new();
+                return [];
             }
         }
+        return [];
     }
 
     private void SaveUsers()
     {
-        var path = Path.Combine(this.dbPath, "users.json");
-        this.storage.Write(path, JsonSerializer.Serialize(this.users));
+        var path = Path.Combine(dbPath, "users.json");
+        storage.Write(path, JsonSerializer.Serialize(users));
     }
 
     /// <inheritdoc />
@@ -63,24 +50,21 @@ public class UserService : IUserService
         RandomNumberGenerator.Fill(salt);
         var saltBase64 = Convert.ToBase64String(salt);
         
-        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, saltBase64));
-        this.users[username] = new UserCredentials { Hash = hash, Salt = saltBase64 };
-        this.SaveUsers();
+        var hash = Convert.ToBase64String(crypto.DeriveKey(password, saltBase64));
+        users[username] = new UserCredentials { Hash = hash, Salt = saltBase64 };
+        SaveUsers();
     }
 
     /// <inheritdoc />
     public bool Login(string username, string password)
     {
-        if (!this.users.ContainsKey(username))
-        {
+        if (!users.TryGetValue(username, out var userCreds))
             return false;
-        }
 
-        var userCreds = this.users[username];
-        var hash = Convert.ToBase64String(this.crypto.DeriveKey(password, userCreds.Salt));
+        var hash = Convert.ToBase64String(crypto.DeriveKey(password, userCreds.Salt));
         if (userCreds.Hash == hash)
         {
-            this.CurrentUser = username;
+            CurrentUser = username;
             return true;
         }
 
@@ -95,8 +79,8 @@ public class UserService : IUserService
 /// User credentials with proper salt storage.
 /// SECURITY: Each user now has a unique random salt to prevent rainbow table attacks.
 /// </summary>
-internal class UserCredentials
+internal sealed class UserCredentials
 {
-    public string Hash { get; set; } = string.Empty;
-    public string Salt { get; set; } = string.Empty;
+    public required string Hash { get; init; }
+    public required string Salt { get; init; }
 }

@@ -12,14 +12,11 @@ using System.Linq;
 /// Base visitor with error recovery capabilities.
 /// Implements try/catch handling for each visit method to prevent crashes.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the <see cref="SqlVisitorBase"/> class.
-/// </remarks>
+/// <typeparam name="TResult">The return type of visit operations.</typeparam>
 /// <param name="throwOnError">Whether to throw exceptions on errors (default: false).</param>
-public abstract class SqlVisitorBase(bool throwOnError = false) : ISqlVisitor
+public abstract class SqlVisitorBase<TResult>(bool throwOnError = false) : ISqlVisitor<TResult>
 {
     private readonly List<string> _errors = [];
-    private readonly bool _throwOnError = throwOnError;
 
     /// <summary>
     /// Gets the list of errors encountered during visitation.
@@ -50,7 +47,7 @@ public abstract class SqlVisitorBase(bool throwOnError = false) : ISqlVisitor
     /// <summary>
     /// Safely executes a visit operation with error recovery.
     /// </summary>
-    protected object? SafeVisit(Func<object?> visitFunc, string context, SqlNode? node = null)
+    protected TResult SafeVisit(Func<TResult> visitFunc, string context, SqlNode? node = null)
     {
         try
         {
@@ -59,243 +56,203 @@ public abstract class SqlVisitorBase(bool throwOnError = false) : ISqlVisitor
         catch (Exception ex)
         {
             RecordError($"{context}: {ex.Message}", node);
-            if (_throwOnError)
+            if (throwOnError)
                 throw;
-            return null;
+            return default!;
         }
     }
 
     /// <inheritdoc/>
-    public virtual object? VisitSelect(SelectNode node)
-    {
-        return SafeVisit(() => VisitSelectCore(node), "SELECT", node);
-    }
+    public virtual TResult VisitSelect(SelectNode node) =>
+        SafeVisit(() => VisitSelectCore(node), "SELECT", node);
 
     /// <summary>
     /// Core implementation of SELECT visit (without error recovery).
     /// </summary>
-    protected abstract object? VisitSelectCore(SelectNode node);
+    protected abstract TResult VisitSelectCore(SelectNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitColumn(ColumnNode node)
-    {
-        return SafeVisit(() => VisitColumnCore(node), "COLUMN", node);
-    }
+    public virtual TResult VisitColumn(ColumnNode node) =>
+        SafeVisit(() => VisitColumnCore(node), "COLUMN", node);
 
     /// <summary>
     /// Core implementation of COLUMN visit.
     /// </summary>
-    protected abstract object? VisitColumnCore(ColumnNode node);
+    protected abstract TResult VisitColumnCore(ColumnNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitFrom(FromNode node)
-    {
-        return SafeVisit(() => VisitFromCore(node), "FROM", node);
-    }
+    public virtual TResult VisitFrom(FromNode node) =>
+        SafeVisit(() => VisitFromCore(node), "FROM", node);
 
     /// <summary>
     /// Core implementation of FROM visit.
     /// </summary>
-    protected abstract object? VisitFromCore(FromNode node);
+    protected abstract TResult VisitFromCore(FromNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitJoin(JoinNode node)
-    {
-        return SafeVisit(() => VisitJoinCore(node), "JOIN", node);
-    }
+    public virtual TResult VisitJoin(JoinNode node) =>
+        SafeVisit(() => VisitJoinCore(node), "JOIN", node);
 
     /// <summary>
     /// Core implementation of JOIN visit.
     /// </summary>
-    protected abstract object? VisitJoinCore(JoinNode node);
+    protected abstract TResult VisitJoinCore(JoinNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitWhere(WhereNode node)
-    {
-        return SafeVisit(() => VisitWhereCore(node), "WHERE", node);
-    }
+    public virtual TResult VisitWhere(WhereNode node) =>
+        SafeVisit(() => VisitWhereCore(node), "WHERE", node);
 
     /// <summary>
     /// Core implementation of WHERE visit.
     /// </summary>
-    protected abstract object? VisitWhereCore(WhereNode node);
+    protected abstract TResult VisitWhereCore(WhereNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitBinaryExpression(BinaryExpressionNode node)
-    {
-        return SafeVisit(() => VisitBinaryExpressionCore(node), "BINARY EXPRESSION", node);
-    }
+    public virtual TResult VisitBinaryExpression(BinaryExpressionNode node) =>
+        SafeVisit(() => VisitBinaryExpressionCore(node), "BINARY EXPRESSION", node);
 
     /// <summary>
     /// Core implementation of BINARY EXPRESSION visit.
     /// </summary>
-    protected abstract object? VisitBinaryExpressionCore(BinaryExpressionNode node);
+    protected abstract TResult VisitBinaryExpressionCore(BinaryExpressionNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitLiteral(LiteralNode node)
-    {
-        return SafeVisit(() => VisitLiteralCore(node), "LITERAL", node);
-    }
+    public virtual TResult VisitLiteral(LiteralNode node) =>
+        SafeVisit(() => VisitLiteralCore(node), "LITERAL", node);
 
     /// <summary>
     /// Core implementation of LITERAL visit.
     /// </summary>
-    protected abstract object? VisitLiteralCore(LiteralNode node);
+    protected abstract TResult VisitLiteralCore(LiteralNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitColumnReference(ColumnReferenceNode node)
-    {
-        return SafeVisit(() => VisitColumnReferenceCore(node), "COLUMN REFERENCE", node);
-    }
+    public virtual TResult VisitColumnReference(ColumnReferenceNode node) =>
+        SafeVisit(() => VisitColumnReferenceCore(node), "COLUMN REFERENCE", node);
 
     /// <summary>
     /// Core implementation of COLUMN REFERENCE visit.
     /// </summary>
-    protected abstract object? VisitColumnReferenceCore(ColumnReferenceNode node);
+    protected abstract TResult VisitColumnReferenceCore(ColumnReferenceNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitInExpression(InExpressionNode node)
-    {
-        return SafeVisit(() => VisitInExpressionCore(node), "IN EXPRESSION", node);
-    }
+    public virtual TResult VisitInExpression(InExpressionNode node) =>
+        SafeVisit(() => VisitInExpressionCore(node), "IN EXPRESSION", node);
 
     /// <summary>
     /// Core implementation of IN EXPRESSION visit.
     /// </summary>
-    protected abstract object? VisitInExpressionCore(InExpressionNode node);
+    protected abstract TResult VisitInExpressionCore(InExpressionNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitOrderBy(OrderByNode node)
-    {
-        return SafeVisit(() => VisitOrderByCore(node), "ORDER BY", node);
-    }
+    public virtual TResult VisitOrderBy(OrderByNode node) =>
+        SafeVisit(() => VisitOrderByCore(node), "ORDER BY", node);
 
     /// <summary>
     /// Core implementation of ORDER BY visit.
     /// </summary>
-    protected abstract object? VisitOrderByCore(OrderByNode node);
+    protected abstract TResult VisitOrderByCore(OrderByNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitGroupBy(GroupByNode node)
-    {
-        return SafeVisit(() => VisitGroupByCore(node), "GROUP BY", node);
-    }
+    public virtual TResult VisitGroupBy(GroupByNode node) =>
+        SafeVisit(() => VisitGroupByCore(node), "GROUP BY", node);
 
     /// <summary>
     /// Core implementation of GROUP BY visit.
     /// </summary>
-    protected abstract object? VisitGroupByCore(GroupByNode node);
+    protected abstract TResult VisitGroupByCore(GroupByNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitHaving(HavingNode node)
-    {
-        return SafeVisit(() => VisitHavingCore(node), "HAVING", node);
-    }
+    public virtual TResult VisitHaving(HavingNode node) =>
+        SafeVisit(() => VisitHavingCore(node), "HAVING", node);
 
     /// <summary>
     /// Core implementation of HAVING visit.
     /// </summary>
-    protected abstract object? VisitHavingCore(HavingNode node);
+    protected abstract TResult VisitHavingCore(HavingNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitFunctionCall(FunctionCallNode node)
-    {
-        return SafeVisit(() => VisitFunctionCallCore(node), "FUNCTION CALL", node);
-    }
+    public virtual TResult VisitFunctionCall(FunctionCallNode node) =>
+        SafeVisit(() => VisitFunctionCallCore(node), "FUNCTION CALL", node);
 
     /// <summary>
     /// Core implementation of FUNCTION CALL visit.
     /// </summary>
-    protected abstract object? VisitFunctionCallCore(FunctionCallNode node);
+    protected abstract TResult VisitFunctionCallCore(FunctionCallNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitInsert(InsertNode node)
-    {
-        return SafeVisit(() => VisitInsertCore(node), "INSERT", node);
-    }
+    public virtual TResult VisitInsert(InsertNode node) =>
+        SafeVisit(() => VisitInsertCore(node), "INSERT", node);
 
     /// <summary>
     /// Core implementation of INSERT visit.
     /// </summary>
-    protected abstract object? VisitInsertCore(InsertNode node);
+    protected abstract TResult VisitInsertCore(InsertNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitUpdate(UpdateNode node)
-    {
-        return SafeVisit(() => VisitUpdateCore(node), "UPDATE", node);
-    }
+    public virtual TResult VisitUpdate(UpdateNode node) =>
+        SafeVisit(() => VisitUpdateCore(node), "UPDATE", node);
 
     /// <summary>
     /// Core implementation of UPDATE visit.
     /// </summary>
-    protected abstract object? VisitUpdateCore(UpdateNode node);
+    protected abstract TResult VisitUpdateCore(UpdateNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitDelete(DeleteNode node)
-    {
-        return SafeVisit(() => VisitDeleteCore(node), "DELETE", node);
-    }
+    public virtual TResult VisitDelete(DeleteNode node) =>
+        SafeVisit(() => VisitDeleteCore(node), "DELETE", node);
 
     /// <summary>
     /// Core implementation of DELETE visit.
     /// </summary>
-    protected abstract object? VisitDeleteCore(DeleteNode node);
+    protected abstract TResult VisitDeleteCore(DeleteNode node);
 
     /// <inheritdoc/>
-    public virtual object? VisitCreateTable(CreateTableNode node) => SafeVisit(() => VisitCreateTableCore(node), "CREATE TABLE", node);
+    public virtual TResult VisitCreateTable(CreateTableNode node) =>
+        SafeVisit(() => VisitCreateTableCore(node), "CREATE TABLE", node);
 
     /// <summary>
     /// Core implementation of CREATE TABLE visit.
     /// </summary>
-    protected abstract object? VisitCreateTableCore(CreateTableNode node);
+    protected abstract TResult VisitCreateTableCore(CreateTableNode node);
 }
 
 /// <summary>
 /// SQL to string visitor for debugging/logging.
+/// Type-safe visitor that always returns strings.
 /// </summary>
-public class SqlToStringVisitor : SqlVisitorBase
+/// <param name="dialect">The SQL dialect to use.</param>
+public sealed class SqlToStringVisitor(ISqlDialect? dialect = null) : SqlVisitorBase<string>(throwOnError: false)
 {
-    private readonly ISqlDialect _dialect;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SqlToStringVisitor"/> class.
-    /// </summary>
-    /// <param name="dialect">The SQL dialect to use.</param>
-    public SqlToStringVisitor(ISqlDialect? dialect = null)
-        : base(throwOnError: false)
-    {
-        _dialect = dialect ?? SqlDialectFactory.Default;
-    }
+    private readonly ISqlDialect _dialect = dialect ?? SqlDialectFactory.Default;
 
     /// <inheritdoc/>
-    protected override object? VisitSelectCore(SelectNode node)
+    protected override string VisitSelectCore(SelectNode node)
     {
-        var parts = new List<string>();
-        parts.Add("SELECT");
+        List<string> parts = ["SELECT"];
 
         if (node.IsDistinct)
             parts.Add("DISTINCT");
 
-        var columns = node.Columns.Select(c => c.Accept(this)?.ToString() ?? "*");
+        var columns = node.Columns.Select(c => c.Accept(this));
         parts.Add(string.Join(", ", columns));
 
         if (node.From != null)
         {
             parts.Add("FROM");
-            parts.Add(node.From.Accept(this)?.ToString() ?? "");
+            parts.Add(node.From.Accept(this));
         }
 
         if (node.Where != null)
-            parts.Add(node.Where.Accept(this)?.ToString() ?? "");
+            parts.Add(node.Where.Accept(this));
 
         if (node.GroupBy != null)
-            parts.Add(node.GroupBy.Accept(this)?.ToString() ?? "");
+            parts.Add(node.GroupBy.Accept(this));
 
         if (node.Having != null)
-            parts.Add(node.Having.Accept(this)?.ToString() ?? "");
+            parts.Add(node.Having.Accept(this));
 
         if (node.OrderBy != null)
-            parts.Add(node.OrderBy.Accept(this)?.ToString() ?? "");
+            parts.Add(node.OrderBy.Accept(this));
 
         var limitClause = _dialect.FormatLimitClause(node.Limit, node.Offset);
         if (!string.IsNullOrEmpty(limitClause))
@@ -305,7 +262,7 @@ public class SqlToStringVisitor : SqlVisitorBase
     }
 
     /// <inheritdoc/>
-    protected override object? VisitColumnCore(ColumnNode node)
+    protected override string VisitColumnCore(ColumnNode node)
     {
         if (node.IsWildcard)
             return node.TableAlias != null ? $"{node.TableAlias}.*" : "*";
@@ -324,7 +281,7 @@ public class SqlToStringVisitor : SqlVisitorBase
     }
 
     /// <inheritdoc/>
-    protected override object? VisitFromCore(FromNode node)
+    protected override string VisitFromCore(FromNode node)
     {
         var from = node.Subquery != null
             ? $"({node.Subquery.Accept(this)})"
@@ -333,12 +290,12 @@ public class SqlToStringVisitor : SqlVisitorBase
         if (!string.IsNullOrEmpty(node.Alias))
             from += $" AS {_dialect.QuoteIdentifier(node.Alias)}";
 
-        var joins = node.Joins.Select(j => j.Accept(this)?.ToString() ?? "");
-        return string.Join(" ", new[] { from }.Concat(joins));
+        var joins = node.Joins.Select(j => j.Accept(this));
+        return string.Join(" ", [from, .. joins]);
     }
 
     /// <inheritdoc/>
-    protected override object? VisitJoinCore(JoinNode node)
+    protected override string VisitJoinCore(JoinNode node)
     {
         var joinType = node.Type switch
         {
@@ -350,101 +307,90 @@ public class SqlToStringVisitor : SqlVisitorBase
             _ => "JOIN"
         };
 
-        var parts = new[] { joinType, node.Table.Accept(this)?.ToString() ?? "" };
+        var parts = new[] { joinType, node.Table.Accept(this) };
 
         if (node.OnCondition != null)
-            parts = parts.Append($"ON {node.OnCondition.Accept(this)}").ToArray();
+            parts = [.. parts, $"ON {node.OnCondition.Accept(this)}"];
 
         return string.Join(" ", parts);
     }
 
     /// <inheritdoc/>
-    protected override object? VisitWhereCore(WhereNode node)
-    {
-        return $"WHERE {node.Condition.Accept(this)}";
-    }
+    protected override string VisitWhereCore(WhereNode node) =>
+        $"WHERE {node.Condition.Accept(this)}";
 
     /// <inheritdoc/>
-    protected override object? VisitBinaryExpressionCore(BinaryExpressionNode node)
+    protected override string VisitBinaryExpressionCore(BinaryExpressionNode node)
     {
-        var left = node.Left?.Accept(this)?.ToString() ?? "NULL";
-        var right = node.Right?.Accept(this)?.ToString() ?? "NULL";
+        var left = node.Left?.Accept(this) ?? "NULL";
+        var right = node.Right?.Accept(this) ?? "NULL";
         return $"({left} {node.Operator} {right})";
     }
 
     /// <inheritdoc/>
-    protected override object? VisitLiteralCore(LiteralNode node)
-    {
-        if (node.Value == null)
-            return "NULL";
-
-        if (node.Value is string s)
-            return $"'{s.Replace("'", "''")}'";
-
-        if (node.Value is bool b)
-            return b ? "1" : "0";
-
-        return node.Value.ToString();
-    }
+    protected override string VisitLiteralCore(LiteralNode node) =>
+        node.Value switch
+        {
+            null => "NULL",
+            string s => $"'{s.Replace("'", "''")}'",
+            bool b => b ? "1" : "0",
+            _ => node.Value.ToString() ?? "NULL"
+        };
 
     /// <inheritdoc/>
-    protected override object? VisitColumnReferenceCore(ColumnReferenceNode node)
-    {
-        return node.TableAlias != null
+    protected override string VisitColumnReferenceCore(ColumnReferenceNode node) =>
+        node.TableAlias != null
             ? $"{_dialect.QuoteIdentifier(node.TableAlias)}.{_dialect.QuoteIdentifier(node.ColumnName)}"
             : _dialect.QuoteIdentifier(node.ColumnName);
-    }
 
     /// <inheritdoc/>
-    protected override object? VisitInExpressionCore(InExpressionNode node)
+    protected override string VisitInExpressionCore(InExpressionNode node)
     {
-        var expr = node.Expression?.Accept(this)?.ToString() ?? "NULL";
+        var expr = node.Expression?.Accept(this) ?? "NULL";
         var op = node.IsNot ? "NOT IN" : "IN";
 
         if (node.Subquery != null)
             return $"{expr} {op} ({node.Subquery.Accept(this)})";
 
-        var values = node.Values.Select(v => v.Accept(this)?.ToString() ?? "NULL");
+        var values = node.Values.Select(v => v.Accept(this));
         return $"{expr} {op} ({string.Join(", ", values)})";
     }
 
     /// <inheritdoc/>
-    protected override object? VisitOrderByCore(OrderByNode node)
+    protected override string VisitOrderByCore(OrderByNode node)
     {
         var items = node.Items.Select(i =>
         {
-            var col = i.Column.Accept(this)?.ToString() ?? "";
+            var col = i.Column.Accept(this);
             return i.IsAscending ? col : $"{col} DESC";
         });
         return $"ORDER BY {string.Join(", ", items)}";
     }
 
     /// <inheritdoc/>
-    protected override object? VisitGroupByCore(GroupByNode node)
+    protected override string VisitGroupByCore(GroupByNode node)
     {
-        var columns = node.Columns.Select(c => c.Accept(this)?.ToString() ?? "");
+        var columns = node.Columns.Select(c => c.Accept(this));
         return $"GROUP BY {string.Join(", ", columns)}";
     }
 
     /// <inheritdoc/>
-    protected override object? VisitHavingCore(HavingNode node)
-    {
-        return $"HAVING {node.Condition.Accept(this)}";
-    }
+    protected override string VisitHavingCore(HavingNode node) =>
+        $"HAVING {node.Condition.Accept(this)}";
 
     /// <inheritdoc/>
-    protected override object? VisitFunctionCallCore(FunctionCallNode node)
+    protected override string VisitFunctionCallCore(FunctionCallNode node)
     {
         var funcName = _dialect.TranslateFunction(node.FunctionName);
         var distinct = node.IsDistinct ? "DISTINCT " : "";
-        var args = node.Arguments.Select(a => a.Accept(this)?.ToString() ?? "");
+        var args = node.Arguments.Select(a => a.Accept(this));
         return $"{funcName}({distinct}{string.Join(", ", args)})";
     }
 
     /// <inheritdoc/>
-    protected override object? VisitInsertCore(InsertNode node)
+    protected override string VisitInsertCore(InsertNode node)
     {
-        var parts = new List<string> { "INSERT INTO", _dialect.QuoteIdentifier(node.TableName) };
+        List<string> parts = ["INSERT INTO", _dialect.QuoteIdentifier(node.TableName)];
 
         if (node.Columns.Any())
         {
@@ -454,11 +400,11 @@ public class SqlToStringVisitor : SqlVisitorBase
 
         if (node.SelectStatement != null)
         {
-            parts.Add(node.SelectStatement.Accept(this)?.ToString() ?? "");
+            parts.Add(node.SelectStatement.Accept(this));
         }
         else
         {
-            var values = node.Values.Select(v => v.Accept(this)?.ToString() ?? "NULL");
+            var values = node.Values.Select(v => v.Accept(this));
             parts.Add($"VALUES ({string.Join(", ", values)})");
         }
 
@@ -466,35 +412,35 @@ public class SqlToStringVisitor : SqlVisitorBase
     }
 
     /// <inheritdoc/>
-    protected override object? VisitUpdateCore(UpdateNode node)
+    protected override string VisitUpdateCore(UpdateNode node)
     {
-        var parts = new List<string> { "UPDATE", _dialect.QuoteIdentifier(node.TableName), "SET" };
+        List<string> parts = ["UPDATE", _dialect.QuoteIdentifier(node.TableName), "SET"];
 
         var sets = node.Assignments.Select(kv =>
             $"{_dialect.QuoteIdentifier(kv.Key)} = {kv.Value.Accept(this)}");
         parts.Add(string.Join(", ", sets));
 
         if (node.Where != null)
-            parts.Add(node.Where.Accept(this)?.ToString() ?? "");
+            parts.Add(node.Where.Accept(this));
 
         return string.Join(" ", parts);
     }
 
     /// <inheritdoc/>
-    protected override object? VisitDeleteCore(DeleteNode node)
+    protected override string VisitDeleteCore(DeleteNode node)
     {
-        var parts = new List<string> { "DELETE FROM", _dialect.QuoteIdentifier(node.TableName) };
+        List<string> parts = ["DELETE FROM", _dialect.QuoteIdentifier(node.TableName)];
 
         if (node.Where != null)
-            parts.Add(node.Where.Accept(this)?.ToString() ?? "");
+            parts.Add(node.Where.Accept(this));
 
         return string.Join(" ", parts);
     }
 
     /// <inheritdoc/>
-    protected override object? VisitCreateTableCore(CreateTableNode node)
+    protected override string VisitCreateTableCore(CreateTableNode node)
     {
-        var parts = new List<string> { "CREATE TABLE" };
+        List<string> parts = ["CREATE TABLE"];
 
         if (node.IfNotExists)
             parts.Add("IF NOT EXISTS");

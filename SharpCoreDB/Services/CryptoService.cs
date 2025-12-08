@@ -15,7 +15,7 @@ using System.Text;
 /// Zero-allocation implementation of ICryptoService using PBKDF2 for key derivation and AES-256-GCM for encryption.
 /// OPTIMIZATION: Uses stackalloc and Span<byte> to eliminate LINQ allocations in Encrypt/Decrypt.
 /// </summary>
-public class CryptoService : ICryptoService
+public sealed class CryptoService : ICryptoService
 {
     private const int NonceSize = 12; // AesGcm.NonceByteSizes.MaxSize
     private const int TagSize = 16;   // AesGcm.TagByteSizes.MaxSize
@@ -66,26 +66,21 @@ public class CryptoService : ICryptoService
             // SECURITY FIX: Derive key using PBKDF2 with 600,000 iterations (OWASP/NIST 2024 recommendation)
             // Previous value of 10,000 was dangerously low against GPU brute force attacks
             // See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-            var key = Rfc2898DeriveBytes.Pbkdf2(
-                passwordBytes.Slice(0, passwordLen), 
-                saltBytes.Slice(0, saltLen), 
+            return Rfc2898DeriveBytes.Pbkdf2(
+                passwordBytes[..passwordLen], 
+                saltBytes[..saltLen], 
                 600000,  // SECURITY: Increased from 10,000 to 600,000 iterations
                 HashAlgorithmName.SHA256, 
                 32);
-            
-            return key;
         }
         finally
         {
             // SECURITY: Clear sensitive password data
             if (passwordArray != null)
-            {
                 ArrayPool<byte>.Shared.Return(passwordArray, clearArray: true);
-            }
+            
             if (saltArray != null)
-            {
                 ArrayPool<byte>.Shared.Return(saltArray, clearArray: true);
-            }
         }
     }
 
@@ -123,9 +118,7 @@ public class CryptoService : ICryptoService
         {
             // SECURITY: Clear cipher data
             if (cipherArray != null)
-            {
                 ArrayPool<byte>.Shared.Return(cipherArray, clearArray: true);
-            }
             
             // SECURITY: Clear stack buffers
             nonce.Clear();
@@ -156,22 +149,15 @@ public class CryptoService : ICryptoService
     }
 
     /// <inheritdoc />
-    public void EncryptPage(Span<byte> page)
-    {
+    public void EncryptPage(Span<byte> page) =>
         // Delegate to AesGcmEncryption for page operations
         throw new NotImplementedException("Use GetAesGcmEncryption() for page-level operations");
-    }
 
     /// <inheritdoc />
-    public void DecryptPage(Span<byte> page)
-    {
+    public void DecryptPage(Span<byte> page) =>
         // Delegate to AesGcmEncryption for page operations
         throw new NotImplementedException("Use GetAesGcmEncryption() for page-level operations");
-    }
 
     /// <inheritdoc />
-    public AesGcmEncryption GetAesGcmEncryption(byte[] key)
-    {
-        return new AesGcmEncryption(key, false);
-    }
+    public AesGcmEncryption GetAesGcmEncryption(byte[] key) => new(key, false);
 }

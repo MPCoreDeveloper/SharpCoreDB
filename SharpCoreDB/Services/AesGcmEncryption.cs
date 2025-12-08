@@ -14,35 +14,17 @@ using System.Runtime.CompilerServices;
 /// SECURITY: All sensitive buffers are cleared immediately after use.
 /// PERFORMANCE: Eliminates all unnecessary allocations through Span<byte> and stackalloc.
 /// </summary>
-public class AesGcmEncryption : IDisposable
+/// <param name="key">The encryption key (must be 32 bytes for AES-256).</param>
+/// <param name="disableEncrypt">If true, encryption is disabled (passthrough mode).</param>
+public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : IDisposable
 {
-    private readonly byte[] _key;
-    private readonly bool _disableEncrypt;
+    private readonly byte[] _key = disableEncrypt ? [] : [.. key];
     private readonly ArrayPool<byte> _pool = ArrayPool<byte>.Shared;
 
     // Size constants for AES-GCM
     private const int NonceSize = 12; // AesGcm.NonceByteSizes.MaxSize = 12
     private const int TagSize = 16;   // AesGcm.TagByteSizes.MaxSize = 16
     private const int StackAllocThreshold = 256; // Use stackalloc for buffers <= 256 bytes
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AesGcmEncryption"/> class.
-    /// </summary>
-    /// <param name="key">The encryption key (must be 32 bytes for AES-256).</param>
-    /// <param name="disableEncrypt">If true, encryption is disabled (passthrough mode).</param>
-    public AesGcmEncryption(byte[] key, bool disableEncrypt = false)
-    {
-        _disableEncrypt = disableEncrypt;
-        if (!disableEncrypt)
-        {
-            _key = new byte[key.Length];
-            key.CopyTo(_key, 0);
-        }
-        else
-        {
-            _key = Array.Empty<byte>();
-        }
-    }
 
     /// <summary>
     /// Encrypts data using AES-256-GCM with optimized buffer handling.
@@ -53,7 +35,7 @@ public class AesGcmEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[] Encrypt(byte[] data)
     {
-        if (_disableEncrypt) 
+        if (disableEncrypt) 
             return data;
 
         using var aes = new AesGcm(_key, TagSize);
@@ -71,7 +53,7 @@ public class AesGcmEncryption : IDisposable
             cipherArray = _pool.Rent(data.Length);
             Span<byte> cipher = cipherArray.AsSpan(0, data.Length);
             
-            // Encrypt: plaintext â†’ ciphertext + tag
+            // Encrypt: plaintext → ciphertext + tag
             aes.Encrypt(nonce, data, cipher, tag);
             
             // Build result: [nonce][cipher][tag]
@@ -86,9 +68,7 @@ public class AesGcmEncryption : IDisposable
         {
             // SECURITY: Clear sensitive cipher data
             if (cipherArray != null)
-            {
                 _pool.Return(cipherArray, clearArray: true);
-            }
             
             // SECURITY: Clear stack-allocated buffers
             nonce.Clear();
@@ -104,7 +84,7 @@ public class AesGcmEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[] Decrypt(byte[] encryptedData)
     {
-        if (_disableEncrypt) 
+        if (disableEncrypt) 
             return encryptedData;
 
         var cipherLength = encryptedData.Length - NonceSize - TagSize;
@@ -134,7 +114,7 @@ public class AesGcmEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int Encrypt(ReadOnlySpan<byte> data, Span<byte> output)
     {
-        if (_disableEncrypt)
+        if (disableEncrypt)
         {
             data.CopyTo(output);
             return data.Length;
@@ -166,8 +146,8 @@ public class AesGcmEncryption : IDisposable
                 
                 // Write to output: [nonce][cipher][tag]
                 nonce.CopyTo(output);
-                cipher.CopyTo(output.Slice(NonceSize));
-                tag.CopyTo(output.Slice(NonceSize + data.Length));
+                cipher.CopyTo(output[NonceSize..]);
+                tag.CopyTo(output[(NonceSize + data.Length)..]);
                 
                 // SECURITY: Clear stack buffers
                 cipher.Clear();
@@ -183,8 +163,8 @@ public class AesGcmEncryption : IDisposable
                 
                 // Write to output: [nonce][cipher][tag]
                 nonce.CopyTo(output);
-                cipher.CopyTo(output.Slice(NonceSize));
-                tag.CopyTo(output.Slice(NonceSize + data.Length));
+                cipher.CopyTo(output[NonceSize..]);
+                tag.CopyTo(output[(NonceSize + data.Length)..]);
             }
             
             return totalSize;
@@ -193,9 +173,7 @@ public class AesGcmEncryption : IDisposable
         {
             // SECURITY: Clear pooled buffer
             if (cipherArray != null)
-            {
                 _pool.Return(cipherArray, clearArray: true);
-            }
             
             // SECURITY: Clear stack-allocated buffers
             nonce.Clear();
@@ -212,7 +190,7 @@ public class AesGcmEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int Decrypt(ReadOnlySpan<byte> encryptedData, Span<byte> output)
     {
-        if (_disableEncrypt)
+        if (disableEncrypt)
         {
             encryptedData.CopyTo(output);
             return encryptedData.Length;
@@ -228,25 +206,25 @@ public class AesGcmEncryption : IDisposable
         using var aes = new AesGcm(_key, TagSize);
         
         // OPTIMIZED: Use Span slicing (zero allocation)
-        var nonce = encryptedData.Slice(0, NonceSize);
+        var nonce = encryptedData[..NonceSize];
         var cipher = encryptedData.Slice(NonceSize, cipherLength);
-        var tag = encryptedData.Slice(NonceSize + cipherLength, TagSize);
+        var tag = encryptedData[(NonceSize + cipherLength)..];
         
         // Decrypt directly to output
-        aes.Decrypt(nonce, cipher, tag, output.Slice(0, cipherLength));
+        aes.Decrypt(nonce, cipher, tag, output[..cipherLength]);
         
         return cipherLength;
     }
 
     /// <summary>
     /// Encrypts a page in-place using AES-256-GCM (zero-allocation).
-    /// Page format: [plaintext...] â†’ [nonce(12)][ciphertext...][tag(16)]
+    /// Page format: [plaintext...] → [nonce(12)][ciphertext...][tag(16)]
     /// </summary>
     /// <param name="page">The page buffer (must have space for nonce + tag overhead).</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void EncryptPage(Span<byte> page)
     {
-        if (_disableEncrypt) 
+        if (disableEncrypt) 
             return;
 
         var dataSize = page.Length - NonceSize - TagSize;
@@ -269,23 +247,21 @@ public class AesGcmEncryption : IDisposable
             Span<byte> temp = tempArray.AsSpan(0, dataSize);
             
             // Copy plaintext to temp
-            page.Slice(0, dataSize).CopyTo(temp);
+            page[..dataSize].CopyTo(temp);
             
-            // Encrypt: temp â†’ temp (in-place in temp buffer)
+            // Encrypt: temp → temp (in-place in temp buffer)
             aes.Encrypt(nonce, temp, temp, tag);
             
             // Write back: [nonce][ciphertext][tag]
             nonce.CopyTo(page);
-            temp.CopyTo(page.Slice(NonceSize));
-            tag.CopyTo(page.Slice(NonceSize + dataSize));
+            temp.CopyTo(page[NonceSize..]);
+            tag.CopyTo(page[(NonceSize + dataSize)..]);
         }
         finally
         {
             // SECURITY: Clear sensitive data
             if (tempArray != null)
-            {
                 _pool.Return(tempArray, clearArray: true);
-            }
             
             nonce.Clear();
             tag.Clear();
@@ -294,13 +270,13 @@ public class AesGcmEncryption : IDisposable
 
     /// <summary>
     /// Decrypts a page in-place using AES-256-GCM (zero-allocation).
-    /// Page format: [nonce(12)][ciphertext...][tag(16)] â†’ [plaintext...]
+    /// Page format: [nonce(12)][ciphertext...][tag(16)] → [plaintext...]
     /// </summary>
     /// <param name="page">The encrypted page buffer.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void DecryptPage(Span<byte> page)
     {
-        if (_disableEncrypt) 
+        if (disableEncrypt) 
             return;
 
         var cipherLength = page.Length - NonceSize - TagSize;
@@ -310,9 +286,9 @@ public class AesGcmEncryption : IDisposable
         using var aes = new AesGcm(_key, TagSize);
         
         // OPTIMIZED: Extract components via Span slicing
-        var nonce = page.Slice(0, NonceSize);
+        var nonce = page[..NonceSize];
         var cipher = page.Slice(NonceSize, cipherLength);
-        var tag = page.Slice(NonceSize + cipherLength, TagSize);
+        var tag = page[(NonceSize + cipherLength)..];
         
         byte[]? tempArray = null;
         try
@@ -331,9 +307,7 @@ public class AesGcmEncryption : IDisposable
         {
             // SECURITY: Clear sensitive data
             if (tempArray != null)
-            {
                 _pool.Return(tempArray, clearArray: true);
-            }
         }
     }
 
@@ -342,9 +316,7 @@ public class AesGcmEncryption : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_key != null && _key.Length > 0)
-        {
-            Array.Clear(_key, 0, _key.Length);
-        }
+        if (_key.Length > 0)
+            Array.Clear(_key);
     }
 }

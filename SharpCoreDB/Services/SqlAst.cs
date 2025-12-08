@@ -5,60 +5,68 @@
 namespace SharpCoreDB.Services;
 
 /// <summary>
-/// Visitor interface for SQL AST nodes.
+/// Generic visitor interface for SQL AST nodes with type-safe return values.
 /// </summary>
-public interface ISqlVisitor
+/// <typeparam name="TResult">The return type of visit operations.</typeparam>
+public interface ISqlVisitor<out TResult>
 {
     /// <summary>Visits a SELECT node.</summary>
-    object? VisitSelect(SelectNode node);
+    TResult VisitSelect(SelectNode node);
 
     /// <summary>Visits a column node.</summary>
-    object? VisitColumn(ColumnNode node);
+    TResult VisitColumn(ColumnNode node);
 
     /// <summary>Visits a FROM node.</summary>
-    object? VisitFrom(FromNode node);
+    TResult VisitFrom(FromNode node);
 
     /// <summary>Visits a JOIN node.</summary>
-    object? VisitJoin(JoinNode node);
+    TResult VisitJoin(JoinNode node);
 
     /// <summary>Visits a WHERE node.</summary>
-    object? VisitWhere(WhereNode node);
+    TResult VisitWhere(WhereNode node);
 
     /// <summary>Visits a binary expression node.</summary>
-    object? VisitBinaryExpression(BinaryExpressionNode node);
+    TResult VisitBinaryExpression(BinaryExpressionNode node);
 
     /// <summary>Visits a literal node.</summary>
-    object? VisitLiteral(LiteralNode node);
+    TResult VisitLiteral(LiteralNode node);
 
     /// <summary>Visits a column reference node.</summary>
-    object? VisitColumnReference(ColumnReferenceNode node);
+    TResult VisitColumnReference(ColumnReferenceNode node);
 
     /// <summary>Visits an IN expression node.</summary>
-    object? VisitInExpression(InExpressionNode node);
+    TResult VisitInExpression(InExpressionNode node);
 
     /// <summary>Visits an ORDER BY node.</summary>
-    object? VisitOrderBy(OrderByNode node);
+    TResult VisitOrderBy(OrderByNode node);
 
     /// <summary>Visits a GROUP BY node.</summary>
-    object? VisitGroupBy(GroupByNode node);
+    TResult VisitGroupBy(GroupByNode node);
 
     /// <summary>Visits a HAVING node.</summary>
-    object? VisitHaving(HavingNode node);
+    TResult VisitHaving(HavingNode node);
 
     /// <summary>Visits a function call node.</summary>
-    object? VisitFunctionCall(FunctionCallNode node);
+    TResult VisitFunctionCall(FunctionCallNode node);
 
     /// <summary>Visits an INSERT node.</summary>
-    object? VisitInsert(InsertNode node);
+    TResult VisitInsert(InsertNode node);
 
     /// <summary>Visits an UPDATE node.</summary>
-    object? VisitUpdate(UpdateNode node);
+    TResult VisitUpdate(UpdateNode node);
 
     /// <summary>Visits a DELETE node.</summary>
-    object? VisitDelete(DeleteNode node);
+    TResult VisitDelete(DeleteNode node);
 
     /// <summary>Visits a CREATE TABLE node.</summary>
-    object? VisitCreateTable(CreateTableNode node);
+    TResult VisitCreateTable(CreateTableNode node);
+}
+
+/// <summary>
+/// Non-generic visitor interface for backward compatibility.
+/// </summary>
+public interface ISqlVisitor : ISqlVisitor<object?>
+{
 }
 
 /// <summary>
@@ -74,9 +82,10 @@ public abstract class SqlNode
     /// <summary>
     /// Accepts a visitor for the visitor pattern.
     /// </summary>
+    /// <typeparam name="TResult">The return type of the visitor.</typeparam>
     /// <param name="visitor">The visitor instance.</param>
     /// <returns>Result of the visit.</returns>
-    public abstract object? Accept(ISqlVisitor visitor);
+    public abstract TResult Accept<TResult>(ISqlVisitor<TResult> visitor);
 }
 
 /// <summary>
@@ -87,7 +96,7 @@ public class SelectNode : SqlNode
     /// <summary>
     /// Gets or sets the list of selected columns.
     /// </summary>
-    public List<ColumnNode> Columns { get; set; } = new();
+    public List<ColumnNode> Columns { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the FROM clause.
@@ -130,7 +139,7 @@ public class SelectNode : SqlNode
     public HavingNode? Having { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitSelect(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitSelect(this);
 }
 
 /// <summary>
@@ -164,7 +173,7 @@ public class ColumnNode : SqlNode
     public string? AggregateFunction { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitColumn(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitColumn(this);
 }
 
 /// <summary>
@@ -185,7 +194,7 @@ public class FromNode : SqlNode
     /// <summary>
     /// Gets or sets the list of JOINs.
     /// </summary>
-    public List<JoinNode> Joins { get; set; } = new();
+    public List<JoinNode> Joins { get; set; } = [];
 
     /// <summary>
     /// Gets or sets a subquery if this is a derived table.
@@ -193,7 +202,7 @@ public class FromNode : SqlNode
     public SelectNode? Subquery { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitFrom(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitFrom(this);
 }
 
 /// <summary>
@@ -238,7 +247,7 @@ public class JoinNode : SqlNode
     public ExpressionNode? OnCondition { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitJoin(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitJoin(this);
 }
 
 /// <summary>
@@ -252,7 +261,7 @@ public class WhereNode : SqlNode
     public ExpressionNode Condition { get; set; } = new BinaryExpressionNode();
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitWhere(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitWhere(this);
 }
 
 /// <summary>
@@ -283,7 +292,7 @@ public class BinaryExpressionNode : ExpressionNode
     public ExpressionNode? Right { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitBinaryExpression(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitBinaryExpression(this);
 }
 
 /// <summary>
@@ -297,7 +306,7 @@ public class LiteralNode : ExpressionNode
     public object? Value { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitLiteral(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitLiteral(this);
 }
 
 /// <summary>
@@ -316,7 +325,7 @@ public class ColumnReferenceNode : ExpressionNode
     public string ColumnName { get; set; } = string.Empty;
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitColumnReference(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitColumnReference(this);
 }
 
 /// <summary>
@@ -332,7 +341,7 @@ public class InExpressionNode : ExpressionNode
     /// <summary>
     /// Gets or sets the list of values.
     /// </summary>
-    public List<ExpressionNode> Values { get; set; } = new();
+    public List<ExpressionNode> Values { get; set; } = [];
 
     /// <summary>
     /// Gets or sets whether this is a NOT IN expression.
@@ -345,7 +354,7 @@ public class InExpressionNode : ExpressionNode
     public SelectNode? Subquery { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitInExpression(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitInExpression(this);
 }
 
 /// <summary>
@@ -356,10 +365,10 @@ public class OrderByNode : SqlNode
     /// <summary>
     /// Gets or sets the list of order by items.
     /// </summary>
-    public List<OrderByItem> Items { get; set; } = new();
+    public List<OrderByItem> Items { get; set; } = [];
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitOrderBy(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitOrderBy(this);
 }
 
 /// <summary>
@@ -386,10 +395,10 @@ public class GroupByNode : SqlNode
     /// <summary>
     /// Gets or sets the list of grouping columns.
     /// </summary>
-    public List<ColumnReferenceNode> Columns { get; set; } = new();
+    public List<ColumnReferenceNode> Columns { get; set; } = [];
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitGroupBy(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitGroupBy(this);
 }
 
 /// <summary>
@@ -403,7 +412,7 @@ public class HavingNode : SqlNode
     public ExpressionNode Condition { get; set; } = new BinaryExpressionNode();
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitHaving(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitHaving(this);
 }
 
 /// <summary>
@@ -419,7 +428,7 @@ public class FunctionCallNode : ExpressionNode
     /// <summary>
     /// Gets or sets the function arguments.
     /// </summary>
-    public List<ExpressionNode> Arguments { get; set; } = new();
+    public List<ExpressionNode> Arguments { get; set; } = [];
 
     /// <summary>
     /// Gets or sets whether this is a DISTINCT aggregate.
@@ -427,7 +436,7 @@ public class FunctionCallNode : ExpressionNode
     public bool IsDistinct { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitFunctionCall(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitFunctionCall(this);
 }
 
 /// <summary>
@@ -443,12 +452,12 @@ public class InsertNode : SqlNode
     /// <summary>
     /// Gets or sets the list of columns.
     /// </summary>
-    public List<string> Columns { get; set; } = new();
+    public List<string> Columns { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the list of values.
     /// </summary>
-    public List<ExpressionNode> Values { get; set; } = new();
+    public List<ExpressionNode> Values { get; set; } = [];
 
     /// <summary>
     /// Gets or sets a SELECT statement for INSERT INTO ... SELECT.
@@ -456,7 +465,7 @@ public class InsertNode : SqlNode
     public SelectNode? SelectStatement { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitInsert(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitInsert(this);
 }
 
 /// <summary>
@@ -472,7 +481,7 @@ public class UpdateNode : SqlNode
     /// <summary>
     /// Gets or sets the SET assignments.
     /// </summary>
-    public Dictionary<string, ExpressionNode> Assignments { get; set; } = new();
+    public Dictionary<string, ExpressionNode> Assignments { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the WHERE clause.
@@ -480,7 +489,7 @@ public class UpdateNode : SqlNode
     public WhereNode? Where { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitUpdate(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitUpdate(this);
 }
 
 /// <summary>
@@ -499,7 +508,7 @@ public class DeleteNode : SqlNode
     public WhereNode? Where { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitDelete(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitDelete(this);
 }
 
 /// <summary>
@@ -515,7 +524,7 @@ public class CreateTableNode : SqlNode
     /// <summary>
     /// Gets or sets the column definitions.
     /// </summary>
-    public List<ColumnDefinition> Columns { get; set; } = new();
+    public List<ColumnDefinition> Columns { get; set; } = [];
 
     /// <summary>
     /// Gets or sets whether to use IF NOT EXISTS.
@@ -523,7 +532,7 @@ public class CreateTableNode : SqlNode
     public bool IfNotExists { get; set; }
 
     /// <inheritdoc/>
-    public override object? Accept(ISqlVisitor visitor) => visitor.VisitCreateTable(this);
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitCreateTable(this);
 }
 
 /// <summary>
