@@ -60,7 +60,7 @@ public class HashIndexTests
         index.Add(row2, 1);
         var beforeRemove = index.LookupPositions(1);
 
-        index.Remove(row1);
+        index.Remove(row1, 0);
         var afterRemove = index.LookupPositions(1);
 
         // Assert

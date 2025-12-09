@@ -130,7 +130,7 @@ public sealed class DatabaseFile : IDisposable
 
         // Copy to encryption buffer and encrypt in-place
         data.CopyTo(_encryptedBuffer.AsSpan(0, PageSize));
-        this.crypto.EncryptPage(_encryptedBuffer.AsSpan(0, PageSize));
+        this.crypto.EncryptPage(_encryptedBuffer.AsSpan(0, StoredPageSize));
 
         // Write to disk
         using var fs = new FileStream(this.filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough);

@@ -17,7 +17,7 @@ using System.Text;
 /// </summary>
 public class HashIndex
 {
-    private readonly Dictionary<object, List<long>> _index = new();
+    private readonly Dictionary<object, List<long>> _index;
     private readonly string _columnName;
     private readonly SimdHashEqualityComparer _comparer = new();
 
@@ -29,6 +29,8 @@ public class HashIndex
     public HashIndex(string tableName, string columnName) 
     {
         _columnName = columnName;
+        // Use default comparer for now - SimdHashEqualityComparer has platform-specific issues with boxed integers
+        _index = new Dictionary<object, List<long>>();
     }
 
     /// <summary>
@@ -39,7 +41,7 @@ public class HashIndex
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Add(Dictionary<string, object> row, long position)
     {
-        if (!row.TryGetValue(_columnName, out var key))
+        if (!row.TryGetValue(_columnName, out var key) || key == null)
             return;
 
         if (!_index.TryGetValue(key, out var list))
@@ -56,9 +58,29 @@ public class HashIndex
     /// <param name="row">The row data.</param>
     public void Remove(Dictionary<string, object> row)
     {
-        if (row.TryGetValue(_columnName, out var key))
+        if (row.TryGetValue(_columnName, out var key) && key != null)
         {
             _index.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Removes a specific position for a row from the index.
+    /// </summary>
+    /// <param name="row">The row data.</param>
+    /// <param name="position">The position to remove.</param>
+    public void Remove(Dictionary<string, object> row, long position)
+    {
+        if (!row.TryGetValue(_columnName, out var key) || key == null)
+            return;
+
+        if (_index.TryGetValue(key, out var list))
+        {
+            list.Remove(position);
+            if (list.Count == 0)
+            {
+                _index.Remove(key);
+            }
         }
     }
 
@@ -69,7 +91,7 @@ public class HashIndex
     /// <returns>List of positions matching the key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<long> LookupPositions(object key)
-        => _index.TryGetValue(key, out var list) ? list : new();
+        => key != null && _index.TryGetValue(key, out var list) ? new List<long>(list) : new();
 
     /// <summary>
     /// Gets the number of unique keys in the index.
