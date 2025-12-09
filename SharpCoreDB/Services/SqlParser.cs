@@ -89,17 +89,19 @@ public class SqlParser : ISqlParser
         
         if (this.queryCache != null)
         {
+            // Cache the structure - for parameterized queries, still track cache hits
             var cached = this.queryCache.GetOrAdd(cacheKey, key =>
             {
                 var parsedParts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 return new QueryCache.CachedQuery
                 {
-                    Sql = key,
+                    Sql = cacheKey,
                     Parts = parsedParts,
                     CachedAt = DateTime.UtcNow
                 };
             });
-            parts = cached.Parts;
+            // Always parse the bound SQL since it contains the actual values
+            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         }
         else
         {
