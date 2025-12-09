@@ -293,7 +293,16 @@ public class EnhancedSqlParser
             }
             else
             {
-                node.TableName = ConsumeIdentifier() ?? "";
+                var tableName = ConsumeIdentifier();
+                if (tableName == null)
+                {
+                    RecordError("Expected table name after FROM");
+                    node.TableName = "";
+                }
+                else
+                {
+                    node.TableName = tableName;
+                }
             }
 
             // Parse alias
