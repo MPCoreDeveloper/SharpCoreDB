@@ -197,7 +197,7 @@ public class IndexTests
 
         // Act - Update status
         var updatedRow = new Dictionary<string, object> { { "id", 1 }, { "status", "inactive" }, { "name", "Item1" } };
-        index.Remove(rows[0]);
+        index.Remove(rows[0], 0);
         index.Add(updatedRow, 0);
 
         // Assert - Index should reflect changes

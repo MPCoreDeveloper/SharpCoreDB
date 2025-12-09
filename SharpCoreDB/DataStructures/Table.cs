@@ -228,9 +228,34 @@ public class Table : ITable, IDisposable
         {
             var idx = this.Columns.IndexOf(orderBy);
             if (idx >= 0)
-                results = asc ? results.OrderBy(r => r[this.Columns[idx]]).ToList() : results.OrderByDescending(r => r[this.Columns[idx]]).ToList();
+            {
+                var columnName = this.Columns[idx];
+                // Use Comparer<object>.Default which handles type mismatches gracefully
+                results = asc 
+                    ? results.OrderBy(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList()
+                    : results.OrderByDescending(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList();
+            }
         }
         return results;
+    }
+    
+    private static int CompareObjects(object? a, object? b)
+    {
+        // Handle nulls
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        
+        // If same type, use default comparison
+        if (a.GetType() == b.GetType())
+        {
+            if (a is IComparable ca)
+                return ca.CompareTo(b);
+            return 0;
+        }
+        
+        // Different types - compare as strings
+        return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>
