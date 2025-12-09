@@ -83,9 +83,32 @@ public class SqlParser : ISqlParser
             sql = this.SanitizeSql(sql);
         }
 
-        // Proceed with existing logic
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        this.ExecuteInternal(sql, parts, wal, originalSql ?? sql);
+        // Use query cache if available
+        string cacheKey = originalSql ?? sql;
+        string[] parts;
+        
+        if (this.queryCache != null)
+        {
+            // Cache the structure - for parameterized queries, still track cache hits
+            var cached = this.queryCache.GetOrAdd(cacheKey, key =>
+            {
+                var parsedParts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                return new QueryCache.CachedQuery
+                {
+                    Sql = cacheKey,
+                    Parts = parsedParts,
+                    CachedAt = DateTime.UtcNow
+                };
+            });
+            // Always parse the bound SQL since it contains the actual values
+            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+        else
+        {
+            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+        
+        this.ExecuteInternal(sql, parts, wal, cacheKey);
     }
 
     /// <summary>
