@@ -23,4 +23,5 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Run Demo CLI
-      run: dotnet run --project SharpCoreDB.Demo --no-build
+      if: success() || failure()
+      run: dotnet run --project SharpCoreDB.Demo
