@@ -62,6 +62,7 @@ public class IndexTests
         // Act - Add rows from multiple threads
         for (int t = 0; t < 10; t++)
         {
+            int threadId = t; // Capture loop variable for closure
             tasks.Add(Task.Run(() =>
             {
                 for (int i = 0; i < 100; i++)
@@ -69,10 +70,10 @@ public class IndexTests
                     var row = new Dictionary<string, object>
                     {
                         { "id", i },
-                        { "thread", t },
-                        { "data", $"data_{t}_{i}" }
+                        { "thread", threadId },
+                        { "data", $"data_{threadId}_{i}" }
                     };
-                    index.Add(row, i + t * 100);
+                    index.Add(row, i + threadId * 100);
                 }
             }));
         }

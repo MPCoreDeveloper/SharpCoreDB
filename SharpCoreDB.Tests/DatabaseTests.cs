@@ -123,7 +123,8 @@ public class DatabaseTests : IDisposable
     public void Database_Index_Lookup_FasterThanScan()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "password");
+        var config = new DatabaseConfig { EnableQueryCache = false };
+        var db = _factory.Create(_testDbPath, "password", config: config);
         db.ExecuteSQL("CREATE TABLE indexed_table (id INTEGER, category TEXT, value INTEGER)");
         db.ExecuteSQL("CREATE INDEX idx_category ON indexed_table (category)");
 
@@ -600,15 +601,10 @@ public class DatabaseTests : IDisposable
         // Create readonly connection
         var dbReadonly = _factory.Create(_testDbPath, "testPassword", isReadOnly: true);
 
-        // Act - Update operation on readonly doesn't throw but doesn't persist either
-        dbReadonly.ExecuteSQL("UPDATE users SET name = @0 WHERE id = @1", new Dictionary<string, object?> { { "0", "Bob" }, { "1", 1 } });
-
-        // Assert - Verify data hasn't changed by reading from a new connection
-        var db2 = _factory.Create(_testDbPath, "testPassword");
-        db2.ExecuteSQL("SELECT * FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
-
-        // Test passes if no exception is thrown during readonly update
-        Assert.True(true);
+        // Act & Assert - Update operation on readonly should throw InvalidOperationException
+        Assert.Throws<InvalidOperationException>(() =>
+            dbReadonly.ExecuteSQL("UPDATE users SET name = @0 WHERE id = @1", new Dictionary<string, object?> { { "0", "Bob" }, { "1", 1 } })
+        );
     }
 
     [Fact]
@@ -622,15 +618,10 @@ public class DatabaseTests : IDisposable
         // Create readonly connection
         var dbReadonly = _factory.Create(_testDbPath, "testPassword", isReadOnly: true);
 
-        // Act - Delete operation on readonly doesn't throw but doesn't persist either
-        dbReadonly.ExecuteSQL("DELETE FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
-
-        // Assert - Verify data hasn't changed by reading from a new connection
-        var db2 = _factory.Create(_testDbPath, "testPassword");
-        db2.ExecuteSQL("SELECT * FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } });
-
-        // Test passes if no exception is thrown during readonly delete
-        Assert.True(true);
+        // Act & Assert - Delete operation on readonly should throw InvalidOperationException
+        Assert.Throws<InvalidOperationException>(() =>
+            dbReadonly.ExecuteSQL("DELETE FROM users WHERE id = @0", new Dictionary<string, object?> { { "0", 1 } })
+        );
     }
 
     [Fact]

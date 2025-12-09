@@ -27,7 +27,7 @@ public class HashIndexPerformanceTests
     {
         // Arrange
         var factory = _serviceProvider.GetRequiredService<DatabaseFactory>();
-        var config = new DatabaseConfig { EnableHashIndexes = true };
+        var config = new DatabaseConfig { EnableHashIndexes = true, EnableQueryCache = false };
         var db = factory.Create(_testDbPath, "test123", false, config);
 
         db.ExecuteSQL("CREATE TABLE time_entries (id INTEGER, project TEXT, task TEXT, duration INTEGER)");
