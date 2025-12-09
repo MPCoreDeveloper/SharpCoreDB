@@ -42,16 +42,7 @@ public class DatabaseTests : IDisposable
     public void Database_ExecuteSQL_ParameterizedQuery_BindsParametersCorrectly()
     {
         // Arrange
-        var mockStorage = new Mock<IStorage>();
-        var mockCrypto = new Mock<ICryptoService>();
-        var mockUserService = new Mock<IUserService>();
-        var services = new ServiceCollection();
-        services.AddSingleton(mockCrypto.Object);
-        services.AddSingleton(mockStorage.Object);
-        services.AddSingleton(mockUserService.Object);
-        var serviceProvider = services.BuildServiceProvider();
-
-        var db = new Database(serviceProvider, _testDbPath, "password");
+        var db = _factory.Create(_testDbPath, "password");
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
         var parameters = new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } };
 
