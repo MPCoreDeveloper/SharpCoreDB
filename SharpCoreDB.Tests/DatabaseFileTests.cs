@@ -49,11 +49,18 @@ public class DatabaseFileTests : IDisposable
     {
         // Arrange
         using var dbFile = new DatabaseFile(this.testFilePath, this.crypto, this.key);
+        
+        // Create test data with valid page header
         var testData = new byte[4096];
-        for (int i = 0; i < testData.Length; i++)
+        var header = PageHeader.Create((byte)PageType.Data, 12345);
+        var userData = new byte[4096 - PageHeader.Size];
+        for (int i = 0; i < userData.Length; i++)
         {
-            testData[i] = (byte)(i % 256);
+            userData[i] = (byte)(i % 256);
         }
+        
+        // Create complete page using PageSerializer
+        PageSerializer.CreatePage(ref header, userData, testData);
 
         // Act
         dbFile.WritePage(0, testData);
@@ -71,11 +78,18 @@ public class DatabaseFileTests : IDisposable
     {
         // Arrange
         using var dbFile = new DatabaseFile(this.testFilePath, this.crypto, this.key);
+        
+        // Create test data with valid page header
         var testData = new byte[4096];
-        for (int i = 0; i < testData.Length; i++)
+        var header = PageHeader.Create((byte)PageType.Data, 12345);
+        var userData = new byte[4096 - PageHeader.Size];
+        for (int i = 0; i < userData.Length; i++)
         {
-            testData[i] = (byte)(i % 256);
+            userData[i] = (byte)(i % 256);
         }
+        
+        // Create complete page using PageSerializer
+        PageSerializer.CreatePage(ref header, userData, testData);
         var buffer = new byte[4096];
 
         // Act
