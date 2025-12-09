@@ -255,7 +255,7 @@ public class Table : ITable, IDisposable
         }
         
         // Different types - compare as strings
-        return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
+        return string.Compare(a.ToString() ?? "", b.ToString() ?? "", StringComparison.Ordinal);
     }
 
     /// <summary>

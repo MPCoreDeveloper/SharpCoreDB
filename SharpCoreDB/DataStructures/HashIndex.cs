@@ -29,7 +29,9 @@ public class HashIndex
     public HashIndex(string tableName, string columnName) 
     {
         _columnName = columnName;
-        // Use default comparer for now - SimdHashEqualityComparer has platform-specific issues with boxed integers
+        // Use default comparer: SimdHashEqualityComparer was removed due to issues with
+        // reference equality vs value equality for boxed value types on Linux/.NET 10.
+        // May revisit with proper generic implementation in future.
         _index = new Dictionary<object, List<long>>();
     }
 
