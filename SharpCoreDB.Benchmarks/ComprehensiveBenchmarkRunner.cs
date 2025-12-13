@@ -24,17 +24,18 @@ public static class ComprehensiveBenchmarkRunner
         Console.WriteLine("???????????????????????????????????????????????????????????????");
         Console.WriteLine();
         Console.WriteLine("Comparing:");
-        Console.WriteLine("  • SharpCoreDB (WITH encryption)");
-        Console.WriteLine("  • SharpCoreDB (WITHOUT encryption)");
-        Console.WriteLine("  • SQLite (Memory mode)");
-        Console.WriteLine("  • SQLite (File mode)");
-        Console.WriteLine("  • LiteDB");
+        Console.WriteLine("  ï¿½ SharpCoreDB (WITH encryption)");
+        Console.WriteLine("  ï¿½ SharpCoreDB (WITHOUT encryption)");
+        Console.WriteLine("  ï¿½ SQLite (Memory mode)");
+        Console.WriteLine("  ï¿½ SQLite (File mode)");
+        Console.WriteLine("  ï¿½ LiteDB");
         Console.WriteLine();
         Console.WriteLine("Operations tested:");
-        Console.WriteLine("  • INSERT (individual & batch)");
-        Console.WriteLine("  • SELECT (point queries, range queries, full scans)");
-        Console.WriteLine("  • UPDATE (bulk updates)");
-        Console.WriteLine("  • DELETE (bulk deletes)");
+        Console.WriteLine("  ï¿½ INSERT (individual & batch)");
+        Console.WriteLine("  ï¿½ SELECT (point queries, range queries, full scans)");
+        Console.WriteLine("  ï¿½ UPDATE (bulk updates)");
+        Console.WriteLine("  ï¿½ DELETE (bulk deletes)");
+        Console.WriteLine("  ï¿½ AGGREGATES (COUNT, SUM, AVG, MIN, MAX, GROUP BY)");
         Console.WriteLine("???????????????????????????????????????????????????????????????");
         Console.WriteLine();
 
@@ -63,6 +64,11 @@ public static class ComprehensiveBenchmarkRunner
             Console.WriteLine("?? UPDATE/DELETE ONLY: Running update and delete benchmarks...\n");
             RunUpdateDeleteBenchmarks();
         }
+        else if (args.Length > 0 && args[0] == "--aggregates")
+        {
+            Console.WriteLine("?? AGGREGATES ONLY: Running aggregate benchmarks...\n");
+            RunAggregateBenchmarks();
+        }
         else
         {
             ShowMenu();
@@ -79,7 +85,8 @@ public static class ComprehensiveBenchmarkRunner
             Console.WriteLine("  3. Insert Benchmarks Only");
             Console.WriteLine("  4. Select Benchmarks Only");
             Console.WriteLine("  5. Update/Delete Benchmarks Only");
-            Console.WriteLine("  6. All Benchmarks (Sequential)");
+            Console.WriteLine("  6. Aggregate Benchmarks Only");
+            Console.WriteLine("  7. All Benchmarks (Sequential)");
             Console.WriteLine("  Q. Quit");
             Console.WriteLine();
             Console.Write("Choice: ");
@@ -104,6 +111,9 @@ public static class ComprehensiveBenchmarkRunner
                     RunUpdateDeleteBenchmarks();
                     return;
                 case "6":
+                    RunAggregateBenchmarks();
+                    return;
+                case "7":
                     RunAllBenchmarks();
                     return;
                 case "Q":
@@ -136,6 +146,10 @@ public static class ComprehensiveBenchmarkRunner
         var updateSummary = BenchmarkRunner.Run<ComparativeUpdateDeleteBenchmarks>();
         summaries.Add(updateSummary);
 
+        Console.WriteLine("\n?? Running AGGREGATE benchmarks...");
+        var aggregateSummary = BenchmarkRunner.Run<ComparativeAggregateBenchmarks>();
+        summaries.Add(aggregateSummary);
+
         Console.WriteLine("\n???????????????????????????????????????????????????????????????");
         Console.WriteLine("  RESULTS SUMMARY");
         Console.WriteLine("???????????????????????????????????????????????????????????????\n");
@@ -159,9 +173,13 @@ public static class ComprehensiveBenchmarkRunner
         var selectSummary = BenchmarkRunner.Run<ComparativeSelectBenchmarks>();
         summaries.Add(selectSummary);
 
-        Console.WriteLine("\n?? Phase 3/3: UPDATE/DELETE benchmarks...");
+        Console.WriteLine("\n?? Phase 3/4: UPDATE/DELETE benchmarks...");
         var updateSummary = BenchmarkRunner.Run<ComparativeUpdateDeleteBenchmarks>();
         summaries.Add(updateSummary);
+
+        Console.WriteLine("\n?? Phase 4/4: AGGREGATE benchmarks (COUNT, SUM, AVG, MIN, MAX, GROUP BY)...");
+        var aggregateSummary = BenchmarkRunner.Run<ComparativeAggregateBenchmarks>();
+        summaries.Add(aggregateSummary);
 
         Console.WriteLine("\n???????????????????????????????????????????????????????????????");
         Console.WriteLine("  COMPREHENSIVE RESULTS");
@@ -189,6 +207,13 @@ public static class ComprehensiveBenchmarkRunner
     {
         Console.WriteLine("?? Running UPDATE/DELETE benchmarks...\n");
         var summary = BenchmarkRunner.Run<ComparativeUpdateDeleteBenchmarks>();
+        GenerateComprehensiveReport(new List<Summary> { summary });
+    }
+
+    private static void RunAggregateBenchmarks()
+    {
+        Console.WriteLine("?? Running AGGREGATE benchmarks...\n");
+        var summary = BenchmarkRunner.Run<ComparativeAggregateBenchmarks>();
         GenerateComprehensiveReport(new List<Summary> { summary });
     }
 
@@ -310,10 +335,10 @@ public static class ComprehensiveBenchmarkRunner
         sb.AppendLine($"  Results saved to: {Path.GetFullPath("./BenchmarkDotNet.Artifacts/results")}");
         sb.AppendLine();
         sb.AppendLine("  Available formats:");
-        sb.AppendLine("    • HTML (interactive reports)");
-        sb.AppendLine("    • CSV (Excel-compatible)");
-        sb.AppendLine("    • JSON (programmatic access)");
-        sb.AppendLine("    • Markdown (GitHub-ready)");
+        sb.AppendLine("    ï¿½ HTML (interactive reports)");
+        sb.AppendLine("    ï¿½ CSV (Excel-compatible)");
+        sb.AppendLine("    ï¿½ JSON (programmatic access)");
+        sb.AppendLine("    ï¿½ Markdown (GitHub-ready)");
         sb.AppendLine();
 
         Console.WriteLine(sb.ToString());

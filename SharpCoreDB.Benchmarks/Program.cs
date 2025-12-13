@@ -42,6 +42,11 @@ if (args.Length > 0)
             ComprehensiveBenchmarkRunner.Run(args);
             return;
             
+        case "--aggregates":
+            Console.WriteLine("?? Running AGGREGATE benchmarks only...\n");
+            ComprehensiveBenchmarkRunner.Run(args);
+            return;
+            
         case "--modernization":
             Console.WriteLine("?? Running C# 14 modernization benchmarks...\n");
             BenchmarkRunner.Run<ModernizationBenchmark>();
@@ -69,6 +74,7 @@ static void ShowHelp()
     Console.WriteLine("  --inserts         INSERT benchmarks only");
     Console.WriteLine("  --selects         SELECT benchmarks only");
     Console.WriteLine("  --updates         UPDATE/DELETE benchmarks only");
+    Console.WriteLine("  --aggregates      AGGREGATE benchmarks only");
     Console.WriteLine("  --modernization   C# 14 modernization benchmarks");
     Console.WriteLine("  --help, -h        Show this help message");
     Console.WriteLine();
@@ -76,13 +82,14 @@ static void ShowHelp()
     Console.WriteLine("  dotnet run -c Release -- --quick");
     Console.WriteLine("  dotnet run -c Release -- --full");
     Console.WriteLine("  dotnet run -c Release -- --inserts");
+    Console.WriteLine("  dotnet run -c Release -- --aggregates");
     Console.WriteLine();
     Console.WriteLine("Databases compared:");
-    Console.WriteLine("  • SharpCoreDB (WITH encryption)");
-    Console.WriteLine("  • SharpCoreDB (WITHOUT encryption)");
-    Console.WriteLine("  • SQLite (Memory mode)");
-    Console.WriteLine("  • SQLite (File mode)");
-    Console.WriteLine("  • LiteDB");
+    Console.WriteLine("  ï¿½ SharpCoreDB (WITH encryption)");
+    Console.WriteLine("  ï¿½ SharpCoreDB (WITHOUT encryption)");
+    Console.WriteLine("  ï¿½ SQLite (Memory mode)");
+    Console.WriteLine("  ï¿½ SQLite (File mode)");
+    Console.WriteLine("  ï¿½ LiteDB");
     Console.WriteLine();
 }
 
@@ -100,10 +107,11 @@ static void ShowInteractiveMenu()
         Console.WriteLine("    3. INSERT Benchmarks Only");
         Console.WriteLine("    4. SELECT Benchmarks Only");
         Console.WriteLine("    5. UPDATE/DELETE Benchmarks Only");
+        Console.WriteLine("    6. AGGREGATE Benchmarks Only");
         Console.WriteLine();
         Console.WriteLine("  Other Benchmarks:");
-        Console.WriteLine("    6. C# 14 Modernization Benchmark");
-        Console.WriteLine("    7. Quick Performance Comparison (no BenchmarkDotNet)");
+        Console.WriteLine("    7. C# 14 Modernization Benchmark");
+        Console.WriteLine("    8. Quick Performance Comparison (no BenchmarkDotNet)");
         Console.WriteLine();
         Console.WriteLine("    H. Help (command-line options)");
         Console.WriteLine("    Q. Quit");
@@ -141,10 +149,14 @@ static void ShowInteractiveMenu()
                 return;
                 
             case "6":
-                BenchmarkRunner.Run<ModernizationBenchmark>();
+                ComprehensiveBenchmarkRunner.Run(new[] { "--aggregates" });
                 return;
                 
             case "7":
+                BenchmarkRunner.Run<ModernizationBenchmark>();
+                return;
+                
+            case "8":
                 QuickPerformanceComparison.Run();
                 return;
                 
