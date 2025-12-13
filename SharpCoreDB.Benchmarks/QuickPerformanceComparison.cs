@@ -1,5 +1,5 @@
 // <copyright file="QuickPerformanceComparison.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 using System.Diagnostics;
@@ -32,8 +32,8 @@ public static class QuickPerformanceComparison
         var newLookupTime = TestNewGenericLookup(RecordCount, Iterations);
         
         var lookupSpeedup = oldLookupTime / newLookupTime;
-        Console.WriteLine($"? OLD Dictionary Lookup:  {oldLookupTime:F4}ms ({oldLookupTime * 1000:F1}µs)");
-        Console.WriteLine($"? NEW Generic Lookup:     {newLookupTime:F4}ms ({newLookupTime * 1000:F1}µs)");
+        Console.WriteLine($"? OLD Dictionary Lookup:  {oldLookupTime:F4}ms ({oldLookupTime * 1000:F1}ï¿½s)");
+        Console.WriteLine($"? NEW Generic Lookup:     {newLookupTime:F4}ms ({newLookupTime * 1000:F1}ï¿½s)");
         Console.WriteLine($"? SPEEDUP:               {lookupSpeedup:F2}x faster!");
         Console.WriteLine();
 

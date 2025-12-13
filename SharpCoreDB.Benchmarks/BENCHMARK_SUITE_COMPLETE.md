@@ -18,7 +18,7 @@ A comprehensive benchmark suite is now ready to compare **SharpCoreDB** (with ne
 
 ### 2. Comprehensive Benchmarks ?
 - **GroupCommitWALBenchmarks.cs** - Main benchmark suite
-- Tests 6 database variants × 9 scenarios = **54 benchmarks**
+- Tests 6 database variants ï¿½ 9 scenarios = **54 benchmarks**
 - Measures sequential and concurrent performance
 - Compares all durability modes
 
@@ -372,7 +372,7 @@ dotnet run -c Release -- --quick
 
 ---
 
-**Created**: December 2024  
+**Created**: December 2025  
 **Framework**: BenchmarkDotNet 0.14.0  
 **Target**: .NET 10  
 **Status**: ? **READY TO RUN!**  

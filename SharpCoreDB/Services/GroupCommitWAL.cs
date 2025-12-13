@@ -1,5 +1,5 @@
 // <copyright file="GroupCommitWAL.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -47,7 +47,7 @@ public class GroupCommitWAL : IDisposable
     /// <summary>
     /// Represents a pending commit request with its completion source.
     /// </summary>
-    private class PendingCommit
+    private sealed class PendingCommit
     {
         public WalRecord Record { get; set; }
         public TaskCompletionSource<bool> CompletionSource { get; set; } = new();
@@ -141,6 +141,7 @@ public class GroupCommitWAL : IDisposable
     /// <summary>
     /// Background worker that processes commit batches.
     /// Batches multiple pending commits into a single fsync operation for improved throughput.
+    /// FIXED: Eliminates race condition by blocking for first commit, then accumulating batch.
     /// </summary>
     private async Task BackgroundCommitWorker(CancellationToken cancellationToken)
     {
@@ -155,31 +156,47 @@ public class GroupCommitWAL : IDisposable
 
                 try
                 {
-                    // CONCURRENCY FIX: Use blocking read with timeout to avoid race conditions
-                    // Wait for first commit or timeout
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeoutCts.CancelAfter(maxBatchDelay);
-                    
-                    try
-                    {
-                        // Wait for at least one commit
-                        await commitQueue.Reader.WaitToReadAsync(timeoutCts.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-                    {
-                        // Timeout waiting for commits - continue to next iteration
-                        continue;
-                    }
+                    // CRITICAL FIX: Block until first commit arrives (no race condition!)
+                    var firstCommit = await commitQueue.Reader.ReadAsync(cancellationToken);
+                    batch.Add(firstCommit);
 
-                    // Collect batch up to maxBatchSize
-                    while (batch.Count < maxBatchSize && commitQueue.Reader.TryRead(out var pending))
+                    // Now accumulate additional commits for up to maxBatchDelayMs
+                    var deadline = DateTime.UtcNow.Add(maxBatchDelay);
+                    
+                    while (batch.Count < maxBatchSize)
                     {
-                        batch.Add(pending);
+                        var remaining = deadline - DateTime.UtcNow;
+                        if (remaining <= TimeSpan.Zero)
+                        {
+                            break;  // Timeout reached - flush batch
+                        }
+
+                        // Try to read more commits with timeout
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        timeoutCts.CancelAfter(remaining);
+                        
+                        try
+                        {
+                            // Wait for commits to arrive
+                            await commitQueue.Reader.WaitToReadAsync(timeoutCts.Token).ConfigureAwait(false);
+                            
+                            // Collect all immediately available commits
+                            while (batch.Count < maxBatchSize && commitQueue.Reader.TryRead(out var pending))
+                            {
+                                batch.Add(pending);
+                            }
+                        }
+                        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                        {
+                            // Timeout expired - flush current batch
+                            break;
+                        }
                     }
 
                     if (batch.Count == 0)
                     {
-                        continue;
+                        // Should never happen, but safety check
+                        // Remove redundant continue - just let loop restart naturally
                     }
 
                     // Calculate total size needed
@@ -339,7 +356,6 @@ public class GroupCommitWAL : IDisposable
             catch
             {
                 // Skip corrupted WAL files
-                continue;
             }
         }
         
@@ -433,7 +449,7 @@ public class GroupCommitWAL : IDisposable
             catch
             {
                 // Skip if file is in use or can't be deleted
-                continue;
+                // Continue is implicit at end of loop
             }
         }
         
@@ -467,7 +483,7 @@ public class GroupCommitWAL : IDisposable
         }
 
         // Signal old worker to stop
-        cts.Cancel();
+        await cts.CancelAsync();
         
         // Wait for all pending commits to complete
         try
@@ -502,6 +518,16 @@ public class GroupCommitWAL : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected dispose method for cleanup.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (disposed)
         {
             return;
@@ -509,23 +535,26 @@ public class GroupCommitWAL : IDisposable
 
         disposed = true;
 
-        // Signal shutdown
-        commitQueue.Writer.Complete();
-        cts.Cancel();
-
-        // Wait for background worker to finish
-        try
+        if (disposing)
         {
-            backgroundWorker.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch
-        {
-            // Ignore timeout
-        }
+            // Signal shutdown
+            commitQueue.Writer.Complete();
+            cts.Cancel();
 
-        // Cleanup resources
-        cts.Dispose();
-        fileStream.Dispose();
+            // Wait for background worker to finish
+            try
+            {
+                backgroundWorker.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch
+            {
+                // Ignore timeout
+            }
+
+            // Cleanup resources
+            cts.Dispose();
+            fileStream.Dispose();
+        }
         
         // Delete instance-specific WAL file (it's been committed to main database)
         try

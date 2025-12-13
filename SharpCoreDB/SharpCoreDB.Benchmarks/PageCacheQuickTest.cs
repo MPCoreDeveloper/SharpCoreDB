@@ -1,5 +1,5 @@
 // <copyright file="PageCacheQuickTest.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Benchmarks;
@@ -12,8 +12,11 @@ using System.Threading.Tasks;
 /// <summary>
 /// Quick performance test voor PageCache - run dit eerst voor snelle validatie.
 /// </summary>
-public class PageCacheQuickTest
+public static class PageCacheQuickTest
 {
+    /// <summary>
+    /// Runs all PageCache performance tests including sequential, concurrent, memory, and statistics tests.
+    /// </summary>
     public static void Run()
     {
         Console.WriteLine("==============================================");
@@ -42,7 +45,7 @@ public class PageCacheQuickTest
         for (int i = 0; i < 10000; i++)
         {
             int pageId = i % 1000;
-            var page = cache.GetPage(pageId);
+            _ = cache.GetPage(pageId);
             cache.UnpinPage(pageId);
         }
         
@@ -69,7 +72,7 @@ public class PageCacheQuickTest
             for (int i = 0; i < 1250; i++)
             {
                 int pageId = (threadId * 1250 + i) % 500;
-                var page = cache.GetPage(pageId);
+                _ = cache.GetPage(pageId);
                 cache.UnpinPage(pageId);
             }
         });
@@ -88,14 +91,16 @@ public class PageCacheQuickTest
     {
         Console.WriteLine("3. Memory Allocation Test...");
         
+#pragma warning disable S1215 // GC.GetTotalMemory is intentionally used for memory benchmarking
         long memBefore = GC.GetTotalMemory(true);
+#pragma warning restore S1215
         
         using (var cache = new PageCache(capacity: 1000, pageSize: 4096))
         {
             // Vul cache
             for (int i = 0; i < 1000; i++)
             {
-                var page = cache.GetPage(i);
+                _ = cache.GetPage(i);
                 cache.UnpinPage(i);
             }
             
@@ -112,7 +117,7 @@ public class PageCacheQuickTest
             for (int i = 0; i < 10000; i++)
             {
                 int pageId = i % 1000;
-                var page = cache.GetPage(pageId);
+                _ = cache.GetPage(pageId);
                 cache.UnpinPage(pageId);
             }
             
@@ -135,7 +140,7 @@ public class PageCacheQuickTest
         // Generate some activity
         for (int i = 0; i < 150; i++) // Meer dan capacity om evictions te triggeren
         {
-            var page = cache.GetPage(i);
+            _ = cache.GetPage(i);
             if (i % 2 == 0)
             {
                 cache.MarkDirty(i);
@@ -163,6 +168,10 @@ public class PageCacheQuickTest
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Main entry point for the PageCache quick test.
+    /// </summary>
+    /// <param name="args">Command line arguments.</param>
     public static void Main(string[] args)
     {
         try

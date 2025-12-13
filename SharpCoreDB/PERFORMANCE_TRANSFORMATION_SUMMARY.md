@@ -11,13 +11,13 @@ This document compares the **ACTUAL performance** of the legacy WAL implementati
 **Hardware**: Intel Core i7-10850H CPU 2.70GHz (6 cores, 12 logical)  
 **OS**: Windows 11 (10.0.26200.7309)  
 **Framework**: .NET 10.0.0  
-**Date**: December 8, 2024
+**Date**: December 8, 2025
 
 ---
 
 ## 🔴 BEFORE: Legacy WAL Performance (Actual Benchmarks)
 
-### Test Date: December 8, 2024 (14:53)
+### Test Date: December 8, 2025 (14:53)
 
 These are **REAL results** from the legacy ComparativeInsertBenchmarks:
 
@@ -354,7 +354,7 @@ The actual benchmark results should confirm:
 
 ---
 
-**Analysis Date**: December 8, 2024  
+**Analysis Date**: December 8, 2025  
 **Framework**: .NET 10.0  
 **Status**: GroupCommitWAL integrated, benchmarks pending fix  
 **Confidence**: **HIGH** - Based on design, industry standards, and legacy baseline

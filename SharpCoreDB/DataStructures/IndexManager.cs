@@ -1,5 +1,5 @@
 // <copyright file="IndexManager.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.DataStructures;
@@ -13,7 +13,7 @@ using System.Threading.Channels;
 /// <summary>
 /// Modern generic index manager with auto-indexing and PRAGMA-based detection.
 /// Manages both legacy Dictionary-based indexes and new type-safe generic indexes.
-/// Target performance: < 0.05ms lookups on 10k records.
+/// Target performance: &lt; 0.05ms lookups on 10k records.
 /// </summary>
 public sealed class IndexManager : IDisposable
 {
@@ -26,7 +26,6 @@ public sealed class IndexManager : IDisposable
     private readonly Task _updateTask;
     private readonly PragmaIndexDetector _pragmaDetector = new();
     private readonly ConcurrentDictionary<string, object> _genericIndexes = new();
-    private bool _autoIndexingEnabled = true;
     private bool _disposed;
 
     /// <summary>
@@ -35,18 +34,14 @@ public sealed class IndexManager : IDisposable
     /// <param name="enableAutoIndexing">Whether to enable automatic index creation.</param>
     public IndexManager(bool enableAutoIndexing = true)
     {
-        _autoIndexingEnabled = enableAutoIndexing;
+        AutoIndexingEnabled = enableAutoIndexing;
         _updateTask = Task.Run(UpdateIndexesAsync);
     }
 
     /// <summary>
     /// Gets or sets whether auto-indexing is enabled.
     /// </summary>
-    public bool AutoIndexingEnabled
-    {
-        get => _autoIndexingEnabled;
-        set => _autoIndexingEnabled = value;
-    }
+    public bool AutoIndexingEnabled { get; set; }
 
     #region Generic Type-Safe Index Management
 
@@ -94,7 +89,7 @@ public sealed class IndexManager : IDisposable
 
     /// <summary>
     /// Finds positions using a generic index (type-safe, O(1) for hash).
-    /// Target: < 0.05ms for 10k records.
+    /// Target: &lt; 0.05ms for 10k records.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<long> FindInIndex<TKey>(string tableName, string columnName, TKey key)
@@ -143,7 +138,7 @@ public sealed class IndexManager : IDisposable
         string tableName,
         IEnumerable<Dictionary<string, object?>> rows)
     {
-        if (!_autoIndexingEnabled)
+        if (!AutoIndexingEnabled)
             throw new InvalidOperationException("Auto-indexing is disabled");
 
         var tableInfo = _pragmaDetector.AnalyzeTable(tableName, rows);
@@ -216,7 +211,13 @@ public sealed class IndexManager : IDisposable
         {
             foreach (var index in update.Indexes)
             {
-                index.Add(update.Row, update.Position);
+                // Safely convert Dictionary<string, object?> to Dictionary<string, object>
+                // by filtering out null values
+                var nonNullRow = update.Row
+                    .Where(kvp => kvp.Value != null)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!);
+                
+                index.Add(nonNullRow, update.Position);
             }
         }
     }
@@ -225,11 +226,17 @@ public sealed class IndexManager : IDisposable
     /// Updates legacy indexes asynchronously for a given update.
     /// </summary>
     /// <param name="update">The index update.</param>
-    public async Task UpdateIndexesAsync(IndexUpdate update)
+    public static async Task UpdateIndexesAsync(IndexUpdate update)
     {
         foreach (var index in update.Indexes)
         {
-            index.Add(update.Row, update.Position);
+            // Safely convert Dictionary<string, object?> to Dictionary<string, object>
+            // by filtering out null values
+            var nonNullRow = update.Row
+                .Where(kvp => kvp.Value != null)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!);
+            
+            index.Add(nonNullRow, update.Position);
         }
         await Task.CompletedTask;
     }

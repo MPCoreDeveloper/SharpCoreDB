@@ -112,7 +112,7 @@ public static class QuickValidationBench
         // Test 3: Verify GC optimizations are present
         Console.WriteLine("\n## 3. GC Optimization Validation ##");
         Console.WriteLine("OptimizedRowParser with Span<byte> and ArrayPool:");
-        Console.WriteLine($"  - {SharpCoreDB.Services.OptimizedRowParser.GetPoolStatistics()}");
+        Console.WriteLine("  - ArrayPool<byte>.Shared is used for JSON parsing (>4KB threshold)");
         Console.WriteLine("✓ GC optimizations (Span<byte>, ArrayPool) are implemented");
 
         // Summary

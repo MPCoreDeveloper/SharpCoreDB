@@ -225,4 +225,4 @@ Na successful benchmark runs:
 
 **Status:** ✅ Ready to Run
 
-**Laatste Update:** December 2024
+**Laatste Update:** December 2025

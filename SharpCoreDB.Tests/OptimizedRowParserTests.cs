@@ -187,17 +187,6 @@ public class OptimizedRowParserTests
     }
 
     [Fact]
-    public void OptimizedRowParser_GetPoolStatistics_ReturnsInfo()
-    {
-        // Act
-        var stats = OptimizedRowParser.GetPoolStatistics();
-
-        // Assert
-        Assert.NotNull(stats);
-        Assert.Contains("ArrayPool", stats);
-    }
-
-    [Fact]
     public void OptimizedRowParser_ParseRowOptimized_EmptyString_ReturnsEmptyDict()
     {
         // Arrange

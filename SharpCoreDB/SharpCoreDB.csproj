@@ -9,8 +9,18 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);SA1101;SA1122;SA1028;SA1119;SA1512;SA1515;SA1513;SA1402;SA1649;SA1518;SA1503;SA1501;SA1611;SA1600;SA1502;SA1616;SA1651;SA1501;SA1503;SA1028;SA1119;SA1512;SA1515;SA1513;SA1402;SA1649;SA1518;SA1516;SA1201;SA1202;SA1214;SA1128;SA1615;SA1633;SA1107;SA1642;SA1137;SA1309</NoWarn>
+    
+    <!-- Best Practice: Enable warnings as errors for production code -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>5</WarningLevel>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    
+    <!-- Suppress only StyleCop warnings that conflict with project style -->
+    <!-- SA1101: Prefix local calls with this - conflicts with modern C# style -->
+    <!-- SA1633: File must have header - handled by copyright headers -->
+    <!-- SA1309: Field names must not begin with underscore - conflicts with private field convention -->
+    <NoWarn>$(NoWarn);SA1101;SA1633;SA1309</NoWarn>
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
@@ -32,9 +42,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -44,6 +54,7 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
+    <None Include=".github\workflows\cross-platform-ci.yml" />
     <None Include="SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
     <None Include="SharpCoreDB.Samples\SharpCoreDB.Samples.csproj" />
     <None Include="SharpCoreDB.Tests\SharpCoreDB.Tests.csproj" />
@@ -59,7 +70,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include=".github\workflows\" />
     <Folder Include="TestPageCache\" />
   </ItemGroup>
 

@@ -755,7 +755,7 @@ The append-only WAL with group commits provides:
 
 ---
 
-**Created**: December 2024  
+**Created**: December 2025  
 **Target**: .NET 10  
 **Status**: ✅ Production Ready  
 **License**: PlaceholderCompany

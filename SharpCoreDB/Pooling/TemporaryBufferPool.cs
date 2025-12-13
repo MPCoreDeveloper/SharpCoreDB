@@ -1,5 +1,5 @@
 // <copyright file="TemporaryBufferPool.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Pooling;
@@ -55,7 +55,7 @@ public class TemporaryBufferPool : IDisposable
         {
             this.threadLocalCache = new ThreadLocal<TempBufferCache>(
                 () => new TempBufferCache(),
-                trackAllValues: false);
+                trackAllValues: true); // PERFORMANCE: Track all values to dispose them
         }
         else
         {
@@ -96,10 +96,7 @@ public class TemporaryBufferPool : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public RentedTempBuffer RentByteBuffer(int minimumSize)
     {
-        if (disposed)
-        {
-            throw new ObjectDisposedException(nameof(TemporaryBufferPool));
-        }
+        ObjectDisposedException.ThrowIf(disposed, this);
 
         Interlocked.Increment(ref byteBuffersRented);
 
@@ -125,7 +122,7 @@ public class TemporaryBufferPool : IDisposable
             buffer = bytePool.Rent(minimumSize);
         }
 
-        return new RentedTempBuffer(buffer, null, this, minimumSize, BufferType.Byte, fromCache);
+        return new RentedTempBuffer(buffer, this, minimumSize, fromCache);
     }
 
     /// <summary>
@@ -137,13 +134,10 @@ public class TemporaryBufferPool : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public RentedTempCharBuffer RentCharBuffer(int minimumSize)
     {
-        if (disposed)
-        {
-            throw new ObjectDisposedException(nameof(TemporaryBufferPool));
-        }
+        ObjectDisposedException.ThrowIf(disposed, this);
 
         Interlocked.Increment(ref charBuffersRented);
-
+        
         char[] buffer;
         bool fromCache = false;
 
@@ -248,11 +242,30 @@ public class TemporaryBufferPool : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the pool and optionally releases managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (!disposed)
         {
+            if (disposing && threadLocalCache != null)
+            {
+                // PERFORMANCE: Dispose all thread-local caches to clear buffers
+                // Clear all tracked cache instances
+                foreach (var cache in threadLocalCache.Values)
+                {
+                    cache?.Dispose();
+                }
+                
+                threadLocalCache.Dispose();
+            }
             disposed = true;
-            threadLocalCache?.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -260,7 +273,7 @@ public class TemporaryBufferPool : IDisposable
     /// Thread-local cache for temporary buffers.
     /// OPTIMIZATION: Separate arrays for different buffer sizes for better cache hit rate.
     /// </summary>
-    private class TempBufferCache
+    private sealed class TempBufferCache : IDisposable
     {
         private readonly byte[][] smallByteBuffers = new byte[2][];
         private readonly byte[][] mediumByteBuffers = new byte[2][];
@@ -271,6 +284,12 @@ public class TemporaryBufferPool : IDisposable
         private int mediumByteCount;
         private int largeByteCount;
         private int charCount;
+        private bool disposed;
+
+        public TempBufferCache()
+        {
+            disposed = false;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryRentByteBuffer(int minimumSize, out byte[] buffer)
@@ -317,6 +336,50 @@ public class TemporaryBufferPool : IDisposable
             return TryPutInArray(charBuffers, ref charCount, buffer);
         }
 
+        /// <summary>
+        /// Clears all cached buffers.
+        /// </summary>
+        public void Clear()
+        {
+            // Clear byte buffers
+            for (int i = 0; i < smallByteCount; i++)
+            {
+                smallByteBuffers[i] = null!;
+            }
+            smallByteCount = 0;
+
+            for (int i = 0; i < mediumByteCount; i++)
+            {
+                mediumByteBuffers[i] = null!;
+            }
+            mediumByteCount = 0;
+
+            for (int i = 0; i < largeByteCount; i++)
+            {
+                largeByteBuffers[i] = null!;
+            }
+            largeByteCount = 0;
+
+            // Clear char buffers
+            for (int i = 0; i < charCount; i++)
+            {
+                charBuffers[i] = null!;
+            }
+            charCount = 0;
+        }
+
+        /// <summary>
+        /// Disposes the cache and clears all buffers.
+        /// </summary>
+        public void Dispose()
+        {
+            if (!disposed)
+            {
+                Clear();
+                disposed = true;
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool TryGetFromArray<T>(T[] array, ref int count, out T item)
         {
@@ -324,7 +387,7 @@ public class TemporaryBufferPool : IDisposable
             {
                 item = array[--count];
                 array[count] = default!;
-                return item != null;
+                return !EqualityComparer<T>.Default.Equals(item, default);
             }
 
             item = default!;
@@ -361,25 +424,19 @@ internal enum BufferType
 public ref struct RentedTempBuffer
 {
     private byte[]? buffer;
-    private char[]? charBuffer;
     private TemporaryBufferPool? pool;
     private int usedSize;
-    private readonly BufferType bufferType;
     private readonly bool fromCache;
 
     internal RentedTempBuffer(
         byte[]? buffer,
-        char[]? charBuffer,
         TemporaryBufferPool pool,
         int requestedSize,
-        BufferType bufferType,
         bool fromCache)
     {
         this.buffer = buffer;
-        this.charBuffer = charBuffer;
         this.pool = pool;
         this.usedSize = 0;
-        this.bufferType = bufferType;
         this.fromCache = fromCache;
     }
 
@@ -477,7 +534,7 @@ public ref struct RentedTempCharBuffer
     /// Converts the used portion to a string.
     /// ALLOCATION: Creates a new string.
     /// </summary>
-    public readonly string ToString() => new string(buffer, 0, usedSize);
+    public readonly new string ToString() => new string(buffer!, 0, usedSize);
 
     /// <summary>
     /// Returns the buffer to the pool.
@@ -498,13 +555,39 @@ public ref struct RentedTempCharBuffer
 /// </summary>
 public class TemporaryBufferPoolStatistics
 {
+    /// <summary>
+    /// Gets or sets the total number of byte buffers rented (lifetime).
+    /// </summary>
     public long ByteBuffersRented { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the total number of char buffers rented (lifetime).
+    /// </summary>
     public long CharBuffersRented { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the number of thread-local cache hits.
+    /// </summary>
     public long CacheHits { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the number of thread-local cache misses.
+    /// </summary>
     public long CacheMisses { get; set; }
+    
+    /// <summary>
+    /// Gets or sets a value indicating whether thread-local caching is enabled.
+    /// </summary>
     public bool ThreadLocalEnabled { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the thread-local cache capacity.
+    /// </summary>
     public int ThreadLocalCapacity { get; set; }
 
+    /// <summary>
+    /// Gets the cache hit rate (0.0 to 1.0).
+    /// </summary>
     public double CacheHitRate => CacheHits + CacheMisses > 0
         ? (double)CacheHits / (CacheHits + CacheMisses)
         : 0.0;

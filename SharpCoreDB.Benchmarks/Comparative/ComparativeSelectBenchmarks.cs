@@ -1,5 +1,5 @@
 // <copyright file="ComparativeSelectBenchmarks.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 using BenchmarkDotNet.Attributes;
@@ -128,6 +128,8 @@ public class ComparativeSelectBenchmarks : IDisposable
             sqliteConn.Open();
 
             using var cmd = sqliteConn.CreateCommand();
+            
+            // Create table
             cmd.CommandText = @"
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
@@ -143,32 +145,37 @@ public class ComparativeSelectBenchmarks : IDisposable
             cmd.CommandText = "CREATE INDEX idx_age ON users(age)";
             cmd.ExecuteNonQuery();
 
-            // Insert data using transaction
+            // ? FIX: Insert data using transaction in a separate scope
             var users = dataGenerator.GenerateUsers(TotalRecords);
-            using var transaction = sqliteConn.BeginTransaction();
-            cmd.CommandText = @"
-                INSERT INTO users (id, name, email, age, created_at, is_active)
-                VALUES (@id, @name, @email, @age, @created_at, @is_active)";
-
-            cmd.Parameters.Add("@id", SqliteType.Integer);
-            cmd.Parameters.Add("@name", SqliteType.Text);
-            cmd.Parameters.Add("@email", SqliteType.Text);
-            cmd.Parameters.Add("@age", SqliteType.Integer);
-            cmd.Parameters.Add("@created_at", SqliteType.Text);
-            cmd.Parameters.Add("@is_active", SqliteType.Integer);
-
-            foreach (var user in users)
+            using (var transaction = sqliteConn.BeginTransaction())
             {
-                cmd.Parameters["@id"].Value = user.Id;
-                cmd.Parameters["@name"].Value = user.Name;
-                cmd.Parameters["@email"].Value = user.Email;
-                cmd.Parameters["@age"].Value = user.Age;
-                cmd.Parameters["@created_at"].Value = user.CreatedAt.ToString("o");
-                cmd.Parameters["@is_active"].Value = user.IsActive ? 1 : 0;
-                cmd.ExecuteNonQuery();
-            }
+                cmd.Transaction = transaction;  // ? Assign transaction to command
+                cmd.CommandText = @"
+                    INSERT INTO users (id, name, email, age, created_at, is_active)
+                    VALUES (@id, @name, @email, @age, @created_at, @is_active)";
 
-            transaction.Commit();
+                cmd.Parameters.Add("@id", SqliteType.Integer);
+                cmd.Parameters.Add("@name", SqliteType.Text);
+                cmd.Parameters.Add("@email", SqliteType.Text);
+                cmd.Parameters.Add("@age", SqliteType.Integer);
+                cmd.Parameters.Add("@created_at", SqliteType.Text);
+                cmd.Parameters.Add("@is_active", SqliteType.Integer);
+
+                foreach (var user in users)
+                {
+                    cmd.Parameters["@id"].Value = user.Id;
+                    cmd.Parameters["@name"].Value = user.Name;
+                    cmd.Parameters["@email"].Value = user.Email;
+                    cmd.Parameters["@age"].Value = user.Age;
+                    cmd.Parameters["@created_at"].Value = user.CreatedAt.ToString("o");
+                    cmd.Parameters["@is_active"].Value = user.IsActive ? 1 : 0;
+                    cmd.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }  // ? Transaction disposed here
+            
+            cmd.Transaction = null;  // ? Clear transaction from command
             
             sw.Stop();
             Console.WriteLine($"  ? SQLite: {TotalRecords} records in {sw.ElapsedMilliseconds}ms");

@@ -1,5 +1,5 @@
 // <copyright file="MvccManager.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.MVCC;
@@ -10,7 +10,7 @@ using SharpCoreDB.DataStructures;
 /// <summary>
 /// MVCC (Multi-Version Concurrency Control) manager with generic type-safe rows.
 /// Provides snapshot isolation for concurrent transactions without locking readers.
-/// Target: 1000 parallel SELECTs in < 10ms on 16 threads.
+/// Target: 1000 parallel SELECTs in &lt; 10ms on 16 threads.
 /// </summary>
 /// <typeparam name="TKey">The type of the row key.</typeparam>
 /// <typeparam name="TData">The type of the row data (must be a reference type).</typeparam>
@@ -84,7 +84,7 @@ public sealed class MvccManager<TKey, TData> : IDisposable
     /// <summary>
     /// Gets a row by key for the given transaction.
     /// Lock-free read operation - concurrent readers don't block each other!
-    /// Target: < 1µs for hot data.
+    /// Target: &lt; 1µs for hot data.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(
         System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]

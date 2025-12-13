@@ -1,5 +1,5 @@
 // <copyright file="PragmaIndexDetector.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -20,8 +20,13 @@ public sealed partial class PragmaIndexDetector
     /// </summary>
     public sealed record TableIndexInfo
     {
+        /// <summary>Gets or initializes the table name.</summary>
         public required string TableName { get; init; }
+        
+        /// <summary>Gets or initializes the list of indexes on this table.</summary>
         public required List<IndexInfo> Indexes { get; init; }
+        
+        /// <summary>Gets or initializes the column statistics for index recommendations.</summary>
         public required Dictionary<string, ColumnStats> ColumnStatistics { get; init; }
     }
     
@@ -30,11 +35,22 @@ public sealed partial class PragmaIndexDetector
     /// </summary>
     public sealed record IndexInfo
     {
+        /// <summary>Gets or initializes the index name.</summary>
         public required string Name { get; init; }
+        
+        /// <summary>Gets or initializes the column name that is indexed.</summary>
         public required string ColumnName { get; init; }
+        
+        /// <summary>Gets or initializes the index type (Hash, BTree, etc.).</summary>
         public required IndexType Type { get; init; }
+        
+        /// <summary>Gets or initializes a value indicating whether the index enforces uniqueness.</summary>
         public required bool IsUnique { get; init; }
+        
+        /// <summary>Gets or initializes a value indicating whether the index was automatically created.</summary>
         public required bool IsAutoCreated { get; init; }
+        
+        /// <summary>Gets or initializes the index statistics.</summary>
         public required IndexStatistics Statistics { get; init; }
     }
     
@@ -43,13 +59,26 @@ public sealed partial class PragmaIndexDetector
     /// </summary>
     public sealed record ColumnStats
     {
+        /// <summary>Gets or initializes the column name.</summary>
         public required string ColumnName { get; init; }
+        
+        /// <summary>Gets or initializes the total number of rows in the table.</summary>
         public required int TotalRows { get; init; }
+        
+        /// <summary>Gets or initializes the number of unique values in the column.</summary>
         public required int UniqueValues { get; init; }
+        
+        /// <summary>Gets or initializes the number of null values in the column.</summary>
         public required int NullCount { get; init; }
+        
+        /// <summary>Gets or initializes the selectivity of the column (unique values / total rows).</summary>
         public required double Selectivity { get; init; }
-        public required int QueryCount { get; init; } // How many times queried in WHERE
-        public required bool ShouldIndex { get; init; } // Auto-index recommendation
+        
+        /// <summary>Gets or initializes the number of times this column has been queried in WHERE clauses.</summary>
+        public required int QueryCount { get; init; }
+        
+        /// <summary>Gets or initializes a value indicating whether an index is recommended for this column.</summary>
+        public required bool ShouldIndex { get; init; }
     }
 
     /// <summary>
@@ -207,13 +236,14 @@ public sealed partial class PragmaIndexDetector
         if (!_tableIndexes.TryGetValue(tableName, out var info))
             return $"-- No indexes found for table '{tableName}'";
 
-        var result = $"-- Index list for table '{tableName}'\n";
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"-- Index list for table '{tableName}'");
         foreach (var index in info.Indexes)
         {
-            result += $"-- {index.Name}: {index.ColumnName} ({index.Type}, " +
-                     $"unique={index.IsUnique}, auto={index.IsAutoCreated})\n";
+            sb.Append($"-- {index.Name}: {index.ColumnName} ({index.Type}, ");
+            sb.AppendLine($"unique={index.IsUnique}, auto={index.IsAutoCreated})");
         }
-        return result;
+        return sb.ToString();
     }
 
     /// <summary>

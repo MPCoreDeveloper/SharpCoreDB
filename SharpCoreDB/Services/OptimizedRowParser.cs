@@ -1,5 +1,5 @@
 // <copyright file="OptimizedRowParser.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -13,7 +13,6 @@ using System.Text.Json;
 /// </summary>
 public static class OptimizedRowParser
 {
-    private static readonly ArrayPool<char> charPool = ArrayPool<char>.Shared;
     private static readonly ArrayPool<byte> bytePool = ArrayPool<byte>.Shared;
 
     /// <summary>
@@ -113,7 +112,7 @@ public static class OptimizedRowParser
     /// Builds a WHERE clause string using pooled StringBuilder to reduce allocations.
     /// </summary>
     /// <param name="columnName">The column name.</param>
-    /// <param name="operation">The operation (=, >. <, etc.).</param>
+    /// <param name="operation">The operation (=, &gt;, &lt;, etc.).</param>
     /// <param name="value">The value to compare.</param>
     /// <returns>WHERE clause string.</returns>
     public static string BuildWhereClauseOptimized(string columnName, string operation, object value)
@@ -250,14 +249,5 @@ public static class OptimizedRowParser
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets statistics about pool usage (for debugging/monitoring).
-    /// </summary>
-    /// <returns>Description of pool usage.</returns>
-    public static string GetPoolStatistics()
-    {
-        return "ArrayPool usage: Char pool and Byte pool in use for reduced allocations";
     }
 }

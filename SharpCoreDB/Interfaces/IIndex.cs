@@ -1,5 +1,5 @@
 // <copyright file="IIndex.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Interfaces;
@@ -23,4 +23,11 @@ public interface IIndex<TKey, TValue>
     /// <param name="key">The key.</param>
     /// <returns>True if found, and the value.</returns>
     (bool Found, TValue? Value) Search(TKey key);
+
+    /// <summary>
+    /// Deletes a key-value pair from the index.
+    /// </summary>
+    /// <param name="key">The key to delete.</param>
+    /// <returns>True if the key was found and deleted, false otherwise.</returns>
+    bool Delete(TKey key);
 }

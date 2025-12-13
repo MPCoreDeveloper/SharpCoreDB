@@ -578,6 +578,6 @@ SIMD acceleration provides **2-8x performance improvements** for SharpCoreDB's h
 
 ---
 
-**Last Updated**: December 2024  
+**Last Updated**: December 2025  
 **Target Framework**: .NET 10  
 **Performance Goal**: 2-8x speedup on SIMD-supported hardware

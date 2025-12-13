@@ -19,6 +19,9 @@ public class QueryCacheBenchmark
     private const int DataCount = 10000;
     private List<int> _queryIds = new();
 
+    /// <summary>
+    /// Sets up the benchmark environment by creating databases and populating test data.
+    /// </summary>
     public void Setup()
     {
         // Clean up existing databases
@@ -56,6 +59,9 @@ public class QueryCacheBenchmark
         _queryIds = Enumerable.Range(0, 1000).Select(_ => random.Next(0, DataCount)).ToList();
     }
 
+    /// <summary>
+    /// Cleans up the benchmark environment by removing test databases.
+    /// </summary>
     public void Cleanup()
     {
         CleanupDatabases();
@@ -69,6 +75,10 @@ public class QueryCacheBenchmark
             Directory.Delete(_sharpCoreNoCachePath, true);
     }
 
+    /// <summary>
+    /// Benchmarks parameterized SELECT queries with query cache enabled.
+    /// </summary>
+    /// <returns>Elapsed time in milliseconds.</returns>
     public long SharpCoreDB_Cached_ParameterizedSelect()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -80,6 +90,10 @@ public class QueryCacheBenchmark
         return stopwatch.ElapsedMilliseconds;
     }
 
+    /// <summary>
+    /// Benchmarks parameterized SELECT queries without query cache.
+    /// </summary>
+    /// <returns>Elapsed time in milliseconds.</returns>
     public long SharpCoreDB_NoCache_ParameterizedSelect()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -91,6 +105,10 @@ public class QueryCacheBenchmark
         return stopwatch.ElapsedMilliseconds;
     }
 
+    /// <summary>
+    /// Benchmarks concurrent async SELECT queries with query cache enabled.
+    /// </summary>
+    /// <returns>Elapsed time in milliseconds.</returns>
     public async Task<long> SharpCoreDB_Cached_ConcurrentAsyncSelect()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -102,6 +120,10 @@ public class QueryCacheBenchmark
         return stopwatch.ElapsedMilliseconds;
     }
 
+    /// <summary>
+    /// Benchmarks concurrent async SELECT queries without query cache.
+    /// </summary>
+    /// <returns>Elapsed time in milliseconds.</returns>
     public async Task<long> SharpCoreDB_NoCache_ConcurrentAsyncSelect()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -114,7 +136,7 @@ public class QueryCacheBenchmark
     }
 
     // EXPLAIN plan logging and speedup estimation
-    private void LogExplainPlan(string dbType, string query, Dictionary<string, object?>? parameters = null)
+    private void LogExplainPlan(string dbType)
     {
         var stopwatch = Stopwatch.StartNew();
         try
@@ -135,16 +157,19 @@ public class QueryCacheBenchmark
         Console.WriteLine($"{dbType} Query execution time: {stopwatch.ElapsedMilliseconds} ms");
     }
 
-    private double EstimateSpeedup(long cachedTime, long noCacheTime)
+    private static double EstimateSpeedup(long cachedTime, long noCacheTime)
     {
         if (noCacheTime == 0) return 0;
         return (double)noCacheTime / cachedTime;
     }
 
+    /// <summary>
+    /// Logs EXPLAIN query plans and estimates performance speedup with caching.
+    /// </summary>
     public void LogExplainPlans()
     {
         Console.WriteLine("Logging EXPLAIN plans for sample parameterized SELECT:");
-        LogExplainPlan("SharpCoreDB", "SELECT * FROM users WHERE id = ?", new Dictionary<string, object?> { ["0"] = 1 });
+        LogExplainPlan("SharpCoreDB");
 
         // Estimate speedup based on sample runs
         var cachedTime = SharpCoreDB_Cached_ParameterizedSelect();
@@ -153,6 +178,9 @@ public class QueryCacheBenchmark
         Console.WriteLine($"Estimated speedup with cache: {speedup:F2}x (cached: {cachedTime}ms, no cache: {noCacheTime}ms)");
     }
 
+    /// <summary>
+    /// Exports benchmark results to a Markdown file.
+    /// </summary>
     public void ExportResultsToMarkdown()
     {
         var markdown = GenerateMarkdownReport();

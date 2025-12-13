@@ -111,8 +111,8 @@ Q. Quit
 - **16 threads** - High concurrency
 
 ### Total Combinations
-- 3 record counts × 3 thread counts = **9 scenarios per database**
-- 6 database variants × 9 scenarios = **54 total benchmarks**
+- 3 record counts ï¿½ 3 thread counts = **9 scenarios per database**
+- 6 database variants ï¿½ 9 scenarios = **54 total benchmarks**
 
 ---
 
@@ -530,7 +530,7 @@ This benchmark suite provides **comprehensive, fair, and reproducible** comparis
 
 ---
 
-**Last Updated**: December 2024  
+**Last Updated**: December 2025  
 **SharpCoreDB Version**: 1.0 (with Group Commit WAL)  
 **Benchmark Framework**: BenchmarkDotNet 0.14.0  
 **Target**: .NET 10

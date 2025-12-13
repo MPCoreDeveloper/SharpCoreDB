@@ -1,5 +1,5 @@
 // <copyright file="AesGcmEncryption.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -11,8 +11,9 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Zero-allocation AES-256-GCM encryption using stackalloc for small buffers and ArrayPool for large ones.
+/// HARDWARE ACCELERATION: Automatically uses AES-NI instructions on Intel/AMD when available.
 /// SECURITY: All sensitive buffers are cleared immediately after use.
-/// PERFORMANCE: Eliminates all unnecessary allocations through Span<byte> and stackalloc.
+/// PERFORMANCE: Eliminates all unnecessary allocations through Span&lt;byte&gt; and stackalloc.
 /// </summary>
 /// <param name="key">The encryption key (must be 32 bytes for AES-256).</param>
 /// <param name="disableEncrypt">If true, encryption is disabled (passthrough mode).</param>
@@ -27,12 +28,22 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     private const int StackAllocThreshold = 256; // Use stackalloc for buffers <= 256 bytes
 
     /// <summary>
+    /// Gets a value indicating whether AES hardware acceleration (AES-NI) is available on this platform.
+    /// Returns true on Intel/AMD CPUs with AES-NI support, false otherwise.
+    /// </summary>
+    public static bool IsHardwareAccelerated
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => AesGcm.IsSupported;
+    }
+
+    /// <summary>
     /// Encrypts data using AES-256-GCM with optimized buffer handling.
     /// Uses stackalloc for nonce/tag, ArrayPool for cipher.
     /// </summary>
     /// <param name="data">The plaintext data to encrypt.</param>
     /// <returns>Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Encrypt(byte[] data)
     {
         if (disableEncrypt) 
@@ -81,7 +92,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// </summary>
     /// <param name="encryptedData">Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</param>
     /// <returns>The decrypted plaintext.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Decrypt(byte[] encryptedData)
     {
         if (disableEncrypt) 
@@ -111,7 +122,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// <param name="data">The plaintext data to encrypt.</param>
     /// <param name="output">The output buffer (must be at least data.Length + 28 bytes).</param>
     /// <returns>Number of bytes written to output.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public int Encrypt(ReadOnlySpan<byte> data, Span<byte> output)
     {
         if (disableEncrypt)
@@ -187,7 +198,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// <param name="encryptedData">Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</param>
     /// <param name="output">The output buffer for decrypted data.</param>
     /// <returns>Number of bytes written to output.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public int Decrypt(ReadOnlySpan<byte> encryptedData, Span<byte> output)
     {
         if (disableEncrypt)
@@ -221,7 +232,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// Page format: [plaintext...] → [nonce(12)][ciphertext...][tag(16)]
     /// </summary>
     /// <param name="page">The page buffer (must have space for nonce + tag overhead).</param>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void EncryptPage(Span<byte> page)
     {
         if (disableEncrypt) 
@@ -273,7 +284,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// Page format: [nonce(12)][ciphertext...][tag(16)] → [plaintext...]
     /// </summary>
     /// <param name="page">The encrypted page buffer.</param>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void DecryptPage(Span<byte> page)
     {
         if (disableEncrypt) 
@@ -314,6 +325,7 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     /// <summary>
     /// Disposes resources and clears sensitive data.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Dispose()
     {
         if (_key.Length > 0)

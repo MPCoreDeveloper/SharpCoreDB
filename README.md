@@ -337,7 +337,7 @@ See the comprehensive test suite:
 ## Performance Benchmarks - Comprehensive Comparison 📊
 
 **Test Environment**: Windows 11, Intel i7-10850H (6 cores), .NET 10, SSD  
-**Date**: December 2024 | **Framework**: BenchmarkDotNet v0.14.0
+**Date**: December 2025 | **Framework**: BenchmarkDotNet v0.14.0
 
 ### 🎯 Quick Summary
 

@@ -1,5 +1,5 @@
 // <copyright file="MemoryMappedFileHandler.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Core.File;
@@ -88,7 +88,7 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] ReadAllBytes()
     {
-        ObjectDisposedException.ThrowIf(this.disposed, this);
+        ObjectDisposedException.ThrowIf(disposed, this);
 
         if (this.useMemoryMapping && this.accessor != null)
         {
@@ -109,7 +109,7 @@ public sealed class MemoryMappedFileHandler : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadBytes(long offset, Span<byte> buffer)
     {
-        ObjectDisposedException.ThrowIf(this.disposed, this);
+        ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(offset, this.FileSize);
 

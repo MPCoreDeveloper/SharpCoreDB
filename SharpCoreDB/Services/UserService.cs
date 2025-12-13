@@ -1,5 +1,5 @@
 // <copyright file="UserService.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -28,8 +28,17 @@ public sealed class UserService(ICryptoService crypto, IStorage storage, string 
             {
                 return JsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? [];
             }
-            catch
+            catch (JsonException ex)
             {
+                // Log deserialization error - corrupted users file
+                Console.WriteLine($"⚠️  Warning: Failed to deserialize users file: {ex.Message}");
+                Console.WriteLine($"   Users file may be corrupted. Starting with empty user list.");
+                return [];
+            }
+            catch (Exception ex)
+            {
+                // Unexpected error - log and return empty
+                Console.WriteLine($"❌ Error loading users: {ex.GetType().Name} - {ex.Message}");
                 return [];
             }
         }

@@ -1,5 +1,5 @@
 // <copyright file="QueryCache.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -91,11 +91,11 @@ public class QueryCache
     /// <returns></returns>
     public (long Hits, long Misses, double HitRate, int Count) GetStatistics()
     {
-        var hits = Interlocked.Read(ref this.hits);
-        var misses = Interlocked.Read(ref this.misses);
-        var total = hits + misses;
-        var hitRate = total > 0 ? (double)hits / total : 0;
-        return (hits, misses, hitRate, this.cache.Count);
+        var totalHits = Interlocked.Read(ref this.hits);
+        var totalMisses = Interlocked.Read(ref this.misses);
+        var total = totalHits + totalMisses;
+        var hitRate = total > 0 ? (double)totalHits / total : 0;
+        return (totalHits, totalMisses, hitRate, this.cache.Count);
     }
 
     /// <summary>
@@ -109,8 +109,18 @@ public class QueryCache
         Interlocked.Exchange(ref this.misses, 0);
     }
 
+    /// <summary>
+    /// Gets a cached query result by SQL string.
+    /// </summary>
+    /// <param name="sql">The SQL query string.</param>
+    /// <returns>The cached result as a JSON string, or null if not found.</returns>
     public string? GetCachedResult(string sql) => this.resultCache.TryGetValue(sql, out var res) ? res : null;
 
+    /// <summary>
+    /// Caches the results of a query execution.
+    /// </summary>
+    /// <param name="sql">The SQL query string.</param>
+    /// <param name="results">The query results to cache.</param>
     public void CacheResult(string sql, List<Dictionary<string, object>> results)
     {
         var json = OptimizedRowParser.SerializeRowsOptimized(results);

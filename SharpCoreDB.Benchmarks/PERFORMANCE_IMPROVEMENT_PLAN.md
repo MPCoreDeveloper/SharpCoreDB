@@ -1,7 +1,7 @@
 # ?? SharpCoreDB Performance Improvement Plan
 
 **Document Version**: 1.0  
-**Date**: December 8, 2024  
+**Date**: December 8, 2025  
 **Status**: READY FOR IMPLEMENTATION  
 **Priority**: CRITICAL - Blocks Production Use
 
@@ -22,7 +22,7 @@ Based on comprehensive benchmark analysis, SharpCoreDB has **critical performanc
 | **UPSERT Overhead in Benchmarks** | ?? CRITICAL | 4.2 GB for 1K records | 40-80 MB | P0 |
 | **Individual Transactions** | ?? CRITICAL | 3,760 ms for 1K inserts | 150-300 ms | P0 |
 | **SELECT Benchmarks Failed** | ?? CRITICAL | 0% success rate | 100% | P0 |
-| **Non-linear Scaling** | ?? HIGH | O(n²) behavior | O(n) | P1 |
+| **Non-linear Scaling** | ?? HIGH | O(nï¿½) behavior | O(n) | P1 |
 | **Memory Allocations** | ?? HIGH | 1,548x vs SQLite | 15-30x | P1 |
 | **No Batch Insert Examples** | ?? MEDIUM | N/A | Documentation | P2 |
 
@@ -778,5 +778,5 @@ For questions about this improvement plan:
 ---
 
 **Document Owner**: Performance Team  
-**Last Updated**: December 8, 2024  
+**Last Updated**: December 8, 2025  
 **Next Review**: December 15, 2024 (after Week 1 completion)

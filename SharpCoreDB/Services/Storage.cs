@@ -1,5 +1,5 @@
 // <copyright file="Storage.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -14,11 +14,13 @@ using System.Text;
 using System.Runtime.CompilerServices;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Buffers;
 
 /// <summary>
 /// Implementation of IStorage using encrypted files and memory-mapped files for performance.
 /// Includes SIMD-accelerated page scanning and pattern matching.
 /// Now with integrated PageCache for high-performance page-level caching.
+/// OPTIMIZED: Uses ArrayPool of byte for buffer pooling to reduce memory allocations.
 /// </summary>
 public class Storage : IStorage
 {
@@ -28,6 +30,7 @@ public class Storage : IStorage
     private readonly bool useMemoryMapping;
     private readonly PageCache? pageCache;
     private readonly int pageSize;
+    private readonly ArrayPool<byte> bufferPool;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Storage"/> class.
@@ -44,6 +47,7 @@ public class Storage : IStorage
         this.useMemoryMapping = config?.UseMemoryMapping ?? true;
         this.pageCache = pageCache;
         this.pageSize = config?.PageSize ?? 4096;
+        this.bufferPool = ArrayPool<byte>.Shared;
     }
 
     /// <inheritdoc />
@@ -179,6 +183,7 @@ public class Storage : IStorage
 
     /// <summary>
     /// Loads a page from disk into a byte array for caching.
+    /// OPTIMIZED: Uses pooled buffer from ReadBytesAtDirect which already implements ArrayPool.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private ReadOnlySpan<byte> LoadPageFromDisk(string path, long position, int maxLength, bool noEncrypt)
@@ -200,39 +205,60 @@ public class Storage : IStorage
 
     /// <summary>
     /// Direct read from disk without caching.
+    /// OPTIMIZED: Uses ArrayPool of byte to reduce allocations.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte[]? ReadBytesAtDirect(string path, long position, int maxLength, bool noEncrypt)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.RandomAccess);
-        fs.Seek(position, SeekOrigin.Begin);
-        
-        byte[] buffer = new byte[maxLength];
-        int bytesRead = fs.Read(buffer.AsSpan());
-        if (bytesRead == 0)
+        byte[]? pooledBuffer = null;
+        try
         {
-            return null;
-        }
-
-        if (bytesRead < maxLength)
-        {
-            Array.Resize(ref buffer, bytesRead);
-        }
-
-        var effectiveNoEncrypt = noEncrypt || this.noEncryption;
-        if (effectiveNoEncrypt)
-        {
-            return buffer;
-        }
-        else
-        {
-            try
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.RandomAccess);
+            fs.Seek(position, SeekOrigin.Begin);
+            
+            // OPTIMIZED: Rent buffer from pool
+            pooledBuffer = this.bufferPool.Rent(maxLength);
+            Span<byte> bufferSpan = pooledBuffer.AsSpan(0, maxLength);
+            
+            int bytesRead = fs.Read(bufferSpan);
+            if (bytesRead == 0)
             {
-                return this.crypto.Decrypt(this.key, buffer);
+                return null;
             }
-            catch
+
+            var effectiveNoEncrypt = noEncrypt || this.noEncryption;
+            
+            byte[] result;
+            if (effectiveNoEncrypt)
             {
-                return buffer;
+                // Copy only the bytes read
+                result = new byte[bytesRead];
+                bufferSpan[..bytesRead].CopyTo(result);
+            }
+            else
+            {
+                try
+                {
+                    // Decrypt only the bytes read
+                    var dataToDecrypt = new byte[bytesRead];
+                    bufferSpan[..bytesRead].CopyTo(dataToDecrypt);
+                    result = this.crypto.Decrypt(this.key, dataToDecrypt);
+                }
+                catch
+                {
+                    result = new byte[bytesRead];
+                    bufferSpan[..bytesRead].CopyTo(result);
+                }
+            }
+            
+            return result;
+        }
+        finally
+        {
+            // SECURITY: Return pooled buffer with clearing
+            if (pooledBuffer != null)
+            {
+                this.bufferPool.Return(pooledBuffer, clearArray: true);
             }
         }
     }
@@ -261,6 +287,45 @@ public class Storage : IStorage
         }
         
         return position;
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public long[] AppendBytesMultiple(string path, List<byte[]> dataBlocks)
+    {
+        if (dataBlocks == null || dataBlocks.Count == 0)
+            return Array.Empty<long>();
+
+        var positions = new long[dataBlocks.Count];
+        
+        // OPTIMIZED: Single file open with batched writes
+        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536, FileOptions.WriteThrough);
+        
+        Span<byte> lengthBuffer = stackalloc byte[4];
+        
+        for (int i = 0; i < dataBlocks.Count; i++)
+        {
+            var data = dataBlocks[i];
+            
+            // Record position before writing
+            positions[i] = fs.Position;
+            
+            // Write length prefix using BinaryPrimitives
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+            fs.Write(lengthBuffer);
+            
+            // Write data directly
+            fs.Write(data.AsSpan());
+            
+            // Invalidate cache for this page if it exists
+            if (this.pageCache != null)
+            {
+                int pageId = ComputePageId(path, positions[i]);
+                this.pageCache.EvictPage(pageId);
+            }
+        }
+        
+        return positions;
     }
 
     /// <inheritdoc />
@@ -326,19 +391,37 @@ public class Storage : IStorage
             return null;
         }
 
-        using var mmf = MemoryMappedFile.CreateFromFile(path, FileMode.Open);
-        using var accessor = mmf.CreateViewAccessor();
-        var length = accessor.Capacity;
-        var buffer = new byte[length];
-        accessor.ReadArray(0, buffer, 0, (int)length);
-        if (this.noEncryption)
+        byte[]? pooledBuffer = null;
+        try
         {
-            return Encoding.UTF8.GetString(buffer);
+            using var mmf = MemoryMappedFile.CreateFromFile(path, FileMode.Open);
+            using var accessor = mmf.CreateViewAccessor();
+            var length = accessor.Capacity;
+            
+            // OPTIMIZED: Rent buffer from pool
+            pooledBuffer = this.bufferPool.Rent((int)length);
+            accessor.ReadArray(0, pooledBuffer, 0, (int)length);
+            
+            ReadOnlySpan<byte> dataSpan = pooledBuffer.AsSpan(0, (int)length);
+            
+            if (this.noEncryption)
+            {
+                return Encoding.UTF8.GetString(dataSpan);
+            }
+            else
+            {
+                var dataArray = dataSpan.ToArray();
+                var plain = this.crypto.Decrypt(this.key, dataArray);
+                return Encoding.UTF8.GetString(plain);
+            }
         }
-        else
+        finally
         {
-            var plain = this.crypto.Decrypt(this.key, buffer);
-            return Encoding.UTF8.GetString(plain);
+            // SECURITY: Return pooled buffer with clearing
+            if (pooledBuffer != null)
+            {
+                this.bufferPool.Return(pooledBuffer, clearArray: true);
+            }
         }
     }
 
@@ -353,6 +436,7 @@ public class Storage : IStorage
 
     /// <summary>
     /// Scans a page for a specific byte pattern using SIMD acceleration.
+    /// OPTIMIZED: Uses ArrayPool of byte to reuse buffer across reads.
     /// </summary>
     /// <param name="path">The file path.</param>
     /// <param name="pattern">The byte pattern to search for.</param>
@@ -365,31 +449,44 @@ public class Storage : IStorage
         if (!File.Exists(path))
             return positions;
 
-        // Read file in chunks for SIMD scanning
         const int chunkSize = 64 * 1024; // 64KB chunks
-        byte[] buffer = new byte[chunkSize];
+        byte[]? pooledBuffer = null;
         
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, chunkSize, FileOptions.SequentialScan);
-        long filePosition = 0;
-        
-        while (true)
+        try
         {
-            int bytesRead = fs.Read(buffer, 0, chunkSize);
-            if (bytesRead == 0)
-                break;
-
-            // SIMD: Use vectorized search
-            int index = 0;
-            while ((index = SimdHelper.IndexOf(buffer.AsSpan(index, bytesRead - index), pattern)) != -1)
+            // OPTIMIZED: Rent buffer from pool
+            pooledBuffer = this.bufferPool.Rent(chunkSize);
+            
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, chunkSize, FileOptions.SequentialScan);
+            long filePosition = 0;
+            
+            while (true)
             {
-                positions.Add(filePosition + index);
-                index++; // Move past this match
+                int bytesRead = fs.Read(pooledBuffer, 0, chunkSize);
+                if (bytesRead == 0)
+                    break;
+
+                // SIMD: Use vectorized search on the pooled buffer
+                int index = 0;
+                while ((index = SimdHelper.IndexOf(pooledBuffer.AsSpan(index, bytesRead - index), pattern)) != -1)
+                {
+                    positions.Add(filePosition + index);
+                    index++; // Move past this match
+                }
+
+                filePosition += bytesRead;
             }
-
-            filePosition += bytesRead;
+            
+            return positions;
         }
-
-        return positions;
+        finally
+        {
+            // SECURITY: Return pooled buffer with clearing
+            if (pooledBuffer != null)
+            {
+                this.bufferPool.Return(pooledBuffer, clearArray: true);
+            }
+        }
     }
 
     /// <summary>

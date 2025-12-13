@@ -1,5 +1,5 @@
 // <copyright file="PooledObjectFactory.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Pooling;
@@ -90,7 +90,7 @@ public class PoolConfiguration
     public int MaximumRetained { get; set; } = 20;
 
     /// <summary>
-    /// Gets or sets whether to use thread-local pools for reduced contention.
+    /// Gets or sets a value indicating whether to use thread-local pools for reduced contention.
     /// PERFORMANCE: Enables thread-local caching for zero-lock access.
     /// MEMORY: Increases memory usage (pool per thread).
     /// </summary>
@@ -104,14 +104,14 @@ public class PoolConfiguration
     public int ThreadLocalCapacity { get; set; } = 3;
 
     /// <summary>
-    /// Gets or sets whether to validate objects on return.
+    /// Gets or sets a value indicating whether to validate objects on return.
     /// SAFETY: Enables validation but adds overhead.
     /// RECOMMENDATION: Enable in debug builds, disable in release for performance.
     /// </summary>
     public bool ValidateOnReturn { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to clear buffers on return.
+    /// Gets or sets a value indicating whether to clear buffers on return.
     /// SECURITY: Prevents data leakage between pool uses.
     /// RECOMMENDATION: Always enable for buffers containing sensitive data.
     /// </summary>
@@ -160,7 +160,7 @@ public class ThreadLocalPool<T> where T : class
         // Try thread-local cache first (zero contention)
         if (cache != null && cache.TryGet(out var obj))
         {
-            return obj;
+            return obj!;
         }
 
         // Fall back to global pool (lock-based)
@@ -208,7 +208,7 @@ public class ThreadLocalPool<T> where T : class
     /// Thread-local cache for zero-contention access.
     /// IMPLEMENTATION: Simple array-based stack for maximum performance.
     /// </summary>
-    private class LocalCache<TItem> where TItem : class
+    private sealed class LocalCache<TItem> where TItem : class
     {
         private readonly TItem?[] items;
         private int count;
@@ -273,7 +273,7 @@ public class PoolStatistics
     public long ObjectsReused { get; set; }
 
     /// <summary>
-    /// Gets or sets the pool hit rate.
+    /// Gets the pool hit rate (0.0 to 1.0).
     /// </summary>
     public double HitRate => ObjectsReused > 0
         ? (double)ObjectsReused / (ObjectsCreated + ObjectsReused)

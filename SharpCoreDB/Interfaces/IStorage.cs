@@ -1,5 +1,5 @@
 // <copyright file="IStorage.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Interfaces;
@@ -59,6 +59,14 @@ public interface IStorage
     /// <param name="data">The data to append.</param>
     /// <returns>The offset where the data was appended.</returns>
     long AppendBytes(string path, byte[] data);
+
+    /// <summary>
+    /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="dataBlocks">The list of data blocks to append.</param>
+    /// <returns>Array of offsets where each data block was appended.</returns>
+    long[] AppendBytesMultiple(string path, List<byte[]> dataBlocks);
 
     /// <summary>
     /// Reads binary data from a file starting from the specified offset.

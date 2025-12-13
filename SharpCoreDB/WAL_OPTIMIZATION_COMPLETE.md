@@ -972,7 +972,7 @@ public void WalManager_Metrics_TrackOperations()
 
 ---
 
-**Created**: December 2024  
+**Created**: December 2025  
 **Target**: .NET 10  
 **Optimization Level**: Maximum (zero-allocation)  
 **Build Status**: ✅ **Success**

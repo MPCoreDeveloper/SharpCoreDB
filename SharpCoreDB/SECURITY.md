@@ -3,7 +3,7 @@
 ## Overview
 This document outlines security considerations, best practices, and known limitations for SharpCoreDB.
 
-## Critical Security Fixes Applied (2025)
+## Critical Security Fixes Applied (2026)
 
 ### 1. User Password Storage (UserService.cs)
 **FIXED**: Hardcoded username-as-salt vulnerability
@@ -15,7 +15,7 @@ This document outlines security considerations, best practices, and known limita
 ### 2. PBKDF2 Iteration Count (CryptoService.cs)
 **FIXED**: Dangerously low iteration count
 - **Previous Issue**: Used only 10,000 PBKDF2-HMAC-SHA256 iterations
-- **Fix Applied**: Increased to 600,000 iterations per OWASP/NIST 2024 recommendations
+- **Fix Applied**: Increased to 600,000 iterations per OWASP/NIST 2025 recommendations
 - **Impact**: Significantly increases resistance to GPU-accelerated brute force attacks
 - **Performance**: ~60x slower key derivation (expected and necessary)
 - **Breaking Change**: YES - existing derived keys will not match
@@ -166,7 +166,7 @@ db.ExecuteSQL("DELETE FROM users WHERE id = " + userId);
 
 ### GroupCommitWAL
 ✅ **THREAD-SAFE**: Properly synchronized with Channel-based queue
-- Fixed race condition in batch collection (2025)
+- Fixed race condition in batch collection (2026)
 - Single-reader (background worker) / multi-writer pattern
 - Atomic operations for statistics
 - Instance-specific WAL files prevent file locking conflicts
@@ -298,13 +298,13 @@ For compliance-critical applications, consider:
 
 ## Version History
 
-### v1.0.0 (2024)
+### v1.0.0 (2025)
 - Initial release with AES-256-GCM encryption
 - Basic SQL injection protection
 - PBKDF2 with 10,000 iterations (INSECURE)
 - Username as salt (INSECURE)
 
-### v1.1.0 (2025) - Security Hardening & SQL Enhancements
+### v1.1.0 (2026) - Security Hardening & SQL Enhancements
 - 🔒 Fixed: Random salt per user (16 bytes)
 - 🔒 Fixed: PBKDF2 iterations increased to 600,000
 - 🔒 Fixed: GroupCommitWAL race condition

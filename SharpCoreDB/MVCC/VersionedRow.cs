@@ -1,5 +1,5 @@
 // <copyright file="VersionedRow.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.MVCC;
@@ -7,12 +7,12 @@ namespace SharpCoreDB.MVCC;
 /// <summary>
 /// Generic versioned row for MVCC (Multi-Version Concurrency Control).
 /// Provides type-safe row versioning with minimal overhead.
-/// Target: < 10ns version check, < 100ns version creation.
+/// Target: &lt; 10ns version check, &lt; 100ns version creation.
 /// </summary>
 /// <typeparam name="TData">The type of the row data (must be a reference type).</typeparam>
-/// <param name="data">The row data.</param>
-/// <param name="version">The transaction version that created this row.</param>
-/// <param name="deletedVersion">The transaction version that deleted this row (null if not deleted).</param>
+/// <param name="Data">The row data.</param>
+/// <param name="Version">The transaction version that created this row.</param>
+/// <param name="DeletedVersion">The transaction version that deleted this row (null if not deleted).</param>
 public sealed record VersionedRow<TData>(
     TData Data,
     long Version,

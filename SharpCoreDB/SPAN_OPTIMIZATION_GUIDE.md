@@ -307,6 +307,6 @@ All changes maintain **100% API compatibility** - no breaking changes for existi
 
 ---
 
-**Last Updated:** December 2024  
+**Last Updated:** December 2025  
 **Target Framework:** .NET 10 / C# 14  
 **Performance Goals:** Zero-allocation hot paths, <1% GC time, sub-millisecond latency

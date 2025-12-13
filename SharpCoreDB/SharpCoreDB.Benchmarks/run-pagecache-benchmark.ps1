@@ -6,8 +6,8 @@ Write-Host "  PageCache Performance Benchmark" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Navigeer naar benchmark directory
-$benchmarkDir = "D:\source\repos\MPCoreDeveloper\SharpCoreDB\SharpCoreDB.Benchmarks"
+# Navigeer naar benchmark directory (relative to script location)
+$benchmarkDir = $PSScriptRoot
 Set-Location $benchmarkDir
 
 Write-Host "Building benchmark project..." -ForegroundColor Yellow

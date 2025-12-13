@@ -1,5 +1,5 @@
 // <copyright file="MvccAsyncBenchmark.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Tests;
@@ -75,7 +75,7 @@ public sealed class MvccAsyncBenchmark
         Console.WriteLine($"?? Parallel Queries:  {ParallelQueries:N0}");
         Console.WriteLine($"? Threads:           {ThreadCount}");
         Console.WriteLine($"??  Total Time:        {elapsedMs:F2} ms");
-        Console.WriteLine($"?? Avg per Query:     {avgMicroseconds:F2} µs");
+        Console.WriteLine($"?? Avg per Query:     {avgMicroseconds:F2} ï¿½s");
         Console.WriteLine($"?? Throughput:        {throughput:N0} queries/sec");
         Console.WriteLine($"?? Target:            < {TargetMs} ms");
         Console.WriteLine();

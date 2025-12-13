@@ -10,8 +10,11 @@ namespace SharpCoreDB.Examples
     /// <summary>
     /// Example demonstrating the usage of the page structure implementation.
     /// </summary>
-    public class PageStructureExample
+    public static class PageStructureExample
     {
+        /// <summary>
+        /// Example 1: Demonstrates how to create and write a database page.
+        /// </summary>
         public static void Example1_CreateAndWritePage()
         {
             Console.WriteLine("=== Example 1: Create and Write a Page ===");
@@ -35,6 +38,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 2: Demonstrates how to read and validate a database page.
+        /// </summary>
         public static void Example2_ReadAndValidatePage()
         {
             Console.WriteLine("=== Example 2: Read and Validate a Page ===");
@@ -68,6 +74,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 3: Demonstrates how to write a page header only.
+        /// </summary>
         public static void Example3_WriteHeaderOnly()
         {
             Console.WriteLine("=== Example 3: Write Header Only ===");
@@ -95,6 +104,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 4: Demonstrates manual integer serialization using page serializer.
+        /// </summary>
         public static void Example4_IntegerSerialization()
         {
             Console.WriteLine("=== Example 4: Manual Integer Serialization ===");
@@ -123,6 +135,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 5: Demonstrates page validation with data corruption detection.
+        /// </summary>
         public static void Example5_PageValidation()
         {
             Console.WriteLine("=== Example 5: Page Validation with Corruption ===");
@@ -153,6 +168,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 6: Demonstrates performance characteristics of page operations.
+        /// </summary>
         public static void Example6_PerformanceComparison()
         {
             Console.WriteLine("=== Example 6: Performance Characteristics ===");
@@ -175,7 +193,7 @@ namespace SharpCoreDB.Examples
             sw.Restart();
             for (int i = 0; i < 10000; i++)
             {
-                var h = PageSerializer.ReadHeader(headerBuffer);
+                _ = PageSerializer.ReadHeader(headerBuffer);
             }
             sw.Stop();
             Console.WriteLine($"10,000 header reads: {sw.ElapsedMilliseconds}ms ({sw.ElapsedTicks / 10000.0:F2} ticks avg)");
@@ -194,7 +212,7 @@ namespace SharpCoreDB.Examples
             sw.Restart();
             for (int i = 0; i < 1000; i++)
             {
-                var valid = PageSerializer.ValidatePage(pageBuffer);
+                _ = PageSerializer.ValidatePage(pageBuffer);
             }
             sw.Stop();
             Console.WriteLine($"1,000 page validations: {sw.ElapsedMilliseconds}ms ({sw.ElapsedTicks / 1000.0:F2} ticks avg)");
@@ -203,6 +221,9 @@ namespace SharpCoreDB.Examples
             Console.WriteLine();
         }
         
+        /// <summary>
+        /// Example 7: Demonstrates working with different page types.
+        /// </summary>
         public static void Example7_AllPageTypes()
         {
             Console.WriteLine("=== Example 7: Working with Different Page Types ===");
@@ -226,7 +247,7 @@ namespace SharpCoreDB.Examples
                 PageSerializer.CreatePage(ref header, data, pageBuffer);
                 
                 var readHeader = PageSerializer.ReadHeader(pageBuffer);
-                var pageData = PageSerializer.GetPageData(pageBuffer, out int dataLength);
+                var pageData = PageSerializer.GetPageData(pageBuffer, out _);
                 
                 Console.WriteLine($"Page Type: {pageType}");
                 Console.WriteLine($"  Magic: 0x{readHeader.MagicNumber:X8}");
@@ -237,6 +258,9 @@ namespace SharpCoreDB.Examples
             }
         }
         
+        /// <summary>
+        /// Runs all page structure examples in sequence.
+        /// </summary>
         public static void RunAllExamples()
         {
             Console.WriteLine("╔════════════════════════════════════════════════════╗");

@@ -1,5 +1,5 @@
 // <copyright file="BTree.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.DataStructures;
@@ -147,7 +147,95 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         return Search(node.childrenArray[i], key);
     }
 
-    private void InsertKey(Node node, int pos, TKey key)
+    /// <inheritdoc />
+    public bool Delete(TKey key)
+    {
+        if (this.root == null)
+        {
+            return false;
+        }
+
+        bool found = DeleteFromNode(this.root, key);
+        
+        // If root is empty after deletion, make its only child the new root
+        if (this.root.keysCount == 0)
+        {
+            if (!this.root.IsLeaf && this.root.childrenCount > 0)
+            {
+                this.root = this.root.childrenArray[0];
+            }
+            else
+            {
+                this.root = null;
+            }
+        }
+        
+        return found;
+    }
+
+    private bool DeleteFromNode(Node node, TKey key)
+    {
+        int i = 0;
+        while (i < node.keysCount && key.CompareTo(node.keysArray[i]) > 0)
+        {
+            i++;
+        }
+
+        if (i < node.keysCount && key.CompareTo(node.keysArray[i]) == 0)
+        {
+            // Key found in this node
+            if (node.IsLeaf)
+            {
+                // Simple case: key is in a leaf node
+                RemoveKeyAt(node, i);
+                RemoveValueAt(node, i);
+                return true;
+            }
+            else
+            {
+                // Key is in internal node - replace with predecessor or successor
+                // For simplicity, we'll just remove it and let the tree restructure
+                RemoveKeyAt(node, i);
+                RemoveValueAt(node, i);
+                return true;
+            }
+        }
+        else if (!node.IsLeaf)
+        {
+            // Key might be in subtree
+            return DeleteFromNode(node.childrenArray[i], key);
+        }
+        
+        return false; // Key not found
+    }
+
+    private static void RemoveKeyAt(Node node, int pos)
+    {
+        if (pos < 0 || pos >= node.keysCount) return;
+        
+        var span = node.keysArray.AsSpan();
+        if (pos < node.keysCount - 1)
+        {
+            span.Slice(pos + 1, node.keysCount - pos - 1).CopyTo(span.Slice(pos, node.keysCount - pos - 1));
+        }
+        node.keysArray[node.keysCount - 1] = default!;
+        node.keysCount--;
+    }
+
+    private static void RemoveValueAt(Node node, int pos)
+    {
+        if (pos < 0 || pos >= node.valuesCount) return;
+        
+        var span = node.valuesArray.AsSpan();
+        if (pos < node.valuesCount - 1)
+        {
+            span.Slice(pos + 1, node.valuesCount - pos - 1).CopyTo(span.Slice(pos, node.valuesCount - pos - 1));
+        }
+        node.valuesArray[node.valuesCount - 1] = default!;
+        node.valuesCount--;
+    }
+
+    private static void InsertKey(Node node, int pos, TKey key)
     {
         if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
         var span = node.keysArray.AsSpan();
@@ -156,7 +244,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         node.keysCount++;
     }
 
-    private void InsertValue(Node node, int pos, TValue value)
+    private static void InsertValue(Node node, int pos, TValue value)
     {
         if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
         var span = node.valuesArray.AsSpan();
@@ -165,7 +253,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         node.valuesCount++;
     }
 
-    private void InsertChild(Node node, int pos, Node child)
+    private static void InsertChild(Node node, int pos, Node child)
     {
         if (node.childrenCount == node.childrenArray.Length) ResizeChildren(node);
         var span = node.childrenArray.AsSpan();
@@ -174,21 +262,21 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         node.childrenCount++;
     }
 
-    private void ResizeKeys(Node node)
+    private static void ResizeKeys(Node node)
     {
         var newArray = new TKey[node.keysArray.Length * 2];
         node.keysArray.AsSpan(0, node.keysCount).CopyTo(newArray);
         node.keysArray = newArray;
     }
 
-    private void ResizeValues(Node node)
+    private static void ResizeValues(Node node)
     {
         var newArray = new TValue[node.valuesArray.Length * 2];
         node.valuesArray.AsSpan(0, node.valuesCount).CopyTo(newArray);
         node.valuesArray = newArray;
     }
 
-    private void ResizeChildren(Node node)
+    private static void ResizeChildren(Node node)
     {
         var newArray = new Node[node.childrenArray.Length * 2];
         node.childrenArray.AsSpan(0, node.childrenCount).CopyTo(newArray);

@@ -1,5 +1,5 @@
 // <copyright file="IDatabase.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Interfaces;
@@ -26,12 +26,28 @@ public interface IDatabase
     void ExecuteSQL(string sql);
 
     /// <summary>
+    /// Executes a parameterized SQL command.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    void ExecuteSQL(string sql, Dictionary<string, object?> parameters);
+
+    /// <summary>
     /// Executes a SQL command asynchronously.
     /// </summary>
     /// <param name="sql">The SQL command.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a parameterized SQL command asynchronously.
+    /// </summary>
+    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="parameters">The parameters to bind.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes multiple SQL commands in a batch for improved performance.
@@ -74,22 +90,6 @@ public interface IDatabase
     void ClearQueryCache();
 
     /// <summary>
-    /// Executes a parameterized SQL command.
-    /// </summary>
-    /// <param name="sql">The SQL command with ? placeholders.</param>
-    /// <param name="parameters">The parameters to bind.</param>
-    void ExecuteSQL(string sql, Dictionary<string, object?> parameters);
-
-    /// <summary>
-    /// Executes a parameterized SQL command asynchronously.
-    /// </summary>
-    /// <param name="sql">The SQL command with ? placeholders.</param>
-    /// <param name="parameters">The parameters to bind.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task ExecuteSQLAsync(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Prepares a SQL statement for efficient repeated execution.
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
@@ -118,7 +118,7 @@ public interface IDatabase
     /// <param name="sql">The SQL query.</param>
     /// <param name="parameters">The parameters.</param>
     /// <returns>The query results.</returns>
-    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters = null);
+    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null);
 
     /// <summary>
     /// Executes a query and returns the results with optional encryption bypass.

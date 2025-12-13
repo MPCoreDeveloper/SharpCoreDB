@@ -175,7 +175,7 @@ The implementation is **complete and production-ready**:
 
 ---
 
-**Date:** December 2024  
+**Date:** December 2025  
 **Target:** .NET 10  
 **Performance:** Maximum (zero-allocation, SIMD-accelerated)  
 **Quality:** Production-ready

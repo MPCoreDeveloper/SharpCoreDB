@@ -337,7 +337,7 @@ Ensure RPlotExporter is working:
 
 ## Performance Baselines
 
-As of December 2024 (.NET 10):
+As of December 2025 (.NET 10):
 
 | Database | Insert (1K) | Query (10K) | Update (1K) | Memory |
 |----------|-------------|-------------|-------------|--------|

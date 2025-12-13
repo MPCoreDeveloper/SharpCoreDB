@@ -1,5 +1,5 @@
 // <copyright file="HashIndex.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.DataStructures;
@@ -29,10 +29,8 @@ public class HashIndex
     public HashIndex(string tableName, string columnName) 
     {
         _columnName = columnName;
-        // Use default comparer: SimdHashEqualityComparer was removed due to issues with
-        // reference equality vs value equality for boxed value types on Linux/.NET 10.
-        // May revisit with proper generic implementation in future.
-        _index = new Dictionary<object, List<long>>();
+        // Use SIMD-accelerated comparer for better hash performance
+        _index = new Dictionary<object, List<long>>(_comparer);
     }
 
     /// <summary>
@@ -43,12 +41,12 @@ public class HashIndex
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Add(Dictionary<string, object> row, long position)
     {
-        if (!row.TryGetValue(_columnName, out var key) || key == null)
+        if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
         if (!_index.TryGetValue(key, out var list))
         {
-            list = new List<long>();
+            list = [];
             _index[key] = list;
         }
         list.Add(position);
@@ -60,7 +58,7 @@ public class HashIndex
     /// <param name="row">The row data.</param>
     public void Remove(Dictionary<string, object> row)
     {
-        if (row.TryGetValue(_columnName, out var key) && key != null)
+        if (row.TryGetValue(_columnName, out var key) && key is not null)
         {
             _index.Remove(key);
         }
@@ -73,7 +71,7 @@ public class HashIndex
     /// <param name="position">The position to remove.</param>
     public void Remove(Dictionary<string, object> row, long position)
     {
-        if (!row.TryGetValue(_columnName, out var key) || key == null)
+        if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
         if (_index.TryGetValue(key, out var list))
@@ -93,7 +91,7 @@ public class HashIndex
     /// <returns>List of positions matching the key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<long> LookupPositions(object key)
-        => key != null && _index.TryGetValue(key, out var list) ? new List<long>(list) : new();
+        => key is not null && _index.TryGetValue(key, out var list) ? new List<long>(list) : [];
 
     /// <summary>
     /// Gets the number of unique keys in the index.
@@ -106,7 +104,7 @@ public class HashIndex
     /// <param name="key">The key to check.</param>
     /// <returns>True if key exists.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ContainsKey(object key) => key != null && _index.ContainsKey(key);
+    public bool ContainsKey(object key) => key is not null && _index.ContainsKey(key);
 
     /// <summary>
     /// Clears all entries from the index.
@@ -142,7 +140,7 @@ public class HashIndex
     /// SIMD-accelerated equality comparer for hash index keys.
     /// Provides fast hash code computation and equality checks for strings and byte arrays.
     /// </summary>
-    private class SimdHashEqualityComparer : IEqualityComparer<object>
+    private sealed class SimdHashEqualityComparer : IEqualityComparer<object>
     {
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public new bool Equals(object? x, object? y)

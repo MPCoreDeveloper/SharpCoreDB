@@ -1,5 +1,5 @@
 // <copyright file="SimdHelper.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -564,7 +564,7 @@ public static class SimdHelper
             int i = 0;
             int vectorizedLength = buffer.Length & ~15;
 
-            Vector128<byte> patternVec = Vector128.Create(pattern);
+            var patternVec = Vector128.Create(pattern);
 
             for (; i < vectorizedLength; i += 16)
             {
@@ -572,8 +572,7 @@ public static class SimdHelper
                 Vector128<byte> cmp = AdvSimd.CompareEqual(data, patternVec);
 
                 // Extract mask from comparison
-                ulong mask0 = cmp.GetElement(0) != 0 ? 1UL : 0UL;
-                for (int j = 1; j < 16; j++)
+                for (int j = 0; j < 16; j++)
                 {
                     if (cmp.GetElement(j) != 0)
                     {

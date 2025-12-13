@@ -1,0 +1,251 @@
+name: Cross-Platform CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:  # Allow manual triggers
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # Build and test on multiple operating systems
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false  # Continue other jobs even if one fails
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+            rid: linux-x64
+          - os: windows-latest
+            platform: Windows
+            rid: win-x64
+          - os: macos-latest
+            platform: macOS
+            rid: osx-x64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for accurate versioning
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Display .NET info
+        run: dotnet --info
+      
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build
+        run: dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=false
+      
+      - name: Run Tests
+        run: dotnet test --no-build -c Release --logger "console;verbosity=detailed" --collect:"XPlat Code Coverage"
+      
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.platform }}
+          path: '**/TestResults/**'
+          retention-days: 30
+      
+      - name: Smoke Test - Demo Project
+        run: |
+          cd SharpCoreDB.Demo
+          dotnet run --no-build -c Release -- --test-mode --quick
+        continue-on-error: true  # Don't fail CI if demo has issues
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.rid }}
+          path: |
+            SharpCoreDB/bin/Release/**
+            SharpCoreDB.Tests/bin/Release/**
+          retention-days: 7
+
+  # Verify SIMD support on different architectures
+  simd-verification:
+    name: SIMD Verification (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore and Build
+        run: |
+          dotnet restore
+          dotnet build -c Release
+      
+      - name: Run SIMD Tests
+        run: dotnet test --no-build -c Release --filter "FullyQualifiedName~SimdTests" --logger "console;verbosity=detailed"
+      
+      - name: Display SIMD Capabilities
+        run: |
+          cd SharpCoreDB.Tests
+          dotnet run --project ../SharpCoreDB.Demo/SharpCoreDB.Demo.csproj -- --simd-info
+        continue-on-error: true
+
+  # Test database file portability across platforms
+  portability-test:
+    name: Database Portability Test
+    runs-on: ubuntu-latest  # Create DB on Linux
+    needs: build-and-test  # Wait for basic tests to pass
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Build Projects
+        run: |
+          dotnet restore
+          dotnet build -c Release
+      
+      - name: Create Test Database on Linux
+        run: |
+          cd SharpCoreDB.Tests
+          dotnet test --no-build -c Release --filter "FullyQualifiedName~PlatformCompatibilityTests" --logger "console;verbosity=detailed"
+      
+      - name: Upload Test Database
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-test-db
+          path: '**/portable_test.db'
+          retention-days: 1
+  
+  # Verify database created on Linux works on Windows
+  verify-portability:
+    name: Verify Portability (Windows reads Linux DB)
+    runs-on: windows-latest
+    needs: portability-test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Download Test Database
+        uses: actions/download-artifact@v4
+        with:
+          name: portable-test-db
+      
+      - name: Build and Test
+        run: |
+          dotnet restore
+          dotnet build -c Release
+      
+      - name: Verify Database Portability
+        run: |
+          cd SharpCoreDB.Tests
+          dotnet test --no-build -c Release --filter "FullyQualifiedName~VerifyPortableDatabase" --logger "console;verbosity=detailed"
+
+  # Performance benchmarks (optional, can be slow)
+  benchmarks:
+    name: Performance Benchmarks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'  # Only on manual trigger or master
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Build Benchmarks
+        run: |
+          dotnet restore
+          dotnet build SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj -c Release
+      
+      - name: Run Simple Benchmarks (Quick)
+        run: |
+          cd SharpCoreDB.Benchmarks
+          dotnet run -c Release -- --filter "*SimpleBenchmark*" --job short
+        timeout-minutes: 10
+      
+      - name: Upload Benchmark Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ matrix.os }}
+          path: 'SharpCoreDB.Benchmarks/BenchmarkDotNet.Artifacts/**'
+          retention-days: 30
+
+  # Summary job that depends on all others
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [build-and-test, simd-verification, portability-test, verify-portability]
+    if: always()
+    
+    steps:
+      - name: Check Job Status
+        run: |
+          echo "Build & Test: ${{ needs.build-and-test.result }}"
+          echo "SIMD Verification: ${{ needs.simd-verification.result }}"
+          echo "Portability Test: ${{ needs.portability-test.result }}"
+          echo "Verify Portability: ${{ needs.verify-portability.result }}"
+          
+          if [ "${{ needs.build-and-test.result }}" != "success" ] || \
+             [ "${{ needs.simd-verification.result }}" != "success" ] || \
+             [ "${{ needs.portability-test.result }}" != "success" ] || \
+             [ "${{ needs.verify-portability.result }}" != "success" ]; then
+            echo "❌ CI Failed - One or more jobs did not succeed"
+            exit 1
+          fi
+          
+          echo "✅ CI Passed - All checks successful!"
+      
+      - name: Post Status Comment (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Cross-Platform CI Passed!**\n\nAll tests passed on:\n- ✅ Ubuntu (Linux x64)\n- ✅ Windows (x64)\n- ✅ macOS (x64)\n- ✅ Database file portability verified\n- ✅ SIMD acceleration tested'
+            })

@@ -495,7 +495,7 @@ BenchmarkDotNet automatically generates:
 
 ---
 
-**Created**: December 2024  
+**Created**: December 2025  
 **Target**: .NET 10  
 **Framework**: BenchmarkDotNet 0.14.0  
 **Status**: ? **Ready for Execution** (after minor API alignment)

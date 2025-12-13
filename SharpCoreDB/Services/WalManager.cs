@@ -1,5 +1,5 @@
 // <copyright file="WalManager.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
@@ -49,13 +49,10 @@ public class WalManager : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public FileStream GetStream(string walPath)
     {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(WalManager));
-        }
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var pool = _pools.GetOrAdd(walPath, _ => new DefaultObjectPool<PooledFileStream>(
-            new PooledFileStreamPolicy(walPath, _bufferSize, this),
+        var pool = _pools.GetOrAdd(walPath, path => new DefaultObjectPool<PooledFileStream>(
+            new PooledFileStreamPolicy(path, _bufferSize, this),
             maximumRetained: 10));
 
         var pooled = pool.Get();
@@ -253,46 +250,52 @@ public class WalManager : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the WalManager and optionally releases managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (_disposed)
         {
             return;
         }
 
-        _disposed = true;
-        
-        // Clean up active streams
-        foreach (var kvp in _activeStreams)
+        if (disposing)
         {
-            try
+            // Clean up active streams
+            foreach (var kvp in _activeStreams.Select(x => x.Key))
             {
-                kvp.Key.Flush(true);
-                kvp.Key.Dispose();
+                try
+                {
+                    kvp.Flush(true);
+                    kvp.Dispose();
+                }
+                catch
+                {
+                    // Ignore errors during cleanup
+                }
             }
-            catch
-            {
-                // Ignore errors during cleanup
-            }
+            _activeStreams.Clear();
+            
+            _pools.Clear();
         }
-        _activeStreams.Clear();
-        
-        _pools.Clear();
+
+        _disposed = true;
     }
 
     /// <summary>
     /// Wrapper for pooled FileStream with path and buffer.
     /// OPTIMIZED: Includes pooled buffer for I/O operations.
     /// </summary>
-    private class PooledFileStream
+    private sealed class PooledFileStream(FileStream stream, string walPath)
     {
-        public FileStream Stream { get; }
-        public string WalPath { get; }
-        public byte[]? Buffer { get; set; }
-
-        public PooledFileStream(FileStream stream, string walPath)
-        {
-            Stream = stream;
-            WalPath = walPath;
-        }
+        public FileStream Stream { get; } = stream;
+        public string WalPath { get; } = walPath;
     }
 
     /// <summary>
@@ -300,7 +303,7 @@ public class WalManager : IDisposable
     /// OPTIMIZED: Validates stream health and flushes before reuse.
     /// CRASH-SAFETY: Guarantees data is on physical disk before stream reuse.
     /// </summary>
-    private class PooledFileStreamPolicy : IPooledObjectPolicy<PooledFileStream>
+    private sealed class PooledFileStreamPolicy : IPooledObjectPolicy<PooledFileStream>
     {
         private readonly string _walPath;
         private readonly int _bufferSize;

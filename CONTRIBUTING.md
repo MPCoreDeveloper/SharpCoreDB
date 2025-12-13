@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2024 MPCoreDeveloper. Licensed under the MIT License. -->
+<!-- Copyright (c) 2026 MPCoreDeveloper. Licensed under the MIT License. -->
 # Contributing to SharpCoreDB
 
 We welcome contributions to SharpCoreDB! This document outlines the process for contributing.

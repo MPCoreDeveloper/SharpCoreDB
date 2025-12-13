@@ -1,28 +1,48 @@
 // <copyright file="CryptoService.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Services;
 
+using SharpCoreDB.Constants;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 /// <summary>
 /// Zero-allocation implementation of ICryptoService using PBKDF2 for key derivation and AES-256-GCM for encryption.
-/// OPTIMIZATION: Uses stackalloc and Span<byte> to eliminate LINQ allocations in Encrypt/Decrypt.
+/// HARDWARE ACCELERATION: Automatically uses AES-NI instructions on Intel/AMD when available.
+/// OPTIMIZATION: Uses stackalloc and Span&lt;byte&gt; to eliminate LINQ allocations in Encrypt/Decrypt.
+/// SECURITY: Tracks GCM operations to prevent nonce exhaustion (2^32 limit).
 /// </summary>
 public sealed class CryptoService : ICryptoService
 {
-    private const int NonceSize = 12; // AesGcm.NonceByteSizes.MaxSize
-    private const int TagSize = 16;   // AesGcm.TagByteSizes.MaxSize
     private const int StackAllocThreshold = 256;
+    
+    // SECURITY: Track encryption operations to prevent GCM nonce exhaustion
+    private long _encryptionCount = 0;
+
+    /// <summary>
+    /// Gets a value indicating whether AES hardware acceleration (AES-NI) is available.
+    /// </summary>
+    public static bool IsHardwareAccelerated
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => AesGcmEncryption.IsHardwareAccelerated;
+    }
+
+    /// <summary>
+    /// Gets the current encryption operation count.
+    /// Used to track when key rotation is needed (approaching 2^32 GCM limit).
+    /// </summary>
+    public long EncryptionCount => Interlocked.Read(ref _encryptionCount);
 
     /// <inheritdoc />
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] DeriveKey(string password, string salt)
     {
         // OPTIMIZED: Use Span<byte> for UTF8 encoding to avoid intermediate allocations
@@ -69,9 +89,9 @@ public sealed class CryptoService : ICryptoService
             return Rfc2898DeriveBytes.Pbkdf2(
                 passwordBytes[..passwordLen], 
                 saltBytes[..saltLen], 
-                600000,  // SECURITY: Increased from 10,000 to 600,000 iterations
+                CryptoConstants.PBKDF2_ITERATIONS,
                 HashAlgorithmName.SHA256, 
-                32);
+                CryptoConstants.AES_KEY_SIZE);
         }
         finally
         {
@@ -85,14 +105,32 @@ public sealed class CryptoService : ICryptoService
     }
 
     /// <inheritdoc />
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Encrypt(byte[] key, byte[] data)
     {
-        using var aes = new AesGcm(key, TagSize);
+        // SECURITY: Check for GCM nonce exhaustion
+        long currentCount = Interlocked.Increment(ref _encryptionCount);
+        
+        if (currentCount >= CryptoConstants.MAX_GCM_OPERATIONS)
+        {
+            throw new InvalidOperationException(
+                $"Encryption limit reached ({currentCount} operations). " +
+                $"Key rotation required to prevent GCM nonce collision. " +
+                $"Please export and re-import the database with a new master password.");
+        }
+        
+        if (currentCount >= CryptoConstants.GCM_OPERATIONS_WARNING_THRESHOLD)
+        {
+            Console.WriteLine(
+                $"⚠️  WARNING: Approaching encryption limit ({currentCount}/{CryptoConstants.MAX_GCM_OPERATIONS}). " +
+                $"Plan for key rotation soon.");
+        }
+        
+        using var aes = new AesGcm(key, CryptoConstants.GCM_TAG_SIZE);
         
         // OPTIMIZED: stackalloc for nonce and tag (small fixed-size buffers)
-        Span<byte> nonce = stackalloc byte[NonceSize];
-        Span<byte> tag = stackalloc byte[TagSize];
+        Span<byte> nonce = stackalloc byte[CryptoConstants.GCM_NONCE_SIZE];
+        Span<byte> tag = stackalloc byte[CryptoConstants.GCM_TAG_SIZE];
         
         RandomNumberGenerator.Fill(nonce);
         
@@ -107,10 +145,10 @@ public sealed class CryptoService : ICryptoService
             aes.Encrypt(nonce, data, cipher, tag);
             
             // OPTIMIZED: Build result using Span.CopyTo instead of LINQ Concat
-            var result = new byte[NonceSize + data.Length + TagSize];
-            nonce.CopyTo(result.AsSpan(0, NonceSize));
-            cipher.CopyTo(result.AsSpan(NonceSize, data.Length));
-            tag.CopyTo(result.AsSpan(NonceSize + data.Length, TagSize));
+            var result = new byte[CryptoConstants.GCM_NONCE_SIZE + data.Length + CryptoConstants.GCM_TAG_SIZE];
+            nonce.CopyTo(result.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE));
+            cipher.CopyTo(result.AsSpan(CryptoConstants.GCM_NONCE_SIZE, data.Length));
+            tag.CopyTo(result.AsSpan(CryptoConstants.GCM_NONCE_SIZE + data.Length, CryptoConstants.GCM_TAG_SIZE));
             
             return result;
         }
@@ -127,19 +165,19 @@ public sealed class CryptoService : ICryptoService
     }
 
     /// <inheritdoc />
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Decrypt(byte[] key, byte[] encryptedData)
     {
-        var cipherLength = encryptedData.Length - NonceSize - TagSize;
+        var cipherLength = encryptedData.Length - CryptoConstants.GCM_NONCE_SIZE - CryptoConstants.GCM_TAG_SIZE;
         if (cipherLength < 0)
             throw new ArgumentException("Invalid encrypted data length", nameof(encryptedData));
 
-        using var aes = new AesGcm(key, TagSize);
+        using var aes = new AesGcm(key, CryptoConstants.GCM_TAG_SIZE);
         
         // OPTIMIZED: Use Span slicing instead of LINQ Take/Skip/TakeLast (zero allocation)
-        ReadOnlySpan<byte> nonce = encryptedData.AsSpan(0, NonceSize);
-        ReadOnlySpan<byte> cipher = encryptedData.AsSpan(NonceSize, cipherLength);
-        ReadOnlySpan<byte> tag = encryptedData.AsSpan(NonceSize + cipherLength, TagSize);
+        ReadOnlySpan<byte> nonce = encryptedData.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE);
+        ReadOnlySpan<byte> cipher = encryptedData.AsSpan(CryptoConstants.GCM_NONCE_SIZE, cipherLength);
+        ReadOnlySpan<byte> tag = encryptedData.AsSpan(CryptoConstants.GCM_NONCE_SIZE + cipherLength, CryptoConstants.GCM_TAG_SIZE);
         
         // Decrypt directly to result
         var plaintext = new byte[cipherLength];
@@ -149,15 +187,27 @@ public sealed class CryptoService : ICryptoService
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EncryptPage(Span<byte> page) =>
         // Delegate to AesGcmEncryption for page operations
         throw new NotImplementedException("Use GetAesGcmEncryption() for page-level operations");
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void DecryptPage(Span<byte> page) =>
         // Delegate to AesGcmEncryption for page operations
         throw new NotImplementedException("Use GetAesGcmEncryption() for page-level operations");
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public AesGcmEncryption GetAesGcmEncryption(byte[] key) => new(key, false);
+    
+    /// <summary>
+    /// Resets the encryption counter.
+    /// SECURITY: Should only be called after key rotation (database export/import with new password).
+    /// </summary>
+    public void ResetEncryptionCounter()
+    {
+        Interlocked.Exchange(ref _encryptionCount, 0);
+    }
 }

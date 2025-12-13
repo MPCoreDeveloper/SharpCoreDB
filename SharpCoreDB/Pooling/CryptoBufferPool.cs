@@ -1,5 +1,5 @@
 // <copyright file="CryptoBufferPool.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Pooling;
@@ -50,7 +50,7 @@ public class CryptoBufferPool : IDisposable
         {
             this.threadLocalCache = new ThreadLocal<CryptoCache>(
                 () => new CryptoCache(this.config.ThreadLocalCapacity),
-                trackAllValues: false);
+                trackAllValues: true); // SECURITY: Track all values to dispose them
         }
         else
         {
@@ -106,10 +106,7 @@ public class CryptoBufferPool : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private RentedCryptoBuffer RentBuffer(int minimumSize, CryptoBufferType bufferType)
     {
-        if (disposed)
-        {
-            throw new ObjectDisposedException(nameof(CryptoBufferPool));
-        }
+        ObjectDisposedException.ThrowIf(disposed, this);
 
         if (minimumSize > maxBufferSize)
         {
@@ -224,14 +221,31 @@ public class CryptoBufferPool : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected dispose method for proper IDisposable pattern.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (!disposed)
         {
+            if (disposing && threadLocalCache != null)
+            {
+                // SECURITY: Dispose all thread-local caches to clear buffers
+                // Clear all tracked cache instances
+                foreach (var cache in threadLocalCache.Values)
+                {
+                    cache?.Dispose();
+                }
+                
+                threadLocalCache.Dispose();
+            }
+
             disposed = true;
-
-            // Dispose thread-local cache (will clear buffers)
-            threadLocalCache?.Dispose();
-
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -239,16 +253,11 @@ public class CryptoBufferPool : IDisposable
     /// Thread-local cache for crypto buffers.
     /// SECURITY: All buffers are cleared when removed from cache.
     /// </summary>
-    private class CryptoCache
+    private sealed class CryptoCache(int capacity) : IDisposable
     {
-        private readonly byte[][] buffers;
-        private int count;
-
-        public CryptoCache(int capacity)
-        {
-            buffers = new byte[capacity][];
-            count = 0;
-        }
+        private readonly byte[][] buffers = new byte[capacity][];
+        private int count = 0;
+        private bool disposed = false;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryRent(int minimumSize, out byte[] buffer)
@@ -299,6 +308,19 @@ public class CryptoBufferPool : IDisposable
                 }
             }
             count = 0;
+        }
+
+        /// <summary>
+        /// Disposes the cache and securely clears all buffers.
+        /// SECURITY: Ensures crypto buffers are cleared on disposal.
+        /// </summary>
+        public void Dispose()
+        {
+            if (!disposed)
+            {
+                Clear();
+                disposed = true;
+            }
         }
     }
 }

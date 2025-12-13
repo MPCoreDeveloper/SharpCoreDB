@@ -557,6 +557,6 @@ public void Dispose()
 
 ---
 
-**Last Updated**: December 2024  
+**Last Updated**: December 2025  
 **Target**: .NET 10  
 **Optimization Level**: Maximum (zero-allocation)

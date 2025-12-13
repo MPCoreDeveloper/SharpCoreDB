@@ -769,7 +769,7 @@ This zero-allocation rewrite of the SQL parser will provide:
 
 ---
 
-**Created**: December 2024  
+**Created**: December 2025  
 **Target**: .NET 10  
 **Optimization**: Maximum (zero-allocation)  
 **Compatibility**: 100% backwards compatible

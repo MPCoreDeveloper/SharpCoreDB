@@ -13,6 +13,7 @@ public class TempDatabaseFixture : IDisposable
     private readonly IServiceProvider _serviceProvider;
     private readonly DatabaseFactory _factory;
     private IDatabase? _database;
+    private bool _disposed;
 
     public TempDatabaseFixture()
     {
@@ -36,7 +37,7 @@ public class TempDatabaseFixture : IDisposable
     /// </summary>
     public IDatabase CreateDatabase(DatabaseConfig? config = null, SecurityConfig? securityConfig = null)
     {
-        return _factory.Create(_tempDbPath, "testPassword", config: config, securityConfig: securityConfig);
+        return _factory.Create(_tempDbPath, "testPassword", config: config, securityConfig: securityConfig ?? SecurityConfig.Default);
     }
 
     /// <summary>
@@ -52,12 +53,29 @@ public class TempDatabaseFixture : IDisposable
     /// </summary>
     public string DatabasePath => _tempDbPath;
 
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                // Clean up the temporary database
+                if (Directory.Exists(_tempDbPath))
+                {
+                    Directory.Delete(_tempDbPath, true);
+                }
+                if (_serviceProvider is IDisposable disposableProvider)
+                {
+                    disposableProvider.Dispose();
+                }
+            }
+            _disposed = true;
+        }
+    }
+
     public void Dispose()
     {
-        // Clean up the temporary database
-        if (Directory.Exists(_tempDbPath))
-        {
-            Directory.Delete(_tempDbPath, true);
-        }
+        Dispose(true);
+        GC.SuppressFinalize(this);
     }
 }

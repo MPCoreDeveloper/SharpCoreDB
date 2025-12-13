@@ -1,5 +1,5 @@
 // <copyright file="WalBufferPool.cs" company="MPCoreDeveloper">
-// Copyright (c) 2024-2025 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 namespace SharpCoreDB.Pooling;
@@ -11,7 +11,7 @@ using System.Threading;
 
 /// <summary>
 /// Specialized buffer pool for WAL operations with zero-contention access.
-/// PERFORMANCE: Uses ArrayPool<byte> with thread-local caching for optimal throughput.
+/// PERFORMANCE: Uses ArrayPool with thread-local caching for optimal throughput.
 /// MEMORY: Reuses large buffers (4MB) to minimize GC pressure.
 /// THREAD-SAFETY: Completely lock-free when using thread-local cache.
 /// </summary>
@@ -49,7 +49,7 @@ public class WalBufferPool : IDisposable
         {
             this.threadLocalCache = new ThreadLocal<BufferCache>(
                 () => new BufferCache(this.config.ThreadLocalCapacity),
-                trackAllValues: false);
+                trackAllValues: true); // SECURITY: Track all values to dispose them
         }
         else
         {
@@ -77,10 +77,7 @@ public class WalBufferPool : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RentedBuffer Rent(int minimumSize)
     {
-        if (disposed)
-        {
-            throw new ObjectDisposedException(nameof(WalBufferPool));
-        }
+        ObjectDisposedException.ThrowIf(disposed, this);
 
         Interlocked.Increment(ref buffersRented);
 
@@ -185,14 +182,31 @@ public class WalBufferPool : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected dispose method for proper IDisposable pattern.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (!disposed)
         {
+            if (disposing && threadLocalCache != null)
+            {
+                // SECURITY: Dispose all thread-local caches to clear buffers
+                // Clear all tracked cache instances
+                foreach (var cache in threadLocalCache.Values)
+                {
+                    cache?.Dispose();
+                }
+                
+                threadLocalCache.Dispose();
+            }
+
             disposed = true;
-
-            // Dispose thread-local cache
-            threadLocalCache?.Dispose();
-
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -201,15 +215,17 @@ public class WalBufferPool : IDisposable
     /// IMPLEMENTATION: Simple array-based stack optimized for WAL patterns.
     /// CAPACITY: Typically 2-3 buffers per thread (WAL write + flush buffer).
     /// </summary>
-    private class BufferCache
+    private sealed class BufferCache : IDisposable
     {
         private readonly BufferEntry[] entries;
         private int count;
+        private bool disposed;
 
         public BufferCache(int capacity)
         {
             entries = new BufferEntry[capacity];
             count = 0;
+            disposed = false;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -247,6 +263,35 @@ public class WalBufferPool : IDisposable
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Clears all cached buffers securely.
+        /// </summary>
+        public void Clear()
+        {
+            for (int i = 0; i < count; i++)
+            {
+                if (entries[i].Buffer != null)
+                {
+                    Array.Clear(entries[i].Buffer, 0, entries[i].Buffer.Length);
+                    entries[i] = default;
+                }
+            }
+            count = 0;
+        }
+
+        /// <summary>
+        /// Disposes the cache and clears all buffers.
+        /// SECURITY: Ensures buffers are cleared on disposal.
+        /// </summary>
+        public void Dispose()
+        {
+            if (!disposed)
+            {
+                Clear();
+                disposed = true;
+            }
         }
 
         private struct BufferEntry
@@ -398,7 +443,7 @@ public class WalBufferPoolStatistics
     public int ThreadLocalCapacity { get; set; }
 
     /// <summary>
-    /// Gets the cache hit rate.
+    /// Gets the cache hit rate (0.0 to 1.0).
     /// </summary>
     public double CacheHitRate => CacheHits + CacheMisses > 0
         ? (double)CacheHits / (CacheHits + CacheMisses)

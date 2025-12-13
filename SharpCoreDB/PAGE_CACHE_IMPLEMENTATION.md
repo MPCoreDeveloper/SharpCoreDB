@@ -751,6 +751,6 @@ The PageCache implementation provides:
 - `SharpCoreDB.Tests/PageCacheTests.cs` - Unit tests
 - `SharpCoreDB.Benchmarks/PageCacheBenchmarks.cs` - Benchmarks
 
-**Created:** December 2024  
+**Created:** December 2025  
 **Target:** .NET 10  
 **Status:** ✅ Complete
