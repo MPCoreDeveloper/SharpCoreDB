@@ -9,8 +9,9 @@
 3. [Indexes](#indexes)
 4. [MVCC & Concurrency](#mvcc)
 5. [Caching](#caching)
-6. [Entity Framework Core](#ef-core)
-7. [Advanced Queries](#advanced-queries)
+6. [Adaptive WAL Batching](#adaptive-wal-batching) - ⚡ **NEW!**
+7. [Entity Framework Core](#ef-core)
+8. [Advanced Queries](#advanced-queries)
 
 ---
 
@@ -216,6 +217,184 @@ db.Execute("PRAGMA query_cache_clear");
 
 ---
 
+## Adaptive WAL Batching
+
+> ⚡ **NEW!** Improve write performance with adaptive WAL batching.
+
+### Enable Adaptive Batching (Recommended)
+
+```csharp
+using SharpCoreDB;
+using Microsoft.Extensions.DependencyInjection;
+
+// Option 1: Use HighPerformance preset (adaptive enabled by default)
+var services = new ServiceCollection();
+services.AddSharpCoreDB();
+var provider = services.BuildServiceProvider();
+var factory = provider.GetRequiredService<DatabaseFactory>();
+
+var db = factory.Create(
+    dbPath: "./data",
+    password: "mypassword",
+    config: DatabaseConfig.HighPerformance  // ✅ Adaptive enabled
+);
+
+// Batch size now adapts automatically based on load!
+// Low load (2 threads):  512 operations
+// Medium load (8 threads): 2048 operations  
+// High load (32+ threads): 8192 operations
+```
+
+### Configure for High Concurrency
+
+```csharp
+// For highly concurrent workloads (32+ threads)
+var config = DatabaseConfig.Concurrent;  // Aggressive adaptive batching
+
+var db = factory.Create("./data", "mypassword", config: config);
+
+// Simulate high concurrency
+Parallel.For(0, 64, i =>
+{
+    db.ExecuteSQL($"INSERT INTO logs VALUES ({i}, 'Event {i}', '{DateTime.Now:o}')");
+});
+
+// Console output shows batch size scaling:
+// [GroupCommitWAL:a1b2c3d4] Batch size adjusted: 2048 → 4096 (queue depth: 10000)
+// [GroupCommitWAL:a1b2c3d4] Batch size adjusted: 4096 → 8192 (queue depth: 20000)
+```
+
+### Custom Multiplier for Extreme Load
+
+```csharp
+// For extreme concurrency (64+ threads):
+var config = new DatabaseConfig
+{
+    UseGroupCommitWal = true,
+    EnableAdaptiveWalBatching = true,
+    WalBatchMultiplier = 256,  // More aggressive (ProcessorCount * 256)
+    WalDurabilityMode = DurabilityMode.Async,
+    NoEncryptMode = true,
+};
+
+var db = factory.Create("./data", "mypassword", config: config);
+
+// Initial batch size on 8-core system: 8 * 256 = 2048
+// Can scale up to 10,000 operations
+```
+
+### Monitor Batch Size Adjustments
+
+```csharp
+// Get current batch size (useful for monitoring dashboards)
+var wal = db.GetGroupCommitWAL();  // Internal API
+
+int currentBatchSize = wal.GetCurrentBatchSize();
+var (current, adjustments, enabled) = wal.GetAdaptiveBatchStatistics();
+
+Console.WriteLine($"Current batch size: {current}");
+Console.WriteLine($"Total adjustments: {adjustments}");
+Console.WriteLine($"Adaptive batching: {(enabled ? "Enabled" : "Disabled")}");
+
+// Example output:
+// Current batch size: 4096
+// Total adjustments: 5
+// Adaptive batching: Enabled
+```
+
+### Disable Adaptive (Fixed Batch Size)
+
+```csharp
+// For fixed, predictable workloads:
+var config = new DatabaseConfig
+{
+    UseGroupCommitWal = true,
+    EnableAdaptiveWalBatching = false,  // Disable adaptive
+    WalMaxBatchSize = 5000,              // Fixed batch size
+};
+
+var db = factory.Create("./data", "mypassword", config: config);
+
+// Batch size stays constant at 5000 regardless of load
+```
+
+### Performance Comparison
+
+```csharp
+using System.Diagnostics;
+
+// Test with 32 concurrent threads
+var stopwatch = Stopwatch.StartNew();
+
+Parallel.For(0, 32, threadId =>
+{
+    for (int i = 0; i < 1000; i++)
+    {
+        int recordId = threadId * 1000 + i;
+        db.ExecuteSQL($"INSERT INTO test VALUES ({recordId}, 'Data {recordId}')");
+    }
+});
+
+stopwatch.Stop();
+Console.WriteLine($"Inserted 32,000 records in {stopwatch.ElapsedMilliseconds} ms");
+
+// Expected results (8-core system):
+// Fixed batching (1000):   ~850ms
+// Adaptive batching:       ~680ms  (+20% faster at 32 threads!)
+```
+
+### Load-Based Scaling Example
+
+```csharp
+// Simulate variable load
+var db = factory.Create("./data", "password", config: DatabaseConfig.HighPerformance);
+
+// Phase 1: Low load (2 threads)
+Parallel.For(0, 2, i =>
+{
+    db.ExecuteSQL($"INSERT INTO logs VALUES ({i}, 'Low load')");
+});
+// Batch size scales DOWN: 1024 → 512
+
+await Task.Delay(1000);
+
+// Phase 2: Medium load (8 threads)
+Parallel.For(0, 8, i =>
+{
+    db.ExecuteSQL($"INSERT INTO logs VALUES ({i}, 'Medium load')");
+});
+// Batch size stays: 1024
+
+await Task.Delay(1000);
+
+// Phase 3: High load (32 threads)
+Parallel.For(0, 32, i =>
+{
+    db.ExecuteSQL($"INSERT INTO logs VALUES ({i}, 'High load')");
+});
+// Batch size scales UP: 1024 → 2048 → 4096
+
+// Console shows adjustments:
+// [GroupCommitWAL:a1b2c3d4] Batch size adjusted: 1024 → 512 (queue depth: 120)
+// [GroupCommitWAL:a1b2c3d4] Batch size adjusted: 512 → 1024 (queue depth: 800)
+// [GroupCommitWAL:a1b2c3d4] Batch size adjusted: 1024 → 2048 (queue depth: 5000)
+```
+
+### When NOT to Use Adaptive Batching
+
+```csharp
+// Single-threaded benchmarks: Use Benchmark config (adaptive disabled)
+var benchmarkDb = factory.Create(
+    "./benchmark",
+    "password",
+    config: DatabaseConfig.Benchmark  // Optimized for single-thread
+);
+
+// Adaptive batching is disabled for predictable benchmark results
+```
+
+---
+
 ## Entity Framework Core
 
 ### Define Entity
@@ -317,6 +496,9 @@ var results = db.Query(@"
 3. **Batch inserts** instead of individual inserts
 4. **Use transactions** for multiple operations
 5. **Choose correct index type** (B-Tree for ranges, Hash for equality)
+6. **Enable adaptive WAL batching** for variable/concurrent workloads ⚡ **NEW!**
+7. **Use HighPerformance or Concurrent config** for production deployments
+8. **Monitor batch size adjustments** to verify optimal scaling
 
 ---
 

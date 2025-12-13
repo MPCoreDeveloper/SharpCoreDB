@@ -90,8 +90,6 @@ public partial class Table : ITable, IDisposable
     private bool isReadOnly;
     private readonly IndexManager? indexManager;
     private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
-    private readonly Dictionary<string, long> columnUsage = new();
-    private readonly object usageLock = new();
 
     /// <summary>
     /// Sets the storage instance for this table.

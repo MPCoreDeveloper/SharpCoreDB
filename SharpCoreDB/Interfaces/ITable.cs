@@ -12,7 +12,7 @@ public interface ITable
     /// <summary>
     /// Gets the table name.
     /// </summary>
-    string Name { get; }
+    string Name { get; set; }
 
     /// <summary>
     /// Gets the column names.
@@ -27,7 +27,7 @@ public interface ITable
     /// <summary>
     /// Gets the data file path.
     /// </summary>
-    string DataFile { get; }
+    string DataFile { get; set; }
 
     /// <summary>
     /// Gets the primary key column index.
@@ -119,4 +119,11 @@ public interface ITable
     /// </summary>
     /// <param name="columnName">The column name.</param>
     void TrackColumnUsage(string columnName);
+
+    /// <summary>
+    /// Removes a hash index for the specified column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>True if index was removed, false if it didn't exist.</returns>
+    bool RemoveHashIndex(string columnName);
 }

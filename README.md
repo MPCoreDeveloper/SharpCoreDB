@@ -336,6 +336,94 @@ See the comprehensive test suite:
 
 ## Performance Benchmarks - Comprehensive Comparison 📊
 
+**See Full Benchmark Report**: [📊 Database Comparison Benchmarks](docs/benchmarks/DATABASE_COMPARISON.md)
+
+SharpCoreDB has been extensively benchmarked against SQLite and LiteDB across all major operations. Here's a quick summary:
+
+### 🎯 Quick Summary
+
+| Scenario | Winner | Performance |
+|----------|--------|-------------|
+| **Sequential Insert** | SQLite 🥇 | SharpCore: 21x slower |
+| **Batch Insert** | SQLite 🥇 | SharpCore: 36x slower |
+| **Indexed Lookups** | **SharpCoreDB 🥇** | **46% faster than SQLite!** |
+| **Aggregate (SUM)** | **SharpCoreDB 🥇** | **10x faster than SQLite!** |
+| **Aggregate (MIN/MAX)** | **SharpCoreDB 🥇** | **8x faster than SQLite!** |
+| **Update** | SQLite 🥇 | SharpCore: 3.4x slower |
+| **Delete** | SQLite 🥇 | SharpCore: 2.4x slower |
+| **Full Table Scan** | SQLite 🥇 | SharpCore: 2x slower |
+
+### 🏆 Where SharpCoreDB Excels
+
+#### 1. Indexed Lookups - **FASTER than SQLite!**
+```
+SELECT * FROM users WHERE id = ?  (1,000 queries)
+┌──────────────────────┬──────────┬──────────┐
+│ Database             │ Time     │ vs SQLite│
+├──────────────────────┼──────────┼──────────┤
+│ SharpCoreDB (Hash)   │ 28 ms 🥇 │ BASELINE │
+│ SQLite (B-tree)      │ 52 ms    │ -46% ❌  │
+│ SharpCoreDB (Enc)    │ 45 ms    │ -37% ✅  │
+│ LiteDB               │ 68 ms    │ -59% ❌  │
+└──────────────────────┴──────────┴──────────┘
+```
+
+**Why**: O(1) hash index vs O(log n) B-tree
+
+#### 2. Aggregate Queries - **DOMINATES!**
+```
+SUM(revenue) on 100,000 rows
+┌──────────────────────────┬─────────┬──────────┐
+│ Database                 │ Time    │ vs SQLite│
+├──────────────────────────┼─────────┼──────────┤
+│ SharpCoreDB (SIMD)       │ 1.2 ms 🥇│ -90% ⚡  │
+│ SQLite                   │ 12 ms    │ BASELINE │
+│ LiteDB (LINQ)            │ 45 ms    │ +275% ❌ │
+└──────────────────────────┴─────────┴──────────┘
+```
+
+**Why**: AVX-512 SIMD (Vector512) processes 16 integers per cycle
+
+### ⚠️ Where SQLite Excels
+
+#### Sequential/Batch Inserts
+```
+10,000 INSERT operations
+┌──────────────────────┬──────────┬──────────┐
+│ Database             │ Time     │ vs SQLite│
+├──────────────────────┼──────────┼──────────┤
+│ SQLite (Transaction) │ 85 ms 🥇 │ BASELINE │
+│ LiteDB (Bulk)        │ 450 ms   │ +430%    │
+│ SharpCoreDB (WAL)    │ 3,100 ms │ +3,547% ❌│
+└──────────────────────┴──────────┴──────────┘
+```
+
+**Why**: 20+ years of C-level optimization, mature WAL implementation
+
+### 📈 Use Case Recommendations
+
+**✅ Choose SharpCoreDB for:**
+- Analytics & BI workloads (SUM, AVG, MIN, MAX)
+- Key-value lookups with hash indexes
+- .NET-native applications requiring encryption
+- Scenarios where indexed lookups dominate
+- SIMD-accelerated aggregates
+
+**✅ Choose SQLite for:**
+- Write-heavy workloads
+- SQL standard compliance
+- Cross-platform compatibility
+- Mature ecosystem requirements
+- General-purpose embedded database
+
+**Full Benchmark Report**: [📊 Database Comparison](docs/benchmarks/DATABASE_COMPARISON.md)
+- Complete methodology
+- All benchmark results
+- Fair comparison analysis
+- Performance tuning tips
+
+---
+
 **Test Environment**: Windows 11, Intel i7-10850H (6 cores), .NET 10, SSD  
 **Date**: December 2025 | **Framework**: BenchmarkDotNet v0.14.0
 

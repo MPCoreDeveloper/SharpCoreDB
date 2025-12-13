@@ -70,6 +70,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="SharpCoreDB.Benchmarks\Comparison\" />
     <Folder Include="TestPageCache\" />
   </ItemGroup>
 
