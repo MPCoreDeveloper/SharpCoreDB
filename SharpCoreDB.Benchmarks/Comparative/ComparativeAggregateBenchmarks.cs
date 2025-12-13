@@ -41,9 +41,9 @@ public class ComparativeAggregateBenchmarks : IDisposable
     [GlobalSetup]
     public void Setup()
     {
-        Console.WriteLine($"\n{'='*60}");
+        Console.WriteLine($"\n{new string('=', 60)}");
         Console.WriteLine("AGGREGATE Benchmarks - Starting Setup");
-        Console.WriteLine($"{'='*60}");
+        Console.WriteLine($"{new string('=', 60)}");
         
         dataGenerator = new TestDataGenerator();
         tempDir = Path.Combine(Path.GetTempPath(), $"dbBenchmark_{Guid.NewGuid()}");
@@ -58,7 +58,7 @@ public class ComparativeAggregateBenchmarks : IDisposable
         totalSw.Stop();
         
         Console.WriteLine($"\n✅ Total setup time: {totalSw.ElapsedMilliseconds}ms");
-        Console.WriteLine($"{'='*60}\n");
+        Console.WriteLine($"{new string('=', 60)}\n");
     }
 
     private void SetupAndPopulateSharpCoreDB()
@@ -196,225 +196,259 @@ public class ComparativeAggregateBenchmarks : IDisposable
     // ==================== COUNT OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): COUNT(*)")]
-    public void SharpCoreDB_Encrypted_CountAll()
+    public int SharpCoreDB_Encrypted_CountAll()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT COUNT(*) FROM users");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT COUNT(*) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): COUNT(*)")]
-    public void SharpCoreDB_NoEncrypt_CountAll()
+    public int SharpCoreDB_NoEncrypt_CountAll()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT COUNT(*) FROM users");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT COUNT(*) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Baseline = true, Description = "SQLite: COUNT(*)")]
-    public void SQLite_CountAll()
+    public long SQLite_CountAll()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT COUNT(*) FROM users";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToInt64(result) : 0;
     }
 
     [Benchmark(Description = "LiteDB: COUNT()")]
-    public void LiteDB_CountAll()
+    public int LiteDB_CountAll()
     {
-        liteCollection?.Count();
+        return liteCollection?.Count() ?? 0;
     }
 
     // ==================== COUNT WITH FILTER ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): COUNT WHERE")]
-    public void SharpCoreDB_Encrypted_CountWhere()
+    public int SharpCoreDB_Encrypted_CountWhere()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT COUNT(*) FROM users WHERE age > 30");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT COUNT(*) FROM users WHERE age > 30");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): COUNT WHERE")]
-    public void SharpCoreDB_NoEncrypt_CountWhere()
+    public int SharpCoreDB_NoEncrypt_CountWhere()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT COUNT(*) FROM users WHERE age > 30");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT COUNT(*) FROM users WHERE age > 30");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: COUNT WHERE")]
-    public void SQLite_CountWhere()
+    public long SQLite_CountWhere()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT COUNT(*) FROM users WHERE age > 30";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToInt64(result) : 0;
     }
 
     [Benchmark(Description = "LiteDB: COUNT WHERE")]
-    public void LiteDB_CountWhere()
+    public int LiteDB_CountWhere()
     {
-        liteCollection?.Count(x => x.Age > 30);
+        return liteCollection?.Count(x => x.Age > 30) ?? 0;
     }
 
     // ==================== SUM OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): SUM(age)")]
-    public void SharpCoreDB_Encrypted_Sum()
+    public int SharpCoreDB_Encrypted_Sum()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT SUM(age) FROM users");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT SUM(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): SUM(age)")]
-    public void SharpCoreDB_NoEncrypt_Sum()
+    public int SharpCoreDB_NoEncrypt_Sum()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT SUM(age) FROM users");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT SUM(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: SUM(age)")]
-    public void SQLite_Sum()
+    public long SQLite_Sum()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT SUM(age) FROM users";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToInt64(result) : 0;
     }
 
-    [Benchmark(Description = "LiteDB: SUM(age) - Manual")]
-    public void LiteDB_Sum()
+    [Benchmark(Description = "LiteDB: SUM(age) - Manual LINQ")]
+    public int LiteDB_Sum()
     {
-        // LiteDB doesn't have native SUM, so we need to do it manually
-        var sum = liteCollection?.FindAll().Sum(x => x.Age);
+        // NOTE: LiteDB doesn't have native SQL SUM, so we use LINQ
+        // This is less efficient as it loads all records into memory first
+        return liteCollection?.FindAll().Sum(x => x.Age) ?? 0;
     }
 
     // ==================== AVG OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): AVG(age)")]
-    public void SharpCoreDB_Encrypted_Avg()
+    public int SharpCoreDB_Encrypted_Avg()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT AVG(age) FROM users");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT AVG(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): AVG(age)")]
-    public void SharpCoreDB_NoEncrypt_Avg()
+    public int SharpCoreDB_NoEncrypt_Avg()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT AVG(age) FROM users");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT AVG(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: AVG(age)")]
-    public void SQLite_Avg()
+    public double SQLite_Avg()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT AVG(age) FROM users";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToDouble(result) : 0;
     }
 
-    [Benchmark(Description = "LiteDB: AVG(age) - Manual")]
-    public void LiteDB_Avg()
+    [Benchmark(Description = "LiteDB: AVG(age) - Manual LINQ")]
+    public double LiteDB_Avg()
     {
-        var avg = liteCollection?.FindAll().Average(x => x.Age);
+        // NOTE: LiteDB doesn't have native SQL AVG, so we use LINQ
+        // This is less efficient as it loads all records into memory first
+        return liteCollection?.FindAll().Average(x => x.Age) ?? 0;
     }
 
     // ==================== MIN OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): MIN(age)")]
-    public void SharpCoreDB_Encrypted_Min()
+    public int SharpCoreDB_Encrypted_Min()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT MIN(age) FROM users");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT MIN(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): MIN(age)")]
-    public void SharpCoreDB_NoEncrypt_Min()
+    public int SharpCoreDB_NoEncrypt_Min()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT MIN(age) FROM users");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT MIN(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: MIN(age)")]
-    public void SQLite_Min()
+    public long SQLite_Min()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT MIN(age) FROM users";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToInt64(result) : 0;
     }
 
-    [Benchmark(Description = "LiteDB: MIN(age) - Manual")]
-    public void LiteDB_Min()
+    [Benchmark(Description = "LiteDB: MIN(age) - Manual LINQ")]
+    public int LiteDB_Min()
     {
-        var min = liteCollection?.FindAll().Min(x => x.Age);
+        // NOTE: LiteDB doesn't have native SQL MIN, so we use LINQ
+        // This is less efficient as it loads all records into memory first
+        return liteCollection?.FindAll().Min(x => x.Age) ?? 0;
     }
 
     // ==================== MAX OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): MAX(age)")]
-    public void SharpCoreDB_Encrypted_Max()
+    public int SharpCoreDB_Encrypted_Max()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT MAX(age) FROM users");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT MAX(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): MAX(age)")]
-    public void SharpCoreDB_NoEncrypt_Max()
+    public int SharpCoreDB_NoEncrypt_Max()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT MAX(age) FROM users");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT MAX(age) FROM users");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: MAX(age)")]
-    public void SQLite_Max()
+    public long SQLite_Max()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT MAX(age) FROM users";
-        cmd.ExecuteScalar();
+        var result = cmd.ExecuteScalar();
+        return result != null ? Convert.ToInt64(result) : 0;
     }
 
-    [Benchmark(Description = "LiteDB: MAX(age) - Manual")]
-    public void LiteDB_Max()
+    [Benchmark(Description = "LiteDB: MAX(age) - Manual LINQ")]
+    public int LiteDB_Max()
     {
-        var max = liteCollection?.FindAll().Max(x => x.Age);
+        // NOTE: LiteDB doesn't have native SQL MAX, so we use LINQ
+        // This is less efficient as it loads all records into memory first
+        return liteCollection?.FindAll().Max(x => x.Age) ?? 0;
     }
 
     // ==================== GROUP BY OPERATIONS ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): GROUP BY age")]
-    public void SharpCoreDB_Encrypted_GroupBy()
+    public int SharpCoreDB_Encrypted_GroupBy()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery("SELECT age, COUNT(*) FROM users GROUP BY age");
+        var results = sharpCoreDbEncrypted?.ExecuteQuery("SELECT age, COUNT(*) FROM users GROUP BY age");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): GROUP BY age")]
-    public void SharpCoreDB_NoEncrypt_GroupBy()
+    public int SharpCoreDB_NoEncrypt_GroupBy()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT age, COUNT(*) FROM users GROUP BY age");
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery("SELECT age, COUNT(*) FROM users GROUP BY age");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: GROUP BY age")]
-    public void SQLite_GroupBy()
+    public int SQLite_GroupBy()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = "SELECT age, COUNT(*) FROM users GROUP BY age";
         using var reader = cmd.ExecuteReader();
-        while (reader.Read()) { /* Consume results */ }
+        int count = 0;
+        while (reader.Read()) { count++; }
+        return count;
     }
 
-    [Benchmark(Description = "LiteDB: GROUP BY age - Manual")]
-    public void LiteDB_GroupBy()
+    [Benchmark(Description = "LiteDB: GROUP BY age - Manual LINQ")]
+    public int LiteDB_GroupBy()
     {
+        // NOTE: LiteDB doesn't have native SQL GROUP BY, so we use LINQ
+        // This is less efficient as it loads all records into memory first
         var groups = liteCollection?.FindAll().GroupBy(x => x.Age).ToList();
+        return groups?.Count ?? 0;
     }
 
     // ==================== COMPLEX AGGREGATES ====================
 
     [Benchmark(Description = "SharpCoreDB (Encrypted): Complex Aggregate")]
-    public void SharpCoreDB_Encrypted_ComplexAggregate()
+    public int SharpCoreDB_Encrypted_ComplexAggregate()
     {
-        sharpCoreDbEncrypted?.ExecuteQuery(@"
+        var results = sharpCoreDbEncrypted?.ExecuteQuery(@"
             SELECT age, COUNT(*) as cnt, AVG(age) as avg_age 
             FROM users 
             WHERE is_active = 1 
             GROUP BY age");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SharpCoreDB (No Encryption): Complex Aggregate")]
-    public void SharpCoreDB_NoEncrypt_ComplexAggregate()
+    public int SharpCoreDB_NoEncrypt_ComplexAggregate()
     {
-        sharpCoreDbNoEncrypt?.ExecuteQuery(@"
+        var results = sharpCoreDbNoEncrypt?.ExecuteQuery(@"
             SELECT age, COUNT(*) as cnt, AVG(age) as avg_age 
             FROM users 
             WHERE is_active = 1 
             GROUP BY age");
+        return results?.Count ?? 0;
     }
 
     [Benchmark(Description = "SQLite: Complex Aggregate")]
-    public void SQLite_ComplexAggregate()
+    public int SQLite_ComplexAggregate()
     {
         using var cmd = sqliteConn?.CreateCommand();
         cmd!.CommandText = @"
@@ -423,12 +457,16 @@ public class ComparativeAggregateBenchmarks : IDisposable
             WHERE is_active = 1 
             GROUP BY age";
         using var reader = cmd.ExecuteReader();
-        while (reader.Read()) { /* Consume results */ }
+        int count = 0;
+        while (reader.Read()) { count++; }
+        return count;
     }
 
-    [Benchmark(Description = "LiteDB: Complex Aggregate - Manual")]
-    public void LiteDB_ComplexAggregate()
+    [Benchmark(Description = "LiteDB: Complex Aggregate - Manual LINQ")]
+    public int LiteDB_ComplexAggregate()
     {
+        // NOTE: LiteDB doesn't have native SQL GROUP BY, so we use LINQ
+        // This is less efficient as it loads all records into memory first
         var result = liteCollection?
             .Find(x => x.IsActive)
             .GroupBy(x => x.Age)
@@ -439,6 +477,7 @@ public class ComparativeAggregateBenchmarks : IDisposable
                 AvgAge = g.Average(x => x.Age)
             })
             .ToList();
+        return result?.Count ?? 0;
     }
 
     [GlobalCleanup]
