@@ -662,19 +662,39 @@ var config = new DatabaseConfig
 
 ### 📊 Reproduce These Benchmarks
 
-```bash
-# All benchmarks
-cd SharpCoreDB.Benchmarks
-dotnet run -c Release
+Run comprehensive benchmarks comparing SharpCoreDB (encrypted/unencrypted) against SQLite and LiteDB:
 
-# Specific operations
+```bash
+cd SharpCoreDB.Benchmarks
+
+# Quick comparison (recommended for testing)
+dotnet run -c Release -- --quick
+
+# Full comprehensive suite (all operations, all sizes)
+dotnet run -c Release -- --full
+
+# Specific benchmark categories
+dotnet run -c Release -- --inserts      # INSERT operations
+dotnet run -c Release -- --selects      # SELECT operations
+dotnet run -c Release -- --updates      # UPDATE/DELETE operations
+dotnet run -c Release -- --aggregates   # COUNT, SUM, AVG, MIN, MAX, GROUP BY
+
+# Using BenchmarkDotNet filters
 dotnet run -c Release -- --filter "*Insert*"
 dotnet run -c Release -- --filter "*Select*"
-dotnet run -c Release -- --filter "*Update*"
-dotnet run -c Release -- --filter "*Delete*"
+dotnet run -c Release -- --filter "*Aggregate*"
 ```
 
-**Detailed Results**: See `COMPREHENSIVE_BENCHMARK_SECTION.md` for full analysis
+**What gets benchmarked:**
+- ✅ **INSERT**: Individual inserts, batch inserts, prepared statements, true batch (single transaction)
+- ✅ **SELECT**: Point queries, range queries, full table scans
+- ✅ **UPDATE/DELETE**: Bulk updates, bulk deletes
+- ✅ **AGGREGATES**: COUNT, SUM, AVG, MIN, MAX, GROUP BY operations
+- ✅ **All operations tested with and without encryption**
+
+**Detailed Documentation**: 
+- See [`SharpCoreDB.Benchmarks/COMPARATIVE_BENCHMARKS_README.md`](SharpCoreDB.Benchmarks/COMPARATIVE_BENCHMARKS_README.md) for complete usage guide
+- Results automatically saved to `BenchmarkDotNet.Artifacts/results/` in HTML, CSV, JSON, and Markdown formats
 
 ---
 

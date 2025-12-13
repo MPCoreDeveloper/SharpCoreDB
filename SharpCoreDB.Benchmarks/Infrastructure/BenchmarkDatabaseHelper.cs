@@ -445,6 +445,15 @@ public class BenchmarkDatabaseHelper : IDisposable
         database.ExecuteBatchSQL(statements);
     }
 
+    /// <summary>
+    /// Executes a SQL query and returns the results.
+    /// Used for SELECT, aggregate, and other query operations.
+    /// </summary>
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
+    {
+        return database.ExecuteQuery(sql, parameters);
+    }
+
     public void Dispose()
     {
         // Database doesn't implement IDisposable, so just clean up service provider

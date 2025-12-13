@@ -12,12 +12,14 @@ This benchmark suite provides head-to-head performance comparisons across three 
 
 ## Features
 
-? **Automatic README Updates** - Results automatically inserted into root README.md
-? **Multiple Test Scenarios** - INSERT, SELECT, UPDATE, DELETE operations
-? **Various Data Sizes** - 1, 10, 100, 1K, 10K, 100K records
-? **Memory Diagnostics** - Track allocations and GC pressure
-? **Performance Charts** - Auto-generated charts using RPlot
-? **Statistical Analysis** - Mean, median, standard deviation
+✅ **Automatic README Updates** - Results automatically inserted into root README.md
+✅ **Multiple Test Scenarios** - INSERT, SELECT, UPDATE, DELETE, AGGREGATES operations
+✅ **Various Data Sizes** - 1, 10, 100, 1K, 10K records
+✅ **Memory Diagnostics** - Track allocations and GC pressure
+✅ **Performance Charts** - Auto-generated charts using RPlot
+✅ **Statistical Analysis** - Mean, median, standard deviation
+✅ **Encryption Impact** - Compare encrypted vs unencrypted performance
+✅ **Fair Comparisons** - Same data, same operations across all engines
 
 ## Running Benchmarks
 
@@ -45,6 +47,9 @@ dotnet run -c Release -- --filter Select
 
 # Update/Delete benchmarks only
 dotnet run -c Release -- --filter Update
+
+# Aggregate benchmarks only
+dotnet run -c Release -- --filter Aggregate
 ```
 
 ## Benchmark Categories
@@ -53,12 +58,18 @@ dotnet run -c Release -- --filter Update
 
 Tests single and bulk insert performance across different record counts.
 
-**Test Sizes**: 1, 10, 100, 1,000, 10,000 records
+**Test Sizes**: 1, 10, 100, 1,000 records
 
 **Scenarios**:
-- SharpCoreDB bulk insert
+- SharpCoreDB (encrypted) - Individual inserts
+- SharpCoreDB (encrypted) - Batch inserts (prepared statements)
+- SharpCoreDB (encrypted) - True batch inserts (single transaction)
+- SharpCoreDB (no encryption) - Individual inserts
+- SharpCoreDB (no encryption) - Batch inserts (prepared statements)
+- SharpCoreDB (no encryption) - True batch inserts (single transaction)
 - SQLite memory bulk insert (baseline)
 - SQLite file bulk insert
+- SQLite file + WAL + FullSync bulk insert
 - LiteDB bulk insert
 
 **Example Results**:
@@ -75,7 +86,7 @@ Tests single and bulk insert performance across different record counts.
 
 Tests query performance for point queries, range filters, and full scans.
 
-**Database Size**: 10,000 pre-populated records
+**Database Size**: 1,000 pre-populated records
 
 **Scenarios**:
 - Point query by ID
@@ -95,7 +106,7 @@ Tests query performance for point queries, range filters, and full scans.
 
 Tests modification and deletion performance.
 
-**Test Sizes**: 1, 10, 100, 1,000 records
+**Test Sizes**: 1, 10, 100 records
 
 **Scenarios**:
 - Bulk updates
@@ -108,6 +119,41 @@ Tests modification and deletion performance.
 | SQLite_Update               | 100     | 2.5 ms      |
 | LiteDB_Update               | 100     | 3.2 ms      |
 | SharpCoreDB_Update          | 100     | 4.1 ms      |
+```
+
+### 4. Aggregate Benchmarks (`ComparativeAggregateBenchmarks.cs`)
+
+Tests aggregate function performance across all database engines.
+
+**Database Size**: 10,000 pre-populated records
+
+**Scenarios**:
+- COUNT(*) - Full table count
+- COUNT(*) WHERE - Filtered count
+- SUM(age) - Sum aggregation
+- AVG(age) - Average calculation
+- MIN(age) - Minimum value
+- MAX(age) - Maximum value
+- GROUP BY age - Grouping with count
+- Complex aggregates - Multiple operations with filters
+
+**Databases Tested**:
+- SharpCoreDB (with AES-256-GCM encryption)
+- SharpCoreDB (without encryption)
+- SQLite (file-based)
+- LiteDB (with manual LINQ aggregations)
+
+**Important Note on LiteDB Aggregates**:
+LiteDB doesn't have native SQL aggregate functions like SUM, AVG, MIN, MAX. The benchmarks use LINQ methods (`FindAll().Sum()`, etc.) which load all records into memory first, making them less efficient than true database-level aggregates. This is a fundamental limitation of LiteDB's architecture, not a benchmark design flaw.
+
+**Example Results**:
+```
+| Method                          | Mean        | Allocated  |
+|---------------------------------|-------------|------------|
+| SQLite_CountAll                 | 125 ?s      | 512 B      |
+| SharpCoreDB_NoEncrypt_CountAll  | 180 ?s      | 1 KB       |
+| SharpCoreDB_Encrypted_CountAll  | 210 ?s      | 1.2 KB     |
+| LiteDB_CountAll                 | 150 ?s      | 768 B      |
 ```
 
 ## Output Structure
