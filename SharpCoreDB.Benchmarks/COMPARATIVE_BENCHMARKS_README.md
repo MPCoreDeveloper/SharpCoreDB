@@ -12,12 +12,14 @@ This benchmark suite provides head-to-head performance comparisons across three 
 
 ## Features
 
-? **Automatic README Updates** - Results automatically inserted into root README.md
-? **Multiple Test Scenarios** - INSERT, SELECT, UPDATE, DELETE operations
-? **Various Data Sizes** - 1, 10, 100, 1K, 10K, 100K records
-? **Memory Diagnostics** - Track allocations and GC pressure
-? **Performance Charts** - Auto-generated charts using RPlot
-? **Statistical Analysis** - Mean, median, standard deviation
+✅ **Automatic README Updates** - Results automatically inserted into root README.md
+✅ **Multiple Test Scenarios** - INSERT, SELECT, UPDATE, DELETE, AGGREGATES operations
+✅ **Various Data Sizes** - 1, 10, 100, 1K, 10K records
+✅ **Memory Diagnostics** - Track allocations and GC pressure
+✅ **Performance Charts** - Auto-generated charts using RPlot
+✅ **Statistical Analysis** - Mean, median, standard deviation
+✅ **Encryption Impact** - Compare encrypted vs unencrypted performance
+✅ **Fair Comparisons** - Same data, same operations across all engines
 
 ## Running Benchmarks
 
@@ -140,6 +142,9 @@ Tests aggregate function performance across all database engines.
 - SharpCoreDB (without encryption)
 - SQLite (file-based)
 - LiteDB (with manual LINQ aggregations)
+
+**Important Note on LiteDB Aggregates**:
+LiteDB doesn't have native SQL aggregate functions like SUM, AVG, MIN, MAX. The benchmarks use LINQ methods (`FindAll().Sum()`, etc.) which load all records into memory first, making them less efficient than true database-level aggregates. This is a fundamental limitation of LiteDB's architecture, not a benchmark design flaw.
 
 **Example Results**:
 ```
