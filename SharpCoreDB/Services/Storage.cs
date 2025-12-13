@@ -347,12 +347,42 @@ public class Storage : IStorage
         if (bytesRead < 4) return null;
         
         int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
-        if (length <= 0 || length > 10_000_000) return null; // Sanity check
+        
+        // FIXED: Increased sanity check from 10MB to 1GB to allow realistic large data
+        // Also added validation: length must be positive and reasonable
+        const int MaxRowSize = 1_000_000_000; // 1 GB max per row (realistic for very large BLOBs)
+        
+        if (length < 0)
+        {
+            // Negative length indicates data corruption or misalignment
+            Console.WriteLine($"❌ ReadBytesFrom: Invalid negative length {length} at offset {offset}");
+            return null;
+        }
+        
+        if (length == 0)
+        {
+            // Empty row is valid (e.g., all NULL fields)
+            return Array.Empty<byte>();
+        }
+        
+        if (length > MaxRowSize)
+        {
+            // Length exceeds reasonable limit - likely corruption
+            Console.WriteLine($"⚠️  ReadBytesFrom: Suspiciously large length {length} at offset {offset} (max: {MaxRowSize})");
+            return null;
+        }
         
         // Read data
         byte[] data = new byte[length];
         bytesRead = fs.Read(data.AsSpan());
-        return bytesRead == length ? data : null;
+        
+        if (bytesRead != length)
+        {
+            Console.WriteLine($"⚠️  ReadBytesFrom: Incomplete read at offset {offset}: got {bytesRead} bytes, expected {length}");
+            return null;
+        }
+        
+        return data;
     }
 
     /// <inheritdoc />

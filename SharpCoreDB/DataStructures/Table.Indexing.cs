@@ -115,38 +115,53 @@ public partial class Table
         // Build index WITHOUT holding write lock (parallel work allowed)
         var index = new HashIndex(this.Name, columnName);
         
-        // Scan all rows and build index
+        // FIXED: Use the same reading logic as ReadRowAtPosition to ensure compatibility
+        // Read all rows using ReadBytesFrom (which handles length prefixes correctly)
         if (this.storage != null && File.Exists(this.DataFile))
         {
-            var data = this.storage.ReadBytes(this.DataFile, false);
-            if (data != null && data.Length > 0)
+            var fileInfo = new FileInfo(this.DataFile);
+            if (fileInfo.Length > 0)
             {
-                using var ms = new MemoryStream(data);
-                using var reader = new BinaryReader(ms);
+                long position = 0;
                 
-                while (ms.Position < ms.Length)
+                // Read all length-prefixed records from the file
+                while (position < fileInfo.Length)
                 {
-                    long position = ms.Position;
+                    var rowData = this.storage.ReadBytesFrom(this.DataFile, position);
+                    if (rowData == null || rowData.Length == 0)
+                    {
+                        break; // End of file or corrupted data
+                    }
+                    
                     var row = new Dictionary<string, object>();
+                    int offset = 0;
+                    ReadOnlySpan<byte> dataSpan = rowData.AsSpan();
                     bool valid = true;
                     
+                    // Parse all columns in the row
                     for (int i = 0; i < this.Columns.Count; i++)
                     {
-                        try 
-                        { 
-                            row[this.Columns[i]] = ReadTypedValue(reader, this.ColumnTypes[i]);
+                        try
+                        {
+                            var columnValue = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                            row[this.Columns[i]] = columnValue;
+                            offset += bytesRead;
                         }
-                        catch 
-                        { 
-                            valid = false; 
-                            break; 
+                        catch
+                        {
+                            valid = false;
+                            break;
                         }
                     }
                     
-                    if (valid && row.TryGetValue(columnName, out var value) && value != null)
+                    // Add to index if row was successfully parsed and contains the indexed column
+                    if (valid && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
                     {
                         index.Add(row, position);
                     }
+                    
+                    // Move to next record (length prefix + data)
+                    position += 4 + rowData.Length; // 4 bytes for length prefix + data length
                 }
             }
         }

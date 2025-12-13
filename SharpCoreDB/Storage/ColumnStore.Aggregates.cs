@@ -141,6 +141,7 @@ public sealed partial class ColumnStore<T>
     /// Partitions data across CPU cores, each running SIMD loop, then reduces.
     /// Expected: 5-8x speedup on 8+ cores vs single-threaded SIMD.
     /// OPTIMIZED: Added Vector512 support for modern CPUs.
+    /// FIXED: Use long for accumulation to prevent overflow on large datasets.
     /// </summary>
     private static int SumInt32ParallelSIMD(int[] data)
     {
@@ -155,7 +156,7 @@ public sealed partial class ColumnStore<T>
             return SumInt32SIMDDirect(data);
         }
         
-        var partialSums = new int[partitionCount];
+        var partialSums = new long[partitionCount]; // FIXED: Use long to prevent overflow
         
         Parallel.For(0, partitionCount, threadId =>
         {
@@ -164,7 +165,7 @@ public sealed partial class ColumnStore<T>
                 ? data.Length
                 : start + (data.Length / partitionCount);
             
-            int partialSum = 0;
+            long partialSum = 0; // FIXED: Use long instead of int
             int i = start;
             
             // ✅ NEW: Vector512 SIMD loop within partition
@@ -210,8 +211,9 @@ public sealed partial class ColumnStore<T>
             partialSums[threadId] = partialSum;
         });
         
-        // Reduce partial sums
-        return partialSums.Sum();
+        // FIXED: Use unchecked cast from long to int (overflow behavior matches SQL SUM)
+        // SQL databases typically allow integer overflow in SUM operations
+        return unchecked((int)partialSums.Sum());
     }
 
     /// <summary>

@@ -368,20 +368,23 @@ public class ComparativeInsertBenchmarks : IDisposable
         // FAIR COMPARISON: Configure SQLite with durability equivalent to SharpCoreDB
         // This shows the TRUE performance cost of full durability guarantees
         
-        using var cmd = sqliteFile?.CreateCommand();
-        
-        // Enable WAL mode
-        cmd!.CommandText = "PRAGMA journal_mode = WAL";
-        cmd.ExecuteNonQuery();
-        
-        // CRITICAL: Set synchronous to FULL for equivalent durability to SharpCoreDB FullSync
-        // This forces fsync after each transaction commit (like SharpCoreDB)
-        cmd.CommandText = "PRAGMA synchronous = FULL";
-        cmd.ExecuteNonQuery();
+        // Configure SQLite PRAGMAS BEFORE transaction
+        using (var pragmaCmd = sqliteFile?.CreateCommand())
+        {
+            pragmaCmd!.CommandText = "PRAGMA journal_mode = WAL";
+            pragmaCmd.ExecuteNonQuery();
+            
+            // CRITICAL: Set synchronous to FULL for equivalent durability to SharpCoreDB FullSync
+            // This forces fsync after each transaction commit (like SharpCoreDB)
+            pragmaCmd.CommandText = "PRAGMA synchronous = FULL";
+            pragmaCmd.ExecuteNonQuery();
+        }
         
         var users = dataGenerator.GenerateUsers(RecordCount);
         
         using var transaction = sqliteFile?.BeginTransaction();
+        using var cmd = sqliteFile?.CreateCommand();
+        cmd!.Transaction = transaction;
         cmd.CommandText = @"
             INSERT OR REPLACE INTO users (id, name, email, age, created_at, is_active)
             VALUES (@id, @name, @email, @age, @created_at, @is_active)";

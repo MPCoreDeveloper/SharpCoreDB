@@ -16,7 +16,7 @@ public static class PersistenceConstants
     public const string WalFileName = "wal.log";
 
     /// <summary>The file extension for table files.</summary>
-    public const string TableFileExtension = ".json";
+    public const string TableFileExtension = ".dat";
 
     /// <summary>The key for tables in metadata.</summary>
     public const string TablesKey = "tables";

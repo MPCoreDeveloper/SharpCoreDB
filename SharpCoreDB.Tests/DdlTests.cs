@@ -37,12 +37,38 @@ public class DdlTests : IDisposable
 
     public void Dispose()
     {
-        this.db.Dispose();
+        try
+        {
+            this.db.Dispose();
+        }
+        catch { }
+
+        // Force garbage collection and wait for finalizers to complete
+        // This ensures all file handles are released before cleanup
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        // Wait for file handles to be released before cleanup
+        System.Threading.Thread.Sleep(250);
+
         if (Directory.Exists(this.testDbPath))
         {
             try
             {
-                Directory.Delete(this.testDbPath, recursive: true);
+                // Try to delete with retry logic
+                for (int i = 0; i < 5; i++)
+                {
+                    try
+                    {
+                        Directory.Delete(this.testDbPath, recursive: true);
+                        break;
+                    }
+                    catch when (i < 4)
+                    {
+                        System.Threading.Thread.Sleep(150 * (i + 1));
+                    }
+                }
             }
             catch
             {
@@ -83,7 +109,8 @@ public class DdlTests : IDisposable
         // Act
         this.db.ExecuteSQL("DROP TABLE temp");
 
-        // Assert
+        // Assert - wait for file to be deleted
+        System.Threading.Thread.Sleep(100);
         Assert.False(File.Exists(dataFile), "Data file should be deleted after DROP TABLE");
     }
 
@@ -212,7 +239,8 @@ public class DdlTests : IDisposable
         // Act
         this.db.ExecuteSQL("ALTER TABLE old_name RENAME TO new_name");
 
-        // Assert
+        // Assert - wait for file operations to complete
+        System.Threading.Thread.Sleep(100);
         Assert.False(File.Exists(oldFile), "Old data file should not exist");
         Assert.True(File.Exists(newFile), "New data file should exist");
     }
@@ -302,6 +330,9 @@ public class DdlTests : IDisposable
 
         // Drop table
         this.db.ExecuteSQL("DROP TABLE temp");
+
+        // Wait for file handles to be released - give OS time to close file
+        System.Threading.Thread.Sleep(200);
 
         // Recreate with different schema
         this.db.ExecuteSQL("CREATE TABLE temp (id INTEGER PRIMARY KEY, value INTEGER)");

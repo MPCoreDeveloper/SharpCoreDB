@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
+using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Tests;
 
@@ -12,6 +13,7 @@ public class BufferedWalTests : IDisposable
     private readonly string _testDbPath;
     private readonly IServiceProvider _serviceProvider;
     private readonly DatabaseFactory _factory;
+    private readonly List<IDatabase> _openDatabases = new();
 
     public BufferedWalTests()
     {
@@ -27,10 +29,48 @@ public class BufferedWalTests : IDisposable
 
     public void Dispose()
     {
+        // Dispose all open database instances first
+        foreach (var db in _openDatabases)
+        {
+            try
+            {
+                (db as IDisposable)?.Dispose();
+            }
+            catch
+            {
+                // Ignore errors during disposal
+            }
+        }
+        _openDatabases.Clear();
+
+        // Give OS time to release file handles
+        System.Threading.Thread.Sleep(100);
+
         // Clean up test databases after each test
         if (Directory.Exists(_testDbPath))
         {
-            Directory.Delete(_testDbPath, true);
+            try
+            {
+                Directory.Delete(_testDbPath, true);
+            }
+            catch
+            {
+                // If cleanup fails, try again with retries
+                for (int i = 0; i < 3; i++)
+                {
+                    try
+                    {
+                        System.Threading.Thread.Sleep(100 * (i + 1));
+                        if (Directory.Exists(_testDbPath))
+                            Directory.Delete(_testDbPath, true);
+                        break;
+                    }
+                    catch when (i < 2)
+                    {
+                        // Retry
+                    }
+                }
+            }
         }
     }
 
@@ -40,6 +80,7 @@ public class BufferedWalTests : IDisposable
         // Arrange - Use HighPerformance config with buffered WAL
         var config = DatabaseConfig.HighPerformance;
         var db = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db);
 
         // Act - Create table and perform multiple inserts (should use buffered WAL)
         db.ExecuteSQL("CREATE TABLE test (id INTEGER, name TEXT, value INTEGER)");
@@ -60,14 +101,21 @@ public class BufferedWalTests : IDisposable
 
         // Act - Create database, insert data with buffered WAL
         var db1 = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db1);
         db1.ExecuteSQL("CREATE TABLE data (id INTEGER, value TEXT)");
         for (int i = 0; i < 150; i++)
         {
             db1.ExecuteSQL("INSERT INTO data VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"value{i}" } });
         }
 
+        // Close first database before opening second
+        (db1 as IDisposable)?.Dispose();
+        _openDatabases.Remove(db1);
+        System.Threading.Thread.Sleep(100);
+
         // Reopen database
         var db2 = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db2);
         db2.ExecuteSQL("SELECT * FROM data WHERE id = '100'");
 
         // Assert - Data persisted correctly with buffered WAL
@@ -84,6 +132,7 @@ public class BufferedWalTests : IDisposable
             WalBufferSize = 2 * 1024 * 1024 // 2MB buffer
         };
         var db = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db);
 
         // Act - Perform many inserts that should benefit from large buffer
         db.ExecuteSQL("CREATE TABLE entries (id INTEGER, data TEXT)");
@@ -102,6 +151,7 @@ public class BufferedWalTests : IDisposable
         // Arrange
         var config = DatabaseConfig.HighPerformance;
         var db = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db);
 
         // Act - Mix of different operations
         db.ExecuteSQL("CREATE TABLE mixed (id INTEGER PRIMARY KEY, name TEXT, active BOOLEAN)");
@@ -142,6 +192,7 @@ public class BufferedWalTests : IDisposable
         };
 
         var db = _factory.Create(_testDbPath, "testPassword", false, config);
+        _openDatabases.Add(db);
         db.ExecuteSQL("CREATE TABLE perf_test (id INTEGER, data TEXT, value INTEGER)");
 
         // Act - Measure time for bulk inserts

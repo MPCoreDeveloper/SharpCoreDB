@@ -87,10 +87,23 @@ public partial class Table
                     this.Index.Insert(pkVal, position);
                 }
 
-                // Async hash index update with position
-                if (this.hashIndexes.Count > 0)
+                // FIXED: Ensure all registered indexes are loaded before INSERT
+                // This fixes the issue where indexes registered during CREATE TABLE
+                // were never loaded, so INSERT didn't populate them with data
+                foreach (var registeredCol in this.registeredIndexes.Keys.ToList())
                 {
-                    _ = _indexQueue.Writer.WriteAsync(new IndexUpdate(row, this.hashIndexes.Values, position));
+                    if (!this.loadedIndexes.Contains(registeredCol))
+                    {
+                        EnsureIndexLoaded(registeredCol);
+                    }
+                }
+
+                // FIXED: Synchronous hash index update for consistency
+                // Hash indexes must be updated immediately so subsequent queries can find the data
+                // Now all registered indexes are guaranteed to be in hashIndexes.Values
+                foreach (var hashIndex in this.hashIndexes.Values)
+                {
+                    hashIndex.Add(row, position);
                 }
                 
                 // Mark unloaded indexes as stale (they need rebuilding if loaded later)

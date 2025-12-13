@@ -136,6 +136,13 @@ public partial class SqlParser
         }
 
         var tableName = insertSql[tableStart..tableEnd].Trim();
+        
+        // Check if table exists
+        if (!this.tables.ContainsKey(tableName))
+        {
+            throw new InvalidOperationException($"Table {tableName} does not exist");
+        }
+        
         var rest = insertSql[tableEnd..];
         List<string>? insertColumns = null;
         if (rest.TrimStart().StartsWith('('))
@@ -312,6 +319,13 @@ public partial class SqlParser
         else
         {
             var tableName = fromParts[0];
+            
+            // Check if table exists
+            if (!this.tables.ContainsKey(tableName))
+            {
+                throw new InvalidOperationException($"Table {tableName} does not exist");
+            }
+            
             if (!string.IsNullOrEmpty(whereStr))
             {
                 var columns = SqlParser.ParseWhereColumns(whereStr);
@@ -442,6 +456,13 @@ public partial class SqlParser
     private void ExecuteUpdate(string sql, string[] parts, IWAL? wal)
     {
         var tableName = parts[1];
+        
+        // Check if table exists
+        if (!this.tables.ContainsKey(tableName))
+        {
+            throw new InvalidOperationException($"Table {tableName} does not exist");
+        }
+        
         var setIdx = Array.IndexOf(parts, "SET");
         var whereIdx = Array.IndexOf(parts, "WHERE");
         var setStr = string.Join(" ", parts.Skip(setIdx + 1).Take(whereIdx - setIdx - 1));
@@ -466,6 +487,13 @@ public partial class SqlParser
     private void ExecuteDelete(string sql, string[] parts, IWAL? wal)
     {
         var tableName = parts[2];
+        
+        // Check if table exists
+        if (!this.tables.ContainsKey(tableName))
+        {
+            throw new InvalidOperationException($"Table {tableName} does not exist");
+        }
+        
         var whereIdx = Array.IndexOf(parts, "WHERE");
         var whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
         this.tables[tableName].Delete(whereStr);

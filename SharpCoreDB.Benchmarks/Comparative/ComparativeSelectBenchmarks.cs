@@ -230,7 +230,28 @@ public class ComparativeSelectBenchmarks : IDisposable
             }
             else
             {
-                Console.WriteLine($"  ? SharpCoreDB (Encrypted): Verified (found user ID 1)");
+                // ENHANCED: Validate the data integrity
+                var row = testResults[0];
+                if (!row.ContainsKey("id") || !row.ContainsKey("name") || !row.ContainsKey("email"))
+                {
+                    errors.Add($"SharpCoreDB (Encrypted): Incomplete row data - missing fields");
+                }
+                else if (row["id"] == null || row["id"] == DBNull.Value)
+                {
+                    errors.Add($"SharpCoreDB (Encrypted): ID field is null");
+                }
+                else if ((int)row["id"] != 1)
+                {
+                    errors.Add($"SharpCoreDB (Encrypted): Expected ID 1, got {row["id"]}");
+                }
+                else if (string.IsNullOrEmpty(row["name"]?.ToString()))
+                {
+                    errors.Add($"SharpCoreDB (Encrypted): Name field is empty (data corruption!)");
+                }
+                else
+                {
+                    Console.WriteLine($"  ? SharpCoreDB (Encrypted): Verified (ID={row["id"]}, Name={row["name"]})");
+                }
             }
         }
         catch (Exception ex)
@@ -248,7 +269,28 @@ public class ComparativeSelectBenchmarks : IDisposable
             }
             else
             {
-                Console.WriteLine($"  ? SharpCoreDB (No Encryption): Verified (found user ID 1)");
+                // ENHANCED: Validate the data integrity
+                var row = testResults[0];
+                if (!row.ContainsKey("id") || !row.ContainsKey("name") || !row.ContainsKey("email"))
+                {
+                    errors.Add($"SharpCoreDB (No Encryption): Incomplete row data - missing fields");
+                }
+                else if (row["id"] == null || row["id"] == DBNull.Value)
+                {
+                    errors.Add($"SharpCoreDB (No Encryption): ID field is null");
+                }
+                else if ((int)row["id"] != 1)
+                {
+                    errors.Add($"SharpCoreDB (No Encryption): Expected ID 1, got {row["id"]}");
+                }
+                else if (string.IsNullOrEmpty(row["name"]?.ToString()))
+                {
+                    errors.Add($"SharpCoreDB (No Encryption): Name field is empty (data corruption!)");
+                }
+                else
+                {
+                    Console.WriteLine($"  ? SharpCoreDB (No Encryption): Verified (ID={row["id"]}, Name={row["name"]})");
+                }
             }
         }
         catch (Exception ex)
