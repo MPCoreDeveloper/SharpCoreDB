@@ -90,20 +90,22 @@ static void ShowInteractiveMenu()
 {
     while (true)
     {
-        Console.WriteLine("???????????????????????????????????????????????????????????????");
+        Console.WriteLine("???????????????????????????????????????????????????????");
         Console.WriteLine("  Select Benchmark Mode:");
-        Console.WriteLine("???????????????????????????????????????????????????????????????");
+        Console.WriteLine("???????????????????????????????????????????????????????");
         Console.WriteLine();
         Console.WriteLine("  Database Comparison Benchmarks:");
-        Console.WriteLine("    1. Quick Comparison (fast, recommended for testing)");
-        Console.WriteLine("    2. Full Comprehensive Suite (20-30 minutes)");
-        Console.WriteLine("    3. INSERT Benchmarks Only");
-        Console.WriteLine("    4. SELECT Benchmarks Only");
-        Console.WriteLine("    5. UPDATE/DELETE Benchmarks Only");
+        Console.WriteLine("    1. Quick 10K Test (RECOMMENDED - 2-3 min) ?");
+        Console.WriteLine("    2. Quick Comparison (fast, reduced parameters)");
+        Console.WriteLine("    3. Full Comprehensive Suite (20-30 minutes)");
+        Console.WriteLine("    4. INSERT Benchmarks Only");
+        Console.WriteLine("    5. SELECT Benchmarks Only");
+        Console.WriteLine("    6. UPDATE/DELETE Benchmarks Only");
         Console.WriteLine();
         Console.WriteLine("  Other Benchmarks:");
-        Console.WriteLine("    6. C# 14 Modernization Benchmark");
-        Console.WriteLine("    7. Quick Performance Comparison (no BenchmarkDotNet)");
+        Console.WriteLine("    7. C# 14 Modernization Benchmark");
+        Console.WriteLine("    8. Quick Performance Comparison (no BenchmarkDotNet)");
+        Console.WriteLine("    9. Simple 10K Test (DEBUG - Minimal config) ??");
         Console.WriteLine();
         Console.WriteLine("    H. Help (command-line options)");
         Console.WriteLine("    Q. Quit");
@@ -115,10 +117,16 @@ static void ShowInteractiveMenu()
         switch (choice)
         {
             case "1":
-                ComprehensiveBenchmarkRunner.Run(new[] { "--quick" });
+                Console.WriteLine("\n?? Running Quick 10K Test...");
+                Console.WriteLine("Testing 10,000 record inserts against SQLite and LiteDB\n");
+                BenchmarkRunner.Run<SharpCoreDB.Benchmarks.Comparative.Quick10kComparison>();
                 return;
                 
             case "2":
+                ComprehensiveBenchmarkRunner.Run(new[] { "--quick" });
+                return;
+                
+            case "3":
                 Console.WriteLine();
                 Console.WriteLine("??  WARNING: Full suite may take 20-30 minutes.");
                 Console.Write("Continue? (Y/N): ");
@@ -128,24 +136,31 @@ static void ShowInteractiveMenu()
                 }
                 return;
                 
-            case "3":
+            case "4":
                 ComprehensiveBenchmarkRunner.Run(new[] { "--inserts" });
                 return;
                 
-            case "4":
+            case "5":
                 ComprehensiveBenchmarkRunner.Run(new[] { "--selects" });
                 return;
                 
-            case "5":
+            case "6":
                 ComprehensiveBenchmarkRunner.Run(new[] { "--updates" });
                 return;
                 
-            case "6":
+            case "7":
                 BenchmarkRunner.Run<ModernizationBenchmark>();
                 return;
                 
-            case "7":
+            case "8":
                 QuickPerformanceComparison.Run();
+                return;
+                
+            case "9":
+                Console.WriteLine("\n?? Running SIMPLE 10K Test (Minimal Config)...");
+                Console.WriteLine("This version uses minimal BenchmarkDotNet configuration");
+                Console.WriteLine("Better for debugging if standard version fails\n");
+                SharpCoreDB.Benchmarks.Simple.SimpleRunner.Run();
                 return;
                 
             case "H":
