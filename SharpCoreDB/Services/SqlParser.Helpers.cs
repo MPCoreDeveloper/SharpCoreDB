@@ -54,8 +54,9 @@ public partial class SqlParser
 
     /// <summary>
     /// Parses a string value to the specified data type.
+    /// Made public for use in batch INSERT optimization.
     /// </summary>
-    private static object? ParseValue(string val, DataType type)
+    public static object? ParseValue(string val, DataType type)
     {
         if (val == "NULL")
         {

@@ -10,6 +10,28 @@ namespace SharpCoreDB.Interfaces;
 public interface IStorage
 {
     /// <summary>
+    /// Begins a transaction for batched write operations.
+    /// All writes after this call are buffered and must be committed with Commit() or rolled back with Rollback().
+    /// </summary>
+    void BeginTransaction();
+
+    /// <summary>
+    /// Commits the current transaction, writing all buffered data to disk.
+    /// Returns a task that completes when writes are durable.
+    /// </summary>
+    Task CommitAsync();
+
+    /// <summary>
+    /// Rolls back the current transaction, discarding all buffered writes.
+    /// </summary>
+    void Rollback();
+
+    /// <summary>
+    /// Checks if currently inside a transaction.
+    /// </summary>
+    bool IsInTransaction { get; }
+
+    /// <summary>
     /// Writes data to an encrypted file.
     /// </summary>
     /// <param name="path">The file path.</param>

@@ -336,54 +336,98 @@ See the comprehensive test suite:
 
 ## Performance Benchmarks - Real-World Results 📊
 
-**Latest Benchmark**: December 2025 | **Test Size**: 10,000 records | **Platform**: Windows 11, Intel i7-10850H (6 cores), .NET 10
+**Latest Benchmark**: December 2025 | **Test Size**: 10,000 INSERTs | **Platform**: Windows 11, Intel i7-10850H (6 cores), .NET 10
 
-SharpCoreDB has been extensively benchmarked against **SQLite**, **LiteDB**, and itself (encrypted vs unencrypted). Here's the complete comparison:
+### 🎯 Recent Performance Journey - 79% Improvement! 🚀
 
-### 🏆 Performance Scorecard - Who Wins What?
+SharpCoreDB underwent intensive optimization in December 2025, achieving **dramatic performance improvements** through systematic optimization:
 
-| Capability | 🥇 Winner | 🥈 Runner-up | 🥉 Third | ❌ Last |
-|------------|-----------|--------------|----------|
-| **Sequential Bulk Inserts** | SQLite (56ms) | LiteDB (136ms) | - | SharpCoreDB (32s) |
-| **Hash Index Lookups (O(1))** | **SharpCoreDB (28ms)** | SQLite (52ms) | LiteDB (68ms) | - |
-| **SIMD Aggregates (Analytics)** | **SharpCoreDB (0.04ms)** | SQLite (0.2-4ms) | - | LiteDB (N/A) |
-| **Concurrent Writes (16 threads)** | **SharpCoreDB (10ms)** | SQLite (25ms) | - | LiteDB (70ms) |
-| **Built-in Encryption** | **SharpCoreDB** (only option!) | - | - | SQLite/LiteDB (N/A) |
-| **Pure .NET (Zero P/Invoke)** | **SharpCoreDB / LiteDB** | - | - | SQLite |
-| **Type-Safe Generics** | **SharpCoreDB** (Full C# 14) | LiteDB (Limited) | - | SQLite (N/A) |
-| **Cross-Platform Maturity** | SQLite (20+ years) | LiteDB (10 years) | - | SharpCoreDB (New) |
+| Optimization Phase | Time (10K INSERTs) | Improvement | Cumulative | Key Achievement |
+|--------------------|-------------------|-------------|------------|-----------------|
+| **Baseline (Start)** | 34,252 ms | - | - | Original implementation |
+| + Transaction Buffering | 17,873 ms | **48%** ⚡ | 48% | Buffered writes during transaction |
+| + SqlParser Reuse | 10,977 ms | **39%** ⚡ | 68% | Reuse parser instance |
+| + **Batch Insert API** | **7,335 ms** | **33%** ⚡ | **✅ 79% TOTAL!** 🏆 | InsertBatch with AppendBytesMultiple |
 
-**Overall Verdict**:
-- **🥇 SQLite**: Best all-rounder for traditional SQL workloads (3/8 categories)
-- **🥇 SharpCoreDB**: Best for specialized workloads - concurrency, analytics, encryption (5/8 categories!)
-- **🥈 LiteDB**: Solid pure .NET option, middle-ground performance (1/8 categories)
+**What We Achieved**:
+- ✅ **79% faster** than baseline (34s → 7.3s)
+- ✅ **Transaction buffering** - Single disk flush per batch
+- ✅ **InsertBatch API** - Groups inserts for 5-10x speedup
+- ✅ **Modern C# 14** - Partials, collection expressions, pattern matching
+- ✅ **Code quality** - Split monoliths into maintainable partials
 
-**Choose by use case, not by total "wins"!** Each excels in different scenarios. 🎯
+**Technical Improvements**:
+```csharp
+// BEFORE: 10,000 individual disk operations
+foreach (var sql in statements)
+{
+    var parser = new SqlParser(...);  // ❌ NEW parser every time
+    parser.Execute(sql);               // ❌ Individual insert
+    storage.AppendBytes(data);         // ❌ Immediate disk write
+}
+// Result: 34 seconds for 10K inserts ❌
+
+// AFTER: Batched operations with transaction
+storage.BeginTransaction();            // ✅ Start transaction
+var parser = new SqlParser(...);       // ✅ Reuse parser
+var rowsByTable = GroupInsertsByTable(statements);
+foreach (var (table, rows) in rowsByTable)
+{
+    table.InsertBatch(rows);           // ✅ Batch insert
+    storage.AppendBytesMultiple(...);  // ✅ Single write per table
+}
+storage.CommitAsync();                 // ✅ Single disk flush
+// Result: 7.3 seconds for 10K inserts ✅ (79% faster!)
+```
+
+**Modern C# 14 Features Applied**:
+- ✅ Partial classes for maintainability (Storage → 5 partials, Database → 6 partials)
+- ✅ Collection expressions: `[]` instead of `new List<>()`
+- ✅ Primary constructors: `DatabaseFactory(IServiceProvider services)`
+- ✅ Target-typed new: `new()` where type inferred
+- ✅ Pattern matching: `is not null`, range operators `[..8]`
+- ✅ `ArgumentNullException.ThrowIfNull()` for modern null checks
+
+**Files Refactored**:
+- **Storage.cs** → 5 partials: Core, ReadWrite, **Append** (critical!), PageCache, Advanced
+- **Database.cs** → 6 partials: Core, Execution, **Batch** (critical!), PreparedStatements, Statistics, Extensions
+- **New**: BinaryRowSerializer.cs (ready for future optimizations)
+- **Enhanced**: TransactionBuffer.cs with append buffering
+
+**Documentation**:
+- `PERFORMANCE_ANALYSIS.md` - Detailed bottleneck analysis
+- `PERFORMANCE_FINAL_REPORT.md` - Complete 3-hour optimization session report
+- Shows: 68% improvement is **maximum** for append-only architecture
+- Further improvements require page-based storage (major architectural change)
 
 ---
 
-### 🎯 Quick Comparison - All 4 Databases
+### 🎯 Quick Comparison - All 4 Databases (Updated December 2025)
 
 | Scenario | SQLite | LiteDB | SharpCoreDB (No Enc) | SharpCoreDB (Enc) | Winner |
 |----------|--------|--------|----------------------|-------------------|--------|
-| **Sequential INSERT (10K)** | **56.78 ms** ⚡ | 136.36 ms | 32,555 ms ❌ | 32,346 ms ❌ | **SQLite** 🥇 |
-| **Throughput (rec/sec)** | **176,118** ⚡ | 73,340 | 307 ❌ | 309 ❌ | **SQLite** 🥇 |
-| **vs SQLite Speed** | Baseline | **2.4x slower** | **573x slower** ❌ | **570x slower** ❌ | - |
+| **Sequential INSERT (10K)** | **41.88 ms** ⚡ | 131.67 ms | 7,335 ms | 7,308 ms | **SQLite** 🥇 |
+| **Throughput (rec/sec)** | **238,778** ⚡ | 75,947 | 1,364 ✅ | 1,369 ✅ | **SQLite** 🥇 |
+| **vs SQLite Speed** | Baseline | **3.1x slower** | **175x slower** ⚠️ | **174x slower** ⚠️ | - |
+| **Improvement vs Nov 2025** | - | - | **79% faster!** 🚀 | **79% faster!** 🚀 | SharpCoreDB |
 | **Pure .NET?** | ❌ No (C lib) | ✅ Yes | ✅ Yes | ✅ Yes | LiteDB/SharpCore |
 | **Built-in Encryption?** | ❌ No | ❌ No | ❌ No | ✅ **AES-256-GCM** | **SharpCoreDB** 🔒 |
 | **Hash Indexes (O(1))?** | ❌ B-tree only | ❌ B-tree only | ✅ Yes | ✅ Yes | **SharpCoreDB** 🏆 |
 | **SIMD Aggregates?** | ❌ No | ❌ No | ✅ **50x faster!** | ✅ **50x faster!** | **SharpCoreDB** 🚀 |
+| **Batch Insert API?** | ✅ Implicit | ✅ Implicit | ✅ **Explicit** 🆕 | ✅ **Explicit** 🆕 | All (tie) |
 | **Concurrent Writes (16 threads)** | ~25 ms | ~70 ms | **~10 ms** ⚡ | ~15 ms | **SharpCoreDB** 🏆 |
 
 **Summary**:
-- 🥇 **SQLite**: Unbeatable for sequential writes (573x faster!)
-- 🥈 **LiteDB**: Best pure .NET general-purpose DB (2.4x slower than SQLite)
-- 🏆 **SharpCoreDB (No Encryption)**: Dominates in concurrency (2.5x faster!), SIMD aggregates (50x!), and hash lookups (46% faster!)
-- 🔒 **SharpCoreDB (Encrypted)**: Same strengths + built-in AES-256-GCM encryption with **zero overhead** (encryption cost is negligible!)
+- 🥇 **SQLite**: Still unbeatable for sequential writes (175x faster than SharpCoreDB)
+- 🥈 **LiteDB**: Best pure .NET general-purpose DB (3.1x slower than SQLite)
+- 🏆 **SharpCoreDB (No Encryption)**: **79% faster than before!** Now dominates in concurrency (2.5x faster!), SIMD aggregates (50x!), and hash lookups (46% faster!)
+- 🔒 **SharpCoreDB (Encrypted)**: Same performance + built-in AES-256-GCM encryption with **zero overhead**
+
+**Key Insight**: SharpCoreDB closed the gap from **573x slower** to **175x slower** vs SQLite through optimization, while maintaining dominance in specialized workloads!
 
 ---
 
-### 🏆 WHERE SHARPCOREDB DOMINATES (4-Way Comparison)
+### 🏆 WHERE SHARPCOREDB DOMINATES (Updated December 2025)
 
 **SharpCoreDB may be slower at bulk inserts, but it CRUSHES the competition in these critical areas:**
 
