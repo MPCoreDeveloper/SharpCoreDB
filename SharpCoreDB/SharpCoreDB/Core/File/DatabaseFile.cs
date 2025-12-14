@@ -21,11 +21,9 @@ public sealed class DatabaseFile : IDisposable
     private const int StoredPageSize = PageSize + 12 + 16; // Account for AES-GCM overhead
     private readonly string filePath;
     private readonly SharpCoreDB.Services.AesGcmEncryption crypto;
-    private readonly byte[] key;
     private readonly MemoryMappedFileHandler handler;
     
     // Pinned buffers for reuse (eliminates per-call allocations)
-    private readonly byte[] _pageBuffer = GC.AllocateUninitializedArray<byte>(PageSize, pinned: true);
     private readonly byte[] _encryptedBuffer = GC.AllocateUninitializedArray<byte>(StoredPageSize, pinned: true);
     private bool disposed;
     private ulong _currentTransactionId;
@@ -45,7 +43,6 @@ public sealed class DatabaseFile : IDisposable
 
         this.filePath = filePath;
         this.crypto = crypto.GetAesGcmEncryption(key);
-        this.key = key;
         this._currentTransactionId = (ulong)DateTime.UtcNow.Ticks;
 
         // Ensure file exists
@@ -245,23 +242,16 @@ public sealed class DatabaseFile : IDisposable
     /// Ref struct for page buffer to avoid allocations.
     /// OPTIMIZED: Uses PageSerializer for all operations.
     /// </summary>
-    public ref struct PageBuffer
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="PageBuffer"/> struct.
+    /// </remarks>
+    /// <param name="size">The buffer size.</param>
+    public readonly ref struct PageBuffer(int size)
     {
-        private Span<byte> buffer;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PageBuffer"/> struct.
-        /// </summary>
-        /// <param name="size">The buffer size.</param>
-        public PageBuffer(int size)
-        {
-            this.buffer = new byte[size];
-        }
-
         /// <summary>
         /// Gets the buffer as a span.
         /// </summary>
-        public Span<byte> Span => this.buffer;
+        public readonly Span<byte> Span { get; } = new byte[size];
 
         /// <summary>
         /// Reads a uint32 from the buffer using PageSerializer.
@@ -269,10 +259,7 @@ public sealed class DatabaseFile : IDisposable
         /// <param name="offset">The offset.</param>
         /// <returns>The uint32 value.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint ReadUInt32LittleEndian(int offset)
-        {
-            return PageSerializer.ReadUInt32(this.buffer[offset..]);
-        }
+        public readonly uint ReadUInt32LittleEndian(int offset) => PageSerializer.ReadUInt32(Span[offset..]);
 
         /// <summary>
         /// Writes a uint32 to the buffer using PageSerializer.
@@ -280,10 +267,7 @@ public sealed class DatabaseFile : IDisposable
         /// <param name="offset">The offset.</param>
         /// <param name="value">The value.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteUInt32LittleEndian(int offset, uint value)
-        {
-            PageSerializer.WriteUInt32(this.buffer[offset..], value);
-        }
+        public readonly void WriteUInt32LittleEndian(int offset, uint value) => PageSerializer.WriteUInt32(Span[offset..], value);
 
         /// <summary>
         /// Reads an int32 from the buffer using PageSerializer.
@@ -291,10 +275,7 @@ public sealed class DatabaseFile : IDisposable
         /// <param name="offset">The offset.</param>
         /// <returns>The int32 value.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int ReadInt32LittleEndian(int offset)
-        {
-            return PageSerializer.ReadInt32(this.buffer[offset..]);
-        }
+        public readonly int ReadInt32LittleEndian(int offset) => PageSerializer.ReadInt32(Span[offset..]);
 
         /// <summary>
         /// Writes an int32 to the buffer using PageSerializer.
@@ -302,9 +283,6 @@ public sealed class DatabaseFile : IDisposable
         /// <param name="offset">The offset.</param>
         /// <param name="value">The value.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteInt32LittleEndian(int offset, int value)
-        {
-            PageSerializer.WriteInt32(this.buffer[offset..], value);
-        }
+        public readonly void WriteInt32LittleEndian(int offset, int value) => PageSerializer.WriteInt32(Span[offset..], value);
     }
 }

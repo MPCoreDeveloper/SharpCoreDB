@@ -85,6 +85,14 @@ public partial class Table : ITable, IDisposable
     private readonly Dictionary<string, IndexMetadata> registeredIndexes = [];
     private readonly HashSet<string> loadedIndexes = [];
     private readonly HashSet<string> staleIndexes = [];
+    
+    // 🔥 CRITICAL FIX: Map index NAMES to COLUMN names for proper DROP INDEX support
+    // SQL: CREATE INDEX idx_email ON users(email) 
+    //      → indexNameToColumn["idx_email"] = "email"
+    // SQL: DROP INDEX idx_email
+    //      → lookup "idx_email" → find "email" → remove hash index on "email"
+    private readonly Dictionary<string, string> indexNameToColumn = [];
+    
     private IStorage? storage;
     private readonly ReaderWriterLockSlim rwLock = new(LockRecursionPolicy.SupportsRecursion);
     private bool isReadOnly;

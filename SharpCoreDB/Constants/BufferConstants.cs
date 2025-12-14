@@ -86,12 +86,13 @@ public static class BufferConstants
     public const int LOW_MEMORY_PAGE_CACHE_CAPACITY = 100;
 
     /// <summary>
-    /// Parallel SIMD threshold for columnar aggregates (10,000 rows).
+    /// Parallel SIMD threshold for columnar aggregates (50,000 rows).
     /// Below this threshold: Use single-threaded SIMD
     /// Above this threshold: Use parallel SIMD with partitioning
     /// Rationale: Parallel overhead (thread creation, synchronization) is only worth it for larger datasets.
+    /// For 10k rows, single-threaded SIMD is faster due to lower overhead.
     /// </summary>
-    public const int PARALLEL_SIMD_THRESHOLD = 10_000;
+    public const int PARALLEL_SIMD_THRESHOLD = 50_000;
 
     /// <summary>
     /// Minimum partition size for parallel SIMD operations (1,000 rows).

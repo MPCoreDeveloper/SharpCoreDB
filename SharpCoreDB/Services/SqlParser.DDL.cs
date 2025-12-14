@@ -64,35 +64,68 @@ public partial class SqlParser
             }
         }
 
-        // FIXED: Properly dispose existing table to release file handles
+        var dataFilePath = Path.Combine(this.dbPath, tableName + PersistenceConstants.TableFileExtension);
+
+        // ✅ CRITICAL FIX: Complete cleanup of existing table + indexes + data file
         if (this.tables.TryGetValue(tableName, out var existingTable))
         {
+            var oldDataFile = existingTable.DataFile;
+            
+            // 🔥 PERFORMANCE CRITICAL: Clear ALL indexes FIRST to prevent reading stale data
+            existingTable.ClearAllIndexes();
+            
+            // Remove from dictionary and dispose to release file handles
             this.tables.Remove(tableName);
             
-            // Dispose the table to release all resources
             if (existingTable is IDisposable disposable)
             {
                 disposable.Dispose();
             }
             
-            // Force garbage collection to release file handles
+            // Force GC to release file handles immediately
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
             
             // Give OS time to close file handles
             System.Threading.Thread.Sleep(100);
+            
+            // Delete old data file explicitly
+            if (File.Exists(oldDataFile))
+            {
+                try
+                {
+                    File.Delete(oldDataFile);
+                    
+                    // Wait for deletion to complete
+                    for (int attempt = 0; attempt < 10 && File.Exists(oldDataFile); attempt++)
+                    {
+                        System.Threading.Thread.Sleep(50);
+                    }
+                }
+                catch (IOException)
+                {
+                    // If deletion fails, truncation below will handle it
+                }
+            }
         }
-
-        var dataFilePath = Path.Combine(this.dbPath, tableName + PersistenceConstants.TableFileExtension);
         
-        // FIXED: Use FileMode.Create which truncates existing files atomically
-        // This ensures we always start with a truly empty file
+        // ✅ ALWAYS use FileMode.Create to guarantee 0-byte file
         using (var fs = File.Create(dataFilePath))
         {
-            // File created and immediately flushed to disk
+            fs.Flush(true); // Force flush to disk
         }
         
+        // ✅ VALIDATION: Verify file is truly empty
+        var fileInfo = new FileInfo(dataFilePath);
+        if (fileInfo.Length != 0)
+        {
+            throw new InvalidOperationException(
+                $"Failed to create empty data file for table '{tableName}'. " +
+                $"File '{dataFilePath}' has {fileInfo.Length} bytes instead of 0.");
+        }
+        
+        // Create brand new table with clean state
         var table = new Table(this.storage, this.isReadOnly)
         {
             Name = tableName,
@@ -106,13 +139,12 @@ public partial class SqlParser
         this.tables[tableName] = table;
         wal?.Log(sql);
         
-        // Auto-create hash index on primary key for faster lookups
+        // Auto-create hash indexes (will be built lazily on first query)
         if (primaryKeyIndex >= 0)
         {
             table.CreateHashIndex(table.Columns[primaryKeyIndex]);
         }
         
-        // Auto-create hash indexes on all columns for faster WHERE lookups
         for (int i = 0; i < columns.Count; i++)
         {
             if (i != primaryKeyIndex)
@@ -140,6 +172,11 @@ public partial class SqlParser
             throw new InvalidOperationException("CREATE INDEX requires ON clause");
         }
 
+        // 🔥 CRITICAL FIX: Extract index NAME (not just column name)
+        // SQL: CREATE INDEX idx_email ON users(email)
+        //      parts[2] = "idx_email" (the index NAME)
+        var indexName = parts[2]; // Extract index name (e.g., "idx_email")
+
         // Extract table name - handle case where parenthesis is attached (e.g., "users(email)")
         var tableNameRaw = parts[onIdx + 1];
         var parenIdx = tableNameRaw.IndexOf('(');
@@ -160,9 +197,9 @@ public partial class SqlParser
 
         var columnName = sql.Substring(columnStart + 1, columnEnd - columnStart - 1).Trim();
 
-        // Create hash index on the table (registers it for lazy loading)
-        // Index will be built automatically when first SELECT query uses it
-        this.tables[tableName].CreateHashIndex(columnName);
+        // 🔥 CRITICAL FIX: Create named hash index with BOTH index name and column name
+        // This allows DROP INDEX idx_email to work correctly
+        this.tables[tableName].CreateHashIndex(indexName, columnName);
         
         wal?.Log(sql);
     }
@@ -198,21 +235,23 @@ public partial class SqlParser
         var table = this.tables[tableName];
         var dataFile = table.DataFile;
         
-        // FIXED: Remove from dictionary and dispose FIRST to release file handles
+        // 🔥 CRITICAL: Clear ALL indexes FIRST to prevent any references to data
+        table.ClearAllIndexes();
+        
+        // Remove from dictionary and dispose to release file handles
         this.tables.Remove(tableName);
         
-        // Dispose the table to release all resources including file handles
         if (table is IDisposable disposable)
         {
             disposable.Dispose();
         }
         
-        // Force garbage collection to release file handles immediately
+        // Force GC to release file handles immediately
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
         
-        // FIXED: Robust file deletion with proper retry and verification
+        // ✅ ROBUST file deletion with retry and verification
         if (File.Exists(dataFile))
         {
             bool deleted = false;
@@ -222,7 +261,7 @@ public partial class SqlParser
             {
                 try
                 {
-                    // Verify file is not locked by trying to open it exclusively first
+                    // Verify file is not locked by opening exclusively first
                     using (var testStream = new FileStream(dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                     {
                         // If we can open exclusively, we can delete
@@ -233,7 +272,7 @@ public partial class SqlParser
                 }
                 catch (IOException) when (attempt < 4)
                 {
-                    // File is locked or in use - wait with exponential backoff
+                    // File is locked - wait with exponential backoff
                     int delayMs = 50 * (1 << attempt); // 50, 100, 200, 400, 800 ms
                     System.Threading.Thread.Sleep(delayMs);
                 }
@@ -244,15 +283,12 @@ public partial class SqlParser
                 }
             }
             
-            // FIXED: Verify deletion succeeded
+            // ✅ VALIDATION: Verify deletion succeeded
             if (File.Exists(dataFile))
             {
-                // File still exists after all retry attempts
-                // This is a serious error - don't allow silent failure
                 throw new InvalidOperationException(
                     $"Failed to delete data file '{dataFile}' after DROP TABLE. " +
-                    $"The file may be locked by another process. " +
-                    $"Close all connections to this database and retry.");
+                    $"The file may be locked by another process.");
             }
         }
         
@@ -261,6 +297,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes DROP INDEX statement.
+    /// FIXED: Now correctly handles named indexes (e.g., DROP INDEX idx_email).
     /// </summary>
     private void ExecuteDropIndex(string[] parts, string sql, IWAL? wal)
     {
@@ -277,12 +314,17 @@ public partial class SqlParser
             indexName = parts[2];
         }
         
+        // 🔥 CRITICAL FIX: Search ALL tables and use RemoveHashIndex which supports index names
+        // Previously used HasHashIndex which only checked column names
         bool found = false;
-        foreach (var table in this.tables.Values.Where(t => t.HasHashIndex(indexName)))
+        foreach (var table in this.tables.Values)
         {
-            table.RemoveHashIndex(indexName);
-            found = true;
-            break;
+            // RemoveHashIndex now supports both index names and column names
+            if (table.RemoveHashIndex(indexName))
+            {
+                found = true;
+                break; // Found and removed
+            }
         }
         
         if (!found && !ifExists)

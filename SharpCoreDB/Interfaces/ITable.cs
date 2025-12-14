@@ -84,6 +84,14 @@ public interface ITable
     void CreateHashIndex(string columnName);
 
     /// <summary>
+    /// Creates a named hash index on the specified column.
+    /// Supports SQL syntax: CREATE INDEX idx_name ON table(column).
+    /// </summary>
+    /// <param name="indexName">The index name (e.g., "idx_email").</param>
+    /// <param name="columnName">The column name to index (e.g., "email").</param>
+    void CreateHashIndex(string indexName, string columnName);
+
+    /// <summary>
     /// Checks if a hash index exists for the specified column.
     /// </summary>
     /// <param name="columnName">The column name.</param>
@@ -126,4 +134,11 @@ public interface ITable
     /// <param name="columnName">The column name.</param>
     /// <returns>True if index was removed, false if it didn't exist.</returns>
     bool RemoveHashIndex(string columnName);
+
+    /// <summary>
+    /// Clears all indexes (hash indexes, registrations, and state).
+    /// Used when table is dropped or recreated to ensure complete cleanup.
+    /// This prevents stale/corrupt index data from being read after DDL operations.
+    /// </summary>
+    void ClearAllIndexes();
 }

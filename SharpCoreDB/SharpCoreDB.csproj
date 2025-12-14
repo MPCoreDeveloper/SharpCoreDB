@@ -48,7 +48,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**/*.cs" Exclude="SharpCoreDB.Test/**;obj/**;SharpCoreDB.Benchmarks/**" />
+    <Compile Include="**/*.cs" Exclude="SharpCoreDB.Tests/**;obj/**;SharpCoreDB.Benchmarks/**;SharpCoreDB.Demo/**;SharpCoreDB.Extensions/**;SharpCoreDB.EntityFrameworkCore/**" />
     <Compile Remove="obj/**/*.cs" />
   </ItemGroup>
 
@@ -65,13 +65,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="SharpCoreDB.Benchmarks\Benchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\PageCacheQuickTest.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="SharpCoreDB.Benchmarks\Comparison\" />
-    <Folder Include="TestPageCache\" />
+    <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
   </ItemGroup>
 
 </Project>

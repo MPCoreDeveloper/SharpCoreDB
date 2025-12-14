@@ -43,7 +43,7 @@ public class ComparativeInsertBenchmarks : IDisposable
     // Track base ID per iteration to avoid conflicts
     private int currentBaseId = 0;
 
-    [Params(1, 10, 100, 1000)]
+    [Params(1, 10, 100, 1000, 10000)]
     public int RecordCount { get; set; }
 
     [GlobalSetup]

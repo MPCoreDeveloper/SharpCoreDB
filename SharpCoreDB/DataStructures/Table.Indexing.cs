@@ -51,19 +51,39 @@ public partial class Table
     }
 
     /// <summary>
-    /// Creates a hash index on the specified column and builds it immediately.
-    /// Use this when you know the index will be used immediately.
+    /// Creates a named hash index on the specified column for fast WHERE clause lookups.
+    /// This overload supports SQL syntax: CREATE INDEX idx_name ON table(column).
+    /// Uses lazy loading: index is registered but not built until first query.
     /// </summary>
-    /// <param name="columnName">The column name to index.</param>
-    /// <param name="buildImmediately">If true, builds the index from existing data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when column doesn't exist.</exception>
-    public void CreateHashIndex(string columnName, bool buildImmediately)
+    /// <param name="indexName">The index name (e.g., "idx_email").</param>
+    /// <param name="columnName">The column name to index (e.g., "email").</param>
+    /// <exception cref="InvalidOperationException">Thrown when column doesn't exist or index name already used.</exception>
+    public void CreateHashIndex(string indexName, string columnName)
     {
-        CreateHashIndex(columnName);
+        if (!this.Columns.Contains(columnName)) 
+            throw new InvalidOperationException($"Column {columnName} not found");
         
-        if (buildImmediately)
+        this.rwLock.EnterWriteLock();
+        try
         {
-            EnsureIndexLoaded(columnName);
+            // Check if index name already exists
+            if (this.indexNameToColumn.ContainsKey(indexName))
+                throw new InvalidOperationException($"Index {indexName} already exists");
+            
+            // Register the column-based index if not already registered
+            if (!this.registeredIndexes.ContainsKey(columnName))
+            {
+                var colIdx = this.Columns.IndexOf(columnName);
+                var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx]);
+                this.registeredIndexes[columnName] = metadata;
+            }
+            
+            // Map index name to column name
+            this.indexNameToColumn[indexName] = columnName;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
         }
     }
 
@@ -196,9 +216,10 @@ public partial class Table
     public bool HasHashIndex(string columnName) => this.hashIndexes.ContainsKey(columnName);
 
     /// <summary>
-    /// Removes a hash index for the specified column.
+    /// Removes a hash index for the specified column or index name.
+    /// Supports both column-based removal and named index removal.
     /// </summary>
-    /// <param name="columnName">The column name.</param>
+    /// <param name="columnName">The index name (e.g., "idx_email") or column name (e.g., "email").</param>
     /// <returns>True if index was removed, false if it didn't exist.</returns>
     public bool RemoveHashIndex(string columnName)
     {
@@ -206,19 +227,66 @@ public partial class Table
         try
         {
             bool removed = false;
+            string? targetColumn = null;
             
-            if (this.hashIndexes.Remove(columnName))
+            // Check if this is an index name
+            if (this.indexNameToColumn.TryGetValue(columnName, out var mappedColumn))
+            {
+                // It's an index name - remove the mapping and use the column name
+                targetColumn = mappedColumn;
+                this.indexNameToColumn.Remove(columnName);
+                removed = true;
+            }
+            else
+            {
+                // It's a column name directly
+                targetColumn = columnName;
+            }
+            
+            // Remove the actual hash index structures for the column
+            if (this.hashIndexes.Remove(targetColumn))
                 removed = true;
             
-            if (this.registeredIndexes.Remove(columnName))
+            if (this.registeredIndexes.Remove(targetColumn))
                 removed = true;
             
-            if (this.loadedIndexes.Remove(columnName))
+            if (this.loadedIndexes.Remove(targetColumn))
                 removed = true;
             
-            this.staleIndexes.Remove(columnName);
+            this.staleIndexes.Remove(targetColumn);
             
             return removed;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// PERFORMANCE CRITICAL: Clears ALL indexes (hash indexes, registrations, and state).
+    /// Used when table is dropped or recreated to ensure complete cleanup.
+    /// This prevents stale/corrupt index data from being read after DDL operations.
+    /// 
+    /// USAGE:
+    /// - Called by DROP TABLE to clean up before deletion
+    /// - Called by CREATE TABLE to ensure fresh start (if table name is reused)
+    /// - NOT called by normal DML operations (INSERT/UPDATE/DELETE use stale marking)
+    /// </summary>
+    public void ClearAllIndexes()
+    {
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            // Clear all index data structures
+            this.hashIndexes.Clear();
+            this.registeredIndexes.Clear();
+            this.loadedIndexes.Clear();
+            this.staleIndexes.Clear();
+            this.indexNameToColumn.Clear(); // 🔥 CRITICAL: Also clear name→column mapping
+            
+            // Also clear column usage statistics (fresh table = fresh stats)
+            this.columnUsageConcurrent.Clear();
         }
         finally
         {

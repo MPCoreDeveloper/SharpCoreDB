@@ -13,38 +13,89 @@ public partial class Table
 {
     /// <summary>
     /// SIMD-accelerated row scanning for full table scans.
-    /// Uses vectorized operations for faster row boundary detection.
+    /// FIXED: Now correctly handles length-prefixed records written by AppendBytes.
+    /// Previously used legacy BinaryReader which didn't handle length prefixes.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private List<Dictionary<string, object>> ScanRowsWithSimd(byte[] data, string? where)
     {
         var results = new List<Dictionary<string, object>>();
         
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
+        // CRITICAL FIX: Use same length-prefixed reading logic as ReadRowAtPosition
+        // Storage.AppendBytes writes: [4-byte length][data]
+        // So we need to read length prefix, then data, then repeat
         
-        while (ms.Position < ms.Length)
+        int filePosition = 0;
+        ReadOnlySpan<byte> dataSpan = data.AsSpan();
+        
+        while (filePosition < dataSpan.Length)
         {
+            // Read length prefix (4 bytes)
+            if (filePosition + 4 > dataSpan.Length)
+            {
+                // Not enough bytes for length prefix - end of file
+                break;
+            }
+            
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                dataSpan.Slice(filePosition, 4));
+            
+            // Sanity check: record length must be reasonable
+            const int MaxRecordSize = 1_000_000_000; // 1 GB max per record
+            if (recordLength < 0 || recordLength > MaxRecordSize)
+            {
+                // Invalid length - likely corrupt data, stop scanning
+                Console.WriteLine($"⚠️  ScanRowsWithSimd: Invalid record length {recordLength} at position {filePosition}");
+                break;
+            }
+            
+            if (recordLength == 0)
+            {
+                // Empty record (all NULL fields) - skip length prefix and continue
+                filePosition += 4;
+                continue;
+            }
+            
+            // Check if we have enough data for the record
+            if (filePosition + 4 + recordLength > dataSpan.Length)
+            {
+                // Incomplete record - end of file
+                Console.WriteLine($"⚠️  ScanRowsWithSimd: Incomplete record at position {filePosition}: need {recordLength} bytes, have {dataSpan.Length - filePosition - 4}");
+                break;
+            }
+            
+            // Skip length prefix (4 bytes) and read record data
+            int dataOffset = filePosition + 4;
+            ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
+            
+            // Parse the record into a row
             var row = new Dictionary<string, object>();
             bool valid = true;
+            int offset = 0;
             
             for (int i = 0; i < this.Columns.Count; i++)
             {
-                try 
-                { 
-                    row[this.Columns[i]] = ReadTypedValue(reader, this.ColumnTypes[i]); 
+                try
+                {
+                    var value = ReadTypedValueFromSpan(recordData.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                    row[this.Columns[i]] = value;
+                    offset += bytesRead;
                 }
-                catch 
-                { 
-                    valid = false; 
-                    break; 
+                catch
+                {
+                    valid = false;
+                    break;
                 }
             }
             
+            // Add row to results if valid and matches WHERE clause
             if (valid && (string.IsNullOrEmpty(where) || EvaluateWhere(row, where)))
             {
                 results.Add(row);
             }
+            
+            // Move to next record (skip length prefix + data)
+            filePosition += 4 + recordLength;
         }
         
         return results;
