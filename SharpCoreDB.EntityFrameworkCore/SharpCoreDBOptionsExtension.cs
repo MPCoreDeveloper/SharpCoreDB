@@ -5,6 +5,7 @@ namespace SharpCoreDB.EntityFrameworkCore;
 
 /// <summary>
 /// Options extension for configuring SharpCoreDB with Entity Framework Core.
+/// Modern C# 14 with primary constructors and init properties.
 /// </summary>
 public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
 {
@@ -12,18 +13,19 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     private string _connectionString = string.Empty;
 
     /// <summary>
-    /// Initializes a new instance of the SharpCoreDBOptionsExtension class.
+    /// Initializes a new instance of the <see cref="SharpCoreDBOptionsExtension"/> class.
     /// </summary>
     public SharpCoreDBOptionsExtension()
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the SharpCoreDBOptionsExtension class with existing extension.
+    /// Initializes a new instance of the <see cref="SharpCoreDBOptionsExtension"/> class with existing extension.
     /// </summary>
     protected SharpCoreDBOptionsExtension(SharpCoreDBOptionsExtension copyFrom)
         : base(copyFrom)
     {
+        ArgumentNullException.ThrowIfNull(copyFrom); // ? C# 14
         _connectionString = copyFrom._connectionString;
     }
 
@@ -53,6 +55,8 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     /// </summary>
     public override void ApplyServices(IServiceCollection services)
     {
+        ArgumentNullException.ThrowIfNull(services); // ? C# 14
+
         // Register EF Core services for SharpCoreDB
         services.AddEntityFrameworkSharpCoreDB();
 
@@ -73,16 +77,11 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
         }
     }
 
-    private sealed class ExtensionInfo : DbContextOptionsExtensionInfo
+    private sealed class ExtensionInfo(IDbContextOptionsExtension extension) : DbContextOptionsExtensionInfo(extension) // ? C# 14: Primary constructor
     {
         private string? _logFragment;
 
-        public ExtensionInfo(IDbContextOptionsExtension extension)
-            : base(extension)
-        {
-        }
-
-        private new SharpCoreDBOptionsExtension Extension
+        private SharpCoreDBOptionsExtension Extension
             => (SharpCoreDBOptionsExtension)base.Extension;
 
         public override bool IsDatabaseProvider => true;
@@ -99,6 +98,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
 
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
         {
+            ArgumentNullException.ThrowIfNull(debugInfo); // ? C# 14
             debugInfo["SharpCoreDB:ConnectionString"] = (Extension.ConnectionString?.GetHashCode() ?? 0).ToString();
         }
     }

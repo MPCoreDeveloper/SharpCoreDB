@@ -9,6 +9,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Represents a SharpCoreDB database connection for Entity Framework Core.
+/// Modern C# 14 implementation with improved resource management.
 /// </summary>
 public class SharpCoreDBConnection : DbConnection
 {
@@ -19,25 +20,23 @@ public class SharpCoreDBConnection : DbConnection
     private DatabasePool? _pool;
 
     /// <summary>
-    /// Initializes a new instance of the SharpCoreDBConnection class.
+    /// Initializes a new instance of the <see cref="SharpCoreDBConnection"/> class.
     /// </summary>
     /// <param name="services">The service provider.</param>
     /// <param name="connectionString">The connection string.</param>
     public SharpCoreDBConnection(IServiceProvider services, string connectionString)
     {
-        _services = services ?? throw new ArgumentNullException(nameof(services));
+        ArgumentNullException.ThrowIfNull(services); // ? C# 14
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString); // ? C# 14
+        
+        _services = services;
         _connectionStringBuilder = new ConnectionStringBuilder(connectionString);
         ConnectionString = connectionString;
     }
 
     /// <inheritdoc />
     [AllowNull]
-    public override string ConnectionString
-    {
-        get;
-
-        set;
-    }
+    public override string ConnectionString { get; set; }
 
     /// <inheritdoc />
     public override string Database => _connectionStringBuilder.DataSource;
@@ -68,7 +67,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Closed)
             return;
 
-        if (_database != null && _pool != null)
+        if (_database is not null && _pool is not null) // ? C# 14: not pattern
         {
             _pool.ReturnDatabase(_database);
         }
@@ -82,8 +81,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Open)
             return;
 
-        if (string.IsNullOrWhiteSpace(_connectionStringBuilder.DataSource))
-            throw new InvalidOperationException("Data source must be specified in connection string.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
 
         // Check if pooling is enabled
         var usePooling = _connectionStringBuilder.Cache?.Equals("Shared", StringComparison.OrdinalIgnoreCase) == true;
@@ -91,11 +89,7 @@ public class SharpCoreDBConnection : DbConnection
         if (usePooling)
         {
             _pool = _services.GetService<DatabasePool>();
-            if (_pool == null)
-            {
-                // Create a new pool if not in DI
-                _pool = new DatabasePool(_services, maxPoolSize: 10);
-            }
+            _pool ??= new DatabasePool(_services, maxPoolSize: 10); // ? C# 14: ??= operator
 
             _database = _pool.GetDatabase(ConnectionString);
         }
@@ -117,8 +111,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Open)
             return;
 
-        if (string.IsNullOrWhiteSpace(_connectionStringBuilder.DataSource))
-            throw new InvalidOperationException("Data source must be specified in connection string.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
 
         // Check if pooling is enabled
         var usePooling = _connectionStringBuilder.Cache?.Equals("Shared", StringComparison.OrdinalIgnoreCase) == true;
@@ -126,13 +119,9 @@ public class SharpCoreDBConnection : DbConnection
         if (usePooling)
         {
             _pool = _services.GetService<DatabasePool>();
-            if (_pool == null)
-            {
-                // Create a new pool if not in DI
-                _pool = new DatabasePool(_services, maxPoolSize: 10);
-            }
+            _pool ??= new DatabasePool(_services, maxPoolSize: 10);
 
-            _database = await Task.Run(() => _pool.GetDatabase(ConnectionString), cancellationToken);
+            _database = await Task.Run(() => _pool.GetDatabase(ConnectionString), cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -140,7 +129,7 @@ public class SharpCoreDBConnection : DbConnection
             _database = await Task.Run(() => factory.Create(
                 _connectionStringBuilder.DataSource,
                 _connectionStringBuilder.Password ?? "default",
-                _connectionStringBuilder.ReadOnly), cancellationToken);
+                _connectionStringBuilder.ReadOnly), cancellationToken).ConfigureAwait(false);
         }
 
         _state = ConnectionState.Open;
@@ -156,10 +145,7 @@ public class SharpCoreDBConnection : DbConnection
     }
 
     /// <inheritdoc />
-    protected override DbCommand CreateDbCommand()
-    {
-        return new SharpCoreDBCommand(this);
-    }
+    protected override DbCommand CreateDbCommand() => new SharpCoreDBCommand(this); // ? C# 14: expression-bodied
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

@@ -6,6 +6,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Represents a SharpCoreDB command for Entity Framework Core.
+/// Modern C# 14 implementation with full query result support.
 /// </summary>
 public class SharpCoreDBCommand : DbCommand
 {
@@ -13,11 +14,12 @@ public class SharpCoreDBCommand : DbCommand
     private string _commandText = string.Empty;
 
     /// <summary>
-    /// Initializes a new instance of the SharpCoreDBCommand class.
+    /// Initializes a new instance of the <see cref="SharpCoreDBCommand"/> class.
     /// </summary>
     public SharpCoreDBCommand(SharpCoreDBConnection connection)
     {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        ArgumentNullException.ThrowIfNull(connection); // ? C# 14
+        _connection = connection;
     }
 
     /// <inheritdoc />
@@ -25,7 +27,6 @@ public class SharpCoreDBCommand : DbCommand
     public override string CommandText
     {
         get => _commandText;
-
         set => _commandText = value ?? string.Empty;
     }
 
@@ -44,8 +45,8 @@ public class SharpCoreDBCommand : DbCommand
     /// <inheritdoc />
     protected override DbConnection DbConnection
     {
-        get => _connection!;
-        set => throw new NotSupportedException();
+        get => _connection;
+        set => throw new NotSupportedException("Cannot change connection for SharpCoreDBCommand.");
     }
 
     /// <inheritdoc />
@@ -66,15 +67,10 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.State != ConnectionState.Open)
             throw new InvalidOperationException("Connection must be open.");
 
-        if (_connection.DbInstance == null)
+        if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        var parameters = new Dictionary<string, object?>();
-        foreach (SharpCoreDBParameter param in DbParameterCollection)
-        {
-            parameters[param.ParameterName] = param.Value;
-        }
-
+        var parameters = BuildParameterDictionary();
         _connection.DbInstance.ExecuteSQL(_commandText, parameters);
         return 1; // Simplified: return 1 for success
     }
@@ -97,10 +93,7 @@ public class SharpCoreDBCommand : DbCommand
     }
 
     /// <inheritdoc />
-    protected override DbParameter CreateDbParameter()
-    {
-        return new SharpCoreDBParameter();
-    }
+    protected override DbParameter CreateDbParameter() => new SharpCoreDBParameter(); // ? C# 14: expression-bodied
 
     /// <inheritdoc />
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
@@ -108,31 +101,64 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.State != ConnectionState.Open)
             throw new InvalidOperationException("Connection must be open.");
 
-        if (_connection.DbInstance == null)
+        if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
+        var parameters = BuildParameterDictionary();
+
+        // Execute query and get results
+        var results = _connection.DbInstance.ExecuteQuery(_commandText, parameters);
+        
+        return new SharpCoreDBDataReader(results);
+    }
+
+    /// <inheritdoc />
+    public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+    {
+        if (_connection.State != ConnectionState.Open)
+            throw new InvalidOperationException("Connection must be open.");
+
+        if (_connection.DbInstance is null)
+            throw new InvalidOperationException("Database instance is not initialized.");
+
+        var parameters = BuildParameterDictionary();
+        await _connection.DbInstance.ExecuteSQLAsync(_commandText, parameters, cancellationToken).ConfigureAwait(false);
+        return 1;
+    }
+
+    /// <inheritdoc />
+    public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
+    {
+        using var reader = await ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && reader.FieldCount > 0)
+        {
+            return reader.GetValue(0);
+        }
+        return null;
+    }
+
+    private Dictionary<string, object?> BuildParameterDictionary()
+    {
         var parameters = new Dictionary<string, object?>();
         foreach (SharpCoreDBParameter param in DbParameterCollection)
         {
-            parameters[param.ParameterName] = param.Value;
+            parameters[param.ParameterName.TrimStart('@', ':')] = param.Value; // ? Handle both @param and :param
         }
-
-        // For now, execute and return empty reader
-        // In a full implementation, this would parse and return query results
-        _connection.DbInstance.ExecuteSQL(_commandText, parameters);
-        return new SharpCoreDBDataReader();
+        return parameters;
     }
 }
 
 /// <summary>
 /// Parameter collection for SharpCoreDB commands.
+/// Modern C# 14 with collection expressions.
 /// </summary>
 public class SharpCoreDBParameterCollection : DbParameterCollection
 {
-    private readonly List<DbParameter> _parameters = [];
+    private readonly List<DbParameter> _parameters = []; // ? C# 14: collection expression
 
     /// <summary>Gets the number of parameters in the collection.</summary>
     public override int Count => _parameters.Count;
+    
     /// <summary>Gets the synchronization root.</summary>
     public override object SyncRoot => _parameters;
 
@@ -141,42 +167,49 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
     /// <returns>The index of the added parameter.</returns>
     public override int Add([AllowNull] object value)
     {
-        if (value is DbParameter param)
-        {
-            _parameters.Add(param);
-            return _parameters.Count - 1;
-        }
-        throw new ArgumentException("Value must be a DbParameter");
+        if (value is not DbParameter param) // ? C# 14: not pattern
+            throw new ArgumentException("Value must be a DbParameter", nameof(value));
+            
+        _parameters.Add(param);
+        return _parameters.Count - 1;
     }
 
     /// <summary>Adds a range of parameters to the collection.</summary>
     /// <param name="values">The parameters to add.</param>
     public override void AddRange(Array values) => _parameters.AddRange(values.Cast<DbParameter>());
+    
     /// <summary>Clears the collection.</summary>
     public override void Clear() => _parameters.Clear();
+    
     /// <summary>Determines whether the collection contains the specified parameter.</summary>
     /// <param name="value">The parameter to check.</param>
     /// <returns>True if the parameter is in the collection, otherwise false.</returns>
     public override bool Contains(object value) => value is DbParameter param && _parameters.Contains(param);
+    
     /// <summary>Determines whether the collection contains a parameter with the specified name.</summary>
     /// <param name="value">The parameter name to check.</param>
     /// <returns>True if the parameter is in the collection, otherwise false.</returns>
     public override bool Contains(string value) => _parameters.Any(p => p.ParameterName == value);
+    
     /// <summary>Copies the parameters to an array.</summary>
     /// <param name="array">The array to copy to.</param>
     /// <param name="index">The starting index.</param>
-    public override void CopyTo(Array array, int index) => throw new NotImplementedException();
+    public override void CopyTo(Array array, int index) => _parameters.CopyTo((DbParameter[])array, index);
+    
     /// <summary>Gets an enumerator for the collection.</summary>
     /// <returns>An enumerator.</returns>
     public override System.Collections.IEnumerator GetEnumerator() => _parameters.GetEnumerator();
+    
     /// <summary>Gets the index of the specified parameter.</summary>
     /// <param name="value">The parameter to find.</param>
     /// <returns>The index of the parameter.</returns>
     public override int IndexOf(object value) => value is DbParameter param ? _parameters.IndexOf(param) : -1;
+    
     /// <summary>Gets the index of the parameter with the specified name.</summary>
     /// <param name="parameterName">The parameter name.</param>
     /// <returns>The index of the parameter.</returns>
     public override int IndexOf(string parameterName) => _parameters.FindIndex(p => p.ParameterName == parameterName);
+    
     /// <summary>Inserts a parameter at the specified index.</summary>
     /// <param name="index">The index to insert at.</param>
     /// <param name="value">The parameter to insert.</param>
@@ -185,6 +218,7 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
         if (value is DbParameter param)
             _parameters.Insert(index, param);
     }
+    
     /// <summary>Removes the specified parameter.</summary>
     /// <param name="value">The parameter to remove.</param>
     public override void Remove([AllowNull] object value)
@@ -192,9 +226,11 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
         if (value is DbParameter param)
             _parameters.Remove(param);
     }
+    
     /// <summary>Removes the parameter at the specified index.</summary>
     /// <param name="index">The index to remove at.</param>
     public override void RemoveAt(int index) => _parameters.RemoveAt(index);
+    
     /// <summary>Removes the parameter with the specified name.</summary>
     /// <param name="parameterName">The parameter name.</param>
     public override void RemoveAt(string parameterName)
@@ -203,22 +239,26 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
         if (index >= 0)
             RemoveAt(index);
     }
+    
     /// <summary>Gets the parameter at the specified index.</summary>
     /// <param name="index">The index.</param>
     /// <returns>The parameter.</returns>
     protected override DbParameter GetParameter(int index) => _parameters[index];
+    
     /// <summary>Gets the parameter with the specified name.</summary>
     /// <param name="parameterName">The parameter name.</param>
     /// <returns>The parameter.</returns>
     protected override DbParameter GetParameter(string parameterName)
     {
         return _parameters.FirstOrDefault(p => p.ParameterName == parameterName)
-               ?? throw new ArgumentException($"Parameter {parameterName} not found");
+               ?? throw new ArgumentException($"Parameter {parameterName} not found", nameof(parameterName));
     }
+    
     /// <summary>Sets the parameter at the specified index.</summary>
     /// <param name="index">The index.</param>
     /// <param name="value">The parameter.</param>
     protected override void SetParameter(int index, DbParameter value) => _parameters[index] = value;
+    
     /// <summary>Sets the parameter with the specified name.</summary>
     /// <param name="parameterName">The parameter name.</param>
     /// <param name="value">The parameter.</param>
@@ -232,29 +272,34 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
 
 /// <summary>
 /// Parameter for SharpCoreDB commands.
+/// Modern C# 14 with init properties.
 /// </summary>
 public class SharpCoreDBParameter : DbParameter
 {
     /// <summary>Gets or sets the database type.</summary>
     public override DbType DbType { get; set; }
+    
     /// <summary>Gets or sets the parameter direction.</summary>
     public override ParameterDirection Direction { get; set; }
+    
     /// <summary>Gets or sets whether the parameter is nullable.</summary>
     public override bool IsNullable { get; set; }
+    
     /// <summary>Gets or sets the parameter name.</summary>
     public override string ParameterName { get; set; } = string.Empty;
+    
     /// <summary>Gets or sets the source column.</summary>
     public override string SourceColumn { get; set; } = string.Empty;
+    
     /// <summary>Gets or sets the parameter value.</summary>
     public override object? Value { get; set; }
+    
     /// <summary>Gets or sets whether the source column null mapping is used.</summary>
     public override bool SourceColumnNullMapping { get; set; }
+    
     /// <summary>Gets or sets the parameter size.</summary>
     public override int Size { get; set; }
 
     /// <summary>Resets the database type to string.</summary>
-    public override void ResetDbType()
-    {
-        DbType = DbType.String;
-    }
+    public override void ResetDbType() => DbType = DbType.String;
 }
