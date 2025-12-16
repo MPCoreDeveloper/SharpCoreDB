@@ -17,6 +17,7 @@ public class DapperConnection(IDatabase database, string connectionString) : DbC
     private readonly IDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
     private readonly string _connectionString = connectionString ?? string.Empty;
     private ConnectionState _state = ConnectionState.Closed;
+    private DapperTransaction? _currentTransaction;
 
     /// <inheritdoc />
     public override string ConnectionString
@@ -61,7 +62,22 @@ public class DapperConnection(IDatabase database, string connectionString) : DbC
     /// <inheritdoc />
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
     {
-        throw new NotSupportedException("Transactions are not yet implemented in SharpCoreDB");
+        if (_state != ConnectionState.Open)
+            throw new InvalidOperationException("Connection must be open to begin a transaction");
+
+        if (_currentTransaction != null)
+            throw new InvalidOperationException("A transaction is already active");
+
+        _currentTransaction = new DapperTransaction(this, isolationLevel);
+        return _currentTransaction;
+    }
+
+    /// <summary>
+    /// Clears the current transaction reference.
+    /// </summary>
+    internal void ClearTransaction()
+    {
+        _currentTransaction = null;
     }
 
     /// <inheritdoc />
@@ -127,8 +143,13 @@ internal class DapperCommand : DbCommand
         if (string.IsNullOrWhiteSpace(_commandText))
             throw new InvalidOperationException("CommandText is not set");
 
-        _database.ExecuteSQL(_commandText);
-        return null; // Simplified implementation
+        var results = _database.ExecuteQuery(_commandText, ConvertParametersToDictionary());
+        
+        if (results.Count == 0)
+            return null;
+        
+        var firstRow = results[0];
+        return firstRow.Values.FirstOrDefault();
     }
 
     public override void Prepare()
@@ -143,7 +164,23 @@ internal class DapperCommand : DbCommand
 
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
     {
-        throw new NotSupportedException("DataReader not yet implemented for SharpCoreDB");
+        if (string.IsNullOrWhiteSpace(_commandText))
+            throw new InvalidOperationException("CommandText is not set");
+
+        // Execute the query and get results
+        var results = _database.ExecuteQuery(_commandText, ConvertParametersToDictionary());
+        
+        return new DapperDataReader(results);
+    }
+
+    private Dictionary<string, object?> ConvertParametersToDictionary()
+    {
+        var parameters = new Dictionary<string, object?>();
+        foreach (DbParameter param in DbParameterCollection)
+        {
+            parameters[param.ParameterName] = param.Value;
+        }
+        return parameters;
     }
 }
 
@@ -231,7 +268,7 @@ internal class DapperParameterCollection : DbParameterCollection
 /// <summary>
 /// Provides a DbParameter implementation.
 /// </summary>
-internal class DapperParameter : DbParameter
+public class DapperParameter : DbParameter
 {
     public override DbType DbType { get; set; }
     public override ParameterDirection Direction { get; set; }

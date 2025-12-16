@@ -67,7 +67,7 @@ public class ComprehensiveBenchmarkSuite
                 engine.CommitAsync().GetAwaiter().GetResult();
                 sw.Stop();
 
-                output.WriteLine();
+                output.WriteLine("");
                 output.WriteLine($"? Inserted 1M records in {sw.Elapsed.TotalSeconds:F1}s");
                 output.WriteLine($"   Throughput: {1_000_000 / sw.Elapsed.TotalSeconds:N0} inserts/sec");
                 output.WriteLine($"   Avg: {sw.Elapsed.TotalMilliseconds / 1_000_000:F3} ms/insert");
@@ -143,7 +143,7 @@ public class ComprehensiveBenchmarkSuite
 
                 sw.Stop();
 
-                output.WriteLine();
+                output.WriteLine("");
                 output.WriteLine($"? Completed threads: {completedThreads}/{threadCount}");
                 output.WriteLine($"   Total inserts: {completedThreads * insertsPerThread:N0}");
                 output.WriteLine($"   Time: {sw.Elapsed.TotalSeconds:F1}s");
@@ -256,7 +256,7 @@ public class ComprehensiveBenchmarkSuite
 
                 sw.Stop();
 
-                output.WriteLine();
+                output.WriteLine("");
                 output.WriteLine($"? Completed mixed workload test");
                 output.WriteLine($"   Duration: {sw.Elapsed.TotalSeconds:F1}s");
                 output.WriteLine($"   Reads: {readCount:N0} ({readCount / sw.Elapsed.TotalSeconds:N0} reads/sec)");
@@ -331,7 +331,7 @@ public class ComprehensiveBenchmarkSuite
             var memoryAfter = GC.GetTotalMemory(true);
             var memoryGrowth = (memoryAfter - memoryBefore) / 1024.0 / 1024.0;
 
-            output.WriteLine();
+            output.WriteLine("");
             output.WriteLine($"? Memory test completed");
             output.WriteLine($"   Memory after: {memoryAfter / 1024.0 / 1024.0:F2} MB");
             output.WriteLine($"   Growth: {memoryGrowth:F2} MB");
@@ -391,7 +391,7 @@ public class ComprehensiveBenchmarkSuite
                 engine.CommitAsync().GetAwaiter().GetResult();
                 sw.Stop();
 
-                output.WriteLine();
+                output.WriteLine("");
                 output.WriteLine($"? Inserted 100 × 10MB blobs in {sw.Elapsed.TotalSeconds:F1}s");
                 output.WriteLine($"   Throughput: {(100.0 * 10) / sw.Elapsed.TotalSeconds:F2} MB/s");
 
