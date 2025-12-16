@@ -7,23 +7,16 @@ namespace SharpCoreDB.Extensions;
 /// <summary>
 /// Provides an IDbConnection wrapper for SharpCoreDB that works with Dapper.
 /// </summary>
-public class DapperConnection : DbConnection
+/// <remarks>
+/// Initializes a new instance of the DapperConnection class.
+/// </remarks>
+/// <param name="database">The SharpCoreDB database instance.</param>
+/// <param name="connectionString">The connection string.</param>
+public class DapperConnection(IDatabase database, string connectionString) : DbConnection
 {
-    private readonly IDatabase _database;
-    private readonly string _connectionString;
-    private ConnectionState _state;
-
-    /// <summary>
-    /// Initializes a new instance of the DapperConnection class.
-    /// </summary>
-    /// <param name="database">The SharpCoreDB database instance.</param>
-    /// <param name="connectionString">The connection string.</param>
-    public DapperConnection(IDatabase database, string connectionString)
-    {
-        _database = database ?? throw new ArgumentNullException(nameof(database));
-        _connectionString = connectionString ?? string.Empty;
-        _state = ConnectionState.Closed;
-    }
+    private readonly IDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
+    private readonly string _connectionString = connectionString ?? string.Empty;
+    private ConnectionState _state = ConnectionState.Closed;
 
     /// <inheritdoc />
     public override string ConnectionString

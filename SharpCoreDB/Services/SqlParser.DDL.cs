@@ -7,6 +7,7 @@ namespace SharpCoreDB.Services;
 using SharpCoreDB.Constants;
 using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage.Hybrid;
 
 /// <summary>
 /// SqlParser partial class containing DDL (Data Definition Language) operations:
@@ -15,7 +16,9 @@ using SharpCoreDB.Interfaces;
 public partial class SqlParser
 {
     /// <summary>
-    /// Executes CREATE TABLE statement.
+    /// Executes CREATE TABLE statement with optional STORAGE clause.
+    /// Syntax: CREATE TABLE name (columns...) [STORAGE = COLUMNAR|PAGE_BASED]
+    /// Default storage mode is COLUMNAR for backward compatibility.
     /// </summary>
     private void ExecuteCreateTable(string sql, string[] parts, IWAL? wal)
     {
@@ -33,6 +36,31 @@ public partial class SqlParser
         var columnTypes = new List<DataType>();
         var isAuto = new List<bool>();
         var primaryKeyIndex = -1;
+        
+        // ✅ NEW: Parse STORAGE clause (defaults to COLUMNAR)
+        var storageMode = StorageMode.Columnar;
+        var afterParenIndex = colsEnd + 1;
+        if (afterParenIndex < sql.Length)
+        {
+            var remainingSQL = sql.Substring(afterParenIndex).Trim().ToUpperInvariant();
+            if (remainingSQL.StartsWith("STORAGE"))
+            {
+                // Extract: STORAGE = COLUMNAR|PAGE_BASED
+                var storageParts = remainingSQL.Split('=', StringSplitOptions.RemoveEmptyEntries);
+                if (storageParts.Length >= 2)
+                {
+                    var modeStr = storageParts[1].Trim();
+                    storageMode = modeStr switch
+                    {
+                        "COLUMNAR" => StorageMode.Columnar,
+                        "PAGE_BASED" => StorageMode.PageBased,
+                        "HYBRID" => StorageMode.Hybrid,
+                        _ => throw new InvalidOperationException(
+                            $"Invalid storage mode '{modeStr}'. Valid modes: COLUMNAR, PAGE_BASED, HYBRID")
+                    };
+                }
+            }
+        }
         
         for (int i = 0; i < colDefs.Count; i++)
         {
@@ -64,13 +92,15 @@ public partial class SqlParser
             }
         }
 
-        var dataFilePath = Path.Combine(this.dbPath, tableName + PersistenceConstants.TableFileExtension);
+        // ✅ NEW: Choose file extension based on storage mode
+        var fileExtension = storageMode == StorageMode.PageBased 
+            ? ".pages" 
+            : PersistenceConstants.TableFileExtension;
+        var dataFilePath = Path.Combine(this.dbPath, tableName + fileExtension);
 
         // ✅ CRITICAL FIX: Complete cleanup of existing table + indexes + data file
         if (this.tables.TryGetValue(tableName, out var existingTable))
         {
-            var oldDataFile = existingTable.DataFile;
-            
             // 🔥 PERFORMANCE CRITICAL: Clear ALL indexes FIRST to prevent reading stale data
             existingTable.ClearAllIndexes();
             
@@ -82,30 +112,29 @@ public partial class SqlParser
                 disposable.Dispose();
             }
             
-            // Force GC to release file handles immediately
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            
             // Give OS time to close file handles
             System.Threading.Thread.Sleep(100);
             
-            // Delete old data file explicitly
-            if (File.Exists(oldDataFile))
+            // Delete old data file explicitly (both .dat and .pages files)
+            foreach (var ext in new[] { PersistenceConstants.TableFileExtension, ".pages", ".pages.freelist" })
             {
-                try
+                var fileToDelete = Path.Combine(this.dbPath, tableName + ext);
+                if (File.Exists(fileToDelete))
                 {
-                    File.Delete(oldDataFile);
-                    
-                    // Wait for deletion to complete
-                    for (int attempt = 0; attempt < 10 && File.Exists(oldDataFile); attempt++)
+                    try
                     {
-                        System.Threading.Thread.Sleep(50);
+                        File.Delete(fileToDelete);
+                        
+                        // Wait for deletion to complete
+                        for (int attempt = 0; attempt < 10 && File.Exists(fileToDelete); attempt++)
+                        {
+                            System.Threading.Thread.Sleep(50);
+                        }
                     }
-                }
-                catch (IOException)
-                {
-                    // If deletion fails, truncation below will handle it
+                    catch (IOException)
+                    {
+                        // If deletion fails, truncation below will handle it
+                    }
                 }
             }
         }
@@ -134,22 +163,27 @@ public partial class SqlParser
             IsAuto = isAuto,
             PrimaryKeyIndex = primaryKeyIndex,
             DataFile = dataFilePath,
+            StorageMode = storageMode  // ✅ NEW: Set storage mode
         };
         
         this.tables[tableName] = table;
         wal?.Log(sql);
         
-        // Auto-create hash indexes (will be built lazily on first query)
-        if (primaryKeyIndex >= 0)
+        // ✅ NEW: Only create indexes for columnar mode (page-based uses B-trees)
+        if (storageMode == StorageMode.Columnar)
         {
-            table.CreateHashIndex(table.Columns[primaryKeyIndex]);
-        }
-        
-        for (int i = 0; i < columns.Count; i++)
-        {
-            if (i != primaryKeyIndex)
+            // Auto-create hash indexes (will be built lazily on first query)
+            if (primaryKeyIndex >= 0)
             {
-                table.CreateHashIndex(columns[i]);
+                table.CreateHashIndex(table.Columns[primaryKeyIndex]);
+            }
+            
+            for (int i = 0; i < columns.Count; i++)
+            {
+                if (i != primaryKeyIndex)
+                {
+                    table.CreateHashIndex(columns[i]);
+                }
             }
         }
     }
@@ -246,11 +280,6 @@ public partial class SqlParser
             disposable.Dispose();
         }
         
-        // Force GC to release file handles immediately
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        
         // ✅ ROBUST file deletion with retry and verification
         if (File.Exists(dataFile))
         {
@@ -316,19 +345,10 @@ public partial class SqlParser
         
         // 🔥 CRITICAL FIX: Search ALL tables and use RemoveHashIndex which supports index names
         // Previously used HasHashIndex which only checked column names
-        bool found = false;
-        foreach (var table in this.tables.Values)
-        {
-            // RemoveHashIndex now supports both index names and column names
-            if (table.RemoveHashIndex(indexName))
-            {
-                found = true;
-                break; // Found and removed
-            }
-        }
+        bool found = this.tables.Values.Any(table => table.RemoveHashIndex(indexName));
         
         if (!found && !ifExists)
-            throw new InvalidOperationException($"Index {indexName} does not exist");
+            throw new InvalidOperationException($"{indexName} is not a table index.");
         
         if (found)
         {

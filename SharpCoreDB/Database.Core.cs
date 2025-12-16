@@ -70,7 +70,7 @@ public partial class Database : IDatabase, IDisposable
             pageCache = new(this.config.PageCacheCapacity, this.config.PageSize);  // ✅ C# 14: target-typed new
         }
         
-        storage = new Storage(crypto, masterKey, this.config, pageCache);
+        storage = new Services.Storage(crypto, masterKey, this.config, pageCache);
         userService = new UserService(crypto, storage, _dbPath);
 
         // Initialize query cache if enabled

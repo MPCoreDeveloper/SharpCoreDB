@@ -155,4 +155,42 @@ public static class BufferConstants
         int recommended = Environment.ProcessorCount * WAL_BATCH_SIZE_MULTIPLIER;
         return Math.Clamp(recommended, MIN_WAL_BATCH_SIZE, MAX_WAL_BATCH_SIZE);
     }
+
+    /// <summary>
+    /// Gets the recommended WAL batch size for bulk operations based on total row count.
+    /// Dynamically scales batch size to match data volume.
+    /// </summary>
+    /// <param name="totalRows">Total number of rows to process.</param>
+    /// <returns>Recommended batch size for this operation.</returns>
+    public static int GetBulkOperationBatchSize(int totalRows)
+    {
+        return totalRows switch
+        {
+            < 100 => 10,                      // Small: 10 rows per batch
+            < 1_000 => 100,                   // Medium: 100 rows per batch
+            < 10_000 => 1_000,                // Large: 1K rows per batch
+            < 100_000 => 5_000,               // Very large: 5K rows per batch
+            _ => 10_000                       // Extreme: 10K rows per batch (max)
+        };
+    }
+
+    /// <summary>
+    /// Gets the recommended WAL buffer size for bulk operations.
+    /// Dynamically scales buffer size based on estimated data volume.
+    /// </summary>
+    /// <param name="totalRows">Total number of rows to process.</param>
+    /// <param name="avgRowSizeBytes">Average row size in bytes (default 1KB).</param>
+    /// <returns>Recommended WAL buffer size in bytes.</returns>
+    public static int GetBulkOperationWalBufferSize(int totalRows, int avgRowSizeBytes = 1024)
+    {
+        long estimatedDataSize = (long)totalRows * avgRowSizeBytes;
+        
+        return estimatedDataSize switch
+        {
+            < 1 * 1024 * 1024 => 1 * 1024 * 1024,      // < 1MB: 1MB buffer
+            < 10 * 1024 * 1024 => 4 * 1024 * 1024,     // < 10MB: 4MB buffer
+            < 100 * 1024 * 1024 => 16 * 1024 * 1024,   // < 100MB: 16MB buffer
+            _ => 64 * 1024 * 1024                       // ≥ 100MB: 64MB buffer (max)
+        };
+    }
 }

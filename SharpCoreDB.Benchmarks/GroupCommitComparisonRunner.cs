@@ -24,6 +24,7 @@ public static class GroupCommitComparisonRunner
         Console.WriteLine("?    • SharpCoreDB (Legacy WAL)                                   ?");
         Console.WriteLine("?    • SharpCoreDB (Group Commit FullSync)                        ?");
         Console.WriteLine("?    • SharpCoreDB (Group Commit Async)                           ?");
+        Console.WriteLine("?    • SharpCoreDB (HighSpeedInsert Mode) ?NEW?                   ?");
         Console.WriteLine("?    • SQLite (Memory, WAL mode, No-WAL mode)                     ?");
         Console.WriteLine("?    • LiteDB                                                      ?");
         Console.WriteLine("????????????????????????????????????????????????????????????????????");
@@ -44,6 +45,11 @@ public static class GroupCommitComparisonRunner
             Console.WriteLine("Running GROUP COMMIT SPECIFIC benchmarks...\n");
             RunGroupCommitBenchmarks();
         }
+        else if (args.Length > 0 && args[0] == "--highspeed")
+        {
+            Console.WriteLine("Running HIGH-SPEED INSERT benchmarks...\n");
+            RunHighSpeedInsertBenchmarks();
+        }
         else
         {
             ShowMenu();
@@ -57,7 +63,8 @@ public static class GroupCommitComparisonRunner
         Console.WriteLine("  2. Full Comparison (comprehensive, all scenarios)");
         Console.WriteLine("  3. Group Commit Specific (detailed WAL analysis)");
         Console.WriteLine("  4. Legacy Comparative Benchmarks");
-        Console.WriteLine("  5. All Benchmarks");
+        Console.WriteLine("  5. High-Speed Insert Mode (NEW - BulkInsertAsync)");
+        Console.WriteLine("  6. All Benchmarks");
         Console.WriteLine("  Q. Quit");
         Console.WriteLine();
         Console.Write("Choice: ");
@@ -79,6 +86,9 @@ public static class GroupCommitComparisonRunner
                 RunLegacyBenchmarks();
                 break;
             case "5":
+                RunHighSpeedInsertBenchmarks();
+                break;
+            case "6":
                 RunAllBenchmarks();
                 break;
             case "Q":
@@ -148,6 +158,16 @@ public static class GroupCommitComparisonRunner
         };
 
         PrintConsolidatedSummary(summaries);
+    }
+
+    private static void RunHighSpeedInsertBenchmarks()
+    {
+        Console.WriteLine("??? HIGH-SPEED INSERT MODE BENCHMARKS ???");
+        Console.WriteLine("Testing BulkInsertAsync with HighSpeedInsertMode...\n");
+
+        var summary = BenchmarkRunner.Run<HighSpeedInsertBenchmarks>();
+        PrintSummary(summary);
+        AnalyzeHighSpeedInsertResults(summary);
     }
 
     private static void RunAllBenchmarks()
@@ -304,6 +324,83 @@ public static class GroupCommitComparisonRunner
                 Console.WriteLine($"             {(fastest.ResultStatistics?.Mean ?? 0) / 1_000_000:F2} ms");
             }
         }
+    }
+
+    private static void AnalyzeHighSpeedInsertResults(Summary summary)
+    {
+        Console.WriteLine("\n????????????????????????????????????????????????????????????????");
+        Console.WriteLine("?      HIGH-SPEED INSERT MODE PERFORMANCE ANALYSIS            ?");
+        Console.WriteLine("????????????????????????????????????????????????????????????????\n");
+
+        var baseline = summary.Reports
+            .Where(r => r.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo.Contains("ExecuteBatchSQL"))
+            .ToList();
+
+        var standard = summary.Reports
+            .Where(r => r.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo.Contains("Standard Config"))
+            .ToList();
+
+        var highSpeed = summary.Reports
+            .Where(r => r.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo.Contains("HighSpeedInsert Mode"))
+            .ToList();
+
+        var bulkImport = summary.Reports
+            .Where(r => r.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo.Contains("BulkImport Config"))
+            .ToList();
+
+        Console.WriteLine("Performance Comparison:");
+        Console.WriteLine("?????????????????????????????????????????????????????????????");
+
+        if (baseline.Any())
+        {
+            var baselineAvg = baseline.Average(r => r.ResultStatistics?.Mean ?? 0);
+            Console.WriteLine($"  ExecuteBatchSQL (Baseline):    {baselineAvg / 1_000_000:F2} ms");
+
+            if (standard.Any())
+            {
+                var standardAvg = standard.Average(r => r.ResultStatistics?.Mean ?? 0);
+                var improvement = (baselineAvg - standardAvg) / baselineAvg * 100;
+                Console.WriteLine($"  BulkInsertAsync (Standard):     {standardAvg / 1_000_000:F2} ms ({improvement:F1}% {(improvement > 0 ? "faster" : "slower")})");
+            }
+
+            if (highSpeed.Any())
+            {
+                var highSpeedAvg = highSpeed.Average(r => r.ResultStatistics?.Mean ?? 0);
+                var improvement = (baselineAvg - highSpeedAvg) / baselineAvg * 100;
+                Console.WriteLine($"  BulkInsertAsync (HighSpeed):    {highSpeedAvg / 1_000_000:F2} ms ({improvement:F1}% faster ??)");
+            }
+
+            if (bulkImport.Any())
+            {
+                var bulkImportAvg = bulkImport.Average(r => r.ResultStatistics?.Mean ?? 0);
+                var improvement = (baselineAvg - bulkImportAvg) / baselineAvg * 100;
+                Console.WriteLine($"  BulkInsertAsync (BulkImport):   {bulkImportAvg / 1_000_000:F2} ms ({improvement:F1}% faster ??)");
+            }
+        }
+
+        Console.WriteLine("\nKey Metrics:");
+        Console.WriteLine("?????????????????????????????????????????????????????????????");
+
+        foreach (var report in summary.Reports)
+        {
+            var methodName = report.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo;
+            var mean = report.ResultStatistics?.Mean ?? 0;
+            var allocated = report.GcStats.GetBytesAllocatedPerOperation(report.BenchmarkCase) ?? 0;
+            var throughput = report.BenchmarkCase.Parameters.Items.FirstOrDefault(p => p.Name == "RecordCount")?.Value is int count 
+                ? count / (mean / 1_000_000_000) 
+                : 0;
+
+            Console.WriteLine($"\n  {methodName}:");
+            Console.WriteLine($"    Time:       {mean / 1_000_000:F2} ms");
+            Console.WriteLine($"    Allocated:  {FormatBytes(allocated)}");
+            if (throughput > 0)
+                Console.WriteLine($"    Throughput: {throughput:F0} rec/sec");
+        }
+
+        Console.WriteLine("\n?? Summary:");
+        Console.WriteLine("  HighSpeedInsert mode targets 2-4x speedup over ExecuteBatchSQL");
+        Console.WriteLine("  Expected performance: 10K inserts in ~2-3 seconds");
+        Console.WriteLine("  vs SQLite gap: Target reduction from 175x to ~50x slower");
     }
 
     private static string GetDatabaseName(string methodName)

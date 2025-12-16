@@ -68,5 +68,9 @@
     <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="SharpCoreDB.Tests\Optimizations\" />
+  </ItemGroup>
+
 </Project>
 

@@ -164,6 +164,16 @@ public partial class Storage
     }
 
     /// <summary>
+    /// Flushes transaction buffer to disk without committing the transaction.
+    /// Used for intermediate flushes during bulk insert operations to prevent excessive memory buildup.
+    /// OPTIMIZATION: For HighSpeedInsertMode, flush every GroupCommitSize rows.
+    /// </summary>
+    public void FlushTransactionBuffer()
+    {
+        FlushBufferedAppends();
+    }
+
+    /// <summary>
     /// Clears all buffered appends during transaction rollback.
     /// </summary>
     internal void ClearBufferedAppends()

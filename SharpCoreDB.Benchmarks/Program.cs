@@ -2,181 +2,223 @@
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
-using BenchmarkDotNet.Running;
-using SharpCoreDB.Benchmarks;
 
-Console.WriteLine("???????????????????????????????????????????????????????????????");
-Console.WriteLine("  SharpCoreDB Comprehensive Performance Benchmark Suite");
-Console.WriteLine("  Database Comparison: SharpCoreDB vs SQLite vs LiteDB");
-Console.WriteLine("  With/Without Encryption Analysis");
-Console.WriteLine("???????????????????????????????????????????????????????????????");
+using SharpCoreDB.Benchmarks;
+using SharpCoreDB.Benchmarks.Infrastructure;
+
+Console.Clear();
+Console.WriteLine("????????????????????????????????????????????????????????????????????????");
+Console.WriteLine("?              SharpCoreDB Performance Benchmarks                      ?");
+Console.WriteLine("????????????????????????????????????????????????????????????????????????");
 Console.WriteLine();
 
-// Check for command-line arguments
-if (args.Length > 0)
+// Show menu
+while (true)
 {
-    switch (args[0])
+    Console.WriteLine("???????????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  Beschikbare Benchmarks");
+    Console.WriteLine("???????????????????????????????????????????????????????????????????????");
+    Console.WriteLine();
+    Console.WriteLine("  ?? FAIR COMPARISON");
+    Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  1. Fair Comparison (10K Bulk Inserts)");
+    Console.WriteLine("     • 3 SharpCore modes vs SQLite vs LiteDB");
+    Console.WriteLine("     • 1 / 8 / 16 threads");
+    Console.WriteLine("     • Markdown tabel output");
+    Console.WriteLine("     • Tijd: ~2 minuten");
+    Console.WriteLine();
+    Console.WriteLine("  ?? REALISTIC WORKLOADS");
+    Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  2. Realistic Workload Benchmark");
+    Console.WriteLine("     • Bulk inserts (10K single transaction)");
+    Console.WriteLine("     • Individual inserts (10K separate transactions)");
+    Console.WriteLine("     • Mixed (5K inserts + 5K updates + 1K queries)");
+    Console.WriteLine("     • VACUUM/checkpoint timing");
+    Console.WriteLine("     • Tijd: ~5 minuten");
+    Console.WriteLine();
+    Console.WriteLine("  ?? QUICK TEST");
+    Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  3. Simple Quick Test (10K inserts, single thread)");
+    Console.WriteLine("     • Snelle baseline check");
+    Console.WriteLine("     • Tijd: ~30 seconden");
+    Console.WriteLine();
+    Console.WriteLine("  ?? DEBUG");
+    Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  4. Test SharpCoreDB Database Creation");
+    Console.WriteLine("     • Check of SharpCore files aanmaakt");
+    Console.WriteLine("     • Diagnose 0B probleem");
+    Console.WriteLine();
+    Console.WriteLine("  ???????????????????????????????????????????????????????????????????");
+    Console.WriteLine("  Q. Afsluiten");
+    Console.WriteLine();
+    Console.Write("Kies een optie (1-4 of Q): ");
+
+    var choice = Console.ReadLine()?.Trim().ToLowerInvariant();
+    Console.WriteLine();
+
+    switch (choice)
     {
-        case "--quick":
-            Console.WriteLine("?? Running QUICK comparative benchmarks...\n");
-            ComprehensiveBenchmarkRunner.Run(args);
+        case "1":
+            RunFairComparison();
+            break;
+
+        case "2":
+            RunRealisticWorkload();
+            break;
+
+        case "3":
+            RunQuickTest();
+            break;
+
+        case "4":
+            RunDebugTest();
+            break;
+
+        case "q":
+        case "quit":
+        case "exit":
+            Console.WriteLine("?? Tot ziens!");
             return;
-            
-        case "--full":
-            Console.WriteLine("?? Running FULL comprehensive benchmarks...\n");
-            ComprehensiveBenchmarkRunner.Run(args);
-            return;
-            
-        case "--inserts":
-            Console.WriteLine("?? Running INSERT benchmarks only...\n");
-            ComprehensiveBenchmarkRunner.Run(args);
-            return;
-            
-        case "--selects":
-            Console.WriteLine("?? Running SELECT benchmarks only...\n");
-            ComprehensiveBenchmarkRunner.Run(args);
-            return;
-            
-        case "--updates":
-            Console.WriteLine("?? Running UPDATE/DELETE benchmarks only...\n");
-            ComprehensiveBenchmarkRunner.Run(args);
-            return;
-            
-        case "--modernization":
-            Console.WriteLine("?? Running C# 14 modernization benchmarks...\n");
-            BenchmarkRunner.Run<ModernizationBenchmark>();
-            return;
-            
-        case "--help":
-        case "-h":
-            ShowHelp();
-            return;
+
+        default:
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("? Ongeldige keuze. Probeer opnieuw.");
+            Console.ResetColor();
+            Console.WriteLine();
+            continue;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Druk op een toets om door te gaan...");
+    Console.ReadKey();
+    Console.Clear();
+}
+
+static void RunFairComparison()
+{
+    Console.Clear();
+    try
+    {
+        var benchmark = new FairComparisonBenchmark();
+        benchmark.Run();
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("? Fair Comparison voltooid!");
+        Console.ResetColor();
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"\n? Error: {ex.Message}");
+        Console.ResetColor();
     }
 }
 
-// Interactive mode
-ShowInteractiveMenu();
-
-static void ShowHelp()
+static void RunRealisticWorkload()
 {
-    Console.WriteLine("SharpCoreDB Benchmark Suite - Command Line Options");
-    Console.WriteLine();
-    Console.WriteLine("Usage: dotnet run -c Release -- [option]");
-    Console.WriteLine();
-    Console.WriteLine("Options:");
-    Console.WriteLine("  --quick           Fast comparison (reduced parameters)");
-    Console.WriteLine("  --full            Full comprehensive suite (all operations, all sizes)");
-    Console.WriteLine("  --inserts         INSERT benchmarks only");
-    Console.WriteLine("  --selects         SELECT benchmarks only");
-    Console.WriteLine("  --updates         UPDATE/DELETE benchmarks only");
-    Console.WriteLine("  --modernization   C# 14 modernization benchmarks");
-    Console.WriteLine("  --help, -h        Show this help message");
-    Console.WriteLine();
-    Console.WriteLine("Examples:");
-    Console.WriteLine("  dotnet run -c Release -- --quick");
-    Console.WriteLine("  dotnet run -c Release -- --full");
-    Console.WriteLine("  dotnet run -c Release -- --inserts");
-    Console.WriteLine();
-    Console.WriteLine("Databases compared:");
-    Console.WriteLine("  • SharpCoreDB (WITH encryption)");
-    Console.WriteLine("  • SharpCoreDB (WITHOUT encryption)");
-    Console.WriteLine("  • SQLite (Memory mode)");
-    Console.WriteLine("  • SQLite (File mode)");
-    Console.WriteLine("  • LiteDB");
-    Console.WriteLine();
+    Console.Clear();
+    try
+    {
+        var benchmark = new RealisticWorkloadBenchmark();
+        benchmark.Run();
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("? Realistic Workload voltooid!");
+        Console.ResetColor();
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"\n? Error: {ex.Message}");
+        Console.ResetColor();
+    }
 }
 
-static void ShowInteractiveMenu()
+static void RunQuickTest()
 {
-    while (true)
+    Console.Clear();
+    try
     {
-        Console.WriteLine("???????????????????????????????????????????????????????");
-        Console.WriteLine("  Select Benchmark Mode:");
-        Console.WriteLine("???????????????????????????????????????????????????????");
-        Console.WriteLine();
-        Console.WriteLine("  Database Comparison Benchmarks:");
-        Console.WriteLine("    1. Quick 10K Test (RECOMMENDED - 2-3 min) ?");
-        Console.WriteLine("    2. Quick Comparison (fast, reduced parameters)");
-        Console.WriteLine("    3. Full Comprehensive Suite (20-30 minutes)");
-        Console.WriteLine("    4. INSERT Benchmarks Only");
-        Console.WriteLine("    5. SELECT Benchmarks Only");
-        Console.WriteLine("    6. UPDATE/DELETE Benchmarks Only");
-        Console.WriteLine();
-        Console.WriteLine("  Other Benchmarks:");
-        Console.WriteLine("    7. C# 14 Modernization Benchmark");
-        Console.WriteLine("    8. Quick Performance Comparison (no BenchmarkDotNet)");
-        Console.WriteLine("    9. Simple 10K Test (DEBUG - Minimal config) ??");
-        Console.WriteLine();
-        Console.WriteLine("    H. Help (command-line options)");
-        Console.WriteLine("    Q. Quit");
-        Console.WriteLine();
-        Console.Write("Choice: ");
+        var benchmark = new SimpleFairBenchmark();
+        benchmark.Run();
 
-        var choice = Console.ReadLine()?.Trim().ToUpper();
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("? Quick Test voltooid!");
+        Console.ResetColor();
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"\n? Error: {ex.Message}");
+        Console.ResetColor();
+    }
+}
 
-        switch (choice)
+static void RunDebugTest()
+{
+    Console.Clear();
+    Console.WriteLine("Testing SharpCoreDB database creation...\n");
+
+    var testPath = Path.Combine(Path.GetTempPath(), "test_sharpcoredb");
+
+    try
+    {
+        Console.WriteLine($"Creating database at: {testPath}");
+        Console.WriteLine($"Is directory: {Directory.Exists(testPath)}");
+        
+        using var helper = new BenchmarkDatabaseHelper(testPath, "password", enableEncryption: false);
+        
+        Console.WriteLine("? Database helper created successfully");
+        
+        helper.CreateUsersTable();
+        
+        Console.WriteLine("? Table created successfully");
+        
+        // Insert one record
+        helper.InsertUserBenchmark(1, "Test User", "test@example.com", 25, DateTime.Now, true);
+        
+        Console.WriteLine("? Record inserted successfully");
+        
+        // Check the testPath as DIRECTORY
+        Console.WriteLine($"\n?? Checking directory: {testPath}");
+        if (Directory.Exists(testPath))
         {
-            case "1":
-                Console.WriteLine("\n?? Running Quick 10K Test...");
-                Console.WriteLine("Testing 10,000 record inserts against SQLite and LiteDB\n");
-                BenchmarkRunner.Run<SharpCoreDB.Benchmarks.Comparative.Quick10kComparison>();
-                return;
-                
-            case "2":
-                ComprehensiveBenchmarkRunner.Run(new[] { "--quick" });
-                return;
-                
-            case "3":
-                Console.WriteLine();
-                Console.WriteLine("??  WARNING: Full suite may take 20-30 minutes.");
-                Console.Write("Continue? (Y/N): ");
-                if (Console.ReadLine()?.Trim().ToUpper() == "Y")
-                {
-                    ComprehensiveBenchmarkRunner.Run(new[] { "--full" });
-                }
-                return;
-                
-            case "4":
-                ComprehensiveBenchmarkRunner.Run(new[] { "--inserts" });
-                return;
-                
-            case "5":
-                ComprehensiveBenchmarkRunner.Run(new[] { "--selects" });
-                return;
-                
-            case "6":
-                ComprehensiveBenchmarkRunner.Run(new[] { "--updates" });
-                return;
-                
-            case "7":
-                BenchmarkRunner.Run<ModernizationBenchmark>();
-                return;
-                
-            case "8":
-                QuickPerformanceComparison.Run();
-                return;
-                
-            case "9":
-                Console.WriteLine("\n?? Running SIMPLE 10K Test (Minimal Config)...");
-                Console.WriteLine("This version uses minimal BenchmarkDotNet configuration");
-                Console.WriteLine("Better for debugging if standard version fails\n");
-                SharpCoreDB.Benchmarks.Simple.SimpleRunner.Run();
-                return;
-                
-            case "H":
-                Console.WriteLine();
-                ShowHelp();
-                Console.WriteLine();
-                continue;
-                
-            case "Q":
-                return;
-                
-            default:
-                Console.WriteLine();
-                Console.WriteLine("? Invalid choice. Please try again.");
-                Console.WriteLine();
-                break;
+            Console.WriteLine($"  Directory exists! Contents:");
+            foreach (var file in Directory.GetFiles(testPath, "*.*", SearchOption.AllDirectories))
+            {
+                var info = new FileInfo(file);
+                Console.WriteLine($"    {Path.GetFileName(file)}: {info.Length:N0} bytes");
+            }
         }
+        else
+        {
+            Console.WriteLine($"  Directory does NOT exist");
+        }
+        
+        // Also check for .db and .wal as files
+        var dbFile = testPath + ".db";
+        var walFile = testPath + ".wal";
+        
+        Console.WriteLine($"\n?? Checking as file paths:");
+        Console.WriteLine($"  DB file ({dbFile}): {(File.Exists(dbFile) ? $"{new FileInfo(dbFile).Length:N0} bytes" : "NOT FOUND")}");
+        Console.WriteLine($"  WAL file ({walFile}): {(File.Exists(walFile) ? $"{new FileInfo(walFile).Length:N0} bytes" : "NOT FOUND")}");
+        
+        Console.WriteLine("\n? Test completed successfully!");
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"\n? ERROR: {ex.Message}");
+        Console.WriteLine($"\nType: {ex.GetType().Name}");
+        Console.WriteLine($"\nStack trace:\n{ex.StackTrace}");
+        if (ex.InnerException != null)
+        {
+            Console.WriteLine($"\nInner exception: {ex.InnerException.Message}");
+            Console.WriteLine($"Inner stack:\n{ex.InnerException.StackTrace}");
+        }
+        Console.ResetColor();
     }
 }

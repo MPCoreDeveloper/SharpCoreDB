@@ -1,6 +1,7 @@
 namespace SharpCoreDB.DataStructures;
 
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage.Hybrid;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -75,6 +76,12 @@ public partial class Table : ITable, IDisposable
     /// Gets or sets the data file path.
     /// </summary>
     public string DataFile { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Gets or sets the storage mode for this table (Columnar, PageBased, or Hybrid).
+    /// Default is Columnar for backward compatibility.
+    /// </summary>
+    public StorageMode StorageMode { get; set; } = StorageMode.Columnar;
     
     /// <summary>
     /// Gets or sets the B-Tree index for primary key lookups.

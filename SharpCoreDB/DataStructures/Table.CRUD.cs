@@ -7,14 +7,46 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Buffers;
 using SharpCoreDB.Services;
+using SharpCoreDB.Storage.Hybrid;
 
 /// <summary>
 /// CRUD operations for Table - Insert, Select, Update, Delete.
+/// Now includes hybrid storage support with PageManager integration.
 /// </summary>
 public partial class Table
 {
+    // Page manager for page-based storage mode (lazy initialized)
+    private PageManager? pageManager;
+
+    /// <summary>
+    /// Gets the page manager for this table, creating it if necessary.
+    /// Only applicable for PAGE_BASED storage mode.
+    /// </summary>
+    private PageManager GetPageManager()
+    {
+        if (StorageMode != StorageMode.PageBased)
+        {
+            throw new InvalidOperationException(
+                $"PageManager is only available for PAGE_BASED storage mode. Current mode: {StorageMode}");
+        }
+
+        if (pageManager == null)
+        {
+            // Extract database path from DataFile
+            var dbPath = Path.GetDirectoryName(DataFile) ?? Environment.CurrentDirectory;
+            
+            // Generate table ID from table name (simple hash for now)
+            uint tableId = (uint)Name.GetHashCode();
+            
+            pageManager = new PageManager(dbPath, tableId);
+        }
+
+        return pageManager;
+    }
+
     /// <summary>
     /// Inserts a row into the table.
+    /// Routes to columnar or page-based storage based on StorageMode.
     /// </summary>
     /// <param name="row">The row data to insert.</param>
     /// <exception cref="ArgumentNullException">Thrown when storage is null.</exception>
@@ -25,6 +57,22 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
+        // Route based on storage mode
+        if (StorageMode == StorageMode.PageBased)
+        {
+            InsertPageBased(row);
+        }
+        else
+        {
+            InsertColumnar(row);
+        }
+    }
+
+    /// <summary>
+    /// Inserts a row using columnar storage (original implementation).
+    /// </summary>
+    private void InsertColumnar(Dictionary<string, object> row)
+    {
         this.rwLock.EnterWriteLock();
         try
         {
@@ -78,7 +126,7 @@ public partial class Table
                 var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
 
                 // TRUE APPEND + POSITION
-                long position = this.storage.AppendBytes(this.DataFile, rowData);
+                long position = this.storage!.AppendBytes(this.DataFile, rowData);
 
                 // Primary key index
                 if (this.PrimaryKeyIndex >= 0)
@@ -90,12 +138,10 @@ public partial class Table
                 // FIXED: Ensure all registered indexes are loaded before INSERT
                 // This fixes the issue where indexes registered during CREATE TABLE
                 // were never loaded, so INSERT didn't populate them with data
-                foreach (var registeredCol in this.registeredIndexes.Keys.ToList())
+                var unloadedIndexes = this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList();
+                foreach (var registeredCol in unloadedIndexes)
                 {
-                    if (!this.loadedIndexes.Contains(registeredCol))
-                    {
-                        EnsureIndexLoaded(registeredCol);
-                    }
+                    EnsureIndexLoaded(registeredCol);
                 }
 
                 // FIXED: Synchronous hash index update for consistency
@@ -124,24 +170,125 @@ public partial class Table
     }
 
     /// <summary>
-    /// Inserts multiple rows in a single batch operation.
-    /// CRITICAL PERFORMANCE: 5-10x faster than individual Insert() calls!
-    /// Uses AppendBytesMultiple for single disk operation.
-    /// Modern C# 14 with collection expressions and pattern matching.
+    /// Inserts a row using page-based storage (new implementation).
     /// </summary>
-    /// <param name="rows">The rows to insert.</param>
-    /// <returns>Array of file positions where each row was written.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when storage or rows is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when table is readonly or primary key violation occurs.</exception>
+    private void InsertPageBased(Dictionary<string, object> row)
+    {
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            // Validate + fill defaults
+            for (int i = 0; i < this.Columns.Count; i++)
+            {
+                var col = this.Columns[i];
+                if (!row.TryGetValue(col, out var val))
+                {
+                    row[col] = this.IsAuto[i] ? GenerateAutoValue(this.ColumnTypes[i]) : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
+                }
+                else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
+                {
+                    throw new InvalidOperationException($"Type mismatch for column {col}");
+                }
+            }
+
+            // Primary key check
+            if (this.PrimaryKeyIndex >= 0)
+            {
+                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                if (this.Index.Search(pkVal).Found)
+                    throw new InvalidOperationException("Primary key violation");
+            }
+
+            // Serialize row data
+            int estimatedSize = EstimateRowSize(row);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+            try
+            {
+                if (SimdHelper.IsSimdSupported)
+                {
+                    SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
+                }
+                else
+                {
+                    Array.Clear(buffer, 0, estimatedSize);
+                }
+
+                int bytesWritten = 0;
+                Span<byte> bufferSpan = buffer.AsSpan();
+                
+                foreach (var col in this.Columns)
+                {
+                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[this.Columns.IndexOf(col)]);
+                    bytesWritten += written;
+                }
+
+                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+
+                // Insert into page-based storage
+                var pm = GetPageManager();
+                uint tableId = (uint)Name.GetHashCode();
+                
+                // Find or allocate a page with space
+                const int RECORD_OVERHEAD = 16; // Record header + slot
+                var requiredSpace = rowData.Length + RECORD_OVERHEAD;
+                var pageId = pm.FindPageWithSpace(tableId, requiredSpace);
+                
+                // Insert the record
+                var recordId = pm.InsertRecord(pageId, rowData);
+
+                // Store position as (pageId << 32 | recordId) for index compatibility
+                long position = ((long)pageId.Value << 32) | recordId.SlotIndex;
+
+                // Update primary key index
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    this.Index.Insert(pkVal, position);
+                }
+
+                // Note: Hash indexes not used with page-based storage
+                // B-tree indexes are built separately (future milestone)
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+            }
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Inserts multiple rows in a single batch operation.
+    /// Routes to columnar or page-based storage based on StorageMode.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long[] InsertBatch(List<Dictionary<string, object>> rows)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
         ArgumentNullException.ThrowIfNull(rows);
         
-        if (rows.Count == 0) return [];  // ✅ C# 14: empty collection expression
+        if (rows.Count == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
+        // Route based on storage mode
+        if (StorageMode == StorageMode.PageBased)
+        {
+            return InsertBatchPageBased(rows);
+        }
+        else
+        {
+            return InsertBatchColumnar(rows);
+        }
+    }
+
+    /// <summary>
+    /// Batch insert for columnar storage (original implementation).
+    /// </summary>
+    private long[] InsertBatchColumnar(List<Dictionary<string, object>> rows)
+    {
         this.rwLock.EnterWriteLock();
         try
         {
@@ -157,7 +304,7 @@ public partial class Table
                     {
                         row[col] = this.IsAuto[i] ? GenerateAutoValue(this.ColumnTypes[i]) : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
                     }
-                    else if (val != DBNull.Value && val is not null && !IsValidType(val, this.ColumnTypes[i]))  // ✅ Fixed: Added null check
+                    else if (val != DBNull.Value && val is not null && !IsValidType(val, this.ColumnTypes[i]))
                     {
                         throw new InvalidOperationException($"Type mismatch for column {col} in row {rowIdx}");
                     }
@@ -214,7 +361,7 @@ public partial class Table
 
             // Step 3: ✅ CRITICAL - Single AppendBytesMultiple call!
             // This is where we go from 10,000 disk operations to ~10!
-            long[] positions = this.storage.AppendBytesMultiple(this.DataFile, serializedRows);
+            long[] positions = this.storage!.AppendBytesMultiple(this.DataFile, serializedRows);
 
             // Step 4: Update indexes in batch
             // Ensure all registered indexes are loaded
@@ -250,6 +397,104 @@ public partial class Table
             foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)))
             {
                 this.staleIndexes.Add(registeredCol);
+            }
+
+            return positions;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Batch insert for page-based storage (new implementation).
+    /// </summary>
+    private long[] InsertBatchPageBased(List<Dictionary<string, object>> rows)
+    {
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            // Validate all rows
+            for (int rowIdx = 0; rowIdx < rows.Count; rowIdx++)
+            {
+                var row = rows[rowIdx];
+                
+                for (int i = 0; i < this.Columns.Count; i++)
+                {
+                    var col = this.Columns[i];
+                    if (!row.TryGetValue(col, out var val))
+                    {
+                        row[col] = this.IsAuto[i] ? GenerateAutoValue(this.ColumnTypes[i]) : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
+                    }
+                    else if (val != DBNull.Value && val is not null && !IsValidType(val, this.ColumnTypes[i]))
+                    {
+                        throw new InvalidOperationException($"Type mismatch for column {col} in row {rowIdx}");
+                    }
+                }
+
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    if (this.Index.Search(pkVal).Found)
+                        throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
+                }
+            }
+
+            var pm = GetPageManager();
+            uint tableId = (uint)Name.GetHashCode();
+            var positions = new long[rows.Count];
+
+            // Insert each row into pages
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                
+                // Serialize row
+                int estimatedSize = EstimateRowSize(row);
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+                
+                try
+                {
+                    if (SimdHelper.IsSimdSupported)
+                    {
+                        SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
+                    }
+                    else
+                    {
+                        Array.Clear(buffer, 0, estimatedSize);
+                    }
+
+                    int bytesWritten = 0;
+                    Span<byte> bufferSpan = buffer.AsSpan();
+                    
+                    foreach (var col in this.Columns)
+                    {
+                        int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[this.Columns.IndexOf(col)]);
+                        bytesWritten += written;
+                    }
+
+                    var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+
+                    // Insert into page
+                    const int RECORD_OVERHEAD = 16;
+                    var requiredSpace = rowData.Length + RECORD_OVERHEAD;
+                    var pageId = pm.FindPageWithSpace(tableId, requiredSpace);
+                    var recordId = pm.InsertRecord(pageId, rowData);
+
+                    positions[i] = ((long)pageId.Value << 32) | recordId.SlotIndex;
+
+                    // Update primary key index
+                    if (this.PrimaryKeyIndex >= 0)
+                    {
+                        var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        this.Index.Insert(pkVal, positions[i]);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+                }
             }
 
             return positions;
@@ -303,6 +548,22 @@ public partial class Table
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private List<Dictionary<string, object>> SelectInternal(string? where, string? orderBy, bool asc, bool noEncrypt)
+    {
+        // Route based on storage mode
+        if (StorageMode == StorageMode.PageBased)
+        {
+            return SelectPageBased(where, orderBy, asc);
+        }
+        else
+        {
+            return SelectColumnar(where, orderBy, asc, noEncrypt);
+        }
+    }
+
+    /// <summary>
+    /// SELECT implementation for columnar storage (original).
+    /// </summary>
+    private List<Dictionary<string, object>> SelectColumnar(string? where, string? orderBy, bool asc, bool noEncrypt)
     {
         var results = new List<Dictionary<string, object>>();
 
@@ -363,40 +624,82 @@ public partial class Table
 
         return ApplyOrdering(results, orderBy, asc);
     }
-    
-    private List<Dictionary<string, object>> ApplyOrdering(List<Dictionary<string, object>> results, string? orderBy, bool asc)
+
+    /// <summary>
+    /// SELECT implementation for page-based storage.
+    /// Uses PageManager to read records from pages.
+    /// </summary>
+    private List<Dictionary<string, object>> SelectPageBased(string? where, string? orderBy, bool asc)
     {
-        if (orderBy != null && results.Count > 0)
+        var results = new List<Dictionary<string, object>>();
+        var pm = GetPageManager();
+
+        // 1. Primary key lookup via B-Tree index
+        if (!string.IsNullOrEmpty(where) && this.PrimaryKeyIndex >= 0)
         {
-            var idx = this.Columns.IndexOf(orderBy);
-            if (idx >= 0)
+            var pkCol = this.Columns[this.PrimaryKeyIndex];
+            if (TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) && whereCol == pkCol)
             {
-                var columnName = this.Columns[idx];
-                results = asc 
-                    ? results.OrderBy(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList()
-                    : results.OrderByDescending(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList();
+                var pkVal = whereVal.ToString() ?? string.Empty;
+                var searchResult = this.Index.Search(pkVal);
+                if (searchResult.Found)
+                {
+                    // Position encoded as (pageId << 32 | recordId)
+                    long position = searchResult.Value;
+                    var pageId = new PageManager.PageId((ulong)(position >> 32));
+                    var recordId = new PageManager.RecordId((ushort)(position & 0xFFFF));
+                    
+                    try
+                    {
+                        var recordData = pm.ReadRecord(pageId, recordId);
+                        var row = DeserializeRow(recordData);
+                        if (row != null) results.Add(row);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Record deleted or corrupt - skip
+                    }
+                    
+                    return ApplyOrdering(results, orderBy, asc);
+                }
             }
         }
-        return results;
+
+        // 2. Full table scan (read all pages)
+        // For now, we'll return empty since full page scanning needs table-wide page iteration
+        // This will be implemented when PageManager adds table-wide iteration support
+        
+        return ApplyOrdering(results, orderBy, asc);
     }
-    
-    private static int CompareObjects(object? a, object? b)
+
+    /// <summary>
+    /// Deserializes a byte array into a row dictionary.
+    /// Used for page-based storage reads.
+    /// </summary>
+    private Dictionary<string, object>? DeserializeRow(byte[] data)
     {
-        // Handle nulls
-        if (a == null && b == null) return 0;
-        if (a == null) return -1;
-        if (b == null) return 1;
-        
-        // If same type, use default comparison
-        if (a.GetType() == b.GetType())
+        var row = new Dictionary<string, object>();
+        int offset = 0;
+        ReadOnlySpan<byte> dataSpan = data.AsSpan();
+
+        try
         {
-            if (a is IComparable ca)
-                return ca.CompareTo(b);
-            return 0;
+            for (int i = 0; i < this.Columns.Count; i++)
+            {
+                if (offset >= dataSpan.Length)
+                    return null;
+
+                var value = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                row[this.Columns[i]] = value;
+                offset += bytesRead;
+            }
+
+            return row;
         }
-        
-        // Different types - compare as strings
-        return string.Compare(a.ToString() ?? "", b.ToString() ?? "", StringComparison.Ordinal);
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -625,5 +928,46 @@ public partial class Table
         // No suitable index available - return empty list
         // Caller will fall back to SelectInternal (O(n) table scan)
         return results;
+    }
+
+    /// <summary>
+    /// Applies ordering to query results.
+    /// </summary>
+    private List<Dictionary<string, object>> ApplyOrdering(List<Dictionary<string, object>> results, string? orderBy, bool asc)
+    {
+        if (orderBy != null && results.Count > 0)
+        {
+            var idx = this.Columns.IndexOf(orderBy);
+            if (idx >= 0)
+            {
+                var columnName = this.Columns[idx];
+                results = asc 
+                    ? results.OrderBy(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList()
+                    : results.OrderByDescending(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList();
+            }
+        }
+        return results;
+    }
+    
+    /// <summary>
+    /// Compares two objects for ordering, handling nulls and different types.
+    /// </summary>
+    private static int CompareObjects(object? a, object? b)
+    {
+        // Handle nulls
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        
+        // If same type, use default comparison
+        if (a.GetType() == b.GetType())
+        {
+            if (a is IComparable ca)
+                return ca.CompareTo(b);
+            return 0;
+        }
+        
+        // Different types - compare as strings
+        return string.Compare(a.ToString() ?? "", b.ToString() ?? "", StringComparison.Ordinal);
     }
 }

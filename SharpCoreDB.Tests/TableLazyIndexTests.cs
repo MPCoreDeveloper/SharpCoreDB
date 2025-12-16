@@ -12,14 +12,14 @@ namespace SharpCoreDB.Tests;
 public class TableLazyIndexTests : IDisposable
 {
     private readonly string _testDirectory;
-    private readonly Storage? _storage;
+    private readonly Services.Storage? _storage;
 
     public TableLazyIndexTests()
     {
         _testDirectory = Path.Combine(Path.GetTempPath(), $"SharpCoreDB_LazyIndexTests_{Guid.NewGuid()}");
         Directory.CreateDirectory(_testDirectory);
         // TODO: Fix Storage constructor call
-        //_storage = new Storage(_testDirectory);
+        //_storage = new Services.Storage(_testDirectory);
     }
 
     public void Dispose()

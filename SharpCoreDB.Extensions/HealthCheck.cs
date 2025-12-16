@@ -7,21 +7,15 @@ namespace SharpCoreDB.Extensions;
 /// <summary>
 /// Health check for SharpCoreDB database instances.
 /// </summary>
-public class SharpCoreDBHealthCheck : IHealthCheck
+/// <remarks>
+/// Initializes a new instance of the SharpCoreDBHealthCheck class.
+/// </remarks>
+/// <param name="database">The database instance to check.</param>
+/// <param name="testQuery">Optional test query to execute (default: none).</param>
+public class SharpCoreDBHealthCheck(IDatabase database, string? testQuery = null) : IHealthCheck
 {
-    private readonly IDatabase _database;
-    private readonly string _testQuery;
-
-    /// <summary>
-    /// Initializes a new instance of the SharpCoreDBHealthCheck class.
-    /// </summary>
-    /// <param name="database">The database instance to check.</param>
-    /// <param name="testQuery">Optional test query to execute (default: none).</param>
-    public SharpCoreDBHealthCheck(IDatabase database, string? testQuery = null)
-    {
-        _database = database ?? throw new ArgumentNullException(nameof(database));
-        _testQuery = testQuery ?? string.Empty;
-    }
+    private readonly IDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
+    private readonly string _testQuery = testQuery ?? string.Empty;
 
     /// <summary>
     /// Performs the health check.

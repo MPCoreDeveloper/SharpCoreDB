@@ -27,6 +27,12 @@ public interface IStorage
     void Rollback();
 
     /// <summary>
+    /// Flushes transaction buffer to disk without committing the transaction.
+    /// Used for intermediate flushes during bulk insert operations to prevent excessive memory buildup.
+    /// </summary>
+    void FlushTransactionBuffer();
+
+    /// <summary>
     /// Checks if currently inside a transaction.
     /// </summary>
     bool IsInTransaction { get; }
