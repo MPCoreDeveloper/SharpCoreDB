@@ -27,7 +27,7 @@ public partial class Storage : IStorage
     
     // Transaction support
     private readonly TransactionBuffer transactionBuffer;
-    private readonly object transactionLock = new object();
+    private readonly Lock transactionLock = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Storage"/> class.

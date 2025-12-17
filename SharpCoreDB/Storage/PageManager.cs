@@ -25,7 +25,7 @@ public class PageManager : IDisposable
     private readonly string freeListFilePath;
     private readonly FileStream pagesFile;
     private readonly ConcurrentDictionary<ulong, Page> pageCache;
-    private readonly object writeLock = new();
+    private readonly Lock writeLock = new();
 #pragma warning disable S1144 // disposed field used in Dispose pattern
     private bool disposed;
 #pragma warning restore S1144

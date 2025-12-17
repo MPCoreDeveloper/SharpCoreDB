@@ -11,7 +11,7 @@ namespace SharpCoreDB.Extensions;
 public static class DapperPerformanceExtensions
 {
     private static readonly Dictionary<string, PerformanceMetrics> _metricsCache = new();
-    private static readonly object _metricsLock = new();
+    private static readonly Lock _metricsLock = new();
 
     /// <summary>
     /// Executes a query with performance tracking.

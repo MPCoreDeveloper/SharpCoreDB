@@ -19,7 +19,7 @@ public class BufferedWriteManager : IDisposable
 {
     // Per-file buffered writes
     private readonly Dictionary<string, FileWriteBuffer> fileBuffers = [];
-    private readonly object bufferLock = new object();
+    private readonly Lock bufferLock = new();
     
     private bool disposed = false;
 

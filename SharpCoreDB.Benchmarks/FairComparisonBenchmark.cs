@@ -187,7 +187,7 @@ public class FairComparisonBenchmark
         {
             var perThread = RECORDS / threads;
             var tasks = new Task[threads];
-            var lockObj = new object();
+            Lock lockObj = new();
 
             for (int t = 0; t < threads; t++)
             {

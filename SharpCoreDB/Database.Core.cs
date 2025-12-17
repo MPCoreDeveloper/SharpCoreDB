@@ -36,7 +36,7 @@ public partial class Database : IDatabase, IDisposable
     private readonly DatabaseConfig? config;
     private readonly QueryCache? queryCache;
     private readonly PageCache? pageCache;
-    private readonly object _walLock = new();  // ✅ C# 14: target-typed new
+    private readonly Lock _walLock = new();  // ✅ C# 14: target-typed new
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
     
     private readonly GroupCommitWAL? groupCommitWal;

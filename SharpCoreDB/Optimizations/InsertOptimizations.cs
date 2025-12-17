@@ -22,7 +22,7 @@ public static class InsertOptimizations
     {
         private readonly List<Dictionary<string, object>> _rowBuffer = [];
         private bool _isTransposed;
-        private readonly object _transposeLock = new();
+        private readonly Lock _transposeLock = new();
 
         /// <summary>
         /// Adds a row WITHOUT transposing (O(1) operation).
