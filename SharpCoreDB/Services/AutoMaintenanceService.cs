@@ -16,7 +16,7 @@ public class AutoMaintenanceService : IDisposable
     private readonly System.Timers.Timer timer;
     private int writeCount = 0;
     private readonly int writeThreshold;
-    private readonly object @lock = new();
+    private readonly Lock @lock = new();
     private bool disposed = false;
 
     /// <summary>

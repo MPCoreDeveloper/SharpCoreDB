@@ -21,7 +21,7 @@ public partial class Storage
     // Track buffered appends during transaction
     private readonly Dictionary<string, List<(byte[] data, long position)>> bufferedAppends = new();
     private readonly Dictionary<string, long> cachedFileLengths = new();  // ✅ NEW: Cache file lengths
-    private readonly object appendLock = new object();
+    private readonly Lock appendLock = new();
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

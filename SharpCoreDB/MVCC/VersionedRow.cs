@@ -69,7 +69,7 @@ public sealed record VersionedRow<TData>(
 public sealed class VersionChain<TData> where TData : class
 {
     private readonly List<VersionedRow<TData>> _versions = [];
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>
     /// Gets the number of versions in this chain.

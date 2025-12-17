@@ -27,7 +27,7 @@ public class PageBasedEngine : IStorageEngine
     private readonly string databasePath;
     private readonly ConcurrentDictionary<string, PageManager> tableManagers = new();
     private readonly ConcurrentDictionary<string, uint> tableIds = new();
-    private readonly object transactionLock = new();
+    private readonly Lock transactionLock = new();
     private bool isInTransaction;
     private readonly List<Action> transactionActions = new();
     

@@ -23,7 +23,7 @@ public sealed class MvccManager<TKey, TData> : IDisposable
     private readonly ConcurrentDictionary<long, MvccTransaction> _activeTransactions = new();
     private long _currentVersion;
     private long _nextTransactionId;
-    private readonly object _versionLock = new();
+    private readonly Lock _versionLock = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MvccManager{TKey, TData}"/> class.
