@@ -1,4 +1,4 @@
-ï»¿// <copyright file="Program.cs" company="MPCoreDeveloper">
+// <copyright file="Program.cs" company="MPCoreDeveloper">
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -22,31 +22,31 @@ while (true)
     Console.WriteLine("  ?? FAIR COMPARISON");
     Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
     Console.WriteLine("  1. Fair Comparison (10K Bulk Inserts)");
-    Console.WriteLine("     â€¢ 3 SharpCore modes vs SQLite vs LiteDB");
-    Console.WriteLine("     â€¢ 1 / 8 / 16 threads");
-    Console.WriteLine("     â€¢ Markdown tabel output");
-    Console.WriteLine("     â€¢ Tijd: ~2 minuten");
+    Console.WriteLine("     • 3 SharpCore modes vs SQLite vs LiteDB");
+    Console.WriteLine("     • 1 / 8 / 16 threads");
+    Console.WriteLine("     • Markdown tabel output");
+    Console.WriteLine("     • Tijd: ~2 minuten");
     Console.WriteLine();
     Console.WriteLine("  ?? REALISTIC WORKLOADS");
     Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
     Console.WriteLine("  2. Realistic Workload Benchmark");
-    Console.WriteLine("     â€¢ Bulk inserts (10K single transaction)");
-    Console.WriteLine("     â€¢ Individual inserts (10K separate transactions)");
-    Console.WriteLine("     â€¢ Mixed (5K inserts + 5K updates + 1K queries)");
-    Console.WriteLine("     â€¢ VACUUM/checkpoint timing");
-    Console.WriteLine("     â€¢ Tijd: ~5 minuten");
+    Console.WriteLine("     • Bulk inserts (10K single transaction)");
+    Console.WriteLine("     • Individual inserts (10K separate transactions)");
+    Console.WriteLine("     • Mixed (5K inserts + 5K updates + 1K queries)");
+    Console.WriteLine("     • VACUUM/checkpoint timing");
+    Console.WriteLine("     • Tijd: ~5 minuten");
     Console.WriteLine();
     Console.WriteLine("  ?? QUICK TEST");
     Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
     Console.WriteLine("  3. Simple Quick Test (10K inserts, single thread)");
-    Console.WriteLine("     â€¢ Snelle baseline check");
-    Console.WriteLine("     â€¢ Tijd: ~30 seconden");
+    Console.WriteLine("     • Snelle baseline check");
+    Console.WriteLine("     • Tijd: ~30 seconden");
     Console.WriteLine();
     Console.WriteLine("  ?? DEBUG");
     Console.WriteLine("  ??????????????????????????????????????????????????????????????????");
     Console.WriteLine("  4. Test SharpCoreDB Database Creation");
-    Console.WriteLine("     â€¢ Check of SharpCore files aanmaakt");
-    Console.WriteLine("     â€¢ Diagnose 0B probleem");
+    Console.WriteLine("     • Check of SharpCore files aanmaakt");
+    Console.WriteLine("     • Diagnose 0B probleem");
     Console.WriteLine();
     Console.WriteLine("  ???????????????????????????????????????????????????????????????????");
     Console.WriteLine("  Q. Afsluiten");
@@ -72,26 +72,6 @@ while (true)
 
         case "4":
             RunDebugTest();
-            break;
-        case "5":  // of een nieuw nummer
-            Console.Clear();
-            try
-            {
-                var benchmark = new ComprehensiveComparison();
-                benchmark.Run();
-
-                Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("âœ“ Comprehensive Comparison voltooid!");
-                Console.ResetColor();
-            }
-            catch (Exception ex)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"\nâœ— Error: {ex.Message}");
-                Console.WriteLine($"\nStack trace: {ex.StackTrace}");
-                Console.ResetColor();
-            }
             break;
 
         case "q":

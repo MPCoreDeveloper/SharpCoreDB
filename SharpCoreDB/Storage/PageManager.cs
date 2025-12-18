@@ -362,6 +362,7 @@ public class PageManager : IDisposable
 
     /// <summary>
     /// Writes a page to disk.
+    /// ✅ CRITICAL FIX: Don't flush immediately - defer until FlushDirtyPages()
     /// </summary>
     /// <param name="page">Page to write.</param>
     public void WritePage(Page page)
@@ -375,8 +376,10 @@ public class PageManager : IDisposable
 
             pagesFile.Seek(offset, SeekOrigin.Begin);
             pagesFile.Write(buffer, 0, PAGE_SIZE);
-            pagesFile.Flush();
-
+            
+            // ✅ CRITICAL FIX: Don't flush here - let FlushDirtyPages() do it in batch!
+            // pagesFile.Flush();  // ❌ OLD: Immediate flush kills performance
+            
             page.IsDirty = false;
             pageCache[page.PageId] = page;
         }

@@ -66,6 +66,7 @@
 
   <ItemGroup>
     <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\ComprehensiveComparison.cs" />
   </ItemGroup>
 
   <ItemGroup>

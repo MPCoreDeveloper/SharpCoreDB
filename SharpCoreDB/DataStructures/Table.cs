@@ -106,6 +106,10 @@ public partial class Table : ITable, IDisposable
     private readonly IndexManager? indexManager;
     private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
 
+    // ✅ NEW: Storage engine routing for hybrid architecture
+    private IStorageEngine? _storageEngine;
+    private readonly object _engineLock = new object();
+
     /// <summary>
     /// Sets the storage instance for this table.
     /// </summary>
@@ -135,6 +139,9 @@ public partial class Table : ITable, IDisposable
     {
         if (disposing)
         {
+            // Dispose storage engine first
+            DisposeStorageEngine();
+            
             this.indexManager?.Dispose();
             _indexQueue.Writer.Complete();
             this.rwLock.Dispose();

@@ -76,6 +76,48 @@ public class BenchmarkDatabaseHelper : IDisposable
         database.ExecuteSQL("CREATE INDEX idx_users_is_active ON users (is_active)");
     }
 
+    /// <summary>
+    /// Creates a table with PAGE_BASED storage for OLTP workloads.
+    /// Optimized for: inserts, updates, lookups, mixed workloads.
+    /// </summary>
+    public void CreateUsersTablePageBased()
+    {
+        database.ExecuteSQL(@"
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                age INTEGER,
+                created_at TEXT,
+                is_active INTEGER
+            ) STORAGE = PAGE_BASED");
+        
+        // Hash indexes for O(1) lookups
+        database.ExecuteSQL("CREATE INDEX idx_users_id ON users (id)");
+        database.ExecuteSQL("CREATE INDEX idx_users_email ON users (email)");
+    }
+
+    /// <summary>
+    /// Creates a table with COLUMNAR storage for OLAP workloads.
+    /// Optimized for: aggregates (SUM/AVG/MIN/MAX), analytical queries.
+    /// </summary>
+    public void CreateUsersTableColumnar()
+    {
+        database.ExecuteSQL(@"
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                age INTEGER,
+                created_at TEXT,
+                is_active INTEGER
+            ) STORAGE = COLUMNAR");
+        
+        // Note: Columnar storage is optimized for scans, not lookups
+        // Indexes still helpful but less critical than page-based
+        database.ExecuteSQL("CREATE INDEX idx_users_id ON users (id)");
+    }
+
     // ==================== BENCHMARK METHODS (FAST PATH - NO UPSERT) ====================
 
     /// <summary>

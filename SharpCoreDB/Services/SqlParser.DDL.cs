@@ -167,6 +167,11 @@ public partial class SqlParser
         };
         
         this.tables[tableName] = table;
+        
+        // ✅ CRITICAL: Initialize storage engine IMMEDIATELY after creating table
+        // This ensures the engine is ready before any INSERT/SELECT operations
+        table.InitializeStorageEngine();
+        
         wal?.Log(sql);
         
         // ✅ NEW: Only create indexes for columnar mode (page-based uses B-trees)
