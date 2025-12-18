@@ -45,8 +45,13 @@ public partial class Storage : IStorage
         this.pageSize = config?.PageSize ?? 4096;
         this.bufferPool = ArrayPool<byte>.Shared;
         
-        // Initialize transaction buffer with IStorage and 8MB default max size
-        this.transactionBuffer = new TransactionBuffer(this, this.pageSize, maxBufferSize: 8 * 1024 * 1024, autoFlush: true);
+        // Initialize transaction buffer in FULL_WRITE mode (legacy compatible)
+        this.transactionBuffer = new TransactionBuffer(
+            this, 
+            mode: TransactionBuffer.BufferMode.FULL_WRITE,
+            pageSize: this.pageSize, 
+            maxBufferSize: 8 * 1024 * 1024, 
+            autoFlush: true);
     }
 
     /// <inheritdoc />

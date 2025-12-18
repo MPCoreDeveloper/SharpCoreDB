@@ -65,7 +65,9 @@ public class HybridEngine : IStorageEngine
     }
 
     /// <inheritdoc />
+#pragma warning disable CS0618 // Hybrid is obsolete - this class exists for backward compatibility
     public StorageEngineType EngineType => StorageEngineType.Hybrid;
+#pragma warning restore CS0618
 
     /// <inheritdoc />
     public long Insert(string tableName, byte[] data)
@@ -420,7 +422,9 @@ public class HybridEngine : IStorageEngine
         foreach (var (recordId, data) in walEntries)
         {
             var pageId = state.PageManager.FindPageWithSpace((uint)state.TableName.GetHashCode(), data.Length + 16);
+#pragma warning disable S1481 // Variable will be used when table-level compaction mapping is added
             var pageRecordId = state.PageManager.InsertRecord(pageId, data);
+#pragma warning restore S1481
             
             // Remove from WAL index (now in page storage)
             state.WalIndex.TryRemove(recordId, out _);
@@ -444,11 +448,23 @@ public class HybridEngine : IStorageEngine
         return reclaimedBytes;
     }
 
+    /// <summary>
+    /// Encodes a page ID and record ID into a single 64-bit storage reference.
+    /// Reserved for future use when page-based compaction mapping is fully implemented.
+    /// </summary>
+    /// <param name="pageId">The page ID.</param>
+    /// <param name="recordId">The record ID within the page.</param>
+    /// <returns>Encoded storage reference.</returns>
+#pragma warning disable S1144 // Reserved for future page-based storage reference encoding
     private static long EncodeStorageReference(ulong pageId, ushort recordId)
-    {
-        return (long)((pageId << 16) | recordId);
-    }
+#pragma warning restore S1144
+        => (long)((pageId << 16) | recordId); // ✅ C# 14 expression-bodied
 
+    /// <summary>
+    /// Decodes a storage reference into page ID and record ID.
+    /// </summary>
+    /// <param name="storageReference">The storage reference.</param>
+    /// <returns>Tuple of (pageId, recordId).</returns>
     private static (ulong pageId, ushort recordId) DecodeStorageReference(long storageReference)
     {
         var pageId = (ulong)storageReference >> 16;

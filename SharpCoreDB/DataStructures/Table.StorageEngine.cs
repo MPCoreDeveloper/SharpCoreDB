@@ -68,10 +68,14 @@ public partial class Table
     /// <summary>
     /// Creates an AppendOnlyEngine for columnar storage.
     /// Requires IStorage instance for encryption and WAL support.
+    /// Note: DatabaseConfig is not currently passed to Table - will be added in future enhancement.
     /// </summary>
+    /// <param name="databasePath">Path to the database directory.</param>
+    /// <returns>Configured AppendOnlyEngine instance.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when storage is null.</exception>
     private IStorageEngine CreateColumnarEngine(string databasePath)
     {
-        if (storage == null)
+        if (storage is null) // ✅ C# 14 pattern
         {
             throw new InvalidOperationException(
                 $"Cannot create columnar storage engine for table '{Name}': IStorage instance is null. " +
@@ -80,6 +84,7 @@ public partial class Table
 
         return StorageEngineFactory.CreateEngine(
             StorageEngineType.AppendOnly,
+            config: null, // Note: Table doesn't have DatabaseConfig reference yet
             storage,
             databasePath);
     }
@@ -87,13 +92,16 @@ public partial class Table
     /// <summary>
     /// Creates a PageBasedEngine for page-based storage.
     /// Self-contained, does not require IStorage (manages its own .pages files).
+    /// Note: DatabaseConfig is not currently passed to Table - will be added in future enhancement.
     /// </summary>
+    /// <param name="databasePath">Path to the database directory.</param>
+    /// <returns>Configured PageBasedEngine instance.</returns>
     private IStorageEngine CreatePageBasedEngine(string databasePath)
     {
-        // PageBasedEngine is self-contained and doesn't need IStorage
         return StorageEngineFactory.CreateEngine(
             StorageEngineType.PageBased,
-            storage: null,
+            config: null, // Note: Table doesn't have DatabaseConfig reference yet
+            storage: null, // PageBased doesn't need IStorage
             databasePath);
     }
 
@@ -116,29 +124,24 @@ public partial class Table
     /// Gets the current storage engine type (for diagnostics/testing).
     /// Returns null if engine not yet initialized.
     /// </summary>
+    /// <returns>The storage engine type or null if not initialized.</returns>
     public StorageEngineType? GetStorageEngineType()
-    {
-        return _storageEngine?.EngineType;
-    }
+        => _storageEngine?.EngineType; // ✅ C# 14 expression-bodied
 
     /// <summary>
     /// Gets storage engine performance metrics (for monitoring/diagnostics).
     /// Returns null if engine not yet initialized.
     /// </summary>
+    /// <returns>Performance metrics or null if not initialized.</returns>
     public StorageEngineMetrics? GetStorageEngineMetrics()
-    {
-        return _storageEngine?.GetMetrics();
-    }
+        => _storageEngine?.GetMetrics(); // ✅ C# 14 expression-bodied
 
     /// <summary>
     /// Disposes the storage engine (called from Table.Dispose).
     /// </summary>
     private void DisposeStorageEngine()
     {
-        if (_storageEngine != null)
-        {
-            _storageEngine.Dispose();
-            _storageEngine = null;
-        }
+        _storageEngine?.Dispose(); // ✅ C# 14 null-conditional
+        _storageEngine = null;
     }
 }

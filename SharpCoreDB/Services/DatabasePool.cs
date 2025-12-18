@@ -10,82 +10,56 @@ using System.Collections.Concurrent;
 
 /// <summary>
 /// Provides connection pooling and reuse of Database instances.
+/// Modern C# 14 with primary constructor and collection expressions.
 /// </summary>
-public class DatabasePool : IDisposable
+/// <param name="services">The service provider for dependency injection.</param>
+/// <param name="maxPoolSize">Maximum number of pooled connections (default 10).</param>
+public sealed class DatabasePool(IServiceProvider services, int maxPoolSize = 10) : IDisposable
 {
-    private readonly IServiceProvider services;
-    private readonly ConcurrentDictionary<string, PooledDatabase> pool = new();
-    private readonly int maxPoolSize;
-    private bool disposed = false;
+    private readonly ConcurrentDictionary<string, PooledDatabase> _pool = new();
+    private readonly int _maxPoolSize = maxPoolSize;  // ✅ Store parameter as field
+    private bool _disposed;
 
     /// <summary>
     /// Represents a pooled database with reference counting.
+    /// Modern C# 14 with init-only setters (required removed for simplicity).
     /// </summary>
-    private class PooledDatabase
+    private sealed class PooledDatabase(IDatabase database, string connectionString)
     {
-        public IDatabase Database { get; set; }
-
-        public string ConnectionString { get; set; }
-
+        public IDatabase Database { get; init; } = database;  // ✅ Remove required, use init with default
+        public string ConnectionString { get; init; } = connectionString;
         public int ReferenceCount { get; set; }
-
-        public DateTime LastUsed { get; set; }
-
-        public PooledDatabase(IDatabase database, string connectionString)
-        {
-            this.Database = database;
-            this.ConnectionString = connectionString;
-            this.ReferenceCount = 0;
-            this.LastUsed = DateTime.UtcNow;
-        }
+        public DateTime LastUsed { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DatabasePool"/> class.
+    /// Gets the maximum pool size.
     /// </summary>
-    /// <param name="services">The service provider.</param>
-    /// <param name="maxPoolSize">Maximum number of pooled connections (default 10).</param>
-    public DatabasePool(IServiceProvider services, int maxPoolSize = 10)
-    {
-        this.services = services;
-        this.maxPoolSize = maxPoolSize;
-    }
+    public int MaxPoolSize => _maxPoolSize;
 
     /// <summary>
     /// Gets or creates a database instance from the pool using a connection string.
     /// </summary>
-    /// <param name="connectionString">The connection string.</param>
-    /// <returns>A database instance.</returns>
     public IDatabase GetDatabase(string connectionString)
     {
-        if (this.disposed)
-        {
-            throw new ObjectDisposedException(nameof(DatabasePool));
-        }
-
+        ObjectDisposedException.ThrowIf(_disposed, this);  // ✅ C# 14: modern throw helper
+        
         var builder = new ConnectionStringBuilder(connectionString);
-        return this.GetDatabase(builder.DataSource, builder.Password, builder.ReadOnly);
+        return GetDatabase(builder.DataSource, builder.Password, builder.ReadOnly);
     }
 
     /// <summary>
     /// Gets or creates a database instance from the pool.
     /// </summary>
-    /// <param name="dbPath">The database path.</param>
-    /// <param name="masterPassword">The master password.</param>
-    /// <param name="isReadOnly">Whether the database is readonly.</param>
-    /// <returns>A database instance.</returns>
     public IDatabase GetDatabase(string dbPath, string masterPassword, bool isReadOnly = false)
     {
-        if (this.disposed)
-        {
-            throw new ObjectDisposedException(nameof(DatabasePool));
-        }
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         var key = $"{dbPath}|{isReadOnly}";
 
-        var pooled = this.pool.GetOrAdd(key, _ =>
+        var pooled = _pool.GetOrAdd(key, _ =>
         {
-            var factory = this.services.GetRequiredService<DatabaseFactory>();
+            var factory = services.GetRequiredService<DatabaseFactory>();
             var db = factory.Create(dbPath, masterPassword, isReadOnly);
             return new PooledDatabase(db, key);
         });
@@ -102,16 +76,12 @@ public class DatabasePool : IDisposable
     /// <summary>
     /// Returns a database instance to the pool (decrements reference count).
     /// </summary>
-    /// <param name="database">The database instance.</param>
-    public void ReturnDatabase(IDatabase database)
+    public void ReturnDatabase(IDatabase? database)
     {
-        if (this.disposed || database == null)
-        {
-            return;
-        }
+        if (_disposed || database is null) return;
 
-        var pooled = this.pool.Values.FirstOrDefault(p => p.Database == database);
-        if (pooled != null)
+        var pooled = _pool.Values.FirstOrDefault(p => p.Database == database);
+        if (pooled is not null)
         {
             lock (pooled)
             {
@@ -122,73 +92,54 @@ public class DatabasePool : IDisposable
     }
 
     /// <summary>
-    /// Clears unused database instances from the pool (reference count = 0 and idle for more than specified time).
+    /// Clears unused database instances from the pool.
     /// </summary>
-    /// <param name="idleTimeout">The idle timeout duration (default 5 minutes).</param>
     public void ClearIdleConnections(TimeSpan? idleTimeout = null)
     {
-        if (this.disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         var timeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         var cutoff = DateTime.UtcNow - timeout;
 
-        var keysToRemove = new List<string>();
-        foreach (var kvp in this.pool)
-        {
-            lock (kvp.Value)
+        var keysToRemove = _pool
+            .Where(kvp =>
             {
-                if (kvp.Value.ReferenceCount == 0 && kvp.Value.LastUsed < cutoff)
+                lock (kvp.Value)
                 {
-                    keysToRemove.Add(kvp.Key);
+                    return kvp.Value.ReferenceCount == 0 && kvp.Value.LastUsed < cutoff;
                 }
-            }
-        }
+            })
+            .Select(kvp => kvp.Key)
+            .ToList();
 
         foreach (var key in keysToRemove)
         {
-            if (this.pool.TryRemove(key, out var pooled))
-            {
-                // Database instances don't have explicit dispose, but we remove from pool
-            }
+            _pool.TryRemove(key, out _);
         }
     }
 
     /// <summary>
     /// Gets the current pool size.
     /// </summary>
-    public int PoolSize => this.pool.Count;
+    public int PoolSize => _pool.Count;
 
     /// <summary>
     /// Gets statistics about the pool.
     /// </summary>
-    /// <returns>A dictionary with pool statistics.</returns>
-    public Dictionary<string, int> GetPoolStatistics()
+    public Dictionary<string, int> GetPoolStatistics() => new()  // ✅ C# 14: target-typed new
     {
-        var stats = new Dictionary<string, int>
-        {
-            ["TotalConnections"] = this.pool.Count,
-            ["ActiveConnections"] = this.pool.Values.Count(p => p.ReferenceCount > 0),
-            ["IdleConnections"] = this.pool.Values.Count(p => p.ReferenceCount == 0),
-        };
+        ["TotalConnections"] = _pool.Count,
+        ["ActiveConnections"] = _pool.Values.Count(p => p.ReferenceCount > 0),
+        ["IdleConnections"] = _pool.Values.Count(p => p.ReferenceCount == 0),
+    };
 
-        return stats;
-    }
-
-    /// <summary>
-    /// Disposes the database pool and clears all connections.
-    /// </summary>
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
-        this.disposed = true;
-        this.pool.Clear();
+        _disposed = true;
+        _pool.Clear();
         GC.SuppressFinalize(this);
     }
 }

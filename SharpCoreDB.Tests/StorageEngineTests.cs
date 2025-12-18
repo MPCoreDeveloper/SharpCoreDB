@@ -204,7 +204,8 @@ public class StorageEngineTests : IDisposable
     {
         using var engine = StorageEngineFactory.CreateEngine(
             StorageEngineType.PageBased,
-            null,
+            config: null,
+            storage: null,
             testDbPath);
 
         Assert.NotNull(engine);
@@ -221,6 +222,7 @@ public class StorageEngineTests : IDisposable
 
         using var engine = StorageEngineFactory.CreateEngine(
             StorageEngineType.AppendOnly,
+            config: null,
             storage,
             testDbPath);
 

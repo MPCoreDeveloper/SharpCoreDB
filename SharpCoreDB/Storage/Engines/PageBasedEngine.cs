@@ -25,6 +25,7 @@ using System.Threading.Tasks;
 public class PageBasedEngine : IStorageEngine
 {
     private readonly string databasePath;
+    private readonly DatabaseConfig? config; // ✅ NEW: Store config for PageManager
     private readonly ConcurrentDictionary<string, PageManager> tableManagers = new();
     private readonly ConcurrentDictionary<string, uint> tableIds = new();
     private readonly Lock transactionLock = new();
@@ -45,11 +46,14 @@ public class PageBasedEngine : IStorageEngine
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PageBasedEngine"/> class.
+    /// ✅ NEW: Accepts DatabaseConfig for auto-configuration!
     /// </summary>
     /// <param name="databasePath">Path to the database directory.</param>
-    public PageBasedEngine(string databasePath)
+    /// <param name="config">Optional database configuration for auto-tuning.</param>
+    public PageBasedEngine(string databasePath, DatabaseConfig? config = null)
     {
         this.databasePath = databasePath ?? throw new ArgumentNullException(nameof(databasePath));
+        this.config = config; // ✅ NEW: Store config
         
         if (!Directory.Exists(databasePath))
         {
@@ -312,7 +316,7 @@ public class PageBasedEngine : IStorageEngine
         return tableManagers.GetOrAdd(tableName, name =>
         {
             var tableId = GetTableId(name);
-            return new PageManager(databasePath, tableId);
+            return new PageManager(databasePath, tableId, config); // ✅ Pass config!
         });
     }
 
