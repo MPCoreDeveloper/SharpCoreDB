@@ -7,6 +7,8 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
+using SharpCoreDB;
+using SharpCoreDB.Services;
 
 namespace SharpCoreDB.Tests;
 
@@ -93,7 +95,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"1?? BASELINE (No Optimizations): {sw.ElapsedMilliseconds} ms");
         _output.WriteLine($"   Throughput: {10_000 / (sw.ElapsedMilliseconds / 1000.0):N0} rec/sec");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -121,7 +123,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"2?? STANDARD (ExecuteBatchSQL): {sw.ElapsedMilliseconds} ms");
         _output.WriteLine($"   Throughput: {10_000 / (sw.ElapsedMilliseconds / 1000.0):N0} rec/sec");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -148,7 +150,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"   Throughput: {10_000 / (sw.ElapsedMilliseconds / 1000.0):N0} rec/sec");
         _output.WriteLine($"   Config: GroupCommitSize=1000, WalBuffer=8MB");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -167,7 +169,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"   Throughput: {10_000 / (sw.ElapsedMilliseconds / 1000.0):N0} rec/sec");
         _output.WriteLine($"   Config: GroupCommitSize=5000, WalBuffer=16MB, WalBatchMultiplier=512");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -197,7 +199,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"   Config: UseOptimizedInsertPath=true, EncryptionBuffer=64KB");
         _output.WriteLine($"   Note: INCLUDES encryption (NoEncryptMode=false)");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -224,7 +226,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         _output.WriteLine($"   Throughput: {10_000 / (sw.ElapsedMilliseconds / 1000.0):N0} rec/sec");
         _output.WriteLine($"   Config: UseOptimizedInsertPath=true, NoEncryptMode=true");
         
-        Directory.Delete(dbPath, true);
+        CleanupDb((Database)db, dbPath);
     }
 
     [Fact]
@@ -296,6 +298,37 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
 
         var throughput = 10_000 / (sw.ElapsedMilliseconds / 1000.0);
         results.Add((name, sw.ElapsedMilliseconds, throughput));
+    }
+
+    private static void SafeDeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, true);
+                return;
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(200);
+            }
+        }
+        // Final attempt
+        Directory.Delete(path, true);
+    }
+
+    private void CleanupDb(Database db, string dbPath)
+    {
+        if (db is not null)
+        {
+            db.ClearQueryCache();
+            db.Dispose();
+        }
+        Thread.Sleep(300);
+        try { GroupCommitWAL.CleanupOrphanedWAL(dbPath); } catch { }
+        SafeDeleteDirectory(dbPath);
     }
 
     public void Dispose()

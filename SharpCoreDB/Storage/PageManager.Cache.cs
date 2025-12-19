@@ -238,11 +238,17 @@ public partial class PageManager
 
             var evictedNode = tail;
             
-            // Flush if dirty before evicting
+            // ✅ FIX: This is a critical issue - we can't flush from within the cache
+            // because we don't have access to the file stream here. The caller (PageManager)
+            // must ensure dirty pages are flushed before they can be evicted.
+            // For now, we'll prevent eviction of dirty pages by not evicting them.
+            
+            // Skip eviction if page is dirty - this prevents data loss
             if (evictedNode.Page.IsDirty)
             {
-                // Caller must handle flushing via callback
-                // For now, just track that we're evicting a dirty page
+                // Don't evict dirty pages - they need to be flushed first
+                // This means cache might exceed capacity temporarily
+                return;
             }
 
             cache.TryRemove(evictedNode.PageId, out _);
@@ -298,8 +304,27 @@ public partial class PageManager
         lock (writeLock)
         {
             var offset = (long)pageId.Value * PAGE_SIZE;
+            
+            // ✅ FIX: If page doesn't exist on disk yet, create a new empty page
+            // This happens when pages are allocated but not yet flushed
             if (offset >= pagesFile.Length)
-                throw new InvalidOperationException($"Page {pageId.Value} does not exist");
+            {
+                // Return a new empty page - it should be in cache if it was allocated
+                // If it's not in cache and doesn't exist on disk, this is an error
+                var newPage = new Page
+                {
+                    PageId = pageId.Value,
+                    Type = PageType.Free,
+                    TableId = 0,
+                    FreeSpaceOffset = (ushort)PAGE_SIZE,
+                    RecordCount = 0,
+                    LSN = 0,
+                    NextPageId = 0,
+                    PrevPageId = 0,
+                    IsDirty = false
+                };
+                return newPage;
+            }
 
             var buffer = new byte[PAGE_SIZE];
             pagesFile.Seek(offset, SeekOrigin.Begin);

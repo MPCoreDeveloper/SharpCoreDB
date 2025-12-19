@@ -82,6 +82,13 @@ public class PageBasedEngine : IStorageEngine
         // Encode storage reference: upper 48 bits = pageId, lower 16 bits = recordId
         var storageRef = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
         
+        // ❌ REMOVED: FlushDirtyPages() - this kills performance!
+        // Pages are now only flushed on:
+        // 1. Transaction commit (CommitAsync)
+        // 2. Explicit Flush() call
+        // 3. Dispose
+        // This enables dirty page buffering and LRU cache effectiveness!
+        
         sw.Stop();
         Interlocked.Add(ref insertTicks, sw.ElapsedTicks);
         Interlocked.Increment(ref totalInserts);
@@ -178,6 +185,43 @@ public class PageBasedEngine : IStorageEngine
             Interlocked.Add(ref readTicks, sw.ElapsedTicks);
             Interlocked.Increment(ref totalReads);
             return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<(long storageReference, byte[] data)> GetAllRecords(string tableName)
+    {
+        var manager = GetOrCreatePageManager(tableName);
+        var tableId = GetTableId(tableName);
+        
+        // Get all pages belonging to this table
+        var tablePages = manager.GetAllTablePages(tableId);
+        
+        foreach (var pageId in tablePages)
+        {
+            // Get all records in this page
+            var recordIds = manager.GetAllRecordsInPage(pageId);
+            
+            foreach (var recordId in recordIds)
+            {
+                byte[]? data = null;
+                try
+                {
+                    // Read the record data
+                    data = manager.ReadRecord(pageId, recordId);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Record was deleted - skip it
+                }
+                
+                if (data != null)
+                {
+                    // Encode storage reference for index compatibility
+                    var storageRef = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
+                    yield return (storageRef, data);
+                }
+            }
         }
     }
 
@@ -322,14 +366,15 @@ public class PageBasedEngine : IStorageEngine
 
     /// <summary>
     /// Gets or creates a unique table ID for the specified table name.
+    /// ✅ FIXED: No Math.Abs() - must match Table's tableId calculation!
     /// </summary>
     private uint GetTableId(string tableName)
     {
         return tableIds.GetOrAdd(tableName, name =>
         {
-            // Simple hash-based ID generation
-            // Production would use a persistent counter
-            return (uint)Math.Abs(name.GetHashCode());
+            // ✅ CRITICAL: Use same calculation as Table.GetPageManager()
+            // DO NOT use Math.Abs() - it breaks tableId matching!
+            return (uint)name.GetHashCode();
         });
     }
 

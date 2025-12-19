@@ -6,7 +6,8 @@
 namespace SharpCoreDB.Benchmarks;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Configs;
+// removed runtime-specific Job attribute usage to avoid HostProcess crash on 0.15.8
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using LiteDB;
@@ -16,21 +17,14 @@ using System.IO;
 
 /// <summary>
 /// Comprehensive storage engine comparison across all available options.
-/// Compares:
-/// - SharpCoreDB AppendOnly (columnar)
-/// - SharpCoreDB PAGE_BASED (optimized)
-/// - SQLite (industry standard)
-/// - LiteDB (pure .NET competitor)
-/// 
-/// Test scale: 100K records to validate production performance.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net90)]
-[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
+// Run configuration provided from Program.cs (HostRuntime + ShortRun)
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 [CategoriesColumn]
 public class StorageEngineComparisonBenchmark
 {
-    private const int RecordCount = 100_000;
+    private const int RecordCount = 10_000; // ? REALISTIC: 10K records for production benchmarks
     
     private string appendOnlyPath = string.Empty;
     private string pageBasedPath = string.Empty;
@@ -38,8 +32,8 @@ public class StorageEngineComparisonBenchmark
     private string liteDbPath = string.Empty;
     
     private IServiceProvider services = null!;
-    private Database? appendOnlyDb; // ? Changed to Database for Dispose
-    private Database? pageBasedDb; // ? Changed to Database for Dispose
+    private Database? appendOnlyDb;
+    private Database? pageBasedDb;
     private SqliteConnection? sqliteConn;
     private LiteDatabase? liteDb;
 
@@ -67,11 +61,24 @@ public class StorageEngineComparisonBenchmark
         {
             NoEncryptMode = true,
             StorageEngineType = StorageEngineType.AppendOnly,
-            EnablePageCache = false
+            EnablePageCache = false,
+            SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled, // ? CRITICAL: Disable for benchmarks
+            StrictParameterValidation = false
         };
 
         // PAGE_BASED config (fully optimized)
-        var pageBasedConfig = DatabaseConfig.OLTP; // Uses optimized PAGE_BASED
+        var pageBasedConfig = new DatabaseConfig
+        {
+            NoEncryptMode = true,
+            StorageEngineType = StorageEngineType.PageBased,
+            EnablePageCache = true,
+            PageCacheCapacity = 10000,
+            UseGroupCommitWal = true,
+            EnableAdaptiveWalBatching = true,
+            WorkloadHint = WorkloadHint.WriteHeavy,
+            SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled, // ? CRITICAL: Disable for benchmarks
+            StrictParameterValidation = false
+        };
 
         appendOnlyDb = (Database)factory.Create(appendOnlyPath, "password", isReadOnly: false, appendOnlyConfig);
         pageBasedDb = (Database)factory.Create(pageBasedPath, "password", isReadOnly: false, pageBasedConfig);
@@ -81,7 +88,7 @@ public class StorageEngineComparisonBenchmark
         sqliteConn.Open();
         using (var cmd = sqliteConn.CreateCommand())
         {
-            cmd.CommandText = @"CREATE TABLE benchmark (
+            cmd.CommandText = @"CREATE TABLE bench_records (
                 id INTEGER PRIMARY KEY,
                 name TEXT,
                 email TEXT,
@@ -94,11 +101,11 @@ public class StorageEngineComparisonBenchmark
 
         // LiteDB setup
         liteDb = new LiteDatabase(liteDbPath);
-        var collection = liteDb.GetCollection<BenchmarkRecord>("benchmark");
+        var collection = liteDb.GetCollection<BenchmarkRecord>("bench_records");
         collection.EnsureIndex(x => x.Id);
 
         // SharpCoreDB schema
-        var createTable = @"CREATE TABLE benchmark (
+        var createTable = @"CREATE TABLE bench_records (
             id INTEGER PRIMARY KEY,
             name TEXT,
             email TEXT,
@@ -145,7 +152,7 @@ public class StorageEngineComparisonBenchmark
     {
         for (int i = 0; i < RecordCount; i++)
         {
-            appendOnlyDb!.ExecuteSQL($@"INSERT INTO benchmark (id, name, email, age, salary, created) 
+            appendOnlyDb!.ExecuteSQL($@"INSERT INTO bench_records (id, name, email, age, salary, created) 
                 VALUES ({i}, 'User{i}', 'user{i}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
     }
@@ -160,7 +167,7 @@ public class StorageEngineComparisonBenchmark
     {
         for (int i = 0; i < RecordCount; i++)
         {
-            pageBasedDb!.ExecuteSQL($@"INSERT INTO benchmark (id, name, email, age, salary, created) 
+            pageBasedDb!.ExecuteSQL($@"INSERT INTO bench_records (id, name, email, age, salary, created) 
                 VALUES ({i}, 'User{i}', 'user{i}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
     }
@@ -174,7 +181,7 @@ public class StorageEngineComparisonBenchmark
     {
         using var transaction = sqliteConn!.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
-        cmd.CommandText = "INSERT INTO benchmark (id, name, email, age, salary, created) VALUES (@id, @name, @email, @age, @salary, @created)";
+        cmd.CommandText = "INSERT INTO bench_records (id, name, email, age, salary, created) VALUES (@id, @name, @email, @age, @salary, @created)";
         
         var idParam = cmd.Parameters.Add("@id", SqliteType.Integer);
         var nameParam = cmd.Parameters.Add("@name", SqliteType.Text);
@@ -204,7 +211,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void LiteDB_Insert_100K()
     {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("benchmark");
+        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
         var records = new List<BenchmarkRecord>(RecordCount);
         
         for (int i = 0; i < RecordCount; i++)
@@ -237,7 +244,7 @@ public class StorageEngineComparisonBenchmark
         for (int i = 0; i < RecordCount / 2; i++)
         {
             var id = Random.Shared.Next(0, RecordCount);
-            appendOnlyDb!.ExecuteSQL($"UPDATE benchmark SET salary = {50000 + id} WHERE id = {id}");
+            appendOnlyDb!.ExecuteSQL($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
         }
     }
 
@@ -252,7 +259,7 @@ public class StorageEngineComparisonBenchmark
         for (int i = 0; i < RecordCount / 2; i++)
         {
             var id = Random.Shared.Next(0, RecordCount);
-            pageBasedDb!.ExecuteSQL($"UPDATE benchmark SET salary = {50000 + id} WHERE id = {id}");
+            pageBasedDb!.ExecuteSQL($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
         }
     }
 
@@ -265,7 +272,7 @@ public class StorageEngineComparisonBenchmark
     {
         using var transaction = sqliteConn!.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
-        cmd.CommandText = "UPDATE benchmark SET salary = @salary WHERE id = @id";
+        cmd.CommandText = "UPDATE bench_records SET salary = @salary WHERE id = @id";
         
         var salaryParam = cmd.Parameters.Add("@salary", SqliteType.Real);
         var idParam = cmd.Parameters.Add("@id", SqliteType.Integer);
@@ -288,7 +295,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Update")]
     public void LiteDB_Update_50K()
     {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("benchmark");
+        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
         
         for (int i = 0; i < RecordCount / 2; i++)
         {
@@ -313,7 +320,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void AppendOnly_Select_FullScan()
     {
-        appendOnlyDb!.ExecuteSQL("SELECT * FROM benchmark WHERE age > 30"); // ? Returns void
+        appendOnlyDb!.ExecuteSQL("SELECT * FROM bench_records WHERE age > 30");
     }
 
     /// <summary>
@@ -324,7 +331,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void PageBased_Select_FullScan()
     {
-        pageBasedDb!.ExecuteSQL("SELECT * FROM benchmark WHERE age > 30"); // ? Returns void
+        pageBasedDb!.ExecuteSQL("SELECT * FROM bench_records WHERE age > 30");
     }
 
     /// <summary>
@@ -335,7 +342,7 @@ public class StorageEngineComparisonBenchmark
     public void SQLite_Select_FullScan()
     {
         using var cmd = sqliteConn!.CreateCommand();
-        cmd.CommandText = "SELECT * FROM benchmark WHERE age > 30";
+        cmd.CommandText = "SELECT * FROM bench_records WHERE age > 30";
         using var reader = cmd.ExecuteReader();
         int count = 0;
         while (reader.Read()) count++;
@@ -349,7 +356,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void LiteDB_Select_FullScan()
     {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("benchmark");
+        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
         var results = collection.Find(x => x.Age > 30);
         _ = results.Count();
     }

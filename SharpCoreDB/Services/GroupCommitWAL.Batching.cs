@@ -87,28 +87,37 @@ public partial class GroupCommitWAL
                     
                     while (batch.Count < currentBatchSize)  // Use currentBatchSize (dynamic)
                     {
+                        // ✅ CRITICAL OPTIMIZATION: If queue is empty and we only have 1 commit,
+                        // flush immediately (no point waiting for batching in low-concurrency scenario)
+                        // ✅ FIX: Use TryPeek instead of .Count (which is not supported on ChannelReader)
+                        if (batch.Count == 1 && !commitQueue.Reader.TryPeek(out _))
+                        {
+                            break;  // Immediate flush for single-threaded workloads!
+                        }
+                        
                         var remaining = deadline - DateTime.UtcNow;
                         if (remaining <= TimeSpan.Zero)
                         {
                             break;  // Timeout reached - flush batch
                         }
 
-                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                        timeoutCts.CancelAfter(remaining);
+                        // ✅ CRITICAL FIX: Use Task.Delay for timeout, not WaitToReadAsync
+                        // WaitToReadAsync waits indefinitely if queue is empty, even with CancellationToken!
+                        var readTask = commitQueue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+                        var delayTask = Task.Delay(remaining, cancellationToken);
                         
-                        try
+                        var completedTask = await Task.WhenAny(readTask, delayTask);
+                        
+                        if (completedTask == delayTask)
                         {
-                            await commitQueue.Reader.WaitToReadAsync(timeoutCts.Token).ConfigureAwait(false);
-                            
-                            // Collect all immediately available commits
-                            while (batch.Count < currentBatchSize && commitQueue.Reader.TryRead(out var pending))
-                            {
-                                batch.Add(pending);
-                            }
-                        }
-                        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-                        {
+                            // Timeout reached - flush whatever we have
                             break;
+                        }
+                        
+                        // Data available - collect all immediately available commits
+                        while (batch.Count < currentBatchSize && commitQueue.Reader.TryRead(out var pending))
+                        {
+                            batch.Add(pending);
                         }
                     }
 
@@ -194,22 +203,27 @@ public partial class GroupCommitWAL
     /// Adjusts batch size based on current queue depth.
     /// Scales UP when queue is deep (high concurrency), DOWN when queue is shallow (low concurrency).
     /// Expected gain: +15-25% throughput at 32+ threads.
+    /// ✅ FIX: Uses approximation via TryPeek since ChannelReader.Count is not supported.
     /// </summary>
     private void AdjustBatchSize()
     {
-        int queueDepth = commitQueue.Reader.Count;
+        // ✅ FIX: ChannelReader.Count is NOT supported in .NET
+        // We approximate queue depth by checking if data is immediately available
+        // Deep queue = TryPeek succeeds, Shallow queue = TryPeek fails
+        bool hasQueuedItems = commitQueue.Reader.TryPeek(out _);
+        
         int oldBatchSize = currentBatchSize;
         int newBatchSize = currentBatchSize;
 
-        // Scale UP: Queue depth > currentBatchSize * 4
-        if (queueDepth > currentBatchSize * BufferConstants.WAL_SCALE_UP_THRESHOLD_MULTIPLIER)
+        // Scale UP: Queue has items (indicates high concurrency)
+        if (hasQueuedItems && currentBatchSize < BufferConstants.MAX_WAL_BATCH_SIZE)
         {
             newBatchSize = Math.Min(
                 currentBatchSize * 2, 
                 BufferConstants.MAX_WAL_BATCH_SIZE);
         }
-        // Scale DOWN: Queue depth < currentBatchSize / 4
-        else if (queueDepth < currentBatchSize / BufferConstants.WAL_SCALE_DOWN_THRESHOLD_DIVISOR)
+        // Scale DOWN: Queue is empty (indicates low concurrency)
+        else if (!hasQueuedItems && currentBatchSize > BufferConstants.MIN_WAL_BATCH_SIZE)
         {
             newBatchSize = Math.Max(
                 currentBatchSize / 2, 
@@ -225,7 +239,7 @@ public partial class GroupCommitWAL
             Console.WriteLine(
                 $"[GroupCommitWAL:{instanceId[..8]}] " +  // ✅ C# 14: Range operator instead of Substring
                 $"Batch size adjusted: {oldBatchSize} → {newBatchSize} " +
-                $"(queue depth: {queueDepth})");
+                $"(queue has items: {hasQueuedItems})");
         }
 
         Interlocked.Exchange(ref operationsSinceLastAdjustment, 0);

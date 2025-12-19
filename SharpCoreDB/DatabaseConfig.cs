@@ -487,6 +487,14 @@ public class DatabaseConfig
             _ => Interfaces.StorageEngineType.PageBased // Default to PAGE_BASED (safest choice)
         };
     }
+
+    /// <summary>
+    /// Threshold for automatic compaction in COLUMNAR storage.
+    /// When the sum of UPDATEs and DELETEs since the last compaction reaches this threshold,
+    /// a background compaction is triggered.
+    /// Default: 1000. Set to 0 to disable auto-compaction.
+    /// </summary>
+    public long ColumnarAutoCompactionThreshold { get; init; } = 1000;
 }
 
 /// <summary>

@@ -15,35 +15,6 @@ using SharpCoreDB.Storage.Hybrid;
 /// </summary>
 public partial class Table
 {
-    // Page manager for page-based storage mode (lazy initialized)
-    private PageManager? pageManager;
-
-    /// <summary>
-    /// Gets the page manager for this table, creating it if necessary.
-    /// Only applicable for PAGE_BASED storage mode.
-    /// </summary>
-    private PageManager GetPageManager()
-    {
-        if (StorageMode != StorageMode.PageBased)
-        {
-            throw new InvalidOperationException(
-                $"PageManager is only available for PAGE_BASED storage mode. Current mode: {StorageMode}");
-        }
-
-        if (pageManager == null)
-        {
-            // Extract database path from DataFile
-            var dbPath = Path.GetDirectoryName(DataFile) ?? Environment.CurrentDirectory;
-            
-            // Generate table ID from table name (simple hash for now)
-            uint tableId = (uint)Name.GetHashCode();
-            
-            pageManager = new PageManager(dbPath, tableId);
-        }
-
-        return pageManager;
-    }
-
     /// <summary>
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
@@ -134,203 +105,11 @@ public partial class Table
                         hashIndex.Add(row, position);
                     }
                     
-                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)))
+                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
                     {
                         this.staleIndexes.Add(registeredCol);
                     }
                 }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-            }
-        }
-        finally
-        {
-            this.rwLock.ExitWriteLock();
-        }
-    }
-
-    /// <summary>
-    /// Inserts a row using columnar storage (original implementation).
-    /// </summary>
-    private void InsertColumnar(Dictionary<string, object> row)
-    {
-        this.rwLock.EnterWriteLock();
-        try
-        {
-            // Validate + fill defaults
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                var col = this.Columns[i];
-                if (!row.TryGetValue(col, out var val))
-                {
-                    row[col] = this.IsAuto[i] ? GenerateAutoValue(this.ColumnTypes[i]) : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                }
-                else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
-                {
-                    throw new InvalidOperationException($"Type mismatch for column {col}");
-                }
-            }
-
-            // Primary key check
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
-                    throw new InvalidOperationException("Primary key violation");
-            }
-
-            // OPTIMIZED: Estimate buffer size and use ArrayPool with SIMD zeroing
-            int estimatedSize = EstimateRowSize(row);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-            try
-            {
-                // SIMD: Zero the buffer for security
-                if (SimdHelper.IsSimdSupported)
-                {
-                    SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-                }
-                else
-                {
-                    Array.Clear(buffer, 0, estimatedSize);
-                }
-
-                int bytesWritten = 0;
-                Span<byte> bufferSpan = buffer.AsSpan();
-                
-                // Serialize row using Span-based operations
-                foreach (var col in this.Columns)
-                {
-                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[this.Columns.IndexOf(col)]);
-                    bytesWritten += written;
-                }
-
-                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-                // TRUE APPEND + POSITION
-                long position = this.storage!.AppendBytes(this.DataFile, rowData);
-
-                // Primary key index
-                if (this.PrimaryKeyIndex >= 0)
-                {
-                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, position);
-                }
-
-                // FIXED: Ensure all registered indexes are loaded before INSERT
-                // This fixes the issue where indexes registered during CREATE TABLE
-                // were never loaded, so INSERT didn't populate them with data
-                var unloadedIndexes = this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList();
-                foreach (var registeredCol in unloadedIndexes)
-                {
-                    EnsureIndexLoaded(registeredCol);
-                }
-
-                // FIXED: Synchronous hash index update for consistency
-                // Hash indexes must be updated immediately so subsequent queries can find the data
-                // Now all registered indexes are guaranteed to be in hashIndexes.Values
-                foreach (var hashIndex in this.hashIndexes.Values)
-                {
-                    hashIndex.Add(row, position);
-                }
-                
-                // Mark unloaded indexes as stale (they need rebuilding if loaded later)
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)))
-                {
-                    this.staleIndexes.Add(registeredCol);
-                }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-            }
-        }
-        finally
-        {
-            this.rwLock.ExitWriteLock();
-        }
-    }
-
-    /// <summary>
-    /// Inserts a row using page-based storage (new implementation).
-    /// </summary>
-    private void InsertPageBased(Dictionary<string, object> row)
-    {
-        this.rwLock.EnterWriteLock();
-        try
-        {
-            // Validate + fill defaults
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                var col = this.Columns[i];
-                if (!row.TryGetValue(col, out var val))
-                {
-                    row[col] = this.IsAuto[i] ? GenerateAutoValue(this.ColumnTypes[i]) : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                }
-                else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
-                {
-                    throw new InvalidOperationException($"Type mismatch for column {col}");
-                }
-            }
-
-            // Primary key check
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
-                    throw new InvalidOperationException("Primary key violation");
-            }
-
-            // Serialize row data
-            int estimatedSize = EstimateRowSize(row);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-            try
-            {
-                if (SimdHelper.IsSimdSupported)
-                {
-                    SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-                }
-                else
-                {
-                    Array.Clear(buffer, 0, estimatedSize);
-                }
-
-                int bytesWritten = 0;
-                Span<byte> bufferSpan = buffer.AsSpan();
-                
-                foreach (var col in this.Columns)
-                {
-                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[this.Columns.IndexOf(col)]);
-                    bytesWritten += written;
-                }
-
-                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-                // Insert into page-based storage
-                var pm = GetPageManager();
-                uint tableId = (uint)Name.GetHashCode();
-                
-                // Find or allocate a page with space
-                const int RECORD_OVERHEAD = 16; // Record header + slot
-                var requiredSpace = rowData.Length + RECORD_OVERHEAD;
-                var pageId = pm.FindPageWithSpace(tableId, requiredSpace);
-                
-                // Insert the record
-                var recordId = pm.InsertRecord(pageId, rowData);
-
-                // Store position as (pageId << 32 | recordId) for index compatibility
-                long position = ((long)pageId.Value << 32) | recordId.SlotIndex;
-
-                // Update primary key index
-                if (this.PrimaryKeyIndex >= 0)
-                {
-                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, position);
-                }
-
-                // Note: Hash indexes not used with page-based storage
-                // B-tree indexes are built separately (future milestone)
             }
             finally
             {
@@ -441,12 +220,9 @@ public partial class Table
                 if (StorageMode == StorageMode.Columnar)
                 {
                     // Ensure all registered indexes are loaded
-                    foreach (var registeredCol in this.registeredIndexes.Keys.ToList())
+                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
                     {
-                        if (!this.loadedIndexes.Contains(registeredCol))
-                        {
-                            EnsureIndexLoaded(registeredCol);
-                        }
+                        EnsureIndexLoaded(registeredCol);
                     }
                 }
 
@@ -474,7 +250,7 @@ public partial class Table
 
                 if (StorageMode == StorageMode.Columnar)
                 {
-                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)))
+                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
                     {
                         this.staleIndexes.Add(registeredCol);
                     }
@@ -610,18 +386,18 @@ public partial class Table
         {
             if (StorageMode == StorageMode.Columnar)
             {
-                // Columnar: Read entire file and scan
+                // Columnar: Read entire file and scan, filtering out deleted/stale rows
                 var data = this.storage!.ReadBytes(this.DataFile, noEncrypt);
                 if (data != null && data.Length > 0)
                 {
-                    results = ScanRowsWithSimd(data, where);
+                    results = ScanRowsWithSimdAndFilterStale(data, where);
                 }
             }
             else // PageBased
             {
-                // PageBased: Full table scan not yet implemented
-                // Would require iterating all pages - future enhancement
-                // For now, return empty results
+                // ✅ IMPLEMENTED: Full table scan using storage engine's GetAllRecords
+                uint tableId = (uint)Name.GetHashCode();
+                results = ScanPageBasedTable(tableId, where);
             }
         }
 
@@ -629,147 +405,103 @@ public partial class Table
     }
 
     /// <summary>
-    /// SELECT implementation for columnar storage (original).
+    /// Scans rows with SIMD optimization and filters out stale versions for columnar storage.
+    /// Columnar UPDATE creates new versions, so we need to only return rows whose PK points to their position.
     /// </summary>
-    private List<Dictionary<string, object>> SelectColumnar(string? where, string? orderBy, bool asc, bool noEncrypt)
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(byte[] data, string? where)
     {
         var results = new List<Dictionary<string, object>>();
-
-        // 1. HashIndex lookup (O(1)) with lazy loading
-        if (!string.IsNullOrEmpty(where) && TryParseSimpleWhereClause(where, out var col, out var valObj) && this.registeredIndexes.ContainsKey(col))
-        {
-            // Ensure index is loaded before using it
-            EnsureIndexLoaded(col);
-            
-            if (this.hashIndexes.TryGetValue(col, out var hashIndex))
-            {
-                var colIdx = this.Columns.IndexOf(col);
-                if (colIdx >= 0)
-                {
-                    var key = ParseValueForHashLookup(valObj.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
-                    if (key is not null)
-                    {
-                        var positions = hashIndex.LookupPositions(key);
-                        foreach (var pos in positions)
-                        {
-                            var row = ReadRowAtPosition(pos, noEncrypt);
-                            if (row != null) results.Add(row);
-                        }
-                    }
-                    if (results.Count > 0) return ApplyOrdering(results, orderBy, asc);
-                }
-            }
-        }
-
-        // 2. Primary key lookup
-        if (results.Count == 0 && where != null && this.PrimaryKeyIndex >= 0)
-        {
-            var pkCol = this.Columns[this.PrimaryKeyIndex];
-            if (TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) && whereCol == pkCol)
-            {
-                var pkVal = whereVal.ToString() ?? string.Empty;
-                var searchResult = this.Index.Search(pkVal);
-                if (searchResult.Found)
-                {
-                    long position = searchResult.Value;
-                    var row = ReadRowAtPosition(position, noEncrypt);
-                    if (row != null) results.Add(row);
-                    return ApplyOrdering(results, orderBy, asc);
-                }
-            }
-        }
-
-        // 3. Full scan fallback with SIMD optimization
-        if (results.Count == 0)
-        {
-            var data = this.storage!.ReadBytes(this.DataFile, noEncrypt);
-            if (data != null && data.Length > 0)
-            {
-                // SIMD: Use optimized row scanning
-                results = ScanRowsWithSimd(data, where);
-            }
-        }
-
-        return ApplyOrdering(results, orderBy, asc);
-    }
-
-    /// <summary>
-    /// SELECT implementation for page-based storage.
-    /// Uses PageManager to read records from pages.
-    /// </summary>
-    private List<Dictionary<string, object>> SelectPageBased(string? where, string? orderBy, bool asc)
-    {
-        var results = new List<Dictionary<string, object>>();
-        var pm = GetPageManager();
-
-        // 1. Primary key lookup via B-Tree index
-        if (!string.IsNullOrEmpty(where) && this.PrimaryKeyIndex >= 0)
-        {
-            var pkCol = this.Columns[this.PrimaryKeyIndex];
-            if (TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) && whereCol == pkCol)
-            {
-                var pkVal = whereVal.ToString() ?? string.Empty;
-                var searchResult = this.Index.Search(pkVal);
-                if (searchResult.Found)
-                {
-                    // Position encoded as (pageId << 32 | recordId)
-                    long position = searchResult.Value;
-                    var pageId = new PageManager.PageId((ulong)(position >> 32));
-                    var recordId = new PageManager.RecordId((ushort)(position & 0xFFFF));
-                    
-                    try
-                    {
-                        var recordData = pm.ReadRecord(pageId, recordId);
-                        var row = DeserializeRow(recordData);
-                        if (row != null) results.Add(row);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // Record deleted or corrupt - skip
-                    }
-                    
-                    return ApplyOrdering(results, orderBy, asc);
-                }
-            }
-        }
-
-        // 2. Full table scan (read all pages)
-        // For now, we'll return empty since full page scanning needs table-wide page iteration
-        // This will be implemented when PageManager adds table-wide iteration support
         
-        return ApplyOrdering(results, orderBy, asc);
-    }
-
-    /// <summary>
-    /// Deserializes a byte array into a row dictionary.
-    /// Used by both columnar and page-based storage for reading records.
-    /// </summary>
-    private Dictionary<string, object>? DeserializeRow(byte[] data)
-    {
-        if (data == null || data.Length == 0) return null;
-        
-        var row = new Dictionary<string, object>();
-        int offset = 0;
+        // Scan file with position tracking
+        int filePosition = 0;
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
-
-        try
+        
+        while (filePosition < dataSpan.Length)
         {
+            // Read length prefix (4 bytes)
+            if (filePosition + 4 > dataSpan.Length)
+                break;
+            
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                dataSpan.Slice(filePosition, 4));
+            
+            const int MaxRecordSize = 1_000_000_000;
+            if (recordLength < 0 || recordLength > MaxRecordSize)
+            {
+                Console.WriteLine($"⚠️  Invalid record length {recordLength} at position {filePosition}");
+                break;
+            }
+            
+            if (recordLength == 0)
+            {
+                filePosition += 4;
+                continue;
+            }
+            
+            if (filePosition + 4 + recordLength > dataSpan.Length)
+            {
+                Console.WriteLine($"⚠️  Incomplete record at position {filePosition}");
+                break;
+            }
+            
+            long currentRecordPosition = filePosition; // Track position for filtering
+            
+            // Skip length prefix and read record data
+            int dataOffset = filePosition + 4;
+            ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
+            
+            // Parse the record
+            var row = new Dictionary<string, object>();
+            bool valid = true;
+            int offset = 0;
+            
             for (int i = 0; i < this.Columns.Count; i++)
             {
-                if (offset >= dataSpan.Length)
-                    return null;
-
-                var value = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
-                row[this.Columns[i]] = value;
-                offset += bytesRead;
+                try
+                {
+                    var value = ReadTypedValueFromSpan(recordData.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                    row[this.Columns[i]] = value;
+                    offset += bytesRead;
+                }
+                catch
+                {
+                    valid = false;
+                    break;
+                }
             }
-
-            return row;
+            
+            // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE
+            if (valid)
+            {
+                bool isCurrentVersion = true;
+                
+                // Check if this row is the current version by verifying PK index points to this position
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var pkCol = this.Columns[this.PrimaryKeyIndex];
+                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                    {
+                        var pkStr = pkValue.ToString() ?? string.Empty;
+                        var searchResult = this.Index.Search(pkStr);
+                        
+                        // Row is current version only if PK index points to THIS position
+                        isCurrentVersion = searchResult.Found && searchResult.Value == currentRecordPosition;
+                    }
+                }
+                
+                bool matchesWhere = string.IsNullOrEmpty(where) || EvaluateWhere(row, where);
+                
+                if (isCurrentVersion && matchesWhere)
+                {
+                    results.Add(row);
+                }
+            }
+            
+            filePosition += 4 + recordLength;
         }
-        catch
-        {
-            return null;
-        }
+        
+        return results;
     }
 
     /// <summary>
@@ -789,7 +521,7 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            var rows = this.SelectInternal(where, null, true, false);
+            var rows = this.Select(where);
             
             foreach (var row in rows)
             {
@@ -860,6 +592,9 @@ public partial class Table
                             }
                             hashIndex.Add(row, newPosition); // Add new ref
                         }
+                        
+                        // ✅ NEW: Track updates for compaction
+                        Interlocked.Increment(ref _updatedRowCount);
                     }
                     else // PageBased
                     {
@@ -885,6 +620,12 @@ public partial class Table
                     ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
                 }
             }
+            
+            // ✅ NEW: Auto-compact if threshold reached
+            if (StorageMode == StorageMode.Columnar)
+            {
+                TryAutoCompact();
+            }
         }
         finally
         {
@@ -897,7 +638,6 @@ public partial class Table
     /// Routes through storage engine with different semantics:
     /// - Columnar: Logical delete (remove from indexes, physical delete during compaction)
     /// - PageBased: Physical delete via engine.Delete() (marks slot as deleted)
-    /// OPTIMIZED: Uses O(1) hash index or O(log n) B-Tree lookups for simple WHERE clauses.
     /// </summary>
     /// <param name="where">Optional WHERE clause to filter rows to delete.</param>
     /// <exception cref="InvalidOperationException">Thrown when table is readonly.</exception>
@@ -910,28 +650,16 @@ public partial class Table
         {
             var engine = GetOrCreateStorageEngine();
             
-            // OPTIMIZATION: For simple WHERE clauses, use direct index lookup
-            List<(Dictionary<string, object> row, long position)> rowsToDelete;
-            
-            if (!string.IsNullOrEmpty(where) && TryParseSimpleWhereClause(where, out var columnName, out var value))
-            {
-                // Fast path: O(1) hash index or O(log n) B-Tree lookup
-                rowsToDelete = GetRowsViaDirectIndexLookup(columnName, value);
-            }
-            else
-            {
-                // Fallback: Complex WHERE or no index - use O(n) SelectInternal
-                var rows = this.SelectInternal(where, null, true, false);
-                rowsToDelete = rows.Select(r => (r, -1L)).ToList(); // Position unknown
-            }
+            // Get rows to delete
+            var rows = this.Select(where);
             
             // Delete via storage engine and update indexes
-            foreach (var (row, position) in rowsToDelete)
+            foreach (var row in rows)
             {
-                long storagePosition = position;
+                long storagePosition = -1;
                 
-                // Get position from primary key if not already known
-                if (storagePosition < 0 && this.PrimaryKeyIndex >= 0)
+                // Get position from primary key
+                if (this.PrimaryKeyIndex >= 0)
                 {
                     var pkCol = this.Columns[this.PrimaryKeyIndex];
                     if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
@@ -974,6 +702,9 @@ public partial class Table
                         {
                             kvp.Value.Remove(row, storagePosition);
                         }
+                        
+                        // ✅ NEW: Track deletes for compaction
+                        Interlocked.Increment(ref _deletedRowCount);
                     }
                 }
             }
@@ -981,169 +712,18 @@ public partial class Table
             // Mark unloaded indexes as stale (columnar only)
             if (StorageMode == StorageMode.Columnar)
             {
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)))
+                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
                 {
                     this.staleIndexes.Add(registeredCol);
                 }
+                
+                // ✅ NEW: Auto-compact if threshold reached
+                TryAutoCompact();
             }
         }
         finally
         {
             this.rwLock.ExitWriteLock();
         }
-    }
-
-    /// <summary>
-    /// Parses simple WHERE clauses like "column = value", "column=value", "column='value'".
-    /// Handles various spacing and quoting formats from parameter binding.
-    /// Returns true if successfully parsed, false for complex WHERE clauses.
-    /// </summary>
-    /// <param name="where">The WHERE clause to parse.</param>
-    /// <param name="columnName">Output: the column name.</param>
-    /// <param name="value">Output: the value to match (unquoted).</param>
-    /// <returns>True if simple WHERE clause (col = val), false otherwise.</returns>
-    private static bool TryParseSimpleWhereClause(string where, out string columnName, out object value)
-    {
-        columnName = string.Empty;
-        value = string.Empty;
-        
-        // Find the equals sign
-        var equalsIndex = where.IndexOf('=');
-        if (equalsIndex < 0)
-        {
-            return false; // No equals sign - not a simple WHERE
-        }
-        
-        // Extract column name (left side of =)
-        columnName = where[..equalsIndex].Trim();
-        
-        // Check for invalid characters in column name (indicates complex WHERE)
-        if (columnName.Contains(' ') || columnName.Contains('(') || columnName.Contains(')'))
-        {
-            return false; // Complex expression like "COUNT(id)" or "col1 AND col2"
-        }
-        
-        // Extract value (right side of =)
-        var valueStr = where[(equalsIndex + 1)..].Trim();
-        
-        // Check for complex operators after =
-        if (valueStr.Contains("AND", StringComparison.OrdinalIgnoreCase) ||
-            valueStr.Contains("OR", StringComparison.OrdinalIgnoreCase) ||
-            valueStr.Contains("LIKE", StringComparison.OrdinalIgnoreCase))
-        {
-            return false; // Complex WHERE with multiple conditions
-        }
-        
-        // Remove surrounding quotes if present
-        if ((valueStr.StartsWith('\'') && valueStr.EndsWith('\'')) ||
-            (valueStr.StartsWith('"') && valueStr.EndsWith('"')))
-        {
-            value = valueStr[1..^1]; // Remove surrounding quotes
-        }
-        else
-        {
-            value = valueStr;
-        }
-        
-        return !string.IsNullOrWhiteSpace(columnName);
-    }
-
-    /// <summary>
-    /// Retrieves rows using hash index (O(1)) or primary key B-Tree (O(log n)) lookup.
-    /// Returns list of (row, position) tuples for efficient deletion.
-    /// If no suitable index exists, returns empty list (caller will use SelectInternal).
-    /// </summary>
-    /// <param name="columnName">The column name to lookup.</param>
-    /// <param name="value">The value to match.</param>
-    /// <returns>List of matching rows with their file positions.</returns>
-    private List<(Dictionary<string, object> row, long position)> GetRowsViaDirectIndexLookup(string columnName, object value)
-    {
-        var results = new List<(Dictionary<string, object>, long)>();
-        
-        // Try hash index lookup first (O(1) - fastest)
-        if (this.hashIndexes.TryGetValue(columnName, out var hashIndex))
-        {
-            var colIdx = this.Columns.IndexOf(columnName);
-            if (colIdx >= 0)
-            {
-                // Parse value to correct type for hash lookup
-                var typedValue = ParseValueForHashLookup(value.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
-                var positions = hashIndex.LookupPositions(typedValue);
-                
-                // Read each row at the found positions
-                foreach (var pos in positions)
-                {
-                    var row = ReadRowAtPosition(pos, noEncrypt: false);
-                    if (row != null)
-                    {
-                        results.Add((row, pos));
-                    }
-                }
-                
-                return results;
-            }
-        }
-        
-        // Try primary key B-Tree lookup (O(log n) - still very fast)
-        if (this.PrimaryKeyIndex >= 0 && this.Columns[this.PrimaryKeyIndex] == columnName)
-        {
-            var valueStr = value.ToString() ?? string.Empty;
-            var searchResult = this.Index.Search(valueStr);
-            if (searchResult.Found)
-            {
-                var row = ReadRowAtPosition(searchResult.Value, noEncrypt: false);
-                if (row != null)
-                {
-                    results.Add((row, searchResult.Value));
-                }
-            }
-            
-            return results;
-        }
-        
-        // No suitable index available - return empty list
-        // Caller will fall back to SelectInternal (O(n) table scan)
-        return results;
-    }
-
-    /// <summary>
-    /// Applies ordering to query results.
-    /// </summary>
-    private List<Dictionary<string, object>> ApplyOrdering(List<Dictionary<string, object>> results, string? orderBy, bool asc)
-    {
-        if (orderBy != null && results.Count > 0)
-        {
-            var idx = this.Columns.IndexOf(orderBy);
-            if (idx >= 0)
-            {
-                var columnName = this.Columns[idx];
-                results = asc 
-                    ? results.OrderBy(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList()
-                    : results.OrderByDescending(r => r[columnName], Comparer<object>.Create((a, b) => CompareObjects(a, b))).ToList();
-            }
-        }
-        return results;
-    }
-    
-    /// <summary>
-    /// Compares two objects for ordering, handling nulls and different types.
-    /// </summary>
-    private static int CompareObjects(object? a, object? b)
-    {
-        // Handle nulls
-        if (a == null && b == null) return 0;
-        if (a == null) return -1;
-        if (b == null) return 1;
-        
-        // If same type, use default comparison
-        if (a.GetType() == b.GetType())
-        {
-            if (a is IComparable ca)
-                return ca.CompareTo(b);
-            return 0;
-        }
-        
-        // Different types - compare as strings
-        return string.Compare(a.ToString() ?? "", b.ToString() ?? "", StringComparison.Ordinal);
     }
 }

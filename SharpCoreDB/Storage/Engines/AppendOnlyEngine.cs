@@ -153,6 +153,57 @@ public class AppendOnlyEngine : IStorageEngine
     }
 
     /// <inheritdoc />
+    public IEnumerable<(long storageReference, byte[] data)> GetAllRecords(string tableName)
+    {
+        // AppendOnly engine doesn't maintain a record index
+        // For full table scan, we need to read the entire file sequentially
+        // This is a simplified implementation - production would need better record delimiting
+        
+        var filePath = GetTableFilePath(tableName);
+        
+        if (!File.Exists(filePath))
+        {
+            yield break;
+        }
+        
+        // Read entire file
+        var allData = storage.ReadBytes(filePath, noEncrypt: false);
+        if (allData == null || allData.Length == 0)
+        {
+            yield break;
+        }
+        
+        // Parse length-prefixed records
+        long position = 0;
+        while (position < allData.Length)
+        {
+            // Check if we have at least 4 bytes for length prefix
+            if (position + 4 > allData.Length)
+            {
+                break;
+            }
+            
+            // Read record length (4 bytes, little-endian)
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                allData.AsSpan((int)position, 4));
+            
+            if (recordLength <= 0 || position + 4 + recordLength > allData.Length)
+            {
+                break; // Invalid or incomplete record
+            }
+            
+            // Extract record data (skip 4-byte length prefix)
+            var recordData = new byte[recordLength];
+            Array.Copy(allData, position + 4, recordData, 0, recordLength);
+            
+            yield return (position, recordData);
+            
+            // Move to next record
+            position += 4 + recordLength;
+        }
+    }
+
+    /// <inheritdoc />
     public void BeginTransaction()
     {
         storage.BeginTransaction();
@@ -218,11 +269,120 @@ public class AppendOnlyEngine : IStorageEngine
 
     /// <summary>
     /// Gets or creates the file path for a table.
+    /// ✅ FIXED: Use .dat extension to match PersistenceConstants.TableFileExtension
+    /// This ensures data written by AppendOnly engine can be read by Table.Select()
     /// </summary>
     private string GetTableFilePath(string tableName)
     {
         return tableFilePaths.GetOrAdd(tableName, name => 
-            Path.Combine(databasePath, $"{name}.data"));
+            Path.Combine(databasePath, $"{name}.dat"));  // ✅ Changed from .data to .dat
+    }
+
+    /// <summary>
+    /// Compacts a table by removing deleted and stale versions.
+    /// Only active rows (positions from the caller's active list) are kept.
+    /// </summary>
+    /// <param name="tableName">The table to compact.</param>
+    /// <param name="activePositions">List of positions for active rows (from primary key index).</param>
+    /// <returns>Number of bytes reclaimed.</returns>
+    public long CompactTable(string tableName, List<long> activePositions)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        ArgumentNullException.ThrowIfNull(activePositions);
+        
+        var filePath = GetTableFilePath(tableName);
+        
+        if (!File.Exists(filePath))
+        {
+            return 0; // No file to compact
+        }
+        
+        var originalSize = new FileInfo(filePath).Length;
+        
+        // Read entire file
+        var allData = storage.ReadBytes(filePath, noEncrypt: false);
+        if (allData == null || allData.Length == 0)
+        {
+            return 0;
+        }
+        
+        // Create set for O(1) lookup
+        var activeSet = new HashSet<long>(activePositions);
+        
+        // Collect active rows
+        var activeRows = new List<byte[]>();
+        var newPositions = new Dictionary<long, long>(); // old position -> new position
+        
+        long position = 0;
+        long newPosition = 0;
+        
+        while (position < allData.Length)
+        {
+            if (position + 4 > allData.Length)
+                break;
+            
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                allData.AsSpan((int)position, 4));
+            
+            if (recordLength <= 0 || position + 4 + recordLength > allData.Length)
+                break;
+            
+            // Check if this position is active
+            if (activeSet.Contains(position))
+            {
+                // Extract record data
+                var recordData = new byte[recordLength];
+                Array.Copy(allData, position + 4, recordData, 0, recordLength);
+                activeRows.Add(recordData);
+                
+                // Track position mapping for index updates
+                newPositions[position] = newPosition;
+                newPosition += 4 + recordLength; // length prefix + data
+            }
+            
+            position += 4 + recordLength;
+        }
+        
+        // Write compacted data to temp file
+        var tempPath = filePath + ".compact.tmp";
+        
+        try
+        {
+            // Delete temp file if it exists
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+            
+            // Write active rows to temp file
+            if (activeRows.Count > 0)
+            {
+                storage.AppendBytesMultiple(tempPath, activeRows);
+            }
+            else
+            {
+                // Create empty file
+                File.WriteAllBytes(tempPath, Array.Empty<byte>());
+            }
+            
+            // Replace original file with compacted file
+            File.Delete(filePath);
+            File.Move(tempPath, filePath);
+            
+            var newSize = new FileInfo(filePath).Length;
+            var bytesReclaimed = originalSize - newSize;
+            
+            return bytesReclaimed;
+        }
+        catch
+        {
+            // Cleanup temp file on error
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* Ignore */ }
+            }
+            throw;
+        }
     }
 
     /// <inheritdoc />

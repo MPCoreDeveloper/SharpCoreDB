@@ -24,6 +24,7 @@
   - [Transactions & Batching](#transactions--batching)
   - [Query Performance](#query-performance)
   - [Indexes](#indexes)
+  - [Compaction & VACUUM](#compaction--vacuum)
   - [Encryption Options](#encryption-options)
 - [Security & Access Control](#security--access-control)
   - [User Management](#user-management)
@@ -540,6 +541,35 @@ db.ExecuteSQL("DROP INDEX idx_email");
 // Drop index if exists (no error if missing)
 db.ExecuteSQL("DROP INDEX IF EXISTS idx_email");
 ```
+
+### Compaction & VACUUM
+
+Columnar (append-only) storage uses append semantics for UPDATE and logical deletes for DELETE. Over time, this can leave stale versions and deleted rows on disk. To reclaim space and keep scans fast, use compaction.
+
+- Auto-compaction
+  - Triggers automatically after a threshold of UPDATE/DELETE operations (default: 1000)
+  - Runs in the background and is safe to ignore if it fails
+
+- Manual compaction (SQL)
+  - Use `VACUUM table_name` to compact a specific columnar table
+  - Rebuilds the primary key index and loaded hash indexes after compaction
+
+Examples:
+
+```
+-- Compact a single table
+VACUUM analytics_events;
+
+-- Typical workflow
+UPDATE analytics_events SET status = 'closed' WHERE id < 1000;
+DELETE FROM analytics_events WHERE archived = 'true';
+VACUUM analytics_events;  -- reclaim disk space
+```
+
+Notes:
+- Compaction currently requires a PRIMARY KEY to compute active rows
+- Page-based storage does in-place UPDATE/DELETE and does not require VACUUM
+- After compaction, positions change; indexes are rebuilt automatically
 
 ### Encryption Options
 

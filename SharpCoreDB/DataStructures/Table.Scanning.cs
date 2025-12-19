@@ -140,12 +140,70 @@ public partial class Table
         return SimdHelper.IndexOf(rowData, pattern);
     }
 
+    /// <summary>
+    /// Evaluates a WHERE clause against a row.
+    /// Supports operators: equals, not equals, greater than, less than, greater or equal, less or equal
+    /// </summary>
     private static bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;
+        
         var parts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 3 && parts[1] == "=")
-            return row.TryGetValue(parts[0], out var val) && val?.ToString() == parts[2].Trim('\'');
-        return true;
+        if (parts.Length < 3) return true;
+        
+        var columnName = parts[0];
+        var op = parts[1];
+        var value = parts[2].Trim('\'');
+        
+        if (!row.TryGetValue(columnName, out var rowValue) || rowValue == null)
+            return false;
+        
+        // Handle different operators
+        switch (op)
+        {
+            case "=":
+                return rowValue.ToString() == value;
+                
+            case "!=":
+            case "<>":
+                return rowValue.ToString() != value;
+                
+            case ">":
+                return CompareValues(rowValue, value) > 0;
+                
+            case "<":
+                return CompareValues(rowValue, value) < 0;
+                
+            case ">=":
+                return CompareValues(rowValue, value) >= 0;
+                
+            case "<=":
+                return CompareValues(rowValue, value) <= 0;
+                
+            default:
+                return true; // Unsupported operator - don't filter
+        }
+    }
+    
+    /// <summary>
+    /// Compares two values for ordering (supports numbers and strings).
+    /// </summary>
+    private static int CompareValues(object rowValue, string compareValue)
+    {
+        // Try numeric comparison first
+        if (rowValue is int intVal && int.TryParse(compareValue, out var intCompare))
+            return intVal.CompareTo(intCompare);
+            
+        if (rowValue is long longVal && long.TryParse(compareValue, out var longCompare))
+            return longVal.CompareTo(longCompare);
+            
+        if (rowValue is double doubleVal && double.TryParse(compareValue, out var doubleCompare))
+            return doubleVal.CompareTo(doubleCompare);
+            
+        if (rowValue is decimal decimalVal && decimal.TryParse(compareValue, out var decimalCompare))
+            return decimalVal.CompareTo(decimalCompare);
+        
+        // Fallback to string comparison
+        return string.Compare(rowValue.ToString(), compareValue, StringComparison.Ordinal);
     }
 }

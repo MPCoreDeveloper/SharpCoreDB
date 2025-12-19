@@ -79,8 +79,29 @@ public partial class Database : IDatabase, IDisposable
             queryCache = new(this.config.QueryCacheSize);
         }
 
-        // Initialize Group Commit WAL if enabled
-        if (this.config.UseGroupCommitWal && !isReadOnly)
+        // ✅ CRITICAL FIX: Load tables BEFORE initializing GroupCommitWAL
+        // This ensures tables dictionary is populated before crash recovery ExecuteSQL calls
+        Load();
+
+        // Apply configuration-dependent per-table settings (e.g., compaction threshold)
+        try
+        {
+            if (this.config is not null && this.config.ColumnarAutoCompactionThreshold != default)
+            {
+                foreach (var table in tables.Values)
+                {
+                    // Only relevant for columnar append-only tables
+                    if (table is DataStructures.Table t)
+                    {
+                        t.SetCompactionThreshold(this.config.ColumnarAutoCompactionThreshold);
+                    }
+                }
+            }
+        }
+        catch { /* non-fatal */ }
+
+        // Initialize Group Commit WAL if enabled (AFTER Load)
+        if (this.config is not null && this.config.UseGroupCommitWal && !isReadOnly)
         {
             groupCommitWal = new(
                 _dbPath,
@@ -89,7 +110,7 @@ public partial class Database : IDatabase, IDisposable
                 this.config.WalMaxBatchDelayMs,
                 _instanceId);
                 
-            // Perform crash recovery
+            // Perform crash recovery (now safe - tables are loaded)
             var recoveredOps = groupCommitWal.CrashRecovery();
             if (recoveredOps.Count > 0)
             {
@@ -112,8 +133,6 @@ public partial class Database : IDatabase, IDisposable
 
             GroupCommitWAL.CleanupOrphanedWAL(_dbPath);
         }
-
-        Load();
     }
 
     private void Load()

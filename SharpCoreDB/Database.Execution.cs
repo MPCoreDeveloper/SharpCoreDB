@@ -35,7 +35,14 @@ public partial class Database
             return;
         }
 
-        if (groupCommitWal is not null)  // ✅ C# 14: not pattern
+        // ✅ OPTIMIZATION: Skip WAL for DELETE/UPDATE with PageBased storage
+        // PageBasedEngine provides durability via direct disk writes
+        bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
+                               parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase);
+        
+        bool useWal = groupCommitWal is not null && !isDeleteOrUpdate;  // ✅ C# 14: not pattern
+
+        if (useWal)
         {
             ExecuteSQLWithGroupCommit(sql).GetAwaiter().GetResult();
         }
@@ -49,6 +56,7 @@ public partial class Database
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
                 {
                     SaveMetadata();
+                    ApplyColumnarCompactionThresholdToTables();
                 }
             }
         }
@@ -78,7 +86,14 @@ public partial class Database
             return;
         }
 
-        if (groupCommitWal is not null)
+        // ✅ OPTIMIZATION: Skip WAL for DELETE/UPDATE with PageBased storage
+        // PageBasedEngine provides durability via direct disk writes
+        bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
+                               parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase);
+        
+        bool useWal = groupCommitWal is not null && !isDeleteOrUpdate;
+
+        if (useWal)
         {
             ExecuteSQLWithGroupCommit(sql, parameters).GetAwaiter().GetResult();
         }
@@ -92,6 +107,7 @@ public partial class Database
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
                 {
                     SaveMetadata();
+                    ApplyColumnarCompactionThresholdToTables();
                 }
             }
         }
@@ -166,6 +182,7 @@ public partial class Database
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
                 SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
             }
         }
         
@@ -183,6 +200,7 @@ public partial class Database
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
                 SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
             }
         }
         
@@ -214,5 +232,23 @@ public partial class Database
     {
         var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, noEncrypt);
         return sqlParser.ExecuteQuery(sql, parameters ?? [], noEncrypt);
+    }
+
+    /// <summary>
+    /// Applies the configured columnar auto-compaction threshold to all tables.
+    /// </summary>
+    private void ApplyColumnarCompactionThresholdToTables()
+    {
+        if (this.config is null)
+            return;
+
+        var threshold = this.config.ColumnarAutoCompactionThreshold;
+        foreach (var table in tables.Values)
+        {
+            if (table is SharpCoreDB.DataStructures.Table concrete)
+            {
+                concrete.SetCompactionThreshold(threshold);
+            }
+        }
     }
 }

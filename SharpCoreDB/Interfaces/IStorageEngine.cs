@@ -56,6 +56,15 @@ public interface IStorageEngine : IDisposable
     byte[]? Read(string tableName, long storageReference);
 
     /// <summary>
+    /// Gets all records for a table (for full table scans).
+    /// Returns an enumerable of (storageReference, data) tuples.
+    /// This allows SELECT to iterate all rows without creating duplicate PageManager instances.
+    /// </summary>
+    /// <param name="tableName">Name of the table to scan.</param>
+    /// <returns>Enumerable of (storage reference, record data) for all active records in the table.</returns>
+    IEnumerable<(long storageReference, byte[] data)> GetAllRecords(string tableName);
+
+    /// <summary>
     /// Begins a transaction for batched operations.
     /// </summary>
     void BeginTransaction();
@@ -90,7 +99,7 @@ public interface IStorageEngine : IDisposable
 
 /// <summary>
 /// Types of storage engines available.
-/// ✅ NEW: Supports Auto for intelligent workload-based selection!
+/// ✅ Supports Auto for intelligent workload-based selection!
 /// </summary>
 public enum StorageEngineType
 {
@@ -99,7 +108,7 @@ public enum StorageEngineType
 
     /// <summary>
     /// Page-based storage with in-place updates.
-    /// ✅ READY: Optimized with O(1) free list, LRU cache (10.5x faster), async flushing (3-5x fewer I/O).
+    /// ✅ Optimized with O(1) free list, LRU cache (10.5x faster), async flushing (3-5x fewer I/O).
     /// Best for: OLTP workloads, random updates, databases >10K records.
     /// </summary>
     PageBased = 1,
@@ -112,21 +121,12 @@ public enum StorageEngineType
     Columnar = 2,
 
     /// <summary>
-    /// ✅ NEW: Auto-select storage engine based on DatabaseConfig.WorkloadHint.
+    /// Auto-select storage engine based on DatabaseConfig.WorkloadHint.
     /// - WorkloadHint.Analytics/ReadHeavy → Columnar
     /// - WorkloadHint.WriteHeavy/General → PageBased
     /// The optimal storage engine is chosen at database creation time.
     /// </summary>
-    Auto = 99,
-
-    /// <summary>
-    /// Hybrid storage combining multiple strategies.
-    /// ⚠️ DEPRECATED: Use Auto with WorkloadHint instead. Scheduled for removal in v2.0.
-    /// </summary>
-#pragma warning disable S1133 // Deprecation is documented and scheduled for v2.0 removal
-    [Obsolete("Use Auto with WorkloadHint for intelligent selection. This will be removed in v2.0.", false)]
-#pragma warning restore S1133
-    Hybrid = 3
+    Auto = 99
 }
 
 /// <summary>

@@ -42,10 +42,7 @@ public static class StorageEngineFactory
         {
             StorageEngineType.AppendOnly => CreateAppendOnlyEngine(storage, databasePath),
             StorageEngineType.PageBased => CreatePageBasedEngine(databasePath, config),
-            StorageEngineType.Columnar => CreateColumnarEngine(databasePath, config),
-            #pragma warning disable CS0618 // Hybrid is obsolete
-            StorageEngineType.Hybrid => CreatePageBasedEngine(databasePath, config), // Fallback to PageBased
-            #pragma warning restore CS0618
+            StorageEngineType.Columnar => CreateColumnarEngine(databasePath, config, storage), // ✅ Pass storage
             _ => throw new NotSupportedException($"Storage engine type '{actualEngineType}' is not supported")
         };
     }
@@ -78,15 +75,18 @@ public static class StorageEngineFactory
     /// Creates a columnar storage engine for analytics workloads.
     /// Optimized for: Heavy aggregations, scans, read-heavy queries.
     /// Expected: 5-10x faster GROUP BY, SUM, AVG vs row-based storage.
-    /// Implementation note: Dedicated ColumnarEngine will be added in future version - currently uses PageBased fallback.
+    /// Uses AppendOnlyEngine for sequential writes with columnar file format (.dat files).
     /// </summary>
     /// <param name="databasePath">Path to the database directory.</param>
-    /// <param name="config">Optional database configuration for auto-tuning.</param>
-    /// <returns>Configured ColumnarEngine instance (currently PageBasedEngine fallback).</returns>
-    /// <remarks>
-    /// ⚠️ IMPLEMENTATION ROADMAP: Dedicated ColumnarEngine scheduled for v1.5.
-    /// Current implementation uses PageBasedEngine which is the most optimized available engine.
-    /// </remarks>
-    private static IStorageEngine CreateColumnarEngine(string databasePath, DatabaseConfig? config)
-        => new PageBasedEngine(databasePath, config); // TODO: Implement ColumnarEngine
+    /// <param name="config">Optional database configuration (currently unused but reserved for future use).</param>
+    /// <param name="storage">IStorage instance required for AppendOnly engine.</param>
+    /// <returns>Configured AppendOnlyEngine instance for columnar storage.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when storage is null (required for columnar).</exception>
+#pragma warning disable S1172 // Unused parameter 'config' - reserved for future use
+    private static IStorageEngine CreateColumnarEngine(string databasePath, DatabaseConfig? config, IStorage? storage)
+#pragma warning restore S1172
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+        return new AppendOnlyEngine(storage, databasePath);
+    }
 }

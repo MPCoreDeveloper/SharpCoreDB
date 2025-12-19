@@ -71,7 +71,7 @@ public partial class Table : ITable, IDisposable
     /// Gets or sets which columns are auto-generated.
     /// </summary>
     public List<bool> IsAuto { get; set; } = [];
-    
+
     /// <summary>
     /// Gets or sets the data file path.
     /// </summary>
@@ -110,6 +110,11 @@ public partial class Table : ITable, IDisposable
     private IStorageEngine? _storageEngine;
     private readonly object _engineLock = new object();
 
+    // ✅ NEW: Compaction tracking for columnar storage
+    private long _deletedRowCount = 0;
+    private long _updatedRowCount = 0;
+    private long COMPACTION_THRESHOLD = 1000; // Default; can be overridden by DatabaseConfig
+
     /// <summary>
     /// Sets the storage instance for this table.
     /// </summary>
@@ -121,6 +126,16 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     /// <param name="isReadOnly">True if readonly.</param>
     public void SetReadOnly(bool isReadOnly) => this.isReadOnly = isReadOnly;
+
+    /// <summary>
+    /// Sets the auto-compaction threshold for columnar storage.
+    /// Set to 0 or less to disable auto-compaction.
+    /// </summary>
+    /// <param name="threshold">Number of updates+deletes to trigger compaction.</param>
+    public void SetCompactionThreshold(long threshold)
+    {
+        COMPACTION_THRESHOLD = threshold <= 0 ? long.MaxValue : threshold;
+    }
 
     /// <summary>
     /// Disposes the table and releases all resources including locks and index managers.

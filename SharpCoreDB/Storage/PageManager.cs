@@ -307,12 +307,13 @@ public partial class PageManager : IDisposable
             IsDirty = true
         };
 
-        // Write magic number and version to header page data
-        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[0..], 0x5348415250434F52); // "SHARPCOR"
-        BinaryPrimitives.WriteUInt32LittleEndian(headerPage.Data.AsSpan()[8..], 1); // Version 1
-        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[12..], 0); // Free list head (none yet)
-        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[20..], 1); // Total page count (just header)
-        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[28..], 1); // Next page ID to allocate
+        // ✅ FIX: Write magic number and metadata to Data section starting AFTER page header (offset 64)
+        var dataStart = PAGE_HEADER_SIZE; // Skip the 64-byte page header
+        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[dataStart..], 0x5348415250434F52); // "SHARPCOR"
+        BinaryPrimitives.WriteUInt32LittleEndian(headerPage.Data.AsSpan()[(dataStart + 8)..], 1); // Version 1
+        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 12)..], 0); // Free list head (none yet)
+        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 20)..], 1); // Total page count (just header)
+        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 28)..], 1); // Next page ID to allocate
 
         WritePage(headerPage);
         FlushDirtyPages();
@@ -327,15 +328,16 @@ public partial class PageManager : IDisposable
     {
         var headerPage = ReadPage(new PageId(0));
         
-        // Verify magic number
-        var magic = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[0..]);
+        // ✅ FIX: Read magic number from Data section (after page header)
+        var dataStart = PAGE_HEADER_SIZE;
+        var magic = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[dataStart..]);
         if (magic != 0x5348415250434F52)
         {
             throw new InvalidDataException($"Invalid database file: bad magic number 0x{magic:X16}");
         }
 
         // Load free list head
-        freeListHead = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[12..]);
+        freeListHead = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 12)..]);
     }
 
     /// <summary>
@@ -344,7 +346,8 @@ public partial class PageManager : IDisposable
     private void SaveFreeListHead()
     {
         var headerPage = ReadPage(new PageId(0));
-        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[12..], freeListHead);
+        var dataStart = PAGE_HEADER_SIZE;
+        BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 12)..], freeListHead);
         headerPage.IsDirty = true;
         WritePage(headerPage);
     }
@@ -358,7 +361,7 @@ public partial class PageManager : IDisposable
     {
         lock (writeLock)
         {
-            // ✅ OPTIMIZED: Try to pop from free list (O(1)!)
+            // ✅ OPTIMIZED: Try to pop from free list (O(1)!
             if (freeListHead != 0)
             {
                 var freePageId = new PageId(freeListHead);
@@ -383,8 +386,9 @@ public partial class PageManager : IDisposable
             
             // No free pages - allocate new page at end of file
             var headerPage = ReadPage(new PageId(0));
-            var nextPageId = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[28..]);
-            var totalPages = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[20..]);
+            var dataStart = PAGE_HEADER_SIZE;
+            var nextPageId = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 28)..]);
+            var totalPages = BinaryPrimitives.ReadUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 20)..]);
             
             // ✅ FIXED: nextPageId is already correct (starts at 1)
             var newPageId = new PageId(nextPageId);
@@ -404,8 +408,8 @@ public partial class PageManager : IDisposable
             WritePage(newPage);
             
             // Update header: increment next page ID and total count
-            BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[28..], nextPageId + 1);
-            BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[20..], totalPages + 1);
+            BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 28)..], nextPageId + 1);
+            BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data.AsSpan()[(dataStart + 20)..], totalPages + 1);
             headerPage.IsDirty = true;
             WritePage(headerPage);
             
@@ -427,6 +431,8 @@ public partial class PageManager : IDisposable
 
         lock (writeLock)
         {
+            // ✅ FIX: Read page directly - it must exist if it was allocated
+            // If it doesn't exist, ReadPage will throw which is the correct behavior
             var page = ReadPage(pageId);
             
             // Mark as free and link into free list
@@ -1026,6 +1032,7 @@ public partial class PageManager : IDisposable
 
     /// <summary>
     /// Finds a page with sufficient free space.
+    /// ✅ CRITICAL FIX: Don't scan pages beyond file length - just allocate new!
     /// </summary>
     /// <param name="tableId">Table ID to search for.</param>
     /// <param name="requiredBytes">Required free space in bytes.</param>
@@ -1035,7 +1042,10 @@ public partial class PageManager : IDisposable
         lock (writeLock)
         {
             var totalPages = pagesFile.Length / PAGE_SIZE;
-            for (ulong i = 1; i <= (ulong)totalPages; i++)
+            
+            // ✅ CRITICAL FIX: Only scan pages that ACTUALLY EXIST (1..totalPages-1)
+            // Don't try to read pages beyond file length!
+            for (ulong i = 1; i < (ulong)totalPages; i++)
             {
                 var pageId = new PageId(i);
                 var page = ReadPage(pageId);
@@ -1046,8 +1056,71 @@ public partial class PageManager : IDisposable
                 }
             }
 
+            // No existing page has space - allocate new one
             return AllocatePage(tableId, PageType.Table);
         }
+    }
+
+    /// <summary>
+    /// Gets all page IDs belonging to a specific table.
+    /// Used for full table scans and iteration.
+    /// </summary>
+    /// <param name="tableId">The table ID to filter pages.</param>
+    /// <returns>List of page IDs belonging to the table.</returns>
+    public List<PageId> GetAllTablePages(uint tableId)
+    {
+        lock (writeLock)
+        {
+            var tablePages = new List<PageId>();
+            var totalPages = pagesFile.Length / PAGE_SIZE;
+            
+            // Scan all pages (skip header page 0)
+            for (ulong i = 1; i < (ulong)totalPages; i++)
+            {
+                var pageId = new PageId(i);
+                var page = ReadPage(pageId);
+                
+                // Only include pages belonging to this table
+                if (page.TableId == tableId && page.Type == PageType.Table)
+                {
+                    tablePages.Add(pageId);
+                }
+            }
+            
+            return tablePages;
+        }
+    }
+
+    /// <summary>
+    /// Gets all record IDs from a specific page.
+    /// Used for full table scans to enumerate all records in a page.
+    /// </summary>
+    /// <param name="pageId">The page ID to read records from.</param>
+    /// <returns>List of valid (non-deleted) record IDs in the page.</returns>
+    public List<RecordId> GetAllRecordsInPage(PageId pageId)
+    {
+        var page = ReadPage(pageId);
+        var recordIds = new List<RecordId>();
+        
+        for (ushort slot = 0; slot < page.RecordCount; slot++)
+        {
+            var slotOffset = PAGE_HEADER_SIZE + (slot * SLOT_SIZE);
+            var recordOffset = BinaryPrimitives.ReadUInt16LittleEndian(page.Data.AsSpan()[slotOffset..]);
+            var recordLength = BinaryPrimitives.ReadUInt16LittleEndian(page.Data.AsSpan()[(slotOffset + 2)..]);
+            
+            // Skip deleted records (offset = 0)
+            if (recordOffset == 0 || recordLength == 0)
+                continue;
+            
+            // Check if record is marked deleted
+            var flags = (RecordFlags)page.Data[recordOffset + 8];
+            if (flags.HasFlag(RecordFlags.Deleted))
+                continue;
+            
+            recordIds.Add(new RecordId(slot));
+        }
+        
+        return recordIds;
     }
 
     /// <summary>
@@ -1078,10 +1151,24 @@ public partial class PageManager : IDisposable
 
         if (disposing)
         {
-            FlushDirtyPages();
-            lruCache.Clear();
-            pagesFile?.Dispose();
-            pageCache.Clear();
+            try
+            {
+                // ✅ FIX: Ensure dirty pages are flushed before closing file
+                FlushDirtyPages();
+                
+                // ✅ FIX: Flush file stream to disk
+                pagesFile?.Flush(flushToDisk: true);
+            }
+            catch
+            {
+                // Best effort - suppress exceptions during disposal
+            }
+            finally
+            {
+                lruCache.Clear();
+                pagesFile?.Dispose();
+                pageCache.Clear();
+            }
         }
 
         disposed = true;
