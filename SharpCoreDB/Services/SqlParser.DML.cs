@@ -384,17 +384,21 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes aggregate query (COUNT, SUM, AVG, MIN, MAX).
+    /// NOW WITH GROUP BY SUPPORT!
     /// </summary>
     private List<Dictionary<string, object>> ExecuteAggregateQuery(string selectClause, string[] parts)
     {
         var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
         var tableName = parts[fromIdx + 1];
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
+        var groupByIdx = Array.IndexOf(parts.Select(p => p.ToUpper()).ToArray(), "GROUP");
         string? whereStr = null;
         
         if (whereIdx > 0)
         {
-            whereStr = string.Join(" ", parts.Skip(whereIdx + 1));
+            // Stop at GROUP BY if present
+            int endIdx = groupByIdx > whereIdx ? groupByIdx : parts.Length;
+            whereStr = string.Join(" ", parts.Skip(whereIdx + 1).Take(endIdx - whereIdx - 1));
         }
 
         // Check if table exists
@@ -411,6 +415,14 @@ public partial class SqlParser
             allRows = allRows.Where(r => SqlParser.EvaluateJoinWhere(r, whereStr)).ToList();
         }
 
+        // ✅ NEW: Check for GROUP BY clause
+        if (groupByIdx >= 0 && groupByIdx + 2 < parts.Length && parts[groupByIdx + 1].ToUpper() == "BY")
+        {
+            // GROUP BY detected - process grouped aggregates
+            var groupByColumn = parts[groupByIdx + 2];
+            return ExecuteGroupedAggregates(selectClause, allRows, groupByColumn);
+        }
+        
         // Parse aggregate functions
         var result = new Dictionary<string, object>();
         
@@ -479,6 +491,113 @@ public partial class SqlParser
         }
 
         return [result];
+    }
+    
+    /// <summary>
+    /// Executes grouped aggregates (SELECT col, AGG(col2) ... GROUP BY col).
+    /// Returns one row per group with the aggregated values.
+    /// </summary>
+    private List<Dictionary<string, object>> ExecuteGroupedAggregates(
+        string selectClause, 
+        List<Dictionary<string, object>> allRows, 
+        string groupByColumn)
+    {
+        // Group rows by the GROUP BY column
+        var groups = allRows
+            .Where(r => r.ContainsKey(groupByColumn))
+            .GroupBy(r => r[groupByColumn])
+            .ToList();
+
+        var results = new List<Dictionary<string, object>>();
+
+        foreach (var group in groups)
+        {
+            var result = new Dictionary<string, object>();
+            
+            // Add the GROUP BY column value
+            result[groupByColumn] = group.Key;
+
+            // Parse and compute aggregates for this group
+            var groupRows = group.ToList();
+
+            // COUNT
+            var countMatch = System.Text.RegularExpressions.Regex.Match(
+                selectClause, @"COUNT\((\*|[a-zA-Z_]\w*)\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (countMatch.Success)
+            {
+                var columnOrStar = countMatch.Groups[1].Value;
+                long count = columnOrStar == "*" 
+                    ? groupRows.Count 
+                    : groupRows.Count(r => r.TryGetValue(columnOrStar, out var val) && val != null);
+                result["count"] = count;
+            }
+
+            // SUM
+            var sumMatch = System.Text.RegularExpressions.Regex.Match(
+                selectClause, @"SUM\(([a-zA-Z_]\w*)\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (sumMatch.Success)
+            {
+                var columnName = sumMatch.Groups[1].Value;
+                decimal sum = 0;
+                foreach (var row in groupRows)
+                {
+                    if (row.TryGetValue(columnName, out var val) && val != null)
+                    {
+                        sum += Convert.ToDecimal(val);
+                    }
+                }
+                result["sum"] = sum;
+            }
+
+            // AVG
+            var avgMatch = System.Text.RegularExpressions.Regex.Match(
+                selectClause, @"AVG\(([a-zA-Z_]\w*)\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (avgMatch.Success)
+            {
+                var columnName = avgMatch.Groups[1].Value;
+                var values = groupRows
+                    .Where(r => r.TryGetValue(columnName, out var val) && val != null)
+                    .Select(r => Convert.ToDecimal(r[columnName]))
+                    .ToList();
+                decimal avg = values.Count > 0 ? values.Sum() / values.Count : 0;
+                result["avg"] = avg;
+            }
+
+            // MAX
+            var maxMatch = System.Text.RegularExpressions.Regex.Match(
+                selectClause, @"MAX\(([a-zA-Z_]\w*)\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (maxMatch.Success)
+            {
+                var columnName = maxMatch.Groups[1].Value;
+                var values = groupRows
+                    .Where(r => r.TryGetValue(columnName, out var val) && val != null)
+                    .ToList();
+                var max = values.Count > 0 ? values.Max(r => Convert.ToDecimal(r[columnName])) : 0;
+                result["max"] = max;
+            }
+
+            // MIN
+            var minMatch = System.Text.RegularExpressions.Regex.Match(
+                selectClause, @"MIN\(([a-zA-Z_]\w*)\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (minMatch.Success)
+            {
+                var columnName = minMatch.Groups[1].Value;
+                var values = groupRows
+                    .Where(r => r.TryGetValue(columnName, out var val) && val != null)
+                    .ToList();
+                var min = values.Count > 0 ? values.Min(r => Convert.ToDecimal(r[columnName])) : 0;
+                result["min"] = min;
+            }
+
+            results.Add(result);
+        }
+
+        return results;
     }
 
     /// <summary>

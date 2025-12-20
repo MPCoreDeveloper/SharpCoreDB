@@ -155,7 +155,7 @@ public partial class SqlParser
         }
         
         // Create brand new table with clean state
-        var table = new Table(this.storage, this.isReadOnly)
+        var table = new Table(this.storage, this.isReadOnly, this.config)
         {
             Name = tableName,
             Columns = columns,

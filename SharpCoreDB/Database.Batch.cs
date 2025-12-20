@@ -177,7 +177,7 @@ public partial class Database
                 // Execute non-INSERT statements normally (UPDATE, DELETE, etc.)
                 if (nonInserts.Count > 0)
                 {
-                    var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                    var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                     
                     foreach (var sql in nonInserts)
                     {
@@ -284,7 +284,7 @@ public partial class Database
                     // Execute non-INSERTs
                     if (nonInserts.Count > 0)
                     {
-                        var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                        var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                         
                         foreach (var sql in nonInserts)
                         {

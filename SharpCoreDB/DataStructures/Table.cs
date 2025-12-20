@@ -37,9 +37,18 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     /// <param name="storage">The storage instance to use for persistence.</param>
     /// <param name="isReadOnly">Whether this table is readonly.</param>
-    public Table(IStorage storage, bool isReadOnly = false) : this()
+    /// <param name="config">Optional database configuration for optimization hints.</param>
+    public Table(IStorage storage, bool isReadOnly = false, DatabaseConfig? config = null) : this()
     {
         (this.storage, this.isReadOnly) = (storage, isReadOnly);
+        _config = config;
+        
+        // Apply compaction threshold from config if provided
+        if (config is not null && config.ColumnarAutoCompactionThreshold > 0)
+        {
+            COMPACTION_THRESHOLD = config.ColumnarAutoCompactionThreshold;
+        }
+        
         if (!isReadOnly)
         {
             this.indexManager = new IndexManager();
@@ -109,6 +118,9 @@ public partial class Table : ITable, IDisposable
     // ✅ NEW: Storage engine routing for hybrid architecture
     private IStorageEngine? _storageEngine;
     private readonly object _engineLock = new object();
+
+    // ✅ NEW: DatabaseConfig for passing optimizations through to storage engines
+    private readonly DatabaseConfig? _config;
 
     // ✅ NEW: Compaction tracking for columnar storage
     private long _deletedRowCount = 0;

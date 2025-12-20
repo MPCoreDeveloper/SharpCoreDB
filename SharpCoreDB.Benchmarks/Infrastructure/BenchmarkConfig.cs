@@ -19,6 +19,10 @@ public class BenchmarkConfig : ManualConfig
 {
     public BenchmarkConfig()
     {
+        // Ensure artifacts are always kept and written, even on failures
+        Options = ConfigOptions.KeepBenchmarkFiles | ConfigOptions.JoinSummary | ConfigOptions.DisableOptimizationsValidator;
+        ArtifactsPath = Path.Combine(AppContext.BaseDirectory, "BenchmarkDotNet.Artifacts");
+
         // Job configuration
         AddJob(Job.Default
             .WithGcServer(true)

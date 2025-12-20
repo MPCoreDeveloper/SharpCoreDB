@@ -84,7 +84,7 @@ public partial class Table
 
         return StorageEngineFactory.CreateEngine(
             StorageEngineType.AppendOnly,
-            config: null, // Note: Table doesn't have DatabaseConfig reference yet
+            config: _config, // ✅ Pass config through chain
             storage,
             databasePath);
     }
@@ -100,7 +100,7 @@ public partial class Table
     {
         return StorageEngineFactory.CreateEngine(
             StorageEngineType.PageBased,
-            config: null, // Note: Table doesn't have DatabaseConfig reference yet
+            config: _config, // ✅ Pass config through chain
             storage: null, // PageBased doesn't need IStorage
             databasePath);
     }

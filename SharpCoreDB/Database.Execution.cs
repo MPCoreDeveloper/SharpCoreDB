@@ -30,7 +30,7 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))  // ✅ Modern comparison
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
             sqlParser.Execute(sql, null);
             return;
         }
@@ -50,7 +50,7 @@ public partial class Database
         {
             lock (_walLock)
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                 sqlParser.Execute(sql, null);
                 
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -81,7 +81,7 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
             sqlParser.Execute(sql, parameters, null);
             return;
         }
@@ -101,7 +101,7 @@ public partial class Database
         {
             lock (_walLock)
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                 sqlParser.Execute(sql, parameters, null);
                 
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -123,7 +123,7 @@ public partial class Database
         {
             await Task.Run(() =>
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                 sqlParser.Execute(sql, null);
             }, cancellationToken).ConfigureAwait(false);
             return;
@@ -156,7 +156,7 @@ public partial class Database
         {
             await Task.Run(() =>
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                 sqlParser.Execute(sql, parameters, null);
             }, cancellationToken).ConfigureAwait(false);
             return;
@@ -176,7 +176,7 @@ public partial class Database
     {
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
             sqlParser.Execute(sql, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -194,7 +194,7 @@ public partial class Database
     {
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache);
+            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
             sqlParser.Execute(sql, parameters, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -217,7 +217,7 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache);
+        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
         return sqlParser.ExecuteQuery(sql, parameters ?? []);  // ✅ C# 14: collection expression
     }
 
@@ -230,7 +230,7 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters, bool noEncrypt)
     {
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, noEncrypt);
+        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, noEncrypt, config);
         return sqlParser.ExecuteQuery(sql, parameters ?? [], noEncrypt);
     }
 

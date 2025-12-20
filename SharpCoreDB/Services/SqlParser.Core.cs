@@ -44,12 +44,13 @@ public partial class SqlParser : ISqlParser
     private readonly IStorage storage;
     private readonly bool isReadOnly;
     private readonly QueryCache? queryCache;
+    private readonly DatabaseConfig? config;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SqlParser"/> class.
     /// Simple SQL parser and executor.
     /// </summary>
-    public SqlParser(Dictionary<string, ITable> tables, IWAL? wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null, bool noEncrypt = false)
+    public SqlParser(Dictionary<string, ITable> tables, IWAL? wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null, bool noEncrypt = false, DatabaseConfig? config = null)
     {
         this.tables = tables;
         this.wal = wal;
@@ -57,6 +58,7 @@ public partial class SqlParser : ISqlParser
         this.storage = storage;
         this.isReadOnly = isReadOnly;
         this.queryCache = queryCache;
+        this.config = config;
         // Note: noEncrypt parameter used in constructor but not stored as field
     }
 
