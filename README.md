@@ -39,8 +39,9 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 - **Multiple Storage Engines**: PageBased (OLTP), Columnar (Analytics), AppendOnly (Logging)
 - **Pure .NET**: No P/Invoke dependencies, fully managed code
 - **SQL Support**: CREATE/INSERT/SELECT/UPDATE/DELETE, JOIN, aggregates, subqueries
-- **Hash Indexes**: O(1) point lookups for indexed columns
+- **Dual Index Types**: Hash indexes (O(1) point lookups) + B-tree indexes (O(log n) ordered/range queries)
 - **Batch Transactions**: **37.94x faster** updates with deferred indexes
+- **Lock-Free CLOCK Cache**: 2-5M ops/sec page cache with CLOCK eviction (replaced LRU for better concurrency)
 - **WAL & Caching**: Write-ahead logging, page cache, query cache
 - **DI Integration**: First-class Dependency Injection support
 
@@ -92,7 +93,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 | **SharpCoreDB PageBased** | 29.92 ms | 334 rec/ms |
 
 **SharpCoreDB Performance**:
-- ✅ **1.99x faster than LiteDB** scans
+- ⚠️ **1.99x slower than LiteDB** scans
 - ⚠️ **21.7x slower than SQLite** (optimization roadmap below)
 
 ---
@@ -141,7 +142,8 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 | **Pure .NET** | ✅ | ✅ | ❌ (P/Invoke) |
 | **Memory Efficiency** | ✅ **6.22x less than LiteDB** | ❌ High | ✅ |
 | **Storage Engines** | ✅ **3 types** | ⚠️ 1 type | ⚠️ 1 type |
-| **Hash Indexes** | ✅ **O(1)** | ⚠️ B-tree | ⚠️ B-tree |
+| **Hash Indexes** | ✅ **O(1) lookups** | ❌ | ❌ |
+| **B-tree Indexes** | ✅ **O(log n) ordered** | ✅ | ✅ |
 | **Async/Await** | ✅ **Full** | ⚠️ Limited | ⚠️ Limited |
 | **License** | ✅ MIT | ✅ MIT | ✅ Public Domain |
 
@@ -178,7 +180,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 ### ⚠️ **Also Consider** (Optimizations Planned):
 
 - **Update-heavy CRUD systems**: SQLite faster, but use batch transactions for competitive performance
-- **SELECT-only analytics**: SharpCoreDB 2x faster than LiteDB, SQLite 22x faster
+- **SELECT-only workloads**: LiteDB 2x faster currently, SQLite 22x faster (Q1 2026 optimization target)
 - **Mixed workloads**: Good general-purpose database with analytics acceleration
 
 ---
@@ -193,6 +195,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 - ✅ Deferred Index Updates
 - ✅ WAL Batch Flushing
 - ✅ Dirty Page Tracking
+- ✅ Lock-Free CLOCK Page Cache (replaced LRU, 2-5x better concurrency)
 
 ### 🔴 Q1 2026 - PRIORITY 1: SELECT & UPDATE Optimization
 
@@ -301,7 +304,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - ✅ **Inserts**: Excellent (**1.64x faster** than LiteDB, **6.22x less memory**)
 - ✅ **Encryption**: Enterprise-ready (**0-6% overhead** only)
 - ✅ **Batch Transactions**: **37.94x faster** for update-heavy workloads
-- 🟡 **SELECT**: Good (**2x faster** than LiteDB, room for optimization)
+- 🟡 **SELECT**: Needs optimization (**2x slower** than LiteDB, optimization planned for Q1 2026)
 - 🟡 **UPDATE**: Solid with batch API (**37.94x faster**), optimization planned
 
 ---

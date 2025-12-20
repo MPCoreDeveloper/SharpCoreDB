@@ -103,7 +103,7 @@ SharpCoreDB demonstrates **world-class performance** in analytics workloads, ach
 
 **Analysis**:
 - SQLite's B-tree is unbeatable for scans (23x faster)
-- SharpCoreDB is **2.2x faster than LiteDB** for scans
+- SharpCoreDB is **2.2x slower than LiteDB** for scans
 - SharpCoreDB uses **45% less memory** than LiteDB
 
 **Why SharpCoreDB is Slower than LiteDB Here**:

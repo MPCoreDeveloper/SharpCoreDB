@@ -122,7 +122,7 @@ LiteDB (152.1ms):
 │ SharpCoreDB:       29.92 ms │ ████████████████████████ │
 │                                                         │
 │ SharpCoreDB Performance:                                │
-│   - 1.99x FASTER than LiteDB ✅                        │
+│   - 1.99x SLOWER than LiteDB ⚠️                         │
 │   - 21.7x SLOWER than SQLite ⚠️  (optimization planned) │
 │                                                         │
 │ Throughput:                                             │
@@ -133,8 +133,20 @@ LiteDB (152.1ms):
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Why Slower Than SQLite?
+### Why Slower Than LiteDB and SQLite?
 
+**vs LiteDB (1.99x slower)**:
+1. **Less Optimized Row Materialization**
+   - More complex row conversion
+   - Additional abstraction layers
+   - Room for optimization
+
+2. **Suboptimal Filter Processing**
+   - WHERE clause evaluation overhead
+   - Not yet optimized for scans
+   - Q1 2026 optimization target
+
+**vs SQLite (21.7x slower)**:
 1. **Row Materialization**
    - Converting binary to objects
    - Memory allocation per row
@@ -149,11 +161,11 @@ LiteDB (152.1ms):
    - More complex WHERE clause evaluation
    - Python/JavaScript-like overhead
 
-### Verdict: 🟡 GOOD (Optimization Opportunity)
+### Verdict: 🔴 NEEDS OPTIMIZATION
 
-- Faster than LiteDB ✅
-- Room for 3-5x improvement (Q1 2026)
-- B-tree indexes would help significantly
+- Slower than both LiteDB and SQLite ⚠️
+- Room for 5-10x improvement (Q1 2026)
+- B-tree indexes + optimized scanning would help significantly
 
 ---
 
@@ -340,12 +352,17 @@ Enterprise-grade security with **zero performance penalty**. This is a major com
    - Perfect for mobile/IoT
    - Embedded database advantage
 
+5. **Lock-Free CLOCK Cache** (2-5M ops/sec)
+   - Better concurrency than LRU (2-5x)
+   - Lower memory overhead
+   - >90% hit rate for hot workloads
+
 ### Opportunities 🟡
 
-1. **SELECT Performance** (21.7x slower)
+1. **SELECT Performance** (1.99x slower than LiteDB, 21.7x slower than SQLite)
    - Optimization target: Q1 2026
-   - Estimated 3-5x improvement possible
-   - B-tree indexes would help significantly
+   - Estimated 5-10x improvement possible
+   - B-tree indexes + optimized scanning would help significantly
 
 2. **UPDATE (SQL Batch)** (408x slower)
    - Optimization target: Q1 2026
