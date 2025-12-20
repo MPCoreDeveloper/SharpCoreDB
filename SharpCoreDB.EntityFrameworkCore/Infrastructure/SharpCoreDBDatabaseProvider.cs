@@ -22,7 +22,7 @@ public class SharpCoreDBDatabaseProvider : IDatabase
     public string? DatabaseProductName => "SharpCoreDB";
 
     /// <inheritdoc />
-    public string? DatabaseProductVersion => "2.0.0";
+    public string? DatabaseProductVersion => "1.0.0";
 
     /// <inheritdoc />
     public int SaveChanges(IList<IUpdateEntry> entries)

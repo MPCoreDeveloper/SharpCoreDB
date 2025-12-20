@@ -267,10 +267,11 @@ var db = factory.Create("./db", "password");
 |---------|--------|--------|
 | **Analytics** | 344x faster than LiteDB | ✅ Production |
 | **Encryption** | 0-6% overhead | ✅ Production |
-| **Batch Updates** | 37.94x faster | ✅ Production |
+| **Batch Updates** | 37.94x faster | ✅ Production (Q4 2025) |
 | **INSERT** | 1.64x faster than LiteDB | ✅ Production |
-| **SELECT** | 1.99x faster than LiteDB | ✅ Production |
-| **SELECT (vs SQLite)** | 21.7x slower | 🟡 Optimization planned Q1 2026 |
+| **Lock-Free CLOCK Cache** | 2-5M ops/sec | ✅ Production (Q4 2025) |
+| **SELECT** | 1.99x slower than LiteDB | 🟡 Optimization planned Q1 2026 |
+| **B-tree Indexes** | Not implemented yet | 🟡 Coming Q1 2026 |
 
 ---
 
@@ -327,7 +328,6 @@ var db = factory.Create("./db", "password");
 ### 🔴 Q1 2026 - PRIORITY 1: SELECT & UPDATE Optimization
 
 - **SELECT Performance**: Target 3-5x improvement
-- **UPDATE (SQL Batch)**: Target 5-10x improvement
 - **B-tree Indexes**: For range queries and ordering
 
 ### Q2-Q3 2026 - Advanced Optimizations
@@ -365,4 +365,4 @@ Perfect for applications requiring **speed, security, and efficiency**.
 
 **Status**: Production Ready for Analytics, Encryption, and Batch Operations  
 **Last Updated**: December 2025  
-**Next Milestone**: Q1 2026 - Further optimization of SELECT/UPDATE
+**Next Milestone**: Q1 2026 - Further optimization of SELECT

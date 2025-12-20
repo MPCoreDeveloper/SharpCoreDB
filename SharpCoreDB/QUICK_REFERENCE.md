@@ -146,9 +146,9 @@ db.ExecuteSQL("INSERT INTO secrets VALUES ('password123')");
 
 ### 🔴 Q1 2026 (PRIORITY)
 - SELECT Optimization (3-5x improvement)
-- B-tree Indexes
-- Auto-batch Detection
+- B-tree Indexes (range queries, ORDER BY)
 - Query Optimizer
+- Advanced Caching
 
 ### Q2-Q3 2026
 - Cost-based Query Planning
@@ -285,21 +285,30 @@ db.EndBatchUpdate();
 **Problem**: Slow SELECT queries
 - **Solution 1**: Use pagination to limit results
 - **Solution 2**: Wait for Q1 2026 optimization (3-5x improvement)
-- **Solution 3**: Consider SQLite for SELECT-heavy workloads
+- **Solution 3**: Create hash indexes for equality filters
 
 **Problem**: Slow batch UPDATE
-- **Solution**: Use `BeginBatchUpdate()` API for 37.94x speedup!
+- **Solution**: ✅ **SOLVED!** Use `BeginBatchUpdate()` API for 37.94x speedup!
+  ```csharp
+  db.BeginBatchUpdate();
+  // ... 5000 updates ...
+  db.EndBatchUpdate();  // 37.94x faster!
+  ```
+
+**Problem**: Need range queries or ORDER BY
+- **Solution**: Coming in Q1 2026 with B-tree indexes
+- **Workaround**: Use LIMIT + app-level sorting for now
 
 **Problem**: Data security
-- **Solution**: SharpCoreDB has native AES-256-GCM with only 0-6% overhead
+- **Solution**: ✅ SharpCoreDB has native AES-256-GCM with only 0-6% overhead
 
 **Problem**: Memory usage
-- **Solution**: SharpCoreDB uses 6.22x less memory than LiteDB
+- **Solution**: ✅ SharpCoreDB uses 6.22x less memory than LiteDB
 
 ---
 
 **Last Updated**: December 2025  
-**Version**: 2.0  
+**Version**: 1.0  
 **Status**: ✅ Production Ready
 
 **Ready to use?** Start with [README.md](../README.md) →  

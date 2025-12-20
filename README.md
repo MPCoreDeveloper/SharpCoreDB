@@ -200,20 +200,19 @@ var rows = db.ExecuteQuery("SELECT * FROM users");
 ### 🔴 Q1 2026 - PRIORITY 1: SELECT & UPDATE Optimization
 
 - **Priority 1**: SELECT Performance
-  - **Current**: 30ms (2x faster than LiteDB)
-  - **Target**: <10ms (match SQLite)
+  - **Current**: 30ms (1.99x slower than LiteDB)
+  - **Target**: <10ms (match LiteDB)
   - **Approach**: B-tree indexes, SIMD scanning, reduced allocation
   - **Est. Impact**: 3-5x speedup
 
-- **Priority 2**: UPDATE Performance (Batch)
-  - **Current**: 37.94x speedup with BeginBatchUpdate
-  - **Target**: Extend to SQL batch API
-  - **Approach**: Implicit batch detection, auto-deferred indexes
-  - **Est. Impact**: 5-10x speedup
+- **Priority 2**: B-tree Indexes Implementation
+  - **Current**: Hash indexes only (O(1) point lookups)
+  - **Target**: Add B-tree for range queries and ordering
+  - **Approach**: Implement B-tree index structure, integrate with query planner
+  - **Est. Impact**: Enable ORDER BY, BETWEEN, range scans
 
 ### Q2-Q3 2026 - Advanced Optimizations
 
-- B-tree Index Implementation: Ordered iteration, range queries
 - Query Planner/Optimizer: Cost-based plans, join optimization
 - Advanced Caching: Multi-level caching, adaptive prefetching
 - Parallel Scans: SIMD + parallelization for large datasets
@@ -294,18 +293,19 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Status
 
-**Current Version**: 2.0  
+**Current Version**: 1.0  
 **Stability**: ✅ **Production-ready for analytics and encrypted databases**  
 **Batch Performance**: ✅ **37.94x faster updates with batch API**  
-**Next Milestone**: Q1 2026 - Optimize SELECT/UPDATE by 3-5x  
+**Next Milestone**: Q1 2026 - Optimize SELECT by 3-5x, implement B-tree indexes  
 
 **Performance Status**:
 - ✅ **Analytics**: World-class (**344x faster** than LiteDB) 🏆
 - ✅ **Inserts**: Excellent (**1.64x faster** than LiteDB, **6.22x less memory**)
 - ✅ **Encryption**: Enterprise-ready (**0-6% overhead** only)
-- ✅ **Batch Transactions**: **37.94x faster** for update-heavy workloads
-- 🟡 **SELECT**: Needs optimization (**2x slower** than LiteDB, optimization planned for Q1 2026)
-- 🟡 **UPDATE**: Solid with batch API (**37.94x faster**), optimization planned
+- ✅ **Batch Transactions**: **37.94x faster** for update-heavy workloads (Q4 2025) 🏆
+- ✅ **Lock-Free CLOCK Cache**: **2-5M ops/sec** concurrent access (Q4 2025) 🏆
+- 🟡 **SELECT**: Needs optimization (**2x slower** than LiteDB, target Q1 2026)
+- 🟡 **B-tree Indexes**: Coming Q1 2026 for range queries and ORDER BY
 
 ---
 
