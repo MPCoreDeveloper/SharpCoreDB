@@ -292,11 +292,13 @@ public class StorageEngineComparisonBenchmark
         liteCollection.InsertBulk(records);
         
         // Pre-populate ENCRYPTED databases for UPDATE/SELECT
-        appendOnlyEncryptedDb!.ExecuteBatchSQL(appendInserts);  // Reuse same inserts
-        pageBasedEncryptedDb!.ExecuteBatchSQL(pageInserts);     // Reuse same inserts
-        columnarAnalyticsDb!.ExecuteBatchSQL(appendInserts);    // ? Pre-populate for analytics benchmarks
+        // Skip AppendOnly ENCRYPTED pre-population to avoid PK conflicts with insert benchmark
+        // appendOnlyEncryptedDb!.ExecuteBatchSQL(appendInserts);  // SKIPPED
+        // Skip PageBased ENCRYPTED pre-population to avoid PK conflicts with insert benchmark
+        // pageBasedEncryptedDb!.ExecuteBatchSQL(pageInserts);     // SKIPPED
+        columnarAnalyticsDb!.ExecuteBatchSQL(appendInserts);
 
-        // ? NEW: Pre-transpose columnar data for analytics benchmarks (do this ONCE in setup!)
+        // Pre-transpose columnar data for analytics benchmarks (do this ONCE in setup!)
         Console.WriteLine("Pre-transposing columnar data for SIMD benchmarks...");
         var columnarRows = columnarAnalyticsDb.ExecuteQuery("SELECT * FROM bench_records");
         var columnarRecords = columnarRows.Select(r => new BenchmarkRecord
@@ -352,13 +354,22 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void AppendOnly_Insert_100K()
     {
-        try { appendOnlyDb!.ExecuteSQL("DELETE FROM bench_records WHERE id >= 10000"); } catch { }
+        // Compute starting id to avoid PK conflicts with any pre-populated data
+        int startId = 0;
+        try
+        {
+            var maxRows = appendOnlyDb!.ExecuteQuery("SELECT MAX(id) FROM bench_records");
+            if (maxRows.Count > 0 && maxRows[0].TryGetValue("max", out var mv) && mv is not null)
+            {
+                startId = Convert.ToInt32(Convert.ToDecimal(mv)) + 1;
+            }
+        }
+        catch { /* fallback to 0 */ }
         
-        // Insert NEW records using BULK INSERT (optimized path)
         var rows = new List<Dictionary<string, object>>(RecordCount);
         for (int i = 0; i < RecordCount; i++)
         {
-            int id = RecordCount + i;
+            int id = startId + i;
             rows.Add(new Dictionary<string, object>
             {
                 ["id"] = id,
@@ -380,13 +391,22 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void PageBased_Insert_100K()
     {
-        try { pageBasedDb!.ExecuteSQL("DELETE FROM bench_records WHERE id >= 10000"); } catch { }
+        // Compute starting id to avoid PK conflicts with any pre-populated data
+        int startId = 0;
+        try
+        {
+            var maxRows = pageBasedDb!.ExecuteQuery("SELECT MAX(id) FROM bench_records");
+            if (maxRows.Count > 0 && maxRows[0].TryGetValue("max", out var mv) && mv is not null)
+            {
+                startId = Convert.ToInt32(Convert.ToDecimal(mv)) + 1;
+            }
+        }
+        catch { /* fallback to 0 */ }
         
-        // Insert NEW records using BULK INSERT (optimized path)
         var rows = new List<Dictionary<string, object>>(RecordCount);
         for (int i = 0; i < RecordCount; i++)
         {
-            int id = RecordCount + i;
+            int id = startId + i;
             rows.Add(new Dictionary<string, object>
             {
                 ["id"] = id,
@@ -407,11 +427,18 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void SQLite_Insert_100K()
     {
-        // Clear previous iteration data
+        // Clear previous iteration data - wrapped in try-catch to handle missing records
         using (var delCmd = sqliteConn!.CreateCommand())
         {
             delCmd.CommandText = "DELETE FROM bench_records WHERE id >= 10000";
-            try { delCmd.ExecuteNonQuery(); } catch { }
+            try 
+            { 
+                delCmd.ExecuteNonQuery(); 
+            } 
+            catch 
+            { 
+                // Ignore errors if no records exist
+            }
         }
         
         // Insert NEW records
@@ -448,9 +475,16 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void LiteDB_Insert_100K()
     {
-        // Clear previous iteration data
+        // Clear previous iteration data - wrapped in try-catch to handle missing records
         var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
-        try { collection.DeleteMany(x => x.Id >= RecordCount); } catch { }
+        try 
+        { 
+            collection.DeleteMany(x => x.Id >= RecordCount); 
+        } 
+        catch 
+        { 
+            // Ignore errors if no records exist
+        }
         
         // Insert NEW records
         var records = new List<BenchmarkRecord>(RecordCount);
@@ -631,23 +665,40 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Encrypted")]
     public void AppendOnly_Encrypted_Insert_10K()
     {
-        try { appendOnlyEncryptedDb!.ExecuteSQL("DELETE FROM bench_records WHERE id >= 10000"); } catch { }
-        
-        var rows = new List<Dictionary<string, object>>(RecordCount);
-        for (int i = 0; i < RecordCount; i++)
+        try
         {
-            int id = RecordCount + i;
-            rows.Add(new Dictionary<string, object>
+            int startId = 0;
+            try
             {
-                ["id"] = id,
-                ["name"] = $"NewUser{id}",
-                ["email"] = $"newuser{id}@test.com",
-                ["age"] = 20 + (i % 50),
-                ["salary"] = (decimal)(30000 + (i % 70000)),
-                ["created"] = DateTime.Parse("2025-01-01")
-            });
+                var maxRows = appendOnlyEncryptedDb!.ExecuteQuery("SELECT MAX(id) FROM bench_records");
+                if (maxRows.Count > 0 && maxRows[0].TryGetValue("max", out var mv) && mv is not null)
+                {
+                    startId = Convert.ToInt32(Convert.ToDecimal(mv)) + 1;
+                }
+            }
+            catch { }
+
+            var rows = new List<Dictionary<string, object>>(RecordCount);
+            for (int i = 0; i < RecordCount; i++)
+            {
+                int id = startId + i;
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["id"] = id,
+                    ["name"] = $"NewUser{id}",
+                    ["email"] = $"newuser{id}@test.com",
+                    ["age"] = 20 + (i % 50),
+                    ["salary"] = (decimal)(30000 + (i % 70000)),
+                    ["created"] = DateTime.Parse("2025-01-01")
+                });
+            }
+            appendOnlyEncryptedDb!.BulkInsertAsync("bench_records", rows).GetAwaiter().GetResult();
         }
-        appendOnlyEncryptedDb!.BulkInsertAsync("bench_records", rows).GetAwaiter().GetResult();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Encrypted AppendOnly Insert] Error: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>
@@ -658,23 +709,40 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Encrypted")]
     public void PageBased_Encrypted_Insert_10K()
     {
-        try { pageBasedEncryptedDb!.ExecuteSQL("DELETE FROM bench_records WHERE id >= 10000"); } catch { }
-        
-        var rows = new List<Dictionary<string, object>>(RecordCount);
-        for (int i = 0; i < RecordCount; i++)
+        try
         {
-            int id = RecordCount + i;
-            rows.Add(new Dictionary<string, object>
+            int startId = 0;
+            try
             {
-                ["id"] = id,
-                ["name"] = $"NewUser{id}",
-                ["email"] = $"newuser{id}@test.com",
-                ["age"] = 20 + (i % 50),
-                ["salary"] = (decimal)(30000 + (i % 70000)),
-                ["created"] = DateTime.Parse("2025-01-01")
-            });
+                var maxRows = pageBasedEncryptedDb!.ExecuteQuery("SELECT MAX(id) FROM bench_records");
+                if (maxRows.Count > 0 && maxRows[0].TryGetValue("max", out var mv) && mv is not null)
+                {
+                    startId = Convert.ToInt32(Convert.ToDecimal(mv)) + 1;
+                }
+            }
+            catch { }
+            
+            var rows = new List<Dictionary<string, object>>(RecordCount);
+            for (int i = 0; i < RecordCount; i++)
+            {
+                int id = startId + i;
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["id"] = id,
+                    ["name"] = $"NewUser{id}",
+                    ["email"] = $"newuser{id}@test.com",
+                    ["age"] = 20 + (i % 50),
+                    ["salary"] = (decimal)(30000 + (i % 70000)),
+                    ["created"] = DateTime.Parse("2025-01-01")
+                });
+            }
+            pageBasedEncryptedDb!.BulkInsertAsync("bench_records", rows).GetAwaiter().GetResult();
         }
-        pageBasedEncryptedDb!.BulkInsertAsync("bench_records", rows).GetAwaiter().GetResult();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Encrypted PageBased Insert] Error: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>

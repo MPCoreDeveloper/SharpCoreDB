@@ -627,4 +627,170 @@ public partial class Table
             _ => true,
         };
     }
+
+    /// <summary>
+    /// Attempts to coerce a value to the expected data type.
+    /// Handles common type conversions for better compatibility with JSON deserialization and API inputs.
+    /// </summary>
+    /// <param name="value">The value to coerce.</param>
+    /// <param name="targetType">The target data type.</param>
+    /// <param name="coercedValue">The coerced value if successful.</param>
+    /// <returns>True if coercion succeeded, false otherwise.</returns>
+    private static bool TryCoerceValue(object value, DataType targetType, out object coercedValue)
+    {
+        coercedValue = value;
+        
+        try
+        {
+            switch (targetType)
+            {
+                case DataType.Integer:
+                    if (value is string strInt && int.TryParse(strInt, out var intVal))
+                    {
+                        coercedValue = intVal;
+                        return true;
+                    }
+                    if (value is long longInt && longInt >= int.MinValue && longInt <= int.MaxValue)
+                    {
+                        coercedValue = (int)longInt;
+                        return true;
+                    }
+                    if (value is double doubleInt && doubleInt >= int.MinValue && doubleInt <= int.MaxValue && Math.Abs(doubleInt - Math.Floor(doubleInt)) < 0.0000001)
+                    {
+                        coercedValue = (int)doubleInt;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Long:
+                    if (value is string strLong && long.TryParse(strLong, out var longVal))
+                    {
+                        coercedValue = longVal;
+                        return true;
+                    }
+                    if (value is int intLong)
+                    {
+                        coercedValue = (long)intLong;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Real:
+                    if (value is string strReal && double.TryParse(strReal, out var doubleVal))
+                    {
+                        coercedValue = doubleVal;
+                        return true;
+                    }
+                    if (value is float floatReal)
+                    {
+                        coercedValue = (double)floatReal;
+                        return true;
+                    }
+                    if (value is int intReal)
+                    {
+                        coercedValue = (double)intReal;
+                        return true;
+                    }
+                    if (value is long longReal)
+                    {
+                        coercedValue = (double)longReal;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Decimal:
+                    if (value is string strDecimal && decimal.TryParse(strDecimal, out var decimalVal))
+                    {
+                        coercedValue = decimalVal;
+                        return true;
+                    }
+                    if (value is int intDecimal)
+                    {
+                        coercedValue = (decimal)intDecimal;
+                        return true;
+                    }
+                    if (value is long longDecimal)
+                    {
+                        coercedValue = (decimal)longDecimal;
+                        return true;
+                    }
+                    if (value is double doubleDecimal)
+                    {
+                        coercedValue = (decimal)doubleDecimal;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.DateTime:
+                    if (value is string strDateTime && DateTime.TryParse(strDateTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dateTimeVal))
+                    {
+                        coercedValue = dateTimeVal;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Boolean:
+                    if (value is string strBool)
+                    {
+                        if (bool.TryParse(strBool, out var boolVal))
+                        {
+                            coercedValue = boolVal;
+                            return true;
+                        }
+                        // Handle common string representations
+                        var lower = strBool.ToLowerInvariant();
+                        if (lower is "1" or "yes" or "y" or "on")
+                        {
+                            coercedValue = true;
+                            return true;
+                        }
+                        if (lower is "0" or "no" or "n" or "off")
+                        {
+                            coercedValue = false;
+                            return true;
+                        }
+                    }
+                    if (value is int intBool)
+                    {
+                        coercedValue = intBool != 0;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Guid:
+                    if (value is string strGuid && Guid.TryParse(strGuid, out var guidVal))
+                    {
+                        coercedValue = guidVal;
+                        return true;
+                    }
+                    break;
+                    
+                case DataType.Ulid:
+                    if (value is string strUlid)
+                    {
+                        try
+                        {
+                            coercedValue = new Ulid(strUlid);
+                            return true;
+                        }
+                        catch
+                        {
+                            // Invalid ULID format
+                        }
+                    }
+                    break;
+                    
+                case DataType.String:
+                    // Any non-null value can be converted to string
+                    coercedValue = value.ToString() ?? string.Empty;
+                    return true;
+            }
+        }
+        catch
+        {
+            // Coercion failed
+        }
+        
+        return false;
+    }
 }

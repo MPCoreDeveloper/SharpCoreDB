@@ -1,0 +1,48 @@
+{
+  "profiles": {
+    "Profiling - PAGE_BASED": {
+      "commandName": "Project",
+      "commandLineArgs": "page-based",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production",
+        "SHARPCORE_PROFILING_MODE": "PageBased",
+        "SHARPCORE_RECORD_COUNT": "10000"
+      },
+      "nativeDebugging": false,
+      "sqlDebugging": false
+    },
+    "Profiling - COLUMNAR": {
+      "commandName": "Project",
+      "commandLineArgs": "columnar",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production",
+        "SHARPCORE_PROFILING_MODE": "Columnar",
+        "SHARPCORE_RECORD_COUNT": "10000"
+      },
+      "nativeDebugging": false,
+      "sqlDebugging": false
+    },
+    "Profiling - Continuous": {
+      "commandName": "Project",
+      "commandLineArgs": "continuous",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production",
+        "SHARPCORE_PROFILING_MODE": "Continuous",
+        "SHARPCORE_BATCH_SIZE": "1000"
+      },
+      "nativeDebugging": false,
+      "sqlDebugging": false
+    },
+    "Profiling - Comparative": {
+      "commandName": "Project",
+      "commandLineArgs": "compare",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production",
+        "SHARPCORE_PROFILING_MODE": "Comparative",
+        "SHARPCORE_RECORD_COUNT": "10000"
+      },
+      "nativeDebugging": false,
+      "sqlDebugging": false
+    }
+  }
+}

@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Benchmarks", ".
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.EntityFrameworkCore", "..\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj", "{25C8E305-9720-412E-9936-9D7DAE42BA8F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Profiling", "..\SharpCoreDB.Profiling\SharpCoreDB.Profiling.csproj", "{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{25C8E305-9720-412E-9936-9D7DAE42BA8F}.Release|x64.Build.0 = Release|Any CPU
 		{25C8E305-9720-412E-9936-9D7DAE42BA8F}.Release|x86.ActiveCfg = Release|Any CPU
 		{25C8E305-9720-412E-9936-9D7DAE42BA8F}.Release|x86.Build.0 = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|x64.Build.0 = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Debug|x86.Build.0 = Debug|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|x64.ActiveCfg = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|x64.Build.0 = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|x86.ActiveCfg = Release|Any CPU
+		{7FE9968F-F5DF-83D9-9DB1-89DF7CA233B8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

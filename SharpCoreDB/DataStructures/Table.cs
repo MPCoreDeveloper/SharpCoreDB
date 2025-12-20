@@ -97,10 +97,17 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     public IIndex<string, long> Index { get; set; } = new BTree<string, long>();
 
+    // ✅ NEW: Cached row count to avoid expensive full table scans in GetDatabaseStatistics()
+    // This is incremented on Insert and decremented on Delete
+    private long _cachedRowCount = 0;
+
     private readonly Dictionary<string, HashIndex> hashIndexes = [];
     private readonly Dictionary<string, IndexMetadata> registeredIndexes = [];
     private readonly HashSet<string> loadedIndexes = [];
     private readonly HashSet<string> staleIndexes = [];
+    
+    // ✅ PERFORMANCE: Cache column name to index mapping for O(1) lookups
+    private Dictionary<string, int>? _columnIndexCache;
     
     // 🔥 CRITICAL FIX: Map index NAMES to COLUMN names for proper DROP INDEX support
     // SQL: CREATE INDEX idx_email ON users(email) 
@@ -147,6 +154,51 @@ public partial class Table : ITable, IDisposable
     public void SetCompactionThreshold(long threshold)
     {
         COMPACTION_THRESHOLD = threshold <= 0 ? long.MaxValue : threshold;
+    }
+
+    /// <summary>
+    /// Gets the cached row count (O(1) operation).
+    /// Returns -1 if cache is not initialized (call RefreshRowCount() first).
+    /// ✅ PERFORMANCE: Avoids expensive full table scan in GetDatabaseStatistics()
+    /// </summary>
+    /// <returns>Number of rows in the table, or -1 if not cached.</returns>
+    public long GetCachedRowCount()
+    {
+        return _cachedRowCount;
+    }
+
+    /// <summary>
+    /// Refreshes the cached row count by doing a full table scan.
+    /// Call this once after loading the table from disk.
+    /// </summary>
+    public void RefreshRowCount()
+    {
+        try
+        {
+            _cachedRowCount = Select().Count;
+        }
+        catch
+        {
+            _cachedRowCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Gets or builds the column name to index cache for O(1) lookups.
+    /// ✅ PERFORMANCE: Eliminates repeated O(n) IndexOf() calls in hot paths.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Dictionary<string, int> GetColumnIndexCache()
+    {
+        if (_columnIndexCache is null)
+        {
+            _columnIndexCache = new Dictionary<string, int>(this.Columns.Count);
+            for (int i = 0; i < this.Columns.Count; i++)
+            {
+                _columnIndexCache[this.Columns[i]] = i;
+            }
+        }
+        return _columnIndexCache;
     }
 
     /// <summary>

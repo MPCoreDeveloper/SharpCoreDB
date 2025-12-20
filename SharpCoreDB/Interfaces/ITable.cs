@@ -149,4 +149,18 @@ public interface ITable
     /// This prevents stale/corrupt index data from being read after DDL operations.
     /// </summary>
     void ClearAllIndexes();
+    
+    /// <summary>
+    /// Gets the cached row count (O(1) operation).
+    /// Returns -1 if cache is not initialized.
+    /// ✅ PERFORMANCE: Avoids expensive full table scan in GetDatabaseStatistics()
+    /// </summary>
+    /// <returns>Number of rows in the table, or -1 if not cached.</returns>
+    long GetCachedRowCount();
+
+    /// <summary>
+    /// Refreshes the cached row count by doing a full table scan.
+    /// Call this once after loading the table from disk.
+    /// </summary>
+    void RefreshRowCount();
 }

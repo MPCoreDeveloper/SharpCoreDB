@@ -4,6 +4,7 @@
 // </copyright>
 namespace SharpCoreDB.DataStructures;
 
+using System;
 using SharpCoreDB.Interfaces;
 using System.Collections.Generic;
 
@@ -15,26 +16,41 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 {
     private sealed class Node
     {
-        private const int InitialCapacity = 16384;
-        public TKey[] keysArray = new TKey[InitialCapacity];
-        public TValue[] valuesArray = new TValue[InitialCapacity];
-        public Node[] childrenArray = new Node[InitialCapacity];
+        public TKey[] keysArray;
+        public TValue[] valuesArray;
+        public Node[] childrenArray;
         public int keysCount = 0;
         public int valuesCount = 0;
         public int childrenCount = 0;
 
         public bool IsLeaf;
+
+        public Node(int capacity)
+        {
+            keysArray = new TKey[capacity];
+            valuesArray = new TValue[capacity];
+            childrenArray = new Node[capacity];
+        }
     }
 
     private Node? root;
     private readonly int degree = 3;
+    private readonly int nodeCapacity;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BTree{TKey, TValue}"/> class.
+    /// </summary>
+    public BTree()
+    {
+        nodeCapacity = 2 * degree;
+    }
 
     /// <inheritdoc />
     public void Insert(TKey key, TValue value)
     {
         if (this.root == null)
         {
-            this.root = new Node { IsLeaf = true };
+            this.root = new Node(nodeCapacity) { IsLeaf = true };
             this.root.keysArray[0] = key;
             this.root.valuesArray[0] = value;
             this.root.keysCount = 1;
@@ -42,74 +58,100 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             return;
         }
 
+        if (this.root.keysCount == (2 * this.degree) - 1)
+        {
+            var oldRoot = this.root;
+            this.root = new Node(nodeCapacity) { IsLeaf = false };
+            this.root.childrenArray[0] = oldRoot;
+            this.root.childrenCount = 1;
+            this.SplitChild(this.root, 0);
+        }
+
         this.InsertNonFull(this.root, key, value);
     }
 
     private void InsertNonFull(Node node, TKey key, TValue value)
     {
-        int i = node.keysCount - 1;
         if (node.IsLeaf)
         {
-            while (i >= 0 && key.CompareTo(node.keysArray[i]) < 0)
-            {
-                i--;
-            }
-
-            InsertKey(node, i + 1, key);
-            InsertValue(node, i + 1, value);
+            int insertPos = FindInsertIndex(node, key);
+            InsertKeyValue(node, insertPos, key, value);
         }
         else
         {
-            while (i >= 0 && key.CompareTo(node.keysArray[i]) < 0)
+            int childIndex = FindInsertIndex(node, key);
+            if (node.childrenArray[childIndex].keysCount == (2 * this.degree) - 1)
             {
-                i--;
-            }
-
-            i++;
-            if (node.childrenArray[i].keysCount == (2 * this.degree) - 1)
-            {
-                this.SplitChild(node, i);
-                if (key.CompareTo(node.keysArray[i]) > 0)
+                this.SplitChild(node, childIndex);
+                if (key.CompareTo(node.keysArray[childIndex]) > 0)
                 {
-                    i++;
+                    childIndex++;
                 }
             }
 
-            this.InsertNonFull(node.childrenArray[i], key, value);
+            this.InsertNonFull(node.childrenArray[childIndex], key, value);
         }
+    }
+
+    private static int FindInsertIndex(Node node, TKey key)
+    {
+        int low = 0;
+        int high = node.keysCount;
+        while (low < high)
+        {
+            int mid = (low + high) >> 1;
+            if (key.CompareTo(node.keysArray[mid]) > 0)
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        return low;
+    }
+
+    private static void InsertKeyValue(Node node, int pos, TKey key, TValue value)
+    {
+        if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
+        if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
+
+        if (pos < node.keysCount)
+        {
+            Array.Copy(node.keysArray, pos, node.keysArray, pos + 1, node.keysCount - pos);
+            Array.Copy(node.valuesArray, pos, node.valuesArray, pos + 1, node.valuesCount - pos);
+        }
+
+        node.keysArray[pos] = key;
+        node.valuesArray[pos] = value;
+        node.keysCount++;
+        node.valuesCount++;
     }
 
     private void SplitChild(Node parent, int i)
     {
         var y = parent.childrenArray[i];
-        var z = new Node { IsLeaf = y.IsLeaf };
+        var z = new Node(nodeCapacity) { IsLeaf = y.IsLeaf };
         InsertChild(parent, i + 1, z);
         InsertKey(parent, i, y.keysArray[this.degree - 1]);
         int t = this.degree;
-        for (int j = 0; j < t - 1; j++)
-        {
-            z.keysArray[j] = y.keysArray[j + t];
-            if (y.IsLeaf)
-            {
-                z.valuesArray[j] = y.valuesArray[j + t];
-            }
-        }
-        z.keysCount = t - 1;
+        int copyCount = t - 1;
+
+        Array.Copy(y.keysArray, t, z.keysArray, 0, copyCount);
+        z.keysCount = copyCount;
+        y.keysCount = copyCount;
+
         if (y.IsLeaf)
         {
-            z.valuesCount = t - 1;
+            Array.Copy(y.valuesArray, t, z.valuesArray, 0, copyCount);
+            z.valuesCount = copyCount;
+            y.valuesCount = copyCount;
         }
-        y.keysCount = t - 1;
-        if (y.IsLeaf)
+        else
         {
-            y.valuesCount = t - 1;
-        }
-        if (!y.IsLeaf)
-        {
-            for (int j = 0; j < t; j++)
-            {
-                z.childrenArray[j] = y.childrenArray[j + t];
-            }
+            Array.Copy(y.childrenArray, t, z.childrenArray, 0, t);
             z.childrenCount = t;
             y.childrenCount = t;
         }
@@ -183,22 +225,13 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
         if (i < node.keysCount && key.CompareTo(node.keysArray[i]) == 0)
         {
-            // Key found in this node
+            // Key found in this node - remove it
+            RemoveKeyAt(node, i);
             if (node.IsLeaf)
             {
-                // Simple case: key is in a leaf node
-                RemoveKeyAt(node, i);
                 RemoveValueAt(node, i);
-                return true;
             }
-            else
-            {
-                // Key is in internal node - replace with predecessor or successor
-                // For simplicity, we'll just remove it and let the tree restructure
-                RemoveKeyAt(node, i);
-                RemoveValueAt(node, i);
-                return true;
-            }
+            return true;
         }
         else if (!node.IsLeaf)
         {
@@ -242,15 +275,6 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         span.Slice(pos, node.keysCount - pos).CopyTo(span.Slice(pos + 1, node.keysCount - pos));
         node.keysArray[pos] = key;
         node.keysCount++;
-    }
-
-    private static void InsertValue(Node node, int pos, TValue value)
-    {
-        if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
-        var span = node.valuesArray.AsSpan();
-        span.Slice(pos, node.valuesCount - pos).CopyTo(span.Slice(pos + 1, node.valuesCount - pos));
-        node.valuesArray[pos] = value;
-        node.valuesCount++;
     }
 
     private static void InsertChild(Node node, int pos, Node child)

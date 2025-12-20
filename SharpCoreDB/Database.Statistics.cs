@@ -92,7 +92,19 @@ public partial class Database
         foreach (var (name, table) in tables)  // ✅ C# 14: tuple deconstruction in foreach
         {
             stats[$"Table_{name}_Columns"] = table.Columns.Count;
-            stats[$"Table_{name}_Rows"] = table.Select().Count;
+            
+            // ✅ PERFORMANCE FIX: Use cached row count instead of full table scan!
+            // Before: table.Select().Count took 53% CPU time (10K BTree searches!)
+            // After: O(1) cached value lookup
+            var rowCount = table.GetCachedRowCount();
+            if (rowCount < 0)
+            {
+                // Cache not initialized - do one-time refresh
+                table.RefreshRowCount();
+                rowCount = table.GetCachedRowCount();
+            }
+            stats[$"Table_{name}_Rows"] = rowCount;
+            
             stats[$"Table_{name}_ColumnUsage"] = table.GetColumnUsage();
         }
 
