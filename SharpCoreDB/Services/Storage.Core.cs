@@ -45,6 +45,10 @@ public partial class Storage : IStorage
         this.pageSize = config?.PageSize ?? 4096;
         this.bufferPool = ArrayPool<byte>.Shared;
         
+        // Initialize batch encryption configuration
+        this.enableBatchEncryption = (config?.EnableBatchEncryption ?? false) && !this.noEncryption;
+        this.batchEncryptionSizeKB = config?.BatchEncryptionSizeKB ?? 64;
+        
         // Initialize transaction buffer in FULL_WRITE mode (legacy compatible)
         this.transactionBuffer = new TransactionBuffer(
             this, 

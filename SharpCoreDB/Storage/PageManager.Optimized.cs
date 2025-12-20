@@ -11,7 +11,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// PageManager partial class - Highly optimized methods for minimal allocations.
 /// ✅ ZERO-ALLOCATION: Uses ArrayPool, stackalloc, and aggressive inlining
-/// ✅ O(1) OPERATIONS: Leverages LRU cache and bitmap for fast lookups
+/// ✅ O(1) OPERATIONS: Leverages CLOCK cache and bitmap for fast lookups
 /// </summary>
 public partial class PageManager
 {
@@ -66,7 +66,7 @@ public partial class PageManager
                 
                 try
                 {
-                    var page = ReadPage(pageId); // ✅ LRU cache makes this fast
+                    var page = ReadPage(pageId); // ✅ CLOCK cache makes this fast
                     
                     if (page.TableId == tableId && 
                         page.Type == PageType.Table && 

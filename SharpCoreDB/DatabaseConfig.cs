@@ -20,6 +20,24 @@ public class DatabaseConfig
     public bool NoEncryptMode { get; init; } = false;
 
     /// <summary>
+    /// Gets a value indicating whether batch encryption is enabled during bulk operations.
+    /// When true, rows are accumulated in plaintext and encrypted in 64KB batches.
+    /// Expected gain: 6-10x faster than per-row encryption for bulk inserts.
+    /// Only effective when UseOptimizedInsertPath = true.
+    /// Target: 10k encrypted inserts from 666ms to less than 100ms.
+    /// </summary>
+    public bool EnableBatchEncryption { get; init; } = false;
+
+    /// <summary>
+    /// Gets the batch encryption buffer size in KB.
+    /// Larger buffers reduce encryption operations but increase memory usage.
+    /// Range: 16-128KB
+    /// Default: 64KB (good balance for 1K-10K row batches)
+    /// Recommended: 32-64KB for most workloads.
+    /// </summary>
+    public int BatchEncryptionSizeKB { get; init; } = 64;
+
+    /// <summary>
     /// Gets a value indicating whether High-Speed Insert mode is enabled.
     /// When enabled: Buffers encryption operations, uses larger WAL batches (1000+ rows), and optimizes for bulk throughput.
     /// BENCHMARK RESULTS (10K records):

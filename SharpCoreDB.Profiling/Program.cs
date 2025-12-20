@@ -359,7 +359,7 @@ internal class Program
                 ["name"] = $"User_{id}",
                 ["email"] = $"user{id}@example.com",
                 ["age"] = 20 + (i % 50),
-                ["created_at"] = DateTime.UtcNow.ToString("o"),
+                ["created_at"] = DateTime.UtcNow,  // ✅ FIX: Use DateTime object instead of string
                 ["is_active"] = i % 2 == 0 ? 1 : 0
             });
         }

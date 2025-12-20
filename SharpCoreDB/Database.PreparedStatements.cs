@@ -1,4 +1,4 @@
-﻿// <copyright file="Database.PreparedStatements.cs" company="MPCoreDeveloper">
+// <copyright file="Database.PreparedStatements.cs" company="MPCoreDeveloper">
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -22,7 +22,7 @@ public partial class Database
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
     /// <returns>A prepared statement instance.</returns>
-    public PreparedStatement Prepare(string sql)
+    public SharpCoreDB.DataStructures.PreparedStatement Prepare(string sql)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         
@@ -33,7 +33,7 @@ public partial class Database
             _preparedPlans[sql] = plan;
         }
         
-        return new PreparedStatement(sql, plan);
+        return new SharpCoreDB.DataStructures.PreparedStatement(sql, plan);
     }
 
     /// <summary>
@@ -41,7 +41,7 @@ public partial class Database
     /// </summary>
     /// <param name="stmt">The prepared statement.</param>
     /// <param name="parameters">The parameters to bind.</param>
-    public void ExecutePrepared(PreparedStatement stmt, Dictionary<string, object?> parameters)
+    public void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -73,7 +73,7 @@ public partial class Database
         }
     }
 
-    private async Task ExecutePreparedWithGroupCommit(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
+    private async Task ExecutePreparedWithGroupCommit(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
         lock (_walLock)
         {
@@ -98,7 +98,7 @@ public partial class Database
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task ExecutePreparedAsync(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
+    public async Task ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -130,7 +130,7 @@ public partial class Database
     /// <param name="stmt">The prepared statement.</param>
     /// <param name="parameters">The parameters to bind.</param>
     /// <returns>A ValueTask representing the execution result.</returns>
-    public async ValueTask<object> ExecutePreparedAsync(PreparedStatement stmt, params object[] parameters)
+    public async ValueTask<object> ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, params object[] parameters)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);

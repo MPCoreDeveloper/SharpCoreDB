@@ -54,6 +54,16 @@ public interface ITable
     long[] InsertBatch(List<Dictionary<string, object>> rows);
 
     /// <summary>
+    /// ✅ NEW: Inserts multiple rows from binary-encoded buffer (zero-allocation path).
+    /// Uses StreamingRowEncoder format to avoid Dictionary materialization.
+    /// Expected: 40-60% faster than InsertBatch() for large batches (10K+ rows).
+    /// </summary>
+    /// <param name="encodedData">Binary-encoded row data from StreamingRowEncoder.</param>
+    /// <param name="rowCount">Number of rows encoded in the buffer.</param>
+    /// <returns>Array of file positions where each row was written.</returns>
+    long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount);
+
+    /// <summary>
     /// Selects rows from the table with optional filtering and ordering.
     /// </summary>
     /// <param name="where">The where clause string.</param>

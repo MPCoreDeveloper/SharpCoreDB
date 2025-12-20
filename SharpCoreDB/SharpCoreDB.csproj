@@ -65,8 +65,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="SharpCoreDB.Benchmarks\BulkInsertAsyncBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\ComprehensiveComparison.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\EncryptionBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\InsertBatchOptimizationBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\UpdateBatchOptimizationBenchmark.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -94,14 +94,14 @@ public interface IDatabase
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
     /// <returns>A prepared statement instance.</returns>
-    PreparedStatement Prepare(string sql);
+    SharpCoreDB.DataStructures.PreparedStatement Prepare(string sql);
 
     /// <summary>
     /// Executes a prepared statement with parameters.
     /// </summary>
     /// <param name="stmt">The prepared statement.</param>
     /// <param name="parameters">The parameters to bind.</param>
-    void ExecutePrepared(PreparedStatement stmt, Dictionary<string, object?> parameters);
+    void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters);
 
     /// <summary>
     /// Executes a prepared statement asynchronously with parameters.
@@ -110,7 +110,7 @@ public interface IDatabase
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task ExecutePreparedAsync(PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
+    Task ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes a query and returns the results.

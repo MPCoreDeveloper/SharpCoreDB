@@ -14,7 +14,7 @@ using System.Collections.Concurrent;
 /// <summary>
 /// Page-based storage manager for OLTP workloads.
 /// ✅ OPTIMIZED: O(1) free page allocation via linked free list (no linear scans!)
-/// ✅ OPTIMIZED: LRU page cache (max 1024 pages) for 5-10x faster reads/writes
+/// ✅ OPTIMIZED: Lock-free CLOCK page cache (max 1024 pages) for 5-10x faster reads/writes
 /// Manages 8KB pages with in-place updates, free space tracking, and WAL integration.
 /// </summary>
 public partial class PageManager : IDisposable
@@ -521,7 +521,7 @@ public partial class PageManager : IDisposable
 
     /// <summary>
     /// Reads a page from disk or cache.
-    /// ✅ OPTIMIZED: Uses LRU cache for 5-10x faster access
+    /// ✅ OPTIMIZED: Uses CLOCK cache for 5-10x faster access
     /// </summary>
     public Page ReadPage(PageId pageId)
     {
