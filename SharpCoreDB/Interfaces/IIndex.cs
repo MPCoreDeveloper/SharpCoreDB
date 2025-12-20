@@ -30,4 +30,9 @@ public interface IIndex<TKey, TValue>
     /// <param name="key">The key to delete.</param>
     /// <returns>True if the key was found and deleted, false otherwise.</returns>
     bool Delete(TKey key);
+
+    /// <summary>
+    /// Clears all entries from the index (used for bulk index rebuild).
+    /// </summary>
+    void Clear();
 }

@@ -22,7 +22,7 @@ using System.Threading.Tasks;
 /// - In-place UPDATE/DELETE without tombstones
 /// - Optimized for OLTP workloads with frequent updates
 /// </summary>
-public class PageBasedEngine : IStorageEngine
+public partial class PageBasedEngine : IStorageEngine
 {
     private readonly string databasePath;
     private readonly DatabaseConfig? config; // ✅ NEW: Store config for PageManager

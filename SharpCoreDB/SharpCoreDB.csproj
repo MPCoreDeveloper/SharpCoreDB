@@ -65,12 +65,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdateDeferredIndexBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdatePerformanceTest.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdateWalBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\BulkInsertAsyncBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\ComprehensiveComparison.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\EncryptionBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\InsertBatchOptimizationBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\PageBasedDirtyPageBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\UpdateBatchOptimizationBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\UpdatePerformanceTest.cs" />
   </ItemGroup>
 
   <ItemGroup>

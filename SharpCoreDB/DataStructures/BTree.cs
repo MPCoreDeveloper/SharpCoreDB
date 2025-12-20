@@ -215,6 +215,12 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         return found;
     }
 
+    /// <inheritdoc />
+    public void Clear()
+    {
+        this.root = null;
+    }
+
     private bool DeleteFromNode(Node node, TKey key)
     {
         int i = 0;

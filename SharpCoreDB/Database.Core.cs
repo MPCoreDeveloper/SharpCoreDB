@@ -44,6 +44,9 @@ public partial class Database : IDatabase, IDisposable
     
     private bool _disposed;  // ✅ C# 14: No need for = false initialization
 
+    // ✅ NEW: Batch UPDATE transaction state
+    private bool _batchUpdateActive = false;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
     /// </summary>

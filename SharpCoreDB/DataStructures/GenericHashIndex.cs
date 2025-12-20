@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 /// </summary>
 /// <typeparam name="TKey">The type of the index key.</typeparam>
 /// <param name="columnName">The column name this index is for.</param>
-public sealed class GenericHashIndex<TKey>(string columnName) : IGenericIndex<TKey>
+public sealed partial class GenericHashIndex<TKey>(string columnName) : IGenericIndex<TKey>
     where TKey : notnull, IComparable<TKey>, IEquatable<TKey>
 {
     private readonly Dictionary<TKey, List<long>> _index = new(capacity: 10000); // Pre-size for 10k

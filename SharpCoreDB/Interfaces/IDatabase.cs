@@ -128,4 +128,26 @@ public interface IDatabase
     /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
     /// <returns>The query results.</returns>
     List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt);
+
+    /// <summary>
+    /// Gets whether a batch UPDATE transaction is currently active.
+    /// </summary>
+    bool IsBatchUpdateActive { get; }
+
+    /// <summary>
+    /// Begins a batch UPDATE transaction for improved performance.
+    /// All index updates are deferred until EndBatchUpdate() is called.
+    /// </summary>
+    void BeginBatchUpdate();
+
+    /// <summary>
+    /// Ends the batch UPDATE transaction and commits changes.
+    /// All deferred indexes are rebuilt and WAL is flushed.
+    /// </summary>
+    void EndBatchUpdate();
+
+    /// <summary>
+    /// Cancels the active batch UPDATE transaction (rollback).
+    /// </summary>
+    void CancelBatchUpdate();
 }

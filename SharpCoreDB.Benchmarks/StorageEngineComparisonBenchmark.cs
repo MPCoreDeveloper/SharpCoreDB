@@ -290,6 +290,18 @@ public class StorageEngineComparisonBenchmark
             });
         }
         liteCollection.InsertBulk(records);
+
+        // Pre-populate ENCRYPTED databases for SELECT/UPDATE benchmarks
+        Console.WriteLine("Pre-populating encrypted databases for SELECT/UPDATE benchmarks...");
+        var encryptedInserts = new List<string>(RecordCount);
+        for (int i = 0; i < RecordCount; i++)
+        {
+            encryptedInserts.Add($@"INSERT INTO bench_records (id, name, email, age, salary, created) 
+                VALUES ({i}, 'User{i}', 'user{i}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
+        }
+        appendOnlyEncryptedDb!.ExecuteBatchSQL(encryptedInserts);
+        pageBasedEncryptedDb!.ExecuteBatchSQL(encryptedInserts);
+        Console.WriteLine("Encrypted databases pre-populated!");
         
         // ? FIX: Pre-populate columnar DB using BulkInsertAsync instead of ExecuteBatchSQL
         Console.WriteLine("Pre-populating columnar analytics database...");
@@ -519,7 +531,8 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Update")]
     public void AppendOnly_Update_50K()
     {
-        // Use ExecuteBatchSQL with transaction for fair comparison (like SQLite)
+        // Use ExecuteBatchSQL which is optimized for batch operations
+        // Note: This is the correct API for bulk operations in the benchmark
         var updates = new List<string>(RecordCount / 2);
         for (int i = 0; i < RecordCount / 2; i++)
         {
@@ -537,7 +550,8 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Update")]
     public void PageBased_Update_50K()
     {
-        // Use ExecuteBatchSQL with transaction for fair comparison (like SQLite)
+        // Use ExecuteBatchSQL which is optimized for batch operations
+        // Note: This is the correct API for bulk operations in the benchmark
         var updates = new List<string>(RecordCount / 2);
         for (int i = 0; i < RecordCount / 2; i++)
         {
@@ -769,24 +783,6 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Encrypted")]
     public void PageBased_Encrypted_Select()
     {
-        // ? FIX: First ensure we have data to select from
-        // Check if we have inserted data yet
-        try
-        {
-            var testQuery = pageBasedEncryptedDb!.ExecuteQuery("SELECT COUNT(*) as cnt FROM bench_records");
-            if (testQuery.Count == 0 || (testQuery.Count > 0 && Convert.ToInt32(testQuery[0]["cnt"]) == 0))
-            {
-                // No data yet - skip this benchmark iteration
-                Console.WriteLine("??  Skipping Encrypted SELECT - no data available");
-                return;
-            }
-        }
-        catch
-        {
-            Console.WriteLine("??  Skipping Encrypted SELECT - query failed");
-            return;
-        }
-        
         var rows = pageBasedEncryptedDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.Count;
     }
@@ -799,27 +795,13 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Encrypted")]
     public void PageBased_Encrypted_Update()
     {
-        // ? FIX: First ensure we have data to update
-        try
-        {
-            var testQuery = pageBasedEncryptedDb!.ExecuteQuery("SELECT COUNT(*) as cnt FROM bench_records");
-            if (testQuery.Count == 0 || (testQuery.Count > 0 && Convert.ToInt32(testQuery[0]["cnt"]) == 0))
-            {
-                Console.WriteLine("??  Skipping Encrypted UPDATE - no data available");
-                return;
-            }
-        }
-        catch
-        {
-            Console.WriteLine("??  Skipping Encrypted UPDATE - query failed");
-            return;
-        }
-        
-        // Use the ID range that was inserted by the INSERT benchmark (100K+)
+        // Use ExecuteBatchSQL which is optimized for batch operations
+        // Note: BeginBatchUpdate/EndBatchUpdate should only be used in application code, 
+        // not in benchmarks where we're measuring batch API performance separately
         var updates = new List<string>(RecordCount / 2);
         for (int i = 0; i < RecordCount / 2; i++)
         {
-            var id = 100_000 + Random.Shared.Next(0, RecordCount);
+            var id = Random.Shared.Next(0, RecordCount);
             updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
         }
         pageBasedEncryptedDb!.ExecuteBatchSQL(updates);
