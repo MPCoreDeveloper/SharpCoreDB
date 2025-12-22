@@ -37,8 +37,9 @@ public partial class Table
                 break;
             }
             
-            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
-                dataSpan.Slice(filePosition, 4));
+            // ✅ C# 14: Range operator - extract length prefix span first
+            var lengthSpan = dataSpan[filePosition..(filePosition + 4)];
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthSpan);
             
             // Sanity check: record length must be reasonable
             const int MaxRecordSize = 1_000_000_000; // 1 GB max per record
@@ -64,9 +65,9 @@ public partial class Table
                 break;
             }
             
-            // Skip length prefix (4 bytes) and read record data
+            // ✅ C# 14: Range operator for record data extraction
             int dataOffset = filePosition + 4;
-            ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
+            ReadOnlySpan<byte> recordData = dataSpan[dataOffset..(dataOffset + recordLength)];
             
             // Parse the record into a row
             var row = new Dictionary<string, object>();
@@ -77,7 +78,8 @@ public partial class Table
             {
                 try
                 {
-                    var value = ReadTypedValueFromSpan(recordData.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                    // ✅ C# 14: Range operator for typed value parsing
+                    var value = ReadTypedValueFromSpan(recordData[offset..], this.ColumnTypes[i], out int bytesRead);
                     row[this.Columns[i]] = value;
                     offset += bytesRead;
                 }

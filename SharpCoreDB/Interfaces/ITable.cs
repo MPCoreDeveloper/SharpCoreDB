@@ -173,4 +173,26 @@ public interface ITable
     /// Call this once after loading the table from disk.
     /// </summary>
     void RefreshRowCount();
+
+    /// <summary>
+    /// Creates a B-tree index on the specified column for range queries.
+    /// Supports: WHERE column &gt; value, WHERE column BETWEEN x AND y, ORDER BY column.
+    /// </summary>
+    /// <param name="columnName">The column name to index.</param>
+    void CreateBTreeIndex(string columnName);
+
+    /// <summary>
+    /// Creates a named B-tree index on the specified column.
+    /// Supports SQL syntax: CREATE INDEX idx_name ON table(column) USING BTREE.
+    /// </summary>
+    /// <param name="indexName">The index name (e.g., "idx_age_btree").</param>
+    /// <param name="columnName">The column name to index (e.g., "age").</param>
+    void CreateBTreeIndex(string indexName, string columnName);
+
+    /// <summary>
+    /// Checks if a B-tree index exists for the specified column.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>True if B-tree index exists.</returns>
+    bool HasBTreeIndex(string columnName);
 }

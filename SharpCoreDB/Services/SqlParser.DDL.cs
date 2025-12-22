@@ -112,28 +112,51 @@ public partial class SqlParser
                 disposable.Dispose();
             }
             
-            // Give OS time to close file handles
-            System.Threading.Thread.Sleep(100);
-            
-            // Delete old data file explicitly (both .dat and .pages files)
+            // ✅ IMPROVED: Retry file deletion with validation and exponential backoff
+            // This defense-in-depth approach handles edge cases on slow machines or antivirus interference
             foreach (var ext in new[] { PersistenceConstants.TableFileExtension, ".pages", ".pages.freelist" })
             {
                 var fileToDelete = Path.Combine(this.dbPath, tableName + ext);
                 if (File.Exists(fileToDelete))
                 {
-                    try
+                    bool deleted = false;
+                    
+                    // Retry with exponential backoff (5 attempts over ~1.5 seconds max)
+                    for (int attempt = 0; attempt < 5 && !deleted; attempt++)
                     {
-                        File.Delete(fileToDelete);
-                        
-                        // Wait for deletion to complete
-                        for (int attempt = 0; attempt < 10 && File.Exists(fileToDelete); attempt++)
+                        try
                         {
-                            System.Threading.Thread.Sleep(50);
+                            // ✅ VALIDATION: Verify file is not locked by opening exclusively first
+                            // This confirms the file handle is truly released by Dispose()
+                            using (var testStream = new FileStream(
+                                fileToDelete, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                            {
+                                // If we can open exclusively, file is not locked
+                            }
+                            
+                            File.Delete(fileToDelete);
+                            deleted = true;
+                        }
+                        catch (IOException) when (attempt < 4)
+                        {
+                            // File still locked - wait with exponential backoff
+                            // 10, 20, 40, 80, 160 ms (total: 310ms max)
+                            int delayMs = 10 * (1 << attempt);
+                            System.Threading.Thread.Sleep(delayMs);
+                        }
+                        catch (UnauthorizedAccessException) when (attempt < 4)
+                        {
+                            // Permission issue (rare) - linear backoff
+                            System.Threading.Thread.Sleep(50 * (attempt + 1));
                         }
                     }
-                    catch (IOException)
+                    
+                    // ✅ VALIDATION: Verify deletion succeeded
+                    if (!deleted && File.Exists(fileToDelete))
                     {
-                        // If deletion fails, truncation below will handle it
+                        throw new InvalidOperationException(
+                            $"Failed to delete '{fileToDelete}' after 5 attempts. " +
+                            "File may be locked by another process or antivirus software.");
                     }
                 }
             }
@@ -195,6 +218,8 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes CREATE INDEX statement.
+    /// ENHANCED: Supports BTREE and HASH index types.
+    /// Syntax: CREATE INDEX idx_name ON table(column) [USING BTREE|HASH]
     /// </summary>
     private void ExecuteCreateIndex(string sql, string[] parts, IWAL? wal)
     {
@@ -203,18 +228,16 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot create index in readonly mode");
         }
 
-        // CREATE INDEX idx_name ON table_name (column_name)
-        // or CREATE UNIQUE INDEX idx_name ON table_name (column_name)
-        var onIdx = Array.IndexOf(parts.Select(p => p.ToUpper()).ToArray(), "ON");
+        // Parse: CREATE INDEX idx_name ON table_name (column_name) [USING BTREE|HASH]
+        // or CREATE UNIQUE INDEX idx_name ON table_name (column_name) [USING BTREE|HASH]
+        var onIdx = Array.FindIndex(parts, p => p.Equals("ON", StringComparison.OrdinalIgnoreCase));
         if (onIdx < 0)
         {
             throw new InvalidOperationException("CREATE INDEX requires ON clause");
         }
 
-        // 🔥 CRITICAL FIX: Extract index NAME (not just column name)
-        // SQL: CREATE INDEX idx_email ON users(email)
-        //      parts[2] = "idx_email" (the index NAME)
-        var indexName = parts[2]; // Extract index name (e.g., "idx_email")
+        // Extract index NAME (e.g., "idx_email")
+        var indexName = parts[2];
 
         // Extract table name - handle case where parenthesis is attached (e.g., "users(email)")
         var tableNameRaw = parts[onIdx + 1];
@@ -236,9 +259,42 @@ public partial class SqlParser
 
         var columnName = sql.Substring(columnStart + 1, columnEnd - columnStart - 1).Trim();
 
-        // 🔥 CRITICAL FIX: Create named hash index with BOTH index name and column name
-        // This allows DROP INDEX idx_email to work correctly
-        this.tables[tableName].CreateHashIndex(indexName, columnName);
+        // ✅ NEW: Determine index type (BTREE or HASH)
+        // Default to HASH for backward compatibility, use BTREE if specified
+        var indexType = IndexType.Hash; // Default
+        
+        // Check for USING clause after closing parenthesis
+        var afterParenIndex = columnEnd + 1;
+        if (afterParenIndex < sql.Length)
+        {
+            var remainingSQL = sql.Substring(afterParenIndex).Trim().ToUpperInvariant();
+            if (remainingSQL.StartsWith("USING"))
+            {
+                if (remainingSQL.Contains("BTREE"))
+                {
+                    indexType = IndexType.BTree;
+                }
+                else if (remainingSQL.Contains("HASH"))
+                {
+                    indexType = IndexType.Hash;
+                }
+            }
+            // Also support shorthand: CREATE INDEX ... BTREE ON ...
+            else if (sql.Contains("BTREE", StringComparison.OrdinalIgnoreCase))
+            {
+                indexType = IndexType.BTree;
+            }
+        }
+
+        // Create the appropriate index type
+        if (indexType == IndexType.BTree)
+        {
+            this.tables[tableName].CreateBTreeIndex(indexName, columnName);
+        }
+        else
+        {
+            this.tables[tableName].CreateHashIndex(indexName, columnName);
+        }
         
         wal?.Log(sql);
     }
@@ -285,20 +341,23 @@ public partial class SqlParser
             disposable.Dispose();
         }
         
-        // ✅ ROBUST file deletion with retry and verification
+        // ✅ OPTIMIZED: Same retry pattern as CREATE TABLE for consistency
+        // PageManager.Dispose() now guarantees synchronous file handle closure
         if (File.Exists(dataFile))
         {
             bool deleted = false;
             
-            // Try deletion with exponential backoff (max 5 attempts over ~1.5 seconds)
+            // Retry with exponential backoff (5 attempts over ~310ms max)
             for (int attempt = 0; attempt < 5 && !deleted; attempt++)
             {
                 try
                 {
-                    // Verify file is not locked by opening exclusively first
-                    using (var testStream = new FileStream(dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    // ✅ VALIDATION: Verify file is not locked by opening exclusively first
+                    // This confirms the file handle is truly released by Dispose()
+                    using (var testStream = new FileStream(
+                        dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                     {
-                        // If we can open exclusively, we can delete
+                        // If we can open exclusively, file is not locked
                     }
                     
                     File.Delete(dataFile);
@@ -306,23 +365,24 @@ public partial class SqlParser
                 }
                 catch (IOException) when (attempt < 4)
                 {
-                    // File is locked - wait with exponential backoff
-                    int delayMs = 50 * (1 << attempt); // 50, 100, 200, 400, 800 ms
+                    // File still locked - wait with exponential backoff
+                    // 10, 20, 40, 80, 160 ms (total: 310ms max)
+                    int delayMs = 10 * (1 << attempt);
                     System.Threading.Thread.Sleep(delayMs);
                 }
                 catch (UnauthorizedAccessException) when (attempt < 4)
                 {
-                    // Permission issue - wait and retry
+                    // Permission issue (rare) - linear backoff
                     System.Threading.Thread.Sleep(50 * (attempt + 1));
                 }
             }
             
             // ✅ VALIDATION: Verify deletion succeeded
-            if (File.Exists(dataFile))
+            if (!deleted && File.Exists(dataFile))
             {
                 throw new InvalidOperationException(
                     $"Failed to delete data file '{dataFile}' after DROP TABLE. " +
-                    $"The file may be locked by another process.");
+                    "File may be locked by another process or antivirus software.");
             }
         }
         

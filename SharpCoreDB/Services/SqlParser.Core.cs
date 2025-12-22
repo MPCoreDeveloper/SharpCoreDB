@@ -180,6 +180,30 @@ public partial class SqlParser : ISqlParser
     }
 
     /// <summary>
+    /// Executes a query using a cached plan and returns the results.
+    /// Skips tokenization/parsing on hot path.
+    /// </summary>
+    /// <param name="plan">The cached query plan.</param>
+    /// <param name="parameters">Optional parameters to bind.</param>
+    /// <returns>The query results.</returns>
+    public List<Dictionary<string, object>> ExecuteQuery(CachedQueryPlan plan, Dictionary<string, object?>? parameters = null)
+    {
+        var sql = plan.Sql;
+        if (parameters != null && parameters.Count > 0)
+        {
+            sql = SqlParser.BindParameters(sql, parameters);
+        }
+        else
+        {
+            sql = SqlParser.SanitizeSql(sql);
+        }
+
+        // Recompute parts to reflect bound SQL (prevents mismatches in WHERE evaluation)
+        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return this.ExecuteQueryInternal(sql, parts);
+    }
+
+    /// <summary>
     /// Parses SQL using the enhanced parser with full dialect support and error recovery.
     /// </summary>
     /// <param name="sql">The SQL statement to parse.</param>

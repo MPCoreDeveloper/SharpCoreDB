@@ -123,7 +123,7 @@ public static class BinaryRowSerializer
         long => sizeof(byte) + sizeof(long),
         double => sizeof(byte) + sizeof(double),
         bool => sizeof(byte) + sizeof(bool),
-        DateTime => sizeof(byte) + sizeof(long),
+        DateTime => sizeof(byte) + sizeof(long), // Binary format (9 bytes total)
         string s => sizeof(byte) + sizeof(int) + Encoding.UTF8.GetByteCount(s),
         byte[] b => sizeof(byte) + sizeof(int) + b.Length,
         _ => sizeof(byte) + sizeof(int) + Encoding.UTF8.GetByteCount(value.ToString() ?? string.Empty)
@@ -165,7 +165,21 @@ public static class BinaryRowSerializer
 
             case DateTime dt:
                 buffer[offset++] = 5; // Type: DateTime
-                BinaryPrimitives.WriteInt64LittleEndian(buffer[offset..], dt.ToBinary());
+                // ✅ EFFICIENT BINARY: Use ToBinary() format instead of ISO8601
+                DateTime utcDateTime;
+                if (dt.Kind == DateTimeKind.Utc)
+                {
+                    utcDateTime = dt;
+                }
+                else if (dt.Kind == DateTimeKind.Local)
+                {
+                    utcDateTime = dt.ToUniversalTime();
+                }
+                else
+                {
+                    utcDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                }
+                BinaryPrimitives.WriteInt64LittleEndian(buffer[offset..], utcDateTime.ToBinary());
                 offset += sizeof(long);
                 break;
 
@@ -213,7 +227,7 @@ public static class BinaryRowSerializer
             2 => (BinaryPrimitives.ReadInt64LittleEndian(buffer[offset..]), sizeof(byte) + sizeof(long)),
             3 => (BinaryPrimitives.ReadDoubleLittleEndian(buffer[offset..]), sizeof(byte) + sizeof(double)),
             4 => (buffer[offset] == 1, sizeof(byte) + sizeof(bool)),
-            5 => (DateTime.FromBinary(BinaryPrimitives.ReadInt64LittleEndian(buffer[offset..])), sizeof(byte) + sizeof(long)),
+            5 => ReadDateTime(buffer[offset..]),
             6 => ReadString(buffer[offset..]),
             7 => ReadByteArray(buffer[offset..]),
             _ => throw new InvalidOperationException($"Unknown type marker: {typeMarker}")
@@ -234,5 +248,12 @@ public static class BinaryRowSerializer
         int length = BinaryPrimitives.ReadInt32LittleEndian(buffer);
         var value = buffer.Slice(sizeof(int), length).ToArray();
         return (value, sizeof(int) + length);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (DateTime value, int bytesRead) ReadDateTime(ReadOnlySpan<byte> buffer)
+    {
+        long binaryValue = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+        return (DateTime.FromBinary(binaryValue), sizeof(long));
     }
 }

@@ -217,6 +217,7 @@ public partial class Table
 
     /// <summary>
     /// Removes a hash index for the specified column or index name.
+    /// Also removes B-tree indexes if they exist for the same column.
     /// Supports both column-based removal and named index removal.
     /// </summary>
     /// <param name="columnName">The index name (e.g., "idx_email") or column name (e.g., "email").</param>
@@ -255,6 +256,10 @@ public partial class Table
             
             this.staleIndexes.Remove(targetColumn);
             
+            // ✅ NEW: Also remove B-tree index if it exists
+            if (RemoveBTreeIndexInternal(targetColumn))
+                removed = true;
+            
             return removed;
         }
         finally
@@ -264,7 +269,7 @@ public partial class Table
     }
 
     /// <summary>
-    /// PERFORMANCE CRITICAL: Clears ALL indexes (hash indexes, registrations, and state).
+    /// PERFORMANCE CRITICAL: Clears ALL indexes (hash indexes, B-tree indexes, registrations, and state).
     /// Used when table is dropped or recreated to ensure complete cleanup.
     /// This prevents stale/corrupt index data from being read after DDL operations.
     /// 
@@ -284,6 +289,9 @@ public partial class Table
             this.loadedIndexes.Clear();
             this.staleIndexes.Clear();
             this.indexNameToColumn.Clear(); // 🔥 CRITICAL: Also clear name→column mapping
+            
+            // ✅ NEW: Clear B-tree indexes too
+            ClearBTreeIndexes();
             
             // Also clear column usage statistics (fresh table = fresh stats)
             this.columnUsageConcurrent.Clear();

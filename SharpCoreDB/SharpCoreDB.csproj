@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -71,9 +71,12 @@
     <Compile Include="SharpCoreDB.Benchmarks\BulkInsertAsyncBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\ComprehensiveComparison.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\DirectLookupBatchUpdateBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\EncryptionBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\InsertBatchOptimizationBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\PageBasedDirtyPageBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\SelectOptimizationBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\SingleColumnUpdateBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\UpdateBatchOptimizationBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\UpdatePerformanceTest.cs" />
   </ItemGroup>

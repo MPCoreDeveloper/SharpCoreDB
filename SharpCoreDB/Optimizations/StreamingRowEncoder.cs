@@ -167,9 +167,15 @@ public sealed class StreamingRowEncoder : IDisposable
 
             case DataType.DateTime:
                 if (target.Length < 9) throw new InvalidOperationException("Buffer too small");
-                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(
-                    target[1..],
-                    ((DateTime)value).ToBinary());
+                // ✅ EFFICIENT BINARY: Use ToBinary() format instead of ISO8601
+                var dtVal = (DateTime)value;
+                if (dtVal.Kind != DateTimeKind.Utc)
+                {
+                    dtVal = dtVal.Kind == DateTimeKind.Local 
+                        ? dtVal.ToUniversalTime() 
+                        : DateTime.SpecifyKind(dtVal, DateTimeKind.Utc);
+                }
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(target[1..], dtVal.ToBinary());
                 bytesWritten += 8;
                 break;
 

@@ -206,7 +206,13 @@ public static class UpdatePerformanceTest
                     decimal newPrice = 10m + (random.Next() % 50000) * 0.01m;
                     string newCategory = $"Cat{random.Next(0, 20)}";
                     
-                    db.ExecuteSQL($"UPDATE products SET price = {newPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}, category = '{newCategory}' WHERE id = {productId}");
+                    // 🔥 NEW: Use parameterized query for optimization
+                    db.ExecuteSQL("UPDATE products SET price = @0, category = @1 WHERE id = @2",
+                        new Dictionary<string, object?> {
+                            { "0", newPrice },
+                            { "1", newCategory },
+                            { "2", productId }
+                        });
 
                     if ((i + 1) % 1000 == 0)
                     {
@@ -277,7 +283,13 @@ public static class UpdatePerformanceTest
                     decimal newPrice = 10m + (random.Next() % 50000) * 0.01m;
                     string newCategory = $"Cat{random.Next(0, 20)}";
                     
-                    db.ExecuteSQL($"UPDATE products SET price = {newPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)}, category = '{newCategory}' WHERE id = {productId}");
+                    // 🔥 NEW: Use parameterized query for optimization
+                    db.ExecuteSQL("UPDATE products SET price = @0, category = @1 WHERE id = @2",
+                        new Dictionary<string, object?> {
+                            { "0", newPrice },
+                            { "1", newCategory },
+                            { "2", productId }
+                        });
 
                     if ((i + 1) % 1000 == 0)
                     {

@@ -56,6 +56,7 @@ Console.WriteLine("Select a benchmark to run:");
 Console.WriteLine("  1) Page-based storage before/after (PageBasedStorageBenchmark)");
 Console.WriteLine("  2) Cross-engine comparison (StorageEngineComparisonBenchmark)");
 Console.WriteLine("  3) UPDATE performance - Priority 1 validation (UpdatePerformanceTest)");
+Console.WriteLine("  4) SELECT optimization - Phase-by-phase speedup (SelectOptimizationTest)");
 Console.WriteLine("  0) Exit");
 Console.WriteLine();
 Console.Write("Enter choice: ");
@@ -94,6 +95,13 @@ try
             Console.WriteLine("\nUpdatePerformanceTest completed.");
             logWriter.WriteLine("UpdatePerformanceTest completed.");
             break;
+        case "4":
+            Console.WriteLine("Running SelectOptimizationTest (SELECT Phase-by-Phase Speedup)...");
+            logWriter.WriteLine("Running SelectOptimizationTest...");
+            SelectOptimizationTest.Main().GetAwaiter().GetResult();  // ? Wait for async method to complete!
+            Console.WriteLine("\nSelectOptimizationTest completed.");
+            logWriter.WriteLine("SelectOptimizationTest completed.");
+            break;
         case "0":
         case "q":
         case "Q":
@@ -101,7 +109,7 @@ try
             logWriter.WriteLine("User exited.");
             break;
         default:
-            Console.WriteLine("Invalid choice. Run with 1, 2, or 3.");
+            Console.WriteLine("Invalid choice. Run with 1, 2, 3, or 4.");
             logWriter.WriteLine($"Invalid choice: {input}");
             break;
     }

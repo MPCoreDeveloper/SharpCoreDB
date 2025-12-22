@@ -46,20 +46,200 @@ public partial class Table
     }
 
     /// <summary>
-    /// Deserializes binary row data into a dictionary.
-    /// Uses the table's column schema to parse the data.
+    /// Tries to parse a range WHERE clause for B-tree optimization.
+    /// Supports: "age > 30", "salary BETWEEN 50000 AND 100000", "age >= 25", etc.
     /// </summary>
-    /// <param name="data">The binary row data.</param>
-    /// <returns>Deserialized row dictionary, or null if deserialization fails.</returns>
+    private static bool TryParseRangeWhereClause(
+        string where,
+        out string column,
+        out string rangeStart,
+        out string rangeEnd)
+    {
+        column = string.Empty;
+        rangeStart = string.Empty;
+        rangeEnd = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(where))
+            return false;
+
+        where = where.Trim();
+
+        // Handle: column BETWEEN x AND y
+        if (where.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = where.Split(new[] { "BETWEEN", "AND" },
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 3)
+            {
+                column = parts[0];
+                rangeStart = parts[1].Trim('\'', '"');
+                rangeEnd = parts[2].Trim('\'', '"');
+                return true;
+            }
+        }
+
+        // Handle: column >= value
+        if (where.Contains(">="))
+        {
+            var parts = where.Split(new[] { ">=" }, StringSplitOptions.None);
+            if (parts.Length == 2)
+            {
+                column = parts[0].Trim();
+                rangeStart = parts[1].Trim().Trim('\'', '"');
+                rangeEnd = "9999999999"; // Large number for upper bound
+                return true;
+            }
+        }
+
+        // Handle: column > value
+        if (where.Contains('>') && !where.Contains('='))
+        {
+            var parts = where.Split('>');
+
+            if (parts.Length == 2)
+            {
+                column = parts[0].Trim();
+                rangeStart = parts[1].Trim().Trim('\'', '"');
+                rangeEnd = "9999999999";
+                return true;
+            }
+        }
+
+        // Handle: column <= value
+        if (where.Contains("<="))
+        {
+            var parts = where.Split(new[] { "<=" }, StringSplitOptions.None);
+            if (parts.Length == 2)
+            {
+                column = parts[0].Trim();
+                rangeStart = "0"; // Minimum value
+                rangeEnd = parts[1].Trim().Trim('\'', '"');
+                return true;
+            }
+        }
+
+        // Handle: column < value
+        if (where.Contains('<') && !where.Contains('='))
+        {
+            var parts = where.Split('<');
+            if (parts.Length == 2)
+            {
+                column = parts[0].Trim();
+                rangeStart = "0";
+                rangeEnd = parts[1].Trim().Trim('\'', '"');
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Parses a value string to the appropriate type for B-tree lookup.
+    /// </summary>
+    private static object? ParseValueForBTreeLookup(string value, DataType type)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        try
+        {
+            return type switch
+            {
+                // ✅ FIX: Use long for integer parsing to handle large range bounds like "9999999999"
+                // Then convert to int if within range, otherwise keep as long
+                DataType.Integer => ParseIntegerSafe(value),
+                DataType.Long => long.Parse(value),
+                DataType.Real => double.Parse(value),
+                DataType.Decimal => decimal.Parse(value),
+                DataType.String => value,
+                DataType.DateTime => DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
+                _ => value
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// ✅ NEW: Safely parses integer values, handling overflow by using long if needed.
+    /// This allows range queries like "age > 30" with upper bound "9999999999".
+    /// </summary>
+    private static object ParseIntegerSafe(string value)
+    {
+        // Try int first (most common case)
+        if (int.TryParse(value, out int intValue))
+        {
+            return intValue;
+        }
+
+        // If too large for int, use long (for range bounds like "9999999999")
+        if (long.TryParse(value, out long longValue))
+        {
+            // ✅ FIX: For integer columns, clamp large values to int.MaxValue
+            // This is safe for range upper bounds: "age < 9999999999" = "age < int.MaxValue"
+            if (longValue > int.MaxValue)
+            {
+                return int.MaxValue;
+            }
+            if (longValue < int.MinValue)
+            {
+                return int.MinValue;
+            }
+            return (int)longValue;  // Safe cast: within int range
+        }
+
+        // Fallback: return int max value for upper bounds
+        return int.MaxValue;
+    }
+
+    /// <summary>
+    /// Deduplicates a list of rows by primary key.
+    /// For UPDATE operations that may create multiple versions, only keeps the latest version per PK.
+    /// </summary>
+    internal List<Dictionary<string, object>> DeduplicateByPrimaryKey(List<Dictionary<string, object>> results)
+    {
+        if (this.PrimaryKeyIndex < 0 || results.Count == 0)
+            return results;
+
+        var pkCol = this.Columns[this.PrimaryKeyIndex];
+        var seen = new HashSet<string>();
+        var deduplicated = new List<Dictionary<string, object>>();
+
+        foreach (var row in results)
+        {
+            if (row.TryGetValue(pkCol, out var pkVal) && pkVal != null)
+            {
+                var pkStr = pkVal.ToString() ?? string.Empty;
+                if (seen.Add(pkStr))
+                {
+                    deduplicated.Add(row);
+                }
+            }
+            else
+            {
+                deduplicated.Add(row);
+            }
+        }
+
+        return deduplicated;
+    }
+
+    /// <summary>
+    /// Deserializes a byte array into a row dictionary.
+    /// Uses ReadTypedValueFromSpan to parse column values.
+    /// </summary>
     private Dictionary<string, object>? DeserializeRow(byte[] data)
     {
         if (data == null || data.Length == 0)
             return null;
-        
+
         var row = new Dictionary<string, object>();
         int offset = 0;
-        var dataSpan = data.AsSpan();
-        
+        ReadOnlySpan<byte> dataSpan = data.AsSpan();
+
         try
         {
             for (int i = 0; i < Columns.Count; i++)
@@ -81,38 +261,28 @@ public partial class Table
     }
 
     /// <summary>
-    /// Applies ORDER BY clause to query results.
+    /// Applies ORDER BY to a list of rows.
     /// </summary>
-    /// <param name="results">The query results to order.</param>
-    /// <param name="orderBy">The column to order by (optional).</param>
-    /// <param name="asc">Whether to order ascending (default true).</param>
-    /// <returns>Ordered results.</returns>
     private static List<Dictionary<string, object>> ApplyOrdering(
-        List<Dictionary<string, object>> results, 
-        string? orderBy, 
+        List<Dictionary<string, object>> results,
+        string? orderBy,
         bool asc)
     {
-        if (string.IsNullOrWhiteSpace(orderBy) || results.Count == 0)
+        if (string.IsNullOrEmpty(orderBy) || results.Count == 0)
             return results;
-        
-        // Check if orderBy column exists in first row
-        if (!results[0].ContainsKey(orderBy))
-            return results;
-        
+
         try
         {
-            if (asc)
-            {
-                return results.OrderBy(r => r.TryGetValue(orderBy, out var val) ? val : null).ToList();
-            }
-            else
-            {
-                return results.OrderByDescending(r => r.TryGetValue(orderBy, out var val) ? val : null).ToList();
-            }
+            // Sort using LINQ with custom comparer (cast to IComparer<object?> for nullability)
+            var sorted = asc
+                ? results.OrderBy(r => r.TryGetValue(orderBy, out var val) ? val : null, (IComparer<object?>)Comparer<object>.Default)
+                : results.OrderByDescending(r => r.TryGetValue(orderBy, out var val) ? val : null, (IComparer<object?>)Comparer<object>.Default);
+
+            return sorted.ToList();
         }
         catch
         {
-            // If ordering fails (e.g., incompatible types), return unsorted
+            // If sorting fails, return unsorted
             return results;
         }
     }

@@ -83,7 +83,9 @@ public partial class SqlParser
                 DataType.String => val,
                 DataType.Real => double.Parse(val),
                 DataType.Blob => Convert.FromBase64String(val),
-                DataType.DateTime => DateTime.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
+                DataType.DateTime => DateTime.SpecifyKind(
+                    DateTime.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
+                    DateTimeKind.Utc), // ✅ FIX: Always specify UTC kind for consistent storage
                 DataType.Long => long.Parse(val),
                 DataType.Decimal => decimal.Parse(val),
                 DataType.Ulid => Ulid.Parse(val),
@@ -156,8 +158,10 @@ public partial class SqlParser
     /// </summary>
     private static bool EvaluateComplexCondition(Dictionary<string, object> row, string[] parts)
     {
-        var subConditions = new List<bool>();
-        for (int i = 0; i < parts.Length; i += 4)
+        // Parse sequence: expr (AND|OR expr)*
+        bool? current = null;
+        string? pendingLogic = null; // AND or OR
+        for (int i = 0; i + 2 < parts.Length;)
         {
             var key = parts[i].Trim();
             var op = parts[i + 1].Trim();
@@ -168,14 +172,45 @@ public partial class SqlParser
                 value = null;
             }
 
+            bool expr = false;
             if (row.ContainsKey(key))
             {
                 var rowValue = row[key];
-                subConditions.Add(EvaluateOperator(rowValue, op, value));
+                expr = EvaluateOperator(rowValue, op, value);
+            }
+
+            if (current is null)
+            {
+                current = expr;
+            }
+            else if (pendingLogic == "AND")
+            {
+                current = current.Value && expr;
+            }
+            else if (pendingLogic == "OR")
+            {
+                current = current.Value || expr;
+            }
+
+            // Move index to next token after this expression
+            i += 3;
+            // Read logical connector if present
+            if (i < parts.Length)
+            {
+                var maybeLogic = parts[i].Trim().ToUpperInvariant();
+                if (maybeLogic == "AND" || maybeLogic == "OR")
+                {
+                    pendingLogic = maybeLogic;
+                    i += 1;
+                }
+                else
+                {
+                    pendingLogic = null;
+                }
             }
         }
 
-        return subConditions.All(c => c);
+        return current ?? false;
     }
 
     /// <summary>
@@ -184,21 +219,51 @@ public partial class SqlParser
     /// </summary>
     private static bool EvaluateOperator(object? rowValue, string op, string? value)
     {
-        // ✅ Cache ToString() to avoid repeated calls
+        // Convert types for accurate numeric/date comparisons
+        object? rhs = value;
+        if (rowValue is not null && value is not null)
+        {
+            try
+            {
+                var targetType = rowValue.GetType();
+                if (targetType == typeof(int)) rhs = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                else if (targetType == typeof(long)) rhs = long.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                else if (targetType == typeof(double)) rhs = double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                else if (targetType == typeof(decimal)) rhs = decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                else if (targetType == typeof(bool)) rhs = (value.Equals("1") || value.Equals("true", StringComparison.OrdinalIgnoreCase));
+                else if (targetType == typeof(DateTime)) rhs = DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                // Fallback to string compare
+                rhs = value;
+            }
+        }
+        
+        int Compare(object? a, object? b)
+        {
+            if (a is IComparable ca && b is not null && a.GetType() == b.GetType())
+                return ca.CompareTo(b);
+            // Fallback to string comparison
+            var sa = a?.ToString();
+            var sb = b?.ToString();
+            return string.Compare(sa, sb, StringComparison.Ordinal);
+        }
+        
         string? rowValueStr = rowValue?.ToString();
         
         return op switch
         {
             "=" => rowValueStr == value,
             "!=" => rowValueStr != value,
-            "<" => Comparer<object>.Default.Compare(rowValue, value) < 0,
-            "<=" => Comparer<object>.Default.Compare(rowValue, value) <= 0,
-            ">" => Comparer<object>.Default.Compare(rowValue, value) > 0,
-            ">=" => Comparer<object>.Default.Compare(rowValue, value) >= 0,
+            "<" => Compare(rowValue, rhs) < 0,
+            "<=" => Compare(rowValue, rhs) <= 0,
+            ">" => Compare(rowValue, rhs) > 0,
+            ">=" => Compare(rowValue, rhs) >= 0,
             "LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) == true,
             "NOT LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) != true,
-            "IN" => value?.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValueStr) ?? false,
-            "NOT IN" => !(value?.Split(',').Select(v => v.Trim().Trim('\'')).Contains(rowValueStr) ?? false),
+            "IN" => value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false,
+            "NOT IN" => !(value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false),
             _ => throw new InvalidOperationException($"Unsupported operator {op}"),
         };
     }
@@ -257,19 +322,25 @@ public partial class SqlParser
             
             var paramIndex = 0;
             var index = 0;
+
+            // Determine binding order: numeric keys (0..N-1) preferred; otherwise use insertion order of dictionary
+            List<object?> orderedValues;
+            var numericKeysAvailable = Enumerable.Range(0, questionMarkCount).All(i => parameters.ContainsKey(i.ToString()));
+            if (numericKeysAvailable)
+            {
+                orderedValues = Enumerable.Range(0, questionMarkCount)
+                    .Select(i => parameters[i.ToString()])
+                    .ToList();
+            }
+            else
+            {
+                // Fallback: use parameter values in enumeration order (take as many as needed)
+                orderedValues = parameters.Values.Take(questionMarkCount).ToList();
+            }
+            
             while ((index = sb.ToString().IndexOf('?', index)) != -1)
             {
-                var paramKey = paramIndex.ToString();
-                if (!parameters.TryGetValue(paramKey, out var value))
-                {
-                    var availableKeys = string.Join(", ", parameters.Keys.Select(k => $"'{k}'"));
-                    throw new InvalidOperationException(
-                        $"Parameter mismatch: SQL has {questionMarkCount} '?' placeholders but parameter key '{paramKey}' not found. " +
-                        $"Available parameter keys: {availableKeys}. " +
-                        $"For '?' placeholders, use keys: '0', '1', '2', etc. " +
-                        $"For '@name' placeholders in SQL, use keys: 'name', 'email', etc. (without @).");
-                }
-
+                var value = orderedValues[paramIndex];
                 var valueStr = FormatValue(value);
                 sb.Remove(index, 1);
                 sb.Insert(index, valueStr);

@@ -79,6 +79,9 @@ public partial class Storage : IStorage
                 throw new InvalidOperationException("No active transaction to commit");
             }
             
+            // ✅ CRITICAL FIX: Flush buffered appends BEFORE closing transaction!
+            FlushBufferedAppends();
+            
             // Flush all buffered writes to disk
             this.transactionBuffer.Flush();
         }

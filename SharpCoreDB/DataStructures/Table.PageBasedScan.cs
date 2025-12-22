@@ -20,15 +20,22 @@ public partial class Table
     /// Iterates all pages and records belonging to this table.
     /// ✅ FIXED: Uses storage engine's GetAllRecords to avoid file lock conflicts
     /// </summary>
-    /// <param name="tableId">The table ID to scan (unused now, kept for signature compatibility).</param>
     /// <param name="where">Optional WHERE clause for filtering.</param>
     /// <returns>List of all matching rows.</returns>
-    private List<Dictionary<string, object>> ScanPageBasedTable(uint tableId, string? where)
+    private List<Dictionary<string, object>> ScanPageBasedTable(string? where)
     {
         var results = new List<Dictionary<string, object>>();
         
+#if DEBUG
+        Console.WriteLine($"[ScanPageBasedTable] Starting scan for table: {Name}");
+        Console.WriteLine($"[ScanPageBasedTable] StorageMode: {StorageMode}");
+#endif
+        
         if (StorageMode != StorageMode.PageBased)
         {
+#if DEBUG
+            Console.WriteLine($"[ScanPageBasedTable] Wrong storage mode, returning empty");
+#endif
             return results;
         }
         
@@ -37,16 +44,31 @@ public partial class Table
             // ✅ FIX: Use storage engine's GetAllRecords instead of creating new PageManager
             // This avoids file lock conflicts since engine already has PageManager instance
             var engine = GetOrCreateStorageEngine();
+#if DEBUG
+            Console.WriteLine($"[ScanPageBasedTable] Got storage engine: {engine.GetType().Name}");
+#endif
             
             // Iterate all records using the engine
-            foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+            int recordCount = 0;
+            foreach (var (_, data) in engine.GetAllRecords(Name))
             {
+                recordCount++;
+#if DEBUG
+                if (recordCount <= 3)
+                {
+                    Console.WriteLine($"[ScanPageBasedTable] Found record #{recordCount}, data length: {data.Length}");
+                }
+#endif
+                
                 try
                 {
                     // Deserialize to row
                     var row = DeserializeRowFromSpan(data);
                     if (row == null)
                     {
+#if DEBUG
+                        Console.WriteLine($"[ScanPageBasedTable] Record #{recordCount} failed to deserialize");
+#endif
                         continue;
                     }
                     
@@ -58,13 +80,25 @@ public partial class Table
                 }
                 catch
                 {
-                    // Skip corrupted records
+                    // Exception during record processing - skip this record and continue
+                    // This handles malformed or corrupt records gracefully
+#if DEBUG
+                    Console.WriteLine($"[ScanPageBasedTable] Exception deserializing record #{recordCount}");
+#endif
                 }
             }
+            
+#if DEBUG
+            Console.WriteLine($"[ScanPageBasedTable] Total records found: {recordCount}, after filtering: {results.Count}");
+#endif
         }
         catch
         {
-            // Return partial results on error
+            // Exception during scan initialization - return empty results
+            // The WHERE clause evaluation or engine access may have failed
+#if DEBUG
+            Console.WriteLine($"[ScanPageBasedTable] Exception during scan");
+#endif
         }
         
         return results;
@@ -76,7 +110,21 @@ public partial class Table
     /// </summary>
     private Dictionary<string, object>? DeserializeRowFromSpan(byte[] data)
     {
-        if (data == null || data.Length == 0) return null;
+        if (data == null || data.Length == 0)
+        {
+#if DEBUG
+            Console.WriteLine($"[DeserializeRowFromSpan] Data is null or empty");
+#endif
+            return null;
+        }
+        
+#if DEBUG
+        Console.WriteLine($"[DeserializeRowFromSpan] Data length: {data.Length}, Columns: {Columns.Count}");
+        if (data.Length >= 16)
+        {
+            Console.WriteLine($"[DeserializeRowFromSpan] First 16 bytes: {BitConverter.ToString(data, 0, 16)}");
+        }
+#endif
         
         var row = new Dictionary<string, object>();
         int offset = 0;
@@ -87,17 +135,34 @@ public partial class Table
             for (int i = 0; i < Columns.Count; i++)
             {
                 if (offset >= dataSpan.Length)
+                {
+#if DEBUG
+                    Console.WriteLine($"[DeserializeRowFromSpan] Offset {offset} exceeds data length {dataSpan.Length} at column {i}/{Columns.Count}");
+#endif
                     return null;
+                }
 
                 var value = ReadTypedValueFromSpan(dataSpan.Slice(offset), ColumnTypes[i], out int bytesRead);
+#if DEBUG
+                Console.WriteLine($"[DeserializeRowFromSpan] Column {i} ({Columns[i]}, {ColumnTypes[i]}): offset={offset}, bytesRead={bytesRead}, value={value}");
+#endif
+                
                 row[Columns[i]] = value;
                 offset += bytesRead;
             }
 
+#if DEBUG
+            Console.WriteLine($"[DeserializeRowFromSpan] Successfully deserialized row with {row.Count} columns");
+#endif
             return row;
         }
         catch
         {
+            // Exception during deserialization indicates corrupt data - ignore and return null
+            // This row will be skipped during scanning
+#if DEBUG
+            Console.WriteLine($"[DeserializeRowFromSpan] Exception during deserialization");
+#endif
             return null;
         }
     }

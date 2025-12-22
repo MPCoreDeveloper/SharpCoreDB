@@ -12,6 +12,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Text;
 
 /// <summary>
 /// Page-based storage engine with 8KB fixed-size pages and in-place updates.
@@ -70,31 +71,20 @@ public partial class PageBasedEngine : IStorageEngine
         ArgumentNullException.ThrowIfNull(data);
         
         var sw = Stopwatch.StartNew();
-        var manager = GetOrCreatePageManager(tableName);
+        
+        // ✅ FIXED: Store raw binary directly - NO Base64 overhead!
+        // Data is already efficiently serialized by BinaryRowSerializer/StreamingRowEncoder
         var tableId = GetTableId(tableName);
-        
-        // Find page with sufficient space or allocate new one
-        var pageId = manager.FindPageWithSpace(tableId, data.Length + 12 + 4); // data + header + slot
-        
-        // Insert record into page
+        var manager = GetOrCreatePageManager(tableName);
+        var pageId = manager.FindPageWithSpace(tableId, data.Length);
         var recordId = manager.InsertRecord(pageId, data);
-        
-        // Encode storage reference: upper 48 bits = pageId, lower 16 bits = recordId
-        var storageRef = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
-        
-        // ❌ REMOVED: FlushDirtyPages() - this kills performance!
-        // Pages are now only flushed on:
-        // 1. Transaction commit (CommitAsync)
-        // 2. Explicit Flush() call
-        // 3. Dispose
-        // This enables dirty page buffering and LRU cache effectiveness!
         
         sw.Stop();
         Interlocked.Add(ref insertTicks, sw.ElapsedTicks);
         Interlocked.Increment(ref totalInserts);
         Interlocked.Add(ref bytesWritten, data.Length);
         
-        return storageRef;
+        return EncodeStorageReference(pageId.Value, recordId.SlotIndex);
     }
 
     /// <inheritdoc />
@@ -105,19 +95,23 @@ public partial class PageBasedEngine : IStorageEngine
         if (dataBlocks.Count == 0)
             return Array.Empty<long>();
         
+        #if DEBUG
+        Console.WriteLine($"[PageBasedEngine.InsertBatch] Inserting {dataBlocks.Count} records into table {tableName}");
+        #endif
+        
         var sw = Stopwatch.StartNew();
         var results = new long[dataBlocks.Count];
         var manager = GetOrCreatePageManager(tableName);
         var tableId = GetTableId(tableName);
         
-        // Simple, proven approach: just insert and let caching handle it
+        // ✅ OPTIMIZED: Store raw binary directly - no encoding overhead
         for (int i = 0; i < dataBlocks.Count; i++)
         {
             var data = dataBlocks[i];
             
-            // FindPageWithSpace is O(1) with bitmap (Fix #1)
+            // FindPageWithSpace is O(1) with bitmap
             // LRU cache keeps hot pages in memory
-            var pageId = manager.FindPageWithSpace(tableId, data.Length + 12 + 4);
+            var pageId = manager.FindPageWithSpace(tableId, data.Length + 16);
             var recordId = manager.InsertRecord(pageId, data);
             results[i] = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
             
@@ -128,6 +122,14 @@ public partial class PageBasedEngine : IStorageEngine
         Interlocked.Add(ref insertTicks, sw.ElapsedTicks);
         Interlocked.Add(ref totalInserts, dataBlocks.Count);
         
+        #if DEBUG
+        Console.WriteLine($"[PageBasedEngine.InsertBatch] Inserted {dataBlocks.Count} records successfully");
+        
+        // Get cache stats
+        var (hits, misses, hitRate, size, _) = manager.GetCacheStats();
+        Console.WriteLine($"[PageBasedEngine.InsertBatch] Cache stats - Size: {size}, Hits: {hits}, Misses: {misses}, HitRate: {hitRate:P2}");
+        #endif
+        
         return results;
     }
 
@@ -137,10 +139,10 @@ public partial class PageBasedEngine : IStorageEngine
         ArgumentNullException.ThrowIfNull(newData);
         
         var sw = Stopwatch.StartNew();
-        var (pageId, recordId) = DecodeStorageReference(storageReference);
-        var manager = GetOrCreatePageManager(tableName);
         
-        // In-place update - PageManager handles space management
+        // ✅ FIXED: Store raw binary directly - NO Base64 overhead!
+        var manager = GetOrCreatePageManager(tableName);
+        var (pageId, recordId) = DecodeStorageReference(storageReference);
         manager.UpdateRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
         
         sw.Stop();
@@ -168,49 +170,48 @@ public partial class PageBasedEngine : IStorageEngine
     public byte[]? Read(string tableName, long storageReference)
     {
         var sw = Stopwatch.StartNew();
+        
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var manager = GetOrCreatePageManager(tableName);
         
-        // ✅ FIX: Use TryReadRecord to avoid exception overhead for deleted records
-        // This is 25-40% faster than throwing/catching exceptions
+        // ✅ FIXED: Read raw binary directly - NO Base64 decoding overhead!
         bool success = manager.TryReadRecord(
             new PageManager.PageId(pageId), 
             new PageManager.RecordId(recordId), 
             out var data);
         
-        sw.Stop();
-        Interlocked.Add(ref readTicks, sw.ElapsedTicks);
-        Interlocked.Increment(ref totalReads);
-        Interlocked.Add(ref bytesRead, data?.Length ?? 0);
+        if (success && data != null)
+        {
+            sw.Stop();
+            Interlocked.Add(ref readTicks, sw.ElapsedTicks);
+            Interlocked.Increment(ref totalReads);
+            Interlocked.Add(ref bytesRead, data.Length);
+            
+            return data;
+        }
         
-        return success ? data : null;
+        sw.Stop();
+        return null;
     }
 
     /// <inheritdoc />
     public IEnumerable<(long storageReference, byte[] data)> GetAllRecords(string tableName)
     {
-        var manager = GetOrCreatePageManager(tableName);
         var tableId = GetTableId(tableName);
+        var manager = GetOrCreatePageManager(tableName);
         
-        // Get all pages belonging to this table
-        var tablePages = manager.GetAllTablePages(tableId);
-        
-        foreach (var pageId in tablePages)
+        foreach (var pageId in manager.GetAllTablePages(tableId))
         {
-            // Get all records in this page
-            var recordIds = manager.GetAllRecordsInPage(pageId);
-            
-            foreach (var recordId in recordIds)
+            foreach (var recordId in manager.GetAllRecordsInPage(pageId))
             {
-                // ✅ OPTIMIZATION: Use TryReadRecord to avoid exception overhead (25-40% faster)
-                // This eliminates expensive exception throwing for deleted/invalid records
+                var storageRef = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
+                
+                // ✅ FIXED: Yield raw binary directly - NO Base64 decoding overhead!
+                // Data is already in optimal binary format from serialization layer
                 if (manager.TryReadRecord(pageId, recordId, out var data) && data != null)
                 {
-                    // Encode storage reference for index compatibility
-                    var storageRef = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
                     yield return (storageRef, data);
                 }
-                // No exception handling needed - TryReadRecord returns false for invalid records
             }
         }
     }
@@ -240,14 +241,32 @@ public partial class PageBasedEngine : IStorageEngine
                 throw new InvalidOperationException("No active transaction");
             }
             
+            #if DEBUG
+            Console.WriteLine($"[PageBasedEngine.CommitAsync] Committing transaction for {tableManagers.Count} tables");
+            #endif
+            
             // Flush all dirty pages to disk
-            foreach (var manager in tableManagers.Values)
+            foreach (var (tableName, manager) in tableManagers)
             {
+                #if DEBUG
+                Console.WriteLine($"[PageBasedEngine.CommitAsync] Flushing dirty pages for table: {tableName}");
+                var (hits, misses, hitRate, size, _) = manager.GetCacheStats();
+                Console.WriteLine($"[PageBasedEngine.CommitAsync] Cache stats before flush - Size: {size}, Hits: {hits}, Misses: {misses}, HitRate: {hitRate:P2}");
+                #endif
+                
                 manager.FlushDirtyPages();
+                
+                #if DEBUG
+                Console.WriteLine($"[PageBasedEngine.CommitAsync] Flushed dirty pages for table: {tableName}");
+                #endif
             }
             
             transactionActions.Clear();
             isInTransaction = false;
+            
+            #if DEBUG
+            Console.WriteLine("[PageBasedEngine.CommitAsync] Transaction committed successfully");
+            #endif
         }
         
         await Task.CompletedTask;

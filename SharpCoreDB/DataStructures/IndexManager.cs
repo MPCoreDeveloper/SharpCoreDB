@@ -67,7 +67,7 @@ public sealed class IndexManager : IDisposable
             return indexType switch
             {
                 IndexType.Hash => new GenericHashIndex<TKey>(columnName),
-                IndexType.BTree => throw new NotImplementedException("B-Tree index not yet implemented"),
+                IndexType.BTree => new BTreeIndex<TKey>(columnName),  // ✅ Now supported!
                 _ => throw new ArgumentException($"Unsupported index type: {indexType}")
             };
         });

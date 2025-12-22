@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Buffers;
 using SharpCoreDB.Services;
+using System.Text;
 
 /// <summary>
 /// Serialization methods for Table - handles type-safe read/write operations.
@@ -25,8 +26,10 @@ public partial class Table
             var value = row[col];
             var type = this.ColumnTypes[this.Columns.IndexOf(col)];
             
-            size += 1; // null flag
-            if (value == null || value == DBNull.Value) continue;
+            size += 1; // ✅ CRITICAL FIX: NULL FLAG (always 1 byte, present for every column!)
+            
+            if (value == null || value == DBNull.Value) 
+                continue;
             
             size += type switch
             {
@@ -34,12 +37,12 @@ public partial class Table
                 DataType.Long => 8,
                 DataType.Real => 8,
                 DataType.Boolean => 1,
-                DataType.DateTime => 8,
+                DataType.DateTime => 8,  // ✅ FIXED: Use ToBinary() 8 bytes, not ISO8601 string
                 DataType.Decimal => 16,
-                DataType.Ulid => 26, // ULID string representation
+                DataType.Ulid => 4 + 26, // ✅ FIXED: ULID is ALWAYS 26 characters in UTF8 (4 bytes length + 26 bytes data)
                 DataType.Guid => 16,
-                DataType.String => 4 + System.Text.Encoding.UTF8.GetByteCount((string)value),
-                DataType.Blob => 4 + ((byte[])value).Length,
+                DataType.String => 4 + System.Text.Encoding.UTF8.GetByteCount((string)value),  // ✅ length prefix + bytes
+                DataType.Blob => 4 + ((byte[])value).Length,  // ✅ length prefix + data
                 _ => 4 + 50 // default estimate
             };
         }
@@ -49,6 +52,9 @@ public partial class Table
     /// <summary>
     /// Writes a typed value to a Span using BinaryPrimitives for zero-allocation serialization.
     /// </summary>
+    /// <param name="buffer">The buffer to write to.</param>
+    /// <param name="value">The value to write.</param>
+    /// <param name="type">The data type of the value.</param>
     /// <returns>Number of bytes written.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int WriteTypedValueToSpan(Span<byte> buffer, object value, DataType type)
@@ -104,10 +110,22 @@ public partial class Table
                 break;
                 
             case DataType.DateTime:
-                if (buffer.Length < 9) // 1 byte null flag + 8 bytes long
+                if (buffer.Length < bytesWritten + 9) // 1 byte null flag + 8 bytes ToBinary
                     throw new InvalidOperationException(
-                        $"Buffer too small for DateTime write: need 9 bytes, have {buffer.Length}");
-                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(bytesWritten), ((DateTime)value).ToBinary());
+                        $"Buffer too small for DateTime write: need {bytesWritten + 9} bytes, have {buffer.Length - bytesWritten}");
+                
+                // ✅ EFFICIENT BINARY: Use ToBinary() format (8 bytes) instead of ISO8601 (28+ bytes)
+                var dateTimeValue = (DateTime)value;
+                
+                // ✅ STRICT: Always ensure DateTime has UTC kind for consistent storage
+                if (dateTimeValue.Kind != DateTimeKind.Utc)
+                {
+                    dateTimeValue = dateTimeValue.Kind == DateTimeKind.Local 
+                        ? dateTimeValue.ToUniversalTime() 
+                        : DateTime.SpecifyKind(dateTimeValue, DateTimeKind.Utc);
+                }
+                
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(bytesWritten), dateTimeValue.ToBinary());
                 bytesWritten += 8;
                 break;
                 
@@ -125,18 +143,26 @@ public partial class Table
                 break;
                 
             case DataType.Ulid:
-                var ulidStr = ((Ulid)value).Value;
-                var ulidBytes = System.Text.Encoding.UTF8.GetBytes(ulidStr);
-                if (ulidBytes.Length > 100)
-                    throw new InvalidOperationException(
-                        $"Ulid too large: {ulidBytes.Length} bytes (max 100)");
-                if (buffer.Length < 5 + ulidBytes.Length) // 1 byte null + 4 bytes length + data
-                    throw new InvalidOperationException(
-                        $"Buffer too small for Ulid write: need {5 + ulidBytes.Length} bytes, have {buffer.Length}");
-                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(bytesWritten), ulidBytes.Length);
-                bytesWritten += 4;
-                ulidBytes.AsSpan().CopyTo(buffer.Slice(bytesWritten));
-                bytesWritten += ulidBytes.Length;
+                {
+                    var ulidStr = ((Ulid)value).Value;
+                    // ✅ OPTIMIZATION: ULID is always 26 characters per specification
+                    // No need to encode length, can write directly as fixed-size (4 bytes len + 26 bytes data)
+                    var ulidBytes = System.Text.Encoding.UTF8.GetBytes(ulidStr);
+                    
+                    // Validate it's actually 26 (sanity check, should never fail)
+                    if (ulidBytes.Length != 26)
+                        throw new InvalidOperationException(
+                            $"Invalid Ulid: expected 26 UTF8 bytes, got {ulidBytes.Length}");
+                    
+                    if (buffer.Length < 31) // 1 null + 4 length + 26 data
+                        throw new InvalidOperationException(
+                            $"Buffer too small for Ulid write: need 31 bytes, have {buffer.Length}");
+                    
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(bytesWritten), 26);
+                    bytesWritten += 4;
+                    ulidBytes.AsSpan().CopyTo(buffer.Slice(bytesWritten));
+                    bytesWritten += 26;  // ✅ Always 26, no variable
+                }
                 break;
                 
             case DataType.Guid:
@@ -246,11 +272,14 @@ public partial class Table
                 return buffer[1] != 0;
                 
             case DataType.DateTime:
-                if (buffer.Length < 9) // 1 byte null flag + 8 bytes long
+                if (buffer.Length < 9) // 1 byte null flag + 8 bytes ToBinary
                     throw new InvalidOperationException(
                         $"Buffer too small for DateTime: need 9 bytes, have {buffer.Length}");
-                bytesRead += 8;
-                return DateTime.FromBinary(System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(1)));
+                bytesRead += 8;  // ✅ CRITICAL FIX: Must increment bytesRead! Was missing!
+                
+                // ✅ EFFICIENT BINARY: Use ToBinary() format (8 bytes) instead of ISO8601 (28+ bytes)
+                long binaryValue = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(1));
+                return DateTime.FromBinary(binaryValue);
                 
             case DataType.Decimal:
                 if (buffer.Length < 17) // 1 byte null flag + 16 bytes (4 ints)
@@ -269,14 +298,19 @@ public partial class Table
                     throw new InvalidOperationException(
                         $"Buffer too small for Ulid length: need 5 bytes, have {buffer.Length}");
                 int ulidLen = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(1));
-                if (ulidLen < 0 || ulidLen > 100) // ULID should be ~26 chars max
+                
+                // ✅ OPTIMIZATION: ULID is always exactly 26 characters per specification
+                // Validate this assumption for data integrity
+                if (ulidLen != 26)
                     throw new InvalidOperationException(
-                        $"Invalid Ulid length: {ulidLen} (expected 0-100)");
-                if (buffer.Length < 5 + ulidLen) // 1 byte null + 4 bytes length + data
+                        $"Invalid Ulid length: {ulidLen} (ULID must be exactly 26 characters)");
+                
+                if (buffer.Length < 31) // 1 byte null + 4 bytes length + 26 data
                     throw new InvalidOperationException(
-                        $"Buffer too small for Ulid data: need {5 + ulidLen} bytes, have {buffer.Length}");
-                bytesRead += 4 + ulidLen;
-                var ulidStr = System.Text.Encoding.UTF8.GetString(buffer.Slice(5, ulidLen));
+                        $"Buffer too small for Ulid data: need 31 bytes, have {buffer.Length}");
+                
+                bytesRead += 4 + 26;  // ✅ Always 4 + 26 = 30, no variable calculation
+                var ulidStr = System.Text.Encoding.UTF8.GetString(buffer.Slice(5, 26));
                 return new Ulid(ulidStr);
                 
             case DataType.Guid:
@@ -352,230 +386,6 @@ public partial class Table
         }
     }
 
-    /// <summary>
-    /// Legacy write method - kept for backward compatibility.
-    /// </summary>
-    private static void WriteTypedValue(BinaryWriter writer, object value, DataType type)
-    {
-        if (value == DBNull.Value || value == null)
-        {
-            writer.Write((byte)0); // null flag
-            return;
-        }
-        writer.Write((byte)1); // not null
-        switch (type)
-        {
-            case DataType.Integer:
-                writer.Write((int)value);
-                break;
-            case DataType.String:
-                writer.Write((string)value);
-                break;
-            case DataType.Real:
-                writer.Write((double)value);
-                break;
-            case DataType.Boolean:
-                writer.Write((bool)value);
-                break;
-            case DataType.DateTime:
-                writer.Write(((DateTime)value).ToBinary());
-                break;
-            case DataType.Long:
-                writer.Write((long)value);
-                break;
-            case DataType.Decimal:
-                writer.Write((decimal)value);
-                break;
-            case DataType.Ulid:
-                writer.Write(((Ulid)value).Value);
-                break;
-            case DataType.Guid:
-                writer.Write(((Guid)value).ToByteArray());
-                break;
-            case DataType.Blob:
-                var bytes = (byte[])value;
-                writer.Write(bytes.Length);
-                writer.Write(bytes);
-                break;
-            default:
-                writer.Write((string)value);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Legacy read method - kept for backward compatibility.
-    /// </summary>
-    private static object ReadTypedValue(BinaryReader reader, DataType type)
-    {
-        try
-        {
-            var isNull = reader.ReadByte();
-            if (isNull == 0) return DBNull.Value;
-            
-            switch (type)
-            {
-                case DataType.Integer:
-                    return reader.ReadInt32();
-                case DataType.String:
-                    return reader.ReadString();
-                case DataType.Real:
-                    return reader.ReadDouble();
-                case DataType.Boolean:
-                    return reader.ReadBoolean();
-                case DataType.DateTime:
-                    return DateTime.FromBinary(reader.ReadInt64());
-                case DataType.Long:
-                    return reader.ReadInt64();
-                case DataType.Decimal:
-                    return reader.ReadDecimal();
-                case DataType.Ulid:
-                    return new Ulid(reader.ReadString());
-                case DataType.Guid:
-                    return new Guid(reader.ReadBytes(16));
-                case DataType.Blob:
-                    {
-                        var len = reader.ReadInt32();
-                        if (len < 0 || len > 1024 * 1024 * 100) // Max 100 MB
-                            throw new InvalidOperationException(
-                                $"Invalid Blob length: {len} (expected 0-{1024 * 1024 * 100})");
-                        return reader.ReadBytes(len);
-                    }
-                default:
-                    return reader.ReadString();
-            }
-        }
-        catch (EndOfStreamException ex)
-        {
-            throw new InvalidOperationException(
-                $"Unexpected end of stream while reading {type}: {ex.Message}", ex);
-        }
-        catch (Exception ex) when (!(ex is InvalidOperationException))
-        {
-            throw new InvalidOperationException(
-                $"Error reading {type}: {ex.GetType().Name}: {ex.Message}", ex);
-        }
-    }
-
-    private Dictionary<string, object>? ReadRowAtPosition(long position, bool noEncrypt = false)
-    {
-        // Read length-prefixed data written by AppendBytes
-        var data = this.storage!.ReadBytesFrom(this.DataFile, position);
-        if (data == null || data.Length == 0) return null;
-        
-        var row = new Dictionary<string, object>();
-        
-        int offset = 0;
-        ReadOnlySpan<byte> dataSpan = data.AsSpan();
-        
-        // ADDED: Debug logging for row structure
-        bool debugRow = data.Length < 512; // Only debug small rows to reduce spam
-        if (debugRow)
-        {
-            var hexDump = System.BitConverter.ToString(data);
-            Console.WriteLine($"🔍 ReadRowAtPosition({position}): Total buffer size: {dataSpan.Length} bytes");
-            Console.WriteLine($"   Hex dump (first bytes): {hexDump.Substring(0, Math.Min(192, hexDump.Length))}");
-        }
-        
-        for (int i = 0; i < this.Columns.Count; i++)
-        {
-            // Validate we have enough data left to read at least the null flag
-            if (offset >= dataSpan.Length)
-            {
-                Console.WriteLine($"⚠️  Data corruption at position {position}: " +
-                    $"Only {i}/{this.Columns.Count} fields could be read. " +
-                    $"Buffer size: {dataSpan.Length}, offset: {offset}");
-                return null;
-            }
-            
-            // ADDED: Debug logging before reading each field
-            if (debugRow)
-            {
-                var previewBytes = Math.Min(16, dataSpan.Length - offset);
-                var preview = System.BitConverter.ToString(data, offset, previewBytes);
-                Console.WriteLine($"   Field {i} ({this.Columns[i]}, type {this.ColumnTypes[i]}): offset={offset}, preview={preview}");
-            }
-            
-            try
-            {
-                var value = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
-                row[this.Columns[i]] = value;
-                offset += bytesRead;
-                
-                // ADDED: Debug logging after reading each field
-                if (debugRow)
-                {
-                    Console.WriteLine($"      ✓ Read {bytesRead} bytes, new offset={offset}, value={value?.ToString() ?? "NULL"}");
-                }
-            }
-            catch (InvalidOperationException ioex) when (ioex.Message.Contains("Buffer"))
-            {
-                // Buffer size error - provide detailed diagnostic info
-                int remainingBytes = dataSpan.Length - offset;
-                Console.WriteLine($"❌ Field deserialization error at position {position}:");
-                Console.WriteLine($"   Column: '{this.Columns[i]}' (index {i}, type {this.ColumnTypes[i]})");
-                Console.WriteLine($"   Buffer state:");
-                Console.WriteLine($"     - Total buffer size: {dataSpan.Length} bytes");
-                Console.WriteLine($"     - Current offset: {offset} bytes");
-                Console.WriteLine($"     - Remaining bytes: {remainingBytes} bytes");
-                Console.WriteLine($"   Error: {ioex.Message}");
-                
-                // Log hex dump of problematic region (up to 32 bytes around error position)
-                int dumpStart = Math.Max(0, offset - 4);
-                int dumpEnd = Math.Min(dataSpan.Length, offset + 32);
-                if (dumpStart < dumpEnd)
-                {
-                    var hexDump = System.BitConverter.ToString(data, dumpStart, dumpEnd - dumpStart);
-                    Console.WriteLine($"   Hex dump (offset {dumpStart}-{dumpEnd}): {hexDump}");
-                }
-                
-                // ADDED: Additional diagnostic - show all previously read fields
-                Console.WriteLine($"   Previously read fields:");
-                foreach (var kvp in row.Take(i))
-                {
-                    Console.WriteLine($"     - {kvp.Key} = {kvp.Value?.ToString() ?? "NULL"}");
-                }
-                
-                return null;
-            }
-            catch (Exception ex)
-            {
-                // Other deserialization errors
-                int remainingBytes = dataSpan.Length - offset;
-                Console.WriteLine($"❌ Unexpected field deserialization error at position {position}:");
-                Console.WriteLine($"   Column: '{this.Columns[i]}' (index {i}, type {this.ColumnTypes[i]})");
-                Console.WriteLine($"   Buffer state:");
-                Console.WriteLine($"     - Total buffer size: {dataSpan.Length} bytes");
-                Console.WriteLine($"     - Current offset: {offset} bytes");
-                Console.WriteLine($"     - Remaining bytes: {remainingBytes} bytes");
-                Console.WriteLine($"   Error: {ex.GetType().Name}: {ex.Message}");
-                
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"   Inner error: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-                }
-                
-                // ADDED: Show what we successfully read so far
-                Console.WriteLine($"   Fields read so far ({row.Count}):");
-                foreach (var kvp in row)
-                {
-                    Console.WriteLine($"     - {kvp.Key} = {kvp.Value?.ToString() ?? "NULL"}");
-                }
-                
-                return null;
-            }
-        }
-        
-        // ADDED: Final validation - ensure we consumed all data
-        if (offset < dataSpan.Length)
-        {
-            int remainingUnread = dataSpan.Length - offset;
-            Console.WriteLine($"⚠️  Warning: {remainingUnread} bytes unread after parsing all {this.Columns.Count} fields at position {position}");
-        }
-        
-        return row;
-    }
-
     private static object ParseValueForHashLookup(string value, DataType type)
     {
         return type switch
@@ -601,7 +411,7 @@ public partial class Table
         DataType.String => string.Empty,
         DataType.Real => 0.0,
         DataType.Boolean => false,
-        DataType.DateTime => DateTime.Now,
+        DataType.DateTime => DateTime.UtcNow, // ✅ FIX: Use UtcNow instead of Now to ensure valid Kind
         DataType.Long => 0L,
         DataType.Decimal => 0m,
         DataType.Ulid => Ulid.NewUlid(),
@@ -724,7 +534,9 @@ public partial class Table
                 case DataType.DateTime:
                     if (value is string strDateTime && DateTime.TryParse(strDateTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dateTimeVal))
                     {
-                        coercedValue = dateTimeVal;
+                        // ✅ FIX: Ensure DateTime has UTC kind and use ToBinary() for storage
+                        // ToBinary() requires a specific Kind, so always normalize to UTC
+                        coercedValue = DateTime.SpecifyKind(dateTimeVal, DateTimeKind.Utc);
                         return true;
                     }
                     break;

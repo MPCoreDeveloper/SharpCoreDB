@@ -140,7 +140,7 @@ internal sealed class DecimalColumnBuffer : ColumnBuffer<decimal>
 }
 
 /// <summary>
-/// DateTime column buffer (stored as ticks for fast comparison).
+/// DateTime column buffer (stored as ticks for fast comparison).  // Note: Actually stores ToBinary() for compatibility
 /// </summary>
 internal sealed class DateTimeColumnBuffer : ColumnBuffer<long>
 {
@@ -148,7 +148,9 @@ internal sealed class DateTimeColumnBuffer : ColumnBuffer<long>
 
     public override void SetValue(int index, object? value)
     {
-        data[index] = value is DateTime dt ? dt.Ticks : 0;
+        // ✅ FIX: Use ToBinary() format for consistency with other serialization paths
+        // Previously used Ticks which caused format mismatch with ReadTypedValueFromSpan
+        data[index] = value is DateTime dt ? dt.ToBinary() : 0;  // ✅ ToBinary() not Ticks
     }
 }
 

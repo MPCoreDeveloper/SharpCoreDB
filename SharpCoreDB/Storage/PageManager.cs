@@ -401,7 +401,7 @@ public partial class PageManager : IDisposable
     }
 
     /// <summary>
-    /// ✅ NEW: Saves free list head pointer to header page.
+    /// ✅ NEW: Saves free list head to header page.
     /// </summary>
     private void SaveFreeListHead()
     {
@@ -538,6 +538,10 @@ public partial class PageManager : IDisposable
         
         page.IsDirty = true;
         clockCache.Put(page.PageId, page);
+        
+        #if DEBUG
+        Console.WriteLine($"[PageManager.WritePage] Page {page.PageId} marked dirty and put in cache");
+        #endif
         
         // Note: Actual disk write happens in FlushDirtyPages() for better performance
     }
@@ -1382,10 +1386,18 @@ public partial class PageManager : IDisposable
             var offset = (long)page.PageId * PAGE_SIZE;
             var buffer = page.ToBytes();
 
+            #if DEBUG
+            Console.WriteLine($"[PageManager.WritePageToDisk] Writing page {page.PageId} at offset {offset}, file: {pagesFilePath}");
+            #endif
+            
             pagesFile.Seek(offset, SeekOrigin.Begin);
             pagesFile.Write(buffer, 0, PAGE_SIZE);
             
             page.IsDirty = false;
+            
+            #if DEBUG
+            Console.WriteLine($"[PageManager.WritePageToDisk] Page {page.PageId} written, IsDirty set to false");
+            #endif
         }
     }
 
@@ -1399,12 +1411,33 @@ public partial class PageManager : IDisposable
         {
             var dirtyPages = clockCache.GetDirtyPages().ToList();
             
+            #if DEBUG
+            Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] Found {dirtyPages.Count} dirty pages to flush");
+            #endif
+            
             foreach (var page in dirtyPages)
             {
+                #if DEBUG
+                Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] Writing page {page.PageId} to disk");
+                #endif
+                
                 WritePageToDisk(page);
+                
+                #if DEBUG
+                Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] Page {page.PageId} written successfully");
+                #endif
             }
             
+            #if DEBUG
+            Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] Flushing file stream to disk");
+            #endif
+            
             pagesFile.Flush(flushToDisk: true);
+            
+            #if DEBUG
+            Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] File stream flushed successfully");
+            Console.WriteLine($"[PageManager.FlushDirtyPagesFromCache] Flushed {dirtyPages.Count} dirty pages to disk");
+            #endif
         }
     }
 
@@ -1446,19 +1479,36 @@ public partial class PageManager : IDisposable
 
         if (disposing)
         {
-            // Flush any remaining dirty pages
+            // ✅ CRITICAL FIX: Ensure ALL file handles are released synchronously
+            // before allowing table recreation or file deletion
             try
             {
+                // Flush any remaining dirty pages
                 FlushDirtyPages();
+                
+                // ✅ FIX: Explicitly flush OS buffers + close file handle synchronously
+                // This guarantees the file handle is released BEFORE Dispose() returns
+                if (pagesFile != null)
+                {
+                    pagesFile.Flush(flushToDisk: true);  // Force OS write + metadata sync
+                    pagesFile.Close();                   // Synchronous close (waits for handle release)
+                    pagesFile.Dispose();                 // Clean up managed resources
+                }
             }
             catch
             {
-                // Best effort flush
+                // Best effort - ensure we don't throw during dispose
+                // But still dispose the file stream to release resources
+                try
+                {
+                    pagesFile?.Dispose();
+                }
+                catch
+                {
+                    // Final fallback - ignore errors
+                }
             }
 
-            // Dispose file stream
-            pagesFile?.Dispose();
-            
             // Clear caches
             clockCache.Clear();
             pageCache.Clear();

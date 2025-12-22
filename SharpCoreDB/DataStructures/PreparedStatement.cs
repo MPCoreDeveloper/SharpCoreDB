@@ -6,6 +6,7 @@ namespace SharpCoreDB.DataStructures;
 
 /// <summary>
 /// Represents a prepared statement for efficient repeated execution.
+/// ✅ NEW: Now includes compiled query plan for zero-parse SELECT execution.
 /// </summary>
 public class PreparedStatement
 {
@@ -20,13 +21,26 @@ public class PreparedStatement
     public CachedQueryPlan Plan { get; }
 
     /// <summary>
+    /// Gets the compiled query plan (for SELECT queries only).
+    /// Returns null for non-SELECT queries or if compilation failed.
+    /// </summary>
+    public CompiledQueryPlan? CompiledPlan { get; }
+
+    /// <summary>
+    /// Gets whether this statement has a compiled query plan.
+    /// </summary>
+    public bool IsCompiled => CompiledPlan is not null;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PreparedStatement"/> class.
     /// </summary>
     /// <param name="sql">The SQL query string.</param>
     /// <param name="plan">The cached query plan.</param>
-    internal PreparedStatement(string sql, CachedQueryPlan plan)
+    /// <param name="compiledPlan">The compiled query plan (optional).</param>
+    internal PreparedStatement(string sql, CachedQueryPlan plan, CompiledQueryPlan? compiledPlan = null)
     {
         Sql = sql;
         Plan = plan;
+        CompiledPlan = compiledPlan;
     }
 }

@@ -215,7 +215,7 @@ public static class PageSerializer
             return false;
 
         // Validate checksum
-        var dataSpan = page.Slice(HeaderSize, page.Length - HeaderSize);
+        var dataSpan = page[HeaderSize..];
         uint actualChecksum = ComputeChecksum(dataSpan);
         return actualChecksum == header.Checksum;
     }
@@ -243,14 +243,15 @@ public static class PageSerializer
         // Serialize header
         SerializeHeader(ref header, destination);
 
-        // Copy data
-        data.CopyTo(destination.Slice(HeaderSize));
+        // ✅ C# 14: Range operator for data copy
+        data.CopyTo(destination[HeaderSize..]);
 
         // Zero remaining space (SIMD-accelerated)
         int remainingSize = PageSize - HeaderSize - data.Length;
         if (remainingSize > 0)
         {
-            SimdHelper.ZeroBuffer(destination.Slice(HeaderSize + data.Length, remainingSize));
+            // ✅ C# 14: Range operator for zero fill
+            SimdHelper.ZeroBuffer(destination[(HeaderSize + data.Length)..]);
         }
     }
 
@@ -268,7 +269,8 @@ public static class PageSerializer
 
         var header = DeserializeHeader(page);
         dataLength = header.EntryCount;
-        return page.Slice(HeaderSize, dataLength);
+        // ✅ C# 14: Range operator for extracting page data
+        return page[HeaderSize..(HeaderSize + dataLength)];
     }
 
     /// <summary>

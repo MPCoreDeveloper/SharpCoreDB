@@ -267,7 +267,16 @@ public class PageBasedDataWriter : IDisposable
 
             case DataType.DateTime:
                 var dateTime = value is DateTime dt ? dt : DateTime.Parse(value.ToString() ?? string.Empty, System.Globalization.CultureInfo.InvariantCulture);
-                writer.Write(dateTime.Ticks);
+                
+                // ✅ EFFICIENT BINARY: Use ToBinary() format instead of ISO8601
+                if (dateTime.Kind != DateTimeKind.Utc)
+                {
+                    dateTime = dateTime.Kind == DateTimeKind.Local 
+                        ? dateTime.ToUniversalTime() 
+                        : DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+                }
+                
+                writer.Write(dateTime.ToBinary());
                 break;
 
             case DataType.String:

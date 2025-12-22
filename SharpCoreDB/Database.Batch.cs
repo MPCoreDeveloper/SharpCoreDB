@@ -70,7 +70,8 @@ public partial class Database
                 {
                     var col = table.Columns[i];
                     var type = table.ColumnTypes[i];
-                    row[col] = SqlParser.ParseValue(values[i], type) ?? DBNull.Value;
+                    var parsedValue = SqlParser.ParseValue(values[i], type) ?? DBNull.Value;
+                    row[col] = parsedValue;
                 }
             }
             else
@@ -244,13 +245,13 @@ public partial class Database
                 if (parsed.HasValue)
                 {
                     var (tableName, row) = parsed.Value;
-                    
+
                     if (!insertsByTable.TryGetValue(tableName, out var rows))
                     {
                         rows = [];
                         insertsByTable[tableName] = rows;
                     }
-                    
+
                     rows.Add(row);
                 }
                 else
@@ -264,48 +265,57 @@ public partial class Database
             }
         }
 
-        await Task.Run(() =>
+        // ✅ CRITICAL FIX: Execute synchronously in lock, then await commit outside lock
+        Task commitTask;
+        lock (_walLock)
         {
-            lock (_walLock)
+            storage.BeginTransaction();
+
+            try
             {
-                storage.BeginTransaction();
-                
-                try
+                // ✅ CRITICAL: Use InsertBatch!
+                foreach (var (tableName, rows) in insertsByTable)
                 {
-                    // ✅ CRITICAL: Use InsertBatch!
-                    foreach (var (tableName, rows) in insertsByTable)
+                    if (tables.TryGetValue(tableName, out var table))
                     {
-                        if (tables.TryGetValue(tableName, out var table))
-                        {
-                            table.InsertBatch(rows);
-                        }
+                        Console.WriteLine($"[ExecuteBatchSQLAsync] Inserting {rows.Count} rows into {tableName}");
+                        table.InsertBatch(rows);
+                        Console.WriteLine($"[ExecuteBatchSQLAsync] InsertBatch completed for {tableName}");
                     }
+                }
 
-                    // Execute non-INSERTs
-                    if (nonInserts.Count > 0)
-                    {
-                        var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
-                        
-                        foreach (var sql in nonInserts)
-                        {
-                            sqlParser.Execute(sql, null);
-                        }
-                    }
-
-                    if (!isReadOnly && statements.Any(IsSchemaChangingCommand))
-                    {
-                        SaveMetadata();
-                    }
+                // Execute non-INSERTs
+                if (nonInserts.Count > 0)
+                {
+                    var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
                     
-                    storage.CommitAsync().GetAwaiter().GetResult();
+                    foreach (var sql in nonInserts)
+                    {
+                        sqlParser.Execute(sql, null);
+                    }
                 }
-                catch
+
+                if (!isReadOnly && statements.Any(IsSchemaChangingCommand))
                 {
-                    storage.Rollback();
-                    throw;
+                    SaveMetadata();
                 }
+                
+                // ✅ CRITICAL FIX: Start commit task inside lock, await outside
+                Console.WriteLine("[ExecuteBatchSQLAsync] Starting CommitAsync...");
+                commitTask = storage.CommitAsync();
+                Console.WriteLine("[ExecuteBatchSQLAsync] CommitAsync task started");
             }
-        }, cancellationToken);
+            catch
+            {
+                storage.Rollback();
+                throw;
+            }
+        }
+        
+        // ✅ CRITICAL: Await commit outside the lock
+        Console.WriteLine("[ExecuteBatchSQLAsync] Awaiting commit task...");
+        await commitTask;
+        Console.WriteLine("[ExecuteBatchSQLAsync] Commit task completed!");
     }
 
     /// <summary>

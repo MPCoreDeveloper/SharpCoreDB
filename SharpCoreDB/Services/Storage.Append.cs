@@ -141,8 +141,11 @@ public partial class Storage
     {
         lock (appendLock)
         {
+            Console.WriteLine($"[FlushBufferedAppends] Called with {bufferedAppends.Count} files buffered");
+            
             if (bufferedAppends.Count == 0)
             {
+                Console.WriteLine("[FlushBufferedAppends] No buffered appends to flush");
                 return;
             }
 
@@ -164,6 +167,8 @@ public partial class Storage
                 if (appends.Count == 0)
                     continue;
 
+                Console.WriteLine($"[FlushBufferedAppends] Flushing {appends.Count} appends to {path}");
+                
                 // ✅ CRITICAL: Open file ONCE and write ALL appends in single operation!
                 using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536, FileOptions.WriteThrough);
 
@@ -173,10 +178,13 @@ public partial class Storage
                     fs.Write(lengthBuffer);
                     fs.Write(data.AsSpan());
                 }
+                
+                Console.WriteLine($"[FlushBufferedAppends] Successfully wrote {appends.Count} records to {path}");
             }
 
             bufferedAppends.Clear();
             cachedFileLengths.Clear();
+            Console.WriteLine("[FlushBufferedAppends] Cleared buffers");
         }
     }
 

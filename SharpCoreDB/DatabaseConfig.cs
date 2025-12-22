@@ -206,6 +206,32 @@ public class DatabaseConfig
     public bool StrictParameterValidation { get; init; } = true;
 
     /// <summary>
+    /// Enables caching of compiled query plans (normalized SQL + parameter shape).
+    /// Zero-breaking changes: falls back to dynamic parsing if cache miss.
+    /// </summary>
+    public bool EnableCompiledPlanCache { get; init; } = true;
+
+    /// <summary>
+    /// Maximum entries for compiled plan cache (LRU eviction).
+    /// </summary>
+    public int CompiledPlanCacheCapacity { get; init; } = 2048;
+
+    /// <summary>
+    /// When true, normalizes SQL (whitespace, case, literals) for better cache hit rate.
+    /// </summary>
+    public bool NormalizeSqlForPlanCache { get; init; } = true;
+
+    /// <summary>
+    /// Enables SIMD filtering and projection pushdown in compiled plans.
+    /// </summary>
+    public bool EnableSimdAndProjectionPushdown { get; init; } = true;
+
+    /// <summary>
+    /// Enables B-tree index selection hints in query executor.
+    /// </summary>
+    public bool EnableBTreeSelection { get; init; } = true;
+
+    /// <summary>
     /// Gets default configuration with encryption enabled.
     /// </summary>
     public static DatabaseConfig Default => new();

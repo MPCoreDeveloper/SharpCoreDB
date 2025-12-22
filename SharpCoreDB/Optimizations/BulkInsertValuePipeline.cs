@@ -163,9 +163,15 @@ public static class BulkInsertValuePipeline
 
             case DataType.DateTime:
                 if (target.Length < 9) throw new InvalidOperationException("Buffer too small");
-                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(
-                    target[1..], 
-                    ((DateTime)value).ToBinary());
+                // ✅ EFFICIENT BINARY: Use ToBinary() format instead of ISO8601
+                var dtValue = (DateTime)value;
+                if (dtValue.Kind != DateTimeKind.Utc)
+                {
+                    dtValue = dtValue.Kind == DateTimeKind.Local 
+                        ? dtValue.ToUniversalTime() 
+                        : DateTime.SpecifyKind(dtValue, DateTimeKind.Utc);
+                }
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(target[1..], dtValue.ToBinary());
                 bytesWritten += 8;
                 break;
 
@@ -218,14 +224,19 @@ public static class BulkInsertValuePipeline
             case DataType.Ulid:
                 {
                     var ulidStr = ((Ulid)value).Value;
+                    // ✅ OPTIMIZATION: ULID is always exactly 26 characters per specification
                     var ulidBytes = System.Text.Encoding.UTF8.GetBytes(ulidStr);
                     
-                    if (target.Length < 5 + ulidBytes.Length)
+                    // Validate it's 26 (sanity check)
+                    if (ulidBytes.Length != 26)
+                        throw new InvalidOperationException("Invalid Ulid: expected 26 UTF8 bytes");
+            
+                    if (target.Length < 31) // 1 null + 4 length + 26 data
                         throw new InvalidOperationException("Buffer too small");
-                    
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(target[1..], ulidBytes.Length);
+            
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(target[1..], 26);
                     ulidBytes.AsSpan().CopyTo(target[5..]);
-                    bytesWritten += 4 + ulidBytes.Length;
+                    bytesWritten += 4 + 26;  // ✅ Always 4 + 26 = 30
                 }
                 break;
 

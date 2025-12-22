@@ -313,8 +313,8 @@ public class ColumnarDataReader : IDisposable
                 if (span.Length < 8)
                     return DateTime.MinValue;
                 bytesRead = 8;
-                long ticks = BinaryPrimitives.ReadInt64LittleEndian(span);
-                return new DateTime(ticks, DateTimeKind.Utc);
+                long binaryValue = BinaryPrimitives.ReadInt64LittleEndian(span);
+                return DateTime.FromBinary(binaryValue);
 
             case DataType.String:
             case DataType.Ulid:

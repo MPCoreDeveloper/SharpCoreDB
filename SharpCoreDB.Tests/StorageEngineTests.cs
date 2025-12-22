@@ -129,6 +129,111 @@ public class StorageEngineTests : IDisposable
     }
 
     [Fact]
+    public void PageBasedEngine_Transaction_Commit_VerifyDiskPersistence()
+    {
+        Console.WriteLine("[TEST] Starting PageBasedEngine_Transaction_Commit_VerifyDiskPersistence");
+
+        var testTableId = (uint)"test_table".GetHashCode();
+        var expectedFilePath = Path.Combine(testDbPath, $"table_{testTableId}.pages");
+
+        Console.WriteLine($"[TEST] Expected file path: {expectedFilePath}");
+
+        using var engine = new PageBasedEngine(testDbPath);
+
+        Console.WriteLine("[TEST] Beginning transaction");
+        engine.BeginTransaction();
+
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+        Console.WriteLine("[TEST] Inserting test data");
+        var reference = engine.Insert("test_table", testData);
+        Console.WriteLine($"[TEST] Insert returned storage reference: {reference}");
+
+        Console.WriteLine("[TEST] Committing transaction");
+        engine.CommitAsync().GetAwaiter().GetResult();
+        Console.WriteLine("[TEST] Transaction committed");
+
+        // CRITICAL: Verify that the .pages file was created on disk
+        Console.WriteLine($"[TEST] Checking if file exists: {expectedFilePath}");
+        var fileExists = File.Exists(expectedFilePath);
+        Console.WriteLine($"[TEST] File exists: {fileExists}");
+
+        if (fileExists)
+        {
+            var fileInfo = new FileInfo(expectedFilePath);
+            Console.WriteLine($"[TEST] File size: {fileInfo.Length} bytes");
+        }
+
+        Assert.True(fileExists, $"Data file must exist after commit! Expected: {expectedFilePath}");
+
+        // Also verify we can read the data back
+        Console.WriteLine("[TEST] Reading data back");
+        var readData = engine.Read("test_table", reference);
+        Console.WriteLine($"[TEST] Read data: {(readData != null ? string.Join(", ", readData) : "NULL")}");
+
+        Assert.NotNull(readData);
+        Assert.Equal(testData, readData);
+
+        Console.WriteLine("[TEST] Test completed successfully");
+    }
+
+    [Fact]
+    public void PageBasedEngine_BatchInsert_Commit_VerifyDiskPersistence()
+    {
+        Console.WriteLine("[TEST] Starting PageBasedEngine_BatchInsert_Commit_VerifyDiskPersistence");
+
+        var testTableId = (uint)"test_table".GetHashCode();
+        var expectedFilePath = Path.Combine(testDbPath, $"table_{testTableId}.pages");
+
+        Console.WriteLine($"[TEST] Expected file path: {expectedFilePath}");
+
+        using var engine = new PageBasedEngine(testDbPath);
+
+        Console.WriteLine("[TEST] Beginning transaction");
+        engine.BeginTransaction();
+
+        var dataBlocks = new List<byte[]>
+        {
+            new byte[] { 1, 2, 3 },
+            new byte[] { 4, 5, 6 },
+            new byte[] { 7, 8, 9 }
+        };
+
+        Console.WriteLine($"[TEST] Inserting batch of {dataBlocks.Count} records");
+        var references = engine.InsertBatch("test_table", dataBlocks);
+        Console.WriteLine($"[TEST] Batch insert returned {references.Length} storage references");
+
+        Console.WriteLine("[TEST] Committing transaction");
+        engine.CommitAsync().GetAwaiter().GetResult();
+        Console.WriteLine("[TEST] Transaction committed");
+
+        // CRITICAL: Verify that the .pages file was created on disk
+        Console.WriteLine($"[TEST] Checking if file exists: {expectedFilePath}");
+        var fileExists = File.Exists(expectedFilePath);
+        Console.WriteLine($"[TEST] File exists: {fileExists}");
+
+        if (fileExists)
+        {
+            var fileInfo = new FileInfo(expectedFilePath);
+            Console.WriteLine($"[TEST] File size: {fileInfo.Length} bytes");
+        }
+
+        Assert.True(fileExists, $"Data file must exist after commit! Expected: {expectedFilePath}");
+
+        // Verify we can read all data back
+        for (int i = 0; i < dataBlocks.Count; i++)
+        {
+            Console.WriteLine($"[TEST] Reading record {i + 1}");
+            var readData = engine.Read("test_table", references[i]);
+            Console.WriteLine($"[TEST] Read data: {(readData != null ? string.Join(", ", readData) : "NULL")}");
+
+            Assert.NotNull(readData);
+            Assert.Equal(dataBlocks[i], readData);
+        }
+
+        Console.WriteLine("[TEST] Test completed successfully");
+    }
+
+    [Fact]
     public void AppendOnlyEngine_Insert_Read_Roundtrip()
     {
         var crypto = new CryptoService();
@@ -182,7 +287,7 @@ public class StorageEngineTests : IDisposable
         using var engine = new PageBasedEngine(testDbPath);
 
         var testData = new byte[] { 1, 2, 3, 4, 5 };
-        
+
         // Perform operations
         var ref1 = engine.Insert("test_table", testData);
         var ref2 = engine.Insert("test_table", testData);

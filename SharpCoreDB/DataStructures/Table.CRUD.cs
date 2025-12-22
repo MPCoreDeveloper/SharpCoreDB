@@ -20,6 +20,7 @@ public partial class Table
     /// <summary>
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
+    /// ✅ NEW: Auto-indexes row in B-tree if indexes exist.
     /// </summary>
     /// <param name="row">The row data to insert.</param>
     /// <exception cref="ArgumentNullException">Thrown when storage is null.</exception>
@@ -125,6 +126,9 @@ public partial class Table
                         this.staleIndexes.Add(registeredCol);
                     }
                 }
+
+                // 🔥 NEW: Auto-index in B-tree if indexes exist
+                IndexRowInBTree(row, position);
                 
                 // ✅ NEW: Update cached row count
                 Interlocked.Increment(ref _cachedRowCount);
@@ -316,6 +320,9 @@ public partial class Table
             // ✅ NEW: Update cached row count
             Interlocked.Add(ref _cachedRowCount, rows.Count);
 
+            // 🔥 NEW: Bulk index in B-tree if indexes exist
+            BulkIndexRowsInBTree(rows, positions);
+
             // ✅ CRITICAL FIX: Commit transaction to flush all pages at once!
             if (needsTransaction)
             {
@@ -422,6 +429,9 @@ public partial class Table
             // ✅ NEW: Update cached row count
             Interlocked.Add(ref _cachedRowCount, validatedRows.Count);
 
+            // 🔥 NEW: Bulk index in B-tree if indexes exist
+            BulkIndexRowsInBTree(validatedRows, positions);
+
             // ✅ CRITICAL FIX: Commit transaction to flush all pages at once!
             if (needsTransaction)
             {
@@ -487,6 +497,18 @@ public partial class Table
     {
         var results = new List<Dictionary<string, object>>();
         var engine = GetOrCreateStorageEngine();
+
+        // 🔥 NEW: Try B-tree range scan FIRST (before hash index)
+        // B-tree is optimal for range queries: age > 25, age BETWEEN 20 AND 30, etc.
+        if (!string.IsNullOrEmpty(where))
+        {
+            var btreeResults = TryBTreeRangeScan(where, orderBy, asc);
+            if (btreeResults != null)
+            {
+                // B-tree succeeded - return immediately
+                return btreeResults;
+            }
+        }
 
         // 1. HashIndex lookup (O(1)) - only for columnar storage
         if (StorageMode == StorageMode.Columnar && 
@@ -557,8 +579,7 @@ public partial class Table
             else // PageBased
             {
                 // ✅ IMPLEMENTED: Full table scan using storage engine's GetAllRecords
-                uint tableId = (uint)Name.GetHashCode();
-                results = ScanPageBasedTable(tableId, where);
+                results = ScanPageBasedTable(where);
             }
         }
 
