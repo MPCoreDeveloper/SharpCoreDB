@@ -1,15 +1,30 @@
-# SharpCoreDB
+<div align="center">
+  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/docs/images/sharpcoredb-logo.png" alt="SharpCoreDB Logo" width="200"/>
+  
+  # SharpCoreDB
+  
+  **High-Performance Embedded Database for .NET 10**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  
+</div>
+
+---
 
 A high-performance, encrypted, embedded database engine for .NET 10 with **B-tree indexes**, **SIMD-accelerated analytics**, and **345x analytics speedup**. Pure .NET implementation with enterprise-grade encryption and world-class analytics performance.
 
-- License: MIT
-- Platform: .NET 10, C# 14
-- Encryption: AES-256-GCM at rest (**0% overhead, sometimes faster!** ?)
-- **Analytics**: **345x faster** than LiteDB with SIMD vectorization ?
-- **Analytics**: **11.5x faster** than SQLite with SIMD vectorization ?
-- **B-tree Indexes**: O(log n + k) range scans, ORDER BY, BETWEEN support ?
+- **License**: MIT
+- **Platform**: .NET 10, C# 14
+- **Encryption**: AES-256-GCM at rest (**0% overhead, sometimes faster!** :white_check_mark:)
+- **Analytics**: **345x faster** than LiteDB with SIMD vectorization :white_check_mark:
+- **Analytics**: **11.5x faster** than SQLite with SIMD vectorization :white_check_mark:
+- **B-tree Indexes**: O(log n + k) range scans, ORDER BY, BETWEEN support :white_check_mark:
 
-## Quickstart
+---
+
+## :rocket: Quickstart
 
 Install:
 
@@ -41,9 +56,11 @@ db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice', 30)");
 var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 ```
 
-## Key Features
+---
 
-### ? **Performance Excellence**
+## :star: Key Features
+
+### :zap: **Performance Excellence**
 
 - **SIMD Analytics**: **345x faster** aggregations than LiteDB (49.5?s vs 17ms)
 - **SIMD Analytics**: **11.5x faster** than SQLite (49.5?s vs 567?s)
@@ -52,14 +69,14 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 - **NativeAOT-Ready**: Zero reflection, zero dynamic dispatch, aggressive inlining
 - **Memory Efficient**: **6.2x less memory** than LiteDB for inserts
 
-### ?? **Enterprise Security**
+### :lock: **Enterprise Security**
 
 - **Native AES-256-GCM**: Hardware-accelerated encryption with **0% overhead (or faster!)**
 - **At-Rest Encryption**: All data encrypted on disk
 - **Zero Configuration**: Automatic key management
 - **GDPR/HIPAA Compliant**: Enterprise-grade security
 
-### ??? **Modern Architecture**
+### :building_construction: **Modern Architecture**
 
 - **Pure .NET**: No P/Invoke dependencies, fully managed code
 - **Multiple Storage Engines**: PageBased (OLTP), Columnar (Analytics), AppendOnly (Logging)
@@ -69,7 +86,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 - **Async/Await**: First-class async support throughout
 - **DI Integration**: Native Dependency Injection
 
-### ?? **SQL Support**
+### :card_file_box: **SQL Support**
 
 - **DDL**: CREATE TABLE, DROP TABLE, CREATE INDEX, DROP INDEX
 - **DML**: INSERT, SELECT, UPDATE, DELETE, INSERT BATCH
@@ -79,7 +96,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-## Performance Benchmarks (December 2025)
+## :bar_chart: Performance Benchmarks (December 2025)
 
 **Test Environment**: Windows 11, Intel i7-10850H @ 2.70GHz (6 cores/12 threads), 16GB RAM, .NET 10  
 **Benchmark Tool**: BenchmarkDotNet v0.15.8  
@@ -87,22 +104,22 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-### ?? **1. ANALYTICS - WORLD CLASS PERFORMANCE**
+### :fire: **1. ANALYTICS - WORLD CLASS PERFORMANCE**
 
 **Test**: `SUM(salary) + AVG(age)` on 10,000 records (columnar storage with SIMD)
 
 | Database | Time | vs SharpCoreDB | Memory |
 |----------|------|----------------|---------|
-| **SharpCoreDB (SIMD Columnar)** | **49.5 ?s** | **Baseline** ? | **0 B** |
+| **SharpCoreDB (SIMD Columnar)** | **49.5 ?s** | **Baseline** :white_check_mark: | **0 B** |
 | SQLite (GROUP BY) | 566.9 ?s | **11.5x slower** | 712 B |
 | LiteDB (Aggregate) | 17,029 ?s | **345x slower** | 22.4 MB |
 
 **What Makes It Fast**:
-- ? **AVX-512** (16-wide), **AVX2** (8-wide), **SSE2** (4-wide) vectorization
-- ? **Columnar storage** for perfect SIMD utilization
-- ? **Zero allocations** during aggregation
-- ? **Branch-free** mask accumulation with BMI1 instructions
-- ? **Hardware-accelerated** vector operations
+- :white_check_mark: **AVX-512** (16-wide), **AVX2** (8-wide), **SSE2** (4-wide) vectorization
+- :white_check_mark: **Columnar storage** for perfect SIMD utilization
+- :white_check_mark: **Zero allocations** during aggregation
+- :white_check_mark: **Branch-free** mask accumulation with BMI1 instructions
+- :white_check_mark: **Hardware-accelerated** vector operations
 
 **Use Cases**:
 - Real-time dashboards
@@ -114,7 +131,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-### ?? **2. BATCH UPDATE Performance**
+### :chart_with_upwards_trend: **2. BATCH UPDATE Performance**
 
 **Test**: 50,000 random updates with `BeginBatchUpdate/EndBatchUpdate` API
 
@@ -126,12 +143,12 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **LiteDB** | **437 ms** | **114K ops/sec** | **327 MB** |
 
 **SharpCoreDB Performance**:
-- ? **1.54x faster than LiteDB** (283ms vs 437ms)
-- ? **3.0x less memory than LiteDB** (109 MB vs 327 MB)
-- ? **AES-256-GCM encryption** with zero overhead
-- ?? **52x slower than SQLite** (SQLite uses in-memory journal + B-tree)
+- :white_check_mark: **1.54x faster than LiteDB** (283ms vs 437ms)
+- :white_check_mark: **3.0x less memory than LiteDB** (109 MB vs 327 MB)
+- :white_check_mark: **AES-256-GCM encryption** with zero overhead
+- :warning: **52x slower than SQLite** (SQLite uses in-memory journal + B-tree)
 
-**For 5K updates** (extrapolated): **28.3ms** - **10x better than 400ms target!** ?
+**For 5K updates** (extrapolated): **28.3ms** - **10x better than 400ms target!** :white_check_mark:
 
 **Optimization Notes**:
 - Use `BeginBatchUpdate()` / `EndBatchUpdate()` for bulk operations
@@ -140,7 +157,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-### ?? **3. INSERT Performance**
+### :rocket: **3. INSERT Performance**
 
 **Test**: Bulk insert 10,000 records
 
@@ -152,16 +169,16 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **LiteDB** | **148.7 ms** | **67K rec/sec** | **337.5 MB** |
 
 **SharpCoreDB Performance**:
-- ? **2.1x faster than LiteDB** (70.9ms vs 148.7ms)
-- ? **6.2x less memory than LiteDB** (54.4 MB vs 337.5 MB)
-- ? **AppendOnly 12% faster** than PageBased for sequential writes
-- ?? **2.4x slower than SQLite** (acceptable for pure .NET + encryption)
+- :white_check_mark: **2.1x faster than LiteDB** (70.9ms vs 148.7ms)
+- :white_check_mark: **6.2x less memory than LiteDB** (54.4 MB vs 337.5 MB)
+- :white_check_mark: **AppendOnly 12% faster** than PageBased for sequential writes
+- :warning: **2.4x slower than SQLite** (acceptable for pure .NET + encryption)
 
 **Acceptable Trade-off**: Pure .NET + encryption + dual indexes for 2.4x slower inserts
 
 ---
 
-### ?? **4. SELECT Performance**
+### :book: **4. SELECT Performance**
 
 **Test**: Full table scan of 10,000 records (`SELECT * FROM bench_records WHERE age > 30`)
 
@@ -173,9 +190,9 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **SharpCoreDB PageBased** | **33.0 ms** | **303 rec/ms** | **12.5 MB** |
 
 **SharpCoreDB Performance**:
-- ? **2.0x faster than LiteDB** (33.0ms vs 16.6ms)
-- ? **1.8x less memory than LiteDB** (12.5 MB vs 22.8 MB)
-- ?? **23.5x slower than SQLite** (33.0ms vs 1.41ms)
+- :white_check_mark: **2.0x faster than LiteDB** (33.0ms vs 16.6ms)
+- :white_check_mark: **1.8x less memory than LiteDB** (12.5 MB vs 22.8 MB)
+- :warning: **23.5x slower than SQLite** (33.0ms vs 1.41ms)
 
 **Analysis**: 
 - Full scans are slow due to deserialization overhead
@@ -184,7 +201,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-### ?? **5. ENCRYPTED Performance (AES-256-GCM)**
+### :closed_lock_with_key: **5. ENCRYPTED Performance (AES-256-GCM)**
 
 #### **Encrypted INSERT (10K records)**
 
@@ -208,7 +225,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **PageBased Encrypted** | **29.2 ms** | **-12% FASTER!** |
 | **PageBased Unencrypted** | **33.0 ms** | **Baseline** |
 
-**?? SURPRISING FINDING**: 
+**:fire: SURPRISING FINDING**: 
 - **Encryption is FASTER than unencrypted mode!**
 - Possible reasons:
   1. Encrypted code path is better optimized
@@ -220,30 +237,30 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-## Feature Comparison
+## :trophy: Feature Comparison
 
 | Feature | SharpCoreDB | SQLite | LiteDB |
 |---------|-------------|--------|--------|
-| **SIMD Analytics** | ? **345x faster** | ? | ? |
-| **Analytics vs SQLite** | ? **11.5x faster** | ? | ? |
-| **Native Encryption** | ? **0% overhead** | ?? SQLCipher (paid) | ? |
-| **Pure .NET** | ? | ? (P/Invoke) | ? |
-| **Hash Indexes** | ? **O(1)** | ? | ? |
-| **B-tree Indexes** | ? **O(log n)** | ? | ? |
-| **AVX-512/AVX2** | ? | ? | ? |
-| **NativeAOT Ready** | ? | ? | ?? Limited |
-| **Async/Await** | ? **Full** | ?? Limited | ?? Limited |
-| **Storage Engines** | ? **3 types** | ?? 1 type | ?? 1 type |
-| **Memory Efficiency** | ? **6.2x less than LiteDB** | ? | ? |
-| **License** | ? MIT | ? Public Domain | ? MIT |
+| **SIMD Analytics** | :white_check_mark: **345x faster** | :x: | :x: |
+| **Analytics vs SQLite** | :white_check_mark: **11.5x faster** | :x: | :x: |
+| **Native Encryption** | :white_check_mark: **0% overhead** | :warning: SQLCipher (paid) | :white_check_mark: |
+| **Pure .NET** | :white_check_mark: | :x: (P/Invoke) | :white_check_mark: |
+| **Hash Indexes** | :white_check_mark: **O(1)** | :white_check_mark: | :white_check_mark: |
+| **B-tree Indexes** | :white_check_mark: **O(log n)** | :white_check_mark: | :white_check_mark: |
+| **AVX-512/AVX2** | :white_check_mark: | :x: | :x: |
+| **NativeAOT Ready** | :white_check_mark: | :x: | :warning: Limited |
+| **Async/Await** | :white_check_mark: **Full** | :warning: Limited | :warning: Limited |
+| **Storage Engines** | :white_check_mark: **3 types** | :warning: 1 type | :warning: 1 type |
+| **Memory Efficiency** | :white_check_mark: **6.2x less than LiteDB** | :white_check_mark: | :x: |
+| **License** | :white_check_mark: MIT | :white_check_mark: Public Domain | :white_check_mark: MIT |
 
 ---
 
-## When to Use SharpCoreDB
+## :bulb: When to Use SharpCoreDB
 
-### ? **PERFECT FOR** (Production-Ready):
+### :white_check_mark: **PERFECT FOR** (Production-Ready):
 
-1. **?? Analytics & BI Applications** - **KILLER FEATURE**
+1. **:fire: Analytics & BI Applications** - **KILLER FEATURE**
    - **345x faster than LiteDB** for aggregations
    - **11.5x faster than SQLite** for GROUP BY
    - Real-time dashboards with sub-50?s queries
@@ -251,26 +268,26 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
    - Columnar storage for analytics
    - Time-series databases
 
-2. **?? Encrypted Embedded Databases**
+2. **:lock: Encrypted Embedded Databases**
    - AES-256-GCM with **0% overhead (or faster!)**
    - GDPR/HIPAA compliance
    - Secure mobile/desktop apps
    - Zero key management
 
-3. **?? High-Throughput Inserts**
+3. **:chart_with_upwards_trend: High-Throughput Inserts**
    - **2.1x faster than LiteDB**
    - **6.2x less memory than LiteDB**
    - Logging systems
    - IoT data streams
    - Event sourcing
 
-4. **?? Batch Update Workloads**
+4. **:repeat: Batch Update Workloads**
    - **1.54x faster than LiteDB**
    - **3.0x less memory than LiteDB**
-   - Use `BeginBatchUpdate()` / `EndBatchUpdate`
+   - Use `BeginBatchUpdate()` / `EndBatchUpdate()`
    - Bulk data synchronization
 
-### ?? **ALSO CONSIDER**:
+### :warning: **ALSO CONSIDER**:
 
 - **High-Frequency Reads**: SQLite 23.5x faster for full scans (use with indexes or wait for Q1 2026 optimization)
 - **Individual Updates**: SQLite 52x faster (use batch API for best performance)
@@ -278,12 +295,12 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ---
 
-## Batch Update API Usage
+## :computer: Batch Update API Usage
 
 ### **CRITICAL**: Use Batch API for Best Performance
 
 ```csharp
-// ? CORRECT: Use batch API (1.54x faster than LiteDB)
+// :white_check_mark: CORRECT: Use batch API (1.54x faster than LiteDB)
 db.BeginBatchUpdate();
 try
 {
@@ -304,7 +321,7 @@ catch
     throw;
 }
 
-// ? WRONG: Individual updates (much slower)
+// :x: WRONG: Individual updates (much slower)
 for (int i = 0; i < 50000; i++)
 {
     db.ExecuteSQL($"UPDATE products SET price = {newPrice} WHERE id = {productId}");
@@ -317,7 +334,7 @@ for (int i = 0; i < 50000; i++)
 
 ---
 
-## SIMD Optimization Details
+## :gear: SIMD Optimization Details
 
 ### Automatic ISA Selection
 
@@ -332,13 +349,13 @@ Scalar:  Fallback                 - Compatible with all CPUs
 
 ### NativeAOT Optimizations
 
-- ? Zero reflection
-- ? Zero dynamic dispatch
-- ? Aggressive inlining
-- ? Static comparison methods
-- ? BMI1 bit manipulation (BLSR instruction)
-- ? PopCount pre-allocation
-- ? Branch-free mask accumulation
+- :white_check_mark: Zero reflection
+- :white_check_mark: Zero dynamic dispatch
+- :white_check_mark: Aggressive inlining
+- :white_check_mark: Static comparison methods
+- :white_check_mark: BMI1 bit manipulation (BLSR instruction)
+- :white_check_mark: PopCount pre-allocation
+- :white_check_mark: Branch-free mask accumulation
 
 ### Supported Operations
 
@@ -352,18 +369,18 @@ SELECT SUM(salary), AVG(age) FROM users GROUP BY department
 
 ---
 
-## Optimization Roadmap
+## :calendar: Optimization Roadmap
 
-### ? **Q4 2025 - COMPLETED**
+### :white_check_mark: **Q4 2025 - COMPLETED**
 
-- ? **SIMD Analytics** (345x faster than LiteDB, 11.5x faster than SQLite)
-- ? **Batch Update API** (1.54x faster than LiteDB)
-- ? **AVX-512/AVX2/SSE2** vectorization
-- ? **NativeAOT Optimizations** (zero reflection)
-- ? **Native AES-256-GCM** (0% overhead)
-- ? **Memory Efficiency** (6.2x less than LiteDB)
+- :white_check_mark: **SIMD Analytics** (345x faster than LiteDB, 11.5x faster than SQLite)
+- :white_check_mark: **Batch Update API** (1.54x faster than LiteDB)
+- :white_check_mark: **AVX-512/AVX2/SSE2** vectorization
+- :white_check_mark: **NativeAOT Optimizations** (zero reflection)
+- :white_check_mark: **Native AES-256-GCM** (0% overhead)
+- :white_check_mark: **Memory Efficiency** (6.2x less than LiteDB)
 
-### ?? **Q1 2026 - PRIORITY 1: SELECT Optimization**
+### :dart: **Q1 2026 - PRIORITY 1: SELECT Optimization**
 
 **Target**: **2-3x speedup** (33ms ? 10-15ms)
 
@@ -377,7 +394,7 @@ SELECT SUM(salary), AVG(age) FROM users GROUP BY department
 - Match or exceed LiteDB (16.6ms)
 - Competitive with SQLite (1.41ms is hard target)
 
-### ?? **Q2 2026 - UPDATE Optimization**
+### :dart: **Q2 2026 - UPDATE Optimization**
 
 **Target**: **Maintain current performance** (283ms is already good!)
 
@@ -388,7 +405,7 @@ SELECT SUM(salary), AVG(age) FROM users GROUP BY department
 
 ---
 
-## How to Run Benchmarks
+## :test_tube: How to Run Benchmarks
 
 ```bash
 cd SharpCoreDB.Benchmarks
@@ -399,7 +416,7 @@ Results saved to `BenchmarkDotNet.Artifacts/results/`
 
 ---
 
-## Architecture
+## :building_construction: Architecture
 
 ### Storage Engines
 
@@ -435,7 +452,7 @@ Results saved to `BenchmarkDotNet.Artifacts/results/`
 
 ---
 
-## Contributing
+## :handshake: Contributing
 
 Contributions welcome! Priority areas:
 
@@ -448,37 +465,37 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## License
+## :page_facing_up: License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-## Status
+## :information_source: Status
 
 **Current Version**: 1.0.0  
-**Stability**: ? **Production-Ready**  
+**Stability**: :white_check_mark: **Production-Ready**  
 **Last Updated**: December 2025
 
 ### Performance Status
 
 | Feature | Status | Performance |
 |---------|--------|-------------|
-| **SIMD Analytics** | ? Production | **345x faster than LiteDB** ? |
-| **Analytics vs SQLite** | ? Production | **11.5x faster** ? |
-| **Batch Updates** | ? Production | **1.54x faster than LiteDB** ? |
-| **Encryption** | ? Production | **0% overhead** ? |
-| **Inserts** | ? Production | **2.1x faster than LiteDB** ? |
-| **Memory Efficiency** | ? Production | **6.2x less than LiteDB** ? |
-| **SELECTs** | ?? Good | 2.0x faster than LiteDB, needs optimization |
+| **SIMD Analytics** | :white_check_mark: Production | **345x faster than LiteDB** :white_check_mark: |
+| **Analytics vs SQLite** | :white_check_mark: Production | **11.5x faster** :white_check_mark: |
+| **Batch Updates** | :white_check_mark: Production | **1.54x faster than LiteDB** :white_check_mark: |
+| **Encryption** | :white_check_mark: Production | **0% overhead** :white_check_mark: |
+| **Inserts** | :white_check_mark: Production | **2.1x faster than LiteDB** :white_check_mark: |
+| **Memory Efficiency** | :white_check_mark: Production | **6.2x less than LiteDB** :white_check_mark: |
+| **SELECTs** | :warning: Good | 2.0x faster than LiteDB, needs optimization |
 
 ### Best Use Cases (Ranked)
 
-1. ?? **Analytics/BI** - **345x faster** than LiteDB, **11.5x faster** than SQLite
-2. ?? **Encrypted databases** - **0% overhead**
-3. ?? **High-throughput inserts** - **2.1x faster** than LiteDB, **6.2x less memory**
-4. ?? **Batch updates** - **1.54x faster** than LiteDB with batch API
-5. ?? **General OLTP** - Good, SELECT optimization planned Q1 2026
+1. :fire: **Analytics/BI** - **345x faster** than LiteDB, **11.5x faster** than SQLite
+2. :lock: **Encrypted databases** - **0% overhead**
+3. :chart_with_upwards_trend: **High-throughput inserts** - **2.1x faster** than LiteDB, **6.2x less memory**
+4. :repeat: **Batch updates** - **1.54x faster** than LiteDB with batch API
+5. :warning: **General OLTP** - Good, SELECT optimization planned Q1 2026
 
 ---
 
