@@ -1,5 +1,5 @@
-<div align="center">
-  <img src="sharpcoredb.jpg" alt="SharpCoreDB Logo" width="200"/>
+﻿<div align="center">
+  <img src="./sharpcoredb.jpg" alt="SharpCoreDB Logo" width="200"/>
   
   # SharpCoreDB
   
@@ -62,8 +62,8 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 ### :zap: **Performance Excellence**
 
-- **SIMD Analytics**: **345x faster** aggregations than LiteDB (49.5?s vs 17ms)
-- **SIMD Analytics**: **11.5x faster** than SQLite (49.5?s vs 567?s)
+- **SIMD Analytics**: **345x faster** aggregations than LiteDB (49.5μs vs 17ms)
+- **SIMD Analytics**: **11.5x faster** than SQLite (49.5μs vs 567μs)
 - **Batch Updates**: **1.54x faster** than LiteDB (283ms vs 437ms for 50K updates)
 - **AVX-512/AVX2/SSE2**: Hardware-accelerated analytics with SIMD vectorization
 - **NativeAOT-Ready**: Zero reflection, zero dynamic dispatch, aggressive inlining
@@ -110,9 +110,9 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 | Database | Time | vs SharpCoreDB | Memory |
 |----------|------|----------------|---------|
-| **SharpCoreDB (SIMD Columnar)** | **49.5 ?s** | **Baseline** :white_check_mark: | **0 B** |
-| SQLite (GROUP BY) | 566.9 ?s | **11.5x slower** | 712 B |
-| LiteDB (Aggregate) | 17,029 ?s | **345x slower** | 22.4 MB |
+| **SharpCoreDB (SIMD Columnar)** | **49.5 μs** | **Baseline** :white_check_mark: | **0 B** |
+| SQLite (GROUP BY) | 566.9 μs | **11.5x slower** | 712 B |
+| LiteDB (Aggregate) | 17,029 μs | **345x slower** | 22.4 MB |
 
 **What Makes It Fast**:
 - :white_check_mark: **AVX-512** (16-wide), **AVX2** (8-wide), **SSE2** (4-wide) vectorization
@@ -263,7 +263,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 1. **:fire: Analytics & BI Applications** - **KILLER FEATURE**
    - **345x faster than LiteDB** for aggregations
    - **11.5x faster than SQLite** for GROUP BY
-   - Real-time dashboards with sub-50?s queries
+   - Real-time dashboards with sub-50μs queries
    - SIMD-accelerated SUM/AVG/COUNT
    - Columnar storage for analytics
    - Time-series databases
@@ -341,9 +341,9 @@ for (int i = 0; i < 50000; i++)
 SharpCoreDB automatically selects the best SIMD instruction set:
 
 ```
-AVX-512: 16-wide (?1024 elements) - 2-3x faster than AVX2
-AVX2:    8-wide (?8 elements)     - 4-8x faster than scalar
-SSE2:    4-wide (?4 elements)     - 2-4x faster than scalar
+AVX-512: 16-wide (≥1024 elements) - 2-3x faster than AVX2
+AVX2:    8-wide (≥8 elements)     - 4-8x faster than scalar
+SSE2:    4-wide (≥4 elements)     - 2-4x faster than scalar
 Scalar:  Fallback                 - Compatible with all CPUs
 ```
 
@@ -382,7 +382,7 @@ SELECT SUM(salary), AVG(age) FROM users GROUP BY department
 
 ### :dart: **Q1 2026 - PRIORITY 1: SELECT Optimization**
 
-**Target**: **2-3x speedup** (33ms ? 10-15ms)
+**Target**: **2-3x speedup** (33ms → 10-15ms)
 
 **Planned Improvements**:
 1. **SIMD-accelerated deserialization** (apply columnar techniques to row-based)
