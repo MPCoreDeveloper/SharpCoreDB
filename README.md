@@ -2,7 +2,7 @@
   
   # SharpCoreDB
   
-  ![SharpCoreDB Logo](sharpcoredb.jpg)
+  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/sharpcoredb.jpg" alt="SharpCoreDB Logo" width="300"/>
   
   **High-Performance Embedded Database for .NET 10**
   
