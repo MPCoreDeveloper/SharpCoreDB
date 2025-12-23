@@ -75,6 +75,7 @@
     <Compile Include="SharpCoreDB.Benchmarks\EncryptionBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\InsertBatchOptimizationBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\PageBasedDirtyPageBenchmark.cs" />
+    <Compile Include="SharpCoreDB.Benchmarks\ParallelBatchUpdateBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\SelectOptimizationBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\SingleColumnUpdateBenchmark.cs" />
     <Compile Include="SharpCoreDB.Benchmarks\UpdateBatchOptimizationBenchmark.cs" />

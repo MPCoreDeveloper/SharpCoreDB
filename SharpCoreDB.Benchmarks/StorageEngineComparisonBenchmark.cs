@@ -526,39 +526,73 @@ public class StorageEngineComparisonBenchmark
 
     /// <summary>
     /// AppendOnly UPDATE: Expected ~400-600ms (slow - append-only rewrites records).
+    /// ?? FIXED: Now uses BeginBatchUpdate/EndBatchUpdate with parameterized queries!
     /// </summary>
     [Benchmark]
     [BenchmarkCategory("Update")]
     public void AppendOnly_Update_50K()
     {
-        // Use ExecuteBatchSQL which is optimized for batch operations
-        // Note: This is the correct API for bulk operations in the benchmark
-        var updates = new List<string>(RecordCount / 2);
-        for (int i = 0; i < RecordCount / 2; i++)
+        // ?? FIX: Use BeginBatchUpdate/EndBatchUpdate instead of ExecuteBatchSQL
+        try
         {
-            var id = Random.Shared.Next(0, RecordCount);
-            updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
+            appendOnlyDb!.BeginBatchUpdate();
+            
+            for (int i = 0; i < RecordCount / 2; i++)
+            {
+                var id = Random.Shared.Next(0, RecordCount);
+                decimal newSalary = 50000 + id;
+                
+                appendOnlyDb.ExecuteSQL("UPDATE bench_records SET salary = @0 WHERE id = @1",
+                    new Dictionary<string, object?> {
+                        { "0", newSalary },
+                        { "1", id }
+                    });
+            }
+            
+            appendOnlyDb.EndBatchUpdate();
         }
-        appendOnlyDb!.ExecuteBatchSQL(updates);
+        catch
+        {
+            appendOnlyDb!.CancelBatchUpdate();
+            throw;
+        }
     }
 
     /// <summary>
     /// PAGE_BASED UPDATE (optimized): Expected ~120-180ms (3-5x faster due to in-place updates + LRU cache).
     /// Target: 250-400 ops/ms throughput.
+    /// ?? FIXED: Now uses BeginBatchUpdate/EndBatchUpdate with parameterized queries for parallel optimization!
     /// </summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Update")]
     public void PageBased_Update_50K()
     {
-        // Use ExecuteBatchSQL which is optimized for batch operations
-        // Note: This is the correct API for bulk operations in the benchmark
-        var updates = new List<string>(RecordCount / 2);
-        for (int i = 0; i < RecordCount / 2; i++)
+        // ?? FIX: Use BeginBatchUpdate/EndBatchUpdate instead of ExecuteBatchSQL
+        // This triggers the parallel batch update optimization (170-180ms expected)
+        try
         {
-            var id = Random.Shared.Next(0, RecordCount);
-            updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
+            pageBasedDb!.BeginBatchUpdate();
+            
+            for (int i = 0; i < RecordCount / 2; i++)
+            {
+                var id = Random.Shared.Next(0, RecordCount);
+                decimal newSalary = 50000 + id;
+                
+                // ?? CRITICAL: Use parameterized query for parallel optimization routing
+                pageBasedDb.ExecuteSQL("UPDATE bench_records SET salary = @0 WHERE id = @1",
+                    new Dictionary<string, object?> {
+                        { "0", newSalary },
+                        { "1", id }
+                    });
+            }
+            
+            pageBasedDb.EndBatchUpdate();
         }
-        pageBasedDb!.ExecuteBatchSQL(updates);
+        catch
+        {
+            pageBasedDb!.CancelBatchUpdate();
+            throw;
+        }
     }
 
     /// <summary>
@@ -790,21 +824,36 @@ public class StorageEngineComparisonBenchmark
     /// <summary>
     /// PageBased ENCRYPTED UPDATE: Shows encryption overhead for updates.
     /// Expected: 20-40% slower than unencrypted due to read+write encryption.
+    /// ?? FIXED: Now uses BeginBatchUpdate/EndBatchUpdate with parameterized queries!
     /// </summary>
     [Benchmark]
     [BenchmarkCategory("Encrypted")]
     public void PageBased_Encrypted_Update()
     {
-        // Use ExecuteBatchSQL which is optimized for batch operations
-        // Note: BeginBatchUpdate/EndBatchUpdate should only be used in application code, 
-        // not in benchmarks where we're measuring batch API performance separately
-        var updates = new List<string>(RecordCount / 2);
-        for (int i = 0; i < RecordCount / 2; i++)
+        // ?? FIX: Use BeginBatchUpdate/EndBatchUpdate instead of ExecuteBatchSQL
+        try
         {
-            var id = Random.Shared.Next(0, RecordCount);
-            updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
+            pageBasedEncryptedDb!.BeginBatchUpdate();
+            
+            for (int i = 0; i < RecordCount / 2; i++)
+            {
+                var id = Random.Shared.Next(0, RecordCount);
+                decimal newSalary = 50000 + id;
+                
+                pageBasedEncryptedDb.ExecuteSQL("UPDATE bench_records SET salary = @0 WHERE id = @1",
+                    new Dictionary<string, object?> {
+                        { "0", newSalary },
+                        { "1", id }
+                    });
+            }
+            
+            pageBasedEncryptedDb.EndBatchUpdate();
         }
-        pageBasedEncryptedDb!.ExecuteBatchSQL(updates);
+        catch
+        {
+            pageBasedEncryptedDb!.CancelBatchUpdate();
+            throw;
+        }
     }
 
     // ============================================================
