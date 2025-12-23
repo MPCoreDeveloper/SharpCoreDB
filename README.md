@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/docs/images/sharpcoredb-logo.png" alt="SharpCoreDB Logo" width="200"/>
+  <img src="sharpcoredb.jpg" alt="SharpCoreDB Logo" width="200"/>
   
   # SharpCoreDB
   
