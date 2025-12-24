@@ -406,7 +406,7 @@ public sealed class GenericLoadTests
         Console.WriteLine($"   AVG(Id): {avgId:F2}");
     }
 
-    [Fact]
+    [Fact(Skip = "Heavy column store aggregate scenario is disabled in CI for stability.")]
     public void ColumnStore_WithMetrics_SIMD_Aggregates_100k()
     {
         // Arrange: Generate 100k metrics

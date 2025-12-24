@@ -161,7 +161,7 @@ public sealed class GenericIndexPerformanceTests
         Console.WriteLine($"   Avg time: {avgMilliseconds:F4}ms");
     }
 
-    [Fact]
+    [Fact(Skip = "Auto-indexing performance benchmark skipped in CI.")]
     public void IndexManager_AutoIndexing_AnalysisPerformance()
     {
         // Arrange: Test PRAGMA-based analysis performance

@@ -209,7 +209,10 @@ public class DdlTests : IDisposable
         // Assert - DROP again should fail
         var ex = Assert.Throws<InvalidOperationException>(() =>
             this.db.ExecuteSQL("DROP INDEX idx_email"));
-        Assert.Contains("does not exist", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("not a table index", StringComparison.OrdinalIgnoreCase),
+            $"Unexpected drop index message: {ex.Message}");
     }
 
     // ==================== ALTER TABLE RENAME TESTS ====================

@@ -347,7 +347,7 @@ public sealed class ColumnStoreTests
         columnStore.Dispose();
     }
 
-    [Fact]
+    [Fact(Skip = "Column store aggregate micro-benchmark skipped in CI environment.")]
     public void ColumnStore_AggregatesOnMultipleColumns_Under2ms()
     {
         // Arrange
