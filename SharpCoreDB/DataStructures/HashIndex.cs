@@ -10,16 +10,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 
 /// <summary>
-/// Hash index with SIMD-accelerated hash calculations for improved performance.
+/// Thread-safe hash index with SIMD-accelerated hash calculations for improved performance.
 /// Uses Vector128/Vector256 instructions when available for string and byte[] hashing.
+/// Thread-safety is provided via ReaderWriterLockSlim for optimal read performance.
 /// </summary>
-public class HashIndex
+public class HashIndex : IDisposable
 {
     private readonly Dictionary<object, List<long>> _index;
     private readonly string _columnName;
     private readonly SimdHashEqualityComparer _comparer = new();
+    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HashIndex"/> class.
@@ -35,6 +39,7 @@ public class HashIndex
 
     /// <summary>
     /// Adds a row to the index at the specified position.
+    /// Thread-safe operation using write lock.
     /// </summary>
     /// <param name="row">The row data.</param>
     /// <param name="position">The file position of the row.</param>
@@ -44,28 +49,46 @@ public class HashIndex
         if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
-        if (!_index.TryGetValue(key, out var list))
+        _lock.EnterWriteLock();
+        try
         {
-            list = [];
-            _index[key] = list;
+            if (!_index.TryGetValue(key, out var list))
+            {
+                list = [];
+                _index[key] = list;
+            }
+            list.Add(position);
         }
-        list.Add(position);
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
     }
 
     /// <summary>
     /// Removes a row from the index.
+    /// Thread-safe operation using write lock.
     /// </summary>
     /// <param name="row">The row data.</param>
     public void Remove(Dictionary<string, object> row)
     {
-        if (row.TryGetValue(_columnName, out var key) && key is not null)
+        if (!row.TryGetValue(_columnName, out var key) || key is null)
+            return;
+
+        _lock.EnterWriteLock();
+        try
         {
             _index.Remove(key);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
         }
     }
 
     /// <summary>
     /// Removes a specific position for a row from the index.
+    /// Thread-safe operation using write lock.
     /// </summary>
     /// <param name="row">The row data.</param>
     /// <param name="position">The position to remove.</param>
@@ -74,66 +97,169 @@ public class HashIndex
         if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
-        if (_index.TryGetValue(key, out var list))
+        _lock.EnterWriteLock();
+        try
         {
-            list.Remove(position);
-            if (list.Count == 0)
+            if (_index.TryGetValue(key, out var list))
             {
-                _index.Remove(key);
+                list.Remove(position);
+                if (list.Count == 0)
+                {
+                    _index.Remove(key);
+                }
             }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
         }
     }
 
     /// <summary>
     /// Looks up positions for a given key using SIMD-accelerated comparison.
+    /// Thread-safe operation using read lock.
     /// </summary>
     /// <param name="key">The key to lookup.</param>
     /// <returns>List of positions matching the key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public List<long> LookupPositions(object key)
-        => key is not null && _index.TryGetValue(key, out var list) ? new List<long>(list) : [];
+    {
+        if (key is null)
+            return [];
+
+        _lock.EnterReadLock();
+        try
+        {
+            return _index.TryGetValue(key, out var list) ? new List<long>(list) : [];
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
 
     /// <summary>
     /// Gets the number of unique keys in the index.
+    /// Thread-safe operation using read lock.
     /// </summary>
-    public int Count => _index.Count;
+    public int Count
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                return _index.Count;
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+    }
 
     /// <summary>
     /// Checks if a key exists in the index using SIMD-accelerated hash lookup.
+    /// Thread-safe operation using read lock.
     /// </summary>
     /// <param name="key">The key to check.</param>
     /// <returns>True if key exists.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ContainsKey(object key) => key is not null && _index.ContainsKey(key);
+    public bool ContainsKey(object key)
+    {
+        if (key is null)
+            return false;
+
+        _lock.EnterReadLock();
+        try
+        {
+            return _index.ContainsKey(key);
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
 
     /// <summary>
     /// Clears all entries from the index.
+    /// Thread-safe operation using write lock.
     /// </summary>
-    public void Clear() => _index.Clear();
+    public void Clear()
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            _index.Clear();
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
 
     /// <summary>
     /// Rebuilds the index from a list of rows.
+    /// Thread-safe operation using write lock.
     /// </summary>
     /// <param name="rows">The rows to index.</param>
     public void Rebuild(List<Dictionary<string, object>> rows)
     {
-        Clear();
-        for (int i = 0; i < rows.Count; i++)
+        _lock.EnterWriteLock();
+        try
         {
-            Add(rows[i], i);
+            _index.Clear();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].TryGetValue(_columnName, out var key) && key is not null)
+                {
+                    if (!_index.TryGetValue(key, out var list))
+                    {
+                        list = [];
+                        _index[key] = list;
+                    }
+                    list.Add(i);
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
         }
     }
 
     /// <summary>
     /// Gets statistics about the index.
+    /// Thread-safe operation using read lock.
     /// </summary>
     /// <returns>Tuple of (UniqueKeys, TotalRows, AvgRowsPerKey).</returns>
     public (int UniqueKeys, int TotalRows, double AvgRowsPerKey) GetStatistics()
     {
-        var uniqueKeys = _index.Count;
-        var totalRows = _index.Values.Sum(list => list.Count);
-        var avgRowsPerKey = uniqueKeys > 0 ? (double)totalRows / uniqueKeys : 0;
-        return (uniqueKeys, totalRows, avgRowsPerKey);
+        _lock.EnterReadLock();
+        try
+        {
+            var uniqueKeys = _index.Count;
+            var totalRows = _index.Values.Sum(list => list.Count);
+            var avgRowsPerKey = uniqueKeys > 0 ? (double)totalRows / uniqueKeys : 0;
+            return (uniqueKeys, totalRows, avgRowsPerKey);
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Disposes the HashIndex and releases the read-write lock.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _lock.Dispose();
+            _disposed = true;
+        }
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>

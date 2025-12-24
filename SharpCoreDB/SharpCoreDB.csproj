@@ -17,9 +17,6 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     
     <!-- Suppress only StyleCop warnings that conflict with project style -->
-    <!-- SA1101: Prefix local calls with this - conflicts with modern C# style -->
-    <!-- SA1633: File must have header - handled by copyright headers -->
-    <!-- SA1309: Field names must not begin with underscore - conflicts with private field convention -->
     <NoWarn>$(NoWarn);SA1101;SA1633;SA1309</NoWarn>
     
     <!-- NuGet Package Properties -->
@@ -28,18 +25,60 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
-    <Description>A lightweight, encrypted, file-based database engine for .NET 10 with SQL support, AES-256-GCM encryption, C# 14 features, and production-ready performance for time-tracking, invoicing, and project management applications.</Description>
-    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance</PackageTags>
+    <Description>A lightweight, encrypted, file-based database engine for .NET 10 with SQL support, AES-256-GCM encryption, C# 14 features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
+    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Platform-specific optimizations -->
+    <Optimize>true</Optimize>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    
+    <!-- Multi-targeting: Build for multiple RIDs when packing -->
+    <!-- Visual Studio will automatically build these when you right-click → Pack -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
+
+  <!-- Platform-specific PropertyGroups -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == 'linux-x64' OR '$(RuntimeIdentifier)' == 'osx-x64'">
+    <DefineConstants>$(DefineConstants);X64</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64' OR '$(RuntimeIdentifier)' == 'linux-arm64' OR '$(RuntimeIdentifier)' == 'osx-arm64'">
+    <DefineConstants>$(DefineConstants);ARM64</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Android platforms (uncomment if building mobile) -->
+  <!--
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'android-arm64' OR '$(RuntimeIdentifier)' == 'android-x64'">
+    <DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
+  </PropertyGroup>
+  -->
+  
+  <!-- iOS platforms (uncomment if building mobile) -->
+  <!--
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64' OR '$(RuntimeIdentifier)' == 'iossimulator-arm64' OR '$(RuntimeIdentifier)' == 'iossimulator-x64'">
+    <DefineConstants>$(DefineConstants);IOS;MOBILE</DefineConstants>
+  </PropertyGroup>
+  -->
+
+  <!-- IoT/Embedded platforms (uncomment if building IoT) -->
+  <!--
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'linux-arm'">
+    <DefineConstants>$(DefineConstants);ARM32;IOT;EMBEDDED</DefineConstants>
+  </PropertyGroup>
+  -->
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
@@ -51,45 +90,69 @@
     <Compile Include="**/*.cs" Exclude="SharpCoreDB.Tests/**;obj/**;SharpCoreDB.Benchmarks/**;SharpCoreDB.Demo/**;SharpCoreDB.Extensions/**;SharpCoreDB.EntityFrameworkCore/**" />
     <Compile Remove="obj/**/*.cs" />
   </ItemGroup>
-
+  
   <ItemGroup>
-    
-    <None Include=".github\workflows\cross-platform-ci.yml" />
-    <None Include="SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
-    <None Include="SharpCoreDB.Samples\SharpCoreDB.Samples.csproj" />
-    <None Include="SharpCoreDB.Tests\SharpCoreDB.Tests.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdateDeferredIndexBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdatePerformanceTest.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\BatchUpdateWalBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\BulkInsertAsyncBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\Comparative\ConcurrencyInsertBenchmarks.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\ComprehensiveComparison.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\DirectLookupBatchUpdateBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\EncryptionBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\InsertBatchOptimizationBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\PageBasedDirtyPageBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\ParallelBatchUpdateBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\SelectOptimizationBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\SingleColumnUpdateBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\UpdateBatchOptimizationBenchmark.cs" />
-    <Compile Include="SharpCoreDB.Benchmarks\UpdatePerformanceTest.cs" />
-  </ItemGroup>
+  <!-- Build all RIDs automatically when packing -->
+  <Target Name="BuildAllRuntimesForPack" BeforeTargets="Pack">
+    <Message Text="Building platform-specific assemblies for NuGet package..." Importance="high" />
+    
+    <!-- Build for each runtime identifier -->
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=win-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=win-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=linux-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=linux-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=osx-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=osx-arm64;Configuration=$(Configuration)" />
+  </Target>
 
+  <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
-    <Folder Include="docs\benchmarks\" />
-    <Folder Include="docs\cleanup\" />
-    <Folder Include="docs\debugging\" />
-    <Folder Include="docs\optimizations\" />
-    <Folder Include="docs\optimization\" />
-    <Folder Include="docs\performance\" />
-    <Folder Include="SharpCoreDB.Tests\Optimizations\" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\linux-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\linux-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\osx-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll" 
+          Pack="true" 
+          PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll')" />
   </ItemGroup>
 
 </Project>

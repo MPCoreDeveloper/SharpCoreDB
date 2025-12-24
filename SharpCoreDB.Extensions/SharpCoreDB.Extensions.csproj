@@ -1,14 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.66" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.1" />
-  </ItemGroup>
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>14.0</LangVersion>
@@ -21,14 +12,104 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Extensions</Product>
-    <Description>Extensions for SharpCoreDB including Dapper integration and ASP.NET Core health checks. Built for .NET 10 with C# 14.</Description>
-    <PackageTags>sharpcoredb;database;dapper;healthchecks;extensions;net10;csharp14</PackageTags>
+    <Description>Extensions for SharpCoreDB including Dapper integration and ASP.NET Core health checks. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
+    <PackageTags>sharpcoredb;database;dapper;healthchecks;extensions;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Platform-specific optimizations -->
+    <Optimize>true</Optimize>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    
+    <!-- Multi-targeting: Build for multiple RIDs when packing -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.1" />
+    
+    <!-- Reference published SharpCoreDB NuGet package instead of project reference for deployment -->
+    <PackageReference Include="SharpCoreDB" Version="1.0.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <!-- Reference SharpCoreDB project for development -->
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Link="SharpCoreDB.jpg" />
+  </ItemGroup>
+
+  <!-- Build all RIDs automatically when packing -->
+  <Target Name="BuildAllRuntimesForPack" BeforeTargets="Pack">
+    <Message Text="Building platform-specific assemblies for SharpCoreDB.Extensions NuGet package..." Importance="high" />
+    
+    <!-- Build for each runtime identifier -->
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=win-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=win-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=linux-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=linux-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=osx-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" 
+             Targets="Build" 
+             Properties="RuntimeIdentifier=osx-arm64;Configuration=$(Configuration)" />
+  </Target>
+
+  <!-- Include runtime-specific assemblies in the package -->
+  <ItemGroup>
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Extensions.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Extensions.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\linux-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.Extensions.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\linux-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.Extensions.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\osx-x64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.Extensions.dll')" />
+    
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll" 
+          Pack="true" 
+          PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" 
+          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll')" />
+  </ItemGroup>
 
 </Project>

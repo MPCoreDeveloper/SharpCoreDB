@@ -98,7 +98,7 @@ try
         case "4":
             Console.WriteLine("Running SelectOptimizationTest (SELECT Phase-by-Phase Speedup)...");
             logWriter.WriteLine("Running SelectOptimizationTest...");
-            SelectOptimizationTest.Main().GetAwaiter().GetResult();  // ? Wait for async method to complete!
+            SelectOptimizationTest.Main().GetAwaiter().GetResult();
             Console.WriteLine("\nSelectOptimizationTest completed.");
             logWriter.WriteLine("SelectOptimizationTest completed.");
             break;

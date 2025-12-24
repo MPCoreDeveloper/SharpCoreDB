@@ -1,0 +1,217 @@
+name: NuGet Package Build
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (e.g., 1.0.0)'
+        required: false
+        default: '1.0.0'
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  CONFIGURATION: Release
+  ARTIFACTS_PATH: './artifacts'
+
+jobs:
+  build:
+    name: Build NuGet Package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Determine version
+      id: version
+      shell: pwsh
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/v*") {
+          $version = "${{ github.ref }}".Replace("refs/tags/v", "")
+        } elseif ("${{ github.event.inputs.version }}" -ne "") {
+          $version = "${{ github.event.inputs.version }}"
+        } else {
+          $version = "1.0.0-ci-${{ github.run_number }}"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Building version: $version"
+    
+    - name: Restore dependencies
+      run: dotnet restore
+      working-directory: ./SharpCoreDB
+    
+    - name: Build platform-specific assemblies
+      shell: pwsh
+      working-directory: ./SharpCoreDB
+      run: |
+        $runtimes = @()
+        
+        # Determine which runtimes to build on this OS
+        if ("${{ matrix.platform }}" -eq "windows") {
+          $runtimes = @("win-x64", "win-arm64")
+        } elseif ("${{ matrix.platform }}" -eq "linux") {
+          $runtimes = @("linux-x64", "linux-arm64")
+        } elseif ("${{ matrix.platform }}" -eq "macos") {
+          $runtimes = @("osx-x64", "osx-arm64")
+        }
+        
+        foreach ($runtime in $runtimes) {
+          Write-Host "Building for $runtime..."
+          dotnet build `
+            --configuration ${{ env.CONFIGURATION }} `
+            --runtime $runtime `
+            /p:Version=${{ steps.version.outputs.VERSION }} `
+            /p:SelfContained=false
+        }
+    
+    - name: Build AnyCPU
+      run: |
+        dotnet build `
+          --configuration ${{ env.CONFIGURATION }} `
+          /p:Version=${{ steps.version.outputs.VERSION }}
+      working-directory: ./SharpCoreDB
+    
+    - name: Run tests
+      run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal
+      working-directory: ./SharpCoreDB
+      continue-on-error: true
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.platform }}
+        path: ./SharpCoreDB/bin/${{ env.CONFIGURATION }}/
+        retention-days: 1
+
+  package:
+    name: Create NuGet Package
+    needs: build
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Determine version
+      id: version
+      shell: pwsh
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/v*") {
+          $version = "${{ github.ref }}".Replace("refs/tags/v", "")
+        } elseif ("${{ github.event.inputs.version }}" -ne "") {
+          $version = "${{ github.event.inputs.version }}"
+        } else {
+          $version = "1.0.0-ci-${{ github.run_number }}"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Package version: $version"
+    
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./SharpCoreDB/bin/${{ env.CONFIGURATION }}/
+    
+    - name: Organize artifacts
+      shell: pwsh
+      working-directory: ./SharpCoreDB
+      run: |
+        # Move platform-specific builds to correct locations
+        $platforms = @("windows", "linux", "macos")
+        foreach ($platform in $platforms) {
+          $artifactPath = "bin/${{ env.CONFIGURATION }}/build-$platform"
+          if (Test-Path $artifactPath) {
+            Get-ChildItem $artifactPath -Recurse | Move-Item -Destination "bin/${{ env.CONFIGURATION }}/" -Force
+            Remove-Item $artifactPath -Recurse -Force
+          }
+        }
+    
+    - name: Create NuGet package
+      shell: pwsh
+      working-directory: ./SharpCoreDB
+      run: |
+        dotnet pack `
+          --configuration ${{ env.CONFIGURATION }} `
+          --no-build `
+          --output ${{ env.ARTIFACTS_PATH }} `
+          /p:Version=${{ steps.version.outputs.VERSION }} `
+          /p:PackageVersion=${{ steps.version.outputs.VERSION }}
+    
+    - name: Upload NuGet package
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-package
+        path: ./SharpCoreDB/${{ env.ARTIFACTS_PATH }}/*.nupkg
+        retention-days: 30
+    
+    - name: Upload symbols package
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-symbols
+        path: ./SharpCoreDB/${{ env.ARTIFACTS_PATH }}/*.snupkg
+        retention-days: 30
+        if-no-files-found: warn
+
+  publish:
+    name: Publish to NuGet
+    needs: package
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download NuGet package
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-package
+        path: ./packages
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Publish to NuGet.org
+      run: |
+        dotnet nuget push ./packages/*.nupkg \
+          --source https://api.nuget.org/v3/index.json \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --skip-duplicate
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./packages/*
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

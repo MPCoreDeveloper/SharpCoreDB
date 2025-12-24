@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>SharpCoreDB</id>
+    <version>$version$</version>
+    <title>SharpCoreDB</title>
+    <authors>MPCoreDeveloper</authors>
+    <owners>MPCoreDeveloper</owners>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</projectUrl>
+    <icon>SharpCoreDB.jpg</icon>
+    <readme>README.md</readme>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A lightweight, encrypted, file-based database engine for .NET 10 with SQL support, AES-256-GCM encryption, C# 14 features, and production-ready performance for time-tracking, invoicing, and project management applications. Includes platform-optimized assemblies for x64 and ARM64 architectures on Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</description>
+    <releaseNotes>Platform-optimized builds for Windows, Linux, macOS, Android, iOS, and IoT/embedded devices on x64, ARM64, and ARM32 architectures.</releaseNotes>
+    <copyright>Copyright © 2025 MPCoreDeveloper</copyright>
+    <tags>database embedded encryption sql nosql time-tracking invoicing net10 csharp14 performance arm64 x64 android ios mobile iot raspberry-pi</tags>
+    <repository type="git" url="https://github.com/MPCoreDeveloper/SharpCoreDB" />
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="Microsoft.Extensions.DependencyInjection" version="10.0.1" />
+        <dependency id="Microsoft.Extensions.ObjectPool" version="10.0.1" />
+        <dependency id="Microsoft.Extensions.Logging" version="10.0.1" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <!-- Icon and readme -->
+    <file src="SharpCoreDB.jpg" target="" />
+    <file src="README.md" target="" />
+    
+    <!-- Build props -->
+    <file src="build\*.props" target="build\" />
+    
+    <!-- AnyCPU lib (fallback) -->
+    <file src="bin\Release\net10.0\SharpCoreDB.dll" target="lib\net10.0\" />
+    <file src="bin\Release\net10.0\SharpCoreDB.xml" target="lib\net10.0\" />
+    
+    <!-- Desktop: Windows x64 -->
+    <file src="bin\Release\net10.0\win-x64\SharpCoreDB.dll" target="runtimes\win-x64\lib\net10.0\" />
+    
+    <!-- Desktop: Windows ARM64 -->
+    <file src="bin\Release\net10.0\win-arm64\SharpCoreDB.dll" target="runtimes\win-arm64\lib\net10.0\" />
+    
+    <!-- Desktop: Linux x64 -->
+    <file src="bin\Release\net10.0\linux-x64\SharpCoreDB.dll" target="runtimes\linux-x64\lib\net10.0\" />
+    
+    <!-- Desktop: Linux ARM64 -->
+    <file src="bin\Release\net10.0\linux-arm64\SharpCoreDB.dll" target="runtimes\linux-arm64\lib\net10.0\" />
+    
+    <!-- Desktop: macOS x64 -->
+    <file src="bin\Release\net10.0\osx-x64\SharpCoreDB.dll" target="runtimes\osx-x64\lib\net10.0\" />
+    
+    <!-- Desktop: macOS ARM64 (Apple Silicon) -->
+    <file src="bin\Release\net10.0\osx-arm64\SharpCoreDB.dll" target="runtimes\osx-arm64\lib\net10.0\" />
+    
+    <!-- Mobile: Android ARM64 -->
+    <file src="bin\Release\net10.0\android-arm64\SharpCoreDB.dll" target="runtimes\android-arm64\lib\net10.0\" />
+    
+    <!-- Mobile: Android x64 (emulator) -->
+    <file src="bin\Release\net10.0\android-x64\SharpCoreDB.dll" target="runtimes\android-x64\lib\net10.0\" />
+    
+    <!-- Mobile: iOS ARM64 (devices) -->
+    <file src="bin\Release\net10.0\ios-arm64\SharpCoreDB.dll" target="runtimes\ios-arm64\lib\net10.0\" />
+    
+    <!-- Mobile: iOS Simulator ARM64 (M1/M2/M3 Mac) -->
+    <file src="bin\Release\net10.0\iossimulator-arm64\SharpCoreDB.dll" target="runtimes\iossimulator-arm64\lib\net10.0\" />
+    
+    <!-- Mobile: iOS Simulator x64 (Intel Mac) -->
+    <file src="bin\Release\net10.0\iossimulator-x64\SharpCoreDB.dll" target="runtimes\iossimulator-x64\lib\net10.0\" />
+    
+    <!-- IoT/Embedded: Linux ARM32 (Raspberry Pi, etc.) -->
+    <file src="bin\Release\net10.0\linux-arm\SharpCoreDB.dll" target="runtimes\linux-arm\lib\net10.0\" />
+  </files>
+</package>
