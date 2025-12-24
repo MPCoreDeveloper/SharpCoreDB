@@ -361,3 +361,27 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# ============================================
+# SharpCoreDB-specific transient files
+# ============================================
+
+# Test output logs
+test_out.txt
+test_full_output.txt
+benchmark_output.txt
+
+# Profiling results
+*.diagsession
+*.speedscope.json
+traces/
+BenchmarkDotNet.Artifacts/
+
+# Temporary database files
+*.db/
+*.dat
+*.wal
+*.log
+
+# Test databases
+test_*/
+temp_*/
