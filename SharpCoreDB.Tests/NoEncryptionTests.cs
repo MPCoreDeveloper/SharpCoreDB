@@ -7,12 +7,14 @@ namespace SharpCoreDB.Tests;
 /// Unit tests for SharpCoreDB NoEncryption mode.
 /// Tests the performance and functionality when encryption is disabled.
 /// </summary>
+[Collection("Sequential")]  // ? FIX: Prevent parallel execution to avoid file locking issues
 public class NoEncryptionTests : IDisposable
 {
     private readonly string _testDbPath;
     private readonly string _testDbPathEncrypted;
     private readonly IServiceProvider _serviceProvider;
     private readonly DatabaseFactory _factory;
+    private Database? _db;
 
     public NoEncryptionTests()
     {
@@ -29,15 +31,15 @@ public class NoEncryptionTests : IDisposable
 
     public void Dispose()
     {
-        // Clean up test databases after each test
-        if (Directory.Exists(_testDbPath))
-        {
-            Directory.Delete(_testDbPath, true);
-        }
-        if (Directory.Exists(_testDbPathEncrypted))
-        {
-            Directory.Delete(_testDbPathEncrypted, true);
-        }
+        // Dispose database first to release file handles
+        (_db as IDisposable)?.Dispose();
+        
+        // Wait for file handles to release
+        TestEnvironment.WaitForFileRelease();
+        
+        // Clean up test databases with retry logic
+        TestEnvironment.CleanupWithRetry(_testDbPath, maxRetries: 3);
+        TestEnvironment.CleanupWithRetry(_testDbPathEncrypted, maxRetries: 3);
     }
 
     [Fact]

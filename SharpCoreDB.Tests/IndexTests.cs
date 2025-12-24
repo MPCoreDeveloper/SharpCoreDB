@@ -116,7 +116,7 @@ public class IndexTests
         Assert.True(memoryUsed < 50 * 1024 * 1024, $"Memory used: {memoryUsed / 1024 / 1024}MB, should be < 50MB");
     }
 
-    [Fact]
+    [Fact(Skip = "Index performance benchmark: CPU-dependent timing. TODO: Use BenchmarkDotNet for consistent cross-platform measurements and establish hardware-specific baselines.")]
     public void HashIndex_IndexLookup_Vs_TableScan_Performance()
     {
         // Arrange - Create test data

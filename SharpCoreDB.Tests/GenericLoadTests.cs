@@ -432,7 +432,7 @@ public sealed class GenericLoadTests
         // Act: SIMD aggregates
         var aggSw = Stopwatch.StartNew();
         
-        var sum = columnStore.Sum<int>("Id");
+        var sum = columnStore.Sum<long>("Id");  // ✅ FIX: Use long instead of int to prevent overflow
         var avg = columnStore.Average("Value");
         var min = columnStore.Min<double>("Value");
         var max = columnStore.Max<double>("Value");

@@ -8,6 +8,7 @@ namespace SharpCoreDB.Tests;
 /// Unit tests for buffered WAL functionality.
 /// Tests the performance improvements from buffered I/O.
 /// </summary>
+[Collection("Sequential")]  // ? FIX: Prevent parallel execution to avoid file locking issues
 public class BufferedWalTests : IDisposable
 {
     private readonly string _testDbPath;
@@ -43,35 +44,11 @@ public class BufferedWalTests : IDisposable
         }
         _openDatabases.Clear();
 
-        // Give OS time to release file handles
-        System.Threading.Thread.Sleep(100);
+        // Wait for file handles to be released
+        TestEnvironment.WaitForFileRelease();
 
-        // Clean up test databases after each test
-        if (Directory.Exists(_testDbPath))
-        {
-            try
-            {
-                Directory.Delete(_testDbPath, true);
-            }
-            catch
-            {
-                // If cleanup fails, try again with retries
-                for (int i = 0; i < 3; i++)
-                {
-                    try
-                    {
-                        System.Threading.Thread.Sleep(100 * (i + 1));
-                        if (Directory.Exists(_testDbPath))
-                            Directory.Delete(_testDbPath, true);
-                        break;
-                    }
-                    catch when (i < 2)
-                    {
-                        // Retry
-                    }
-                }
-            }
-        }
+        // Clean up test databases with retry logic
+        TestEnvironment.CleanupWithRetry(_testDbPath, maxRetries: 3);
     }
 
     [Fact]
