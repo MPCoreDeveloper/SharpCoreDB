@@ -83,6 +83,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="docs\benchmarks\" />
+    <Folder Include="docs\cleanup\" />
+    <Folder Include="docs\debugging\" />
+    <Folder Include="docs\optimizations\" />
+    <Folder Include="docs\optimization\" />
+    <Folder Include="docs\performance\" />
     <Folder Include="SharpCoreDB.Tests\Optimizations\" />
   </ItemGroup>
 
