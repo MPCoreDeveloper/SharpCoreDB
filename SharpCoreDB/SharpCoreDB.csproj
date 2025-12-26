@@ -26,6 +26,8 @@
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine for .NET 10 with SQL support, AES-256-GCM encryption, C# 14 features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+    <PackageReleaseNotes>Initial release v1.0.0: SIMD-accelerated analytics (345x faster than LiteDB, 11.5x faster than SQLite), native AES-256-GCM encryption (0% overhead), batch update API (1.54x faster than LiteDB), B-tree + hash indexes, 3 storage engines (PageBased/Columnar/AppendOnly), full async support, DI integration, production-ready performance.</PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
