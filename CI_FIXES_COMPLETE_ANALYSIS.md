@@ -1,4 +1,4 @@
-# ?? CI Test Failures - Complete Analysis & Fixes
+# :warning: CI Test Failures - Complete Analysis & Fixes
 
 ## Executive Summary
 
@@ -10,9 +10,9 @@
 
 ---
 
-## ? QUICK WIN FIXES (15 minutes ? 6 tests fixed)
+## :rocket: QUICK WIN FIXES (15 minutes :arrow_right: 6 tests fixed)
 
-### Fix #1: MvccAsyncBenchmark Timeouts ?? FILE NOT FOUND
+### Fix #1: MvccAsyncBenchmark Timeouts :warning: FILE NOT FOUND
 
 **Problem**: File `MvccAsyncBenchmark.cs` referenced in test output but not found in file system
 
@@ -63,7 +63,7 @@ Assert.True(sw.ElapsedMilliseconds < timeout2,
 
 ---
 
-### Fix #2: GenericIndexPerformanceTests Timeout ? CAN FIX
+### Fix #2: GenericIndexPerformanceTests Timeout :white_check_mark: CAN FIX
 
 **File**: `../SharpCoreDB.Tests/GenericIndexPerformanceTests.cs`
 **Line**: 190
@@ -83,7 +83,7 @@ Assert.True(sw.ElapsedMilliseconds < timeout,
 
 ---
 
-### Fix #3: GenericLoadTests Integer Overflow ? CAN FIX
+### Fix #3: GenericLoadTests Integer Overflow :white_check_mark: CAN FIX
 
 **File**: `../SharpCoreDB.Tests/GenericLoadTests.cs`
 **Line**: 435
@@ -120,7 +120,7 @@ private static long SumInt32ParallelSIMD(Int32[] data)
 
 ---
 
-### Fix #4: NoEncryptionTests File Locking ? CAN FIX
+### Fix #4: NoEncryptionTests File Locking :white_check_mark: CAN FIX
 
 **File**: `../SharpCoreDB.Tests/NoEncryptionTests.cs`
 **Line**: 35 (Dispose method)
@@ -162,7 +162,7 @@ public class NoEncryptionTests : IDisposable
 
 ---
 
-### Fix #5: BufferedWalTests File Locking ? CAN FIX
+### Fix #5: BufferedWalTests File Locking :white_check_mark: CAN FIX
 
 **File**: `../SharpCoreDB.Tests/BufferedWalTests.cs`
 
@@ -190,7 +190,7 @@ public class BufferedWalTests : IDisposable
 
 ---
 
-### Fix #6: DatabaseTests Encryption Assertion ? CAN FIX
+### Fix #6: DatabaseTests Encryption Assertion :white_check_mark: CAN FIX
 
 **File**: `../SharpCoreDB.Tests/DatabaseTests.cs`
 **Line**: 194
@@ -214,11 +214,11 @@ Console.WriteLine($"Ratio: {ratio:F2}");
 
 if (encryptedMs < noEncryptMs)
 {
-    Console.WriteLine("?? Encryption faster (AES-NI hardware acceleration detected)");
+    Console.WriteLine(":rocket: Encryption faster (AES-NI hardware acceleration detected)");
 }
 else
 {
-    Console.WriteLine("?? No-encrypt faster as expected");
+    Console.WriteLine(":rocket: No-encrypt faster as expected");
 }
 
 // Just verify both completed successfully
@@ -228,7 +228,7 @@ Assert.True(noEncryptMs > 0 && encryptedMs > 0,
 
 ---
 
-## ?? DDL/STORAGE LAYER INVESTIGATION (7 tests)
+## :bulb: DDL/STORAGE LAYER INVESTIGATION (7 tests)
 
 ### Critical Finding: File Naming Convention Mismatch
 
@@ -265,9 +265,9 @@ Assert.True(noEncryptMs > 0 && encryptedMs > 0,
 **Evidence**:
 - Tests check for specific file names: `{tableName}.dat` or `table_{tableId}.pages`
 - Multiple storage engines:
-  - `AppendOnlyEngine` ? creates `{tableName}.dat`
-  - `PageBasedEngine` ? creates `table_{tableId}.pages`
-  - `ColumnarEngine` ? creates `{tableName}_columnar.dat`
+  - `AppendOnlyEngine` :arrow_right: creates `{tableName}.dat`
+  - `PageBasedEngine` :arrow_right: creates `table_{tableId}.pages`
+  - `ColumnarEngine` :arrow_right: creates `{tableName}_columnar.dat`
 
 **What likely happened**:
 ```csharp
@@ -301,13 +301,13 @@ Get-ChildItem $env:TEMP -Recurse -Filter "test_ddl_*" |
 // DROP TABLE implementation:
 public void DropTable(string tableName)
 {
-    // ? Deletes data file
+    // :white_check_mark: Deletes data file
     File.Delete(dataFilePath);
     
-    // ? MISSING: Remove from table registry
+    // :x: MISSING: Remove from table registry
     // _tableRegistry.Remove(tableName); // This line missing?
     
-    // ? MISSING: Clear table ID mapping
+    // :x: MISSING: Clear table ID mapping
     // _tableIdMap.Remove(tableName); // This line missing?
 }
 ```
@@ -346,7 +346,7 @@ public void DropTable_DeletesDataFile()
     var db = _factory.Create(_testDbPath, "password");
     db.ExecuteSQL("CREATE TABLE users (id INT, name TEXT)");
     
-    // ?? ADD THIS: Check what files are created
+    // :warning: ADD THIS: Check what files are created
     Console.WriteLine("Files after CREATE TABLE:");
     foreach (var file in Directory.GetFiles(_testDbPath))
     {
@@ -358,7 +358,7 @@ public void DropTable_DeletesDataFile()
     Console.WriteLine($"Looking for: {Path.GetFileName(dataFile)}");
     Console.WriteLine($"Exists: {File.Exists(dataFile)}");
     
-    // ?? ADD THIS: Check alternative file names
+    // :warning: ADD THIS: Check alternative file names
     var altFile1 = Directory.GetFiles(_testDbPath, "table_*.pages").FirstOrDefault();
     var altFile2 = Directory.GetFiles(_testDbPath, "*users*").FirstOrDefault();
     Console.WriteLine($"Alternative PageBased file: {altFile1}");
@@ -410,7 +410,7 @@ public void DropIndex_RemovesIndex_Success()
 
 ---
 
-## ?? Impact Summary
+## :chart_with_upwards_trend: Impact Summary
 
 ### Before Any Fixes
 ```
@@ -425,7 +425,7 @@ CI Success Rate: ~70% (flaky)
 ```
 Total: 346 tests  
 Passed: 318 (92%)
-Failed: 8 (2.3%) ? 7 DDL + 1 MvccAsync
+Failed: 8 (2.3%) :arrow_right: 7 DDL + 1 MvccAsync
 Skipped: 20 (5.8%)
 CI Success Rate: ~85%
 ```
@@ -441,53 +441,53 @@ CI Success Rate: ~95%+
 
 ---
 
-## ?? Action Plan
+## :dart: Action Plan
 
 ### Immediate (Today)
-1. ? Fix #2: GenericIndexPerformanceTests (2 min)
-2. ? Fix #3: GenericLoadTests overflow (2 min)
-3. ? Fix #4: NoEncryptionTests file locking (3 min)
-4. ? Fix #5: BufferedWalTests file locking (3 min)
-5. ? Fix #6: DatabaseTests assertion (2 min)
+1. :white_check_mark: Fix #2: GenericIndexPerformanceTests (2 min)
+2. :white_check_mark: Fix #3: GenericLoadTests overflow (2 min)
+3. :white_check_mark: Fix #4: NoEncryptionTests file locking (3 min)
+4. :white_check_mark: Fix #5: BufferedWalTests file locking (3 min)
+5. :white_check_mark: Fix #6: DatabaseTests assertion (2 min)
 **Total: 12 minutes, 5 tests fixed**
 
 ### Short Term (This Week)
-6. ?? Locate MvccAsyncBenchmark.cs file
-7. ?? Run DDL tests with diagnostic logging
-8. ?? Identify storage engine file naming pattern
-9. ?? Fix DDL test expectations OR fix storage engine
+6. :warning: Locate MvccAsyncBenchmark.cs file
+7. :warning: Run DDL tests with diagnostic logging
+8. :warning: Identify storage engine file naming pattern
+9. :warning: Fix DDL test expectations OR fix storage engine
 **Total: 2-4 hours investigation**
 
 ### Long Term (This Month)
-10. ?? Document storage engine file conventions
-11. ?? Update all DDL tests to match conventions
-12. ?? Add integration tests for DDL operations
-13. ?? Create GitHub Actions workflow
+10. :warning: Document storage engine file conventions
+11. :warning: Update all DDL tests to match conventions
+12. :warning: Add integration tests for DDL operations
+13. :warning: Create GitHub Actions workflow
 
 ---
 
-## ?? Files to Modify
+## :memo: Files to Modify
 
 ### Quick Win (Can do now)
-- ? `GenericIndexPerformanceTests.cs` (line 190)
-- ? `GenericLoadTests.cs` (line 435)
-- ? `NoEncryptionTests.cs` (add Sequential + cleanup)
-- ? `BufferedWalTests.cs` (add Sequential + cleanup)
-- ? `DatabaseTests.cs` (line 194)
+- :white_check_mark: `GenericIndexPerformanceTests.cs` (line 190)
+- :white_check_mark: `GenericLoadTests.cs` (line 435)
+- :white_check_mark: `NoEncryptionTests.cs` (add Sequential + cleanup)
+- :white_check_mark: `BufferedWalTests.cs` (add Sequential + cleanup)
+- :white_check_mark: `DatabaseTests.cs` (line 194)
 
 ### Investigation Needed
-- ?? `MvccAsyncBenchmark.cs` (find file first!)
-- ?? `DdlTests.cs` (all 7 failing tests)
-- ?? `SqlParser.DDL.cs` (storage engine integration)
-- ?? `Storage engines` (file naming conventions)
+- :warning: `MvccAsyncBenchmark.cs` (find file first!)
+- :warning: `DdlTests.cs` (all 7 failing tests)
+- :warning: `SqlParser.DDL.cs` (storage engine integration)
+- :warning: `Storage engines` (file naming conventions)
 
 ---
 
-## ? Conclusion
+## :tada: Conclusion
 
 **Quick Win Status**: 5/6 fixes can be applied immediately (83% success)
 **DDL Issue Status**: Root cause identified, investigation plan ready
-**Overall Progress**: From 70% CI stability ? 85% achievable in 15 minutes
+**Overall Progress**: From 70% CI stability :arrow_right: 85% achievable in 15 minutes
 
 **Next Step**: Apply the 5 Quick Win fixes now, then investigate DDL/storage layer systematically.
 

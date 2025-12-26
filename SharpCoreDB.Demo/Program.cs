@@ -49,23 +49,41 @@ class Program
             Console.WriteLine($"Master password: {masterPassword}");
             var db = factory.Create(dbPath, masterPassword);
 
+            // --- NEW: Users & permissions demo ---
+            Console.WriteLine("\n--- Creating database users (readwrite & readonly) ---");
+            db.CreateUser("reader", "reader-pass");
+            db.CreateUser("writer", "writer-pass");
+
+            Console.WriteLine("Login as writer (readwrite)");
+            var writerLogin = db.Login("writer", "writer-pass");
+            Console.WriteLine($"Writer login: {(writerLogin ? "OK" : "FAILED")}");
+
+            Console.WriteLine("Login as reader (readonly)");
+            var readerLogin = db.Login("reader", "reader-pass");
+            Console.WriteLine($"Reader login: {(readerLogin ? "OK" : "FAILED")}");
+
+            // Read/write connection (default)
+            var dbReadWrite = db;
+            // Create a readonly connection to the same database path
+            var dbReadOnly = factory.Create(dbPath, masterPassword, isReadOnly: true);
+
             // Step 3: Create Tables
             Console.WriteLine("--- Creating Tables ---");
-            db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+            dbReadWrite.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
             string createTestTable = "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT, active BOOLEAN, created DATETIME, score REAL, bigNum LONG, price DECIMAL, ulid ULID AUTO, guid GUID AUTO)";
             Console.WriteLine($"Executing: {createTestTable}");
-            db.ExecuteSQL(createTestTable);
+            dbReadWrite.ExecuteSQL(createTestTable);
 
-            // Step 4: Insert Data
-            Console.WriteLine("\n--- Inserting Data ---");
-            db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
-            db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
-            db.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Charlie" } });
+            // Step 4: Insert Data (with readwrite user)
+            Console.WriteLine("\n--- Inserting Data (readwrite connection) ---");
+            dbReadWrite.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Alice" } });
+            dbReadWrite.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Bob" } });
+            dbReadWrite.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "Charlie" } });
             var newUlid = Ulid.NewUlid().Value;
             Console.WriteLine($"Generated ULID: {newUlid}");
             var parsedUlid = Ulid.Parse(newUlid);
             Console.WriteLine($"Parsed timestamp: {parsedUlid.ToDateTime()}");
-            db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+            dbReadWrite.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
                 new Dictionary<string, object?> { 
                     { "0", 1 }, 
                     { "1", "Test1" }, 
@@ -77,68 +95,71 @@ class Program
                     { "7", newUlid }, 
                     { "8", Guid.NewGuid().ToString() } 
                 });
-            db.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Test2" }, { "2", null }, { "3", null }, { "4", null }, { "5", null }, { "6", null }, { "7", null }, { "8", null } });
-            db.ExecuteSQL("INSERT INTO test (id, name) VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "AutoTest" } });
+            dbReadWrite.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Test2" }, { "2", null }, { "3", null }, { "4", null }, { "5", null }, { "6", null }, { "7", null }, { "8", null } });
+            dbReadWrite.ExecuteSQL("INSERT INTO test (id, name) VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "AutoTest" } });
             Console.WriteLine("Inserted data");
 
-            // Step 5: Query Data
-            Console.WriteLine("\n--- Querying Data ---");
+            // Step 5: Query Data from readonly connection
+            Console.WriteLine("\n--- Querying Data (readonly connection) ---");
+            dbReadOnly.ExecuteSQL("SELECT * FROM users");
+            dbReadOnly.ExecuteSQL("SELECT * FROM test WHERE active = 'true'");
 
-            // Select all test
-            Console.WriteLine("Selecting all test:");
-            db.ExecuteSQL("SELECT * FROM test");
-
-            // Select test where active = 'true'
-            Console.WriteLine("\nSelecting test where active = 'true':");
-            db.ExecuteSQL("SELECT * FROM test WHERE active = 'true'");
-
-            // Test UPDATE
-            Console.WriteLine("\nTesting UPDATE:");
-            db.ExecuteSQL("UPDATE test SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "UpdatedTest" }, { "1", 1 } });
-            db.ExecuteSQL("SELECT * FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
-
-            // Test DELETE
-            Console.WriteLine("\nTesting DELETE:");
-            db.ExecuteSQL("DELETE FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 2 } });
-            db.ExecuteSQL("SELECT * FROM test");
-
-            // Test JOIN
-            Console.WriteLine("\nTesting JOIN:");
-            db.ExecuteSQL("SELECT test.id, users.name FROM test JOIN users ON test.id = users.id");
-
-            // Test LEFT JOIN
-            Console.WriteLine("\nTesting LEFT JOIN:");
-            db.ExecuteSQL("SELECT test.id, users.name FROM test LEFT JOIN users ON test.id = users.id");
-
-            // Performance demo
-            Console.WriteLine("\n--- Performance Demo: JOIN with 10k records ---");
-            db.ExecuteSQL("CREATE TABLE users_large (id INTEGER PRIMARY KEY, name TEXT)");
-            db.ExecuteSQL("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, user_id INTEGER)");
-
-            // Insert 1000 users
-            for (int i = 1; i <= 1000; i++)
+            Console.WriteLine("Attempting INSERT on readonly connection (should fail)");
+            try
             {
-                db.ExecuteSQL("INSERT INTO users_large VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"User{i}" } });
+                dbReadOnly.ExecuteSQL("INSERT INTO users VALUES (?, ?)", new Dictionary<string, object?> { { "0", 99 }, { "1", "ReadonlyFail" } });
+                Console.WriteLine("Unexpected: INSERT succeeded on readonly connection");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Readonly INSERT blocked: {ex.Message}");
             }
 
-            // Insert 10000 projects, each user has 10
+            // Continue with original demo on readwrite connection
+            Console.WriteLine("\nSelecting all test:");
+            dbReadWrite.ExecuteSQL("SELECT * FROM test");
+
+            Console.WriteLine("\nSelecting test where active = 'true':");
+            dbReadWrite.ExecuteSQL("SELECT * FROM test WHERE active = 'true'");
+
+            Console.WriteLine("\nTesting UPDATE:");
+            dbReadWrite.ExecuteSQL("UPDATE test SET name = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "UpdatedTest" }, { "1", 1 } });
+            dbReadWrite.ExecuteSQL("SELECT * FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
+
+            Console.WriteLine("\nTesting DELETE:");
+            dbReadWrite.ExecuteSQL("DELETE FROM test WHERE id = ?", new Dictionary<string, object?> { { "0", 2 } });
+            dbReadWrite.ExecuteSQL("SELECT * FROM test");
+
+            Console.WriteLine("\nTesting JOIN:");
+            dbReadWrite.ExecuteSQL("SELECT test.id, users.name FROM test JOIN users ON test.id = users.id");
+
+            Console.WriteLine("\nTesting LEFT JOIN:");
+            dbReadWrite.ExecuteSQL("SELECT test.id, users.name FROM test LEFT JOIN users ON test.id = users.id");
+
+            Console.WriteLine("\n--- Performance Demo: JOIN with 10k records ---");
+            dbReadWrite.ExecuteSQL("CREATE TABLE users_large (id INTEGER PRIMARY KEY, name TEXT)");
+            dbReadWrite.ExecuteSQL("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, user_id INTEGER)");
+
+            for (int i = 1; i <= 1000; i++)
+            {
+                dbReadWrite.ExecuteSQL("INSERT INTO users_large VALUES (?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"User{i}" } });
+            }
+
             for (int i = 1; i <= 10000; i++)
             {
                 int userId = ((i - 1) % 1000) + 1;
-                db.ExecuteSQL("INSERT INTO projects VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"Project{i}" }, { "2", userId } });
+                dbReadWrite.ExecuteSQL("INSERT INTO projects VALUES (?, ?, ?)", new Dictionary<string, object?> { { "0", i }, { "1", $"Project{i}" }, { "2", userId } });
             }
 
             Console.WriteLine("Inserted 1000 users and 10000 projects");
 
-            // Time the JOIN without cache (first time)
             var stopwatch = Stopwatch.StartNew();
-            var results = db.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
+            var results = dbReadWrite.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
             stopwatch.Stop();
             Console.WriteLine($"JOIN without cache: {results.Count} rows in {stopwatch.ElapsedMilliseconds} ms");
 
-            // With cache (second time)
             stopwatch = Stopwatch.StartNew();
-            results = db.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
+            results = dbReadWrite.ExecuteQuery("SELECT projects.name, users_large.name FROM projects LEFT JOIN users_large ON projects.user_id = users_large.id");
             stopwatch.Stop();
             Console.WriteLine($"JOIN with cache: {results.Count} rows in {stopwatch.ElapsedMilliseconds} ms");
 
