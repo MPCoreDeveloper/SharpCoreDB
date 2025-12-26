@@ -64,8 +64,6 @@ class Program
 
             // Read/write connection (default)
             var dbReadWrite = db;
-            // Create a readonly connection to the same database path
-            var dbReadOnly = factory.Create(dbPath, masterPassword, isReadOnly: true);
 
             // Step 3: Create Tables
             Console.WriteLine("--- Creating Tables ---");
@@ -98,6 +96,9 @@ class Program
             dbReadWrite.ExecuteSQL("INSERT INTO test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Test2" }, { "2", null }, { "3", null }, { "4", null }, { "5", null }, { "6", null }, { "7", null }, { "8", null } });
             dbReadWrite.ExecuteSQL("INSERT INTO test (id, name) VALUES (?, ?)", new Dictionary<string, object?> { { "0", 3 }, { "1", "AutoTest" } });
             Console.WriteLine("Inserted data");
+
+            // Create a readonly connection AFTER schema/data creation so it can load metadata
+            var dbReadOnly = factory.Create(dbPath, masterPassword, isReadOnly: true);
 
             // Step 5: Query Data from readonly connection
             Console.WriteLine("\n--- Querying Data (readonly connection) ---");

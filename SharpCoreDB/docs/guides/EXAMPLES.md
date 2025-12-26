@@ -12,6 +12,7 @@
 6. [Adaptive WAL Batching](#adaptive-wal-batching) - ⚡ **NEW!**
 7. [Entity Framework Core](#ef-core)
 8. [Advanced Queries](#advanced-queries)
+9. [Read-only Instances & Schema Changes](#read-only-instances--schema-changes)  <!-- NEW -->
 
 ---
 
@@ -489,20 +490,16 @@ var results = db.Query(@"
 
 ---
 
-## Performance Tips
+## Read-only Instances & Schema Changes
 
-1. **Use indexes** for frequently queried columns
-2. **Enable caching** for read-heavy workloads
-3. **Batch inserts** instead of individual inserts
-4. **Use transactions** for multiple operations
-5. **Choose correct index type** (B-Tree for ranges, Hash for equality)
-6. **Enable adaptive WAL batching** for variable/concurrent workloads ⚡ **NEW!**
-7. **Use HighPerformance or Concurrent config** for production deployments
-8. **Monitor batch size adjustments** to verify optimal scaling
+Read-only instances load the catalog (tables/indexes) once on construction. If a read-write instance creates a new table later, already opened read-only instances do not automatically “see” the new table.
 
----
+- Effect: queries against newly created tables fail on those read-only instances until they are recreated.
+- Cost: recreating a read-only instance only reloads small metadata files (O(#tables)) and has negligible overhead. It does not affect regular query performance.
 
-For more examples, see:
-- [Benchmarks](../SharpCoreDB.Benchmarks/)
-- [Demo Project](../SharpCoreDB.Demo/)
-- [Unit Tests](../SharpCoreDB.Tests/)
+### Recommended patterns
+
+```csharp
+// 1) Create schema with a read-write connection
+var rw = factory.Create(dbPath, password);
+rw.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
