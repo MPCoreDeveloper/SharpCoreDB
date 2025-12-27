@@ -20,7 +20,7 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 - **Encryption**: AES-256-GCM at rest (**0% overhead, sometimes faster!** :white_check_mark:)
 - **Analytics**: **345x faster** than LiteDB with SIMD vectorization :white_check_mark:
 - **Analytics**: **11.5x faster** than SQLite with SIMD vectorization :white_check_mark:
-- **B-tree Indexes**: O(log n + k) range scans, ORDER BY, BETWEEN support :white_check_mark:
+- **B-tree Indexes**: O(log n + k) range scans, ORDER BY, BETWEEN support :warning: **In development - core implemented, integration in progress**
 
 ---
 
@@ -45,14 +45,14 @@ var factory = provider.GetRequiredService<DatabaseFactory>();
 
 using var db = factory.Create("./app_db", "StrongPassword!");
 
-// Create table with B-tree index
+// Create table
 db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");
-db.ExecuteSQL("CREATE INDEX idx_age ON users(age) USING BTREE");
+// Note: B-tree indexes are being integrated - currently use hash indexes for production
 
 // Fast inserts
-db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice', 30)");
+db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice', 30)")]
 
-// Fast queries with batch API
+// Fast queries
 var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 ```
 
@@ -81,8 +81,8 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 - **Pure .NET**: No P/Invoke dependencies, fully managed code
 - **Multiple Storage Engines**: PageBased (OLTP), Columnar (Analytics), AppendOnly (Logging)
 - **Dual Index Types**: 
-  - Hash indexes (O(1) point lookups)
-  - B-tree indexes (O(log n) range queries, ORDER BY)
+  - Hash indexes (O(1) point lookups) - **Production ready** :white_check_mark:
+  - B-tree indexes (O(log n) range queries, ORDER BY) - **Core implemented, integration in progress** :warning:
 - **Async/Await**: First-class async support throughout
 - **DI Integration**: Native Dependency Injection
 
@@ -196,8 +196,8 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 
 **Analysis**: 
 - Full scans are slow due to deserialization overhead
-- **Solution**: Use B-tree indexes for range queries (planned optimization)
-- **Future**: SIMD-accelerated SELECT deserialization (Q1 2026)
+- **Solution**: Optimization work planned for Q1 2026 (SIMD-accelerated deserialization, reduced allocations)
+- B-tree indexes are being integrated for range queries (core implementation complete, query engine integration in progress)
 
 ---
 
@@ -246,7 +246,7 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **Native Encryption** | :white_check_mark: **0% overhead** | :warning: SQLCipher (paid) | :white_check_mark: |
 | **Pure .NET** | :white_check_mark: | :x: (P/Invoke) | :white_check_mark: |
 | **Hash Indexes** | :white_check_mark: **O(1)** | :white_check_mark: | :white_check_mark: |
-| **B-tree Indexes** | :white_check_mark: **O(log n)** | :white_check_mark: | :white_check_mark: |
+| **B-tree Indexes** | :warning: **In development** | :white_check_mark: | :white_check_mark: |
 | **AVX-512/AVX2** | :white_check_mark: | :x: | :x: |
 | **NativeAOT Ready** | :white_check_mark: | :x: | :warning: Limited |
 | **Async/Await** | :white_check_mark: **Full** | :warning: Limited | :warning: Limited |
@@ -380,17 +380,19 @@ SELECT SUM(salary), AVG(age) FROM users GROUP BY department
 - :white_check_mark: **Native AES-256-GCM** (0% overhead)
 - :white_check_mark: **Memory Efficiency** (6.2x less than LiteDB)
 
-### :dart: **Q1 2026 - PRIORITY 1: SELECT Optimization**
+### :dart: **Q1 2026 - PRIORITY 1: SELECT Optimization + B-tree Integration**
 
-**Target**: **2-3x speedup** (33ms ? 10-15ms)
+**Target**: **2-3x speedup** (33ms → 10-15ms)
 
 **Planned Improvements**:
-1. **SIMD-accelerated deserialization** (apply columnar techniques to row-based)
-2. **Reduce dictionary allocations** (pool dictionaries)
-3. **Optimize BinaryRowSerializer** (faster binary format)
-4. **Parallel scans** for large datasets
+1. **Complete B-tree integration** (core implementation ready, query engine integration remaining)
+2. **SIMD-accelerated deserialization** (apply columnar techniques to row-based)
+3. **Reduce dictionary allocations** (pool dictionaries)
+4. **Optimize BinaryRowSerializer** (faster binary format)
+5. **Parallel scans** for large datasets
 
 **Expected Results**:
+- B-tree range queries operational for production use
 - Match or exceed LiteDB (16.6ms)
 - Competitive with SQLite (1.41ms is hard target)
 
@@ -444,11 +446,14 @@ Results saved to `BenchmarkDotNet.Artifacts/results/`
    - O(1) point lookups
    - Perfect for `WHERE id = value`
    - Primary keys
+   - **Status**: :white_check_mark: Production ready
 
-2. **B-tree Index** (`USING BTREE`)
+2. **B-tree Index** (planned)
    - O(log n + k) range scans
    - Range queries, ORDER BY
    - BETWEEN clauses
+   - **Status**: :warning: Core implementation complete, query engine integration in progress
+   - **Expected**: Q1 2026 full integration
 
 ---
 
@@ -487,6 +492,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 | **Encryption** | :white_check_mark: Production | **0% overhead** :white_check_mark: |
 | **Inserts** | :white_check_mark: Production | **2.1x faster than LiteDB** :white_check_mark: |
 | **Memory Efficiency** | :white_check_mark: Production | **6.2x less than LiteDB** :white_check_mark: |
+| **Hash Indexes** | :white_check_mark: Production | **O(1) lookups** :white_check_mark: |
+| **B-tree Indexes** | :warning: In Development | Core ready, integration Q1 2026 |
 | **SELECTs** | :warning: Good | 2.0x faster than LiteDB, needs optimization |
 
 ### Best Use Cases (Ranked)
