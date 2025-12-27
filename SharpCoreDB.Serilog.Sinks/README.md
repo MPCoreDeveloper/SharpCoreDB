@@ -1,4 +1,18 @@
-# SharpCoreDB.Serilog.Sinks
+<div align="center">
+  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="200"/>
+  
+  # SharpCoreDB.Serilog.Sinks
+  
+  **High-Performance Serilog Sink for SharpCoreDB**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Serilog.Sinks)
+  [![Serilog](https://img.shields.io/badge/Serilog-4.2.0-purple.svg)](https://serilog.net/)
+  
+</div>
+
+---
 
 A Serilog sink for SharpCoreDB, optimized for efficient batch logging with built-in encryption support.
 
@@ -506,5 +520,3 @@ sw.Stop();
 
 Console.WriteLine($"10,000 logs written in {sw.ElapsedMilliseconds}ms");
 Console.WriteLine($"Throughput: {10000.0 / (sw.ElapsedMilliseconds / 1000.0):F0} logs/second");
-
-```
