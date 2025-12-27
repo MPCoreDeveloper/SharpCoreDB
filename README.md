@@ -8,7 +8,7 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
-`n  [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)`n  
+  [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
 </div>
 
 ---
@@ -502,3 +502,16 @@ MIT License - see [LICENSE](LICENSE) file for details.
 **Test Environment**: .NET 10, Windows 11, Intel i7-10850H @ 2.70GHz, BenchmarkDotNet v0.15.8  
 **Benchmark Date**: December 23, 2025
 
+
+
+---
+
+## Support This Project ❤️
+
+If you find SharpCoreDB useful, please consider supporting the development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
+
+Your support helps maintain and improve this project. Thank you! 🙏
+
+---

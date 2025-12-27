@@ -507,7 +507,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Test Environment**: .NET 10, Windows 11, Intel i7-10850H @ 2.70GHz, BenchmarkDotNet v0.15.8  
+**Test Environment**: .NET 10, Windows 11, 32GB RAM, Intel i7-10850H @ 2.70GHz, BenchmarkDotNet v0.15.8  
 **Benchmark Date**: December 23, 2025
 
 
