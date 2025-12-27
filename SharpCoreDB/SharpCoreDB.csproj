@@ -94,6 +94,7 @@
   </ItemGroup>
   
   <ItemGroup>
+    <None Include=".github\FUNDING.yml" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
@@ -104,57 +105,30 @@
     <Message Text="Building platform-specific assemblies for NuGet package..." Importance="high" />
     
     <!-- Build for each runtime identifier -->
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=win-x64;Configuration=$(Configuration)" />
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=win-arm64;Configuration=$(Configuration)" />
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=linux-x64;Configuration=$(Configuration)" />
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=linux-arm64;Configuration=$(Configuration)" />
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=osx-x64;Configuration=$(Configuration)" />
-    <MSBuild Projects="$(MSBuildProjectFile)" 
-             Targets="Build" 
-             Properties="RuntimeIdentifier=osx-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=win-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=win-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=linux-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=linux-arm64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=osx-x64;Configuration=$(Configuration)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=osx-arm64;Configuration=$(Configuration)" />
   </Target>
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
-    <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.dll')" />
     
-    <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.dll')" />
     
-    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\linux-x64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\linux-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\SharpCoreDB.dll')" />
     
-    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\linux-arm64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\linux-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-arm64\SharpCoreDB.dll')" />
     
-    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\osx-x64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\osx-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\SharpCoreDB.dll')" />
     
-    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll" 
-          Pack="true" 
-          PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" 
-          Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll')" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll')" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="SharpCoreDB.Tests\" />
   </ItemGroup>
 
 </Project>

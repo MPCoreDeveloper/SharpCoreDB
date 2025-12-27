@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Title>SharpCoreDB ADO.NET Data Provider</Title>
+    <Description>Complete ADO.NET Data Provider for SharpCoreDB - enables SSMS integration and standard ADO.NET usage</Description>
+    <Authors>MPCoreDeveloper</Authors>
+    <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <PackageTags>ado.net;database;data-provider;sharpcoredb;ssms</PackageTags>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+  </ItemGroup>
+
+</Project>

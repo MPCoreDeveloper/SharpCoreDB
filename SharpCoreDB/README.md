@@ -8,6 +8,7 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![GitHub Sponsors](https://img.shields.io/github/sponsors/mpcoredeveloper?style=flat&logo=github&label=Sponsor)](https://github.com/sponsors/mpcoredeveloper)
   
 </div>
 
