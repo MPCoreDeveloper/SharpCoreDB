@@ -509,3 +509,16 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 **Test Environment**: .NET 10, Windows 11, Intel i7-10850H @ 2.70GHz, BenchmarkDotNet v0.15.8  
 **Benchmark Date**: December 23, 2025
+
+
+---
+
+## Support This Project ❤️
+
+If you find this library useful, please consider supporting the development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/MPCoreDeveloper)
+
+Your support helps maintain and improve this project. Thank you! 🙏
+
+---
