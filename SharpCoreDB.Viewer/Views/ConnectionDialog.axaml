@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="350"
+        x:Class="SharpCoreDB.Viewer.Views.ConnectionDialog"
+        x:DataType="vm:ConnectionDialogViewModel"
+        Title="Connect to SharpCoreDB"
+        Width="500" Height="350"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Icon="/Assets/SharpCoreDB.ico">
+
+    <Design.DataContext>
+        <vm:ConnectionDialogViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.header">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="Red"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Classes="header" Text="Connect to SharpCoreDB Database"/>
+            <TextBlock Text="Enter the database path and password to connect"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       FontSize="12"/>
+        </StackPanel>
+
+        <!-- Form -->
+        <StackPanel Grid.Row="1" Spacing="15">
+            
+            <!-- Database Path -->
+            <StackPanel>
+                <TextBlock Text="Database Path:" Margin="0,0,0,5"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding DatabasePath}"
+                             Watermark="C:\data\mydb.scdb or database directory"
+                             IsEnabled="{Binding !IsConnecting}"/>
+                    <Button Grid.Column="1"
+                            Content="Browse..."
+                            Command="{Binding BrowseForDatabaseCommand}"
+                            IsEnabled="{Binding !IsConnecting}"
+                            Margin="5,0,0,0"
+                            Width="80"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Password -->
+            <StackPanel>
+                <TextBlock Text="Master Password:" Margin="0,0,0,5"/>
+                <TextBox Text="{Binding Password}"
+                         Watermark="Enter database password"
+                         PasswordChar="?"
+                         IsEnabled="{Binding !IsConnecting}"/>
+            </StackPanel>
+
+            <!-- Error Message -->
+            <TextBlock Classes="error"
+                       Text="{Binding ErrorMessage}"
+                       IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       TextWrapping="Wrap"/>
+
+            <!-- Connection Status -->
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10"
+                        IsVisible="{Binding IsConnecting}">
+                <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
+                <TextBlock Text="Connecting..." VerticalAlignment="Center"/>
+            </StackPanel>
+
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,20,0,0">
+            <Button Content="Cancel"
+                    Width="100"
+                    Command="{Binding CancelCommand}"
+                    IsEnabled="{Binding !IsConnecting}"/>
+            <Button Content="Connect"
+                    Width="100"
+                    Command="{Binding ConnectCommand}"
+                    IsEnabled="{Binding !IsConnecting}"
+                    Classes="accent"/>
+        </StackPanel>
+
+    </Grid>
+
+</Window>

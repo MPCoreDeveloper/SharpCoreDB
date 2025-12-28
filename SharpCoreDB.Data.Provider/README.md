@@ -2,7 +2,7 @@
 
 ? **Status**: Fully implemented and working!
 
-Complete ADO.NET Data Provider for SharpCoreDB, ready for SQL Server Management Studio (SSMS) and any ADO.NET consumer.
+Complete ADO.NET Data Provider for SharpCoreDB, ready for any ADO.NET consumer.
 
 > **Language:** This is the English README. For Dutch, see [`README.nl.md`](README.nl.md).
 
@@ -20,7 +20,7 @@ Complete ADO.NET Data Provider for SharpCoreDB, ready for SQL Server Management 
 9. ? `SharpCoreDBDataAdapter.cs` – DataSet/DataTable support for legacy apps
 10. ? `SharpCoreDBCommandBuilder.cs` – Automatic command generation
 11. ? `SharpCoreDBException.cs` – Exception handling
-12. ? `REGISTRATION.md` / `REGISTRATION.en.md` – SSMS registration guides (NL/EN)
+12. ? `REGISTRATION.md`
 
 ### C# 14 Features Used
 - Collection expressions `[]` and `[..]`
@@ -253,7 +253,6 @@ See [`REGISTRATION.en.md`](REGISTRATION.en.md) for the English SSMS registration
 
 ## Roadmap
 - [ ] Unit tests
-- [ ] Integration tests with SSMS
 - [ ] Performance benchmarks
 - [ ] NuGet package publication
 - [ ] Enhanced schema discovery

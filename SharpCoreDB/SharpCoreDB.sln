@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Serilog.Sinks",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Data.Provider", "..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj", "{0C06E487-6A91-419F-9BFE-4A1AA4885B82}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Viewer", "..\SharpCoreDB.Viewer\SharpCoreDB.Viewer.csproj", "{1DE8AADA-D116-8391-2373-98D2B1456C75}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{0C06E487-6A91-419F-9BFE-4A1AA4885B82}.Release|x64.Build.0 = Release|Any CPU
 		{0C06E487-6A91-419F-9BFE-4A1AA4885B82}.Release|x86.ActiveCfg = Release|Any CPU
 		{0C06E487-6A91-419F-9BFE-4A1AA4885B82}.Release|x86.Build.0 = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|x64.Build.0 = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Debug|x86.Build.0 = Debug|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|x64.ActiveCfg = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|x64.Build.0 = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|x86.ActiveCfg = Release|Any CPU
+		{1DE8AADA-D116-8391-2373-98D2B1456C75}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

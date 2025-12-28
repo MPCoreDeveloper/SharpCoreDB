@@ -1,0 +1,157 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="SharpCoreDB.Viewer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/SharpCoreDB.ico"
+        Title="{Binding Title}"
+        Width="1200" Height="700"
+        WindowStartupLocation="CenterScreen">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <DockPanel>
+        <!-- Top Toolbar -->
+        <StackPanel DockPanel.Dock="Top" 
+                    Orientation="Horizontal" 
+                    Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                    Height="40"
+                    Spacing="5">
+            <Button Content="Connect" 
+                    Click="OnConnectClicked"
+                    IsEnabled="{Binding !IsConnected}"
+                    Margin="5"/>
+            <Button Content="Disconnect" 
+                    Command="{Binding DisconnectCommand}"
+                    IsEnabled="{Binding IsConnected}"
+                    Margin="5"/>
+            <Separator/>
+            <Button Content="Execute" 
+                    Command="{Binding ExecuteQueryCommand}"
+                    IsEnabled="{Binding IsConnected}"
+                    Margin="5"/>
+            <Separator/>
+            <TextBlock Text="{Binding ConnectionStatus}" 
+                       VerticalAlignment="Center"
+                       Margin="10,0"/>
+        </StackPanel>
+
+        <!-- Status Bar -->
+        <Border DockPanel.Dock="Bottom" 
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Height="25"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="0,1,0,0">
+            <TextBlock Text="Ready" 
+                       VerticalAlignment="Center" 
+                       Margin="10,0"/>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250" MinWidth="150"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Panel: Database Explorer -->
+            <Border Grid.Column="0" 
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" 
+                    BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Database Tables"
+                               FontWeight="SemiBold"
+                               Margin="10,10,10,5"/>
+                    <ListBox ItemsSource="{Binding Tables}"
+                             Margin="5"
+                             Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="5"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="1" 
+                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+
+            <!-- Right Panel: Query Editor + Results -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="100"/>
+                    <RowDefinition Height="5"/>
+                    <RowDefinition Height="2*" MinHeight="150"/>
+                </Grid.RowDefinitions>
+
+                <!-- Query Editor -->
+                <DockPanel Grid.Row="0">
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="SQL Query Editor"
+                               FontWeight="SemiBold"
+                               Margin="10,10,10,5"/>
+                    <TextBox Text="{Binding QueryText}"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             FontFamily="Cascadia Code,Consolas,Courier New"
+                             Margin="10,0,10,10"
+                             IsEnabled="{Binding IsConnected}"
+                             Watermark="Enter SQL query here..."/>
+                </DockPanel>
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Row="1"/>
+
+                <!-- Results Grid -->
+                <DockPanel Grid.Row="2">
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Query Results"
+                               FontWeight="SemiBold"
+                               Margin="10,10,10,5"/>
+                    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                            BorderThickness="1"
+                            Margin="10,0,10,10">
+                        <TextBlock Text="Execute a query to see results"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </Border>
+                </DockPanel>
+
+            </Grid>
+        </Grid>
+
+        <!-- Welcome Screen (when not connected) -->
+        <Border IsVisible="{Binding !IsConnected}"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+            <StackPanel VerticalAlignment="Center" 
+                        HorizontalAlignment="Center"
+                        Spacing="20">
+                <TextBlock Text="SharpCoreDB Viewer"
+                           FontSize="32"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Click 'Connect' to open a database"
+                           FontSize="16"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           HorizontalAlignment="Center"/>
+                <Button Content="Connect to Database"
+                        Click="OnConnectClicked"
+                        HorizontalAlignment="Center"
+                        Padding="20,10"
+                        FontSize="14"/>
+            </StackPanel>
+        </Border>
+
+    </DockPanel>
+
+</Window>

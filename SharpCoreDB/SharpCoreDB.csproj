@@ -127,9 +127,6 @@
     
     <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.dll')" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="SharpCoreDB.Tests\" />
-  </ItemGroup>
 
 </Project>
 

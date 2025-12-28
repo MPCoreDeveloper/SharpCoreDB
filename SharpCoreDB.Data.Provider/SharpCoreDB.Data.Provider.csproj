@@ -20,4 +20,8 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Install\" />
+  </ItemGroup>
+
 </Project>
