@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
@@ -40,5 +39,15 @@
     <!-- SharpCoreDB References -->
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
     <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy JSON files to output directory -->
+    <None Include="Resources\Strings.en-US.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\Strings.nl-NL.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

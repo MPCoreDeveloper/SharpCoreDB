@@ -2,8 +2,9 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
-using System.Linq;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
+using SharpCoreDB.Viewer.Services;
 using SharpCoreDB.Viewer.ViewModels;
 using SharpCoreDB.Viewer.Views;
 
@@ -21,8 +22,19 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
-            // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
             DisableAvaloniaDataAnnotationValidation();
+            
+            // Load and apply settings
+            var settingsService = SettingsService.Instance;
+            settingsService.ApplySettings();
+            ApplyTheme(settingsService.Settings.Theme);
+            
+            // Subscribe to settings changes
+            settingsService.SettingsChanged += (s, settings) =>
+            {
+                ApplyTheme(settings.Theme);
+            };
+            
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainWindowViewModel(),
@@ -30,6 +42,16 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void ApplyTheme(string themeName)
+    {
+        RequestedThemeVariant = themeName switch
+        {
+            "Dark" => ThemeVariant.Dark,
+            "Light" => ThemeVariant.Light,
+            _ => ThemeVariant.Default
+        };
     }
 
     private void DisableAvaloniaDataAnnotationValidation()

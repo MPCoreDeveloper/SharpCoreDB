@@ -3,6 +3,7 @@
         xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:loc="using:SharpCoreDB.Viewer.Converters"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="SharpCoreDB.Viewer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -16,25 +17,51 @@
     </Design.DataContext>
 
     <DockPanel>
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="{loc:Localize FileMenu}">
+                <MenuItem Header="{loc:Localize ExitMenu}" Click="OnExitClicked"/>
+            </MenuItem>
+            <MenuItem Header="{loc:Localize SettingsMenu}" Click="OnSettingsClicked"/>
+        </Menu>
+
         <!-- Top Toolbar -->
         <StackPanel DockPanel.Dock="Top" 
                     Orientation="Horizontal" 
                     Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                     Height="40"
                     Spacing="5">
-            <Button Content="Connect" 
-                    Click="OnConnectClicked"
+            <Button Click="OnConnectClicked"
                     IsEnabled="{Binding !IsConnected}"
-                    Margin="5"/>
-            <Button Content="Disconnect" 
-                    Command="{Binding DisconnectCommand}"
+                    Margin="5"
+                    ToolTip.Tip="{loc:Localize ConnectTooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" 
+                              Width="16" Height="16"/>
+                    <TextBlock Text="{loc:Localize Connect}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Command="{Binding DisconnectCommand}"
                     IsEnabled="{Binding IsConnected}"
-                    Margin="5"/>
+                    Margin="5"
+                    ToolTip.Tip="{loc:Localize DisconnectTooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" 
+                              Width="16" Height="16"/>
+                    <TextBlock Text="{loc:Localize Disconnect}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Separator/>
-            <Button Content="Execute" 
-                    Command="{Binding ExecuteQueryCommand}"
+            <Button Command="{Binding ExecuteQueryCommand}"
                     IsEnabled="{Binding IsConnected}"
-                    Margin="5"/>
+                    Margin="5"
+                    ToolTip.Tip="{loc:Localize ExecuteTooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="M8 5v14l11-7z" 
+                              Width="16" Height="16"/>
+                    <TextBlock Text="{loc:Localize Execute}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Separator/>
             <TextBlock Text="{Binding ConnectionStatus}" 
                        VerticalAlignment="Center"
@@ -47,7 +74,7 @@
                 Height="25"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 BorderThickness="0,1,0,0">
-            <TextBlock Text="Ready" 
+            <TextBlock Text="{loc:Localize Ready}" 
                        VerticalAlignment="Center" 
                        Margin="10,0"/>
         </Border>
@@ -66,7 +93,7 @@
                     BorderThickness="0,0,1,0">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top"
-                               Text="Database Tables"
+                               Text="{loc:Localize DatabaseTables}"
                                FontWeight="SemiBold"
                                Margin="10,10,10,5"/>
                     <ListBox ItemsSource="{Binding Tables}"
@@ -96,7 +123,7 @@
                 <!-- Query Editor -->
                 <DockPanel Grid.Row="0">
                     <TextBlock DockPanel.Dock="Top"
-                               Text="SQL Query Editor"
+                               Text="{loc:Localize QueryEditor}"
                                FontWeight="SemiBold"
                                Margin="10,10,10,5"/>
                     <TextBox Text="{Binding QueryText}"
@@ -105,7 +132,7 @@
                              FontFamily="Cascadia Code,Consolas,Courier New"
                              Margin="10,0,10,10"
                              IsEnabled="{Binding IsConnected}"
-                             Watermark="Enter SQL query here..."/>
+                             Watermark="{loc:Localize QueryPlaceholder}"/>
                 </DockPanel>
 
                 <!-- Splitter -->
@@ -114,13 +141,13 @@
                 <!-- Results Grid -->
                 <DockPanel Grid.Row="2">
                     <TextBlock DockPanel.Dock="Top"
-                               Text="Query Results"
+                               Text="{loc:Localize QueryResults}"
                                FontWeight="SemiBold"
                                Margin="10,10,10,5"/>
                     <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                             BorderThickness="1"
                             Margin="10,0,10,10">
-                        <TextBlock Text="Execute a query to see results"
+                        <TextBlock Text="{loc:Localize ResultsPlaceholder}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
@@ -136,15 +163,15 @@
             <StackPanel VerticalAlignment="Center" 
                         HorizontalAlignment="Center"
                         Spacing="20">
-                <TextBlock Text="SharpCoreDB Viewer"
+                <TextBlock Text="{loc:Localize WelcomeTitle}"
                            FontSize="32"
                            FontWeight="Bold"
                            HorizontalAlignment="Center"/>
-                <TextBlock Text="Click 'Connect' to open a database"
+                <TextBlock Text="{loc:Localize WelcomeMessage}"
                            FontSize="16"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            HorizontalAlignment="Center"/>
-                <Button Content="Connect to Database"
+                <Button Content="{loc:Localize ConnectToDatabase}"
                         Click="OnConnectClicked"
                         HorizontalAlignment="Center"
                         Padding="20,10"

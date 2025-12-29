@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCoreDB.Data.Provider;
+using SharpCoreDB.Viewer.Services;
 using Avalonia.Platform.Storage;
 
 namespace SharpCoreDB.Viewer.ViewModels;
@@ -10,6 +11,8 @@ namespace SharpCoreDB.Viewer.ViewModels;
 /// </summary>
 public partial class ConnectionDialogViewModel : ViewModelBase
 {
+    private readonly LocalizationService _localization = LocalizationService.Instance;
+
     [ObservableProperty]
     private string _databasePath = string.Empty;
 
@@ -37,7 +40,7 @@ public partial class ConnectionDialogViewModel : ViewModelBase
 
         var options = new FolderPickerOpenOptions
         {
-            Title = "Select SharpCoreDB Database Directory",
+            Title = _localization["ConnectionDialogTitle"],
             AllowMultiple = false
         };
 
@@ -50,6 +53,39 @@ public partial class ConnectionDialogViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task CreateNewDatabase()
+    {
+        if (StorageProvider == null) return;
+
+        var options = new FolderPickerOpenOptions
+        {
+            Title = _localization["SelectNewDatabaseLocation"],
+            AllowMultiple = false
+        };
+
+        var result = await StorageProvider.OpenFolderPickerAsync(options);
+
+        if (result.Count > 0)
+        {
+            var basePath = result[0].Path.LocalPath;
+            
+            // Suggest a default name
+            var suggestedName = "NewDatabase";
+            var counter = 1;
+            var newDbPath = Path.Combine(basePath, suggestedName);
+            
+            // Find unique name
+            while (Directory.Exists(newDbPath))
+            {
+                newDbPath = Path.Combine(basePath, $"{suggestedName}{counter}");
+                counter++;
+            }
+            
+            DatabasePath = newDbPath;
+        }
+    }
+
+    [RelayCommand]
     private async Task Connect()
     {
         ErrorMessage = string.Empty;
@@ -57,20 +93,13 @@ public partial class ConnectionDialogViewModel : ViewModelBase
         // Validate inputs
         if (string.IsNullOrWhiteSpace(DatabasePath))
         {
-            ErrorMessage = "Please enter a database path";
+            ErrorMessage = _localization["ErrorDatabasePathRequired"];
             return;
         }
 
         if (string.IsNullOrWhiteSpace(Password))
         {
-            ErrorMessage = "Please enter a password";
-            return;
-        }
-
-        // Check if path exists
-        if (!Directory.Exists(DatabasePath) && !File.Exists(DatabasePath))
-        {
-            ErrorMessage = "Database path does not exist";
+            ErrorMessage = _localization["ErrorPasswordRequired"];
             return;
         }
 
@@ -78,6 +107,15 @@ public partial class ConnectionDialogViewModel : ViewModelBase
 
         try
         {
+            // Check if database exists
+            bool isNewDatabase = !Directory.Exists(DatabasePath) && !File.Exists(DatabasePath);
+            
+            if (isNewDatabase)
+            {
+                // Create directory for new database
+                Directory.CreateDirectory(DatabasePath);
+            }
+
             // Create connection string
             var connectionString = $"Path={DatabasePath};Password={Password}";
 
@@ -92,7 +130,7 @@ public partial class ConnectionDialogViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Connection failed: {ex.Message}";
+            ErrorMessage = _localization.Format("ErrorConnectionFailed", ex.Message);
             IsConnected = false;
         }
         finally

@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        xmlns:loc="using:SharpCoreDB.Viewer.Converters"
+        mc:Ignorable="d" d:DesignWidth="450" d:DesignHeight="300"
+        x:Class="SharpCoreDB.Viewer.Views.SettingsDialog"
+        x:DataType="vm:SettingsViewModel"
+        Title="{loc:Localize SettingsTitle}"
+        Width="450" Height="300"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Icon="/Assets/SharpCoreDB.ico">
+
+    <Design.DataContext>
+        <vm:SettingsViewModel/>
+    </Design.DataContext>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" 
+                   Text="{loc:Localize SettingsTitle}"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,20"/>
+
+        <!-- Settings Content -->
+        <StackPanel Grid.Row="1" Spacing="20">
+            
+            <!-- Language Selection -->
+            <StackPanel>
+                <TextBlock Text="{loc:Localize LanguageLabel}" 
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <ComboBox ItemsSource="{Binding AvailableLanguages}"
+                          SelectedItem="{Binding SelectedLanguage}"
+                          HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{loc:Localize LanguageDescription}"
+                           FontSize="11"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Margin="0,5,0,0"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Theme Selection -->
+            <StackPanel>
+                <TextBlock Text="{loc:Localize ThemeLabel}" 
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <ComboBox ItemsSource="{Binding AvailableThemes}"
+                          SelectedItem="{Binding SelectedTheme}"
+                          HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{loc:Localize ThemeDescription}"
+                           FontSize="11"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Margin="0,5,0,0"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,20,0,0">
+            <Button Content="{loc:Localize Cancel}"
+                    Width="100"
+                    Command="{Binding CancelCommand}"/>
+            <Button Content="{loc:Localize Save}"
+                    Width="100"
+                    Command="{Binding SaveCommand}"
+                    Classes="accent"/>
+        </StackPanel>
+
+    </Grid>
+
+</Window>

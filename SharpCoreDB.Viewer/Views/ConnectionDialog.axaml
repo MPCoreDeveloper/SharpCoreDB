@@ -3,10 +3,11 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        xmlns:loc="using:SharpCoreDB.Viewer.Converters"
         mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="350"
         x:Class="SharpCoreDB.Viewer.Views.ConnectionDialog"
         x:DataType="vm:ConnectionDialogViewModel"
-        Title="Connect to SharpCoreDB"
+        Title="{loc:Localize ConnectionDialogTitle}"
         Width="500" Height="350"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -38,8 +39,8 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Classes="header" Text="Connect to SharpCoreDB Database"/>
-            <TextBlock Text="Enter the database path and password to connect"
+            <TextBlock Classes="header" Text="{loc:Localize ConnectionDialogTitle}"/>
+            <TextBlock Text="{loc:Localize ConnectionDialogSubtitle}"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                        FontSize="12"/>
         </StackPanel>
@@ -49,26 +50,34 @@
             
             <!-- Database Path -->
             <StackPanel>
-                <TextBlock Text="Database Path:" Margin="0,0,0,5"/>
-                <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{loc:Localize DatabasePath}" Margin="0,0,0,5"/>
+                <Grid ColumnDefinitions="*,Auto,Auto">
                     <TextBox Grid.Column="0"
                              Text="{Binding DatabasePath}"
-                             Watermark="C:\data\mydb.scdb or database directory"
+                             Watermark="{loc:Localize DatabasePathPlaceholder}"
                              IsEnabled="{Binding !IsConnecting}"/>
                     <Button Grid.Column="1"
-                            Content="Browse..."
+                            Content="{loc:Localize Browse}"
                             Command="{Binding BrowseForDatabaseCommand}"
                             IsEnabled="{Binding !IsConnecting}"
                             Margin="5,0,0,0"
-                            Width="80"/>
+                            Width="80"
+                            ToolTip.Tip="{loc:Localize BrowseTooltip}"/>
+                    <Button Grid.Column="2"
+                            Content="{loc:Localize New}"
+                            Command="{Binding CreateNewDatabaseCommand}"
+                            IsEnabled="{Binding !IsConnecting}"
+                            Margin="5,0,0,0"
+                            Width="80"
+                            ToolTip.Tip="{loc:Localize NewTooltip}"/>
                 </Grid>
             </StackPanel>
 
             <!-- Password -->
             <StackPanel>
-                <TextBlock Text="Master Password:" Margin="0,0,0,5"/>
+                <TextBlock Text="{loc:Localize MasterPassword}" Margin="0,0,0,5"/>
                 <TextBox Text="{Binding Password}"
-                         Watermark="Enter database password"
+                         Watermark="{loc:Localize PasswordPlaceholder}"
                          PasswordChar="?"
                          IsEnabled="{Binding !IsConnecting}"/>
             </StackPanel>
@@ -84,7 +93,7 @@
                         Spacing="10"
                         IsVisible="{Binding IsConnecting}">
                 <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
-                <TextBlock Text="Connecting..." VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Localize Connecting}" VerticalAlignment="Center"/>
             </StackPanel>
 
         </StackPanel>
@@ -95,11 +104,11 @@
                     HorizontalAlignment="Right"
                     Spacing="10"
                     Margin="0,20,0,0">
-            <Button Content="Cancel"
+            <Button Content="{loc:Localize Cancel}"
                     Width="100"
                     Command="{Binding CancelCommand}"
                     IsEnabled="{Binding !IsConnecting}"/>
-            <Button Content="Connect"
+            <Button Content="{loc:Localize Connect}"
                     Width="100"
                     Command="{Binding ConnectCommand}"
                     IsEnabled="{Binding !IsConnecting}"

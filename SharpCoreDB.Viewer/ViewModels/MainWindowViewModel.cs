@@ -1,12 +1,15 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCoreDB.Data.Provider;
+using SharpCoreDB.Viewer.Services;
 using System.Collections.ObjectModel;
 
 namespace SharpCoreDB.Viewer.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    private readonly LocalizationService _localization = LocalizationService.Instance;
+
     [ObservableProperty]
     private string _title = "SharpCoreDB Viewer";
 
@@ -14,7 +17,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private SharpCoreDBConnection? _activeConnection;
 
     [ObservableProperty]
-    private string _connectionStatus = "Not connected";
+    private string _connectionStatus;
 
     [ObservableProperty]
     private bool _isConnected;
@@ -25,6 +28,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<string> _tables = [];
 
+    public MainWindowViewModel()
+    {
+        _connectionStatus = _localization["NotConnected"];
+        
+        // Subscribe to language changes
+        _localization.LanguageChanged += (s, e) =>
+        {
+            OnPropertyChanged(nameof(ConnectionStatus));
+            if (!IsConnected)
+            {
+                ConnectionStatus = _localization["NotConnected"];
+            }
+        };
+    }
+
     [RelayCommand]
     private void Disconnect()
     {
@@ -32,7 +50,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ActiveConnection?.Dispose();
         ActiveConnection = null;
         IsConnected = false;
-        ConnectionStatus = "Not connected";
+        ConnectionStatus = _localization["NotConnected"];
         Tables.Clear();
     }
 
@@ -52,7 +70,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         ActiveConnection = connection;
         IsConnected = true;
-        ConnectionStatus = $"Connected to: {connection.DataSource}";
+        ConnectionStatus = _localization.Format("ConnectedTo", connection.DataSource);
         
         // Load database schema
         _ = LoadTablesAsync();
@@ -79,8 +97,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            // TODO: Show error message
-            Console.WriteLine($"Failed to load tables: {ex.Message}");
+            // Show localized error message
+            Console.WriteLine(_localization.Format("ErrorTableLoadFailed", ex.Message));
         }
     }
 }
