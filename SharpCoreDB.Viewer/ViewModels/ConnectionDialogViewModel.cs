@@ -25,6 +25,9 @@ public partial class ConnectionDialogViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isConnecting;
 
+    [ObservableProperty]
+    private bool _isPasswordVisible;
+
     public SharpCoreDBConnection? Connection { get; private set; }
     
     public bool IsConnected { get; private set; }
@@ -32,6 +35,16 @@ public partial class ConnectionDialogViewModel : ViewModelBase
     public bool WasCancelled { get; private set; }
     
     public IStorageProvider? StorageProvider { get; set; }
+
+    public ConnectionDialogViewModel()
+    {
+    }
+
+    [RelayCommand]
+    private void TogglePasswordVisibility()
+    {
+        IsPasswordVisible = !IsPasswordVisible;
+    }
 
     [RelayCommand]
     private async Task BrowseForDatabase()

@@ -20,63 +20,91 @@
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="{loc:Localize FileMenu}">
-                <MenuItem Header="{loc:Localize ExitMenu}" Click="OnExitClicked"/>
+                <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource DocumentIcon}"/>
+                </MenuItem.Icon>
+                <MenuItem Header="{loc:Localize ExitMenu}" Click="OnExitClicked">
+                    <MenuItem.Icon>
+                        <PathIcon Data="{StaticResource ExitIcon}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
-            <MenuItem Header="{loc:Localize SettingsMenu}" Click="OnSettingsClicked"/>
+            <MenuItem Header="{loc:Localize SettingsMenu}" Click="OnSettingsClicked">
+                <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SettingsIcon}"/>
+                </MenuItem.Icon>
+            </MenuItem>
         </Menu>
 
         <!-- Top Toolbar -->
-        <StackPanel DockPanel.Dock="Top" 
-                    Orientation="Horizontal" 
-                    Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
-                    Height="40"
-                    Spacing="5">
-            <Button Click="OnConnectClicked"
-                    IsEnabled="{Binding !IsConnected}"
-                    Margin="5"
-                    ToolTip.Tip="{loc:Localize ConnectTooltip}">
-                <StackPanel Orientation="Horizontal" Spacing="5">
-                    <PathIcon Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" 
-                              Width="16" Height="16"/>
-                    <TextBlock Text="{loc:Localize Connect}" VerticalAlignment="Center"/>
+        <Border DockPanel.Dock="Top" 
+                Classes="Toolbar"
+                Height="32"
+                BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" 
+                        Spacing="1"
+                        Margin="4,0">
+                <Button Click="OnConnectClicked"
+                        IsEnabled="{Binding !IsConnected}"
+                        Width="80"
+                        Height="28"
+                        Padding="6,0"
+                        ToolTip.Tip="{loc:Localize ConnectTooltip}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="{StaticResource PlugConnectIcon}" Width="14" Height="14"/>
+                        <TextBlock Text="{loc:Localize Connect}" 
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding DisconnectCommand}"
+                        IsEnabled="{Binding IsConnected}"
+                        Width="100"
+                        Height="28"
+                        Padding="6,0"
+                        ToolTip.Tip="{loc:Localize DisconnectTooltip}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="{StaticResource DisconnectSimpleIcon}" Width="14" Height="14"/>
+                        <TextBlock Text="{loc:Localize Disconnect}" 
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Button>
+                <Separator Width="1" Margin="4,4"/>
+                <Button Command="{Binding ExecuteQueryCommand}"
+                        IsEnabled="{Binding IsConnected}"
+                        Width="80"
+                        Height="28"
+                        Padding="6,0"
+                        ToolTip.Tip="{loc:Localize ExecuteTooltip}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Data="{StaticResource ExecuteIcon}" Width="14" Height="14"/>
+                        <TextBlock Text="{loc:Localize Execute}" 
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Button>
+                <Separator Width="1" Margin="4,4"/>
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
+                    <PathIcon Data="{StaticResource InfoIcon}" Width="12" Height="12" Opacity="0.6"/>
+                    <TextBlock Text="{Binding ConnectionStatus}" 
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Opacity="0.8"/>
                 </StackPanel>
-            </Button>
-            <Button Command="{Binding DisconnectCommand}"
-                    IsEnabled="{Binding IsConnected}"
-                    Margin="5"
-                    ToolTip.Tip="{loc:Localize DisconnectTooltip}">
-                <StackPanel Orientation="Horizontal" Spacing="5">
-                    <PathIcon Data="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" 
-                              Width="16" Height="16"/>
-                    <TextBlock Text="{loc:Localize Disconnect}" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Separator/>
-            <Button Command="{Binding ExecuteQueryCommand}"
-                    IsEnabled="{Binding IsConnected}"
-                    Margin="5"
-                    ToolTip.Tip="{loc:Localize ExecuteTooltip}">
-                <StackPanel Orientation="Horizontal" Spacing="5">
-                    <PathIcon Data="M8 5v14l11-7z" 
-                              Width="16" Height="16"/>
-                    <TextBlock Text="{loc:Localize Execute}" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Separator/>
-            <TextBlock Text="{Binding ConnectionStatus}" 
-                       VerticalAlignment="Center"
-                       Margin="10,0"/>
-        </StackPanel>
+            </StackPanel>
+        </Border>
 
         <!-- Status Bar -->
         <Border DockPanel.Dock="Bottom" 
-                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Classes="StatusBar"
                 Height="25"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 BorderThickness="0,1,0,0">
-            <TextBlock Text="{loc:Localize Ready}" 
-                       VerticalAlignment="Center" 
-                       Margin="10,0"/>
+            <StackPanel Orientation="Horizontal" Spacing="5" Margin="10,0">
+                <PathIcon Data="{StaticResource ConnectIcon}" Width="12" Height="12" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Localize Ready}" 
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </Border>
 
         <!-- Main Content -->
@@ -89,19 +117,25 @@
 
             <!-- Left Panel: Database Explorer -->
             <Border Grid.Column="0" 
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" 
                     BorderThickness="0,0,1,0">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top"
-                               Text="{loc:Localize DatabaseTables}"
-                               FontWeight="SemiBold"
-                               Margin="10,10,10,5"/>
+                    <StackPanel DockPanel.Dock="Top" 
+                                Orientation="Horizontal" 
+                                Spacing="8"
+                                Margin="10,10,10,5">
+                        <PathIcon Data="{StaticResource DatabaseIcon}"/>
+                        <TextBlock Text="{loc:Localize DatabaseTables}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
                     <ListBox ItemsSource="{Binding Tables}"
-                             Margin="5"
-                             Background="Transparent">
+                             Margin="5">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}" Margin="5"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="5">
+                                    <PathIcon Data="{StaticResource TableIcon}" Width="14" Height="14"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -109,8 +143,7 @@
             </Border>
 
             <!-- Splitter -->
-            <GridSplitter Grid.Column="1" 
-                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+            <GridSplitter Grid.Column="1"/>
 
             <!-- Right Panel: Query Editor + Results -->
             <Grid Grid.Column="2">
@@ -122,10 +155,15 @@
 
                 <!-- Query Editor -->
                 <DockPanel Grid.Row="0">
-                    <TextBlock DockPanel.Dock="Top"
-                               Text="{loc:Localize QueryEditor}"
-                               FontWeight="SemiBold"
-                               Margin="10,10,10,5"/>
+                    <StackPanel DockPanel.Dock="Top" 
+                                Orientation="Horizontal" 
+                                Spacing="8"
+                                Margin="10,10,10,5">
+                        <PathIcon Data="{StaticResource CodeIcon}"/>
+                        <TextBlock Text="{loc:Localize QueryEditor}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
                     <TextBox Text="{Binding QueryText}"
                              AcceptsReturn="True"
                              TextWrapping="NoWrap"
@@ -140,17 +178,24 @@
 
                 <!-- Results Grid -->
                 <DockPanel Grid.Row="2">
-                    <TextBlock DockPanel.Dock="Top"
-                               Text="{loc:Localize QueryResults}"
-                               FontWeight="SemiBold"
-                               Margin="10,10,10,5"/>
-                    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            BorderThickness="1"
+                    <StackPanel DockPanel.Dock="Top" 
+                                Orientation="Horizontal" 
+                                Spacing="8"
+                                Margin="10,10,10,5">
+                        <PathIcon Data="{StaticResource TableIcon}"/>
+                        <TextBlock Text="{loc:Localize QueryResults}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Border BorderThickness="1"
                             Margin="10,0,10,10">
-                        <TextBlock Text="{loc:Localize ResultsPlaceholder}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                        <StackPanel VerticalAlignment="Center" 
+                                    HorizontalAlignment="Center"
+                                    Spacing="10">
+                            <PathIcon Data="{StaticResource TableIcon}" Width="48" Height="48" Opacity="0.3"/>
+                            <TextBlock Text="{loc:Localize ResultsPlaceholder}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
                     </Border>
                 </DockPanel>
 
@@ -158,24 +203,27 @@
         </Grid>
 
         <!-- Welcome Screen (when not connected) -->
-        <Border IsVisible="{Binding !IsConnected}"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+        <Border IsVisible="{Binding !IsConnected}">
             <StackPanel VerticalAlignment="Center" 
                         HorizontalAlignment="Center"
                         Spacing="20">
+                <PathIcon Data="{StaticResource DatabaseIcon}" Width="64" Height="64" HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Localize WelcomeTitle}"
                            FontSize="32"
                            FontWeight="Bold"
                            HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Localize WelcomeMessage}"
                            FontSize="16"
-                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            HorizontalAlignment="Center"/>
-                <Button Content="{loc:Localize ConnectToDatabase}"
-                        Click="OnConnectClicked"
+                <Button Click="OnConnectClicked"
                         HorizontalAlignment="Center"
                         Padding="20,10"
-                        FontSize="14"/>
+                        FontSize="14">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <PathIcon Data="{StaticResource ConnectIcon}"/>
+                        <TextBlock Text="{loc:Localize ConnectToDatabase}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 

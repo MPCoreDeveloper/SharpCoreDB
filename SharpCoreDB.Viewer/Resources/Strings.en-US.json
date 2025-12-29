@@ -38,10 +38,12 @@
   "SelectNewDatabaseLocation": "Select Location for New SharpCoreDB Database",
   "SettingsTitle": "Settings",
   "LanguageLabel": "Language",
-  "LanguageDescription": "Select your preferred language. Changes will take effect immediately.",
+  "LanguageDescription": "Changes apply immediately. Click 'Save Settings' to remember your choice on next startup.",
   "ThemeLabel": "Theme",
-  "ThemeDescription": "Choose between light and dark theme.",
+  "ThemeDescription": "Toggle to preview. Click 'Save Settings' to remember your choice on next startup.",
   "FileMenu": "File",
   "SettingsMenu": "Settings",
-  "ExitMenu": "Exit"
+  "ExitMenu": "Exit",
+  "ShowPassword": "Show password",
+  "HidePassword": "Hide password"
 }

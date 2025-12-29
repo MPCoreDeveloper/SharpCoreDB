@@ -9,7 +9,19 @@
         <local:ViewLocator/>
     </Application.DataTemplates>
   
+    <Application.Resources>
+        <!-- Icon Resources -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Resources/Icons.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+  
     <Application.Styles>
         <FluentTheme />
+        
+        <!-- Custom Visual Studio Dark Theme -->
+        <StyleInclude Source="/Styles/VSTheme.axaml"/>
     </Application.Styles>
 </Application>

@@ -1,0 +1,276 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel>
+                <TextBlock Text="Sample Text"/>
+                <Button Content="Sample Button"/>
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+    
+    <!-- Visual Studio Theme Resources - Dark Mode -->
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- Dark Theme -->
+                <ResourceDictionary x:Key="Dark">
+                    <!-- VS Dark Background Colors -->
+                    <SolidColorBrush x:Key="VSBackgroundBrush">#1E1E1E</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundLighterBrush">#252526</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundDarkerBrush">#1B1B1C</SolidColorBrush>
+                    
+                    <!-- VS Chrome Colors (toolbars, status bars) -->
+                    <SolidColorBrush x:Key="VSChromeBrush">#2D2D30</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSChromeLightBrush">#3E3E42</SolidColorBrush>
+                    
+                    <!-- VS Border Colors -->
+                    <SolidColorBrush x:Key="VSBorderBrush">#3F3F46</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBorderLightBrush">#454545</SolidColorBrush>
+                    
+                    <!-- VS Text Colors -->
+                    <SolidColorBrush x:Key="VSTextBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextSecondaryBrush">#969696</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextDisabledBrush">#656565</SolidColorBrush>
+                    
+                    <!-- VS Highlight Colors -->
+                    <SolidColorBrush x:Key="VSHighlightBrush">#007ACC</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightHoverBrush">#1C97EA</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightPressedBrush">#005A9E</SolidColorBrush>
+                </ResourceDictionary>
+                
+                <!-- Light Theme -->
+                <ResourceDictionary x:Key="Light">
+                    <!-- VS Light Background Colors -->
+                    <SolidColorBrush x:Key="VSBackgroundBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundLighterBrush">#F5F5F5</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundDarkerBrush">#EEEEF2</SolidColorBrush>
+                    
+                    <!-- VS Chrome Colors (toolbars, status bars) -->
+                    <SolidColorBrush x:Key="VSChromeBrush">#EEEEF2</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSChromeLightBrush">#E0E0E0</SolidColorBrush>
+                    
+                    <!-- VS Border Colors -->
+                    <SolidColorBrush x:Key="VSBorderBrush">#CCCEDB</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBorderLightBrush">#D5D5D5</SolidColorBrush>
+                    
+                    <!-- VS Text Colors -->
+                    <SolidColorBrush x:Key="VSTextBrush">#1E1E1E</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextSecondaryBrush">#6E6E6E</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextDisabledBrush">#A0A0A0</SolidColorBrush>
+                    
+                    <!-- VS Highlight Colors -->
+                    <SolidColorBrush x:Key="VSHighlightBrush">#007ACC</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightHoverBrush">#1C97EA</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightPressedBrush">#005A9E</SolidColorBrush>
+                </ResourceDictionary>
+                
+                <!-- Default (follows system) -->
+                <ResourceDictionary x:Key="Default">
+                    <!-- VS Dark Background Colors (default to dark) -->
+                    <SolidColorBrush x:Key="VSBackgroundBrush">#1E1E1E</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundLighterBrush">#252526</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBackgroundDarkerBrush">#1B1B1C</SolidColorBrush>
+                    
+                    <!-- VS Chrome Colors (toolbars, status bars) -->
+                    <SolidColorBrush x:Key="VSChromeBrush">#2D2D30</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSChromeLightBrush">#3E3E42</SolidColorBrush>
+                    
+                    <!-- VS Border Colors -->
+                    <SolidColorBrush x:Key="VSBorderBrush">#3F3F46</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSBorderLightBrush">#454545</SolidColorBrush>
+                    
+                    <!-- VS Text Colors -->
+                    <SolidColorBrush x:Key="VSTextBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextSecondaryBrush">#969696</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSTextDisabledBrush">#656565</SolidColorBrush>
+                    
+                    <!-- VS Highlight Colors -->
+                    <SolidColorBrush x:Key="VSHighlightBrush">#007ACC</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightHoverBrush">#1C97EA</SolidColorBrush>
+                    <SolidColorBrush x:Key="VSHighlightPressedBrush">#005A9E</SolidColorBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+    
+    <!-- Apply VS theme to Window -->
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundBrush}"/>
+    </Style>
+    
+    <!-- Apply VS theme to all controls -->
+    <Style Selector="Border">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="Panel">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource VSTextBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource VSTextBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <Style Selector="TextBox:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource VSTextDisabledBrush}"/>
+    </Style>
+    
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{DynamicResource VSChromeBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource VSTextBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <Style Selector="Button:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSHighlightPressedBrush}"/>
+    </Style>
+    
+    <Style Selector="Button:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource VSTextDisabledBrush}"/>
+    </Style>
+    
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundBrush}"/>
+    </Style>
+    
+    <Style Selector="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource VSTextBrush}"/>
+    </Style>
+    
+    <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <Style Selector="MenuItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <!-- Toolbar styling -->
+    <Style Selector="StackPanel.Toolbar">
+        <Setter Property="Background" Value="{DynamicResource VSChromeBrush}"/>
+    </Style>
+    
+    <!-- Toolbar Border styling -->
+    <Style Selector="Border.Toolbar">
+        <Setter Property="Background" Value="{DynamicResource VSChromeBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <!-- Toolbar buttons - flat style like SSMS -->
+    <Style Selector="Border.Toolbar Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="6,0"/>
+        <Setter Property="Margin" Value="0"/>
+    </Style>
+    
+    <Style Selector="Border.Toolbar Button:pointerover">
+        <Setter Property="Background" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <Style Selector="Border.Toolbar Button:pressed">
+        <Setter Property="Background" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <Style Selector="Border.Toolbar Button:disabled">
+        <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+    
+    <Style Selector="Border.Toolbar Separator">
+        <Setter Property="Background" Value="{DynamicResource VSBorderBrush}"/>
+        <Setter Property="Margin" Value="4,4"/>
+    </Style>
+    
+    <!-- Status bar styling -->
+    <Style Selector="Border.StatusBar">
+        <Setter Property="Background" Value="{DynamicResource VSChromeBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <!-- GridSplitter -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <!-- DataGrid (if used) -->
+    <Style Selector="DataGrid">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+        <Setter Property="GridLinesVisibility" Value="All"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource VSBorderBrush}"/>
+        <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <!-- ComboBox -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource VSTextBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+        <Setter Property="BorderBrush" Value="{DynamicResource VSHighlightHoverBrush}"/>
+    </Style>
+    
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSHighlightBrush}"/>
+    </Style>
+    
+    <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VSChromeLightBrush}"/>
+    </Style>
+    
+    <!-- Dialog -->
+    <Style Selector="Window.Dialog">
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundBrush}"/>
+    </Style>
+    
+    <!-- Progress Bar -->
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource VSHighlightBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource VSBackgroundLighterBrush}"/>
+    </Style>
+    
+    <!-- Separator -->
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{DynamicResource VSBorderBrush}"/>
+    </Style>
+    
+</Styles>

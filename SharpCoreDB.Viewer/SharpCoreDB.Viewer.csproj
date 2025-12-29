@@ -11,10 +11,14 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="Styles\**" />
+    <AvaloniaResource Include="Resources\**" />
   </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Remove="Assets\SharpCoreDB.jpg" />
+    <AvaloniaResource Remove="Resources\Strings.en-US.json" />
+    <AvaloniaResource Remove="Resources\Strings.nl-NL.json" />
   </ItemGroup>
 
   <ItemGroup>

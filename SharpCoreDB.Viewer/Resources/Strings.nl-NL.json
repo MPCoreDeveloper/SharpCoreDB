@@ -38,10 +38,12 @@
   "SelectNewDatabaseLocation": "Selecteer Locatie voor Nieuwe SharpCoreDB Database",
   "SettingsTitle": "Instellingen",
   "LanguageLabel": "Taal",
-  "LanguageDescription": "Selecteer uw voorkeurstaal. Wijzigingen worden direct toegepast.",
+  "LanguageDescription": "Wijzigingen worden direct toegepast. Klik op 'Instellingen Opslaan' om uw keuze te onthouden bij de volgende start.",
   "ThemeLabel": "Thema",
-  "ThemeDescription": "Kies tussen licht en donker thema.",
+  "ThemeDescription": "Schakel om te bekijken. Klik op 'Instellingen Opslaan' om uw keuze te onthouden bij de volgende start.",
   "FileMenu": "Bestand",
   "SettingsMenu": "Instellingen",
-  "ExitMenu": "Afsluiten"
+  "ExitMenu": "Afsluiten",
+  "ShowPassword": "Wachtwoord tonen",
+  "HidePassword": "Wachtwoord verbergen"
 }
