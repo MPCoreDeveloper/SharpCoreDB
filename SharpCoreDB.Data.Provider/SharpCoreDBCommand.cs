@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Data.Provider;
 
@@ -139,6 +140,16 @@ public sealed class SharpCoreDBCommand : DbCommand
             else
                 db.ExecuteSQL(CommandText!);
 
+            // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
+            // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
+            var commandUpper = CommandText!.Trim().ToUpperInvariant();
+            if (commandUpper.StartsWith("INSERT") || 
+                commandUpper.StartsWith("UPDATE") || 
+                commandUpper.StartsWith("DELETE"))
+            {
+                db.Flush();
+            }
+
             // SharpCoreDB doesn't return rows affected, return -1 as per ADO.NET convention
             return -1;
         }
@@ -160,6 +171,13 @@ public sealed class SharpCoreDBCommand : DbCommand
             var db = Connection!.DbInstance!;
             var parameters = BuildParameterDictionary();
 
+            // ? FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
+            var commandTextUpper = CommandText!.ToUpperInvariant().Trim();
+            if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
+            {
+                return ExecuteSystemTableQuery(commandTextUpper, behavior);
+            }
+
             List<Dictionary<string, object>> results;
             if (parameters.Count > 0)
                 results = db.ExecuteQuery(CommandText!, parameters);
@@ -172,6 +190,148 @@ public sealed class SharpCoreDBCommand : DbCommand
         {
             throw new SharpCoreDBException("Error executing data reader command.", ex);
         }
+    }
+
+    /// <summary>
+    /// Executes queries against SQLite system tables (sqlite_master) by redirecting to IMetadataProvider.
+    /// </summary>
+    private DbDataReader ExecuteSystemTableQuery(string commandTextUpper, CommandBehavior behavior)
+    {
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Query: {CommandText}");
+        System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Command (upper): {commandTextUpper}");
+#endif
+        
+        try
+        {
+            var db = Connection!.DbInstance!;
+            
+            // Check if this is a table list query
+            if (commandTextUpper.Contains("SELECT") && commandTextUpper.Contains("NAME"))
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Detected table list query");
+                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Database type: {db.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] IMetadataProvider: {db is IMetadataProvider}");
+#endif
+                
+                // Redirect to IMetadataProvider.GetTables()
+                if (db is IMetadataProvider metadata)
+                {
+                    var tables = metadata.GetTables();
+                    
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] GetTables() returned {tables?.Count ?? 0} tables");
+#endif
+                    
+                    // Convert to the format expected by SQLite queries
+                    var results = new List<Dictionary<string, object>>();
+                    
+                    if (tables != null && tables.Count > 0)
+                    {
+                        foreach (var table in tables)
+                        {
+#if DEBUG
+                            System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Table: {table.Name}, Type: {table.Type}");
+#endif
+                            results.Add(new Dictionary<string, object>
+                            {
+                                ["name"] = table.Name ?? string.Empty,
+                                ["type"] = table.Type ?? "TABLE"
+                            });
+                        }
+                    }
+                    
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Returning {results.Count} rows");
+#endif
+                    
+                    // Return empty result set if no tables (this is valid - new database)
+                    return new SharpCoreDBDataReader(results, behavior);
+                }
+                else
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] ERROR: Database does not implement IMetadataProvider!");
+#endif
+                }
+            }
+            
+            // Check if this is a column list query (pragma_table_info or similar)
+            if (commandTextUpper.Contains("PRAGMA") || commandTextUpper.Contains("TABLE_INFO"))
+            {
+                // Extract table name from query (simplified parsing)
+                var tableName = ExtractTableNameFromPragma(CommandText!);
+                
+                if (!string.IsNullOrEmpty(tableName) && db is IMetadataProvider metadata)
+                {
+                    var columns = metadata.GetColumns(tableName);
+                    
+                    var results = new List<Dictionary<string, object>>();
+                    foreach (var column in columns)
+                    {
+                        results.Add(new Dictionary<string, object>
+                        {
+                            ["cid"] = column.Ordinal,
+                            ["name"] = column.Name,
+                            ["type"] = column.DataType,
+                            ["notnull"] = !column.IsNullable ? 1 : 0,
+                            ["dflt_value"] = DBNull.Value,
+                            ["pk"] = 0
+                        });
+                    }
+                    
+                    return new SharpCoreDBDataReader(results, behavior);
+                }
+            }
+            
+            // Fallback: Return empty result set for unsupported system queries
+            // This is valid - don't throw an exception
+            return new SharpCoreDBDataReader([], behavior);
+        }
+        catch (Exception ex)
+        {
+            // Log the error but return empty result set instead of crashing
+            System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] System table query failed: {ex.Message}");
+            return new SharpCoreDBDataReader([], behavior);
+        }
+    }
+
+    /// <summary>
+    /// Extracts table name from PRAGMA table_info() or similar queries.
+    /// </summary>
+    private static string? ExtractTableNameFromPragma(string sql)
+    {
+        try
+        {
+            // Simple regex to extract table name from PRAGMA table_info('tablename')
+            var match = System.Text.RegularExpressions.Regex.Match(
+                sql, 
+                @"table_info\s*\(\s*['""]?(\w+)['""]?\s*\)", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            if (match.Success && match.Groups.Count > 1)
+            {
+                return match.Groups[1].Value;
+            }
+            
+            // Try to extract from SELECT * FROM pragma_table_info('tablename')
+            match = System.Text.RegularExpressions.Regex.Match(
+                sql,
+                @"pragma_table_info\s*\(\s*['""]?(\w+)['""]?\s*\)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            if (match.Success && match.Groups.Count > 1)
+            {
+                return match.Groups[1].Value;
+            }
+        }
+        catch
+        {
+            // Ignore parsing errors
+        }
+        
+        return null;
     }
 
     /// <summary>
@@ -223,6 +383,17 @@ public sealed class SharpCoreDBCommand : DbCommand
                 await db.ExecuteSQLAsync(CommandText!, parameters, cancellationToken);
             else
                 await db.ExecuteSQLAsync(CommandText!, cancellationToken);
+
+            // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
+            // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
+            // This is essential for data durability - we want data on disk IMMEDIATELY.
+            var commandUpper = CommandText!.Trim().ToUpperInvariant();
+            if (commandUpper.StartsWith("INSERT") || 
+                commandUpper.StartsWith("UPDATE") || 
+                commandUpper.StartsWith("DELETE"))
+            {
+                db.Flush();
+            }
 
             return -1;
         }
@@ -279,6 +450,13 @@ public sealed class SharpCoreDBCommand : DbCommand
         {
             var db = Connection!.DbInstance!;
             var parameters = BuildParameterDictionary();
+
+            // ? FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
+            var commandTextUpper = CommandText!.ToUpperInvariant().Trim();
+            if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
+            {
+                return ExecuteSystemTableQuery(commandTextUpper, behavior);
+            }
 
             // ExecuteQuery doesn't have async version, so use Task.Run
             var results = await Task.Run(() =>

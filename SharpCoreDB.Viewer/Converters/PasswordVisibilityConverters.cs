@@ -14,10 +14,10 @@ public static class BoolConverters
     private static readonly LocalizationService _localization = LocalizationService.Instance;
 
     /// <summary>
-    /// Converts boolean to PasswordChar: empty string (visible) or bullet (hidden)
+    /// Converts boolean to PasswordChar: empty string (visible) or asterisk (hidden)
     /// </summary>
     public static readonly IValueConverter PasswordCharConverter = 
-        new FuncValueConverter<bool, char>(isVisible => isVisible ? '\0' : '?');
+        new FuncValueConverter<bool, char>(isVisible => isVisible ? '\0' : '*');
 
     /// <summary>
     /// Converts boolean to Eye icon: EyeIcon (visible) or EyeOffIcon (hidden)

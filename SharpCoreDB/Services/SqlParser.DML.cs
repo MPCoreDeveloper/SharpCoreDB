@@ -7,6 +7,7 @@ namespace SharpCoreDB.Services;
 using SharpCoreDB.Constants;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.DataStructures;
+using System.Text;
 
 /// <summary>
 /// SqlParser partial class containing DML (Data Manipulation Language) operations:
@@ -128,9 +129,45 @@ public partial class SqlParser
             rest = rest[(colEnd + 1)..];
         }
 
-        var valuesStart = rest.IndexOf(SqlConstants.VALUES) + SqlConstants.VALUES.Length;
+        var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
         var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
-        List<string> values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
+        
+        // ✅ FIX: Split values respecting quotes, and preserve boolean keywords
+        List<string> values = [];
+        var currentValue = new StringBuilder();
+        bool inQuotes = false;
+        
+        for (int i = 0; i < valuesStr.Length; i++)
+        {
+            char c = valuesStr[i];
+            
+            if (c == '\'' && (i == 0 || valuesStr[i - 1] != '\\'))
+            {
+                inQuotes = !inQuotes;
+                // ✅ FIX: DON'T include the quote character itself!
+                // We only use it to track whether we're inside a quoted string
+                continue;  // Skip the quote character
+            }
+            
+            if (c == ',' && !inQuotes)
+            {
+                // End of value
+                var val = currentValue.ToString().Trim();
+                values.Add(val);
+                currentValue.Clear();
+            }
+            else
+            {
+                currentValue.Append(c);
+            }
+        }
+        
+        // Add last value
+        if (currentValue.Length > 0)
+        {
+            values.Add(currentValue.ToString().Trim());
+        }
+        
         var row = new Dictionary<string, object>();
         
         if (insertColumns == null)
@@ -140,7 +177,11 @@ public partial class SqlParser
             {
                 var col = this.tables[tableName].Columns[i];
                 var type = this.tables[tableName].ColumnTypes[i];
-                row[col] = SqlParser.ParseValue(values[i], type)!;
+                var valueStr = values[i];
+                
+                // ✅ Quotes are already removed during parsing above!
+                var parsedValue = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                row[col] = parsedValue;
             }
         }
         else
@@ -151,17 +192,10 @@ public partial class SqlParser
                 var col = insertColumns[i];
                 var idx = this.tables[tableName].Columns.IndexOf(col);
                 var type = this.tables[tableName].ColumnTypes[idx];
-                row[col] = SqlParser.ParseValue(values[i], type)!;
-            }
-
-            // For auto columns not specified
-            for (int i = 0; i < this.tables[tableName].Columns.Count; i++)
-            {
-                var col = this.tables[tableName].Columns[i];
-                if (!row.ContainsKey(col) && this.tables[tableName].IsAuto[i])
-                {
-                    row[col] = SqlParser.GenerateAutoValue(this.tables[tableName].ColumnTypes[i]);
-                }
+                var valueStr = values[i];
+                
+                // ✅ Quotes are already removed during parsing above!
+                row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
             }
         }
 

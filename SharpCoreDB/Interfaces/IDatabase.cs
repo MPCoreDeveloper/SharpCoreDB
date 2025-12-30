@@ -170,4 +170,17 @@ public interface IDatabase
     /// <param name="parameters">The query parameters.</param>
     /// <returns>The query results.</returns>
     List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null);
+
+    /// <summary>
+    /// Flushes all pending changes to disk and saves metadata.
+    /// This ensures all CREATE TABLE, INSERT, UPDATE, DELETE operations are persisted.
+    /// Call this after batch operations or before closing the connection if you want to guarantee persistence.
+    /// </summary>
+    void Flush();
+    
+    /// <summary>
+    /// Forces metadata to be saved to disk, ignoring the dirty flag.
+    /// Used internally by the provider to ensure persistence on connection close.
+    /// </summary>
+    void ForceSave();
 }

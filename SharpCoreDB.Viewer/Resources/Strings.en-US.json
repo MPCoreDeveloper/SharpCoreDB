@@ -45,5 +45,10 @@
   "SettingsMenu": "Settings",
   "ExitMenu": "Exit",
   "ShowPassword": "Show password",
-  "HidePassword": "Hide password"
+  "HidePassword": "Hide password",
+  "ErrorQueryEmpty": "Please enter a SQL query",
+  "ExecutingQuery": "Executing query...",
+  "QueryExecutedSuccess": "Query executed successfully. {0} rows returned.",
+  "QueryExecutedAffected": "{0} rows affected.",
+  "ErrorQueryFailed": "Query failed: {0}"
 }

@@ -61,6 +61,13 @@ public partial class Database
                 {
                     SaveMetadata();
                     ApplyColumnarCompactionThresholdToTables();
+                    // ✅ Schema changes are immediately saved, but still mark dirty for safety
+                    _metadataDirty = true;
+                }
+                else if (!isReadOnly)
+                {
+                    // ✅ Mark metadata as dirty for data-modifying commands
+                    _metadataDirty = true;
                 }
             }
         }
@@ -112,6 +119,13 @@ public partial class Database
                 {
                     SaveMetadata();
                     ApplyColumnarCompactionThresholdToTables();
+                    // ✅ Schema changes are immediately saved, but still mark dirty for safety
+                    _metadataDirty = true;
+                }
+                else if (!isReadOnly)
+                {
+                    // ✅ Mark metadata as dirty for data-modifying commands
+                    _metadataDirty = true;
                 }
             }
         }

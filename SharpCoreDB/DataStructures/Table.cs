@@ -108,6 +108,24 @@ public partial class Table : ITable, IDisposable
     
     // ✅ PERFORMANCE: Cache column name to index mapping for O(1) lookups
     private Dictionary<string, int>? _columnIndexCache;
+
+    /// <summary>
+    /// Gets or builds the column name to index cache for O(1) lookups.
+    /// ✅ PERFORMANCE: Eliminates repeated O(n) IndexOf() calls in hot paths.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Dictionary<string, int> GetColumnIndexCache()
+    {
+        if (_columnIndexCache is null)
+        {
+            _columnIndexCache = new Dictionary<string, int>(Columns.Count);
+            for (int i = 0; i < Columns.Count; i++)
+            {
+                _columnIndexCache[Columns[i]] = i;
+            }
+        }
+        return _columnIndexCache;
+    }
     
     // 🔥 CRITICAL FIX: Map index NAMES to COLUMN names for proper DROP INDEX support
     // SQL: CREATE INDEX idx_email ON users(email) 
@@ -184,21 +202,133 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
-    /// Gets or builds the column name to index cache for O(1) lookups.
-    /// ✅ PERFORMANCE: Eliminates repeated O(n) IndexOf() calls in hot paths.
+    /// Rebuilds the Primary Key B-Tree index by scanning the data file.
+    /// ✅ CRITICAL: This must be called after deserialization because the B-Tree index
+    /// is NOT persisted to disk (it's rebuild from data on load).
+    /// Without this, SELECT queries return 0 rows after restart!
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Dictionary<string, int> GetColumnIndexCache()
+    public void RebuildPrimaryKeyIndexFromDisk()
     {
-        if (_columnIndexCache is null)
+        if (PrimaryKeyIndex < 0)
         {
-            _columnIndexCache = new Dictionary<string, int>(this.Columns.Count);
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                _columnIndexCache[this.Columns[i]] = i;
-            }
+            return; // No primary key, nothing to rebuild
         }
-        return _columnIndexCache;
+
+        if (storage == null)
+        {
+            throw new InvalidOperationException("Storage must be set before rebuilding index");
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] Starting rebuild for table: {Name}");
+        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] DataFile: {DataFile}");
+        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] PK column: {Columns[PrimaryKeyIndex]}");
+#endif
+
+        // Clear existing index
+        Index = new BTree<string, long>();
+
+        // Read entire data file
+        var data = storage.ReadBytes(DataFile, noEncrypt: false);
+        if (data == null || data.Length == 0)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] Data file is empty, no index to rebuild");
+#endif
+            return;
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] Data file size: {data.Length} bytes");
+#endif
+
+        // Scan file and rebuild index
+        int filePosition = 0;
+        ReadOnlySpan<byte> dataSpan = data.AsSpan();
+        int recordsIndexed = 0;
+
+        while (filePosition < dataSpan.Length)
+        {
+            // Read length prefix (4 bytes)
+            if (filePosition + 4 > dataSpan.Length)
+            {
+                break;
+            }
+
+            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                dataSpan.Slice(filePosition, 4));
+
+            if (recordLength <= 0 || recordLength > 1_000_000_000)
+            {
+                break; // Invalid record
+            }
+
+            if (filePosition + 4 + recordLength > dataSpan.Length)
+            {
+                break; // Incomplete record
+            }
+
+            long currentRecordPosition = filePosition; // This is the key for the index!
+
+            // Skip length prefix and read record data
+            int dataOffset = filePosition + 4;
+            ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
+
+            // Parse just enough to get the primary key value
+            try
+            {
+                var row = new Dictionary<string, object>();
+                int offset = 0;
+
+                for (int i = 0; i < Columns.Count; i++)
+                {
+                    if (offset >= recordData.Length)
+                    {
+                        break;
+                    }
+
+                    var value = ReadTypedValueFromSpan(recordData.Slice(offset), ColumnTypes[i], out int bytesRead);
+
+                    // Only store PK column, we don't need the rest for index rebuild
+                    if (i == PrimaryKeyIndex)
+                    {
+                        row[Columns[i]] = value;
+                    }
+
+                    offset += bytesRead;
+                }
+
+                // Extract PK value and add to index
+                if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
+                {
+                    var pkStr = pkValue.ToString() ?? string.Empty;
+                    
+                    // Only add if this key doesn't exist yet (handles UPDATE versions - keep latest)
+                    var existing = Index.Search(pkStr);
+                    if (!existing.Found)
+                    {
+                        Index.Insert(pkStr, currentRecordPosition);
+                        recordsIndexed++;
+                    }
+                    else
+                    {
+                        // Update to newer position (later in file = newer version)
+                        Index.Delete(pkStr);
+                        Index.Insert(pkStr, currentRecordPosition);
+                    }
+                }
+            }
+            catch
+            {
+                // Skip corrupted records
+            }
+
+            filePosition += 4 + recordLength;
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] ✅ Indexed {recordsIndexed} records");
+#endif
     }
 
     /// <summary>
@@ -208,6 +338,99 @@ public partial class Table : ITable, IDisposable
     {
         Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Flushes all pending writes to disk.
+    /// Ensures INSERT/UPDATE/DELETE operations are persisted.
+    /// </summary>
+    public void Flush()
+    {
+        if (isReadOnly || storage == null)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Table.Flush] Skipping flush for table {Name} (readonly={isReadOnly}, storage={storage == null})");
+#endif
+            return;
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[Table.Flush] Flushing table: {Name}");
+        System.Diagnostics.Debug.WriteLine($"[Table.Flush] DataFile: {DataFile}");
+        System.Diagnostics.Debug.WriteLine($"[Table.Flush] StorageMode: {StorageMode}");
+        System.Diagnostics.Debug.WriteLine($"[Table.Flush] StorageEngine: {(_storageEngine != null ? _storageEngine.GetType().Name : "NULL")}");
+#endif
+
+        try
+        {
+            // Flush storage engine if present
+            if (_storageEngine != null)
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] Calling StorageEngine.Flush()...");
+#endif
+                _storageEngine.Flush();
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] Storage engine flushed for table: {Name}");
+#endif
+            }
+            else
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] WARNING: No storage engine to flush for table {Name}!");
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] Attempting direct storage write for backward compatibility...");
+#endif
+                
+                // ✅ FALLBACK: If no storage engine, try to flush via storage directly
+                // This handles legacy columnar tables that don't use storage engines
+                if (storage != null && File.Exists(DataFile))
+                {
+                    // Force storage to commit any buffered writes
+                    if (storage.IsInTransaction)
+                    {
+                        storage.FlushTransactionBuffer();
+                    }
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[Table.Flush] Flushed storage transaction buffer");
+#endif
+                }
+            }
+            
+            // Flush indexes
+            if (indexManager != null)
+            {
+                foreach (var index in hashIndexes.Values)
+                {
+                    // Hash indexes are in-memory only, no flush needed
+                }
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] Indexes flushed for table: {Name}");
+#endif
+            }
+            
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Table.Flush] ✅ Flush completed for table: {Name}");
+            
+            // Check file size after flush
+            if (File.Exists(DataFile))
+            {
+                var fileInfo = new FileInfo(DataFile);
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] DataFile size: {fileInfo.Length} bytes");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Table.Flush] WARNING: DataFile does not exist: {DataFile}");
+            }
+#endif
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Table.Flush] ERROR flushing table {Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[Table.Flush] Stack trace: {ex.StackTrace}");
+#endif
+            throw new InvalidOperationException($"Failed to flush table {Name}: {ex.Message}", ex);
+        }
     }
 
     /// <summary>

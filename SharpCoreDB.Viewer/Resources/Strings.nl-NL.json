@@ -45,5 +45,10 @@
   "SettingsMenu": "Instellingen",
   "ExitMenu": "Afsluiten",
   "ShowPassword": "Wachtwoord tonen",
-  "HidePassword": "Wachtwoord verbergen"
+  "HidePassword": "Wachtwoord verbergen",
+  "ErrorQueryEmpty": "Voer een SQL query in",
+  "ExecutingQuery": "Query uitvoeren...",
+  "QueryExecutedSuccess": "Query succesvol uitgevoerd. {0} rijen geretourneerd.",
+  "QueryExecutedAffected": "{0} rijen aangepast.",
+  "ErrorQueryFailed": "Query mislukt: {0}"
 }

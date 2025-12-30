@@ -83,9 +83,7 @@ public partial class SqlParser
                 DataType.String => val,
                 DataType.Real => double.Parse(val),
                 DataType.Blob => Convert.FromBase64String(val),
-                DataType.DateTime => DateTime.SpecifyKind(
-                    DateTime.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
-                    DateTimeKind.Utc), // ✅ FIX: Always specify UTC kind for consistent storage
+                DataType.DateTime => ParseDateTime(val),  // ✅ FIX: Use custom parser
                 DataType.Long => long.Parse(val),
                 DataType.Decimal => decimal.Parse(val),
                 DataType.Ulid => Ulid.Parse(val),
@@ -97,6 +95,35 @@ public partial class SqlParser
         {
             throw new InvalidOperationException($"Invalid value '{val}' for data type {type}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Parses DateTime from string with support for multiple formats.
+    /// Handles: 'yyyy-MM-dd HH:mm:ss', 'yyyy-MM-dd', ISO8601, etc.
+    /// </summary>
+    private static DateTime ParseDateTime(string val)
+    {
+        // Try common formats first for performance
+        string[] formats = [
+            "yyyy-MM-dd HH:mm:ss",     // SharpCoreDB default
+            "yyyy-MM-dd'T'HH:mm:ss",   // ISO 8601
+            "yyyy-MM-dd",               // Date only
+            "yyyy-MM-ddTHH:mm:ssZ",    // ISO 8601 with Z
+            "yyyy-MM-dd HH:mm:ss.fff"  // With milliseconds
+        ];
+
+        if (DateTime.TryParseExact(val, formats, 
+            System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.None, 
+            out var result))
+        {
+            // ✅ FIX: Always specify UTC kind for consistent storage
+            return DateTime.SpecifyKind(result, DateTimeKind.Utc);
+        }
+
+        // Fallback to general parse
+        var parsed = DateTime.Parse(val, System.Globalization.CultureInfo.InvariantCulture);
+        return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
     }
 
     /// <summary>

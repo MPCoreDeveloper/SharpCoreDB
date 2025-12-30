@@ -20,6 +20,8 @@
   
     <Application.Styles>
         <FluentTheme />
+        <!-- Include DataGrid styles so it renders headers/rows -->
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
         
         <!-- Custom Visual Studio Dark Theme -->
         <StyleInclude Source="/Styles/VSTheme.axaml"/>

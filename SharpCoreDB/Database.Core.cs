@@ -46,6 +46,9 @@ public partial class Database : IDatabase, IDisposable
 
     // ✅ NEW: Batch UPDATE transaction state
     private bool _batchUpdateActive = false;
+    
+    // ✅ NEW: Track if metadata needs to be flushed
+    private bool _metadataDirty = false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
@@ -141,19 +144,56 @@ public partial class Database : IDatabase, IDisposable
     private void Load()
     {
         var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
+        
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from: {metaPath}");
+        System.Diagnostics.Debug.WriteLine($"[Load] File exists: {File.Exists(metaPath)}");
+#endif
+        
         var metaJson = storage.Read(metaPath);
         
-        if (metaJson is null) return;  // ✅ C# 14: pattern matching
+        if (metaJson is null)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[Load] No metadata file found - new database");
+#endif
+            return;
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[Load] Metadata JSON length: {metaJson.Length}");
+#endif
 
         var meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
         if (meta?.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) != true || tablesObj is null)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[Load] No tables in metadata");
+#endif
             return;
+        }
 
         var tablesObjString = tablesObj.ToString();
-        if (string.IsNullOrEmpty(tablesObjString)) return;
+        if (string.IsNullOrEmpty(tablesObjString))
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[Load] Empty tables object");
+#endif
+            return;
+        }
 
         var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString);
-        if (tablesList is null) return;
+        if (tablesList is null)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[Load] Failed to deserialize tables list");
+#endif
+            return;
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[Load] Loading {tablesList.Count} tables...");
+#endif
 
         foreach (var tableDict in tablesList)
         {
@@ -162,9 +202,63 @@ public partial class Database : IDatabase, IDisposable
             {
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
+                
+                // ✅ CRITICAL FIX: Reinitialize Table after deserialization
+                // JSON deserialization doesn't call constructor, so we need to ensure:
+                // 1. IsAuto list has correct length (may be missing after deserialization)
+                // 2. Column index cache is built
+                // 3. Row count cache is refreshed
+                // 4. PRIMARY KEY INDEX REBUILT! (most critical - without this, SELECT returns 0 rows!)
+                
+                // Ensure IsAuto list has same length as Columns
+                while (table.IsAuto.Count < table.Columns.Count)
+                {
+                    table.IsAuto.Add(false); // Default to non-auto for missing entries
+                }
+                
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Load] Table {table.Name} reinitialized - Columns: {table.Columns.Count}, IsAuto: {table.IsAuto.Count}");
+                System.Diagnostics.Debug.WriteLine($"[Load] PrimaryKeyIndex: {table.PrimaryKeyIndex}");
+#endif
+                
+                // ✅ CRITICAL FIX: Rebuild Primary Key index after deserialization
+                // The B-Tree index is NOT serialized, so it's empty after reload
+                // Without this, all rows appear as "stale" during SELECT and 0 rows are returned!
+                if (table.PrimaryKeyIndex >= 0)
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[Load] Primary key column: {table.Columns[table.PrimaryKeyIndex]}");
+                    System.Diagnostics.Debug.WriteLine($"[Load] Rebuilding Primary Key B-Tree index...");
+#endif
+                    
+                    try
+                    {
+                        // Rebuild the index by scanning the data file
+                        table.RebuildPrimaryKeyIndexFromDisk();
+                        
+#if DEBUG
+                        System.Diagnostics.Debug.WriteLine($"[Load] ✅ Primary Key index rebuilt successfully!");
+#endif
+                    }
+                    catch (Exception ex)
+                    {
+#if DEBUG
+                        System.Diagnostics.Debug.WriteLine($"[Load] ⚠️  WARNING: Failed to rebuild PK index: {ex.Message}");
+#endif
+                        // Continue loading - table will work but without index optimization
+                    }
+                }
+                
                 tables[table.Name] = table;
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[Load] Loaded table: {table.Name}");
+#endif
             }
         }
+        
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[Load] Total tables loaded: {tables.Count}");
+#endif
     }
 
     private void SaveMetadata()
@@ -180,6 +274,9 @@ public partial class Database : IDatabase, IDisposable
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
         storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), JsonSerializer.Serialize(meta));
+        
+        // ✅ Reset dirty flag after successful save
+        _metadataDirty = false;
     }
 
     private static bool IsSchemaChangingCommand(string sql) =>
@@ -225,6 +322,80 @@ public partial class Database : IDatabase, IDisposable
     public IDatabase Initialize(string dbPath, string masterPassword) => this;  // ✅ Already initialized in constructor
 
     /// <inheritdoc />
+    public void Flush()
+    {
+        if (isReadOnly)
+            return; // No-op for readonly databases
+
+        // ✅ OPTIMIZATION: Only save if metadata has changed
+        if (!_metadataDirty)
+            return;
+
+        try
+        {
+            SaveMetadata();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to flush database changes: {ex.Message}", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public void ForceSave()
+    {
+        if (isReadOnly)
+            return;
+
+        try
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[ForceSave] Saving metadata...");
+            System.Diagnostics.Debug.WriteLine($"[ForceSave] Tables count: {tables.Count}");
+            
+            foreach (var table in tables.Values)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ForceSave] Table: {table.Name}, DataFile: {table.DataFile}");
+            }
+#endif
+            
+            // ✅ CRITICAL FIX: Flush all table data files BEFORE saving metadata!
+            // This ensures INSERT/UPDATE/DELETE data is persisted to disk
+            foreach (var table in tables.Values)
+            {
+                try
+                {
+                    // Call Flush() on each table to persist data
+                    table.Flush();
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[ForceSave] Flushed table: {table.Name}");
+#endif
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[ForceSave] WARNING: Failed to flush table {table.Name}: {ex.Message}");
+#endif
+                    // Continue flushing other tables even if one fails
+                }
+            }
+            
+            SaveMetadata();
+            
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[ForceSave] Metadata saved successfully!");
+#endif
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[ForceSave] ERROR: {ex.Message}");
+#endif
+            throw new InvalidOperationException($"Failed to force save database changes: {ex.Message}", ex);
+        }
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         Dispose(true);
@@ -241,6 +412,24 @@ public partial class Database : IDatabase, IDisposable
 
         if (disposing)
         {
+            // ✅ FIX: Save metadata before disposing to persist any table changes
+            if (!isReadOnly)
+            {
+                try
+                {
+                    SaveMetadata();
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    // Log but don't throw during dispose
+                    System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] Failed to save metadata during dispose: {ex.Message}");
+#endif
+                    // Suppress exception - dispose should not throw
+                    _ = ex; // Avoid unused variable warning
+                }
+            }
+
             groupCommitWal?.Dispose();
             pageCache?.Clear(false, null);
             queryCache?.Clear();

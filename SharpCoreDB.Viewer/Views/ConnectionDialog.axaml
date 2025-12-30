@@ -96,7 +96,8 @@
                     <TextBox Grid.Column="0"
                              Text="{Binding Password}"
                              Watermark="{loc:Localize PasswordPlaceholder}"
-                             PasswordChar="{Binding IsPasswordVisible, Converter={x:Static conv:BoolConverters.PasswordCharConverter}}"
+                             PasswordChar="*"
+                             RevealPassword="{Binding IsPasswordVisible}"
                              IsEnabled="{Binding !IsConnecting}"/>
                     <Button Grid.Column="1"
                             Command="{Binding TogglePasswordVisibilityCommand}"

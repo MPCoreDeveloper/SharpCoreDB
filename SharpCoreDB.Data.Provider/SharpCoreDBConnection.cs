@@ -117,6 +117,17 @@ public sealed class SharpCoreDBConnection : DbConnection
         catch (Exception ex)
         {
             _state = ConnectionState.Broken;
+            
+            // ? FIX: Provide clear error message if sqlite_master is mentioned
+            if (ex.Message.Contains("sqlite_master", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new SharpCoreDBException(
+                    "SharpCoreDB is not SQLite. The error 'Table sqlite_master does not exist' indicates that " +
+                    "some tooling or code is trying to query SQLite system tables. " +
+                    "SharpCoreDB uses its own metadata system via IMetadataProvider. " +
+                    $"Original error: {ex.Message}", ex);
+            }
+            
             throw new SharpCoreDBException("Failed to open connection to SharpCoreDB.", ex);
         }
     }
@@ -131,6 +142,23 @@ public sealed class SharpCoreDBConnection : DbConnection
 
         try
         {
+            // ? FIX: FORCE save metadata on close to ensure persistence
+            if (_database != null)
+            {
+                try
+                {
+                    _database.ForceSave();
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] Failed to save during close: {ex.Message}");
+#endif
+                    // Suppress exception to allow connection to close gracefully
+                    _ = ex; // Avoid unused variable warning
+                }
+            }
+            
             _database = null;
             
             if (_serviceProvider is IDisposable disposable)

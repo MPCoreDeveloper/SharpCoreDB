@@ -102,130 +102,196 @@
                 BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" Spacing="5" Margin="10,0">
                 <PathIcon Data="{StaticResource ConnectIcon}" Width="12" Height="12" VerticalAlignment="Center"/>
-                <TextBlock Text="{loc:Localize Ready}" 
+                <TextBlock Text="{Binding StatusMessage}" 
                            VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <!-- Main Content -->
+        <!-- Main Content Grid with overlay support -->
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250" MinWidth="150"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- Main workspace content - visible only when connected -->
+            <Grid IsVisible="{Binding IsConnected}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="250" MinWidth="150"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- Left Panel: Database Explorer -->
-            <Border Grid.Column="0" 
-                    BorderThickness="0,0,1,0">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" 
-                                Orientation="Horizontal" 
-                                Spacing="8"
-                                Margin="10,10,10,5">
-                        <PathIcon Data="{StaticResource DatabaseIcon}"/>
-                        <TextBlock Text="{loc:Localize DatabaseTables}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <ListBox ItemsSource="{Binding Tables}"
-                             Margin="5">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="5">
-                                    <PathIcon Data="{StaticResource TableIcon}" Width="14" Height="14"/>
-                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </DockPanel>
-            </Border>
-
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1"/>
-
-            <!-- Right Panel: Query Editor + Results -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" MinHeight="100"/>
-                    <RowDefinition Height="5"/>
-                    <RowDefinition Height="2*" MinHeight="150"/>
-                </Grid.RowDefinitions>
-
-                <!-- Query Editor -->
-                <DockPanel Grid.Row="0">
-                    <StackPanel DockPanel.Dock="Top" 
-                                Orientation="Horizontal" 
-                                Spacing="8"
-                                Margin="10,10,10,5">
-                        <PathIcon Data="{StaticResource CodeIcon}"/>
-                        <TextBlock Text="{loc:Localize QueryEditor}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <TextBox Text="{Binding QueryText}"
-                             AcceptsReturn="True"
-                             TextWrapping="NoWrap"
-                             FontFamily="Cascadia Code,Consolas,Courier New"
-                             Margin="10,0,10,10"
-                             IsEnabled="{Binding IsConnected}"
-                             Watermark="{loc:Localize QueryPlaceholder}"/>
-                </DockPanel>
+                <!-- Left Panel: Database Explorer -->
+                <Border Grid.Column="0" 
+                        BorderThickness="0,0,1,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" 
+                                    Orientation="Horizontal" 
+                                    Spacing="8"
+                                    Margin="10,10,10,5">
+                            <PathIcon Data="{StaticResource DatabaseIcon}"/>
+                            <TextBlock Text="{loc:Localize DatabaseTables}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Tables}"
+                                 Margin="5">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="5">
+                                        <PathIcon Data="{StaticResource TableIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
 
                 <!-- Splitter -->
-                <GridSplitter Grid.Row="1"/>
+                <GridSplitter Grid.Column="1"/>
 
-                <!-- Results Grid -->
-                <DockPanel Grid.Row="2">
-                    <StackPanel DockPanel.Dock="Top" 
-                                Orientation="Horizontal" 
-                                Spacing="8"
-                                Margin="10,10,10,5">
-                        <PathIcon Data="{StaticResource TableIcon}"/>
-                        <TextBlock Text="{loc:Localize QueryResults}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <Border BorderThickness="1"
-                            Margin="10,0,10,10">
-                        <StackPanel VerticalAlignment="Center" 
-                                    HorizontalAlignment="Center"
-                                    Spacing="10">
-                            <PathIcon Data="{StaticResource TableIcon}" Width="48" Height="48" Opacity="0.3"/>
-                            <TextBlock Text="{loc:Localize ResultsPlaceholder}"
-                                       HorizontalAlignment="Center"/>
+                <!-- Right Panel: Query Editor + Results -->
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" MinHeight="100"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="2*" MinHeight="150"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Query Editor -->
+                    <DockPanel Grid.Row="0">
+                        <StackPanel DockPanel.Dock="Top" 
+                                    Orientation="Horizontal" 
+                                    Spacing="8"
+                                    Margin="10,10,10,5">
+                            <PathIcon Data="{StaticResource CodeIcon}"/>
+                            <TextBlock Text="{loc:Localize QueryEditor}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
-                </DockPanel>
+                        <TextBox Text="{Binding QueryText}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="NoWrap"
+                                 FontFamily="Cascadia Code,Consolas,Courier New"
+                                 Margin="10,0,10,10"
+                                 IsEnabled="{Binding IsConnected}"
+                                 Watermark="{loc:Localize QueryPlaceholder}"/>
+                    </DockPanel>
 
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Row="1"/>
+
+                    <!-- Results Grid -->
+                    <DockPanel Grid.Row="2">
+                        <StackPanel DockPanel.Dock="Top" 
+                                    Orientation="Horizontal" 
+                                    Spacing="8"
+                                    Margin="10,10,10,5">
+                            <PathIcon Data="{StaticResource TableIcon}"/>
+                            <TextBlock Text="{loc:Localize QueryResults}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <!-- Show placeholder when no results -->
+                        <Border DockPanel.Dock="Top"
+                                BorderThickness="1"
+                                Margin="10,0,10,10"
+                                IsVisible="{Binding !HasResults}">
+                            <StackPanel VerticalAlignment="Center" 
+                                        HorizontalAlignment="Center"
+                                        Spacing="10">
+                                <PathIcon Data="{StaticResource TableIcon}" Width="48" Height="48" Opacity="0.3"/>
+                                <TextBlock Text="{loc:Localize ResultsPlaceholder}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- DataGrid MUST be last child in DockPanel to fill available space -->
+                        <DataGrid ItemsSource="{Binding QueryResults}"
+                                  IsVisible="True"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  GridLinesVisibility="All"
+                                  BorderThickness="1"
+                                  Margin="10,0,10,10"
+                                  CanUserReorderColumns="True"
+                                  CanUserResizeColumns="True"
+                                  CanUserSortColumns="True"
+                                  Name="ResultsDataGrid"
+                                  HeadersVisibility="Column"
+                                  ColumnWidth="*">
+                            <DataGrid.Resources>
+                                <!-- Custom DataGridColumnHeader Template -->
+                                <ControlTemplate x:Key="CustomColumnHeaderTemplate" TargetType="DataGridColumnHeader">
+                                    <Grid Background="#20000000">
+                                        <ContentPresenter Content="{TemplateBinding Content}"
+                                                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                        Margin="{TemplateBinding Padding}"
+                                                        Background="Transparent"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </DataGrid.Resources>
+                            <DataGrid.Styles>
+                                <!-- Alternating row colors -->
+                                <Style Selector="DataGridRow:nth-child(odd)">
+                                    <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundAltHighBrush}"/>
+                                </Style>
+                                <Style Selector="DataGridRow:nth-child(even)">
+                                    <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+                                </Style>
+                                <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+                                    <Setter Property="Fill" Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+                                </Style>
+                                <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+                                    <Setter Property="Fill" Value="{DynamicResource SystemControlHighlightListMediumBrush}"/>
+                                </Style>
+                                
+                                <!-- Column header styling - use custom template -->
+                                <Style Selector="DataGridColumnHeader">
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                                    <Setter Property="Padding" Value="8,6"/>
+                                    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+                                    <Setter Property="Template" Value="{StaticResource CustomColumnHeaderTemplate}"/>
+                                </Style>
+                                <Style Selector="DataGridColumnHeader:pointerover">
+                                    <Setter Property="Background" Value="#30000000"/>
+                                </Style>
+                            </DataGrid.Styles>
+                            <!-- Columns will be added programmatically in code-behind via OnColumnsChanged -->
+                        </DataGrid>
+                    </DockPanel>
+
+                </Grid>
             </Grid>
-        </Grid>
 
-        <!-- Welcome Screen (when not connected) -->
-        <Border IsVisible="{Binding !IsConnected}">
-            <StackPanel VerticalAlignment="Center" 
-                        HorizontalAlignment="Center"
-                        Spacing="20">
-                <PathIcon Data="{StaticResource DatabaseIcon}" Width="64" Height="64" HorizontalAlignment="Center"/>
-                <TextBlock Text="{loc:Localize WelcomeTitle}"
-                           FontSize="32"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"/>
-                <TextBlock Text="{loc:Localize WelcomeMessage}"
-                           FontSize="16"
-                           HorizontalAlignment="Center"/>
-                <Button Click="OnConnectClicked"
-                        HorizontalAlignment="Center"
-                        Padding="20,10"
-                        FontSize="14">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <PathIcon Data="{StaticResource ConnectIcon}"/>
-                        <TextBlock Text="{loc:Localize ConnectToDatabase}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Border>
+            <!-- Welcome Screen (when not connected) - full screen overlay -->
+            <Border IsVisible="{Binding !IsConnected}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+                <StackPanel VerticalAlignment="Center" 
+                            HorizontalAlignment="Center"
+                            Spacing="20">
+                    <PathIcon Data="{StaticResource DatabaseIcon}" Width="64" Height="64" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Localize WelcomeTitle}"
+                               FontSize="32"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Localize WelcomeMessage}"
+                               FontSize="16"
+                               HorizontalAlignment="Center"/>
+                    <Button Click="OnConnectClicked"
+                            HorizontalAlignment="Center"
+                            Padding="20,10"
+                            FontSize="14">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <PathIcon Data="{StaticResource ConnectIcon}"/>
+                            <TextBlock Text="{loc:Localize ConnectToDatabase}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
 
     </DockPanel>
 

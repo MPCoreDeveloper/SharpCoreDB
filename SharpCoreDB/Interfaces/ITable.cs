@@ -195,4 +195,10 @@ public interface ITable
     /// <param name="columnName">The column name.</param>
     /// <returns>True if B-tree index exists.</returns>
     bool HasBTreeIndex(string columnName);
+    
+    /// <summary>
+    /// Flushes all pending writes to disk.
+    /// Ensures INSERT/UPDATE/DELETE operations are persisted.
+    /// </summary>
+    void Flush();
 }
