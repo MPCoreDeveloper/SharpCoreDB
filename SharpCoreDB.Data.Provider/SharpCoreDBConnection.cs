@@ -152,7 +152,7 @@ public sealed class SharpCoreDBConnection : DbConnection
                 catch (Exception ex)
                 {
 #if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] Failed to save during close: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"{ex.Message}");
 #endif
                     // Suppress exception to allow connection to close gracefully
                     _ = ex; // Avoid unused variable warning
@@ -202,6 +202,40 @@ public sealed class SharpCoreDBConnection : DbConnection
     public override DataTable GetSchema()
     {
         return GetSchema("MetaDataCollections");
+    }
+
+    /// <summary>
+    /// Gets schema information for a specific collection.
+    /// </summary>
+    public override DataTable GetSchema(string collectionName)
+    {
+        if (_state != ConnectionState.Open)
+            throw new InvalidOperationException("Connection must be open to retrieve schema information.");
+
+        return collectionName.ToUpperInvariant() switch
+        {
+            "METADATACOLLECTIONS" => GetMetaDataCollectionsSchema(),
+            "TABLES" => GetTablesSchema(),
+            "COLUMNS" => GetColumnsSchema(),
+            _ => throw new ArgumentException($"The requested collection '{collectionName}' is not defined.", nameof(collectionName))
+        };
+    }
+
+    /// <summary>
+    /// Gets schema information for a specific collection with restrictions.
+    /// </summary>
+    public override DataTable GetSchema(string collectionName, string?[] restrictionValues)
+    {
+        if (_state != ConnectionState.Open)
+            throw new InvalidOperationException("Connection must be open to retrieve schema information.");
+
+        var upper = collectionName.ToUpperInvariant();
+        if (upper == "COLUMNS" && restrictionValues.Length > 0 && !string.IsNullOrWhiteSpace(restrictionValues[0]))
+        {
+            return GetColumnsSchema(restrictionValues[0]!);
+        }
+
+        return GetSchema(collectionName);
     }
 
     private static DataTable GetMetaDataCollectionsSchema()
@@ -274,40 +308,6 @@ public sealed class SharpCoreDBConnection : DbConnection
         }
 
         return table;
-    }
-
-    /// <summary>
-    /// Gets schema information for a specific collection.
-    /// </summary>
-    public override DataTable GetSchema(string collectionName)
-    {
-        if (_state != ConnectionState.Open)
-            throw new InvalidOperationException("Connection must be open to retrieve schema information.");
-
-        return collectionName.ToUpperInvariant() switch
-        {
-            "METADATACOLLECTIONS" => GetMetaDataCollectionsSchema(),
-            "TABLES" => GetTablesSchema(),
-            "COLUMNS" => GetColumnsSchema(),
-            _ => throw new ArgumentException($"The requested collection '{collectionName}' is not defined.", nameof(collectionName))
-        };
-    }
-
-    /// <summary>
-    /// Gets schema information for a specific collection with restrictions.
-    /// </summary>
-    public override DataTable GetSchema(string collectionName, string?[] restrictionValues)
-    {
-        if (_state != ConnectionState.Open)
-            throw new InvalidOperationException("Connection must be open to retrieve schema information.");
-
-        var upper = collectionName.ToUpperInvariant();
-        if (upper == "COLUMNS" && restrictionValues.Length > 0 && !string.IsNullOrWhiteSpace(restrictionValues[0]))
-        {
-            return GetColumnsSchema(restrictionValues[0]!);
-        }
-
-        return GetSchema(collectionName);
     }
 
     private void ParseConnectionString(string connectionString)
