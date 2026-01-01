@@ -144,13 +144,21 @@ public partial class Database : IDatabase, IDisposable
     private void Load()
     {
         var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
+        var metaExists = File.Exists(metaPath);
         
 #if DEBUG
         System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from: {metaPath}");
-        System.Diagnostics.Debug.WriteLine($"[Load] File exists: {File.Exists(metaPath)}");
+        System.Diagnostics.Debug.WriteLine($"[Load] File exists: {metaExists}");
 #endif
         
         var metaJson = storage.Read(metaPath);
+
+        // ✅ CRITICAL: If metadata file exists but cannot be decrypted, abort instead of creating a new empty database
+        if (metaExists && metaJson is null)
+        {
+            throw new InvalidOperationException(
+                "Failed to decrypt database metadata. The master password may be incorrect or the database file is corrupted.");
+        }
         
         if (metaJson is null)
         {
@@ -164,7 +172,17 @@ public partial class Database : IDatabase, IDisposable
         System.Diagnostics.Debug.WriteLine($"[Load] Metadata JSON length: {metaJson.Length}");
 #endif
 
-        var meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
+        Dictionary<string, object>? meta;
+        try
+        {
+            meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "Failed to read database metadata. The master password may be incorrect or the metadata file is corrupted.", ex);
+        }
+        
         if (meta?.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) != true || tablesObj is null)
         {
 #if DEBUG
@@ -313,13 +331,13 @@ public partial class Database : IDatabase, IDisposable
     }
 
     /// <inheritdoc />
-    public void CreateUser(string username, string password) => userService.CreateUser(username, password);
+    public void CreateUser(String username, string password) => userService.CreateUser(username, password);
 
     /// <inheritdoc />
-    public bool Login(string username, string password) => userService.Login(username, password);
+    public bool Login(String username, string password) => userService.Login(username, password);
 
     /// <inheritdoc />
-    public IDatabase Initialize(string dbPath, string masterPassword) => this;  // ✅ Already initialized in constructor
+    public IDatabase Initialize(String dbPath, String masterPassword) => this;  // ✅ Already initialized in constructor
 
     /// <inheritdoc />
     public void Flush()

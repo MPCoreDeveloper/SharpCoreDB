@@ -39,16 +39,16 @@
         <!-- Top Toolbar -->
         <Border DockPanel.Dock="Top" 
                 Classes="Toolbar"
-                Height="32"
+                Height="36"
                 BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal" 
-                        Spacing="1"
-                        Margin="4,0">
+                        Spacing="2"
+                        Margin="6,0">
                 <Button Click="OnConnectClicked"
                         IsEnabled="{Binding !IsConnected}"
-                        Width="80"
-                        Height="28"
-                        Padding="6,0"
+                        MinWidth="90"
+                        Height="30"
+                        Padding="10,0"
                         ToolTip.Tip="{loc:Localize ConnectTooltip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="{StaticResource PlugConnectIcon}" Width="14" Height="14"/>
@@ -59,9 +59,9 @@
                 </Button>
                 <Button Command="{Binding DisconnectCommand}"
                         IsEnabled="{Binding IsConnected}"
-                        Width="100"
-                        Height="28"
-                        Padding="6,0"
+                        MinWidth="110"
+                        Height="30"
+                        Padding="10,0"
                         ToolTip.Tip="{loc:Localize DisconnectTooltip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="{StaticResource DisconnectSimpleIcon}" Width="14" Height="14"/>
@@ -70,12 +70,12 @@
                                    FontSize="12"/>
                     </StackPanel>
                 </Button>
-                <Separator Width="1" Margin="4,4"/>
+                <Separator Width="1" Margin="6,6"/>
                 <Button Command="{Binding ExecuteQueryCommand}"
                         IsEnabled="{Binding IsConnected}"
-                        Width="80"
-                        Height="28"
-                        Padding="6,0"
+                        MinWidth="90"
+                        Height="30"
+                        Padding="10,0"
                         ToolTip.Tip="{loc:Localize ExecuteTooltip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="{StaticResource ExecuteIcon}" Width="14" Height="14"/>
@@ -84,9 +84,9 @@
                                    FontSize="12"/>
                     </StackPanel>
                 </Button>
-                <Separator Width="1" Margin="4,4"/>
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
-                    <PathIcon Data="{StaticResource InfoIcon}" Width="12" Height="12" Opacity="0.6"/>
+                <Separator Width="1" Margin="6,6"/>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0">
+                    <PathIcon Data="{StaticResource InfoIcon}" Width="14" Height="14" Opacity="0.6"/>
                     <TextBlock Text="{Binding ConnectionStatus}" 
                                VerticalAlignment="Center"
                                FontSize="12"

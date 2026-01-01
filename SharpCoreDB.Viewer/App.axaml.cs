@@ -24,10 +24,15 @@ public partial class App : Application
             // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
             DisableAvaloniaDataAnnotationValidation();
             
-            // Load and apply settings
+            // Load and apply settings (auto-detects system language on first startup)
             var settingsService = SettingsService.Instance;
             settingsService.ApplySettings();
             ApplyTheme(settingsService.Settings.Theme);
+            
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[App] Starting with language: {settingsService.Settings.Language}");
+            System.Diagnostics.Debug.WriteLine($"[App] Starting with theme: {settingsService.Settings.Theme}");
+#endif
             
             // Subscribe to settings changes
             settingsService.SettingsChanged += (s, settings) =>

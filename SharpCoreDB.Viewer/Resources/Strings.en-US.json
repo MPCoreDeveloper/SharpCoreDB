@@ -50,5 +50,6 @@
   "ExecutingQuery": "Executing query...",
   "QueryExecutedSuccess": "Query executed successfully. {0} rows returned.",
   "QueryExecutedAffected": "{0} rows affected.",
-  "ErrorQueryFailed": "Query failed: {0}"
+  "ErrorQueryFailed": "Query failed: {0}",
+  "ErrorIncorrectPassword": "⚠️ Incorrect password or corrupted database. Please check your password and try again."
 }

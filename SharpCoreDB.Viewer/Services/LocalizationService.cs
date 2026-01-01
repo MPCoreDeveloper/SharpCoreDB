@@ -23,7 +23,10 @@ public class LocalizationService : INotifyPropertyChanged
 
     private LocalizationService()
     {
-        _currentCulture = CultureInfo.CurrentUICulture;
+        // Get initial language from settings (which handles system language detection)
+        var settingsService = SettingsService.Instance;
+        _currentCulture = new CultureInfo(settingsService.Settings.Language);
+        
         Debug.WriteLine($"[Localization] Service initialized with culture: {_currentCulture.Name}");
         LoadLanguage(_currentCulture.Name);
     }

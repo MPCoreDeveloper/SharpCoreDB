@@ -33,6 +33,7 @@
   "ErrorPasswordRequired": "Voer een wachtwoord in",
   "ErrorDatabaseNotFound": "Database pad bestaat niet",
   "ErrorConnectionFailed": "Verbinding mislukt: {0}",
+  "ErrorIncorrectPassword": "⚠️ Onjuist wachtwoord of beschadigde database. Controleer uw wachtwoord en probeer het opnieuw.",
   "ErrorTableLoadFailed": "Laden van tabellen mislukt: {0}",
   "ConnectedTo": "Verbonden met: {0}",
   "SelectNewDatabaseLocation": "Selecteer Locatie voor Nieuwe SharpCoreDB Database",

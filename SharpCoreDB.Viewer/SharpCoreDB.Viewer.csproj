@@ -19,6 +19,10 @@
     <AvaloniaResource Remove="Assets\SharpCoreDB.jpg" />
     <AvaloniaResource Remove="Resources\Strings.en-US.json" />
     <AvaloniaResource Remove="Resources\Strings.nl-NL.json" />
+    <AvaloniaResource Remove="Resources\Strings.de-DE.json" />
+    <AvaloniaResource Remove="Resources\Strings.fr-FR.json" />
+    <AvaloniaResource Remove="Resources\Strings.es-ES.json" />
+    <AvaloniaResource Remove="Resources\Strings.it-IT.json" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,6 +55,18 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="Resources\Strings.nl-NL.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\Strings.de-DE.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\Strings.fr-FR.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\Strings.es-ES.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\Strings.it-IT.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

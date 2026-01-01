@@ -128,7 +128,7 @@ public sealed class SharpCoreDBConnection : DbConnection
                     $"Original error: {ex.Message}", ex);
             }
             
-            throw new SharpCoreDBException("Failed to open connection to SharpCoreDB.", ex);
+            throw new SharpCoreDBException($"Failed to open connection to SharpCoreDB: {ex.Message}", ex);
         }
     }
 

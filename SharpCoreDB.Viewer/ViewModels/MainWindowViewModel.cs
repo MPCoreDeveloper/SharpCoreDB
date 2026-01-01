@@ -90,97 +90,138 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             StatusMessage = _localization["ExecutingQuery"];
+            
+            // ✅ Split query by semicolons to support multiple statements
+            var statements = QueryText
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+
+            if (statements.Count == 0)
+            {
+                StatusMessage = _localization["ErrorQueryEmpty"];
+                return;
+            }
+
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] Executing {statements.Count} statement(s)");
+#endif
+
+            int totalAffected = 0;
+            int selectResultCount = 0;
+            bool hasSelectStatement = false;
+            
+            // Clear previous results before executing
             QueryResults.Clear();
             HasResults = false;
 
-            using var command = new SharpCoreDBCommand(QueryText, ActiveConnection);
-            
-            // Check if this is a SELECT query
-            var trimmedQuery = QueryText.Trim().ToUpperInvariant();
-            if (trimmedQuery.StartsWith("SELECT"))
+            // Execute each statement
+            for (int i = 0; i < statements.Count; i++)
             {
-                // Execute SELECT and show results
-                using var reader = await command.ExecuteReaderAsync();
+                var statement = statements[i];
+                var trimmedStatement = statement.TrimStart().ToUpperInvariant();
                 
-                var results = new ObservableCollection<Dictionary<string, object>>();
-                int rowCount = 0;
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] Statement {i + 1}/{statements.Count}: {statement.Substring(0, Math.Min(50, statement.Length))}...");
+#endif
+
+                using var command = new SharpCoreDBCommand(statement, ActiveConnection);
                 
-                // Get column names for dynamic column generation
-                var columnNames = new List<string>();
-                for (int i = 0; i < reader.FieldCount; i++)
+                if (trimmedStatement.StartsWith("SELECT"))
                 {
-                    columnNames.Add(reader.GetName(i));
-                }
-                
-                while (await reader.ReadAsync())
-                {
-                    var row = new Dictionary<string, object>();
-                    for (int i = 0; i < reader.FieldCount; i++)
+                    hasSelectStatement = true;
+                    
+                    // Execute SELECT and show results (only last SELECT is shown)
+                    using var reader = await command.ExecuteReaderAsync();
+                    
+                    var results = new ObservableCollection<Dictionary<string, object>>();
+                    int rowCount = 0;
+                    
+                    // Get column names for dynamic column generation
+                    var columnNames = new List<string>();
+                    for (int j = 0; j < reader.FieldCount; j++)
                     {
-                        var value = reader.GetValue(i);
-                        row[reader.GetName(i)] = value ?? DBNull.Value;
+                        columnNames.Add(reader.GetName(j));
                     }
-                    results.Add(row);
-                    rowCount++;
-                }
+                    
+                    while (await reader.ReadAsync())
+                    {
+                        var row = new Dictionary<string, object>();
+                        for (int j = 0; j < reader.FieldCount; j++)
+                        {
+                            var value = reader.GetValue(j);
+                            row[reader.GetName(j)] = value ?? DBNull.Value;
+                        }
+                        results.Add(row);
+                        rowCount++;
+                    }
 
 #if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] SELECT returned {rowCount} rows with {columnNames.Count} columns");
-                if (rowCount > 0)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] First row keys: {string.Join(", ", results[0].Keys)}");
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] First row values: {string.Join(", ", results[0].Values.Select(v => v?.ToString() ?? "NULL"))}");
-                }
+                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] SELECT {i + 1} returned {rowCount} rows with {columnNames.Count} columns");
 #endif
 
-                // ✅ Convert Dictionary rows to array-based QueryResultRow objects  
-                QueryResults.Clear();
-                foreach (var dictRow in results)
-                {
-                    // Convert Dictionary to array in correct column order
-                    var resultRow = Models.QueryResultRow.FromDictionary(dictRow, columnNames);
-                    QueryResults.Add(resultRow);
+                    // ✅ Store results from last SELECT statement
+                    if (i == statements.Count - 1 || !statements.Skip(i + 1).Any(s => s.TrimStart().ToUpperInvariant().StartsWith("SELECT")))
+                    {
+                        QueryResults.Clear();
+                        foreach (var dictRow in results)
+                        {
+                            var resultRow = Models.QueryResultRow.FromDictionary(dictRow, columnNames);
+                            QueryResults.Add(resultRow);
+                        }
+                        
+                        ResultColumns = columnNames;
+                        HasResults = rowCount > 0;
+                        selectResultCount = rowCount;
+                        
+                        if (HasResults && columnNames.Count > 0)
+                        {
+                            GenerateDataGridColumns(columnNames);
+                        }
+                    }
                 }
-                
-                // ✅ CRITICAL: Store column names for DataGrid column generation
-                ResultColumns = columnNames;
-                
-                HasResults = rowCount > 0;
-                
-                // Generate columns AFTER setting HasResults so DataGrid is visible
-                if (HasResults && columnNames.Count > 0)
+                else
                 {
-                    GenerateDataGridColumns(columnNames);
-                }
-                
+                    // Execute non-query (INSERT, UPDATE, DELETE, CREATE, etc.)
+                    int affected = await command.ExecuteNonQueryAsync();
+                    if (affected >= 0)
+                    {
+                        totalAffected += affected;
+                    }
+                    
 #if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] QueryResults now contains {QueryResults.Count} items");
-                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] ResultColumns: {string.Join(", ", ResultColumns)}");
-                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] HasResults set to: {HasResults}");
-                System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] Row count: {rowCount}");
-                
-                // Verify first row array structure
-                if (QueryResults.Count > 0)
-                {
-                    var firstRow = QueryResults[0];
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] First row Values.Length: {firstRow.Values.Length}");
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] First row values: {string.Join(", ", firstRow.Values.Select((v, i) => $"[{i}]={v}"))}");
-                }
+                    System.Diagnostics.Debug.WriteLine($"[ExecuteQuery] Non-query {i + 1} affected {affected} row(s)");
 #endif
-                
-                StatusMessage = $"✅ {_localization.Format("QueryExecutedSuccess", rowCount)}";
+                }
+            }
+
+            // Build status message based on what was executed
+            if (hasSelectStatement && selectResultCount > 0)
+            {
+                if (totalAffected > 0)
+                {
+                    StatusMessage = $"✅ {statements.Count} statement(s): {selectResultCount} rows returned, {totalAffected} rows affected";
+                }
+                else
+                {
+                    StatusMessage = $"✅ {statements.Count} statement(s): {selectResultCount} rows returned";
+                }
+            }
+            else if (totalAffected > 0)
+            {
+                StatusMessage = $"✅ {statements.Count} statement(s): {totalAffected} rows affected";
             }
             else
             {
-                // Execute non-query (INSERT, UPDATE, DELETE, CREATE, etc.)
-                int affected = await command.ExecuteNonQueryAsync();
-                
-                // ✅ IMPROVED: Better status message for non-query commands
-                StatusMessage = affected >= 0 
-                    ? $"✅ {_localization.Format("QueryExecutedAffected", affected)}"
-                    : $"✅ {_localization["QueryExecutedSuccess"]}";
-                
-                // Reload table list in case schema changed
+                StatusMessage = $"✅ {statements.Count} statement(s) executed successfully";
+            }
+            
+            // Reload table list in case schema changed
+            if (statements.Any(s => s.TrimStart().ToUpperInvariant().StartsWith("CREATE") || 
+                                    s.TrimStart().ToUpperInvariant().StartsWith("DROP") ||
+                                    s.TrimStart().ToUpperInvariant().StartsWith("ALTER")))
+            {
                 await LoadTablesAsync();
             }
         }
@@ -196,7 +237,6 @@ public partial class MainWindowViewModel : ViewModelBase
             HasResults = false;
             
 #if DEBUG
-            // Also log to debug output
             System.Diagnostics.Debug.WriteLine($"[Query Error] {errorMsg}");
             System.Diagnostics.Debug.WriteLine($"[Query Error] Stack: {ex.StackTrace}");
 #endif

@@ -29,7 +29,11 @@ public partial class SettingsViewModel : ViewModelBase
     public ObservableCollection<LanguageOption> AvailableLanguages { get; } = 
     [
         new LanguageOption { Code = "en-US", DisplayName = "English" },
-        new LanguageOption { Code = "nl-NL", DisplayName = "Nederlands" }
+        new LanguageOption { Code = "nl-NL", DisplayName = "Nederlands" },
+        new LanguageOption { Code = "de-DE", DisplayName = "Deutsch" },
+        new LanguageOption { Code = "fr-FR", DisplayName = "Français" },
+        new LanguageOption { Code = "es-ES", DisplayName = "Español" },
+        new LanguageOption { Code = "it-IT", DisplayName = "Italiano" }
     ];
 
     public bool IsSaved { get; private set; }
@@ -42,8 +46,9 @@ public partial class SettingsViewModel : ViewModelBase
         _originalLanguage = settings.Language;
         _originalTheme = settings.Theme;
         
-        // Set selected language
+        // Set selected language (will auto-select based on saved/system language)
         SelectedLanguage = AvailableLanguages.FirstOrDefault(l => l.Code == settings.Language) 
+                           ?? AvailableLanguages.FirstOrDefault(l => l.Code == "en-US")
                            ?? AvailableLanguages[0];
         
         // Set theme toggle (true = dark, false = light)

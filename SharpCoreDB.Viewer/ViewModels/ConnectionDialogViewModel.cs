@@ -141,9 +141,36 @@ public partial class ConnectionDialogViewModel : ViewModelBase
             IsConnected = true;
             OnPropertyChanged(nameof(IsConnected));
         }
+        catch (SharpCoreDBException ex)
+        {
+            // ? Check if error is related to password/decryption
+            if (ex.Message.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+                (ex.InnerException?.Message.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (ex.InnerException?.Message.Contains("password", StringComparison.OrdinalIgnoreCase) ?? false))
+            {
+                ErrorMessage = _localization["ErrorIncorrectPassword"];
+            }
+            else
+            {
+                ErrorMessage = _localization.Format("ErrorConnectionFailed", ex.Message);
+            }
+            IsConnected = false;
+        }
         catch (Exception ex)
         {
-            ErrorMessage = _localization.Format("ErrorConnectionFailed", ex.Message);
+            // ? Check inner exceptions for password-related errors
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            
+            if (errorMessage.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
+                errorMessage.Contains("password", StringComparison.OrdinalIgnoreCase))
+            {
+                ErrorMessage = _localization["ErrorIncorrectPassword"];
+            }
+            else
+            {
+                ErrorMessage = _localization.Format("ErrorConnectionFailed", errorMessage);
+            }
             IsConnected = false;
         }
         finally
