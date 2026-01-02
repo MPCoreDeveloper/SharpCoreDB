@@ -3,18 +3,23 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+// ✅ RELOCATED: This file was moved from root SharpCoreDB/ to Database/Execution/
+// Original path: SharpCoreDB/Database.Execution.cs
+// New path: SharpCoreDB/Database/Execution/Database.Execution.cs
+// Date: December 2025
+
 namespace SharpCoreDB;
 
-using SharpCoreDB.Constants;
-using SharpCoreDB.Services;
-using SharpCoreDB.DataStructures;
-using System.Text;
 using System.Text.Json;
 
 /// <summary>
 /// Database implementation - Execution partial class.
-/// Handles SQL execution with modern C# 14 patterns.
-/// ✅ NEW: Compiled query execution for 5-10x faster repeated SELECT queries.
+/// Handles SQL execution with modern C# 14 patterns and async support.
+/// 
+/// Location: Database/Execution/Database.Execution.cs
+/// Purpose: SQL command execution (sync + async), query execution, compiled queries
+/// Features: Group commit WAL, query plan caching, parameter validation
+/// Dependencies: SqlParser, QueryPlanCache, GroupCommitWAL
 /// </summary>
 public partial class Database
 {
@@ -23,7 +28,7 @@ public partial class Database
     /// <inheritdoc />
     public void ExecuteSQL(string sql)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sql);  // ✅ C# 14
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         
         SqlQueryValidator.ValidateQuery(
             sql, 
@@ -32,7 +37,7 @@ public partial class Database
             config?.StrictParameterValidation ?? true);
         
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))  // ✅ Modern comparison
+        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
             var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
             sqlParser.Execute(sql, null);
@@ -40,11 +45,10 @@ public partial class Database
         }
 
         // ✅ OPTIMIZATION: Skip WAL for DELETE/UPDATE with PageBased storage
-        // PageBasedEngine provides durability via direct disk writes
         bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
                                parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase);
         
-        bool useWal = groupCommitWal is not null && !isDeleteOrUpdate;  // ✅ C# 14: not pattern
+        bool useWal = groupCommitWal is not null && !isDeleteOrUpdate;
 
         if (useWal)
         {
@@ -61,12 +65,10 @@ public partial class Database
                 {
                     SaveMetadata();
                     ApplyColumnarCompactionThresholdToTables();
-                    // ✅ Schema changes are immediately saved, but still mark dirty for safety
                     _metadataDirty = true;
                 }
                 else if (!isReadOnly)
                 {
-                    // ✅ Mark metadata as dirty for data-modifying commands
                     _metadataDirty = true;
                 }
             }
@@ -76,7 +78,7 @@ public partial class Database
     /// <summary>
     /// Executes a parameterized SQL command.
     /// </summary>
-    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="sql">The SQL command with parameter placeholders.</param>
     /// <param name="parameters">The parameters to bind.</param>
     public void ExecuteSQL(string sql, Dictionary<string, object?> parameters)
     {
@@ -97,8 +99,6 @@ public partial class Database
             return;
         }
 
-        // ✅ OPTIMIZATION: Skip WAL for DELETE/UPDATE with PageBased storage
-        // PageBasedEngine provides durability via direct disk writes
         bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
                                parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase);
         
@@ -119,12 +119,10 @@ public partial class Database
                 {
                     SaveMetadata();
                     ApplyColumnarCompactionThresholdToTables();
-                    // ✅ Schema changes are immediately saved, but still mark dirty for safety
                     _metadataDirty = true;
                 }
                 else if (!isReadOnly)
                 {
-                    // ✅ Mark metadata as dirty for data-modifying commands
                     _metadataDirty = true;
                 }
             }
@@ -133,20 +131,18 @@ public partial class Database
 
     /// <summary>
     /// Executes a parameterized SQL command with positional parameters.
-    /// PERFORMANCE: Skips SQL parsing - reuses cached plan from preparation.
-    /// Expected: 50k updates from 3.79 seconds to less than 100 milliseconds (38x faster).
     /// </summary>
-    /// <param name="sql">The prepared SQL statement with ? placeholders.</param>
+    /// <param name="sql">The SQL statement with ? placeholders.</param>
     /// <param name="parameters">Parameters in order of ? placeholders.</param>
     public void ExecuteSQL(string sql, params object?[] parameters)
     {
-        if (parameters == null || parameters.Length == 0)
+        if (parameters is null || parameters.Length == 0)
         {
             ExecuteSQL(sql);
             return;
         }
 
-        var paramDict = new Dictionary<string, object?>();
+        Dictionary<string, object?> paramDict = [];  // ✅ C# 14: Collection expression
         for (int i = 0; i < parameters.Length; i++)
         {
             paramDict[$"@p{i}"] = parameters[i];
@@ -184,7 +180,7 @@ public partial class Database
     /// <summary>
     /// Executes a parameterized SQL command asynchronously.
     /// </summary>
-    /// <param name="sql">The SQL command with ? placeholders.</param>
+    /// <param name="sql">The SQL command with parameter placeholders.</param>
     /// <param name="parameters">The parameters to bind.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -214,6 +210,9 @@ public partial class Database
         }
     }
 
+    /// <summary>
+    /// Executes SQL with group commit WAL for improved write performance.
+    /// </summary>
     private async Task ExecuteSQLWithGroupCommit(string sql, CancellationToken cancellationToken = default)
     {
         lock (_walLock)
@@ -232,6 +231,9 @@ public partial class Database
         await groupCommitWal!.CommitAsync(walData, cancellationToken);
     }
 
+    /// <summary>
+    /// Executes parameterized SQL with group commit WAL.
+    /// </summary>
     private async Task ExecuteSQLWithGroupCommit(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
         lock (_walLock)
@@ -255,7 +257,7 @@ public partial class Database
     /// Executes a query and returns the results.
     /// </summary>
     /// <param name="sql">The SQL query.</param>
-    /// <param name="parameters">The parameters.</param>
+    /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
@@ -265,7 +267,7 @@ public partial class Database
         if (config?.EnableCompiledPlanCache ?? true)
         {
             planCache ??= new QueryPlanCache(config?.CompiledPlanCacheCapacity ?? 2048);
-            var cache = planCache; // local non-null for flow
+            var cache = planCache;
             var entry = cache.GetOrAdd(key, k =>
             {
                 var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -297,10 +299,10 @@ public partial class Database
     }
 
     /// <summary>
-    /// Executes a query and returns the results with optional encryption bypass.
+    /// Executes a query with optional encryption bypass.
     /// </summary>
     /// <param name="sql">The SQL query.</param>
-    /// <param name="parameters">The parameters.</param>
+    /// <param name="parameters">Optional query parameters.</param>
     /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters, bool noEncrypt)
@@ -311,15 +313,13 @@ public partial class Database
 
     /// <summary>
     /// Executes a compiled query plan (zero parsing overhead).
-    /// Expected performance: 5-10x faster than ExecuteQuery for repeated queries.
-    /// Target: 1000 identical SELECTs in less than 8ms total.
+    /// Expected: 5-10x faster than ExecuteQuery for repeated queries.
     /// </summary>
     /// <param name="plan">The compiled query plan.</param>
-    /// <param name="parameters">The query parameters.</param>
+    /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null)
     {
-        // Route through SqlParser's optimized path using CachedQueryPlan parts
         var cached = new CachedQueryPlan(plan.Sql, plan.Sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
         return sqlParser.ExecuteQuery(cached, parameters ?? []);
@@ -327,22 +327,20 @@ public partial class Database
 
     /// <summary>
     /// Executes a prepared statement with compiled query optimization.
-    /// Uses zero-parse execution for SELECT queries with compiled plans.
     /// </summary>
     /// <param name="stmt">The prepared statement.</param>
-    /// <param name="parameters">The query parameters.</param>
+    /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
-        
-        // If compiled plan present, still use cached parts for stable SELECT logic
         return sqlParser.ExecuteQuery(stmt.Plan, parameters ?? []);
     }
 
     /// <summary>
     /// Applies the configured columnar auto-compaction threshold to all tables.
+    /// Called after schema changes to ensure new tables have correct settings.
     /// </summary>
     private void ApplyColumnarCompactionThresholdToTables()
     {
@@ -352,7 +350,7 @@ public partial class Database
         var threshold = this.config.ColumnarAutoCompactionThreshold;
         foreach (var table in tables.Values)
         {
-            if (table is SharpCoreDB.DataStructures.Table concrete)
+            if (table is Table concrete)
             {
                 concrete.SetCompactionThreshold(threshold);
             }

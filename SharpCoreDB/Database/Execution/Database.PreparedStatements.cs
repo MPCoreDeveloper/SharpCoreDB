@@ -3,29 +3,32 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+// ✅ RELOCATED: Moved from root to Database/Execution/
+// Original: SharpCoreDB/Database.PreparedStatements.cs
+// New: SharpCoreDB/Database/Execution/Database.PreparedStatements.cs
+// Date: December 2025
+
 namespace SharpCoreDB;
 
-using SharpCoreDB.Constants;
-using SharpCoreDB.DataStructures;
-using SharpCoreDB.Services;
-using System.Text;
 using System.Text.Json;
 
 /// <summary>
 /// Database implementation - Prepared statements partial class.
-/// Modern C# 14 with improved null handling and pattern matching.
-/// ✅ NEW: Compiled query support for zero-parse execution (5-10x faster).
+/// Modern C# 14 with compiled query support for zero-parse execution.
+/// 
+/// Location: Database/Execution/Database.PreparedStatements.cs
+/// Purpose: Prepared statement preparation and execution (sync + async)
+/// Features: Compiled query plans, expression trees, 5-10x performance improvement
 /// </summary>
 public partial class Database
 {
     /// <summary>
     /// Prepares a SQL statement for efficient repeated execution.
-    /// ✅ NEW: For SELECT queries, compiles to expression trees for zero-parse execution.
-    /// Expected performance: 5-10x faster for repeated SELECT statements.
+    /// For SELECT queries, compiles to expression trees for zero-parse execution.
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
     /// <returns>A prepared statement instance.</returns>
-    public SharpCoreDB.DataStructures.PreparedStatement Prepare(string sql)
+    public DataStructures.PreparedStatement Prepare(string sql)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         
@@ -36,14 +39,13 @@ public partial class Database
             _preparedPlans[sql] = plan;
         }
         
-        // ✅ NEW: Try to compile SELECT queries to expression trees
         CompiledQueryPlan? compiledPlan = null;
         if (sql.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
         {
             compiledPlan = QueryCompiler.Compile(sql);
         }
         
-        return new SharpCoreDB.DataStructures.PreparedStatement(sql, plan, compiledPlan);
+        return new DataStructures.PreparedStatement(sql, plan, compiledPlan);
     }
 
     /// <summary>
@@ -51,7 +53,7 @@ public partial class Database
     /// </summary>
     /// <param name="stmt">The prepared statement.</param>
     /// <param name="parameters">The parameters to bind.</param>
-    public void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters)
+    public void ExecutePrepared(DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -83,7 +85,10 @@ public partial class Database
         }
     }
 
-    private async Task ExecutePreparedWithGroupCommit(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Executes a prepared statement with group commit WAL.
+    /// </summary>
+    private async Task ExecutePreparedWithGroupCommit(DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
         lock (_walLock)
         {
@@ -104,11 +109,7 @@ public partial class Database
     /// <summary>
     /// Executes a prepared statement asynchronously with parameters.
     /// </summary>
-    /// <param name="stmt">The prepared statement.</param>
-    /// <param name="parameters">The parameters to bind.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
+    public async Task ExecutePreparedAsync(DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -137,21 +138,18 @@ public partial class Database
     /// <summary>
     /// Executes a prepared statement asynchronously with variable parameters.
     /// </summary>
-    /// <param name="stmt">The prepared statement.</param>
-    /// <param name="parameters">The parameters to bind.</param>
-    /// <returns>A ValueTask representing the execution result.</returns>
-    public async ValueTask<object> ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, params object[] parameters)
+    public async ValueTask<object> ExecutePreparedAsync(DataStructures.PreparedStatement stmt, params object[] parameters)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
         
-        var paramDict = new Dictionary<string, object?>();
+        Dictionary<string, object?> paramDict = [];  // ✅ C# 14: collection expression
         for (int i = 0; i < parameters.Length; i++)
         {
             paramDict[i.ToString()] = parameters[i];
         }
         
         await ExecutePreparedAsync(stmt, paramDict);
-        return new object();  // ✅ Could return void in modern C# but keeping for interface compatibility
+        return new object();
     }
 }

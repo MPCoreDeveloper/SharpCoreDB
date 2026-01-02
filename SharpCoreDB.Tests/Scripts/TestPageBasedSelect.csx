@@ -1,3 +1,9 @@
+// ? RELOCATED: Moved from SharpCoreDB (main project) to SharpCoreDB.Tests/Scripts/
+// Original: SharpCoreDB/TestPageBasedSelect.csx
+// New: SharpCoreDB.Tests/Scripts/TestPageBasedSelect.csx
+// Date: December 2025
+// Reason: Test scripts belong in test project, not production code
+
 // Quick test to verify PageBased SELECT works
 using SharpCoreDB.Core;
 using SharpCoreDB.DataStructures;
@@ -26,7 +32,7 @@ try
     // Test 1: SELECT * (full table scan)
     Console.WriteLine("\nTest 1: SELECT * FROM Users");
     var allRows = db.ExecuteQuery("SELECT * FROM Users");
-    Console.WriteLine($"  ✓ Found {allRows.Count} rows");
+    Console.WriteLine($"  ? Found {allRows.Count} rows");
     foreach (var row in allRows)
     {
         Console.WriteLine($"    - Id={row["Id"]}, Name={row["Name"]}, Age={row["Age"]}");
@@ -35,7 +41,7 @@ try
     // Test 2: SELECT with WHERE (primary key lookup)
     Console.WriteLine("\nTest 2: SELECT * FROM Users WHERE Id = 3");
     var pkRow = db.ExecuteQuery("SELECT * FROM Users WHERE Id = 3");
-    Console.WriteLine($"  ✓ Found {pkRow.Count} rows");
+    Console.WriteLine($"  ? Found {pkRow.Count} rows");
     if (pkRow.Count > 0)
     {
         Console.WriteLine($"    - Id={pkRow[0]["Id"]}, Name={pkRow[0]["Name"]}, Age={pkRow[0]["Age"]}");
@@ -44,7 +50,7 @@ try
     // Test 3: SELECT with WHERE (full scan with filter)
     Console.WriteLine("\nTest 3: SELECT * FROM Users WHERE Age > 30");
     var filteredRows = db.ExecuteQuery("SELECT * FROM Users WHERE Age > 30");
-    Console.WriteLine($"  ✓ Found {filteredRows.Count} rows");
+    Console.WriteLine($"  ? Found {filteredRows.Count} rows");
     foreach (var row in filteredRows)
     {
         Console.WriteLine($"    - Id={row["Id"]}, Name={row["Name"]}, Age={row["Age"]}");
@@ -54,15 +60,15 @@ try
     Console.WriteLine("\nTest 4: UPDATE Users SET Age = 31 WHERE Id = 2");
     db.Execute("UPDATE Users SET Age = 31 WHERE Id = 2");
     var updated = db.ExecuteQuery("SELECT * FROM Users WHERE Id = 2");
-    Console.WriteLine($"  ✓ Updated age: {updated[0]["Age"]}");
+    Console.WriteLine($"  ? Updated age: {updated[0]["Age"]}");
     
     // Test 5: DELETE
     Console.WriteLine("\nTest 5: DELETE FROM Users WHERE Id = 5");
     db.Execute("DELETE FROM Users WHERE Id = 5");
     var remaining = db.ExecuteQuery("SELECT * FROM Users");
-    Console.WriteLine($"  ✓ Remaining rows: {remaining.Count}");
+    Console.WriteLine($"  ? Remaining rows: {remaining.Count}");
     
-    Console.WriteLine("\n✅ All tests passed!");
+    Console.WriteLine("\n? All tests passed!");
 }
 finally
 {

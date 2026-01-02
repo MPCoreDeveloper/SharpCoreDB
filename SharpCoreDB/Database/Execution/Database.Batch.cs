@@ -3,14 +3,21 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-namespace SharpCoreDB;
+// ✅ RELOCATED: Moved from root to Database/Execution/
+// Original: SharpCoreDB/Database.Batch.cs
+// New: SharpCoreDB/Database/Execution/Database.Batch.cs
+// Date: December 2025
 
-using SharpCoreDB.Services;
+namespace SharpCoreDB;
 
 /// <summary>
 /// Database implementation - Batch operations partial class.
-/// CRITICAL: This is where the 680x performance improvement happens!
-/// Modern C# 14 with improved pattern matching and span support.
+/// CRITICAL PERFORMANCE: 680x improvement for bulk inserts!
+/// 
+/// Location: Database/Execution/Database.Batch.cs
+/// Purpose: Batch SQL execution, bulk insert optimization
+/// Features: INSERT statement batching, StreamingRowEncoder, transaction grouping
+/// Performance: 10K inserts in &lt;50ms with optimized path
 /// </summary>
 public partial class Database
 {
@@ -25,7 +32,6 @@ public partial class Database
 
     /// <summary>
     /// Parses an INSERT statement to extract table name and row data.
-    /// Simple parser for common INSERT INTO table VALUES (...) format.
     /// </summary>
     private (string tableName, Dictionary<string, object> row)? ParseInsertStatement(string sql)
     {
@@ -52,7 +58,7 @@ public partial class Database
                 var colStart = rest.IndexOf('(') + 1;
                 var colEnd = rest.IndexOf(')', colStart);
                 var colStr = rest[colStart..colEnd];
-                insertColumns = [.. colStr.Split(',').Select(c => c.Trim())];  // ✅ C# 14: collection expression
+                insertColumns = [.. colStr.Split(',').Select(c => c.Trim())];
                 rest = rest[(colEnd + 1)..];
             }
 
@@ -60,12 +66,11 @@ public partial class Database
             var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
             var values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
             
-            var row = new Dictionary<string, object>();
+            Dictionary<string, object> row = [];
             var table = tables[tableName];
             
             if (insertColumns is null)
             {
-                // All columns
                 for (int i = 0; i < table.Columns.Count; i++)
                 {
                     var col = table.Columns[i];
@@ -76,7 +81,6 @@ public partial class Database
             }
             else
             {
-                // Specified columns
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
                     var col = insertColumns[i];
@@ -90,24 +94,18 @@ public partial class Database
         }
         catch
         {
-            return null;  // Parse failed - fall back to normal execution
+            return null;
         }
     }
 
-    /// <summary>
-    /// Executes multiple SQL commands in a batch with transaction support.
-    /// CRITICAL PERFORMANCE: Single disk flush for entire batch!
-    /// ✅ NEW: Detects INSERT statements and uses InsertBatch API for 5-10x improvement!
-    /// </summary>
-    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
+    /// <inheritdoc />
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
     {
         ArgumentNullException.ThrowIfNull(sqlStatements);
         
-        var statements = sqlStatements as string[] ?? [.. sqlStatements];  // ✅ C# 14: collection expression spread
+        var statements = sqlStatements as string[] ?? [.. sqlStatements];
         if (statements.Length == 0) return;
 
-        // Check for SELECT statements (can't be batched)
         var hasSelect = statements.Any(sql =>
         {
             var trimmed = sql.AsSpan().Trim();
@@ -123,10 +121,8 @@ public partial class Database
             return;
         }
 
-        // ✅ CRITICAL OPTIMIZATION: Detect and batch INSERT statements!
-        // Group INSERT statements by table for batch processing
-        var insertsByTable = new Dictionary<string, List<Dictionary<string, object>>>();
-        var nonInserts = new List<string>();
+        Dictionary<string, List<Dictionary<string, object>>> insertsByTable = [];
+        List<string> nonInserts = [];
 
         foreach (var sql in statements)
         {
@@ -147,7 +143,6 @@ public partial class Database
                 }
                 else
                 {
-                    // Parse failed - execute normally
                     nonInserts.Add(sql);
                 }
             }
@@ -157,25 +152,20 @@ public partial class Database
             }
         }
 
-        // ✅ CRITICAL: TRUE TRANSACTION with IStorage.BeginTransaction()
-        // All AppendBytes() calls are buffered until CommitAsync()!
         lock (_walLock)
         {
             storage.BeginTransaction();
             
             try
             {
-                // ✅ CRITICAL OPTIMIZATION: Use InsertBatch for grouped INSERTs!
-                // This is where we go from 10,000 AppendBytes calls to ~10!
                 foreach (var (tableName, rows) in insertsByTable)
                 {
                     if (tables.TryGetValue(tableName, out var table))
                     {
-                        table.InsertBatch(rows);  // ✅ Single call per table!
+                        table.InsertBatch(rows);
                     }
                 }
 
-                // Execute non-INSERT statements normally (UPDATE, DELETE, etc.)
                 if (nonInserts.Count > 0)
                 {
                     var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
@@ -191,8 +181,6 @@ public partial class Database
                     SaveMetadata();
                 }
                 
-                // ✅ CRITICAL: Single CommitAsync() flushes ALL buffered appends!
-                // This is where 10,000 individual writes become ONE disk write!
                 storage.CommitAsync().GetAwaiter().GetResult();
             }
             catch
@@ -203,14 +191,7 @@ public partial class Database
         }
     }
 
-    /// <summary>
-    /// Executes multiple SQL commands in a batch asynchronously with transaction support.
-    /// CRITICAL PERFORMANCE: Single disk flush for entire batch!
-    /// ✅ NEW: Detects INSERT statements and uses InsertBatch API for 5-10x improvement!
-    /// </summary>
-    /// <param name="sqlStatements">Collection of SQL statements to execute.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <inheritdoc />
     public async Task ExecuteBatchSQLAsync(IEnumerable<string> sqlStatements, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sqlStatements);
@@ -233,9 +214,8 @@ public partial class Database
             return;
         }
 
-        // ✅ CRITICAL OPTIMIZATION: Detect and batch INSERT statements!
-        var insertsByTable = new Dictionary<string, List<Dictionary<string, object>>>();
-        var nonInserts = new List<string>();
+        Dictionary<string, List<Dictionary<string, object>>> insertsByTable = [];
+        List<string> nonInserts = [];
 
         foreach (var sql in statements)
         {
@@ -265,7 +245,6 @@ public partial class Database
             }
         }
 
-        // ✅ CRITICAL FIX: Execute synchronously in lock, then await commit outside lock
         Task commitTask;
         lock (_walLock)
         {
@@ -273,18 +252,14 @@ public partial class Database
 
             try
             {
-                // ✅ CRITICAL: Use InsertBatch!
                 foreach (var (tableName, rows) in insertsByTable)
                 {
                     if (tables.TryGetValue(tableName, out var table))
                     {
-                        Console.WriteLine($"[ExecuteBatchSQLAsync] Inserting {rows.Count} rows into {tableName}");
                         table.InsertBatch(rows);
-                        Console.WriteLine($"[ExecuteBatchSQLAsync] InsertBatch completed for {tableName}");
                     }
                 }
 
-                // Execute non-INSERTs
                 if (nonInserts.Count > 0)
                 {
                     var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
@@ -300,10 +275,7 @@ public partial class Database
                     SaveMetadata();
                 }
                 
-                // ✅ CRITICAL FIX: Start commit task inside lock, await outside
-                Console.WriteLine("[ExecuteBatchSQLAsync] Starting CommitAsync...");
                 commitTask = storage.CommitAsync();
-                Console.WriteLine("[ExecuteBatchSQLAsync] CommitAsync task started");
             }
             catch
             {
@@ -312,20 +284,11 @@ public partial class Database
             }
         }
         
-        // ✅ CRITICAL: Await commit outside the lock
-        Console.WriteLine("[ExecuteBatchSQLAsync] Awaiting commit task...");
         await commitTask;
-        Console.WriteLine("[ExecuteBatchSQLAsync] Commit task completed!");
     }
 
     /// <summary>
     /// Bulk insert operation optimized for large data imports (10K-1M rows).
-    /// ✅ NEW: Value pipeline with Span batches - 100k inserts from 677ms to less than 50ms!
-    /// VERIFIED PERFORMANCE (10K records):
-    /// - Standard Config: 252ms, 15.64 MB (13% faster, 77% less memory) ⭐ RECOMMENDED
-    /// - HighSpeed Config: 261ms, 15.98 MB (10% faster, 76% less memory)
-    /// - With UseOptimizedInsertPath: less than 50ms, less than 50MB (87% improvement)
-    /// TARGET: 100k encrypted inserts less than 50ms, allocations less than 50MB
     /// </summary>
     public async Task BulkInsertAsync(
         string tableName, 
@@ -340,14 +303,12 @@ public partial class Database
         if (!tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table '{tableName}' does not exist");
 
-        // ✅ NEW: Use optimized insert path if enabled or for large batches
         if ((config?.UseOptimizedInsertPath ?? false) || rows.Count > 5000)
         {
             await BulkInsertOptimizedInternalAsync(tableName, rows, table, cancellationToken);
             return;
         }
 
-        // Standard path for smaller batches
         int batchSize = (config?.HighSpeedInsertMode ?? false)
             ? (config?.GroupCommitSize ?? 1000)
             : 100;
@@ -387,18 +348,15 @@ public partial class Database
     }
 
     /// <summary>
-    /// ✅ OPTIMIZED bulk insert path with StreamingRowEncoder (zero-allocation).
-    /// Encodes rows to binary format, then uses InsertBatchFromBuffer for direct storage.
-    /// Expected: 40-60% faster than standard path for large batches (10K+ rows).
-    /// Memory: ~75% reduction in allocations (no intermediate Dictionary list).
+    /// Optimized bulk insert with StreamingRowEncoder (zero-allocation).
     /// </summary>
     private async Task BulkInsertOptimizedInternalAsync(
         string tableName,
         List<Dictionary<string, object>> rows,
-        SharpCoreDB.Interfaces.ITable table,
+        ITable table,
         CancellationToken cancellationToken)
     {
-        _ = tableName; // Parameter kept for logging
+        _ = tableName;
         
         await Task.Run(() =>
         {
@@ -408,34 +366,27 @@ public partial class Database
                 
                 try
                 {
-                    // ✅ CRITICAL: Use StreamingRowEncoder to encode rows into binary batches
                     using var encoder = new Optimizations.StreamingRowEncoder(
                         table.Columns,
                         table.ColumnTypes,
-                        64 * 1024);  // 64KB batch size
+                        64 * 1024);
 
-                    var allPositions = new List<long>(rows.Count);
+                    List<long> allPositions = new(rows.Count);
 
-                    // Process rows in batches using the encoder
                     for (int i = 0; i < rows.Count; i++)
                     {
                         var row = rows[i];
                         
-                        // Try to encode the row
                         if (!encoder.EncodeRow(row))
                         {
-                            // Batch is full - process accumulated rows
                             var batchData = encoder.GetBatchData();
                             var batchRowCount = encoder.GetRowCount();
                             
-                            // Insert batch using binary format
                             long[] positions = table.InsertBatchFromBuffer(batchData, batchRowCount);
                             allPositions.AddRange(positions);
                             
-                            // Reset encoder for next batch
                             encoder.Reset();
                             
-                            // Retry encoding the current row
                             if (!encoder.EncodeRow(row))
                             {
                                 throw new InvalidOperationException(
@@ -444,7 +395,6 @@ public partial class Database
                         }
                     }
 
-                    // Insert remaining rows in final batch
                     if (encoder.GetRowCount() > 0)
                     {
                         var batchData = encoder.GetBatchData();
@@ -454,7 +404,6 @@ public partial class Database
                         allPositions.AddRange(positions);
                     }
                     
-                    // ✅ CRITICAL: Single commit for entire batch!
                     storage.CommitAsync().GetAwaiter().GetResult();
                 }
                 catch

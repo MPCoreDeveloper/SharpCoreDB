@@ -3,11 +3,20 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+// ✅ RELOCATED: Moved from root to Database/Core/
+// Original: SharpCoreDB/Database.Statistics.cs
+// New: SharpCoreDB/Database/Core/Database.Statistics.cs
+// Date: December 2025
+
 namespace SharpCoreDB;
 
 /// <summary>
 /// Database implementation - Statistics partial class.
 /// Handles cache and database statistics with modern C# 14 patterns.
+/// 
+/// Location: Database/Core/Database.Statistics.cs
+/// Purpose: Query/page cache statistics, database metrics, table statistics
+/// Features: Tuple returns, tuple deconstruction, cached row counts
 /// </summary>
 public partial class Database
 {
@@ -16,7 +25,7 @@ public partial class Database
     /// </summary>
     /// <returns>A tuple containing cache hits, misses, hit rate, and count.</returns>
     public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics() =>
-        queryCache?.GetStatistics() ?? (0, 0, 0, 0);  // ✅ C# 14: tuple + null-coalescing
+        queryCache?.GetStatistics() ?? (0, 0, 0, 0);
 
     /// <summary>
     /// Clears the query cache.
@@ -54,7 +63,7 @@ public partial class Database
     /// <returns>A dictionary containing database statistics.</returns>
     public Dictionary<string, object> GetDatabaseStatistics()
     {
-        var stats = new Dictionary<string, object>
+        Dictionary<string, object> stats = new()  // ✅ C# 14: target-typed new
         {
             ["TablesCount"] = tables.Count,
             ["IsReadOnly"] = isReadOnly,
@@ -65,17 +74,15 @@ public partial class Database
             ["PageCacheEnabled"] = config?.EnablePageCache ?? false,
         };
 
-        // Query cache stats
         if (queryCache is not null)
         {
-            var (hits, misses, hitRate, count) = queryCache.GetStatistics();  // ✅ C# 14: tuple deconstruction
+            var (hits, misses, hitRate, count) = queryCache.GetStatistics();
             stats["QueryCacheHits"] = hits;
             stats["QueryCacheMisses"] = misses;
             stats["QueryCacheHitRate"] = hitRate;
             stats["QueryCacheCount"] = count;
         }
 
-        // Page cache stats
         if (pageCache is not null)
         {
             var pageCacheStats = pageCache.Statistics;
@@ -88,18 +95,13 @@ public partial class Database
             stats["PageCacheLatchFailures"] = pageCacheStats.LatchFailures;
         }
 
-        // Table-specific stats
-        foreach (var (name, table) in tables)  // ✅ C# 14: tuple deconstruction in foreach
+        foreach (var (name, table) in tables)
         {
             stats[$"Table_{name}_Columns"] = table.Columns.Count;
             
-            // ✅ PERFORMANCE FIX: Use cached row count instead of full table scan!
-            // Before: table.Select().Count took 53% CPU time (10K BTree searches!)
-            // After: O(1) cached value lookup
             var rowCount = table.GetCachedRowCount();
             if (rowCount < 0)
             {
-                // Cache not initialized - do one-time refresh
                 table.RefreshRowCount();
                 rowCount = table.GetCachedRowCount();
             }

@@ -582,29 +582,6 @@ public partial class Table
     }
 
     /// <summary>
-    /// 🔥 NEW: Executes typed UpdateBatch for a single PRIMARY KEY update.
-    /// This is the fast path that achieves 5-7x speedup.
-    /// </summary>
-    private static bool ExecuteTypedUpdate<TId, TValue>(
-        Table table,
-        string idColumn,
-        string updateColumn,
-        List<(TId id, TValue value)> updates)
-        where TId : notnull
-        where TValue : notnull
-    {
-        try
-        {
-            table.UpdateBatch(idColumn, updateColumn, updates);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
     /// 🔥 NEW: Batch update with multiple columns using strongly-typed ID and dynamic values.
     /// Optimized for PRIMARY KEY lookups with multiple column updates.
     /// Expected: 4-6x faster than standard Update() for multi-column PK-based updates.
@@ -643,10 +620,10 @@ public partial class Table
                 .Distinct()
                 .ToList();
             
-            foreach (var col in allUpdateColumns)
+            var missingColumns = allUpdateColumns.Where(col => !Columns.Contains(col)).ToList();
+            if (missingColumns.Count > 0)
             {
-                if (!Columns.Contains(col))
-                    throw new ArgumentException($"Column '{col}' not found");
+                throw new ArgumentException($"Column(s) '{string.Join(", ", missingColumns)}' not found");
             }
 
             var engine = GetOrCreateStorageEngine();

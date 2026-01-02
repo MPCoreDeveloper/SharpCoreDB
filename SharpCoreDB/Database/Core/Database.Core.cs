@@ -3,28 +3,32 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
+// ✅ RELOCATED: This file was moved from root SharpCoreDB/ to Database/Core/ for better organization
+// Original path: SharpCoreDB/Database.Core.cs
+// New path: SharpCoreDB/Database/Core/Database.Core.cs
+// Date: December 2025
+
 namespace SharpCoreDB;
 
 using Microsoft.Extensions.DependencyInjection;
-using SharpCoreDB.Constants;
 using SharpCoreDB.Core.Cache;
-using SharpCoreDB.DataStructures;
-using SharpCoreDB.Interfaces;
-using SharpCoreDB.Services;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 /// <summary>
 /// Database implementation - Core partial class with fields and initialization.
-/// Modern C# 14 with collection expressions and primary constructors support.
+/// Modern C# 14 with collection expressions, primary constructors, and async patterns.
+/// 
+/// Location: Database/Core/Database.Core.cs
+/// Purpose: Core initialization, field declarations, Load/Save metadata, Dispose pattern
+/// Dependencies: IStorage, IUserService, tables dictionary, caches
 /// </summary>
 public partial class Database : IDatabase, IDisposable
 {
     private readonly IStorage storage;
     private readonly IUserService userService;
-    private readonly Dictionary<string, ITable> tables = [];
+    private readonly Dictionary<string, ITable> tables = [];  // ✅ C# 14: Collection expression
     private readonly string _dbPath;
     
     /// <summary>
@@ -36,26 +40,31 @@ public partial class Database : IDatabase, IDisposable
     private readonly DatabaseConfig? config;
     private readonly QueryCache? queryCache;
     private readonly PageCache? pageCache;
-    private readonly Lock _walLock = new();  // ✅ C# 14: target-typed new
+    private readonly Lock _walLock = new();  // ✅ C# 14: Lock type + target-typed new
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
     
     private readonly GroupCommitWAL? groupCommitWal;
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     
-    private bool _disposed;  // ✅ C# 14: No need for = false initialization
+    private bool _disposed;  // ✅ C# 14: No explicit = false needed
 
-    // ✅ NEW: Batch UPDATE transaction state
-    private bool _batchUpdateActive = false;
+    // Batch UPDATE transaction state
+    private bool _batchUpdateActive;
     
-    // ✅ NEW: Track if metadata needs to be flushed
-    private bool _metadataDirty = false;
+    // Track if metadata needs to be flushed
+    private bool _metadataDirty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
     /// </summary>
+    /// <param name="services">The service provider for dependency injection.</param>
+    /// <param name="dbPath">The database directory path.</param>
+    /// <param name="masterPassword">The master encryption password.</param>
+    /// <param name="isReadOnly">Whether the database is readonly.</param>
+    /// <param name="config">Optional database configuration.</param>
     public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
     {
-        ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14: Modern null checking
+        ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14: Modern validation
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(masterPassword);
         
@@ -89,25 +98,8 @@ public partial class Database : IDatabase, IDisposable
         // This ensures tables dictionary is populated before crash recovery ExecuteSQL calls
         Load();
 
-        // Apply configuration-dependent per-table settings (e.g., compaction threshold)
-        try
-        {
-            if (this.config is not null && this.config.ColumnarAutoCompactionThreshold != default)
-            {
-                foreach (var table in tables.Values)
-                {
-                    // Only relevant for columnar append-only tables
-                    if (table is DataStructures.Table t)
-                    {
-                        t.SetCompactionThreshold(this.config.ColumnarAutoCompactionThreshold);
-                    }
-                }
-            }
-        }
-        catch { /* non-fatal */ }
-
         // Initialize Group Commit WAL if enabled (AFTER Load)
-        if (this.config is not null && this.config.UseGroupCommitWal && !isReadOnly)
+        if (this.config is not null && this.config.UseGroupCommitWal && !isReadOnly)  // ✅ C# 14: is not null
         {
             groupCommitWal = new(
                 _dbPath,
@@ -141,6 +133,9 @@ public partial class Database : IDatabase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Loads database metadata from disk and initializes tables.
+    /// </summary>
     private void Load()
     {
         var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
@@ -153,14 +148,14 @@ public partial class Database : IDatabase, IDisposable
         
         var metaJson = storage.Read(metaPath);
 
-        // ✅ CRITICAL: If metadata file exists but cannot be decrypted, abort instead of creating a new empty database
-        if (metaExists && metaJson is null)
+        // ✅ CRITICAL: If metadata file exists but cannot be decrypted, abort
+        if (metaExists && metaJson is null)  // ✅ C# 14: is null pattern
         {
             throw new InvalidOperationException(
                 "Failed to decrypt database metadata. The master password may be incorrect or the database file is corrupted.");
         }
         
-        if (metaJson is null)
+        if (metaJson is null)  // ✅ C# 14: is null pattern
         {
 #if DEBUG
             System.Diagnostics.Debug.WriteLine("[Load] No metadata file found - new database");
@@ -216,22 +211,16 @@ public partial class Database : IDatabase, IDisposable
         foreach (var tableDict in tablesList)
         {
             var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict));
-            if (table is not null)  // ✅ C# 14: not pattern
+            if (table is not null)  // ✅ C# 14: is not null pattern
             {
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
                 
                 // ✅ CRITICAL FIX: Reinitialize Table after deserialization
-                // JSON deserialization doesn't call constructor, so we need to ensure:
-                // 1. IsAuto list has correct length (may be missing after deserialization)
-                // 2. Column index cache is built
-                // 3. Row count cache is refreshed
-                // 4. PRIMARY KEY INDEX REBUILT! (most critical - without this, SELECT returns 0 rows!)
-                
                 // Ensure IsAuto list has same length as Columns
                 while (table.IsAuto.Count < table.Columns.Count)
                 {
-                    table.IsAuto.Add(false); // Default to non-auto for missing entries
+                    table.IsAuto.Add(false);
                 }
                 
 #if DEBUG
@@ -240,8 +229,6 @@ public partial class Database : IDatabase, IDisposable
 #endif
                 
                 // ✅ CRITICAL FIX: Rebuild Primary Key index after deserialization
-                // The B-Tree index is NOT serialized, so it's empty after reload
-                // Without this, all rows appear as "stale" during SELECT and 0 rows are returned!
                 if (table.PrimaryKeyIndex >= 0)
                 {
 #if DEBUG
@@ -251,11 +238,10 @@ public partial class Database : IDatabase, IDisposable
                     
                     try
                     {
-                        // Rebuild the index by scanning the data file
                         table.RebuildPrimaryKeyIndexFromDisk();
                         
 #if DEBUG
-                        System.Diagnostics.Debug.WriteLine($"[Load] ✅ Primary Key index rebuilt successfully!");
+                        System.Diagnostics.Debug.WriteLine("[Load] ✅ Primary Key index rebuilt successfully!");
 #endif
                     }
                     catch (Exception ex)
@@ -279,6 +265,9 @@ public partial class Database : IDatabase, IDisposable
 #endif
     }
 
+    /// <summary>
+    /// Saves database metadata to disk.
+    /// </summary>
     private void SaveMetadata()
     {
         var tablesList = tables.Values.Select(t => new
@@ -293,14 +282,23 @@ public partial class Database : IDatabase, IDisposable
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
         storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), JsonSerializer.Serialize(meta));
         
-        // ✅ Reset dirty flag after successful save
         _metadataDirty = false;
     }
 
+    /// <summary>
+    /// Determines if a SQL command changes the database schema.
+    /// </summary>
+    /// <param name="sql">The SQL command.</param>
+    /// <returns>True if schema-changing command.</returns>
     private static bool IsSchemaChangingCommand(string sql) =>
         sql.TrimStart().ToUpperInvariant() is var upper &&
-        (upper.StartsWith("CREATE ") || upper.StartsWith("ALTER ") || upper.StartsWith("DROP "));  // ✅ C# 14: expression-bodied + pattern
+        (upper.StartsWith("CREATE ") || upper.StartsWith("ALTER ") || upper.StartsWith("DROP "));
 
+    /// <summary>
+    /// Gets or creates the database-specific salt for key derivation.
+    /// </summary>
+    /// <param name="dbPath">The database path.</param>
+    /// <returns>Base64-encoded salt string.</returns>
     private static string GetOrCreateDatabaseSalt(string dbPath)
     {
         var saltFilePath = Path.Combine(dbPath, ".salt");
@@ -331,22 +329,18 @@ public partial class Database : IDatabase, IDisposable
     }
 
     /// <inheritdoc />
-    public void CreateUser(String username, string password) => userService.CreateUser(username, password);
+    public void CreateUser(string username, string password) => userService.CreateUser(username, password);
 
     /// <inheritdoc />
-    public bool Login(String username, string password) => userService.Login(username, password);
+    public bool Login(string username, string password) => userService.Login(username, password);
 
     /// <inheritdoc />
-    public IDatabase Initialize(String dbPath, String masterPassword) => this;  // ✅ Already initialized in constructor
+    public IDatabase Initialize(string dbPath, string masterPassword) => this;
 
     /// <inheritdoc />
     public void Flush()
     {
-        if (isReadOnly)
-            return; // No-op for readonly databases
-
-        // ✅ OPTIMIZATION: Only save if metadata has changed
-        if (!_metadataDirty)
+        if (isReadOnly || !_metadataDirty)
             return;
 
         try
@@ -377,13 +371,11 @@ public partial class Database : IDatabase, IDisposable
             }
 #endif
             
-            // ✅ CRITICAL FIX: Flush all table data files BEFORE saving metadata!
-            // This ensures INSERT/UPDATE/DELETE data is persisted to disk
+            // ✅ CRITICAL: Flush all table data files BEFORE saving metadata
             foreach (var table in tables.Values)
             {
                 try
                 {
-                    // Call Flush() on each table to persist data
                     table.Flush();
 #if DEBUG
                     System.Diagnostics.Debug.WriteLine($"[ForceSave] Flushed table: {table.Name}");
@@ -394,7 +386,6 @@ public partial class Database : IDatabase, IDisposable
 #if DEBUG
                     System.Diagnostics.Debug.WriteLine($"[ForceSave] WARNING: Failed to flush table {table.Name}: {ex.Message}");
 #endif
-                    // Continue flushing other tables even if one fails
                 }
             }
             
@@ -430,7 +421,6 @@ public partial class Database : IDatabase, IDisposable
 
         if (disposing)
         {
-            // ✅ FIX: Save metadata before disposing to persist any table changes
             if (!isReadOnly)
             {
                 try
@@ -440,11 +430,9 @@ public partial class Database : IDatabase, IDisposable
                 catch (Exception ex)
                 {
 #if DEBUG
-                    // Log but don't throw during dispose
                     System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] Failed to save metadata during dispose: {ex.Message}");
 #endif
-                    // Suppress exception - dispose should not throw
-                    _ = ex; // Avoid unused variable warning
+                    _ = ex;
                 }
             }
 

@@ -2,6 +2,13 @@
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
+
+// ✅ RELOCATED: Moved from root to DataStructures/
+// Original: SharpCoreDB/Ulid.cs
+// New: SharpCoreDB/DataStructures/Ulid.cs
+// Date: December 2025
+// Reason: Data structure belongs with other data structures (TableInfo, ColumnInfo, etc.)
+
 namespace SharpCoreDB;
 
 using SharpCoreDB.Base32Encoding;
@@ -9,13 +16,17 @@ using System.Security.Cryptography;
 
 /// <summary>
 /// Represents a Universally Unique Lexicographically Sortable Identifier (ULID).
+/// Modern C# 14 record type with Span-based operations.
+/// 
+/// Location: DataStructures/Ulid.cs
+/// Purpose: Time-sortable unique identifier generation and parsing
+/// Features: Record type, Span&lt;T&gt; for zero-allocation, cryptographic randomness
 /// </summary>
 /// <param name="Value">The string value of the ULID.</param>
 public record Ulid(string Value)
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Ulid"/> class.
-    /// Initializes a new instance of Ulid with an empty value.
+    /// Initializes a new instance of the <see cref="Ulid"/> class with an empty value.
     /// </summary>
     public Ulid()
         : this(string.Empty)
@@ -53,6 +64,7 @@ public record Ulid(string Value)
 
     /// <summary>
     /// Creates a new ULID with the specified timestamp in milliseconds since Unix epoch.
+    /// Uses Span&lt;T&gt; for zero-allocation generation.
     /// </summary>
     /// <param name="timestamp">The timestamp in milliseconds.</param>
     /// <returns>A new Ulid instance.</returns>
@@ -93,7 +105,6 @@ public record Ulid(string Value)
         }
 
         ReadOnlySpan<byte> bytes = Base32.Decode(ulid.Value[..10]);
-
         long timestamp = ExtractTimestamp(bytes);
 
         return DateTime.UnixEpoch.AddMilliseconds(timestamp);
@@ -116,11 +127,10 @@ public record Ulid(string Value)
     {
         if (string.IsNullOrEmpty(this.Value) || this.Value.Length != 26)
         {
-            return 0; // if the value is empty or not 26 characters long, return 0
+            return 0;
         }
 
         ReadOnlySpan<byte> bytes = Base32.Decode(this.Value[..10]);
-
         return ExtractTimestamp(bytes);
     }
 
@@ -133,6 +143,9 @@ public record Ulid(string Value)
         return this.ToEpoch();
     }
 
+    /// <summary>
+    /// Extracts timestamp from byte span.
+    /// </summary>
     private static long ExtractTimestamp(ReadOnlySpan<byte> bytes)
     {
         long timestamp = 0;
