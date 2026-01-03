@@ -521,3 +521,4 @@ public sealed class SharpCoreDBCommand : DbCommand
         base.Dispose(disposing);
     }
 }
+

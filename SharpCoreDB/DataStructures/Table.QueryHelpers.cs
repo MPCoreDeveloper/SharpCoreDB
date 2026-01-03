@@ -230,34 +230,15 @@ public partial class Table
     /// <summary>
     /// Deserializes a byte array into a row dictionary.
     /// Uses ReadTypedValueFromSpan to parse column values.
+    /// ✅ OPTIMIZED: Uses SIMD batch deserialization for numeric columns.
     /// </summary>
     private Dictionary<string, object>? DeserializeRow(byte[] data)
     {
         if (data == null || data.Length == 0)
             return null;
 
-        var row = new Dictionary<string, object>();
-        int offset = 0;
-        ReadOnlySpan<byte> dataSpan = data.AsSpan();
-
-        try
-        {
-            for (int i = 0; i < Columns.Count; i++)
-            {
-                if (offset >= dataSpan.Length)
-                    return null;
-
-                var value = ReadTypedValueFromSpan(dataSpan.Slice(offset), ColumnTypes[i], out int bytesRead);
-                row[Columns[i]] = value;
-                offset += bytesRead;
-            }
-
-            return row;
-        }
-        catch
-        {
-            return null;
-        }
+        // ✅ OPTIMIZED: Use SIMD batch deserialization when beneficial
+        return DeserializeRowWithSimd(data.AsSpan());
     }
 
     /// <summary>

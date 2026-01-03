@@ -87,4 +87,33 @@ public sealed partial class SqlToStringVisitor
 
         return string.Join(" ", parts);
     }
+
+    /// <inheritdoc/>
+    protected override string VisitAlterTableCore(AlterTableNode node)
+    {
+        List<string> parts = ["ALTER TABLE", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 14: Collection expression
+
+        switch (node.Operation)
+        {
+            case AlterTableOperation.AddColumn:
+                parts.Add("ADD COLUMN");
+                if (node.Column is not null) // ✅ C# 14: is not null pattern
+                {
+                    var c = node.Column;
+                    var def = $"{_dialect.QuoteIdentifier(c.Name)} {c.DataType}";
+                    if (c.IsPrimaryKey) def += " PRIMARY KEY";
+                    if (c.IsAutoIncrement) def += " AUTO";
+                    if (c.IsNotNull) def += " NOT NULL";
+                    if (c.IsUnique) def += " UNIQUE";
+                    if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 14: is not null
+                    parts.Add(def);
+                }
+                break;
+            default:
+                parts.Add($"({node.Operation} not implemented)");
+                break;
+        }
+
+        return string.Join(" ", parts);
+    }
 }

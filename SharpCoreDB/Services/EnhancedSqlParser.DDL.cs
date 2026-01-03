@@ -23,6 +23,17 @@ public partial class EnhancedSqlParser
         return null;
     }
 
+    private SqlNode? ParseAlter()
+    {
+        ConsumeKeyword(); // ALTER
+
+        if (MatchKeyword("TABLE"))
+            return ParseAlterTable();
+
+        RecordError("Only ALTER TABLE is supported");
+        return null;
+    }
+
     private CreateTableNode ParseCreateTable()
     {
         var node = new CreateTableNode { Position = _position };
@@ -43,12 +54,27 @@ public partial class EnhancedSqlParser
             if (!MatchToken("("))
                 RecordError("Expected ( after table name");
 
-            // Parse column definitions
+            // Parse column definitions and table constraints
             do
             {
-                var column = ParseColumnDefinition();
-                if (column is not null)
-                    node.Columns.Add(column);
+                if (PeekKeyword()?.ToUpperInvariant() == "FOREIGN")
+                {
+                    var fk = ParseForeignKeyDefinition();
+                    if (fk is not null)
+                        node.ForeignKeys.Add(fk);
+                }
+                else if (PeekKeyword()?.ToUpperInvariant() == "CHECK")
+                {
+                    var check = ParseCheckConstraint();
+                    if (check is not null)
+                        node.CheckConstraints.Add(check);
+                }
+                else
+                {
+                    var column = ParseColumnDefinition();
+                    if (column is not null)
+                        node.Columns.Add(column);
+                }
             } while (MatchToken(","));
 
             if (!MatchToken(")"))
@@ -57,6 +83,39 @@ public partial class EnhancedSqlParser
         catch (Exception ex)
         {
             RecordError($"Error parsing CREATE TABLE: {ex.Message}");
+        }
+
+        return node;
+    }
+
+    private AlterTableNode ParseAlterTable()
+    {
+        var node = new AlterTableNode { Position = _position };
+
+        try
+        {
+            node.TableName = ConsumeIdentifier() ?? "";
+
+            if (MatchKeyword("ADD"))
+            {
+                if (MatchKeyword("COLUMN"))
+                {
+                    node.Operation = AlterTableOperation.AddColumn;
+                    node.Column = ParseColumnDefinition();
+                }
+                else
+                {
+                    RecordError("Expected COLUMN after ADD");
+                }
+            }
+            else
+            {
+                RecordError("Only ADD COLUMN is supported for ALTER TABLE");
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordError($"Error parsing ALTER TABLE: {ex.Message}");
         }
 
         return node;
@@ -90,10 +149,35 @@ public partial class EnhancedSqlParser
                         RecordError("Expected NULL after NOT");
                     column.IsNotNull = true;
                 }
+                else if (MatchKeyword("UNIQUE"))
+                {
+                    column.IsUnique = true;
+                }
                 else if (MatchKeyword("DEFAULT"))
                 {
-                    var defaultValue = ParseLiteral();
-                    column.DefaultValue = defaultValue?.Value;
+                    column.DefaultExpression = ParseDefaultExpression();
+                }
+                else if (MatchKeyword("CHECK"))
+                {
+                    if (!MatchToken("("))
+                        RecordError("Expected ( after CHECK");
+                    // For now, capture the expression as a string
+                    // TODO: Implement full expression parsing for CHECK constraints
+                    var startPos = _position;
+                    var parenCount = 1;
+                    
+                    while (_position < _sql.Length && parenCount > 0)
+                    {
+                        if (_sql[_position] == '(') parenCount++;
+                        else if (_sql[_position] == ')') parenCount--;
+                        _position++;
+                    }
+                    
+                    if (parenCount > 0)
+                        RecordError("Unclosed parentheses in CHECK constraint");
+                    
+                    var expr = _sql.Substring(startPos, _position - startPos - 1).Trim();
+                    column.CheckExpression = expr;
                 }
                 else
                 {
@@ -107,5 +191,145 @@ public partial class EnhancedSqlParser
         }
 
         return column;
+    }
+
+    private ForeignKeyDefinition? ParseForeignKeyDefinition()
+    {
+        var fk = new ForeignKeyDefinition();
+
+        try
+        {
+            if (!MatchKeyword("FOREIGN"))
+                return null;
+            if (!MatchKeyword("KEY"))
+                RecordError("Expected KEY after FOREIGN");
+
+            if (!MatchToken("("))
+                RecordError("Expected ( after FOREIGN KEY");
+            
+            fk.ColumnName = ConsumeIdentifier() ?? "";
+            
+            if (!MatchToken(")"))
+                RecordError("Expected ) after column name");
+
+            if (!MatchKeyword("REFERENCES"))
+                RecordError("Expected REFERENCES after FOREIGN KEY");
+
+            fk.ReferencedTable = ConsumeIdentifier() ?? "";
+
+            if (!MatchToken("("))
+                RecordError("Expected ( after referenced table");
+            
+            fk.ReferencedColumn = ConsumeIdentifier() ?? "";
+            
+            if (!MatchToken(")"))
+                RecordError("Expected ) after referenced column");
+
+            // Parse ON DELETE and ON UPDATE actions
+            while (true)
+            {
+                if (MatchKeyword("ON"))
+                {
+                    if (MatchKeyword("DELETE"))
+                    {
+                        fk.OnDelete = ParseFkAction();
+                    }
+                    else if (MatchKeyword("UPDATE"))
+                    {
+                        fk.OnUpdate = ParseFkAction();
+                    }
+                    else
+                    {
+                        RecordError("Expected DELETE or UPDATE after ON");
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordError($"Error parsing FOREIGN KEY: {ex.Message}");
+        }
+
+        return fk;
+    }
+
+    private FkAction ParseFkAction()
+    {
+        if (MatchKeyword("CASCADE"))
+            return FkAction.Cascade;
+        if (MatchKeyword("SET"))
+        {
+            if (!MatchKeyword("NULL"))
+                RecordError("Expected NULL after SET");
+            return FkAction.SetNull;
+        }
+        if (MatchKeyword("RESTRICT"))
+            return FkAction.Restrict;
+        if (MatchKeyword("NO"))
+        {
+            if (!MatchKeyword("ACTION"))
+                RecordError("Expected ACTION after NO");
+            return FkAction.NoAction;
+        }
+        
+        // Default to RESTRICT if no action specified
+        return FkAction.Restrict;
+    }
+
+    /// <summary>
+    /// Parses a DEFAULT expression, supporting both literals and functions like CURRENT_TIMESTAMP, NEWID().
+    /// </summary>
+    private string? ParseDefaultExpression()
+    {
+        // Try to parse as a function call first (CURRENT_TIMESTAMP, NEWID(), etc.)
+        var identifier = PeekKeyword()?.ToUpperInvariant();
+        if (identifier is "CURRENT_TIMESTAMP" or "GETDATE" or "GETUTCDATE" or "NEWID" or "NEWSEQUENTIALID")
+        {
+            ConsumeKeyword(); // consume the function name
+            if (MatchToken("("))
+            {
+                if (!MatchToken(")"))
+                    RecordError("Expected ) after function call");
+            }
+            return identifier;
+        }
+
+        // Fall back to literal parsing
+        var literal = ParseLiteral();
+        return literal?.Value?.ToString();
+    }
+
+    /// <summary>
+    /// Parses a CHECK constraint expression.
+    /// </summary>
+    private string? ParseCheckConstraint()
+    {
+        if (!MatchKeyword("CHECK"))
+            return null;
+
+        if (!MatchToken("("))
+            RecordError("Expected ( after CHECK");
+
+        // For now, capture the expression as a string
+        // TODO: Implement full expression parsing and evaluation for CHECK constraints
+        var startPos = _position;
+        var parenCount = 1;
+        
+        while (_position < _sql.Length && parenCount > 0)
+        {
+            if (_sql[_position] == '(') parenCount++;
+            else if (_sql[_position] == ')') parenCount--;
+            _position++;
+        }
+        
+        if (parenCount > 0)
+            RecordError("Unclosed parentheses in CHECK constraint");
+        
+        var expr = _sql.Substring(startPos, _position - startPos - 1).Trim();
+        return expr;
     }
 }

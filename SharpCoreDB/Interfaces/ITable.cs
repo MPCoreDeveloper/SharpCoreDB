@@ -40,6 +40,26 @@ public interface ITable
     List<bool> IsAuto { get; }
 
     /// <summary>
+    /// Gets whether columns are NOT NULL.
+    /// </summary>
+    List<bool> IsNotNull { get; }
+
+    /// <summary>
+    /// Gets the default values for columns.
+    /// </summary>
+    List<object?> DefaultValues { get; }
+
+    /// <summary>
+    /// Gets the foreign key constraints.
+    /// </summary>
+    List<ForeignKeyConstraint> ForeignKeys { get; }
+
+    /// <summary>
+    /// Gets the unique constraints (column names or composite).
+    /// </summary>
+    List<List<string>> UniqueConstraints { get; }
+
+    /// <summary>
     /// Inserts a row into the table.
     /// </summary>
     /// <param name="row">The row data.</param>
@@ -201,4 +221,11 @@ public interface ITable
     /// Ensures INSERT/UPDATE/DELETE operations are persisted.
     /// </summary>
     void Flush();
+
+    /// <summary>
+    /// Adds a new column to the table schema.
+    /// Used for ALTER TABLE ADD COLUMN operations.
+    /// </summary>
+    /// <param name="columnDef">The column definition to add.</param>
+    void AddColumn(ColumnDefinition columnDef);
 }

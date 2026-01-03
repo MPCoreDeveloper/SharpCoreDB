@@ -162,4 +162,13 @@ public abstract partial class SqlVisitorBase<TResult>
     /// Core implementation of CREATE TABLE visit.
     /// </summary>
     protected abstract TResult VisitCreateTableCore(CreateTableNode node);
+
+    /// <inheritdoc/>
+    public virtual TResult VisitAlterTable(AlterTableNode node) =>
+        SafeVisit(() => VisitAlterTableCore(node), "ALTER TABLE", node);
+
+    /// <summary>
+    /// Core implementation of ALTER TABLE visit.
+    /// </summary>
+    protected abstract TResult VisitAlterTableCore(AlterTableNode node);
 }

@@ -7,7 +7,7 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.1-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
   [![EF Core](https://img.shields.io/badge/EF%20Core-10.0-purple.svg)](https://docs.microsoft.com/ef/core/)
   
 </div>
@@ -179,6 +179,77 @@ var context = provider.GetRequiredService<AppDbContext>();
 - **Multi-Platform**: Windows, Linux, macOS, Android, iOS, IoT (x64, ARM64)
 - **Pure .NET**: No native dependencies, works everywhere .NET runs
 - **NativeAOT Ready**: Compatible with ahead-of-time compilation
+
+### [?] DDL Feature Support
+
+SharpCoreDB supports advanced DDL features that enhance data integrity. Here's how they work with EF Core:
+
+#### ? DEFAULT Values (Fully Supported)
+DEFAULT values work seamlessly with EF Core migrations and fluent API:
+
+```csharp
+// Using Data Annotations
+public class Product
+{
+    public int Id { get; set; }
+    [DefaultValue("Unknown")]
+    public string Name { get; set; }
+    
+    [DefaultValue(0)]
+    public decimal Price { get; set; }
+}
+
+// Using Fluent API
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.Entity<Product>()
+        .Property(p => p.Name)
+        .HasDefaultValue("Unknown");
+        
+    modelBuilder.Entity<Product>()
+        .Property(p => p.CreatedAt)
+        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+}
+```
+
+#### ?? CHECK Constraints (Raw SQL Required)
+**EF Core 10 does not support CHECK constraints in migrations.** Use raw SQL to add CHECK constraints:
+
+```csharp
+// After creating your migration, add CHECK constraints manually
+protected override void Up(MigrationBuilder migrationBuilder)
+{
+    // Create table with EF Core
+    migrationBuilder.CreateTable(
+        name: "Products",
+        columns: table => new
+        {
+            Id = table.Column<int>(nullable: false),
+            Name = table.Column<string>(nullable: false),
+            Price = table.Column<decimal>(nullable: false),
+            Stock = table.Column<int>(nullable: false)
+        },
+        constraints: table =>
+        {
+            table.PrimaryKey("PK_Products", x => x.Id);
+        });
+
+    // Add CHECK constraints with raw SQL
+    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Price_Positive CHECK (Price > 0)");
+    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Stock_NonNegative CHECK (Stock >= 0)");
+    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Value CHECK (Price * Stock < 10000)");
+}
+
+protected override void Down(MigrationBuilder migrationBuilder)
+{
+    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Price_Positive");
+    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Stock_NonNegative");
+    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Value");
+    migrationBuilder.DropTable(name: "Products");
+}
+```
+
+**Note**: When EF Core adds CHECK constraint support in future versions, the SharpCoreDB provider will automatically support it through the standard migration operations.
 
 ---
 
@@ -603,7 +674,7 @@ MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: December 2025  
-**Compatibility**: .NET 10.0+, EF Core 10.0.1+, C# 14  
+**Version**: 1.0.1  
+**Last Updated**: January 2026  
+**Compatibility**: .NET 10.0+, EF Core 10.0.1+, SharpCoreDB 1.0.4+, C# 14  
 **Platforms**: Windows, Linux, macOS, Android, iOS, IoT (x64, ARM64)

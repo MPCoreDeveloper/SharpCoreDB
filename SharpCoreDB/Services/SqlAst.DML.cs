@@ -112,6 +112,18 @@ public class CreateTableNode : SqlNode
     public List<ColumnDefinition> Columns { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the foreign key constraints.
+    /// ✅ C# 14: Collection expression.
+    /// </summary>
+    public List<ForeignKeyDefinition> ForeignKeys { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the CHECK constraints.
+    /// ✅ C# 14: Collection expression.
+    /// </summary>
+    public List<string> CheckConstraints { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets whether to use IF NOT EXISTS.
     /// </summary>
     public bool IfNotExists { get; set; }
@@ -151,7 +163,101 @@ public class ColumnDefinition
     public bool IsNotNull { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this is UNIQUE.
+    /// </summary>
+    public bool IsUnique { get; set; }
+
+    /// <summary>
     /// Gets or sets the default value.
     /// </summary>
     public object? DefaultValue { get; set; }
+
+    /// <summary>
+    /// Gets or sets the default expression (for functions like CURRENT_TIMESTAMP).
+    /// </summary>
+    public string? DefaultExpression { get; set; }
+
+    /// <summary>
+    /// Gets or sets the CHECK constraint expression for this column.
+    /// </summary>
+    public string? CheckExpression { get; set; }
+}
+
+/// <summary>
+/// Represents a foreign key constraint definition.
+/// </summary>
+public class ForeignKeyDefinition
+{
+    /// <summary>
+    /// Gets or sets the column name in this table.
+    /// </summary>
+    public string ColumnName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the referenced table name.
+    /// </summary>
+    public string ReferencedTable { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the referenced column name.
+    /// </summary>
+    public string ReferencedColumn { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the ON DELETE action.
+    /// </summary>
+    public FkAction OnDelete { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ON UPDATE action.
+    /// </summary>
+    public FkAction OnUpdate { get; set; }
+}
+
+/// <summary>
+/// Represents an ALTER TABLE statement.
+/// </summary>
+public class AlterTableNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the table name.
+    /// </summary>
+    public string TableName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the ALTER TABLE operation.
+    /// </summary>
+    public AlterTableOperation Operation { get; set; }
+
+    /// <summary>
+    /// Gets or sets the column definition for ADD COLUMN.
+    /// </summary>
+    public ColumnDefinition? Column { get; set; }
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitAlterTable(this);
+}
+
+/// <summary>
+/// ALTER TABLE operation types.
+/// </summary>
+public enum AlterTableOperation
+{
+    /// <summary>Add a column.</summary>
+    AddColumn,
+
+    /// <summary>Drop a column.</summary>
+    DropColumn,
+
+    /// <summary>Modify a column.</summary>
+    ModifyColumn,
+
+    /// <summary>Rename a column.</summary>
+    RenameColumn,
+
+    /// <summary>Add a constraint.</summary>
+    AddConstraint,
+
+    /// <summary>Drop a constraint.</summary>
+    DropConstraint
 }

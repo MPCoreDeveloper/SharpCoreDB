@@ -37,6 +37,17 @@ public partial class SqlParser
         var isAuto = new List<bool>();
         var primaryKeyIndex = -1;
         
+        // ✅ NEW: For Phase 1 DDL features
+        var isNotNull = new List<bool>();
+        var defaultValues = new List<object?>();
+        var uniqueConstraints = new List<List<string>>();
+        var foreignKeys = new List<ForeignKeyConstraint>();  // Added for Phase 1.2
+        
+        // ✅ NEW: For Phase 2 integrity features
+        var defaultExpressions = new List<string?>();
+        var columnCheckExpressions = new List<string?>();
+        var tableCheckConstraints = new List<string>();
+        
         // ✅ NEW: Parse STORAGE clause (defaults to COLUMNAR)
         var storageMode = StorageMode.Columnar;
         var afterParenIndex = colsEnd + 1;
@@ -70,6 +81,9 @@ public partial class SqlParser
             var typeStr = partsDef[1].ToUpper();
             var isPrimary = def.Contains(SqlConstants.PRIMARYKEY);
             var isAutoGen = def.Contains("AUTO");
+            var isNotNullCol = def.Contains("NOT NULL");
+            var isUniqueCol = def.Contains("UNIQUE");
+            
             columns.Add(colName);
             columnTypes.Add(typeStr switch
             {
@@ -86,11 +100,28 @@ public partial class SqlParser
                 _ => DataType.String,
             });
             isAuto.Add(isAutoGen);
+            isNotNull.Add(isNotNullCol);
+            defaultValues.Add(null); // Default to null, would need more parsing for actual DEFAULT values
+            defaultExpressions.Add(null); // Phase 2: Default expressions
+            columnCheckExpressions.Add(null); // Phase 2: Column CHECK constraints
+            
             if (isPrimary)
             {
                 primaryKeyIndex = i;
             }
+            
+            if (isUniqueCol)
+            {
+                uniqueConstraints.Add([colName]);
+            }
         }
+
+        // ✅ NEW: Parse FOREIGN KEY constraints (Phase 1.2)
+        // Look for FOREIGN KEY definitions in the column definitions
+        foreignKeys.AddRange(colDefs
+            .Where(def => def.Trim().ToUpper().StartsWith("FOREIGN KEY"))
+            .Select(def => ParseForeignKeyFromString(def.Trim()))
+            .Where(fk => fk is not null)!);
 
         // ✅ NEW: Choose file extension based on storage mode
         var fileExtension = storageMode == StorageMode.PageBased 
@@ -186,7 +217,14 @@ public partial class SqlParser
             IsAuto = isAuto,
             PrimaryKeyIndex = primaryKeyIndex,
             DataFile = dataFilePath,
-            StorageMode = storageMode  // ✅ NEW: Set storage mode
+            StorageMode = storageMode,
+            IsNotNull = isNotNull,
+            DefaultValues = defaultValues,
+            UniqueConstraints = uniqueConstraints,
+            ForeignKeys = foreignKeys,  // Added for Phase 1.2
+            DefaultExpressions = defaultExpressions,
+            ColumnCheckExpressions = columnCheckExpressions,
+            TableCheckConstraints = tableCheckConstraints
         };
         
         this.tables[tableName] = table;
@@ -325,6 +363,22 @@ public partial class SqlParser
             if (ifExists)
                 return;
             throw new InvalidOperationException($"Table {tableName} does not exist");
+        }
+
+        // ✅ FK dependency check: Ensure no other tables reference this table
+        foreach (var otherTable in this.tables.Values)
+        {
+            if (otherTable.Name != tableName)
+            {
+                foreach (var fk in otherTable.ForeignKeys)
+                {
+                    if (fk.ReferencedTable == tableName)
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot drop table '{tableName}' because it is referenced by foreign key in table '{otherTable.Name}' (column '{fk.ColumnName}')");
+                    }
+                }
+            }
         }
         
         var table = this.tables[tableName];
@@ -522,11 +576,214 @@ public partial class SqlParser
         }
         else if (parts.Length > 4 && parts[3].ToUpper() == "ADD" && parts[4].ToUpper() == "COLUMN")
         {
-            throw new NotImplementedException("ALTER TABLE ADD COLUMN not yet implemented");
+            // Parse the column definition from SQL
+            var columnDefStr = string.Join(" ", parts.Skip(5));
+            var columnDef = ParseColumnDefinitionFromSql(columnDefStr);
+
+            // Add column to table
+            table.AddColumn(columnDef);
+
+            // Mark metadata as dirty for persistence
+            // Note: Database.ExecuteSQL will handle SaveMetadata
+
+            wal?.Log(sql);
         }
         else
         {
             throw new InvalidOperationException($"Unsupported ALTER TABLE operation: {string.Join(" ", parts.Skip(3))}");
         }
+    }
+
+    /// <summary>
+    /// Parses a column definition string into a ColumnDefinition object.
+    /// Used for ALTER TABLE ADD COLUMN parsing.
+    /// </summary>
+    private static ColumnDefinition ParseColumnDefinitionFromSql(string columnDefStr)
+    {
+        var parts = columnDefStr.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            throw new InvalidOperationException("Invalid column definition");
+        }
+
+        var column = new ColumnDefinition
+        {
+            Name = parts[0],
+            DataType = parts[1]
+        };
+
+        // Parse constraints
+        int i = 2;
+        while (i < parts.Length)
+        {
+            var constraint = parts[i].ToUpperInvariant();
+            switch (constraint)
+            {
+                case "PRIMARY":
+                    if (i + 1 < parts.Length && parts[i + 1].ToUpperInvariant() == "KEY")
+                    {
+                        column.IsPrimaryKey = true;
+                        i += 2; // Skip PRIMARY KEY
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                    break;
+                case "AUTO":
+                case "AUTOINCREMENT":
+                    column.IsAutoIncrement = true;
+                    i++;
+                    break;
+                case "NOT":
+                    if (i + 1 < parts.Length && parts[i + 1].ToUpperInvariant() == "NULL")
+                    {
+                        column.IsNotNull = true;
+                        i += 2; // Skip NOT NULL
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                    break;
+                case "UNIQUE":
+                    column.IsUnique = true;
+                    i++;
+                    break;
+                case "DEFAULT":
+                    if (i + 1 < parts.Length)
+                    {
+                        column.DefaultValue = ParseDefaultValue(parts[i + 1]);
+                        i += 2; // Skip DEFAULT value
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                    break;
+                default:
+                    i++;
+                    break;
+            }
+        }
+
+        return column;
+    }
+
+    /// <summary>
+    /// Parses a default value string.
+    /// </summary>
+    private static object? ParseDefaultValue(string valueStr)
+    {
+        if (string.IsNullOrEmpty(valueStr))
+            return null;
+
+        // Remove quotes for strings
+        if (valueStr.StartsWith('\'') && valueStr.EndsWith('\''))
+        {
+            return valueStr.Substring(1, valueStr.Length - 2);
+        }
+
+        // Handle NULL
+        if (valueStr.ToUpperInvariant() == "NULL")
+        {
+            return null;
+        }
+
+        // Handle CURRENT_TIMESTAMP
+        if (valueStr.ToUpperInvariant() == "CURRENT_TIMESTAMP")
+        {
+            return DateTime.Now; // Or a special marker
+        }
+
+        // Try to parse as number
+        if (int.TryParse(valueStr, out var intVal))
+            return intVal;
+        if (long.TryParse(valueStr, out var longVal))
+            return longVal;
+        if (decimal.TryParse(valueStr, out var decimalVal))
+            return decimalVal;
+        if (bool.TryParse(valueStr, out var boolVal))
+            return boolVal;
+
+        // Default to string
+        return valueStr;
+    }
+
+    /// <summary>
+    /// Parses a foreign key constraint from a string definition.
+    /// Used for CREATE TABLE parsing.
+    /// </summary>
+    private static ForeignKeyConstraint ParseForeignKeyFromString(string fkDef)
+    {
+        // Expected format: FOREIGN KEY (column_name) REFERENCES table_name(column_name) [ON DELETE action] [ON UPDATE action]
+        var parts = fkDef.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 6 || !parts[0].ToUpper().Equals("FOREIGN") || !parts[1].ToUpper().Equals("KEY"))
+        {
+            throw new InvalidOperationException($"Invalid FOREIGN KEY definition: {fkDef}");
+        }
+
+        // Extract column name from (column_name)
+        var columnPart = parts[2];
+        if (!columnPart.StartsWith('(') || !columnPart.EndsWith(')'))
+        {
+            throw new InvalidOperationException($"Invalid FOREIGN KEY column reference: {columnPart}");
+        }
+        var columnName = columnPart.Trim('(', ')');
+
+        // Extract referenced table and column
+        var referencesIdx = Array.FindIndex(parts, p => p.ToUpper().Equals("REFERENCES"));
+        if (referencesIdx < 0 || referencesIdx + 1 >= parts.Length)
+        {
+            throw new InvalidOperationException($"Missing REFERENCES clause in FOREIGN KEY: {fkDef}");
+        }
+
+        var refTableAndCol = parts[referencesIdx + 1];
+        var parenIdx = refTableAndCol.IndexOf('(');
+        if (parenIdx < 0 || !refTableAndCol.EndsWith(')'))
+        {
+            throw new InvalidOperationException($"Invalid REFERENCES format: {refTableAndCol}");
+        }
+        var referencedTable = refTableAndCol.Substring(0, parenIdx);
+        var referencedColumn = refTableAndCol.Substring(parenIdx + 1, refTableAndCol.Length - parenIdx - 2);
+
+        // Parse ON DELETE and ON UPDATE actions
+        var onDelete = FkAction.Restrict; // Default
+        var onUpdate = FkAction.Restrict; // Default
+
+        for (int i = referencesIdx + 2; i < parts.Length; i++)
+        {
+            if (parts[i].ToUpper().Equals("ON") && i + 2 < parts.Length)
+            {
+                var actionType = parts[i + 1].ToUpper();
+                var action = parts[i + 2].ToUpper();
+                var fkAction = action switch
+                {
+                    "CASCADE" => FkAction.Cascade,
+                    "SET" => FkAction.SetNull, // Assuming next part is NULL
+                    "RESTRICT" => FkAction.Restrict,
+                    "NO" => FkAction.NoAction, // Assuming next part is ACTION
+                    _ => FkAction.Restrict
+                };
+
+                if (actionType.Equals("DELETE"))
+                {
+                    onDelete = fkAction;
+                }
+                else if (actionType.Equals("UPDATE"))
+                {
+                    onUpdate = fkAction;
+                }
+            }
+        }
+
+        return new ForeignKeyConstraint
+        {
+            ColumnName = columnName,
+            ReferencedTable = referencedTable,
+            ReferencedColumn = referencedColumn,
+            OnDelete = onDelete,
+            OnUpdate = onUpdate
+        };
     }
 }

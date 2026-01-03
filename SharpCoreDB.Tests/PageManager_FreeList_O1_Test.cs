@@ -33,7 +33,7 @@ public class PageManager_FreeList_O1_Test : IDisposable
     public void AllocatePage_10K_Pages_Should_Be_O1_Not_On()
     {
         // Arrange
-        using var pm = new PageManager(testDir, tableId: 1);
+        using var pm = new PageManager(testDir, tableId: 1, new DatabaseConfig { PageCacheCapacity = 10000 });
         var allocatedPages = new List<PageManager.PageId>();
         
         // Act: Allocate 10K pages and measure each batch
@@ -93,7 +93,7 @@ public class PageManager_FreeList_O1_Test : IDisposable
     public void FreePage_10K_Pages_Should_Be_O1()
     {
         // Arrange: Allocate 10K pages first
-        using var pm = new PageManager(testDir, tableId: 1);
+        using var pm = new PageManager(testDir, tableId: 1, new DatabaseConfig { PageCacheCapacity = 10000 });
         var pages = new List<PageManager.PageId>();
         
         for (int i = 0; i < 10_000; i++)

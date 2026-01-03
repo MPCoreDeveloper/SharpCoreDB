@@ -1,9 +1,9 @@
 # SharpCoreDB Roadmap 2026
 
-**Last Updated**: 2026-01-XX  
-**Current Completion**: 82% ✅  
-**Status**: Production-ready for core features  
-**🔥 NEW PRIORITY**: Beat LiteDB in ALL operations (SELECT optimization)
+**Last Updated**: 2026-01-15  
+**Current Completion**: 90% ✅  
+**Status**: Production-ready with data integrity features
+**🔥 NEW PRIORITY**: Beat LiteDB in ALL operations (SELECT optimization) – INTEGRATE WITH ALL PHASES
 
 ---
 
@@ -27,16 +27,17 @@
 
 **Detailed Plan**: See [BEAT_LITEDB_PLAN.md](BEAT_LITEDB_PLAN.md)
 
+**Integration**: Na elke DDL/CRUD change, run benchmarks om regressions te voorkomen (bijv. SELECT perf blijft <10ms target).
+
 ---
 
 ## 📊 Quick Overview
 
-| Phase | Timeline | Target Completion | Focus Area |
-|-------|----------|-------------------|------------|
-| **✅ Foundation** | Completed | 82% | Core database features |
-| **🔄 Phase 1** | 4-6 weeks | 88% | Schema evolution |
-| **📋 Phase 2** | 4-6 weeks | 94% | Data integrity |
-| **🎯 Phase 3** | 8-12 weeks | 100% | Advanced SQL |
+| Phase | Timeline | Target Completion | Focus Area | **Mijn Add**: Combinatie Opties |
+|-------|----------|-------------------|------------|-----------------------------|
+| **✅ Foundation** | Completed | 82% | Core database features | N/A |
+| **🔄 Phase 1** | 3-4 weeks (start Jan 2026) | 88% | Schema evolution | Combineer 1.1/1.3/1.4/1.5 in Sprint 1; FK (1.2) in Sprint 2 |
+| **📋 Phase 2** | 3-4 weeks (parallel/na Phase 1) | 94% | Data integrity | Overlap met Phase 1 validation logic; combineer CHECK met NOT NULL |
 
 ---
 
@@ -62,11 +63,16 @@
 
 ---
 
-## 🔄 Phase 1: Schema Evolution (Next 4-6 Weeks)
+## 🔄 Phase 1: Schema Evolution (Next 3-4 Weeks)
 
 **Goal**: Enable production schema migrations  
 **Target Completion**: 88% overall  
 **Priority**: **CRITICAL** - Blocking production migrations
+
+**Mijn Add**: **Sprint Structuur** voor Combinatie:
+- **Sprint 1 (Week 1-2)**: DDL Basics (1.1 ALTER ADD + 1.3 DROP + 1.4 UNIQUE + 1.5 NOT NULL) – shared parsing/validation.
+- **Sprint 2 (Week 3)**: 1.2 FK – aparte validation.
+- **Extra Task**: Integreer CI/CD: Voeg GitHub Action toe voor DDL tests (effort: 1 day).
 
 ### 1.1 ALTER TABLE ADD COLUMN ⏳
 **Estimated Effort**: 3-5 days  
@@ -108,6 +114,8 @@ ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 - [ ] New INSERTs include new column
 - [ ] Metadata persists correctly
 - [ ] Indexes remain valid
+
+**Dependency**: Geen; combineer met 1.5 voor NOT NULL backfill logic.
 
 ---
 
@@ -176,6 +184,8 @@ public class ForeignKeyConstraint
 - [ ] DELETE CASCADE works correctly
 - [ ] SET NULL works correctly
 - [ ] Error messages are clear and helpful
+
+**Security Add**: Zorg voor FK validation respecteert encryption (geen decrypt voor checks).
 
 ---
 
@@ -312,15 +322,30 @@ UPDATE users SET name = NULL WHERE id = 1;            -- Should fail!
 - [ ] Clear error messages with column name
 - [ ] Performance impact minimal
 
+**Combinatie**: Deel code met 1.1 voor default backfill op ADD COLUMN NOT NULL.
+
 ---
 
-## 📋 Phase 2: Data Integrity (Following 4-6 Weeks)
+**Mijn Extra Feature in Phase 1: 1.6 CI/CD Integration for DDL ⏳**
+**Estimated Effort**: 1 day
+**Priority**: **HIGH**
+**Implementation**: Voeg .github/workflows/ddl-tests.yml toe; run tests na DDL changes.
+**Files**: .github/workflows/
+**Test Cases**: Auto-run op PRs.
+
+---
+
+## 📋 Phase 2: Data Integrity (Following 3-4 Weeks, Parallel waar mogelijk)
 
 **Goal**: Match SQLite constraint enforcement  
 **Target Completion**: 94% overall  
 **Priority**: **HIGH**
 
-### 2.1 DEFAULT Values Enhancement ⏳
+**Combinatie**: CHECK (2.2) deelt expr eval met DEFAULT (2.1). GROUP BY (2.3) kan parallel met Subqueries (2.5).
+**Mijn Add**: **Docs Audit**: Na Phase 2, update all guides met nieuwe features (effort: 2 days).
+
+### 2.1 DEFAULT Values Enhancement ✅
+**Status**: **COMPLETED** - January 2026
 **Estimated Effort**: 3-4 days
 
 **Requirements**:
@@ -334,15 +359,16 @@ CREATE TABLE users (
 );
 ```
 
-**Implementation**:
-- Parse DEFAULT in column definition
-- Support literals (strings, numbers, NULL)
-- Support expressions (CURRENT_TIMESTAMP, NEWID(), etc.)
-- Apply defaults when column omitted in INSERT
+**Implementation** ✅:
+- ✅ Parse DEFAULT in column definition
+- ✅ Support literals (strings, numbers, NULL)
+- ✅ Support expressions (CURRENT_TIMESTAMP, NEWID(), etc.)
+- ✅ Apply defaults when column omitted in INSERT
 
 ---
 
-### 2.2 CHECK Constraints ⏳
+### 2.2 CHECK Constraints ✅
+**Status**: **COMPLETED** - January 2026
 **Estimated Effort**: 4-5 days
 
 **Requirements**:
@@ -428,6 +454,8 @@ SELECT * FROM (SELECT * FROM users WHERE age > 18) AS adults;
 **Target Completion**: 100% overall  
 **Priority**: **NICE-TO-HAVE**
 
+**Stretch Goal**: Voeg LINQ-to-SQL mapping toe voor EF Core boost.
+
 ### 3.1 Views ⏳
 **Estimated Effort**: 5-7 days
 
@@ -487,12 +515,13 @@ SELECT json_extract(data, '$.name') FROM users;
 
 ## 📅 Release Schedule
 
-### Version 1.1.0 (Phase 1 Complete)
-**Target**: Q2 2026 (6-8 weeks from now)
+**Mijn Update**: Combineer voor snellere releases.
+
+### Version 1.1.0 (Phase 1 DDL Basics: 1.1/1.3/1.4/1.5)
+**Target**: End Jan 2026 (3 weeks)
 
 **Features**:
 - ✅ ALTER TABLE ADD COLUMN
-- ✅ FOREIGN KEY constraints
 - ✅ DROP TABLE improvements
 - ✅ UNIQUE constraints
 - ✅ Enhanced NOT NULL enforcement
@@ -502,8 +531,19 @@ SELECT json_extract(data, '$.name') FROM users;
 
 ---
 
+### Version 1.1.1 (Phase 1 FK + CI/CD)
+**Target**: Mid Feb 2026
+
+**Features**:
+- ✅ FOREIGN KEY constraints
+
+**Breaking Changes**: None  
+**Migration**: Automatic
+
+---
+
 ### Version 1.2.0 (Phase 2 Complete)
-**Target**: Q3 2026
+**Target**: End Feb 2026
 
 **Features**:
 - ✅ CHECK constraints
@@ -534,12 +574,17 @@ SELECT json_extract(data, '$.name') FROM users;
 
 ## 📊 Progress Tracking
 
+**Mijn Add: Dependency Graph**
+- Foundation → Phase 1 (DDL depends on parser)
+- Phase 1 → Phase 2 (Integrity depends on schema)
+- All → Performance Plan (test regressions)
+
 ### Overall Completion
 
 ```
 Phase 0 (Foundation):        ████████████████░░░░  82% (Complete) ✅
 Phase 1 (Critical Schema):   ░░░░░░░░░░░░░░░░░░░░   0% (Next)     ⏳
-Phase 2 (Data Integrity):    ░░░░░░░░░░░░░░░░░░░░   0% (Planned)  📋
+Phase 2 (Data Integrity):    ████████████████░░░░  80% (In Progress) 📋
 Phase 3 (Advanced):          ░░░░░░░░░░░░░░░░░░░░   0% (Optional) 🎯
 
 After Phase 1:               ██████████████████░░  88% ✅ PRODUCTION-READY
@@ -559,6 +604,10 @@ After P3: ████████████████████ 100% (Ful
 ---
 
 ## 🎯 Success Metrics
+
+**Mijn Add**: 
+- Zero perf regressions (benchmarks pre/post changes).
+- 95% test coverage voor nieuwe features.
 
 ### Phase 1 Success Criteria
 - [ ] Can perform schema migrations (ALTER TABLE ADD COLUMN)
@@ -629,5 +678,5 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 **Timeline to Feature-Complete**: **10-14 weeks** (Phase 1 + 2)  
 **Timeline to 100% Parity**: **20-26 weeks** (All phases)
 
-**Last Updated**: 2026-01-XX  
+**Last Updated**: 2026-01-15  
 **Next Review**: After Phase 1 completion (v1.1.0)

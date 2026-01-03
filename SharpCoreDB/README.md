@@ -7,7 +7,7 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.4-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
 </div>
 
@@ -31,3 +31,14 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 - **Analytics**: **345x faster** than LiteDB with SIMD vectorization :white_check_mark:
 - **Analytics**: **11.5x faster** than SQLite with SIMD vectorization :white_check_mark:
 - **B-tree Indexes**: O(log n + k) range scans, ORDER BY, BETWEEN support :white_check_mark:
+
+### :card_file_box: **SQL Support**
+
+- **DDL**: CREATE TABLE, DROP TABLE, CREATE INDEX, DROP INDEX
+- **DML**: INSERT, SELECT, UPDATE, DELETE, INSERT BATCH
+- **Queries**: WHERE, ORDER BY, LIMIT, OFFSET, BETWEEN
+- **Aggregates**: COUNT, SUM, AVG, MIN, MAX, GROUP BY
+- **Constraints**: NOT NULL, UNIQUE, DEFAULT values, CHECK constraints
+- **Advanced**: JOINs, subqueries, complex expressions
+
+## :bar_chart: Performance Benchmarks (January 2026)

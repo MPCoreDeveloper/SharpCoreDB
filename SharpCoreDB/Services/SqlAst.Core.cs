@@ -75,6 +75,9 @@ public interface ISqlVisitor<out TResult>
 
     /// <summary>Visits a CREATE TABLE node.</summary>
     TResult VisitCreateTable(CreateTableNode node);
+
+    /// <summary>Visits an ALTER TABLE node.</summary>
+    TResult VisitAlterTable(AlterTableNode node);
 }
 
 /// <summary>

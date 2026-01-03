@@ -1,6 +1,6 @@
 # SharpCoreDB Examples
 
-**Last Updated**: 2025-12-13
+**Last Updated**: 2026-01-15
 
 ## Table of Contents
 
@@ -25,11 +25,41 @@ var db = new SharpCoreDatabase();
 db.Execute("CREATE TABLE users (id INT, name TEXT, email TEXT)");
 ```
 
+### Create Table with Constraints
+
+```csharp
+// Create table with DEFAULT values and CHECK constraints
+db.Execute(@"
+    CREATE TABLE products (
+        id INT PRIMARY KEY,
+        name TEXT NOT NULL,
+        price DECIMAL DEFAULT 0.00,
+        stock INT DEFAULT 0,
+        category TEXT DEFAULT 'general',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CHECK (price >= 0),
+        CHECK (stock >= 0),
+        CHECK (price * stock < 1000000)
+    )
+");
+```
+
 ### Insert Data
 
 ```csharp
 db.Execute("INSERT INTO users VALUES (1, 'Alice', 'alice@example.com')");
 db.Execute("INSERT INTO users VALUES (2, 'Bob', 'bob@example.com')");
+```
+
+### Insert with Defaults
+
+```csharp
+// Insert with explicit values
+db.Execute("INSERT INTO products VALUES (1, 'Laptop', 999.99, 10, 'electronics', '2026-01-15')");
+
+// Insert with defaults (omitted columns get default values)
+db.Execute("INSERT INTO products (id, name) VALUES (2, 'Mouse')");
+// Result: price=0.00, stock=0, category='general', created_at=CURRENT_TIMESTAMP
 ```
 
 ### Query Data
@@ -200,8 +230,6 @@ var db = new SharpCoreDatabase(options);
 // First query: cache miss (0.08 ms)
 var result1 = db.Query("SELECT * FROM users WHERE id = 1");
 
-// Second query: cache hit (0.04 ms - 50% faster!)
-var result2 = db.Query("SELECT * FROM users WHERE id = 1");
 ```
 
 ### Configure Cache at Runtime

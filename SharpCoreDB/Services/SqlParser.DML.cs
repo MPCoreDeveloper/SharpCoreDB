@@ -199,6 +199,68 @@ public partial class SqlParser
             }
         }
 
+        // ✅ NEW: Validate foreign key constraints
+        foreach (var foreignKey in this.tables[tableName].ForeignKeys)
+        {
+            var referencedTable = foreignKey.ReferencedTable;
+            var referencedColumn = foreignKey.ReferencedColumn;
+            var columnValue = row[foreignKey.ColumnName];
+
+            // Check if referenced table exists
+            if (!this.tables.ContainsKey(referencedTable))
+            {
+                throw new InvalidOperationException($"Referenced table {referencedTable} does not exist");
+            }
+
+            // Check if referenced column exists
+            var referencedTableDef = this.tables[referencedTable];
+            if (!referencedTableDef.Columns.Contains(referencedColumn))
+            {
+                throw new InvalidOperationException($"Referenced column {referencedColumn} does not exist in table {referencedTable}");
+            }
+
+            // Check if value exists in referenced table
+            var exists = referencedTableDef.Select($"[{referencedColumn}] = {SqlParser.FormatValue(columnValue)}").Any();
+            if (!exists)
+            {
+                throw new InvalidOperationException($"Foreign key constraint violated: {foreignKey.ColumnName} = {columnValue} does not exist in {referencedTable}.{referencedColumn}");
+            }
+        }
+
+        // ✅ FOREIGN KEY validation for INSERT
+        var table = this.tables[tableName];
+        foreach (var fk in table.ForeignKeys)
+        {
+            if (row.TryGetValue(fk.ColumnName, out var fkValue) && fkValue != null && fkValue != DBNull.Value)
+            {
+                // Check if referenced table exists and has the referenced row
+                if (!this.tables.ContainsKey(fk.ReferencedTable))
+                {
+                    throw new InvalidOperationException($"Foreign key references non-existent table '{fk.ReferencedTable}'");
+                }
+
+                var refTable = this.tables[fk.ReferencedTable];
+                var refColIndex = refTable.Columns.IndexOf(fk.ReferencedColumn);
+                if (refColIndex < 0)
+                {
+                    throw new InvalidOperationException($"Foreign key references non-existent column '{fk.ReferencedColumn}' in table '{fk.ReferencedTable}'");
+                }
+
+                // Check if referenced value exists
+                var fkStr = fkValue.ToString() ?? string.Empty;
+                var exists = refTable.PrimaryKeyIndex >= 0 && (refTable as Table)?.Index.Search(fkStr).Found == true;
+                if (!exists)
+                {
+                    // Also check via Select for non-PK references
+                    var refRows = refTable.Select($"{fk.ReferencedColumn} = '{fkStr}'");
+                    if (refRows.Count == 0)
+                    {
+                        throw new InvalidOperationException($"Foreign key constraint violation: value '{fkStr}' does not exist in '{fk.ReferencedTable}.{fk.ReferencedColumn}'");
+                    }
+                }
+            }
+        }
+
         this.tables[tableName].Insert(row);
         wal?.Log(sql);
     }
@@ -746,6 +808,126 @@ public partial class SqlParser
             }
         }
 
+        // ✅ FOREIGN KEY validation for UPDATE
+        var updateRows = table.Select(whereClause);
+        foreach (var row in updateRows)
+        {
+            // Apply updates to check FK constraints
+            var updatedRow = new Dictionary<string, object>(row);
+            foreach (var assignment in assignments)
+            {
+                updatedRow[assignment.Key] = assignment.Value;
+            }
+            
+            foreach (var fk in table.ForeignKeys)
+            {
+                if (updatedRow.TryGetValue(fk.ColumnName, out var fkValue) && fkValue != null && fkValue != DBNull.Value)
+                {
+                    // Check if referenced table exists and has the referenced row
+                    if (!this.tables.ContainsKey(fk.ReferencedTable))
+                    {
+                        throw new InvalidOperationException($"Foreign key references non-existent table '{fk.ReferencedTable}'");
+                    }
+
+                    var refTable = this.tables[fk.ReferencedTable];
+                    var refColIndex = refTable.Columns.IndexOf(fk.ReferencedColumn);
+                    if (refColIndex < 0)
+                    {
+                        throw new InvalidOperationException($"Foreign key references non-existent column '{fk.ReferencedColumn}' in table '{fk.ReferencedTable}'");
+                    }
+
+                    // Check if referenced value exists
+                    var fkStr = fkValue.ToString() ?? string.Empty;
+                    var exists = refTable.PrimaryKeyIndex >= 0 && (refTable as Table)?.Index.Search(fkStr).Found == true;
+                    if (!exists)
+                    {
+                        // Also check via Select for non-PK references
+                        var refRows = refTable.Select($"{fk.ReferencedColumn} = '{fkStr}'");
+                        if (refRows.Count == 0)
+                        {
+                            throw new InvalidOperationException($"Foreign key constraint violation: value '{fkStr}' does not exist in '{fk.ReferencedTable}.{fk.ReferencedColumn}'");
+                        }
+                    }
+                }
+            }
+        }
+
+        // ✅ FOREIGN KEY CASCADE/RESTRICT for UPDATE (when PK changes)
+        if (table.PrimaryKeyIndex >= 0)
+        {
+            var pkCol = table.Columns[table.PrimaryKeyIndex];
+            if (assignments.ContainsKey(pkCol))
+            {
+                var cascadeRows = table.Select(whereClause);
+                foreach (var row in cascadeRows)
+                {
+                    var oldPkValue = row[pkCol];
+                    
+                    // Check all referencing foreign keys
+                    foreach (var otherTable in this.tables.Values)
+                    {
+                        if (otherTable.Name != tableName) // Skip self-references
+                        {
+                            foreach (var fk in otherTable.ForeignKeys)
+                            {
+                                if (fk.ReferencedTable == tableName)
+                                {
+                                    // Find child rows that reference the old PK value
+                                    var childRows = otherTable.Select($"{fk.ColumnName} = '{oldPkValue?.ToString() ?? string.Empty}'");
+                                    
+                                    if (childRows.Count > 0)
+                                    {
+                                        switch (fk.OnUpdate)
+                                        {
+                                            case FkAction.Cascade:
+                                                // Update FK values in child rows to new PK value
+                                                var cascadeUpdate = new Dictionary<string, object> { [fk.ColumnName] = assignments[pkCol] };
+                                                foreach (var childRow in childRows)
+                                                {
+                                                    // Get child PK for update
+                                                    if (otherTable.PrimaryKeyIndex >= 0)
+                                                    {
+                                                        var childPkCol = otherTable.Columns[otherTable.PrimaryKeyIndex];
+                                                        if (childRow.TryGetValue(childPkCol, out var childPkValue))
+                                                        {
+                                                            otherTable.Update($"{childPkCol} = '{childPkValue}'", cascadeUpdate);
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                                
+                                            case FkAction.SetNull:
+                                                // Set FK column to NULL in child rows
+                                                var nullUpdate = new Dictionary<string, object> { [fk.ColumnName] = DBNull.Value };
+                                                foreach (var childRow in childRows)
+                                                {
+                                                    // Get child PK for update
+                                                    if (otherTable.PrimaryKeyIndex >= 0)
+                                                    {
+                                                        var childPkCol = otherTable.Columns[otherTable.PrimaryKeyIndex];
+                                                        if (childRow.TryGetValue(childPkCol, out var childPkValue))
+                                                        {
+                                                            otherTable.Update($"{childPkCol} = '{childPkValue}'", nullUpdate);
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                                
+                                            case FkAction.Restrict:
+                                            default:
+                                                // Block the update if child rows exist
+                                                throw new InvalidOperationException(
+                                                    $"Cannot update '{tableName}.{pkCol}' because it is referenced by '{otherTable.Name}.{fk.ColumnName}' (RESTRICT constraint)");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Standard path: Use existing Update() method
         table.Update(whereClause, assignments);
         wal?.Log(sql);
@@ -903,19 +1085,19 @@ public partial class SqlParser
         Console.WriteLine($"[SQL Parser] PK Type: {pkType}, PK Value Type: {pkValue.GetType()}");
         #endif
 
-        // Route to typed UpdateBatchMultiColumnParallel based on PK type
+        // Route to typed UpdateBatchMultiColumn based on PK type
         try
         {
             bool success = pkType switch
             {
                 DataType.Integer when pkValue is int intId
-                    => ExecuteMultiColumnUpdateParallel(table, pkColumn, [(intId, assignments)]),
+                    => table.UpdateBatchMultiColumn(pkColumn, [(intId, assignments)]) > 0,
                 
                 DataType.Long when pkValue is long longId
-                    => ExecuteMultiColumnUpdateParallel(table, pkColumn, [(longId, assignments)]),
+                    => table.UpdateBatchMultiColumn(pkColumn, [(longId, assignments)]) > 0,
                 
                 DataType.String when pkValue is string strId
-                    => ExecuteMultiColumnUpdateParallel(table, pkColumn, [(strId, assignments)]),
+                    => table.UpdateBatchMultiColumn(pkColumn, [(strId, assignments)]) > 0,
                 
                 _ => false // Unsupported PK type - fall back to standard path
             };
@@ -936,28 +1118,6 @@ public partial class SqlParser
             #else
             _ = ex; // Suppress unused variable warning in Release
             #endif
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// 🔥 NEW: Executes typed UpdateBatchMultiColumnParallel for PRIMARY KEY updates with multiple columns.
-    /// This is the parallel fast path (25-35% speedup).
-    /// </summary>
-    private static bool ExecuteMultiColumnUpdateParallel<TId>(
-        Table table,
-        string idColumn,
-        List<(TId id, Dictionary<string, object> columnUpdates)> updates)
-        where TId : notnull
-    {
-        try
-        {
-            // Use parallel implementation for better performance
-            table.UpdateBatchMultiColumnParallel(idColumn, updates, useParallel: true);
-            return true;
-        }
-        catch
-        {
             return false;
         }
     }
@@ -996,6 +1156,106 @@ public partial class SqlParser
         if (whereIdx > 0)
         {
             whereClause = sql.Substring(whereIdx + 7).Trim();
+        }
+
+        // Execute delete with WHERE clause
+        // 🔥 NEW! Cascade DELETE: Auto-delete child rows in referenced tables
+        // Find all foreign key constraints referencing this table
+        var referencingFks = this.tables.Values
+            .SelectMany(t => t.ForeignKeys.Where(fk => fk.ReferencedTable == tableName))
+            .ToList();
+
+        // If there are referencing foreign keys, ask for confirmation before cascading
+        if (referencingFks.Count > 0)
+        {
+            Console.WriteLine($"WARNING: Deleting from {tableName} may affect related records in other tables:");
+            foreach (var fk in referencingFks)
+            {
+                Console.WriteLine($" - {fk.ReferencedTable}.{fk.ReferencedColumn} (FK: {fk.ColumnName})");
+            }
+            Console.Write("Do you want to continue with CASCADE DELETE? (y/n): ");
+            var response = Console.ReadLine();
+            if (response?.Trim().ToLower() != "y")
+            {
+                Console.WriteLine("DELETE operation cancelled.");
+                return;
+            }
+
+            // Perform cascading deletes on child tables
+            foreach (var fk in referencingFks)
+            {
+                var childTable = this.tables[fk.ReferencedTable];
+                var childWhere = $"{fk.ReferencedColumn} IN (SELECT {fk.ColumnName} FROM {tableName})";
+                childTable.Delete(childWhere);
+            }
+        }
+
+        // ✅ FOREIGN KEY CASCADE/RESTRICT for DELETE
+        var table = this.tables[tableName];
+        var rowsToDelete = table.Select(whereClause); // Get rows before deleting
+        
+        foreach (var row in rowsToDelete)
+        {
+            // Get the primary key value for CASCADE operations
+            object? pkValue = null;
+            if (table.PrimaryKeyIndex >= 0)
+            {
+                var pkCol = table.Columns[table.PrimaryKeyIndex];
+                row.TryGetValue(pkCol, out pkValue);
+            }
+
+            // Check all referencing foreign keys
+            foreach (var otherTable in this.tables.Values)
+            {
+                if (otherTable.Name != tableName) // Skip self-references
+                {
+                    foreach (var fk in otherTable.ForeignKeys)
+                    {
+                        if (fk.ReferencedTable == tableName)
+                        {
+                            // Find child rows that reference this parent row
+                            var childRows = otherTable.Select($"{fk.ColumnName} = '{pkValue?.ToString() ?? string.Empty}'");
+                            
+                            if (childRows.Count > 0)
+                            {
+                                switch (fk.OnDelete)
+                                {
+                                    case FkAction.Cascade:
+                                        // Delete all child rows
+                                        foreach (var childRow in childRows)
+                                        {
+                                            otherTable.Delete($"{fk.ColumnName} = '{pkValue?.ToString() ?? string.Empty}'");
+                                        }
+                                        break;
+                                                
+                                    case FkAction.SetNull:
+                                        // Set FK column to NULL in child rows
+                                        var nullUpdate = new Dictionary<string, object> { [fk.ColumnName] = DBNull.Value };
+                                        foreach (var childRow in childRows)
+                                        {
+                                            // Get child PK for update
+                                            if (otherTable.PrimaryKeyIndex >= 0)
+                                            {
+                                                var childPkCol = otherTable.Columns[otherTable.PrimaryKeyIndex];
+                                                if (childRow.TryGetValue(childPkCol, out var childPkValue))
+                                                {
+                                                    otherTable.Update($"{childPkCol} = '{childPkValue}'", nullUpdate);
+                                                }
+                                            }
+                                        }
+                                        break;
+                                                
+                                    case FkAction.Restrict:
+                                    default:
+                                        // Block the delete if child rows exist
+                                        throw new InvalidOperationException(
+                                            $"Cannot delete from '{tableName}' because it is referenced by '{otherTable.Name}.{fk.ColumnName}' (RESTRICT constraint)");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Execute delete with WHERE clause

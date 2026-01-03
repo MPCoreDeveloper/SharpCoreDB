@@ -57,6 +57,7 @@ Console.WriteLine("  1) Page-based storage before/after (PageBasedStorageBenchma
 Console.WriteLine("  2) Cross-engine comparison (StorageEngineComparisonBenchmark)");
 Console.WriteLine("  3) UPDATE performance - Priority 1 validation (UpdatePerformanceTest)");
 Console.WriteLine("  4) SELECT optimization - Phase-by-phase speedup (SelectOptimizationTest)");
+Console.WriteLine("  5) StructRow API - Zero-copy performance (StructRowBenchmark)");
 Console.WriteLine("  0) Exit");
 Console.WriteLine();
 Console.Write("Enter choice: ");
@@ -102,6 +103,14 @@ try
             Console.WriteLine("\nSelectOptimizationTest completed.");
             logWriter.WriteLine("SelectOptimizationTest completed.");
             break;
+        case "5":
+            Console.WriteLine("Running StructRowBenchmark (Zero-Copy API Performance)...");
+            logWriter.WriteLine("Running StructRowBenchmark...");
+            StructRowBenchmark.RunBenchmarks();
+            CrossEngineBenchmark.RunCrossEngineBenchmarks();
+            Console.WriteLine("\nStructRowBenchmark completed.");
+            logWriter.WriteLine("StructRowBenchmark completed.");
+            break;
         case "0":
         case "q":
         case "Q":
@@ -109,7 +118,7 @@ try
             logWriter.WriteLine("User exited.");
             break;
         default:
-            Console.WriteLine("Invalid choice. Run with 1, 2, 3, or 4.");
+            Console.WriteLine("Invalid choice. Run with 1, 2, 3, 4, or 5.");
             logWriter.WriteLine($"Invalid choice: {input}");
             break;
     }

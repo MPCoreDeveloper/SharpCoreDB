@@ -20,7 +20,6 @@ using System.Text.RegularExpressions;
 /// </summary>
 public partial class EnhancedSqlParser
 {
-    private readonly ISqlDialect _dialect;
     private readonly List<string> _errors = [];
     private string _sql = string.Empty;
     private int _position;
@@ -31,7 +30,6 @@ public partial class EnhancedSqlParser
     /// <param name="dialect">The SQL dialect to use.</param>
     public EnhancedSqlParser(ISqlDialect? dialect = null)
     {
-        _dialect = dialect ?? SqlDialectFactory.Default;
     }
 
     /// <summary>
@@ -66,6 +64,7 @@ public partial class EnhancedSqlParser
                 "UPDATE" => ParseUpdate(),
                 "DELETE" => ParseDelete(),
                 "CREATE" => ParseCreate(),
+                "ALTER" => ParseAlter(),
                 _ => throw new InvalidOperationException($"Unsupported statement type: {keyword}")
             };
         }
@@ -89,15 +88,13 @@ public partial class EnhancedSqlParser
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    private string? ConsumeKeyword()
+    private void ConsumeKeyword()
     {
         var match = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase);
         if (match.Success)
         {
             _position += match.Length;
-            return match.Groups[1].Value;
         }
-        return null;
     }
 
     private bool MatchKeyword(string keyword)

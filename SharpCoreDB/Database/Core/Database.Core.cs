@@ -119,10 +119,9 @@ public partial class Database : IDatabase, IDisposable
                         string sql = Encoding.UTF8.GetString(opData.Span);
                         ExecuteSQL(sql);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         // Silently skip failed recovery operations
-                        _ = ex;  // Suppress unused variable warning
                     }
                 }
                 
@@ -216,15 +215,23 @@ public partial class Database : IDatabase, IDisposable
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
                 
-                // ✅ CRITICAL FIX: Reinitialize Table after deserialization
-                // Ensure IsAuto list has same length as Columns
+                // ✅ CRITICAL FIX: Complete initialization of new DDL properties
+                // Ensure lists have correct length
                 while (table.IsAuto.Count < table.Columns.Count)
                 {
                     table.IsAuto.Add(false);
                 }
+                while (table.IsNotNull.Count < table.Columns.Count)
+                {
+                    table.IsNotNull.Add(false);
+                }
+                while (table.DefaultValues.Count < table.Columns.Count)
+                {
+                    table.DefaultValues.Add(null);
+                }
                 
 #if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[Load] Table {table.Name} reinitialized - Columns: {table.Columns.Count}, IsAuto: {table.IsAuto.Count}");
+                System.Diagnostics.Debug.WriteLine($"[Load] Table {table.Name} reinitialized - Columns: {table.Columns.Count}, IsAuto: {table.IsAuto.Count}, IsNotNull: {table.IsNotNull.Count}");
                 System.Diagnostics.Debug.WriteLine($"[Load] PrimaryKeyIndex: {table.PrimaryKeyIndex}");
 #endif
                 
@@ -250,6 +257,8 @@ public partial class Database : IDatabase, IDisposable
                         System.Diagnostics.Debug.WriteLine($"[Load] ⚠️  WARNING: Failed to rebuild PK index: {ex.Message}");
 #endif
                         // Continue loading - table will work but without index optimization
+                        // Suppress unused variable warning for release builds
+                        _ = ex;
                     }
                 }
                 
@@ -277,6 +286,11 @@ public partial class Database : IDatabase, IDisposable
             t.ColumnTypes,
             t.PrimaryKeyIndex,
             t.DataFile,
+            t.IsAuto,
+            t.IsNotNull,
+            t.DefaultValues,
+            t.UniqueConstraints,
+            t.ForeignKeys,  // Added for Phase 1.2
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
@@ -386,6 +400,8 @@ public partial class Database : IDatabase, IDisposable
 #if DEBUG
                     System.Diagnostics.Debug.WriteLine($"[ForceSave] WARNING: Failed to flush table {table.Name}: {ex.Message}");
 #endif
+                    // Suppress unused variable warning
+                    _ = ex;
                 }
             }
             

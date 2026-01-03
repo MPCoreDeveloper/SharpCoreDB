@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,7 +8,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Extensions</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Extensions</Product>
@@ -43,7 +43,7 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.1" />
     
     <!-- Reference published SharpCoreDB NuGet package instead of project reference for deployment -->
-    <PackageReference Include="SharpCoreDB" Version="1.0.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.0.4" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
