@@ -4,24 +4,56 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB</Product>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Title>SharpCoreDB ADO.NET Data Provider</Title>
-    <Description>Complete ADO.NET Data Provider for SharpCoreDB - enables SSMS integration and standard ADO.NET usage</Description>
+    <Description>Complete ADO.NET Data Provider for SharpCoreDB - enables integration and standard ADO.NET usage</Description>
     <Authors>MPCoreDeveloper</Authors>
     <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
-    <PackageTags>ado.net;database;data-provider;sharpcoredb;ssms</PackageTags>
+    <PackageTags>ado.net;database;data-provider;sharpcoredb</PackageTags>
     <Version>1.0.1</Version>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Platform-specific optimizations -->
+    <Optimize>true</Optimize>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+
+    <!-- Multi-targeting: Build for multiple RIDs when packing -->
+    <!-- Visual Studio will automatically build these when you right-click → Pack -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
+  <!-- Platform-specific PropertyGroups -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == 'linux-x64' OR '$(RuntimeIdentifier)' == 'osx-x64'">
+    <DefineConstants>$(DefineConstants);X64</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64' OR '$(RuntimeIdentifier)' == 'linux-arm64' OR '$(RuntimeIdentifier)' == 'osx-arm64'">
+    <DefineConstants>$(DefineConstants);ARM64</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Install\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
 </Project>
