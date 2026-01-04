@@ -82,6 +82,20 @@ public sealed class QueryPlanCache
     }
 
     /// <summary>
+    /// Tries to retrieve a cached plan without updating LRU or hit count.
+    /// Used for validation/lookup only. Completely lock-free on hit path.
+    /// </summary>
+    /// <param name="key">The cache key.</param>
+    /// <param name="entry">The cache entry if found, null otherwise.</param>
+    /// <returns>True if found, false otherwise.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetCachedPlan(string key, out CacheEntry? entry)
+    {
+        // Lock-free: direct dictionary lookup without any locking
+        return map.TryGetValue(key, out entry);
+    }
+
+    /// <summary>
     /// Returns cache statistics.
     /// </summary>
     public (long Hits, long Misses, double HitRate, int Count) GetStatistics()

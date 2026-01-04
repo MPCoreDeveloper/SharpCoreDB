@@ -23,8 +23,6 @@ using System.Text.Json;
 /// </summary>
 public partial class Database
 {
-    private QueryPlanCache? planCache;
-
     /// <inheritdoc />
     public void ExecuteSQL(string sql)
     {
@@ -39,9 +37,22 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
-            sqlParser.Execute(sql, null);
+            ExecuteSelectQuery(sql, null);
             return;
+        }
+
+        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
+        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.INSERT);
+        }
+        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
+        }
+        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
 
         // ✅ OPTIMIZATION: Skip WAL for DELETE/UPDATE with PageBased storage
@@ -94,9 +105,22 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
-            sqlParser.Execute(sql, parameters, null);
+            ExecuteSelectQuery(sql, parameters);
             return;
+        }
+
+        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
+        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
+        }
+        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
+        }
+        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
 
         bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
@@ -159,17 +183,27 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            await Task.Run(() =>
-            {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
-                sqlParser.Execute(sql, null);
-            }, cancellationToken).ConfigureAwait(false);
+            await ExecuteSelectQueryAsync(sql, null, cancellationToken).ConfigureAwait(false);
             return;
+        }
+
+        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
+        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.INSERT);
+        }
+        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
+        }
+        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
 
         if (groupCommitWal is not null)
         {
-            await ExecuteSQLWithGroupCommit(sql, cancellationToken);
+            await ExecuteSQLWithGroupCommit(sql, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -192,22 +226,53 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            await Task.Run(() =>
-            {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
-                sqlParser.Execute(sql, parameters, null);
-            }, cancellationToken).ConfigureAwait(false);
+            await ExecuteSelectQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
             return;
+        }
+
+        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
+        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
+        }
+        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
+        }
+        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
 
         if (groupCommitWal is not null)
         {
-            await ExecuteSQLWithGroupCommit(sql, parameters, cancellationToken);
+            await ExecuteSQLWithGroupCommit(sql, parameters, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             await Task.Run(() => ExecuteSQL(sql, parameters), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Executes SELECT query with plan caching.
+    /// </summary>
+    private void ExecuteSelectQuery(string sql, Dictionary<string, object?>? parameters)
+    {
+        var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+        sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
+    }
+
+    /// <summary>
+    /// Executes SELECT query asynchronously with plan caching.
+    /// </summary>
+    private async Task ExecuteSelectQueryAsync(string sql, Dictionary<string, object?>? parameters, CancellationToken cancellationToken)
+    {
+        await Task.Run(() =>
+        {
+            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+            sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -261,41 +326,18 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
-        var normalized = (config?.NormalizeSqlForPlanCache ?? true) ? QueryPlanCache.NormalizeSql(sql) : sql;
-        var key = QueryPlanCache.BuildKey(normalized, parameters);
-
-        if (config?.EnableCompiledPlanCache ?? true)
+        var entry = GetOrAddPlan(sql, parameters, SqlCommandType.SELECT);
+        
+        if (entry is not null && entry.CompiledPlan is not null)
         {
-            planCache ??= new QueryPlanCache(config?.CompiledPlanCacheCapacity ?? 2048);
-            var cache = planCache;
-            var entry = cache.GetOrAdd(key, k =>
-            {
-                var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var cached = new CachedQueryPlan(sql, parts);
-                CompiledQueryPlan? compiled = null;
-                return new QueryPlanCache.CacheEntry
-                {
-                    Key = k,
-                    CachedPlan = cached,
-                    CompiledPlan = compiled,
-                    CachedAtUtc = DateTime.UtcNow
-                };
-            });
-
-            if (entry.CompiledPlan is not null)
-            {
-                var sqlParserCompiled = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
-                return sqlParserCompiled.ExecuteQuery(entry.CachedPlan, parameters ?? []);
-            }
-
-            var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
-            return sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? []);
+            var sqlParserCompiled = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+            return sqlParserCompiled.ExecuteQuery(entry.CachedPlan, parameters ?? []);
         }
-        else
-        {
-            var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
-            return sqlParser.ExecuteQuery(sql, parameters ?? []);
-        }
+
+        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+        return entry is not null 
+            ? sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? [])
+            : sqlParser.ExecuteQuery(sql, parameters ?? []);
     }
 
     /// <summary>

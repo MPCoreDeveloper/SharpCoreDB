@@ -555,4 +555,231 @@ public static partial class SimdHelper
 
         return -1;
     }
+
+    /// <summary>
+    /// Copies data from source to destination using SIMD acceleration.
+    /// Significantly faster than Buffer.BlockCopy for arrays > 256 bytes.
+    /// THRESHOLD: Use for buffers >= 256 bytes; smaller buffers use Span.CopyTo.
+    /// </summary>
+    /// <param name="source">Source buffer to copy from.</param>
+    /// <param name="destination">Destination buffer to copy to.</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void CopyBuffer(ReadOnlySpan<byte> source, Span<byte> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Source and destination must have the same length");
+
+        if (source.IsEmpty)
+            return;
+
+        // For small buffers, use built-in Span.CopyTo (optimized by runtime)
+        if (source.Length < 256)
+        {
+            source.CopyTo(destination);
+            return;
+        }
+
+        // AVX2: 32 bytes at a time
+        if (Avx2.IsSupported && source.Length >= 32)
+        {
+            CopyBufferAvx2(source, destination);
+            return;
+        }
+
+        // SSE2: 16 bytes at a time
+        if (Sse2.IsSupported && source.Length >= 16)
+        {
+            CopyBufferSse2(source, destination);
+            return;
+        }
+
+        // ARM NEON: 16 bytes at a time
+        if (AdvSimd.IsSupported && source.Length >= 16)
+        {
+            CopyBufferNeon(source, destination);
+            return;
+        }
+
+        // Scalar fallback
+        source.CopyTo(destination);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void CopyBufferAvx2(ReadOnlySpan<byte> source, Span<byte> destination)
+    {
+        fixed (byte* srcPtr = source)
+        fixed (byte* dstPtr = destination)
+        {
+            int i = 0;
+            int vectorizedLength = source.Length & ~31;
+
+            // Copy 32 bytes at a time
+            for (; i < vectorizedLength; i += 32)
+            {
+                Vector256<byte> data = Avx.LoadVector256(srcPtr + i);
+                Avx.Store(dstPtr + i, data);
+            }
+
+            // Copy remaining bytes
+            for (; i < source.Length; i++)
+            {
+                dstPtr[i] = srcPtr[i];
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void CopyBufferSse2(ReadOnlySpan<byte> source, Span<byte> destination)
+    {
+        fixed (byte* srcPtr = source)
+        fixed (byte* dstPtr = destination)
+        {
+            int i = 0;
+            int vectorizedLength = source.Length & ~15;
+
+            for (; i < vectorizedLength; i += 16)
+            {
+                Vector128<byte> data = Sse2.LoadVector128(srcPtr + i);
+                Sse2.Store(dstPtr + i, data);
+            }
+
+            for (; i < source.Length; i++)
+            {
+                dstPtr[i] = srcPtr[i];
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void CopyBufferNeon(ReadOnlySpan<byte> source, Span<byte> destination)
+    {
+        fixed (byte* srcPtr = source)
+        fixed (byte* dstPtr = destination)
+        {
+            int i = 0;
+            int vectorizedLength = source.Length & ~15;
+
+            for (; i < vectorizedLength; i += 16)
+            {
+                Vector128<byte> data = AdvSimd.LoadVector128(srcPtr + i);
+                AdvSimd.Store(dstPtr + i, data);
+            }
+
+            for (; i < source.Length; i++)
+            {
+                dstPtr[i] = srcPtr[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fills a buffer with a specified byte value using SIMD acceleration.
+    /// Faster than Array.Fill for large buffers.
+    /// THRESHOLD: Use for buffers >= 64 bytes.
+    /// </summary>
+    /// <param name="buffer">The buffer to fill.</param>
+    /// <param name="value">The byte value to fill with.</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static void FillBuffer(Span<byte> buffer, byte value)
+    {
+        if (buffer.IsEmpty)
+            return;
+
+        // For small buffers, use built-in Fill
+        if (buffer.Length < 64)
+        {
+            buffer.Fill(value);
+            return;
+        }
+
+        // AVX2: 32 bytes at a time
+        if (Avx2.IsSupported && buffer.Length >= 32)
+        {
+            FillBufferAvx2(buffer, value);
+            return;
+        }
+
+        // SSE2: 16 bytes at a time
+        if (Sse2.IsSupported && buffer.Length >= 16)
+        {
+            FillBufferSse2(buffer, value);
+            return;
+        }
+
+        // ARM NEON: 16 bytes at a time
+        if (AdvSimd.IsSupported && buffer.Length >= 16)
+        {
+            FillBufferNeon(buffer, value);
+            return;
+        }
+
+        // Scalar fallback
+        buffer.Fill(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void FillBufferAvx2(Span<byte> buffer, byte value)
+    {
+        fixed (byte* ptr = buffer)
+        {
+            int i = 0;
+            int vectorizedLength = buffer.Length & ~31;
+
+            Vector256<byte> fillValue = Vector256.Create(value);
+
+            for (; i < vectorizedLength; i += 32)
+            {
+                Avx.Store(ptr + i, fillValue);
+            }
+
+            for (; i < buffer.Length; i++)
+            {
+                ptr[i] = value;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void FillBufferSse2(Span<byte> buffer, byte value)
+    {
+        fixed (byte* ptr = buffer)
+        {
+            int i = 0;
+            int vectorizedLength = buffer.Length & ~15;
+
+            Vector128<byte> fillValue = Vector128.Create(value);
+
+            for (; i < vectorizedLength; i += 16)
+            {
+                Sse2.Store(ptr + i, fillValue);
+            }
+
+            for (; i < buffer.Length; i++)
+            {
+                ptr[i] = value;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static unsafe void FillBufferNeon(Span<byte> buffer, byte value)
+    {
+        fixed (byte* ptr = buffer)
+        {
+            int i = 0;
+            int vectorizedLength = buffer.Length & ~15;
+
+            Vector128<byte> fillValue = Vector128.Create(value);
+
+            for (; i < vectorizedLength; i += 16)
+            {
+                AdvSimd.Store(ptr + i, fillValue);
+            }
+
+            for (; i < buffer.Length; i++)
+            {
+                ptr[i] = value;
+            }
+        }
+    }
 }

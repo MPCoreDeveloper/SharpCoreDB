@@ -2,7 +2,6 @@ namespace SharpCoreDB.DataStructures;
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Buffers;
@@ -22,6 +21,7 @@ public partial class Table
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
     /// ✅ NEW: Auto-indexes row in B-tree if indexes exist.
+    /// ✅ OPTIMIZED: Lock contention reduced by moving validations outside lock.
     /// </summary>
     /// <param name="row">The row data to insert.</param>
     /// <exception cref="ArgumentNullException">Thrown when storage is null.</exception>
@@ -32,136 +32,128 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
-        this.rwLock.EnterWriteLock();
-        try
+        // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
+        var columnIndexCache = GetColumnIndexCache();
+        
+        for (int i = 0; i < this.Columns.Count; i++)
         {
-            // ✅ PERFORMANCE: Get column index cache once
-            var columnIndexCache = GetColumnIndexCache();
-            
-            // Validate + fill defaults
-            for (int i = 0; i < this.Columns.Count; i++)
+            var col = this.Columns[i];
+            if (!row.TryGetValue(col, out var val))
             {
-                var col = this.Columns[i];
-                if (!row.TryGetValue(col, out var val))
+                if (this.IsAuto[i])
                 {
-                    if (this.IsAuto[i])
-                    {
-                        row[col] = GenerateAutoValue(this.ColumnTypes[i]);
-                    }
-                    else if (this.DefaultExpressions[i] is not null)
-                    {
-                        var defaultValue = TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]);
-                        row[col] = defaultValue ?? DBNull.Value;
-                    }
-                    else
-                    {
-                        row[col] = GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                    }
+                    row[col] = GenerateAutoValue(this.ColumnTypes[i]);
                 }
-                else if (val != DBNull.Value && val is not null && !IsValidType(val, this.ColumnTypes[i]))
+                else if (this.DefaultExpressions[i] is not null)
                 {
-                    // Try to coerce the value to the expected type
-                    if (TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
-                    {
-                        row[col] = coercedValue;
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Type mismatch for column {col}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
-                    }
-                }
-            }
-
-            // Primary key check
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
-                    throw new InvalidOperationException("Primary key violation");
-            }
-
-            // ✅ NOT NULL validation
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                if (this.IsNotNull[i] && (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
-                {
-                    throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
-                }
-            }
-
-            // ✅ UNIQUE validation
-            foreach (var uniqueConstraint in this.UniqueConstraints)
-            {
-                if (uniqueConstraint.Count == 1) // Single column unique
-                {
-                    var colName = uniqueConstraint[0];
-                    var colIndex = this.Columns.IndexOf(colName);
-                    if (colIndex >= 0 && row.TryGetValue(colName, out var value) && value != null && value != DBNull.Value)
-                    {
-                        // Check if value already exists (simplified - would need index lookup in real impl)
-                        // For now, just validate non-null for single column unique
-                    }
-                }
-            }
-
-            // ✅ CHECK constraint validation
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                if (this.ColumnCheckExpressions[i] is not null)
-                {
-                    if (!TypeConverter.EvaluateCheckConstraint(this.ColumnCheckExpressions[i], row, this.ColumnTypes))
-                    {
-                        throw new InvalidOperationException($"CHECK constraint violation for column '{this.Columns[i]}'");
-                    }
-                }
-            }
-
-            // Table-level CHECK constraints
-            foreach (var checkExpr in this.TableCheckConstraints)
-            {
-                if (!TypeConverter.EvaluateCheckConstraint(checkExpr, row, this.ColumnTypes))
-                {
-                    throw new InvalidOperationException($"Table CHECK constraint violation: {checkExpr}");
-                }
-            }
-
-            // ✅ FOREIGN KEY validation for INSERT - moved to SqlParser
-
-
-            // ✅ NEW: Route through storage engine
-            var engine = GetOrCreateStorageEngine();
-            
-            // Serialize row data
-            int estimatedSize = EstimateRowSize(row);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-            try
-            {
-                if (SimdHelper.IsSimdSupported)
-                {
-                    SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
+                    var defaultValue = TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]);
+                    row[col] = defaultValue ?? DBNull.Value;
                 }
                 else
                 {
-                    Array.Clear(buffer, 0, estimatedSize);
+                    row[col] = GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
                 }
-
-                int bytesWritten = 0;
-                Span<byte> bufferSpan = buffer.AsSpan();
-                
-                foreach (var col in this.Columns)
+            }
+            else if (val != DBNull.Value && val is not null && !IsValidType(val, this.ColumnTypes[i]))
+            {
+                // Try to coerce the value to the expected type
+                if (TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
                 {
-                    // ✅ PERFORMANCE: Use cached index instead of IndexOf
-                    int colIdx = columnIndexCache[col];
-                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                    bytesWritten += written;
+                    row[col] = coercedValue;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Type mismatch for column {col}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
+                }
+            }
+        }
+
+        // ✅ NOT NULL validation (outside lock)
+        for (int i = 0; i < this.Columns.Count; i++)
+        {
+            if (this.IsNotNull[i] && (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
+            {
+                throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+            }
+        }
+
+        // ✅ UNIQUE validation (outside lock)
+        foreach (var uniqueConstraint in this.UniqueConstraints)
+        {
+            if (uniqueConstraint.Count == 1) // Single column unique
+            {
+                var colName = uniqueConstraint[0];
+                var colIndex = this.Columns.IndexOf(colName);
+                if (colIndex >= 0 && row.TryGetValue(colName, out var value) && value != null && value != DBNull.Value)
+                {
+                    // Check if value already exists (simplified - would need index lookup in real impl)
+                    // For now, just validate non-null for single column unique
+                }
+            }
+        }
+
+        // ✅ CHECK constraint validation (outside lock)
+        for (int i = 0; i < this.Columns.Count; i++)
+        {
+            if (this.ColumnCheckExpressions[i] is not null && !TypeConverter.EvaluateCheckConstraint(this.ColumnCheckExpressions[i], row, this.ColumnTypes))
+            {
+                throw new InvalidOperationException($"CHECK constraint violation for column '{this.Columns[i]}'");
+            }
+        }
+
+        // Table-level CHECK constraints (outside lock)
+        foreach (var checkExpr in this.TableCheckConstraints)
+        {
+            if (!TypeConverter.EvaluateCheckConstraint(checkExpr, row, this.ColumnTypes))
+            {
+                throw new InvalidOperationException($"Table CHECK constraint violation: {checkExpr}");
+            }
+        }
+
+        // Serialize row data (outside lock)
+        int estimatedSize = EstimateRowSize(row);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+        try
+        {
+            if (SimdHelper.IsSimdSupported)
+            {
+                SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
+            }
+            else
+            {
+                Array.Clear(buffer, 0, estimatedSize);
+            }
+
+            int bytesWritten = 0;
+            Span<byte> bufferSpan = buffer.AsSpan();
+            
+            foreach (var col in this.Columns)
+            {
+                // ✅ PERFORMANCE: Use cached index instead of IndexOf
+                int colIdx = columnIndexCache[col];
+                int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
+                bytesWritten += written;
+            }
+
+            var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+
+            // ✅ MINIMAL CRITICAL SECTION: Lock only for PK check, insert, and index updates
+            this.rwLock.EnterWriteLock();
+            try
+            {
+                // Primary key check (under lock)
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    if (this.Index.Search(pkVal).Found)
+                        throw new InvalidOperationException("Primary key violation");
                 }
 
-                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-                // ✅ ROUTE TO ENGINE: Single Insert() call
+                // ✅ NEW: Route through storage engine
+                var engine = GetOrCreateStorageEngine();
                 long position = engine.Insert(Name, rowData);
 
-                // Update indexes
+                // Update indexes (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
@@ -171,7 +163,15 @@ public partial class Table
                 // Hash indexes (only for columnar mode)
                 if (StorageMode == StorageMode.Columnar)
                 {
-                    var unloadedIndexes = this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList();
+                    var unloadedIndexes = new List<string>();
+                    // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                    foreach (var col in this.registeredIndexes.Keys)
+                    {
+                        if (!this.loadedIndexes.Contains(col))
+                        {
+                            unloadedIndexes.Add(col);
+                        }
+                    }
                     foreach (var registeredCol in unloadedIndexes)
                     {
                         EnsureIndexLoaded(registeredCol);
@@ -182,7 +182,7 @@ public partial class Table
                         hashIndex.Add(row, position);
                     }
                     
-                    foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
+                    foreach (var registeredCol in unloadedIndexes)
                     {
                         this.staleIndexes.Add(registeredCol);
                     }
@@ -196,12 +196,12 @@ public partial class Table
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+                this.rwLock.ExitWriteLock();
             }
         }
         finally
         {
-            this.rwLock.ExitWriteLock();
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
         }
     }
 
@@ -217,7 +217,7 @@ public partial class Table
     {
         ArgumentNullException.ThrowIfNull(this.storage);
         ArgumentNullException.ThrowIfNull(rows);
-        
+
         if (rows.Count == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
@@ -226,7 +226,7 @@ public partial class Table
         {
             // ✅ OPTIMIZATION: Use typed column buffers if enabled or large batch
             bool useOptimizedPath = (_config?.UseOptimizedInsertPath ?? false) || rows.Count > 1000;
-            
+
             if (useOptimizedPath)
             {
                 return InsertBatchOptimizedPath(rows);
@@ -250,23 +250,23 @@ public partial class Table
     {
         // ✅ PERFORMANCE: Get column index cache once for entire batch
         var columnIndexCache = GetColumnIndexCache();
-        
+
         // ✅ CRITICAL FIX: Start engine transaction for batching!
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
-        
+
         if (needsTransaction)
         {
             engine.BeginTransaction();
         }
-        
+
         try
         {
             // Step 1: Validate all rows and fill defaults
             for (int rowIdx = 0; rowIdx < rows.Count; rowIdx++)
             {
                 var row = rows[rowIdx];
-                
+
                 for (int i = 0; i < this.Columns.Count; i++)
                 {
                     var col = this.Columns[i];
@@ -319,12 +319,12 @@ public partial class Table
 
             // Step 2: Serialize all rows
             var serializedRows = new List<byte[]>(rows.Count);
-            
+
             foreach (var row in rows)
             {
                 int estimatedSize = EstimateRowSize(row);
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-                
+
                 try
                 {
                     if (SimdHelper.IsSimdSupported)
@@ -338,7 +338,7 @@ public partial class Table
 
                     int bytesWritten = 0;
                     Span<byte> bufferSpan = buffer.AsSpan();
-                    
+
                     foreach (var col in this.Columns)
                     {
                         // ✅ PERFORMANCE: Use cached index instead of IndexOf
@@ -360,10 +360,19 @@ public partial class Table
             long[] positions = engine.InsertBatch(Name, serializedRows);
 
             // Step 4: Update indexes
+            var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
                 // Ensure all registered indexes are loaded
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
+                // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                foreach (var col in this.registeredIndexes.Keys)
+                {
+                    if (!this.loadedIndexes.Contains(col))
+                    {
+                        unloadedIndexes.Add(col);
+                    }
+                }
+                foreach (var registeredCol in unloadedIndexes)
                 {
                     EnsureIndexLoaded(registeredCol);
                 }
@@ -388,14 +397,6 @@ public partial class Table
                     {
                         hashIndex.Add(row, position);
                     }
-                }
-            }
-
-            if (StorageMode == StorageMode.Columnar)
-            {
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
-                {
-                    this.staleIndexes.Add(registeredCol);
                 }
             }
 
@@ -462,12 +463,12 @@ public partial class Table
         // ✅ CRITICAL FIX: Start engine transaction for batching!
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
-        
+
         if (needsTransaction)
         {
             engine.BeginTransaction();
         }
-        
+
         try
         {
             // Serialize all rows (uses optimized pipeline with Span-based buffers)
@@ -478,10 +479,19 @@ public partial class Table
             long[] positions = engine.InsertBatch(Name, serializedRows);
 
             // Step 4: Update indexes
+            var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
                 // Ensure all registered indexes are loaded
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
+                // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                foreach (var col in this.registeredIndexes.Keys)
+                {
+                    if (!this.loadedIndexes.Contains(col))
+                    {
+                        unloadedIndexes.Add(col);
+                    }
+                }
+                foreach (var registeredCol in unloadedIndexes)
                 {
                     EnsureIndexLoaded(registeredCol);
                 }
@@ -506,14 +516,6 @@ public partial class Table
                     {
                         hashIndex.Add(row, position);
                     }
-                }
-            }
-
-            if (StorageMode == StorageMode.Columnar)
-            {
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
-                {
-                    this.staleIndexes.Add(registeredCol);
                 }
             }
 
@@ -544,6 +546,7 @@ public partial class Table
 
     /// <summary>
     /// Selects rows from the table with optional WHERE and ORDER BY clauses.
+    /// ✅ OPTIMIZED: Lock-free reads for high-throughput concurrent access.
     /// </summary>
     /// <param name="where">Optional WHERE clause.</param>
     /// <param name="orderBy">Optional ORDER BY column.</param>
@@ -557,6 +560,7 @@ public partial class Table
 
     /// <summary>
     /// Selects rows from the table with optional WHERE, ORDER BY, and encryption bypass.
+    /// ✅ OPTIMIZED: Lock-free reads for high-throughput concurrent access.
     /// </summary>
     /// <param name="where">Optional WHERE clause.</param>
     /// <param name="orderBy">Optional ORDER BY column.</param>
@@ -567,33 +571,8 @@ public partial class Table
     public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
-        return this.isReadOnly ? SelectInternal(where, orderBy, asc, noEncrypt) : SelectWithLock(where, orderBy, asc, noEncrypt);
-    }
-
-    private List<Dictionary<string, object>> SelectWithLock(string? where, string? orderBy, bool asc, bool noEncrypt)
-    {
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            // ✅ PHASE 4: Auto-detect parallel scanning for large datasets
-            // Use parallel scan if: rowCount >= 10K AND cores >= 4 AND not a simple lookup
-            bool useParallel = _cachedRowCount >= 10000 &&
-                              Environment.ProcessorCount >= 4 &&
-                              (string.IsNullOrEmpty(where) || !IsSimpleLookup(where));
-
-            if (useParallel)
-            {
-                return SelectParallelInternal(where, orderBy, asc, noEncrypt);
-            }
-            else
-            {
-                return SelectInternal(where, orderBy, asc, noEncrypt);
-            }
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
+        // ✅ OPTIMIZATION: Lock-free reads
+        return SelectInternal(where, orderBy, asc, noEncrypt);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -615,13 +594,13 @@ public partial class Table
         }
 
         // 1. HashIndex lookup (O(1)) - only for columnar storage
-        if (StorageMode == StorageMode.Columnar && 
-            !string.IsNullOrEmpty(where) && 
-            TryParseSimpleWhereClause(where, out var col, out var valObj) && 
+        if (StorageMode == StorageMode.Columnar &&
+            !string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var col, out var valObj) &&
             this.registeredIndexes.ContainsKey(col))
         {
             EnsureIndexLoaded(col);
-            
+
             if (this.hashIndexes.TryGetValue(col, out var hashIndex))
             {
                 var colIdx = this.Columns.IndexOf(col);
@@ -699,54 +678,54 @@ public partial class Table
     private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(byte[] data, string? where)
     {
         var results = new List<Dictionary<string, object>>();
-        
+
         // Scan file with position tracking
         int filePosition = 0;
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
-        
+
         while (filePosition < dataSpan.Length)
         {
             // Read length prefix (4 bytes)
             if (filePosition + 4 > dataSpan.Length)
                 break;
-            
+
             int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
                 dataSpan.Slice(filePosition, 4));
-            
+
             const int MaxRecordSize = 1_000_000_000;
             if (recordLength < 0 || recordLength > MaxRecordSize)
             {
                 Console.WriteLine($"⚠️  Invalid record length {recordLength} at position {filePosition}");
                 break;
             }
-            
+
             if (recordLength == 0)
             {
                 filePosition += 4;
                 continue;
             }
-            
+
             if (filePosition + 4 + recordLength > dataSpan.Length)
             {
                 Console.WriteLine($"⚠️  Incomplete record at position {filePosition}");
                 break;
             }
-            
+
             long currentRecordPosition = filePosition; // Track position for filtering
-            
+
             // Skip length prefix and read record data
             int dataOffset = filePosition + 4;
             ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
-            
+
             // Parse the record
             var row = DeserializeRowWithSimd(recordData);
             bool valid = row != null;
-            
+
             // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE
             if (valid && row != null)
             {
                 bool isCurrentVersion = true;
-                
+
                 // Check if this row is the current version by verifying PK index points to this position
                 if (this.PrimaryKeyIndex >= 0)
                 {
@@ -755,23 +734,23 @@ public partial class Table
                     {
                         var pkStr = pkValue.ToString() ?? string.Empty;
                         var searchResult = this.Index.Search(pkStr);
-                        
+
                         // Row is current version only if PK index points to THIS position
                         isCurrentVersion = searchResult.Found && searchResult.Value == currentRecordPosition;
                     }
                 }
-                
+
                 bool matchesWhere = string.IsNullOrEmpty(where) || EvaluateWhere(row, where);
-                
+
                 if (isCurrentVersion && matchesWhere)
                 {
                     results.Add(row);
                 }
             }
-            
+
             filePosition += 4 + recordLength;
         }
-        
+
         return results;
     }
 
@@ -793,12 +772,12 @@ public partial class Table
         {
             var engine = GetOrCreateStorageEngine();
             var rows = this.Select(where);
-            
+
             foreach (var row in rows)
             {
                 // Store old values for CASCADE operations
                 var oldRow = new Dictionary<string, object>(row);
-                
+
                 // Apply updates to the row
                 foreach (var update in updates)
                 {
@@ -817,7 +796,7 @@ public partial class Table
                 // Serialize updated row
                 int estimatedSize = EstimateRowSize(row);
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-                
+
                 try
                 {
                     if (SimdHelper.IsSimdSupported)
@@ -831,10 +810,10 @@ public partial class Table
 
                     int bytesWritten = 0;
                     Span<byte> bufferSpan = buffer.AsSpan();
-                    
+
                     // ✅ PERFORMANCE: Get column index cache once
                     var columnIndexCache = GetColumnIndexCache();
-                    
+
                     foreach (var col in this.Columns)
                     {
                         // ✅ PERFORMANCE: Use cached index instead of IndexOf
@@ -879,7 +858,7 @@ public partial class Table
                             }
                             hashIndex.Add(row, newPosition); // Add new ref
                         }
-                        
+
                         // ✅ NEW: Track updates for compaction
                         Interlocked.Increment(ref _updatedRowCount);
                     }
@@ -895,7 +874,7 @@ public partial class Table
                             {
                                 long position = searchResult.Value;
                                 engine.Update(Name, position, rowData);
-                                
+
                                 // Index position stays the same (in-place update)
                                 // No index updates needed unless indexed column changed
                             }
@@ -907,7 +886,7 @@ public partial class Table
                     ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
                 }
             }
-            
+
             // ✅ NEW: Auto-compact if threshold reached
             if (StorageMode == StorageMode.Columnar)
             {
@@ -937,14 +916,14 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            
+
             // ✅ OPTIMIZATION: Snapshot-based deletion (Option 1)
             // Capture ALL storage references BEFORE any deletions
             // This prevents mid-scan invalidation and eliminates exception overhead
             // Performance: 50-70% faster for batch deletes, single table scan
-            
+
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
-            
+
             if (StorageMode == StorageMode.PageBased)
             {
                 // PageBased: Collect storage references upfront
@@ -964,7 +943,7 @@ public partial class Table
                 foreach (var row in rows)
                 {
                     long storagePosition = -1;
-                    
+
                     if (this.PrimaryKeyIndex >= 0)
                     {
                         var pkCol = this.Columns[this.PrimaryKeyIndex];
@@ -978,7 +957,7 @@ public partial class Table
                             }
                         }
                     }
-                    
+
                     if (storagePosition >= 0)
                     {
                         recordsToDelete.Add((storagePosition, row));
@@ -988,7 +967,7 @@ public partial class Table
 
             // ✅ Now delete all records in one batch - no more scanning between deletes
             int deletedCount = 0;
-            
+
             foreach (var (storagePosition, row) in recordsToDelete)
             {
                 try
@@ -1001,7 +980,7 @@ public partial class Table
                     }
                     // Columnar: Logical delete only (no engine call needed)
                     // Physical space reclaimed during compaction
-                    
+
                     // Remove from indexes (both modes)
                     if (this.PrimaryKeyIndex >= 0)
                     {
@@ -1016,255 +995,46 @@ public partial class Table
                     // Remove from hash indexes (columnar mode only)
                     if (StorageMode == StorageMode.Columnar)
                     {
-                        foreach (var kvp in this.hashIndexes.Where(idx => this.loadedIndexes.Contains(idx.Key)))
+                        // Manual loop for performance - avoids LINQ Where allocation on hot path
+                        foreach (var kvp in this.hashIndexes)
                         {
-                            kvp.Value.Remove(row, storagePosition);
+                            if (this.loadedIndexes.Contains(kvp.Key))
+                            {
+                                kvp.Value.Remove(row, storagePosition);
+                            }
                         }
-                        
-                        // ✅ NEW: Track deletes for compaction
-                        Interlocked.Increment(ref _deletedRowCount);
+
+                        // Mark unloaded indexes as stale (columnar only)
+                        if (StorageMode == StorageMode.Columnar)
+                        {
+                            // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                            foreach (var col in this.registeredIndexes.Keys)
+                            {
+                                if (!this.loadedIndexes.Contains(col))
+                                {
+                                    this.staleIndexes.Add(col);
+                                }
+                            }
+
+                            // ✅ NEW: Auto-compact if threshold reached
+                            TryAutoCompact();
+                        }
                     }
-                    
+
                     deletedCount++;
                 }
-                catch (InvalidOperationException)
+                catch (Exception ex)
                 {
-                    // Record already deleted (idempotent) - skip and continue
-                    // This can happen with duplicate WHERE clauses or concurrent operations
+                    Console.WriteLine($"Error deleting record at {storagePosition}: {ex.Message}");
                 }
             }
-            
+
             // ✅ NEW: Update cached row count
             Interlocked.Add(ref _cachedRowCount, -deletedCount);
-            
-            // Mark unloaded indexes as stale (columnar only)
-            if (StorageMode == StorageMode.Columnar)
-            {
-                foreach (var registeredCol in this.registeredIndexes.Keys.Where(col => !this.loadedIndexes.Contains(col)).ToList())
-                {
-                    this.staleIndexes.Add(registeredCol);
-                }
-                
-                // ✅ NEW: Auto-compact if threshold reached
-                TryAutoCompact();
-            }
         }
         finally
         {
             this.rwLock.ExitWriteLock();
-        }
-    }
-
-    /// <summary>
-    /// Selects a single column with Span-based streaming (zero-allocation for single column queries).
-    /// Example: SELECT salary FROM employees
-    /// ✅ OPTIMIZATION: Returns typed array instead of Dictionary list (90% fewer allocations).
-    /// Expected performance: 14.5ms (Dictionary) → &lt;2ms (typed array) for 100k rows.
-    /// </summary>
-    /// <typeparam name="T">The target column type (must match actual column type).</typeparam>
-    /// <param name="columnName">The column to select.</param>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Array of typed values from the column.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public T[] SelectColumn<T>(string columnName, string? where = null) where T : notnull
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        
-        int columnIndex = this.Columns.IndexOf(columnName);
-        if (columnIndex < 0)
-            throw new ArgumentException($"Column '{columnName}' not found in table '{Name}'");
-
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            // Get all matching rows using standard Select (with WHERE filter if specified)
-            var allRows = this.SelectInternal(where, null, true, false);
-
-            // Project to single column using typed array
-            var results = new T[allRows.Count];
-
-            for (int i = 0; i < allRows.Count; i++)
-            {
-                var value = allRows[i].TryGetValue(columnName, out var val) ? val : null;
-                results[i] = value switch
-                {
-                    T typed => typed,
-                    null => default(T)!,
-                    _ => (T)Convert.ChangeType(value, typeof(T))
-                };
-            }
-
-            return results;
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Performs a count aggregation on rows matching WHERE clause.
-    /// Example: SELECT COUNT(*) FROM employees WHERE status = 'active'
-    /// ✅ OPTIMIZATION: Single pass, no materialization (O(1) memory vs O(n)).
-    /// Expected performance: 0.5ms for 100k rows (vs 14.5ms Dictionary materialization).
-    /// </summary>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Count of matching rows.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public long SelectCount(string? where = null)
-    {
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            // Use SelectInternal to get matching rows (respects indexes for optimization)
-            var matchingRows = this.SelectInternal(where, null, true, false);
-            return matchingRows.LongCount();
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Performs SUM aggregation on a numeric column.
-    /// Example: SELECT SUM(salary) FROM employees
-    /// ✅ OPTIMIZATION: Single pass with early termination, no materialization.
-    /// </summary>
-    /// <param name="columnName">The numeric column to sum.</param>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Sum of values in the column.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public decimal SelectSum(string columnName, string? where = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            var matchingRows = this.SelectInternal(where, null, true, false);
-            
-            decimal sum = 0;
-            foreach (var row in matchingRows)
-            {
-                if (row.TryGetValue(columnName, out var val) && val is not null)
-                {
-                    sum += Convert.ToDecimal(val);
-                }
-            }
-            return sum;
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Performs AVG aggregation on a numeric column.
-    /// Example: SELECT AVG(salary) FROM employees
-    /// ✅ OPTIMIZATION: Single pass with running total.
-    /// </summary>
-    /// <param name="columnName">The numeric column to average.</param>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Average of values in the column.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public decimal SelectAvg(string columnName, string? where = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            var matchingRows = this.SelectInternal(where, null, true, false);
-            
-            decimal sum = 0;
-            long count = 0;
-            foreach (var row in matchingRows)
-            {
-                if (row.TryGetValue(columnName, out var val) && val is not null)
-                {
-                    sum += Convert.ToDecimal(val);
-                    count++;
-                }
-            }
-            return count > 0 ? sum / count : 0;
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Performs MIN aggregation on a column.
-    /// Example: SELECT MIN(salary) FROM employees
-    /// ✅ OPTIMIZATION: Single pass with comparison.
-    /// </summary>
-    /// <param name="columnName">The column to find minimum.</param>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Minimum value in the column.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public decimal SelectMin(string columnName, string? where = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            var matchingRows = this.SelectInternal(where, null, true, false);
-            
-            decimal? min = null;
-            foreach (var row in matchingRows)
-            {
-                if (row.TryGetValue(columnName, out var val) && val is not null)
-                {
-                    var decVal = Convert.ToDecimal(val);
-                    if (min is null || decVal < min)
-                        min = decVal;
-                }
-            }
-            return min ?? 0;
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Performs MAX aggregation on a column.
-    /// Example: SELECT MAX(salary) FROM employees
-    /// ✅ OPTIMIZATION: Single pass with comparison.
-    /// </summary>
-    /// <param name="columnName">The column to find maximum.</param>
-    /// <param name="where">Optional WHERE clause filter.</param>
-    /// <returns>Maximum value in the column.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public decimal SelectMax(string columnName, string? where = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        
-        this.rwLock.EnterUpgradeableReadLock();
-        try
-        {
-            var matchingRows = this.SelectInternal(where, null, true, false);
-            
-            decimal? max = null;
-            foreach (var row in matchingRows)
-            {
-                if (row.TryGetValue(columnName, out var val) && val is not null)
-                {
-                    var decVal = Convert.ToDecimal(val);
-                    if (max is null || decVal > max)
-                        max = decVal;
-                }
-            }
-            return max ?? 0;
-        }
-        finally
-        {
-            this.rwLock.ExitUpgradeableReadLock();
         }
     }
 
@@ -1299,126 +1069,5 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
-    }
-
-    /// <summary>
-    /// Gets raw row data for StructRow operations.
-    /// Returns concatenated row data for zero-copy processing.
-    /// </summary>
-    /// <returns>ReadOnlyMemory containing all row data.</returns>
-    private ReadOnlyMemory<byte> GetRawRowData()
-    {
-        if (storage == null)
-            throw new InvalidOperationException("Storage not set");
-
-        var data = storage.ReadBytes(DataFile, noEncrypt: false);
-        return data ?? ReadOnlyMemory<byte>.Empty;
-    }
-
-    /// <summary>
-    /// Determines if a WHERE clause represents a simple lookup (PK or hash index).
-    /// Used to decide whether to use parallel scanning or not.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsSimpleLookup(string? where)
-    {
-        if (string.IsNullOrEmpty(where)) return false;
-
-        // Check if it's a primary key lookup
-        if (this.PrimaryKeyIndex >= 0)
-        {
-            var pkCol = this.Columns[this.PrimaryKeyIndex];
-            if (TryParseSimpleWhereClause(where, out var whereCol, out _) && whereCol == pkCol)
-            {
-                return true;
-            }
-        }
-
-        // Check if it's a hash index lookup
-        if (StorageMode == StorageMode.Columnar &&
-            TryParseSimpleWhereClause(where, out var col, out _) &&
-            this.registeredIndexes.ContainsKey(col))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Selects rows using zero-copy StructRow API for maximum performance.
-    /// Returns StructRow objects that provide lazy deserialization.
-    /// </summary>
-    /// <param name="where">Optional WHERE clause.</param>
-    /// <param name="orderBy">Optional ORDER BY column.</param>
-    /// <param name="asc">Whether to order ascending.</param>
-    /// <returns>StructRowEnumerable for zero-copy iteration.</returns>
-    public StructRowEnumerable SelectStruct(string? where = null, string? orderBy = null, bool asc = true)
-    {
-        // Get raw data without deserializing to dictionaries
-        var rawData = GetRawRowData();
-        var schema = BuildStructRowSchema();
-
-        // Apply WHERE filter at byte level (ultra-fast)
-        var filteredData = ApplyWhereFilter(rawData);
-
-        // Apply ordering if needed
-        if (!string.IsNullOrEmpty(orderBy))
-        {
-            filteredData = ApplyOrdering(filteredData);
-        }
-
-        int rowCount = CountRowsInData(filteredData);
-        return new StructRowEnumerable(filteredData, schema, rowCount);
-    }
-
-    /// <summary>
-    /// Counts the number of rows in the raw data.
-    /// </summary>
-    /// <param name="data">The raw data.</param>
-    /// <returns>Number of rows.</returns>
-    private static int CountRowsInData(ReadOnlyMemory<byte> data)
-    {
-        if (data.IsEmpty) return 0;
-
-        // For columnar storage, count records by scanning length prefixes
-        int count = 0;
-        int position = 0;
-        var span = data.Span;
-
-        while (position < span.Length)
-        {
-            if (position + 4 > span.Length) break;
-            int recordLength = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(position, 4));
-            if (recordLength <= 0) break;
-            position += 4 + recordLength;
-            count++;
-        }
-
-        return count;
-    }
-
-    /// <summary>
-    /// Applies WHERE filtering at byte level for StructRow operations.
-    /// Ultra-fast filtering without deserializing to dictionaries.
-    /// </summary>
-    /// <param name="data">The raw row data.</param>
-    /// <returns>Filtered data as ReadOnlyMemory.</returns>
-    private static ReadOnlyMemory<byte> ApplyWhereFilter(ReadOnlyMemory<byte> data)
-    {
-        // Byte-level WHERE filtering not yet implemented - returns all data
-        return data;
-    }
-
-    /// <summary>
-    /// Applies ORDER BY sorting at byte level for StructRow operations.
-    /// Ultra-fast sorting without deserializing to dictionaries.
-    /// </summary>
-    /// <param name="data">The raw row data.</param>
-    /// <returns>Sorted data.</returns>
-    private static ReadOnlyMemory<byte> ApplyOrdering(ReadOnlyMemory<byte> data)
-    {
-        // Byte-level ORDER BY sorting not yet implemented - returns unsorted data
-        return data;
     }
 }

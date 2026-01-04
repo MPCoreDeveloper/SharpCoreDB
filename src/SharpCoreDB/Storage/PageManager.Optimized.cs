@@ -174,11 +174,11 @@ public partial class PageManager
             
             // ✅ Use stackalloc for small temporary buffers (zero heap allocation)
             Span<byte> offsetBytes = stackalloc byte[2];
-            page.Data.AsSpan(slotOffset, 2).CopyTo(offsetBytes);
+            page.Data.Slice(slotOffset, 2).CopyTo(offsetBytes);
             var recordOffset = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(offsetBytes);
             
             Span<byte> lengthBytes = stackalloc byte[2];
-            page.Data.AsSpan(slotOffset + 2, 2).CopyTo(lengthBytes);
+            page.Data.Slice(slotOffset + 2, 2).CopyTo(lengthBytes);
             var recordLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(lengthBytes);
             
             // Skip deleted records

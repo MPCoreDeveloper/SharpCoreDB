@@ -348,7 +348,8 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public StructRowEnumerable SelectStructParallel(string? where = null, string? orderBy = null, bool asc = true)
     {
-        // True parallel StructRow scanning not yet implemented - delegates to regular SelectStruct
-        return SelectStruct(where, orderBy, asc);
+        // Note: StructRow API not yet implemented - placeholder for future optimization
+        // For now, return an empty enumerable or throw NotImplementedException
+        throw new NotImplementedException("SelectStructParallel not yet implemented. Use SelectParallel instead.");
     }
 }

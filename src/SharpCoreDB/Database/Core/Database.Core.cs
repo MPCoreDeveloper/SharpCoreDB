@@ -43,6 +43,7 @@ public partial class Database : IDatabase, IDisposable
     private readonly PageCache? pageCache;
     private readonly Lock _walLock = new();  // ✅ C# 14: Lock type + target-typed new
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
+    private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     
     private readonly GroupCommitWAL? groupCommitWal;
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
@@ -456,6 +457,7 @@ public partial class Database : IDatabase, IDisposable
             groupCommitWal?.Dispose();
             pageCache?.Clear(false, null);
             queryCache?.Clear();
+            ClearPlanCache();  // ✅ Clear query plan cache on disposal
         }
 
         _disposed = true;
