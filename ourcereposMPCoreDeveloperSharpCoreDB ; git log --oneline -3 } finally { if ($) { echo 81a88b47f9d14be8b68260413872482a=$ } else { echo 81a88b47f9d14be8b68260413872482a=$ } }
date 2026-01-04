@@ -1,5 +1,0 @@
-[33m845a574[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m perf: Week 2 Performance Optimizations (32 percent improvement)
-[33m3e213a9[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m readme
-[33mfb68cd0[m docs
-[33m1b4791f[m Merge pull request #20 from MPCoreDeveloper/copilot/fix-cli-runner-on-git-note
-[33m7487cdb[m[33m ([m[1;31morigin/copilot/fix-cli-runner-on-git-note[m[33m)[m Fix parameterized query bug and update CI for .NET 10.0

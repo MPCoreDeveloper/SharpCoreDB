@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,6 +15,7 @@
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="LiteDB" Version="5.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -30,8 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
-    <ProjectReference Include="..\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
   </ItemGroup>
 
 </Project>

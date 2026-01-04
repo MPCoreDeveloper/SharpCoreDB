@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Serilog" Version="4.3.0" />

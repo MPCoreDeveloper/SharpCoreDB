@@ -8,7 +8,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     
     <!-- Best Practice: Enable warnings as errors for production code -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -89,9 +88,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**/*.cs" Exclude="SharpCoreDB.Tests/**;obj/**;SharpCoreDB.Benchmarks/**;SharpCoreDB.Demo/**;SharpCoreDB.Extensions/**;SharpCoreDB.EntityFrameworkCore/**" />
-    <Compile Remove="obj/**/*.cs" />
+    <Compile Remove="SharpCoreDB.Tests\**" />
+    <Compile Remove="SharpCoreDB.Benchmarks\**" />
     <Compile Remove="SharpCoreDB.Demo\**" />
+    <Compile Remove="SharpCoreDB.Extensions\**" />
+    <Compile Remove="SharpCoreDB.EntityFrameworkCore\**" />
     <EmbeddedResource Remove="SharpCoreDB.Demo\**" />
     <None Remove="SharpCoreDB.Demo\**" />
   </ItemGroup>

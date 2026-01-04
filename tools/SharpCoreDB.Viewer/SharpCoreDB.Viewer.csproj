@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -45,8 +45,8 @@
 
   <ItemGroup>
     <!-- SharpCoreDB References -->
-    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
-    <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
   </ItemGroup>
 
   <ItemGroup>

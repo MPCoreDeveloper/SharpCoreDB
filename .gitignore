@@ -385,3 +385,29 @@ BenchmarkDotNet.Artifacts/
 # Test databases
 test_*/
 temp_*/
+
+# PowerShell scripts (temporary restructuring scripts)
+restructure-sharpcoredb.ps1
+*-restructure*.ps1
+
+# Temporary PageCacheTest directory (if not intended for commit)
+PageCacheTest/
+
+# NuGet packaging artifacts
+artifacts/
+packages/
+*.nupkg
+*.snupkg
+
+# IDE specific
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# JetBrains Rider
+.idea/
+*.sln.iml

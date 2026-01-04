@@ -1,0 +1,47 @@
+<Project>
+  <PropertyGroup>
+    <!-- Common properties for all projects -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    
+    <!-- Performance optimizations -->
+    <TieredCompilation>true</TieredCompilation>
+    <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    
+    <!-- Deterministic builds -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    
+    <!-- Source control -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Package metadata (for libraries only) -->
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>MPCoreDeveloper</Company>
+    <Product>SharpCoreDB</Product>
+    <Copyright>Copyright © 2025-2026 MPCoreDeveloper</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>database;embedded;nosql;keyvalue;encryption;aes;simd;performance;dotnet10</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <Description>High-performance embedded database for .NET 10 with AES-256 encryption, SIMD analytics, and B-tree indexes</Description>
+  </PropertyGroup>
+
+  <!-- Source Link for debugging -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+</Project>
