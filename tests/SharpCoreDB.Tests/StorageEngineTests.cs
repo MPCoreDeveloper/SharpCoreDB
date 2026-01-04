@@ -111,7 +111,7 @@ public class StorageEngineTests : IDisposable
     }
 
     [Fact]
-    public void PageBasedEngine_Transaction_Commit()
+    public async Task PageBasedEngine_Transaction_Commit()
     {
         using var engine = new PageBasedEngine(testDbPath);
 
@@ -120,7 +120,7 @@ public class StorageEngineTests : IDisposable
         var testData = new byte[] { 1, 2, 3, 4, 5 };
         var reference = engine.Insert("test_table", testData);
 
-        engine.CommitAsync().GetAwaiter().GetResult();
+        await engine.CommitAsync();
 
         var readData = engine.Read("test_table", reference);
 
@@ -129,7 +129,7 @@ public class StorageEngineTests : IDisposable
     }
 
     [Fact]
-    public void PageBasedEngine_Transaction_Commit_VerifyDiskPersistence()
+    public async Task PageBasedEngine_Transaction_Commit_VerifyDiskPersistence()
     {
         Console.WriteLine("[TEST] Starting PageBasedEngine_Transaction_Commit_VerifyDiskPersistence");
 
@@ -149,7 +149,7 @@ public class StorageEngineTests : IDisposable
         Console.WriteLine($"[TEST] Insert returned storage reference: {reference}");
 
         Console.WriteLine("[TEST] Committing transaction");
-        engine.CommitAsync().GetAwaiter().GetResult();
+        await engine.CommitAsync();
         Console.WriteLine("[TEST] Transaction committed");
 
         // CRITICAL: Verify that the .pages file was created on disk
@@ -177,7 +177,7 @@ public class StorageEngineTests : IDisposable
     }
 
     [Fact]
-    public void PageBasedEngine_BatchInsert_Commit_VerifyDiskPersistence()
+    public async Task PageBasedEngine_BatchInsert_Commit_VerifyDiskPersistence()
     {
         Console.WriteLine("[TEST] Starting PageBasedEngine_BatchInsert_Commit_VerifyDiskPersistence");
 
@@ -203,7 +203,7 @@ public class StorageEngineTests : IDisposable
         Console.WriteLine($"[TEST] Batch insert returned {references.Length} storage references");
 
         Console.WriteLine("[TEST] Committing transaction");
-        engine.CommitAsync().GetAwaiter().GetResult();
+        await engine.CommitAsync();
         Console.WriteLine("[TEST] Transaction committed");
 
         // CRITICAL: Verify that the .pages file was created on disk

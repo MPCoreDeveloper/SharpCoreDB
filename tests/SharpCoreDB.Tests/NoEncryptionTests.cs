@@ -14,7 +14,6 @@ public class NoEncryptionTests : IDisposable
     private readonly string _testDbPathEncrypted;
     private readonly IServiceProvider _serviceProvider;
     private readonly DatabaseFactory _factory;
-    private Database? _db;
 
     public NoEncryptionTests()
     {
@@ -31,12 +30,6 @@ public class NoEncryptionTests : IDisposable
 
     public void Dispose()
     {
-        // Dispose database first to release file handles
-        (_db as IDisposable)?.Dispose();
-        
-        // Wait for file handles to release
-        TestEnvironment.WaitForFileRelease();
-        
         // Clean up test databases with retry logic
         TestEnvironment.CleanupWithRetry(_testDbPath, maxRetries: 3);
         TestEnvironment.CleanupWithRetry(_testDbPathEncrypted, maxRetries: 3);

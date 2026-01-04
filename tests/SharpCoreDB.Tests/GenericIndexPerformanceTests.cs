@@ -11,7 +11,7 @@ using Xunit;
 
 /// <summary>
 /// Performance tests for generic indexes with 10k records.
-/// Target: < 0.05ms (50 microseconds) per lookup.
+/// Target: &lt; 0.05ms (50 microseconds) per lookup.
 /// Comparison baseline: SQLite typically ~0.2ms for same query.
 /// </summary>
 public sealed class GenericIndexPerformanceTests

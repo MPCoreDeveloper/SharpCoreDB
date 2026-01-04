@@ -9,6 +9,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 /// <summary>
 /// Write-Ahead Log (WAL) manager for crash recovery.
@@ -29,6 +32,7 @@ internal sealed class WalManager : IDisposable
     private readonly Lock _walLock = new();
     private ulong _currentLsn;
     private ulong _currentTransactionId;
+    private ulong _lastCheckpointLsn;
     private bool _inTransaction;
     private bool _disposed;
 
@@ -42,6 +46,7 @@ internal sealed class WalManager : IDisposable
         _currentLsn = 0;
         _currentTransactionId = 0;
         _inTransaction = false;
+        _lastCheckpointLsn = 0;
     }
 
     public ulong CurrentLsn => _currentLsn;
@@ -170,6 +175,7 @@ internal sealed class WalManager : IDisposable
     {
         lock (_walLock)
         {
+            _lastCheckpointLsn = _currentLsn;
             _pendingEntries.Enqueue(new WalLogEntry
             {
                 Lsn = ++_currentLsn,
@@ -209,18 +215,83 @@ internal sealed class WalManager : IDisposable
         }
     }
 
-    #pragma warning disable S1172 // Unused parameter will be used in future implementation
     private async Task FlushWalAsync(CancellationToken cancellationToken = default)
-    #pragma warning restore S1172
     {
-        // NOTE: Implement WAL persistence
-        // For now, just clear pending entries
+        // Get pending entries to write
+        WalLogEntry[] entriesToWrite;
         lock (_walLock)
         {
+            if (_pendingEntries.Count == 0)
+            {
+                return; // Nothing to flush
+            }
+
+            entriesToWrite = _pendingEntries.ToArray();
             _pendingEntries.Clear();
         }
 
-        await Task.CompletedTask;
+        // Write entries to WAL file
+        var fileStream = GetFileStream();
+        var walHeader = new WalHeader
+        {
+            Magic = WalHeader.MAGIC,
+            Version = WalHeader.CURRENT_VERSION,
+            CurrentLsn = _currentLsn,
+            LastCheckpoint = _lastCheckpointLsn,
+            EntrySize = WalHeader.DEFAULT_ENTRY_SIZE,
+            MaxEntries = (uint)_maxEntries,
+            HeadOffset = 0,
+            TailOffset = 0
+        };
+
+        // Write header first
+        fileStream.Position = 0;
+        var headerBuffer = new byte[WalHeader.SIZE];
+        MemoryMarshal.Write(headerBuffer, in walHeader);
+        await fileStream.WriteAsync(headerBuffer, cancellationToken);
+
+        // Write entries
+        foreach (var entry in entriesToWrite)
+        {
+            var entryBuffer = new byte[WalHeader.DEFAULT_ENTRY_SIZE];
+            WriteWalEntry(entryBuffer, entry);
+            await fileStream.WriteAsync(entryBuffer, cancellationToken);
+        }
+
+        await fileStream.FlushAsync(cancellationToken);
+    }
+
+    private System.IO.FileStream GetFileStream()
+    {
+        return _provider.GetInternalFileStream();
+    }
+
+    private static void WriteWalEntry(Span<byte> buffer, WalLogEntry entry)
+    {
+        var walEntry = new WalEntry
+        {
+            Lsn = entry.Lsn,
+            TransactionId = entry.TransactionId,
+            Timestamp = (ulong)entry.Timestamp,
+            Operation = (ushort)entry.Operation,
+            BlockIndex = 0,
+            PageId = 0,
+            DataLength = (ushort)(entry.DataLength > 4000 ? 4000 : entry.DataLength)
+        };
+
+        // Set block name (truncated to 32 bytes)
+        if (!string.IsNullOrEmpty(entry.BlockName))
+        {
+            var nameBytes = Encoding.UTF8.GetBytes(entry.BlockName);
+            var nameSpan = nameBytes.AsSpan(0, Math.Min(nameBytes.Length, 32));
+            nameSpan.CopyTo(walEntry.BlockName);
+        }
+
+        // Set checksum
+        var checksum = SHA256.HashData(buffer[..(WalEntry.SIZE - 32)]);
+        checksum.CopyTo(walEntry.Checksum);
+
+        MemoryMarshal.Write(buffer, in walEntry);
     }
 }
 
@@ -252,4 +323,44 @@ internal enum WalOperation
     TransactionAbort = 7,
     PageAllocate = 8,
     PageFree = 9
+}
+
+internal struct WalHeader
+{
+    public const uint MAGIC = 0x20230522;
+    public const ushort CURRENT_VERSION = 1;
+    public const int SIZE = 64;
+    public const int DEFAULT_ENTRY_SIZE = 4096;
+
+    public uint Magic;
+    public ushort Version;
+    public ushort EntrySize;
+    public uint MaxEntries;
+    public ulong CurrentLsn;
+    public ulong LastCheckpoint;
+    public ulong HeadOffset;
+    public ulong TailOffset;
+}
+
+internal struct WalEntry
+{
+    public const int SIZE = 64;
+
+    public ulong Lsn;
+    public ulong TransactionId;
+    public ulong Timestamp;
+    public ushort Operation;
+    public ushort BlockIndex;
+    public ushort PageId;
+    public ushort DataLength;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+    public byte[] BlockName;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+    public byte[] Checksum;
+
+    public WalEntry()
+    {
+        BlockName = new byte[32];
+        Checksum = new byte[32];
+    }
 }

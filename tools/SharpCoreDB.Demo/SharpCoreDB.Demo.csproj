@@ -6,6 +6,7 @@
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <StartupObject>SingleFileDemo</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

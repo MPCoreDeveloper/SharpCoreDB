@@ -127,7 +127,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
     }
 
     [Fact]
-    public void Test3_HighSpeed_BulkInsertAsync()
+    public async Task Test3_HighSpeed_BulkInsertAsync()
     {
         var dbPath = Path.Combine(_testDbPath, "highspeed");
         var config = new DatabaseConfig
@@ -143,7 +143,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT, email TEXT, age INTEGER, created_at TEXT, is_active INTEGER)");
 
         var sw = Stopwatch.StartNew();
-        db.BulkInsertAsync("users", _testRows).GetAwaiter().GetResult();
+        await db.BulkInsertAsync("users", _testRows);
         sw.Stop();
 
         _output.WriteLine($"3?? HIGHSPEED (HighSpeedInsertMode): {sw.ElapsedMilliseconds} ms");
@@ -154,7 +154,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
     }
 
     [Fact]
-    public void Test4_BulkImport_AggressiveConfig()
+    public async Task Test4_BulkImport_AggressiveConfig()
     {
         var dbPath = Path.Combine(_testDbPath, "bulkimport");
         var db = (Database)_factory.Create(dbPath, "pass", false, DatabaseConfig.BulkImport, null);
@@ -162,7 +162,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT, email TEXT, age INTEGER, created_at TEXT, is_active INTEGER)");
 
         var sw = Stopwatch.StartNew();
-        db.BulkInsertAsync("users", _testRows).GetAwaiter().GetResult();
+        await db.BulkInsertAsync("users", _testRows);
         sw.Stop();
 
         _output.WriteLine($"4?? BULKIMPORT (Aggressive Config): {sw.ElapsedMilliseconds} ms");
@@ -173,7 +173,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
     }
 
     [Fact]
-    public void Test5_OptimizedPath_DelayedTranspose_BufferedEncryption()
+    public async Task Test5_OptimizedPath_DelayedTranspose_BufferedEncryption()
     {
         var dbPath = Path.Combine(_testDbPath, "optimized");
         var config = new DatabaseConfig
@@ -191,7 +191,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT, email TEXT, age INTEGER, created_at TEXT, is_active INTEGER)");
 
         var sw = Stopwatch.StartNew();
-        db.BulkInsertAsync("users", _testRows).GetAwaiter().GetResult();
+        await db.BulkInsertAsync("users", _testRows);
         sw.Stop();
 
         _output.WriteLine($"5?? OPTIMIZED PATH (Delayed Transpose + Buffered Encryption): {sw.ElapsedMilliseconds} ms");
@@ -203,7 +203,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
     }
 
     [Fact]
-    public void Test6_OptimizedPath_NoEncryption()
+    public async Task Test6_OptimizedPath_NoEncryption()
     {
         var dbPath = Path.Combine(_testDbPath, "optimized_noenc");
         var config = new DatabaseConfig
@@ -219,7 +219,7 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT, email TEXT, age INTEGER, created_at TEXT, is_active INTEGER)");
 
         var sw = Stopwatch.StartNew();
-        db.BulkInsertAsync("users", _testRows).GetAwaiter().GetResult();
+        await db.BulkInsertAsync("users", _testRows);
         sw.Stop();
 
         _output.WriteLine($"6?? OPTIMIZED PATH (No Encryption): {sw.ElapsedMilliseconds} ms");
@@ -235,12 +235,14 @@ public sealed class Complete10KInsertPerformanceTest : IDisposable
         var results = new List<(string Name, long TimeMs, double Throughput)>();
 
         // Run all tests
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call.
         RunAndRecord(results, "Baseline (No Opt)", () => Test1_Baseline_NoOptimizations());
         RunAndRecord(results, "Standard Batch", () => Test2_Standard_ExecuteBatchSQL());
         RunAndRecord(results, "HighSpeed Mode", () => Test3_HighSpeed_BulkInsertAsync());
         RunAndRecord(results, "BulkImport Config", () => Test4_BulkImport_AggressiveConfig());
         RunAndRecord(results, "Optimized + Enc", () => Test5_OptimizedPath_DelayedTranspose_BufferedEncryption());
         RunAndRecord(results, "Optimized No Enc", () => Test6_OptimizedPath_NoEncryption());
+#pragma warning restore CS4014
 
         // Print summary
         _output.WriteLine("");

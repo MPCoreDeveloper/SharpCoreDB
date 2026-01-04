@@ -695,16 +695,25 @@ public struct TableDirectoryHeader
     
     /// <summary>Current directory version</summary>
     public const uint CURRENT_VERSION = 1;
+    
+    /// <summary>Structure size in bytes</summary>
+    public const int SIZE = 16;
+
+    /// <summary>
+    /// Validates the header magic and version.
+    /// </summary>
+    public readonly bool IsValid => Magic == MAGIC && Version == CURRENT_VERSION;
 }
 
 /// <summary>
-/// Table metadata entry (128 bytes).
+/// Table metadata entry (256 bytes).
 /// Describes a single table in the database.
+/// Extended to include full schema information.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct TableMetadataEntry
 {
-    /// <summary>Table name (UTF-8, null-terminated)</summary>
+    /// <summary>Table name (UTF-8, null-terminated, max 63 chars)</summary>
     public unsafe fixed byte TableName[64]; // 0x00: Table name
     
     /// <summary>Table ID (hash of table name)</summary>
@@ -713,8 +722,8 @@ public struct TableMetadataEntry
     /// <summary>Offset to data block</summary>
     public ulong DataBlockOffset;    // 0x44: Data block offset
     
-    /// <summary>Offset to index block</summary>
-    public ulong IndexBlockOffset;   // 0x4C: Index block offset
+    /// <summary>Offset to primary key index block</summary>
+    public ulong PrimaryKeyIndexOffset; // 0x4C: PK index block offset
     
     /// <summary>Total record count</summary>
     public ulong RecordCount;        // 0x54: Record count
@@ -722,15 +731,172 @@ public struct TableMetadataEntry
     /// <summary>Number of columns</summary>
     public uint ColumnCount;         // 0x5C: Column count
     
+    /// <summary>Primary key column index (-1 if no PK)</summary>
+    public int PrimaryKeyIndex;      // 0x60: Primary key column index
+    
     /// <summary>Storage mode (0=Columnar, 1=PageBased)</summary>
-    public byte StorageMode;         // 0x60: Storage mode
+    public byte StorageMode;         // 0x64: Storage mode
     
     /// <summary>Table flags</summary>
-    public byte Flags;               // 0x61: Flags
+    public byte Flags;               // 0x65: Flags
+    
+    /// <summary>Number of hash indexes</summary>
+    public uint HashIndexCount;      // 0x66: Hash index count
+    
+    /// <summary>Number of B-tree indexes</summary>
+    public uint BTreeIndexCount;     // 0x6A: B-tree index count
+    
+    /// <summary>Offset to column definitions block</summary>
+    public ulong ColumnDefsOffset;   // 0x6E: Column definitions offset
+    
+    /// <summary>Offset to index definitions block</summary>
+    public ulong IndexDefsOffset;    // 0x76: Index definitions offset
+    
+    /// <summary>Creation timestamp (Unix microseconds)</summary>
+    public ulong CreatedTime;        // 0x7E: Creation timestamp
+    
+    /// <summary>Last modification timestamp</summary>
+    public ulong ModifiedTime;       // 0x86: Last modified timestamp
     
     /// <summary>Reserved for future use</summary>
-    public unsafe fixed byte Reserved[14];  // 0x62: Reserved
+    public unsafe fixed byte Reserved[26];  // 0x8E: Reserved
+
+    /// <summary>Structure size in bytes</summary>
+    public const int SIZE = 256;
+    
+    /// <summary>Maximum table name length</summary>
+    public const int MAX_TABLE_NAME_LENGTH = 63;
+}
+
+/// <summary>
+/// Column definition entry (64 bytes).
+/// Describes a single column in a table.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct ColumnDefinitionEntry
+{
+    /// <summary>Column name (UTF-8, null-terminated, max 31 chars)</summary>
+    public unsafe fixed byte ColumnName[32]; // 0x00: Column name
+    
+    /// <summary>Data type (see DataType enum)</summary>
+    public uint DataType;           // 0x20: Data type
+    
+    /// <summary>Column flags (auto, not null, etc.)</summary>
+    public uint Flags;              // 0x24: Column flags
+    
+    /// <summary>Default value length (0 if no default)</summary>
+    public uint DefaultValueLength; // 0x28: Default value length
+    
+    /// <summary>Check constraint length (0 if no check)</summary>
+    public uint CheckLength;        // 0x2C: Check constraint length
+
+    /// <summary>Structure size in bytes (fixed part)</summary>
+    public const int FIXED_SIZE = 48;
+    
+    /// <summary>Maximum column name length</summary>
+    public const int MAX_COLUMN_NAME_LENGTH = 31;
+}
+
+/// <summary>
+/// Index definition entry (128 bytes).
+/// Describes a single index on a table.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct IndexDefinitionEntry
+{
+    /// <summary>Index name (UTF-8, null-terminated, max 63 chars)</summary>
+    public unsafe fixed byte IndexName[64]; // 0x00: Index name
+    
+    /// <summary>Index type (0=Hash, 1=BTree)</summary>
+    public uint IndexType;          // 0x40: Index type
+    
+    /// <summary>Number of columns in index</summary>
+    public uint ColumnCount;        // 0x44: Column count
+    
+    /// <summary>Index flags (unique, etc.)</summary>
+    public uint Flags;              // 0x48: Index flags
+    
+    /// <summary>Offset to index data block</summary>
+    public ulong IndexDataOffset;   // 0x4C: Index data offset
+    
+    /// <summary>Column indexes (up to 16 columns)</summary>
+    public unsafe fixed int ColumnIndexes[16]; // 0x54: Column indexes
+    
+    /// <summary>Reserved for future use</summary>
+    public unsafe fixed byte Reserved[16]; // 0x94: Reserved
 
     /// <summary>Structure size in bytes</summary>
     public const int SIZE = 128;
+    
+    /// <summary>Maximum index name length</summary>
+    public const int MAX_INDEX_NAME_LENGTH = 63;
+    
+    /// <summary>Maximum columns per index</summary>
+    public const int MAX_COLUMNS = 16;
+}
+
+/// <summary>
+/// Table flags enumeration.
+/// </summary>
+[Flags]
+public enum TableFlags : byte
+{
+    /// <summary>No flags</summary>
+    None = 0,
+    
+    /// <summary>Table has been modified</summary>
+    Dirty = 1 << 0,
+    
+    /// <summary>Table is temporary</summary>
+    Temporary = 1 << 1,
+    
+    /// <summary>Table is read-only</summary>
+    ReadOnly = 1 << 2
+}
+
+/// <summary>
+/// Column flags enumeration.
+/// </summary>
+[Flags]
+public enum ColumnFlags : uint
+{
+    /// <summary>No flags</summary>
+    None = 0,
+    
+    /// <summary>Column is auto-increment</summary>
+    AutoIncrement = 1 << 0,
+    
+    /// <summary>Column is NOT NULL</summary>
+    NotNull = 1 << 1,
+    
+    /// <summary>Column is UNIQUE</summary>
+    Unique = 1 << 2,
+    
+    /// <summary>Column is PRIMARY KEY</summary>
+    PrimaryKey = 1 << 3,
+    
+    /// <summary>Column has a default value</summary>
+    HasDefault = 1 << 4,
+    
+    /// <summary>Column has a check constraint</summary>
+    HasCheck = 1 << 5
+}
+
+/// <summary>
+/// Index flags enumeration.
+/// </summary>
+[Flags]
+public enum IndexFlags : uint
+{
+    /// <summary>No flags</summary>
+    None = 0,
+    
+    /// <summary>Index enforces uniqueness</summary>
+    Unique = 1 << 0,
+    
+    /// <summary>Index is clustered</summary>
+    Clustered = 1 << 1,
+    
+    /// <summary>Index is disabled</summary>
+    Disabled = 1 << 2
 }

@@ -312,7 +312,7 @@ public sealed class GenericLoadTests
     }
 
     [Fact]
-    public void MVCC_ConcurrentReadsWithStructs_Stress()
+    public async Task MVCC_ConcurrentReadsWithStructs_Stress()
     {
         // Arrange
         var mvcc = new MvccManager<int, Order>("orders_concurrent");
@@ -349,7 +349,7 @@ public sealed class GenericLoadTests
             });
         }).ToArray();
 
-        Task.WaitAll(tasks);
+        await Task.WhenAll(tasks);
         stopwatch.Stop();
 
         // Assert

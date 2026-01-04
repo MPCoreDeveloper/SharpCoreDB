@@ -31,6 +31,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private readonly BlockRegistry _blockRegistry;
     private readonly FreeSpaceManager _freeSpaceManager;
     private readonly WalManager _walManager;
+    private readonly TableDirectoryManager _tableDirectoryManager;
     private readonly ConcurrentDictionary<string, BlockMetadata> _blockCache;
     private readonly Lock _transactionLock = new();
     private bool _isInTransaction;
@@ -59,6 +60,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _blockRegistry = new BlockRegistry(this, header.BlockRegistryOffset, header.BlockRegistryLength);
         _freeSpaceManager = new FreeSpaceManager(this, header.FsmOffset, header.FsmLength, header.PageSize);
         _walManager = new WalManager(this, header.WalOffset, header.WalLength, options.WalBufferSizePages);
+        _tableDirectoryManager = new TableDirectoryManager(this, header.TableDirOffset, header.TableDirLength);
     }
 
     /// <summary>
@@ -147,6 +149,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
     /// <inheritdoc/>
     public int PageSize => _header.PageSize;
+
+    /// <summary>
+    /// Gets the table directory manager for schema operations.
+    /// </summary>
+    internal TableDirectoryManager TableDirectoryManager => _tableDirectoryManager;
 
     /// <inheritdoc/>
     public bool BlockExists(string blockName)
@@ -425,6 +432,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // Flush FSM
         await _freeSpaceManager.FlushAsync(cancellationToken);
 
+        // Flush table directory
+        _tableDirectoryManager.Flush();
+
         // Checkpoint WAL
         await _walManager.CheckpointAsync(cancellationToken);
 
@@ -583,6 +593,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             _blockRegistry?.Dispose();
             _freeSpaceManager?.Dispose();
             _walManager?.Dispose();
+            _tableDirectoryManager?.Dispose();
             _memoryMappedFile?.Dispose();
             _fileStream?.Dispose();
         }
@@ -630,13 +641,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         header.WalOffset = header.FsmOffset + header.FsmLength;
         header.WalLength = (ulong)options.PageSize * (ulong)options.WalBufferSizePages;
 
-        // Write header
-        Span<byte> headerBuffer = stackalloc byte[(int)ScdbFileHeader.HEADER_SIZE];
-        header.WriteTo(headerBuffer);
-        fs.Write(headerBuffer);
+        // Initialize table directory at page 10
+        header.TableDirOffset = header.WalOffset + header.WalLength;
+        header.TableDirLength = (ulong)options.PageSize * 4; // 4 pages for table directory
 
         // Allocate space for metadata structures
-        var totalMetadataSize = header.WalOffset + header.WalLength;
+        var totalMetadataSize = header.TableDirOffset + header.TableDirLength;
         fs.SetLength((long)totalMetadataSize);
 
         return header;

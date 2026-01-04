@@ -12,7 +12,6 @@ namespace SharpCoreDB.Tests;
 public class TableLazyIndexTests : IDisposable
 {
     private readonly string _testDirectory;
-    private readonly Services.Storage? _storage;
 
     public TableLazyIndexTests()
     {
@@ -101,7 +100,7 @@ public class TableLazyIndexTests : IDisposable
 
     private Table CreateTableWithData()
     {
-        var table = new Table(_storage, isReadOnly: false)
+        var table = new Table()
         {
             Name = "users",
             Columns = ["id", "name", "email"],

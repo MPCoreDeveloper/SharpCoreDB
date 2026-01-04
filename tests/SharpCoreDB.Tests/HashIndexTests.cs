@@ -143,7 +143,7 @@ public class HashIndexTests
     {
         // Arrange
         var index = new HashIndex("users", "email");
-        var row1 = new Dictionary<string, object> { { "email", (object)null }, { "name", "Alice" } };
+        var row1 = new Dictionary<string, object> { { "email", (object?)null! }, { "name", "Alice" } };
         var row2 = new Dictionary<string, object> { { "name", "Bob" } }; // Missing email key
 
         // Act
@@ -152,7 +152,7 @@ public class HashIndexTests
 
         // Assert
         Assert.Equal(0, index.Count); // No keys added
-        Assert.Empty(index.LookupPositions(null));
+        Assert.Empty(index.LookupPositions(null!));
     }
 
     [Fact]

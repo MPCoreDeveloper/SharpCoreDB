@@ -53,7 +53,7 @@ public class IndexTests
     }
 
     [Fact]
-    public void HashIndex_ConcurrentAccess_ThreadSafe()
+    public async Task HashIndex_ConcurrentAccess_ThreadSafe()
     {
         // Arrange
         var index = new HashIndex("concurrent", "id");
@@ -78,7 +78,7 @@ public class IndexTests
             }));
         }
 
-        Task.WaitAll(tasks.ToArray());
+        await Task.WhenAll(tasks);
 
         // Assert - All rows should be indexed
         var totalRows = 0;

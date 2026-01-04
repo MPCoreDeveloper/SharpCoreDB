@@ -10,7 +10,7 @@ using Xunit;
 
 /// <summary>
 /// Tests for columnar storage with SIMD-optimized aggregates.
-/// Target: Aggregates on 10k records in < 2ms.
+/// Target: Aggregates on 10k records in &lt; 2ms.
 /// </summary>
 public sealed class ColumnStoreTests
 {

@@ -14,9 +14,9 @@ namespace SharpCoreDB.Tests;
 /// Validates that page allocation doesn't degrade with high page counts.
 /// 
 /// Expected Performance:
-/// - 10K allocations: <100ms total (~10?s per allocation)
-/// - 10K frees: <50ms total (~5?s per free)
-/// - 10K re-allocations: <100ms total (proving O(1) reuse)
+/// - 10K allocations: &lt;100ms total (~10µs per allocation)
+/// - 10K frees: &lt;50ms total (~5µs per free)
+/// - 10K re-allocations: &lt;100ms total (proving O(1) reuse)
 /// - No O(n) slowdown as page count increases
 /// </summary>
 public class PageManager_FreeList_O1_Test : IDisposable

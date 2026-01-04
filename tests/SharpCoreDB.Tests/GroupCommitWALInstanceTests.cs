@@ -228,7 +228,7 @@ public class GroupCommitWALInstanceTests
     /// <summary>
     /// Cleanup method for test resources.
     /// </summary>
-    public void Cleanup()
+    private void Cleanup()
     {
         try
         {

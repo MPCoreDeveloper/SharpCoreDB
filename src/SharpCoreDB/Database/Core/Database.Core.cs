@@ -12,6 +12,7 @@ namespace SharpCoreDB;
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Core.Cache;
+using SharpCoreDB.Storage;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.Json;

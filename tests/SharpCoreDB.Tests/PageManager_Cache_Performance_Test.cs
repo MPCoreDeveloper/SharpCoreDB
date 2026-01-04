@@ -15,8 +15,8 @@ namespace SharpCoreDB.Tests;
 /// Target Performance:
 /// - Cache hit rate: >90% for hot pages
 /// - Speedup vs disk: 5-10x faster
-/// - Random reads: <1ms for 1K reads (cached)
-/// - Random writes: <2ms for 1K writes (cached)
+/// - Random reads: &lt;1ms for 1K reads (cached)
+/// - Random writes: &lt;2ms for 1K writes (cached)
 /// </summary>
 public class PageManager_Cache_Performance_Test : IDisposable
 {
