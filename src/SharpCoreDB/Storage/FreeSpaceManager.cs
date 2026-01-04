@@ -1,0 +1,434 @@
+// <copyright file="FreeSpaceManager.cs" company="MPCoreDeveloper">
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+// </copyright>
+
+namespace SharpCoreDB.Storage;
+
+using SharpCoreDB.Storage.Scdb;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+
+/// <summary>
+/// Free Space Map (FSM) for O(1) page allocation.
+/// Uses two-level bitmap inspired by PostgreSQL.
+/// L1: 1 bit per page (allocated/free)
+/// L2: Extent map for large contiguous allocations.
+/// Format: [FsmHeader(64B)] [L1 Bitmap(variable)] [L2 Extents(variable)]
+/// </summary>
+internal sealed class FreeSpaceManager : IDisposable
+{
+    private readonly SingleFileStorageProvider _provider;
+    private readonly ulong _fsmOffset;
+    private readonly ulong _fsmLength;
+    private readonly int _pageSize;
+    private readonly BitArray _l1Bitmap; // 1 bit per page
+    private readonly List<FreeExtent> _l2Extents; // Large free extents
+    private readonly Lock _allocationLock = new();
+    private bool _isDirty;
+    private bool _disposed;
+    private ulong _totalPages;
+    private ulong _freePages;
+
+    public FreeSpaceManager(SingleFileStorageProvider provider, ulong fsmOffset, ulong fsmLength, int pageSize)
+    {
+        _provider = provider;
+        _fsmOffset = fsmOffset;
+        _fsmLength = fsmLength;
+        _pageSize = pageSize;
+        _l1Bitmap = new BitArray(1024 * 1024); // 1M pages = 4GB @ 4KB pages
+        _l2Extents = new List<FreeExtent>();
+        _totalPages = 0;
+        _freePages = 0;
+
+        // Load existing FSM from disk
+        LoadFsm();
+    }
+
+    public ulong AllocatePages(int count)
+    {
+        if (count <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        lock (_allocationLock)
+        {
+            // Try to find contiguous free pages
+            var startPage = FindContiguousFreePages(count);
+            
+            if (startPage == ulong.MaxValue)
+            {
+                // No space found, extend file
+                startPage = _totalPages;
+                ExtendFile(count);
+            }
+
+            // Mark pages as allocated
+            for (var i = 0; i < count; i++)
+            {
+                _l1Bitmap.Set((int)(startPage + (ulong)i), true);
+            }
+
+            _freePages -= (ulong)count;
+            _isDirty = true;
+
+            return startPage * (ulong)_pageSize; // Return byte offset
+        }
+    }
+
+    public void FreePages(ulong offset, int count)
+    {
+        if (count <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        var startPage = offset / (ulong)_pageSize;
+
+        lock (_allocationLock)
+        {
+            // Mark pages as free
+            for (var i = 0; i < count; i++)
+            {
+                _l1Bitmap.Set((int)(startPage + (ulong)i), false);
+            }
+
+            _freePages += (ulong)count;
+            _isDirty = true;
+
+            // Coalesce into extent if large
+            if (count >= 16)
+            {
+                _l2Extents.Add(new FreeExtent(startPage, (ulong)count));
+            }
+        }
+    }
+
+    public (long FreeSpace, long FreePages) GetStatistics()
+    {
+        lock (_allocationLock)
+        {
+            return ((long)_freePages * _pageSize, (long)_freePages);
+        }
+    }
+
+    /// <summary>
+    /// Flushes the FSM to disk.
+    /// Format: [FreeSpaceMapHeader(64B)] [L1 Bitmap(bytes)] [L2 Extent Count(4B)] [FreeExtent1(16B)] ...
+    /// </summary>
+    public async Task FlushAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_isDirty) return;
+
+        byte[] buffer;
+        int totalSize;
+
+        // Prepare data inside lock (fast, synchronous)
+        lock (_allocationLock)
+        {
+            if (!_isDirty) return;
+
+            // Calculate L1 bitmap size (1 bit per page, packed into bytes)
+            var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
+            
+            // Calculate L2 extent size
+            var extentCount = _l2Extents.Count;
+            var extentSizeBytes = extentCount * FreeExtent.SIZE;
+            
+            // Total size
+            totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
+
+            if ((ulong)totalSize > _fsmLength)
+            {
+                throw new InvalidOperationException(
+                    $"FSM too large: {totalSize} bytes exceeds limit {_fsmLength}");
+            }
+
+            buffer = ArrayPool<byte>.Shared.Rent(totalSize);
+            var span = buffer.AsSpan(0, totalSize);
+            span.Clear();
+
+            // Write header
+            var header = new FreeSpaceMapHeader
+            {
+                Magic = FreeSpaceMapHeader.MAGIC,
+                Version = FreeSpaceMapHeader.CURRENT_VERSION,
+                TotalPages = _totalPages,
+                FreePages = _freePages,
+                LargestExtent = extentCount > 0 ? _l2Extents.Max(e => e.Length) : 0,
+                BitmapOffset = FreeSpaceMapHeader.SIZE,
+                ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
+            };
+
+            MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
+
+            // Write L1 bitmap
+            var bitmapSpan = span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
+            SerializeBitmap(bitmapSpan);
+
+            // Write L2 extent count
+            var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
+            MemoryMarshal.Write(span[countOffset..], extentCount);
+
+            // Write L2 extents
+            var extentOffset = countOffset + sizeof(int);
+            for (var i = 0; i < extentCount; i++)
+            {
+                var extent = _l2Extents[i];
+                var extentSpan = span.Slice(extentOffset + (i * FreeExtent.SIZE), FreeExtent.SIZE);
+                MemoryMarshal.Write(extentSpan, in extent);
+            }
+
+            _isDirty = false;
+        }
+
+        // Write to file OUTSIDE lock
+        try
+        {
+            var fileStream = GetFileStream();
+            fileStream.Position = (long)_fsmOffset;
+            await fileStream.WriteAsync(buffer.AsMemory(0, totalSize), cancellationToken);
+            await fileStream.FlushAsync(cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        try
+        {
+            if (_isDirty)
+            {
+                FlushAsync().GetAwaiter().GetResult();
+            }
+        }
+        finally
+        {
+            _disposed = true;
+        }
+    }
+
+    private ulong FindContiguousFreePages(int count)
+    {
+        // Scan L1 bitmap for contiguous free pages
+        var consecutive = 0;
+        var startPage = 0UL;
+
+        for (var i = 0UL; i < _totalPages; i++)
+        {
+            if (!_l1Bitmap.Get((int)i))
+            {
+                if (consecutive == 0)
+                {
+                    startPage = i;
+                }
+                consecutive++;
+
+                if (consecutive >= count)
+                {
+                    return startPage;
+                }
+            }
+            else
+            {
+                consecutive = 0;
+            }
+        }
+
+        return ulong.MaxValue; // Not found
+    }
+
+    private void ExtendFile(int pages)
+    {
+        _totalPages += (ulong)pages;
+        _freePages += (ulong)pages;
+        
+        // Expand bitmap if needed
+        if ((int)_totalPages > _l1Bitmap.Length)
+        {
+            _l1Bitmap.Length = (int)_totalPages * 2;
+        }
+    }
+
+    /// <summary>
+    /// Loads FSM from disk.
+    /// </summary>
+    private void LoadFsm()
+    {
+        try
+        {
+            var fileStream = GetFileStream();
+            
+            if (fileStream.Length < (long)(_fsmOffset + FreeSpaceMapHeader.SIZE))
+            {
+                return; // Empty FSM
+            }
+
+            // Read header
+            fileStream.Position = (long)_fsmOffset;
+            Span<byte> headerBuffer = stackalloc byte[FreeSpaceMapHeader.SIZE];
+            fileStream.ReadExactly(headerBuffer);
+            
+            var header = MemoryMarshal.Read<FreeSpaceMapHeader>(headerBuffer);
+            
+            if (!header.IsValid)
+            {
+                return;
+            }
+
+            _totalPages = header.TotalPages;
+            _freePages = header.FreePages;
+
+            // Read L1 bitmap
+            var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
+            var bitmapBuffer = ArrayPool<byte>.Shared.Rent(bitmapSizeBytes);
+            try
+            {
+                var bitmapSpan = bitmapBuffer.AsSpan(0, bitmapSizeBytes);
+                fileStream.ReadExactly(bitmapSpan);
+                DeserializeBitmap(bitmapSpan);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bitmapBuffer);
+            }
+
+            // Read L2 extent count
+            Span<byte> countBuffer = stackalloc byte[sizeof(int)];
+            fileStream.ReadExactly(countBuffer);
+            var extentCount = MemoryMarshal.Read<int>(countBuffer);
+
+            // Read L2 extents
+            if (extentCount > 0)
+            {
+                var extentBufferSize = extentCount * FreeExtent.SIZE;
+                var extentBuffer = ArrayPool<byte>.Shared.Rent(extentBufferSize);
+                try
+                {
+                    var extentSpan = extentBuffer.AsSpan(0, extentBufferSize);
+                    fileStream.ReadExactly(extentSpan);
+
+                    for (var i = 0; i < extentCount; i++)
+                    {
+                        var offset = i * FreeExtent.SIZE;
+                        var extent = MemoryMarshal.Read<FreeExtent>(extentSpan[offset..]);
+                        _l2Extents.Add(extent);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(extentBuffer);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // If loading fails, start with empty FSM
+            _totalPages = 0;
+            _freePages = 0;
+            _l1Bitmap.Length = 1024 * 1024;
+            _l2Extents.Clear();
+        }
+    }
+
+    private void SerializeBitmap(Span<byte> destination)
+    {
+        for (var i = 0; i < _l1Bitmap.Length; i++)
+        {
+            var byteIndex = i / 8;
+            var bitIndex = i % 8;
+            
+            if (_l1Bitmap.Get(i))
+            {
+                destination[byteIndex] |= (byte)(1 << bitIndex);
+            }
+        }
+    }
+
+    private void DeserializeBitmap(ReadOnlySpan<byte> source)
+    {
+        for (var i = 0; i < (int)_totalPages; i++)
+        {
+            var byteIndex = i / 8;
+            var bitIndex = i % 8;
+            
+            var isSet = (source[byteIndex] & (1 << bitIndex)) != 0;
+            _l1Bitmap.Set(i, isSet);
+        }
+    }
+
+    private System.IO.FileStream GetFileStream()
+    {
+        return _provider.GetInternalFileStream();
+    }
+}
+
+/// <summary>
+/// Simple BitArray implementation (substitute for System.Collections.BitArray).
+/// </summary>
+internal sealed class BitArray
+{
+    private int[] _array;
+    private int _length;
+
+    public BitArray(int length)
+    {
+        _length = length;
+        _array = new int[(length + 31) / 32];
+    }
+
+    public int Length
+    {
+        get => _length;
+        set
+        {
+            if (value > _length)
+            {
+                Array.Resize(ref _array, (value + 31) / 32);
+            }
+            _length = value;
+        }
+    }
+
+    public bool Get(int index)
+    {
+        if (index < 0 || index >= _length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of range [0, {_length})");
+        }
+
+        var arrayIndex = index / 32;
+        var bitIndex = index % 32;
+        return (_array[arrayIndex] & (1 << bitIndex)) != 0;
+    }
+
+    public void Set(int index, bool value)
+    {
+        if (index < 0 || index >= _length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of range [0, {_length})");
+        }
+
+        var arrayIndex = index / 32;
+        var bitIndex = index % 32;
+
+        if (value)
+        {
+            _array[arrayIndex] |= (1 << bitIndex);
+        }
+        else
+        {
+            _array[arrayIndex] &= ~(1 << bitIndex);
+        }
+    }
+}

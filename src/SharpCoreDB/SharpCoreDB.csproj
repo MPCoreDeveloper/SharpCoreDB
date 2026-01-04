@@ -99,7 +99,6 @@
   
   <ItemGroup>
     <None Include=".github\FUNDING.yml" />
-    <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
   </ItemGroup>

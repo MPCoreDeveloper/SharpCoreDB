@@ -5,10 +5,12 @@
 namespace SharpCoreDB.Interfaces;
 
 using SharpCoreDB.DataStructures;
+using SharpCoreDB.Storage;
 
 /// <summary>
 /// Interface for the database engine.
 /// ✅ NEW: Compiled query support for zero-parse execution (5-10x faster).
+/// ✅ NEW: VACUUM support for single-file storage defragmentation.
 /// </summary>
 public interface IDatabase
 {
@@ -183,4 +185,24 @@ public interface IDatabase
     /// Used internally by the provider to ensure persistence on connection close.
     /// </summary>
     void ForceSave();
+
+    /// <summary>
+    /// Performs VACUUM operation on single-file databases to reclaim space and reduce fragmentation.
+    /// For directory-based databases, this operation is a no-op.
+    /// </summary>
+    /// <param name="mode">VACUUM mode (Quick, Incremental, or Full)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>VACUUM result with statistics</returns>
+    Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the database storage mode (Directory or SingleFile).
+    /// </summary>
+    StorageMode StorageMode { get; }
+
+    /// <summary>
+    /// Gets storage statistics (file size, fragmentation, block count, etc.).
+    /// </summary>
+    /// <returns>Storage statistics</returns>
+    StorageStatistics GetStorageStatistics();
 }
