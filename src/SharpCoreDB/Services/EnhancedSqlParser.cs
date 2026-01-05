@@ -18,19 +18,12 @@ using System.Text.RegularExpressions;
 /// - EnhancedSqlParser.DDL.cs: CREATE TABLE and DDL statement parsing
 /// - EnhancedSqlParser.Expressions.cs: Expression, literal, and operator parsing
 /// </summary>
-public partial class EnhancedSqlParser
+public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 {
+    private readonly ISqlDialect? _dialect = dialect;
     private readonly List<string> _errors = [];
     private string _sql = string.Empty;
     private int _position;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EnhancedSqlParser"/> class.
-    /// </summary>
-    /// <param name="dialect">The SQL dialect to use.</param>
-    public EnhancedSqlParser(ISqlDialect? dialect = null)
-    {
-    }
 
     /// <summary>
     /// Gets the list of parsing errors.
@@ -151,7 +144,7 @@ public partial class EnhancedSqlParser
 
     private static bool IsReservedKeyword(string keyword)
     {
-        var reserved = new[] { "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS", "ON", "GROUP", "BY", "HAVING", "ORDER", "LIMIT", "OFFSET" };
+        string[] reserved = ["SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS", "ON", "GROUP", "BY", "HAVING", "ORDER", "LIMIT", "OFFSET"];
         return reserved.Contains(keyword.ToUpperInvariant());
     }
 }

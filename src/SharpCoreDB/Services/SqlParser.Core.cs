@@ -36,31 +36,14 @@ using SharpCoreDB.Interfaces;
 ///   - Multiple SQL dialect support
 /// Use ParseWithEnhancedParser() for complex queries.
 /// </summary>
-public partial class SqlParser : ISqlParser
+public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null, DatabaseConfig? config = null) : ISqlParser
 {
-    private readonly Dictionary<string, ITable> tables;
-    private readonly IWAL? wal;
-    private readonly string dbPath;
-    private readonly IStorage storage;
-    private readonly bool isReadOnly;
-    private readonly QueryCache? queryCache;
-    private readonly DatabaseConfig? config;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SqlParser"/> class.
-    /// Simple SQL parser and executor.
-    /// </summary>
-    public SqlParser(Dictionary<string, ITable> tables, IWAL? wal, string dbPath, IStorage storage, bool isReadOnly = false, QueryCache? queryCache = null, bool noEncrypt = false, DatabaseConfig? config = null)
-    {
-        this.tables = tables;
-        this.wal = wal;
-        this.dbPath = dbPath;
-        this.storage = storage;
-        this.isReadOnly = isReadOnly;
-        this.queryCache = queryCache;
-        this.config = config;
-        // Note: noEncrypt parameter used in constructor but not stored as field
-    }
+    private readonly Dictionary<string, ITable> tables = tables;
+    private readonly string dbPath = dbPath;
+    private readonly IStorage storage = storage;
+    private readonly bool isReadOnly = isReadOnly;
+    private readonly QueryCache? queryCache = queryCache;
+    private readonly DatabaseConfig? config = config;
 
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)

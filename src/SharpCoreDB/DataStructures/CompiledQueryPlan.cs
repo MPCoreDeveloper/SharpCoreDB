@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.DataStructures;
 
+using SharpCoreDB.Optimization;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
@@ -84,6 +85,16 @@ public class CompiledQueryPlan
     public bool HasProjection => ProjectionFunc is not null;
 
     /// <summary>
+    /// Gets the optimizer-produced physical plan (if available).
+    /// </summary>
+    public PhysicalPlan? OptimizedPlan { get; }
+
+    /// <summary>
+    /// Gets the estimated cost for the optimized plan.
+    /// </summary>
+    public double OptimizedCost { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="CompiledQueryPlan"/> class.
     /// </summary>
     /// <param name="sql">The original SQL statement.</param>
@@ -97,6 +108,8 @@ public class CompiledQueryPlan
     /// <param name="limit">The LIMIT value.</param>
     /// <param name="offset">The OFFSET value.</param>
     /// <param name="parameterNames">The parameter names.</param>
+    /// <param name="optimizedPlan">Physical plan produced by optimizer (optional).</param>
+    /// <param name="optimizedCost">Estimated cost for optimized plan.</param>
     public CompiledQueryPlan(
         string sql,
         string tableName,
@@ -108,7 +121,9 @@ public class CompiledQueryPlan
         bool orderByAscending,
         int? limit,
         int? offset,
-        HashSet<string> parameterNames)
+        HashSet<string> parameterNames,
+        PhysicalPlan? optimizedPlan = null,
+        double optimizedCost = 0d)
     {
         Sql = sql;
         TableName = tableName;
@@ -121,5 +136,7 @@ public class CompiledQueryPlan
         Limit = limit;
         Offset = offset;
         ParameterNames = parameterNames;
+        OptimizedPlan = optimizedPlan;
+        OptimizedCost = optimizedCost;
     }
 }

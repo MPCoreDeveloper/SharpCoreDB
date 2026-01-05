@@ -7,6 +7,7 @@ namespace SharpCoreDB.Services;
 
 using SharpCoreDB.DataStructures;
 using SharpCoreDB.Services.Compilation;
+using SharpCoreDB.Optimization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -86,6 +87,11 @@ public static class QueryCompiler
                 orderByAscending = selectNode.OrderBy.Items[0].IsAscending;
             }
 
+            // Build optimizer plan (lightweight, cacheable)
+            var stats = new Dictionary<string, TableStatistics>();
+            var optimizer = new QueryOptimizer(new CostEstimator(stats));
+            var physicalPlan = optimizer.Optimize(selectNode);
+
             // Return CompiledQueryPlan (compatible with existing code)
             return new CompiledQueryPlan(
                 sql,
@@ -98,7 +104,9 @@ public static class QueryCompiler
                 orderByAscending,
                 selectNode.Limit,
                 selectNode.Offset,
-                parameterNames);
+                parameterNames,
+                physicalPlan,
+                physicalPlan.EstimatedCost);
         }
         catch
         {

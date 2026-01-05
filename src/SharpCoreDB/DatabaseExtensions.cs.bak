@@ -153,10 +153,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     private readonly string _dbPath; // #pragma warning disable S4487 // Used for logging
     private readonly DatabaseOptions _options; // #pragma warning disable S4487 // Used for configuration
     private readonly Dictionary<string, ITable> _tables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _transactionLock = new();
     private readonly TableDirectoryManager _tableDirectoryManager;
-    private readonly Services.QueryCache _queryCache;
-    private readonly Lock _batchUpdateLock = new();
-    private bool _isBatchUpdateActive;
 
     /// <summary>
     /// Creates a new SingleFileDatabase instance.
@@ -173,7 +171,6 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _tableDirectoryManager = ((SingleFileStorageProvider)storageProvider).TableDirectoryManager;
-        _queryCache = new Services.QueryCache(options.DatabaseConfig?.QueryCacheSize ?? 1024);
         
         // Load existing tables from single-file storage
         LoadTables();
@@ -204,15 +201,35 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         return Task.CompletedTask;
     }
 
-    public void CreateUser(string username, string password) => throw new NotSupportedException("User management is not supported in single-file mode");
+    public void CreateUser(string username, string password)
+    {
+        throw new NotSupportedException("User management is not supported in single-file mode");
+    }
 
-    public bool Login(string username, string password) => false;
+    public bool Login(string username, string password)
+    {
+        return false;
+    }
 
-   
+    public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics()
+    {
+        return (0, 0, 0.0, 0);
+    }
 
-    public SharpCoreDB.DataStructures.PreparedStatement Prepare(string sql) => throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+    public void ClearQueryCache()
+    {
+        // No query cache in single-file mode yet
+    }
 
-    public void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters) => throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+    public SharpCoreDB.DataStructures.PreparedStatement Prepare(string sql)
+    {
+        throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+    }
+
+    public void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters)
+    {
+        throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+    }
 
     public Task ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
@@ -234,8 +251,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         {
             // Return storage statistics
             var stats = GetStorageStatistics();
-            return
-            [
+            return new List<Dictionary<string, object>>
+            {
                 new Dictionary<string, object>
                 {
                     ["TotalSize"] = stats.TotalSize,
@@ -244,106 +261,65 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
                     ["FragmentationPercent"] = stats.FragmentationPercent,
                     ["BlockCount"] = stats.BlockCount
                 }
-            ];
+            };
         }
         
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
     }
 
-    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt) => ExecuteQuery(sql, parameters);
-
-    public bool IsBatchUpdateActive => _isBatchUpdateActive;
-    
-    public (long Hits, long Misses, double HitRate, int Count) GetQueryCacheStatistics() 
-        => _queryCache.GetStatistics();
-
-    /// <summary>
-    /// Clears the query cache for single-file database.
-    /// Uses modern C# 14 null-conditional operator and minimal allocation.
-    /// </summary>
-    public void ClearQueryCache()
+    public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt)
     {
-        _queryCache.Clear();
+        return ExecuteQuery(sql, parameters);
     }
 
-    /// <summary>
-    /// Begins a batch update transaction for optimized bulk operations.
-    /// Uses C# 14 Lock type and modern exception handling.
-    /// </summary>
+    public bool IsBatchUpdateActive => false;
+
     public void BeginBatchUpdate()
     {
-        lock (_batchUpdateLock)
-        {
-            if (_isBatchUpdateActive)
-            {
-                throw new InvalidOperationException("Batch update is already active");
-            }
-
-            _storageProvider.BeginTransaction();
-            _isBatchUpdateActive = true;
-        }
+        // Not implemented yet
     }
 
-    /// <summary>
-    /// Ends a batch update transaction and commits all changes.
-    /// Uses modern async-over-sync pattern with GetAwaiter().GetResult().
-    /// </summary>
     public void EndBatchUpdate()
     {
-        lock (_batchUpdateLock)
-        {
-            if (!_isBatchUpdateActive)
-            {
-                throw new InvalidOperationException("No active batch update to end");
-            }
-
-            try
-            {
-                _storageProvider.CommitTransactionAsync().GetAwaiter().GetResult();
-                _tableDirectoryManager.Flush();
-                _isBatchUpdateActive = false;
-            }
-            catch
-            {
-                // On error, rollback and rethrow
-                _storageProvider.RollbackTransaction();
-                _isBatchUpdateActive = false;
-                throw;
-            }
-        }
+        // Not implemented yet
     }
 
-    /// <summary>
-    /// Cancels an active batch update transaction and rolls back changes.
-    /// Uses modern C# 14 exception handling patterns.
-    /// </summary>
     public void CancelBatchUpdate()
     {
-        lock (_batchUpdateLock)
-        {
-            if (!_isBatchUpdateActive)
-            {
-                throw new InvalidOperationException("No active batch update to cancel");
-            }
-
-            _storageProvider.RollbackTransaction();
-            _isBatchUpdateActive = false;
-        }
+        // Not implemented yet
     }
 
-    public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null) => throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+    public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null)
+    {
+        throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+    }
 
-    public List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null) => throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+    public List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null)
+    {
+        throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+    }
 
-    public void Flush() => _storageProvider.FlushAsync().GetAwaiter().GetResult();
+    public void Flush()
+    {
+        _storageProvider.FlushAsync().GetAwaiter().GetResult();
+    }
 
-    public void ForceSave() => Flush();
+    public void ForceSave()
+    {
+        Flush();
+    }
 
-    public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default) => _storageProvider.VacuumAsync(mode, cancellationToken);
+    public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default)
+    {
+        return _storageProvider.VacuumAsync(mode, cancellationToken);
+    }
 
     public StorageMode StorageMode => _storageProvider.Mode;
 
-    public StorageStatistics GetStorageStatistics() => _storageProvider.GetStatistics();
+    public StorageStatistics GetStorageStatistics()
+    {
+        return _storageProvider.GetStatistics();
+    }
 
     public void Dispose()
     {
@@ -367,6 +343,52 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
                 var table = new SingleFileTable(tableName, _storageProvider, metadata.Value);
                 _tables[tableName] = table;
             }
+        }
+    }
+
+    private ulong AllocateDataBlock(string tableName)
+    {
+        // Allocate a data block for the table (simplified - just return a placeholder offset)
+        // In a real implementation, this would allocate space from the FSM
+        return 1024 * 1024; // 1MB offset as placeholder
+    }
+
+    private static bool MatchesWhere(Dictionary<string, object> row, string whereClause, Dictionary<string, object?>? parameters)
+    {
+        if (string.IsNullOrEmpty(whereClause))
+        {
+            return true;
+        }
+
+        // Very basic WHERE parsing - only supports "column = value"
+        var parts = whereClause.Split('=');
+        if (parts.Length == 2)
+        {
+            var column = parts[0].Trim();
+            var valueStr = parts[1].Trim().Trim('\'');
+            
+            if (row.TryGetValue(column, out var rowValue))
+            {
+                return rowValue?.ToString() == valueStr;
+            }
+        }
+
+        return false;
+    }
+
+    private static unsafe void SetColumnName(ref ColumnDefinitionEntry entry, string name)
+    {
+        if (name.Length > ColumnDefinitionEntry.MAX_COLUMN_NAME_LENGTH)
+        {
+            throw new ArgumentException($"Column name too long: {name.Length} > {ColumnDefinitionEntry.MAX_COLUMN_NAME_LENGTH}");
+        }
+        
+        var nameBytes = Encoding.UTF8.GetBytes(name);
+        fixed (byte* ptr = entry.ColumnName)
+        {
+            var span = new Span<byte>(ptr, ColumnDefinitionEntry.MAX_COLUMN_NAME_LENGTH + 1);
+            span.Clear();
+            nameBytes.CopyTo(span);
         }
     }
 
@@ -474,6 +496,13 @@ internal class BasicSqlParser
         return columns;
     }
     
+    public Dictionary<string, object?> GetValues(Dictionary<string, object?>? parameters)
+    {
+        var values = new Dictionary<string, object?>();
+        // TODO: Implement proper parsing
+        return values;
+    }
+    
     public string GetWhereClause()
     {
         var whereIndex = _sql.ToUpperInvariant().IndexOf("WHERE");
@@ -482,6 +511,13 @@ internal class BasicSqlParser
             return _sql.Substring(whereIndex + 5).Trim();
         }
         return string.Empty;
+    }
+    
+    public Dictionary<string, object?> GetSetValues(Dictionary<string, object?>? parameters)
+    {
+        var values = new Dictionary<string, object?>();
+        // TODO: Implement proper parsing
+        return values;
     }
 }
 
@@ -496,8 +532,6 @@ internal class SingleFileTable : ITable
     private readonly List<DataType> _columnTypes;
     private readonly IStorageProvider _storageProvider;
     private readonly string _dataBlockName;
-    private readonly Dictionary<object, long> _primaryKeyIndex;
-    private readonly Lock _tableLock = new();
     private long _nextId = 1;
 
     public SingleFileTable(string tableName, List<string> columns, List<DataType> columnTypes, IStorageProvider storageProvider)
@@ -507,7 +541,6 @@ internal class SingleFileTable : ITable
         _columnTypes = columnTypes;
         _storageProvider = storageProvider;
         _dataBlockName = $"table:{tableName}:data";
-        _primaryKeyIndex = new Dictionary<object, long>();
     }
 
     public SingleFileTable(string tableName, IStorageProvider storageProvider, TableMetadataEntry metadata)
@@ -515,7 +548,6 @@ internal class SingleFileTable : ITable
         _tableName = tableName;
         _storageProvider = storageProvider;
         _dataBlockName = $"table:{tableName}:data";
-        _primaryKeyIndex = new Dictionary<object, long>();
         
         // Load column definitions from metadata
         var tableDirManager = ((SingleFileStorageProvider)storageProvider).TableDirectoryManager;
@@ -529,9 +561,6 @@ internal class SingleFileTable : ITable
             _columns.Add(GetColumnName(colDef));
             _columnTypes.Add((DataType)colDef.DataType);
         }
-        
-        // Build primary key index from existing data
-        RebuildPrimaryKeyIndex();
     }
 
     public string Name { get => _tableName; set => throw new NotSupportedException(); }
@@ -567,65 +596,23 @@ internal class SingleFileTable : ITable
         Insert(row);
     }
 
-    /// <summary>
-    /// Deletes a row from the single-file table using modern C# 14 patterns.
-    /// Uses primary key index for O(1) lookup and block-level deletion.
-    /// </summary>
-    /// <param name="row">Row to delete (must contain primary key value)</param>
     public void Delete(Dictionary<string, object?> row)
     {
-        ArgumentNullException.ThrowIfNull(row);
-
-        lock (_tableLock)
-        {
-            // Get primary key value from row
-            if (PrimaryKeyIndex >= 0 && PrimaryKeyIndex < _columns.Count)
-            {
-                var pkColumn = _columns[PrimaryKeyIndex];
-                
-                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null)
-                {
-                    throw new InvalidOperationException($"Cannot delete row: Primary key column '{pkColumn}' is null or missing");
-                }
-
-                // Lookup position in primary key index
-                if (!_primaryKeyIndex.TryGetValue(pkValue, out var blockOffset))
-                {
-                    throw new InvalidOperationException($"Cannot delete row: Primary key value '{pkValue}' not found in index");
-                }
-
-                // Delete block from storage provider
-                var blockName = $"{_dataBlockName}:{blockOffset}";
-                _storageProvider.DeleteBlockAsync(blockName).GetAwaiter().GetResult();
-
-                // Remove from primary key index
-                _primaryKeyIndex.Remove(pkValue);
-            }
-            else
-            {
-                // Fallback: Full scan for tables without primary key (slow)
-                DeleteWithoutPrimaryKey(row);
-            }
-        }
+        // Not implemented - would need proper indexing
+        throw new NotImplementedException("Delete not implemented in single-file table");
     }
 
     public List<Dictionary<string, object>> Select()
     {
         var results = new List<Dictionary<string, object>>();
         
-        // Read all data from blocks
-        var allBlocks = _storageProvider.EnumerateBlocks()
-            .Where(name => name.StartsWith(_dataBlockName, StringComparison.Ordinal))
-            .ToList();
-            
-        foreach (var blockName in allBlocks)
+        // Read all data from block
+        var data = _storageProvider.ReadBlockAsync(_dataBlockName).GetAwaiter().GetResult();
+        if (data != null)
         {
-            var data = _storageProvider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
-            if (data != null)
-            {
-                var row = DeserializeRow(data);
-                results.Add(row);
-            }
+            // Deserialize rows (simplified - assumes one row per block)
+            var row = DeserializeRow(data);
+            results.Add(row);
         }
         
         return results;
@@ -637,7 +624,7 @@ internal class SingleFileTable : ITable
     public void Update(string? whereClause, Dictionary<string, object> updates) => throw new NotImplementedException();
     public void Delete(string? whereClause) => throw new NotImplementedException();
     public void CreateHashIndex(string columnName) => throw new NotImplementedException();
-    public void CreateHashIndex(string indexName, string columnName) => throw new NotImplementedException();
+    public void CreateHashIndex(string columnName, string indexName) => throw new NotImplementedException();
     public bool HasHashIndex(string columnName) => false;
     public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => (0, 0, 0.0);
     public void IncrementColumnUsage(string columnName) { }
@@ -646,108 +633,15 @@ internal class SingleFileTable : ITable
     public void TrackColumnUsage(string columnName) { }
     public bool RemoveHashIndex(string columnName) => false;
     public void ClearAllIndexes() => throw new NotImplementedException();
-    public long GetCachedRowCount() => _primaryKeyIndex.Count;
+    public long GetCachedRowCount() => 0;
     public void RefreshRowCount() { }
     public void CreateBTreeIndex(string columnName) => throw new NotImplementedException();
-    public void CreateBTreeIndex(string indexName, string columnName) => throw new NotImplementedException();
+    public void CreateBTreeIndex(string columnName, string indexName) => throw new NotImplementedException();
     public bool HasBTreeIndex(string columnName) => false;
     public long[] InsertBatch(List<Dictionary<string, object>> rows) => throw new NotImplementedException();
     public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => throw new NotImplementedException();
     public void Flush() { }
     public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
-
-    /// <summary>
-    /// Fallback deletion method for tables without a primary key.
-    /// Performs full table scan - O(n) complexity.
-    /// </summary>
-    private void DeleteWithoutPrimaryKey(Dictionary<string, object?> row)
-    {
-        var allBlocks = _storageProvider.EnumerateBlocks()
-            .Where(name => name.StartsWith(_dataBlockName, StringComparison.Ordinal))
-            .ToList();
-
-        foreach (var blockName in allBlocks)
-        {
-            var data = _storageProvider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
-            if (data is null) continue;
-
-            var storedRow = DeserializeRow(data);
-            
-            // Check if all columns match
-            if (RowsMatch(row, storedRow))
-            {
-                _storageProvider.DeleteBlockAsync(blockName).GetAwaiter().GetResult();
-                return; // Only delete first match
-            }
-        }
-
-        throw new InvalidOperationException("Row not found for deletion");
-    }
-
-    /// <summary>
-    /// Checks if two rows match on all non-null columns.
-    /// Uses modern C# 14 pattern matching and LINQ.
-    /// </summary>
-    private bool RowsMatch(Dictionary<string, object?> row1, Dictionary<string, object> row2)
-    {
-        foreach (var kvp in row1.Where(kvp => kvp.Value is not null))
-        {
-            if (!row2.TryGetValue(kvp.Key, out var value2) || 
-                !Equals(kvp.Value, value2))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// Rebuilds the primary key index by scanning all data blocks.
-    /// Called during table initialization from metadata.
-    /// </summary>
-    private void RebuildPrimaryKeyIndex()
-    {
-        if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= _columns.Count)
-        {
-            return; // No primary key
-        }
-
-        var pkColumn = _columns[PrimaryKeyIndex];
-        var allBlocks = _storageProvider.EnumerateBlocks()
-            .Where(name => name.StartsWith(_dataBlockName, StringComparison.Ordinal))
-            .ToList();
-
-        foreach (var blockName in allBlocks)
-        {
-            var data = _storageProvider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
-            if (data is null) continue;
-
-            var row = DeserializeRow(data);
-            if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null) 
-                continue;
-            
-            // Extract block offset from block name (e.g., "table:users:data:12345" -> 12345)
-            var blockParts = blockName.Split(':');
-            if (blockParts.Length > 0)
-            {
-                var lastPart = blockParts[^1];
-                if (long.TryParse(lastPart, out var offset))
-                {
-                    _primaryKeyIndex[pkValue] = offset;
-                    
-                    // Update _nextId for auto-increment
-                    if (pkValue is int intVal && intVal >= _nextId)
-                    {
-                        _nextId = intVal + 1;
-                    }
-                    else if (pkValue is long longVal && longVal >= _nextId)
-                    {
-                        _nextId = longVal + 1;
-                    }
-                }
-            }
-        }
-    }
 
     private byte[] SerializeRow(Dictionary<string, object?> row)
     {
@@ -786,7 +680,7 @@ internal class SingleFileSqlParser
     {
         _database = database;
         _tableDirectoryManager = tableDirectoryManager;
-        _baseParser = new SqlParser(database.Tables, database.DbPath, null!, false, null, database.Options.DatabaseConfig);
+        _baseParser = new SqlParser(database.Tables, null!, database.DbPath, null!, false, null, database.Options.DatabaseConfig);
     }
 
     public void Execute(string sql, Dictionary<string, object?>? parameters = null)

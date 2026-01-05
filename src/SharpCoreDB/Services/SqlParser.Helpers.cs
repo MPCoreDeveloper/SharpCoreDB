@@ -15,6 +15,86 @@ using System.Text;
 public partial class SqlParser
 {
     /// <summary>
+    /// Extracts the main query's table name from the FROM clause, ignoring subqueries.
+    /// This handles cases like: SELECT c.name, (SELECT MAX(amount) FROM orders) FROM customers
+    /// Returns: "customers" (not "orders)" which is inside a subquery)
+    /// </summary>
+    /// <param name="sql">The SQL query string.</param>
+    /// <param name="fromKeywordIndex">The starting position after SELECT keyword.</param>
+    /// <returns>The main table name, or null if not found.</returns>
+    private static string? ExtractMainTableNameFromSql(string sql, int fromKeywordIndex)
+    {
+        int parenthesisDepth = 0;
+        int fromPosition = -1;
+        
+        // Find the FROM keyword at parenthesis depth 0 (main query level)
+        for (int i = fromKeywordIndex; i < sql.Length - 4; i++)
+        {
+            char c = sql[i];
+            
+            if (c == '(')
+            {
+                parenthesisDepth++;
+            }
+            else if (c == ')')
+            {
+                parenthesisDepth--;
+            }
+            else if (parenthesisDepth == 0 && i + 4 <= sql.Length)
+            {
+                // Check for FROM keyword at depth 0
+                string substr = sql.Substring(i, 4).ToUpperInvariant();
+                if (substr == "FROM" && (i == 0 || char.IsWhiteSpace(sql[i - 1])) && 
+                    (i + 4 >= sql.Length || char.IsWhiteSpace(sql[i + 4])))
+                {
+                    fromPosition = i + 4;
+                    break;
+                }
+            }
+        }
+        
+        if (fromPosition < 0)
+        {
+            return null;
+        }
+        
+        // Extract table name after FROM keyword
+        // Skip whitespace
+        while (fromPosition < sql.Length && char.IsWhiteSpace(sql[fromPosition]))
+        {
+            fromPosition++;
+        }
+        
+        if (fromPosition >= sql.Length)
+        {
+            return null;
+        }
+        
+        // Extract identifier (table name)
+        var tableNameBuilder = new System.Text.StringBuilder();
+        while (fromPosition < sql.Length)
+        {
+            char c = sql[fromPosition];
+            
+            // Stop at whitespace or special characters
+            if (char.IsWhiteSpace(c) || c == ',' || c == '(' || c == ')' || c == ';')
+            {
+                break;
+            }
+            
+            tableNameBuilder.Append(c);
+            fromPosition++;
+        }
+        
+        string tableName = tableNameBuilder.ToString().Trim();
+        
+        // Remove any trailing punctuation (like parenthesis, comma, etc.)
+        tableName = tableName.TrimEnd(')', ',', ';');
+        
+        return string.IsNullOrEmpty(tableName) ? null : tableName;
+    }
+
+    /// <summary>
     /// Calculates the end index for WHERE clause parsing based on the presence of ORDER BY and LIMIT clauses.
     /// </summary>
     private static int CalculateWhereClauseEndIndex(int orderIdx, int limitIdx, int partsLength)
@@ -127,16 +207,6 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Generates an automatic value for auto-increment columns.
-    /// </summary>
-    private static object GenerateAutoValue(DataType type) => type switch
-    {
-        DataType.Ulid => Ulid.NewUlid(),
-        DataType.Guid => Guid.NewGuid(),
-        _ => throw new InvalidOperationException($"Auto generation not supported for type {type}"),
-    };
-
-    /// <summary>
     /// Evaluates a WHERE clause condition for JOIN operations.
     /// </summary>
     public static bool EvaluateJoinWhere(Dictionary<string, object> row, string where)
@@ -188,7 +258,8 @@ public partial class SqlParser
         // Parse sequence: expr (AND|OR expr)*
         bool? current = null;
         string? pendingLogic = null; // AND or OR
-        for (int i = 0; i + 2 < parts.Length;)
+        int i = 0;
+        while (i + 2 < parts.Length)
         {
             var key = parts[i].Trim();
             var op = parts[i + 1].Trim();

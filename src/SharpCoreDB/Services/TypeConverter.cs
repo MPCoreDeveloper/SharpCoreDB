@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace SharpCoreDB.Services;
 
@@ -99,28 +100,10 @@ public static class TypeConverter
         if (string.IsNullOrEmpty(expression))
             return true;
 
-        // For now, implement basic CHECK constraint evaluation
-        // TODO: Implement full expression parsing and evaluation
         try
         {
-            // Simple comparison patterns: column > value, column < value, etc.
-            var parts = expression.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 3)
-            {
-                var columnName = parts[0];
-                var op = parts[1];
-                var valueStr = parts[2];
-
-                if (row.TryGetValue(columnName, out var columnValue))
-                {
-                    var expectedValue = ParseValue(valueStr, columnTypes[row.Keys.ToList().IndexOf(columnName)]);
-                    return EvaluateOperator(columnValue, op, expectedValue);
-                }
-            }
-
-            // For complex expressions, return true for now
-            // TODO: Implement full expression evaluation
-            return true;
+            // Parse and evaluate the full expression
+            return EvaluateExpression(expression.Trim(), row, columnTypes);
         }
         catch
         {
@@ -130,44 +113,432 @@ public static class TypeConverter
     }
 
     /// <summary>
-    /// Parses a string value to the specified data type.
+    /// Evaluates a full CHECK constraint expression with support for:
+    /// - Column references
+    /// - Literal values (numbers, strings, booleans)
+    /// - Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=)
+    /// - Logical operators (AND, OR, NOT)
+    /// - Parentheses for grouping
+    /// - Arithmetic operators (+, -, *, /)
     /// </summary>
-    private static object? ParseValue(string value, DataType type)
+    private static bool EvaluateExpression(string expression, Dictionary<string, object> row, List<DataType> columnTypes)
     {
-        if (value == "NULL") return null;
+        // Tokenize the expression
+        var tokens = TokenizeExpression(expression);
+        
+        // Parse and evaluate using recursive descent
+        var index = 0;
+        return EvaluateOrExpression(tokens, ref index, row, columnTypes);
+    }
 
-        return type switch
+    /// <summary>
+    /// Tokenizes a CHECK constraint expression into tokens.
+    /// </summary>
+    private static List<string> TokenizeExpression(string expression)
+    {
+        var tokens = new List<string>();
+        var currentToken = new StringBuilder();
+        var inString = false;
+        var stringChar = '\0';
+
+        for (int i = 0; i < expression.Length; i++)
         {
-            DataType.Integer => int.Parse(value),
-            DataType.Long => long.Parse(value),
-            DataType.Real => double.Parse(value),
-            DataType.Decimal => decimal.Parse(value),
-            DataType.String => value.Trim('\'', '"'),
-            DataType.Boolean => bool.Parse(value),
-            DataType.DateTime => DateTime.Parse(value),
-            _ => value
+            char c = expression[i];
+
+            if (inString)
+            {
+                currentToken.Append(c);
+                if (c == stringChar)
+                {
+                    inString = false;
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+            }
+            else if (c == '\'' || c == '"')
+            {
+                if (currentToken.Length > 0)
+                {
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+                inString = true;
+                stringChar = c;
+                currentToken.Append(c);
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                if (currentToken.Length > 0)
+                {
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+            }
+            else if (c == '(' || c == ')' || c == '+' || c == '-' || c == '*' || c == '/')
+            {
+                if (currentToken.Length > 0)
+                {
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+                tokens.Add(c.ToString());
+            }
+            else if (c == '=' || c == '!' || c == '<' || c == '>')
+            {
+                if (currentToken.Length > 0)
+                {
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+                
+                // Handle multi-character operators
+                if (i + 1 < expression.Length)
+                {
+                    var next = expression[i + 1];
+                    if ((c == '!' && next == '=') || (c == '<' && next == '=') || (c == '>' && next == '='))
+                    {
+                        tokens.Add($"{c}{next}");
+                        i += 1; // Skip next character
+                        continue;
+                    }
+                }
+                
+                tokens.Add(c.ToString());
+            }
+            else if (c == '&' || c == '|')
+            {
+                if (currentToken.Length > 0)
+                {
+                    tokens.Add(currentToken.ToString());
+                    currentToken.Clear();
+                }
+                
+                // Handle && and ||
+                if (i + 1 < expression.Length && expression[i + 1] == c)
+                {
+                    tokens.Add($"{c}{c}");
+                    i += 1; // Skip next character
+                }
+            }
+            else
+            {
+                currentToken.Append(c);
+            }
+        }
+
+        if (currentToken.Length > 0)
+        {
+            tokens.Add(currentToken.ToString());
+        }
+
+        return tokens;
+    }
+
+    /// <summary>
+    /// Evaluates OR expressions (lowest precedence).
+    /// </summary>
+    private static bool EvaluateOrExpression(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        var result = EvaluateAndExpression(tokens, ref index, row, columnTypes);
+
+        while (index < tokens.Count && tokens[index] == "||")
+        {
+            index++; // Skip ||
+            var right = EvaluateAndExpression(tokens, ref index, row, columnTypes);
+            result = result || right;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates AND expressions.
+    /// </summary>
+    private static bool EvaluateAndExpression(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        var result = EvaluateComparisonExpression(tokens, ref index, row, columnTypes);
+
+        while (index < tokens.Count && tokens[index] == "&&")
+        {
+            index++; // Skip &&
+            var right = EvaluateComparisonExpression(tokens, ref index, row, columnTypes);
+            result = result && right;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates comparison expressions.
+    /// </summary>
+    private static bool EvaluateComparisonExpression(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        var left = EvaluateArithmeticExpression(tokens, ref index, row, columnTypes);
+
+        if (index >= tokens.Count)
+            return ConvertToBoolean(left);
+
+        var op = tokens[index];
+        if (op == "=" || op == "!=" || op == "<" || op == "<=" || op == ">" || op == ">=")
+        {
+            index++; // Skip operator
+            var right = EvaluateArithmeticExpression(tokens, ref index, row, columnTypes);
+            return EvaluateComparison(left, op, right);
+        }
+
+        return ConvertToBoolean(left);
+    }
+
+    /// <summary>
+    /// Evaluates arithmetic expressions (+, -).
+    /// </summary>
+    private static object? EvaluateArithmeticExpression(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        var result = EvaluateTerm(tokens, ref index, row, columnTypes);
+
+        while (index < tokens.Count && (tokens[index] == "+" || tokens[index] == "-"))
+        {
+            var op = tokens[index];
+            index++; // Skip operator
+            var right = EvaluateTerm(tokens, ref index, row, columnTypes);
+            
+            if (op == "+")
+                result = AddValues(result, right);
+            else
+                result = SubtractValues(result, right);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates terms (*, /).
+    /// </summary>
+    private static object? EvaluateTerm(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        var result = EvaluateFactor(tokens, ref index, row, columnTypes);
+
+        while (index < tokens.Count && (tokens[index] == "*" || tokens[index] == "/"))
+        {
+            var op = tokens[index];
+            index++; // Skip operator
+            var right = EvaluateFactor(tokens, ref index, row, columnTypes);
+            
+            if (op == "*")
+                result = MultiplyValues(result, right);
+            else
+                result = DivideValues(result, right);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates factors (literals, columns, parentheses, NOT).
+    /// </summary>
+    private static object? EvaluateFactor(List<string> tokens, ref int index, Dictionary<string, object> row, List<DataType> columnTypes)
+    {
+        if (index >= tokens.Count)
+            throw new InvalidOperationException("Unexpected end of expression");
+
+        var token = tokens[index];
+        index++;
+
+        if (token == "(")
+        {
+            var result = EvaluateOrExpression(tokens, ref index, row, columnTypes);
+            if (index >= tokens.Count || tokens[index] != ")")
+                throw new InvalidOperationException("Missing closing parenthesis");
+            index++; // Skip )
+            return result;
+        }
+        else if (token == "NOT")
+        {
+            var value = EvaluateFactor(tokens, ref index, row, columnTypes);
+            return !ConvertToBoolean(value);
+        }
+        else if (token.StartsWith('\'') && token.EndsWith('\''))
+        {
+            // String literal
+            return token.Trim('\'', '"');
+        }
+        else if (token.StartsWith('"') && token.EndsWith('"'))
+        {
+            // String literal
+            return token.Trim('\'', '"');
+        }
+        else if (int.TryParse(token, out var intValue))
+        {
+            return intValue;
+        }
+        else if (long.TryParse(token, out var longValue))
+        {
+            return longValue;
+        }
+        else if (double.TryParse(token, out var doubleValue))
+        {
+            return doubleValue;
+        }
+        else if (decimal.TryParse(token, out var decimalValue))
+        {
+            return decimalValue;
+        }
+        else if (token.ToUpper() == "TRUE")
+        {
+            return true;
+        }
+        else if (token.ToUpper() == "FALSE")
+        {
+            return false;
+        }
+        else if (token.ToUpper() == "NULL")
+        {
+            return null;
+        }
+        else
+        {
+            // Column reference
+            if (row.TryGetValue(token, out var value))
+            {
+                return value;
+            }
+            else
+            {
+                throw new InvalidOperationException($"Column '{token}' not found in row");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Converts a value to boolean for logical operations.
+    /// </summary>
+    private static bool ConvertToBoolean(object? value)
+    {
+        if (value == null) return false;
+        if (value is bool b) return b;
+        if (value is int i) return i != 0;
+        if (value is long l) return l != 0;
+        if (value is double d) return Math.Abs(d) > double.Epsilon;
+        if (value is decimal m) return m != 0;
+        if (value is string s) return !string.IsNullOrEmpty(s);
+        return true; // Non-null objects are truthy
+    }
+
+    /// <summary>
+    /// Evaluates a comparison operation.
+    /// </summary>
+    private static bool EvaluateComparison(object? left, string op, object? right)
+    {
+        if (left == null || right == null)
+        {
+            // Handle null comparisons
+            return op switch
+            {
+                "=" => left == right,
+                "!=" => left != right,
+                _ => false // Other comparisons with null are false
+            };
+        }
+
+        // Convert types for comparison
+        var (leftComparable, rightComparable) = NormalizeTypes(left, right);
+        
+        int comparison = Comparer<object>.Default.Compare(leftComparable, rightComparable);
+
+        return op switch
+        {
+            "=" => comparison == 0,
+            "!=" => comparison != 0,
+            "<" => comparison < 0,
+            "<=" => comparison <= 0,
+            ">" => comparison > 0,
+            ">=" => comparison >= 0,
+            _ => throw new InvalidOperationException($"Unsupported comparison operator: {op}")
         };
     }
 
     /// <summary>
-    /// Evaluates a comparison operator.
+    /// Normalizes types for comparison.
     /// </summary>
-    private static bool EvaluateOperator(object? left, string op, object? right)
+    private static (object, object) NormalizeTypes(object left, object right)
     {
-        if (left == null || right == null)
-            return false;
+        // If both are the same type, no conversion needed
+        if (left.GetType() == right.GetType())
+            return (left, right);
 
-        int comparison = Comparer<object>.Default.Compare(left, right);
-
-        return op switch
+        // Try to convert to compatible numeric types
+        if (IsNumeric(left) && IsNumeric(right))
         {
-            ">" => comparison > 0,
-            "<" => comparison < 0,
-            ">=" => comparison >= 0,
-            "<=" => comparison <= 0,
-            "=" => comparison == 0,
-            "!=" or "<>" => comparison != 0,
-            _ => false
+            return (ConvertToDecimal(left), ConvertToDecimal(right));
+        }
+
+        // Convert to strings for comparison
+        return (left.ToString() ?? "", right.ToString() ?? "");
+    }
+
+    /// <summary>
+    /// Checks if a value is numeric.
+    /// </summary>
+    private static bool IsNumeric(object value)
+    {
+        return value is int || value is long || value is double || value is decimal || value is float;
+    }
+
+    /// <summary>
+    /// Converts a value to decimal.
+    /// </summary>
+    private static decimal ConvertToDecimal(object value)
+    {
+        return value switch
+        {
+            int i => i,
+            long l => l,
+            double d => (decimal)d,
+            decimal m => m,
+            float f => (decimal)f,
+            _ => 0
         };
+    }
+
+    /// <summary>
+    /// Adds two values.
+    /// </summary>
+    private static object? AddValues(object? left, object? right)
+    {
+        if (left == null || right == null) return null;
+        
+        if (left is string || right is string)
+            return (left?.ToString() ?? "") + (right?.ToString() ?? "");
+        
+        return ConvertToDecimal(left) + ConvertToDecimal(right);
+    }
+
+    /// <summary>
+    /// Subtracts two values.
+    /// </summary>
+    private static object? SubtractValues(object? left, object? right)
+    {
+        if (left == null || right == null) return null;
+        return ConvertToDecimal(left) - ConvertToDecimal(right);
+    }
+
+    /// <summary>
+    /// Multiplies two values.
+    /// </summary>
+    private static object? MultiplyValues(object? left, object? right)
+    {
+        if (left == null || right == null) return null;
+        return ConvertToDecimal(left) * ConvertToDecimal(right);
+    }
+
+    /// <summary>
+    /// Divides two values.
+    /// </summary>
+    private static object? DivideValues(object? left, object? right)
+    {
+        if (left == null || right == null) return null;
+        var divisor = ConvertToDecimal(right);
+        if (divisor == 0) throw new DivideByZeroException();
+        return ConvertToDecimal(left) / divisor;
     }
 }

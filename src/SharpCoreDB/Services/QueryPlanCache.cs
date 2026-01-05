@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 namespace SharpCoreDB.Services;
 
+using SharpCoreDB.Optimization;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -29,6 +30,10 @@ public sealed class QueryPlanCache
         public DataStructures.CachedQueryPlan CachedPlan { get; init; } = new("", []);
         /// <summary>Gets the compiled plan, if available.</summary>
         public DataStructures.CompiledQueryPlan? CompiledPlan { get; init; }
+        /// <summary>Gets the optimized physical plan, if available.</summary>
+        public Optimization.PhysicalPlan? OptimizedPlan { get; init; }
+        /// <summary>Estimated cost of the optimized plan.</summary>
+        public double OptimizedCost { get; init; }
         /// <summary>Gets the UTC timestamp when cached.</summary>
         public DateTime CachedAtUtc { get; init; }
         private long accessCount;

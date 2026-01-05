@@ -129,7 +129,24 @@ public partial class EnhancedSqlParser
                 }
                 else
                 {
-                    column.Name = ConsumeIdentifier() ?? "";
+                    var tableAlias = ConsumeIdentifier();
+                    if (tableAlias != null && MatchToken("."))
+                    {
+                        var columnName = ConsumeIdentifier();
+                        if (columnName != null)
+                        {
+                            column.TableAlias = tableAlias;
+                            column.Name = columnName;
+                        }
+                        else
+                        {
+                            column.Name = tableAlias;
+                        }
+                    }
+                    else
+                    {
+                        column.Name = tableAlias ?? "";
+                    }
                 }
 
                 if (!MatchToken(")"))

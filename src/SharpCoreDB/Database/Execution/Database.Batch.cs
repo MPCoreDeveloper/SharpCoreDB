@@ -168,7 +168,7 @@ public partial class Database
 
                 if (nonInserts.Count > 0)
                 {
-                    var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+                    var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
                     
                     foreach (var sql in nonInserts)
                     {
@@ -262,7 +262,7 @@ public partial class Database
 
                 if (nonInserts.Count > 0)
                 {
-                    var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+                    var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
                     
                     foreach (var sql in nonInserts)
                     {

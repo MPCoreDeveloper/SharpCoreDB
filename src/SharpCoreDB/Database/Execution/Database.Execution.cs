@@ -69,7 +69,7 @@ public partial class Database
         {
             lock (_walLock)
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
                 sqlParser.Execute(sql, null);
                 
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -136,7 +136,7 @@ public partial class Database
         {
             lock (_walLock)
             {
-                var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
                 sqlParser.Execute(sql, parameters, null);
                 
                 if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -259,7 +259,7 @@ public partial class Database
     /// </summary>
     private void ExecuteSelectQuery(string sql, Dictionary<string, object?>? parameters)
     {
-        var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
     }
 
@@ -270,7 +270,7 @@ public partial class Database
     {
         await Task.Run(() =>
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -282,7 +282,7 @@ public partial class Database
     {
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             sqlParser.Execute(sql, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -303,7 +303,7 @@ public partial class Database
     {
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, null!, _dbPath, storage, isReadOnly, queryCache, false, config);
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             sqlParser.Execute(sql, parameters, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -330,11 +330,11 @@ public partial class Database
         
         if (entry is not null && entry.CompiledPlan is not null)
         {
-            var sqlParserCompiled = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+            var sqlParserCompiled = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             return sqlParserCompiled.ExecuteQuery(entry.CachedPlan, parameters ?? []);
         }
 
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         return entry is not null 
             ? sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? [])
             : sqlParser.ExecuteQuery(sql, parameters ?? []);
@@ -349,7 +349,7 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters, bool noEncrypt)
     {
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, noEncrypt, config);
+        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         return sqlParser.ExecuteQuery(sql, parameters ?? [], noEncrypt);
     }
 
@@ -363,7 +363,7 @@ public partial class Database
     public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null)
     {
         var cached = new CachedQueryPlan(plan.Sql, plan.Sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         return sqlParser.ExecuteQuery(cached, parameters ?? []);
     }
 
@@ -376,7 +376,7 @@ public partial class Database
     public List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null)
     {
         ArgumentNullException.ThrowIfNull(stmt);
-        var sqlParser = new SqlParser(tables, null, _dbPath, storage, isReadOnly, queryCache, false, config);
+        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         return sqlParser.ExecuteQuery(stmt.Plan, parameters ?? []);
     }
 

@@ -161,23 +161,11 @@ public partial class EnhancedSqlParser
                 {
                     if (!MatchToken("("))
                         RecordError("Expected ( after CHECK");
-                    // For now, capture the expression as a string
-                    // TODO: Implement full expression parsing for CHECK constraints
-                    var startPos = _position;
-                    var parenCount = 1;
-                    
-                    while (_position < _sql.Length && parenCount > 0)
-                    {
-                        if (_sql[_position] == '(') parenCount++;
-                        else if (_sql[_position] == ')') parenCount--;
-                        _position++;
-                    }
-                    
-                    if (parenCount > 0)
-                        RecordError("Unclosed parentheses in CHECK constraint");
-                    
-                    var expr = _sql.Substring(startPos, _position - startPos - 1).Trim();
-                    column.CheckExpression = expr;
+                    // Parse the check expression - simplified for now
+                    var expr = ParseExpression();
+                    if (!MatchToken(")"))
+                        RecordError("Expected ) after CHECK expression");
+                    column.CheckExpression = expr.ToString();
                 }
                 else
                 {
@@ -290,10 +278,9 @@ public partial class EnhancedSqlParser
         if (identifier is "CURRENT_TIMESTAMP" or "GETDATE" or "GETUTCDATE" or "NEWID" or "NEWSEQUENTIALID")
         {
             ConsumeKeyword(); // consume the function name
-            if (MatchToken("("))
+            if (MatchToken("(") && !MatchToken(")"))
             {
-                if (!MatchToken(")"))
-                    RecordError("Expected ) after function call");
+                RecordError("Expected ) after function call");
             }
             return identifier;
         }
@@ -314,22 +301,13 @@ public partial class EnhancedSqlParser
         if (!MatchToken("("))
             RecordError("Expected ( after CHECK");
 
-        // For now, capture the expression as a string
-        // TODO: Implement full expression parsing and evaluation for CHECK constraints
-        var startPos = _position;
-        var parenCount = 1;
-        
-        while (_position < _sql.Length && parenCount > 0)
-        {
-            if (_sql[_position] == '(') parenCount++;
-            else if (_sql[_position] == ')') parenCount--;
-            _position++;
-        }
-        
-        if (parenCount > 0)
-            RecordError("Unclosed parentheses in CHECK constraint");
-        
-        var expr = _sql.Substring(startPos, _position - startPos - 1).Trim();
-        return expr;
+        // Parse the check expression
+        var expr = ParseExpression();
+
+        if (!MatchToken(")"))
+            RecordError("Expected ) after CHECK expression");
+
+        // Convert expression to string representation for now
+        return expr.ToString();
     }
 }

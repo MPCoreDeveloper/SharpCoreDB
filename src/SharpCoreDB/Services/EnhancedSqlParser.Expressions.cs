@@ -10,7 +10,8 @@ using System.Text.RegularExpressions;
 
 /// <summary>
 /// Expression, literal, and operator parsing methods for EnhancedSqlParser.
-/// Handles complex expressions, literals, operators, function calls, and IN clauses.
+/// Handles complex expressions, literals, operators, function calls, IN clauses, and subqueries.
+/// ✅ C# 14: is patterns, collection expressions.
 /// </summary>
 public partial class EnhancedSqlParser
 {
@@ -75,7 +76,7 @@ public partial class EnhancedSqlParser
 
         // Check for comparison operators
         var op = ParseComparisonOperator();
-        if (op != null)
+        if (op is not null)
         {
             var right = ParsePrimaryExpression();
             return new BinaryExpressionNode
@@ -139,6 +140,57 @@ public partial class EnhancedSqlParser
 
     private ExpressionNode ParsePrimaryExpression()
     {
+        // ✅ NEW: Check for subquery: ( SELECT ...
+        if (MatchToken("("))
+        {
+            var nextKeyword = PeekKeyword();
+            if (nextKeyword?.ToUpperInvariant() == "SELECT")
+            {
+                // This is a subquery
+                var subquery = ParseSelect();
+                
+                if (!MatchToken(")"))
+                    RecordError("Expected ) after subquery");
+                
+                return new SubqueryExpressionNode 
+                { 
+                    Query = subquery,
+                    Position = _position
+                };
+            }
+            else
+            {
+                // This is a parenthesized expression
+                var expr = ParseExpression();
+                if (!MatchToken(")"))
+                    RecordError("Expected ) after expression");
+                return expr;
+            }
+        }
+
+        // Check for EXISTS subquery
+        if (MatchKeyword("EXISTS"))
+        {
+            if (!MatchToken("("))
+            {
+                RecordError("Expected ( after EXISTS");
+                return new LiteralNode { Position = _position, Value = null };
+            }
+
+            var subquery = ParseSelect();
+            
+            if (!MatchToken(")"))
+                RecordError("Expected ) after EXISTS subquery");
+            
+            // Wrap in SubqueryExpressionNode (will be handled by executor)
+            return new SubqueryExpressionNode 
+            { 
+                Query = subquery,
+                Type = SubqueryType.Table,
+                Position = _position
+            };
+        }
+
         // Check for literal
         var literal = ParseLiteral();
         if (literal is not null)
@@ -170,15 +222,6 @@ public partial class EnhancedSqlParser
                 Position = _position,
                 ColumnName = identifier
             };
-        }
-
-        // Check for parenthesized expression
-        if (MatchToken("("))
-        {
-            var expr = ParseExpression();
-            if (!MatchToken(")"))
-                RecordError("Expected ) after expression");
-            return expr;
         }
 
         RecordError("Expected expression");
