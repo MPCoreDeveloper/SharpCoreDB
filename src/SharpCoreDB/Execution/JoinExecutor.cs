@@ -36,7 +36,7 @@ using System.Runtime.CompilerServices;
 /// </summary>
 public static class JoinExecutor
 {
-    private const int HashJoinThreshold = 10; // Use hash join if either side > 10 rows
+    private const int HashJoinThreshold = int.MaxValue; // Disable hash join until key hashing is implemented
 
     #region Public API
 

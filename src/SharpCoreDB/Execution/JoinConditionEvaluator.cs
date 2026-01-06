@@ -28,6 +28,7 @@ public static class JoinConditionEvaluator
     /// <summary>
     /// Creates a condition evaluator from ON clause expression.
     /// Parses simple equality conditions: "table1.col1 = table2.col2".
+    /// ✅ FIXED: Added diagnostic logging to trace condition parsing.
     /// </summary>
     /// <param name="onClause">The ON clause string (e.g., "users.id = orders.user_id").</param>
     /// <param name="leftAlias">Left table alias.</param>
@@ -38,6 +39,11 @@ public static class JoinConditionEvaluator
         string? leftAlias,
         string? rightAlias)
     {
+#if DEBUG
+        Console.WriteLine($"[JOIN-PARSE] Creating evaluator for ON clause: '{onClause}'");
+        Console.WriteLine($"[JOIN-PARSE]   Left alias: '{leftAlias}', Right alias: '{rightAlias}'");
+#endif
+
         if (string.IsNullOrWhiteSpace(onClause))
         {
             // No condition - always true (for CROSS JOIN)
@@ -47,7 +53,17 @@ public static class JoinConditionEvaluator
         // Parse ON clause
         var conditions = ParseOnClause(onClause, leftAlias, rightAlias);
 
-        // Return evaluator function
+#if DEBUG
+        Console.WriteLine($"[JOIN-PARSE] Parsed {conditions.Count} conditions:");
+        foreach (var cond in conditions)
+        {
+            Console.WriteLine($"[JOIN-PARSE]   - Left: ({cond.LeftColumn.table}.{cond.LeftColumn.column}, isLeft={cond.LeftColumn.isLeft})");
+            Console.WriteLine($"[JOIN-PARSE]   - Right: ({cond.RightColumn.table}.{cond.RightColumn.column}, isLeft={cond.RightColumn.isLeft})");
+            Console.WriteLine($"[JOIN-PARSE]   - Operator: {cond.Operator}");
+        }
+#endif
+
+        // Return evaluator function  
         return (leftRow, rightRow) => EvaluateConditions(conditions, leftRow, rightRow);
     }
 
@@ -180,6 +196,7 @@ public static class JoinConditionEvaluator
 
     /// <summary>
     /// Gets column value from appropriate row based on column reference.
+    /// ✅ FIXED: Added diagnostic logging and fallback search for column names.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static object? GetColumnValue(
@@ -200,9 +217,29 @@ public static class JoinConditionEvaluator
         }
 
         // Try unqualified column name
-        return row.TryGetValue(columnRef.column, out var unqualifiedValue) 
-            ? unqualifiedValue 
-            : null;
+        if (row.TryGetValue(columnRef.column, out var unqualifiedValue))
+        {
+            return unqualifiedValue;
+        }
+
+        // ✅ NEW: Try finding any key that matches the column name (case-insensitive)
+        // This handles cases where the row has qualified names but we're looking for unqualified
+        var matchingKey = row.Keys.FirstOrDefault(k => 
+            k.Equals(columnRef.column, StringComparison.OrdinalIgnoreCase) ||
+            k.EndsWith($".{columnRef.column}", StringComparison.OrdinalIgnoreCase));
+        
+        if (matchingKey is not null && row.TryGetValue(matchingKey, out var fallbackValue))
+        {
+            return fallbackValue;
+        }
+
+#if DEBUG
+        // Diagnostic: Show what keys are available if we can't find the column
+        Console.WriteLine($"[JOIN-DEBUG] Could not find column '{columnRef.column}' (table: {columnRef.table}, isLeft: {columnRef.isLeft})");
+        Console.WriteLine($"[JOIN-DEBUG]   Available keys in {'(' + (columnRef.isLeft ? "LEFT" : "RIGHT") + ')'} row: {string.Join(", ", row.Keys)}");
+#endif
+
+        return null;
     }
 
     /// <summary>

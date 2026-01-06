@@ -41,19 +41,18 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("INSERT INTO customers VALUES (5, 'Dana', 99)");  // missing region
 
         // Orders (medium-ish ~200 for demo; can be scaled)
-        var sb = new StringBuilder();
-        sb.Append("INSERT INTO orders VALUES ");
-        int orderId = 1;
+        // ✅ FIX: Use single-row INSERTs since multi-row syntax isn't supported
+        Console.WriteLine("✓ Inserting 200 orders...");
         for (int i = 0; i < 200; i++)
         {
+            int orderId = i + 1;
             int custId = (i % 5) + 1; // distribute over 5 customers
             decimal amount = 50 + (i % 20) * 5;
             string status = (i % 7 == 0) ? "CANCELLED" : "PAID";
-            sb.Append($"({orderId}, {custId}, {amount}, '{status}')");
-            orderId++;
-            if (i < 199) sb.Append(',');
+            
+            db.ExecuteSQL($"INSERT INTO orders VALUES ({orderId}, {custId}, {amount}, '{status}')");
         }
-        db.ExecuteSQL(sb.ToString());
+        Console.WriteLine("✓ Completed inserting 200 orders");
 
         // Payments (some missing, some duplicates)
         db.ExecuteSQL("INSERT INTO payments VALUES (1, 1, 'CARD', 1)");

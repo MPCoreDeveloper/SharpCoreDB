@@ -25,9 +25,13 @@ internal sealed class DemoRunner
         var setup = new SchemaSetup(db);
         setup.Seed();
 
+        // ✅ Run validation first to diagnose issues
+        var validator = new JoinValidator(db);
+        validator.RunAll();
+
+        // Run full demo scenarios
         var joins = new JoinScenarios(db);
         var subq = new SubqueryScenarios(db);
-
         joins.RunAll();
         subq.RunAll();
 
