@@ -29,6 +29,11 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
+            <MenuItem Header="{loc:Localize ToolsMenu}" Click="OnToolsClicked">
+                <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SettingsIcon}"/>
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="{loc:Localize SettingsMenu}" Click="OnSettingsClicked">
                 <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SettingsIcon}"/>

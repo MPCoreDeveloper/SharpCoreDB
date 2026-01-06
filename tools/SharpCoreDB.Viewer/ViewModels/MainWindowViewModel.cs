@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCoreDB.Data.Provider;
 using SharpCoreDB.Viewer.Services;
@@ -241,6 +241,12 @@ public partial class MainWindowViewModel : ViewModelBase
             System.Diagnostics.Debug.WriteLine($"[Query Error] Stack: {ex.StackTrace}");
 #endif
         }
+    }
+    
+    [RelayCommand]
+    private void OpenTools()
+    {
+        // This will be called from MainWindow code-behind since we need the Window reference
     }
 
     public void SetConnection(SharpCoreDBConnection connection)

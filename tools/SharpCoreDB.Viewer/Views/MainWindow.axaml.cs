@@ -167,6 +167,15 @@ public partial class MainWindow : Window
         var dialog = new SettingsDialog();
         await dialog.ShowDialog(this);
     }
+    
+    private async void OnToolsClicked(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new ToolsDialog
+        {
+            DataContext = new ViewModels.ToolsViewModel()
+        };
+        await dialog.ShowDialog(this);
+    }
 
     private void OnExitClicked(object? sender, RoutedEventArgs e)
     {

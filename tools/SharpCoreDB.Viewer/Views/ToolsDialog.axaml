@@ -1,0 +1,263 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        xmlns:loc="using:SharpCoreDB.Viewer.Converters"
+        xmlns:conv="using:SharpCoreDB.Viewer.Converters"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="550"
+        x:Class="SharpCoreDB.Viewer.Views.ToolsDialog"
+        x:DataType="vm:ToolsViewModel"
+        Classes="Dialog"
+        Title="{loc:Localize ToolsTitle}"
+        Width="700" Height="700"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Icon="/Assets/SharpCoreDB.ico">
+
+    <Design.DataContext>
+        <vm:ToolsViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.header">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,10,0,5"/>
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="Red"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style Selector="TextBlock.success">
+            <Setter Property="Foreground" Value="Green"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <PathIcon Data="{StaticResource SettingsIcon}" Width="24" Height="24" VerticalAlignment="Center"/>
+                <TextBlock Classes="header" Text="{loc:Localize ToolsTitle}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="{loc:Localize ToolsSubtitle}" Foreground="Gray" FontSize="12"/>
+        </StackPanel>
+
+        <!-- Form -->
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="10">
+                
+                <!-- Source Database -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="10" CornerRadius="5">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="section" Text="{loc:Localize SourceDatabase}"/>
+                        
+                        <!-- Source Format -->
+                        <StackPanel>
+                            <TextBlock Text="{loc:Localize SourceFormat}" Margin="0,0,0,5"/>
+                            <ComboBox SelectedIndex="{Binding SourceFormat, Converter={x:Static conv:EnumToIntConverter.Instance}}"
+                                      IsEnabled="{Binding !IsConverting}"
+                                      HorizontalAlignment="Stretch">
+                                <ComboBoxItem>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <PathIcon Data="{StaticResource FolderIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize FormatDirectory}"/>
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <PathIcon Data="{StaticResource DocumentIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize FormatSingleFile}"/>
+                                    </StackPanel>
+                                </ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+                        
+                        <!-- Source Path -->
+                        <StackPanel>
+                            <TextBlock Text="{loc:Localize SourcePath}" Margin="0,0,0,5"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding SourcePath}"
+                                         Watermark="{loc:Localize SourcePathPlaceholder}"
+                                         IsEnabled="{Binding !IsConverting}"/>
+                                <Button Grid.Column="1"
+                                        Command="{Binding BrowseSourceCommand}"
+                                        IsEnabled="{Binding !IsConverting}"
+                                        Margin="5,0,0,0"
+                                        Width="80">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <PathIcon Data="{StaticResource FolderIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize Browse}"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Swap Button -->
+                <Button Command="{Binding SwapFormatsCommand}"
+                        IsEnabled="{Binding !IsConverting}"
+                        HorizontalAlignment="Center"
+                        Width="40"
+                        Height="40"
+                        Padding="8"
+                        ToolTip.Tip="{loc:Localize SwapFormats}">
+                    <PathIcon Data="M7.5,17.34H14.5V15.34H7.5V13.34L4.5,16.34L7.5,19.34V17.34M16.5,10.66V8.66L19.5,11.66L16.5,14.66V12.66H9.5V10.66H16.5Z" 
+                              Width="24" Height="24"/>
+                </Button>
+                
+                <!-- Target Database -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="10" CornerRadius="5">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="section" Text="{loc:Localize TargetDatabase}"/>
+                        
+                        <!-- Target Format -->
+                        <StackPanel>
+                            <TextBlock Text="{loc:Localize TargetFormat}" Margin="0,0,0,5"/>
+                            <ComboBox SelectedIndex="{Binding TargetFormat, Converter={x:Static conv:EnumToIntConverter.Instance}}"
+                                      IsEnabled="{Binding !IsConverting}"
+                                      HorizontalAlignment="Stretch">
+                                <ComboBoxItem>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <PathIcon Data="{StaticResource FolderIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize FormatDirectory}"/>
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <PathIcon Data="{StaticResource DocumentIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize FormatSingleFile}"/>
+                                    </StackPanel>
+                                </ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+                        
+                        <!-- Target Path -->
+                        <StackPanel>
+                            <TextBlock Text="{loc:Localize TargetPath}" Margin="0,0,0,5"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding TargetPath}"
+                                         Watermark="{loc:Localize TargetPathPlaceholder}"
+                                         IsEnabled="{Binding !IsConverting}"/>
+                                <Button Grid.Column="1"
+                                        Command="{Binding BrowseTargetCommand}"
+                                        IsEnabled="{Binding !IsConverting}"
+                                        Margin="5,0,0,0"
+                                        Width="80">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <PathIcon Data="{StaticResource FolderIcon}" Width="14" Height="14"/>
+                                        <TextBlock Text="{loc:Localize Browse}"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Password -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="15" CornerRadius="5">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Localize MasterPassword}" Margin="0,0,0,5"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding Password}"
+                                     Watermark="{loc:Localize PasswordPlaceholder}"
+                                     PasswordChar="*"
+                                     RevealPassword="{Binding IsPasswordVisible}"
+                                     IsEnabled="{Binding !IsConverting}"/>
+                            <Button Grid.Column="1"
+                                    Command="{Binding TogglePasswordVisibilityCommand}"
+                                    IsEnabled="{Binding !IsConverting}"
+                                    Width="40"
+                                    Height="32"
+                                    Padding="8"
+                                    Margin="2,0,0,0"
+                                    ToolTip.Tip="{Binding IsPasswordVisible, Converter={x:Static conv:BoolConverters.ShowHidePasswordTooltip}}">
+                                <PathIcon Data="{Binding IsPasswordVisible, Converter={x:Static conv:BoolConverters.EyeIconConverter}}" 
+                                          Width="16" 
+                                          Height="16"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Progress -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="15" CornerRadius="5"
+                        IsVisible="{Binding IsConverting}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="{loc:Localize ConversionProgress}" FontWeight="SemiBold"/>
+                        <ProgressBar Value="{Binding ConversionProgress}" 
+                                     Maximum="100" 
+                                     Height="8"/>
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="Gray" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Status Messages -->
+                <StackPanel Orientation="Horizontal" 
+                            Spacing="5"
+                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <PathIcon Data="{StaticResource ErrorIcon}" Width="14" Height="14" Foreground="Red" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                    <TextBlock Classes="error"
+                               Text="{Binding ErrorMessage}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+                
+                <StackPanel Orientation="Horizontal" 
+                            Spacing="5"
+                            IsVisible="{Binding ConversionComplete}">
+                    <PathIcon Data="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" Width="14" Height="14" Foreground="Green" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                    <TextBlock Classes="success"
+                               Text="{Binding StatusMessage}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,20,0,0">
+            <Button Command="{Binding $parent[Window].Close}"
+                    IsEnabled="{Binding !IsConverting}"
+                    Width="100">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource DisconnectIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize Close}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Command="{Binding ConvertCommand}"
+                    IsEnabled="{Binding !IsConverting}"
+                    Width="120"
+                    Classes="accent">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource SettingsIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize Convert}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+    </Grid>
+
+</Window>
