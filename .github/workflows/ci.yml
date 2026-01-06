@@ -33,13 +33,13 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore SharpCoreDB.sln
       
     - name: Build
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build SharpCoreDB.sln --configuration Release --no-restore
       
     - name: Test
-      run: dotnet test --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage"
+      run: dotnet test SharpCoreDB.sln --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage"
       
     - name: Upload test results
       if: always()
@@ -103,7 +103,7 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
     - name: Pack
-      run: dotnet pack --configuration Release --output ./artifacts
+      run: dotnet pack SharpCoreDB.sln --configuration Release --output ./artifacts
       
     - name: Upload packages
       uses: actions/upload-artifact@v4
