@@ -506,4 +506,57 @@ public static class TypedRowBuffer
             };
         }
     }
+
+    /// <summary>
+    /// ✅ PHASE 3: Pre-computed column offsets for fixed-schema tables.
+    /// Enables O(1) column access instead of sequential writes.
+    /// Uses C# 14 InlineArray for stack allocation.
+    /// </summary>
+    [InlineArray(16)]
+    public struct ColumnOffsets
+    {
+        private int _element0;
+
+        /// <summary>
+        /// Computes offsets for fixed-size columns.
+        /// </summary>
+        public static ColumnOffsets ComputeForSchema(ReadOnlySpan<DataType> columnTypes)
+        {
+            var offsets = new ColumnOffsets();
+            int currentOffset = 0;
+
+            for (int i = 0; i < Math.Min(columnTypes.Length, 16); i++)
+            {
+                offsets[i] = currentOffset;
+                currentOffset += GetFixedSize(columnTypes[i]);
+            }
+
+            return offsets;
+        }
+
+        private static int GetFixedSize(DataType type) => type switch
+        {
+            DataType.Integer => 5,   // 1 null + 4 bytes
+            DataType.Long => 9,      // 1 null + 8 bytes
+            DataType.Real => 9,      // 1 null + 8 bytes
+            DataType.Boolean => 2,   // 1 null + 1 byte
+            DataType.DateTime => 9,  // 1 null + 8 bytes
+            DataType.Decimal => 17,  // 1 null + 16 bytes
+            DataType.Guid => 17,     // 1 null + 16 bytes
+            DataType.Ulid => 31,     // 1 null + 4 len + 26 bytes
+            DataType.String => 256,  // Variable - estimate
+            DataType.Blob => 1024,   // Variable - estimate
+            _ => 256                 // Default estimate
+        };
+    }
+
+    /// <summary>
+    /// ✅ PHASE 3: Inline row values array for zero-allocation row data.
+    /// Stores up to 16 object references without Dictionary overhead.
+    /// </summary>
+    [InlineArray(16)]
+    public struct InlineRowValues
+    {
+        private object? _element0;
+    }
 }

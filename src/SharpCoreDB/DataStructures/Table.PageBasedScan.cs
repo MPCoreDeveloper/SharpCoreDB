@@ -156,15 +156,28 @@ public partial class Table
 #endif
             return row;
         }
+#if DEBUG
+        catch (Exception ex)
+        {
+            // Exception during deserialization indicates corrupt data - ignore and return null
+            // This row will be skipped during scanning
+            Console.WriteLine($"[DeserializeRowFromSpan] Exception during deserialization: {ex.Message}");
+            Console.WriteLine($"[DeserializeRowFromSpan] At offset: {offset}, remaining bytes: {dataSpan.Length - offset}");
+            if (offset < dataSpan.Length)
+            {
+                var remaining = Math.Min(16, dataSpan.Length - offset);
+                Console.WriteLine($"[DeserializeRowFromSpan] Next {remaining} bytes: {BitConverter.ToString(data, offset, remaining)}");
+            }
+            return null;
+        }
+#else
         catch
         {
             // Exception during deserialization indicates corrupt data - ignore and return null
             // This row will be skipped during scanning
-#if DEBUG
-            Console.WriteLine($"[DeserializeRowFromSpan] Exception during deserialization");
-#endif
             return null;
         }
+#endif
     }
     
     /// <summary>

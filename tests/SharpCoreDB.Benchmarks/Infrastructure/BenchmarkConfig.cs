@@ -9,11 +9,13 @@ using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
+using BenchmarkDotNet.Toolchains.InProcess.Emit;
 
 namespace SharpCoreDB.Benchmarks;
 
 /// <summary>
 /// Centralized configuration for comparative database benchmarks.
+/// ✅ FIXED: Uses InProcess toolchain to avoid file locking issues on Windows.
 /// </summary>
 public class BenchmarkConfig : ManualConfig
 {
@@ -23,12 +25,14 @@ public class BenchmarkConfig : ManualConfig
         Options = ConfigOptions.KeepBenchmarkFiles | ConfigOptions.JoinSummary | ConfigOptions.DisableOptimizationsValidator;
         ArtifactsPath = Path.Combine(AppContext.BaseDirectory, "BenchmarkDotNet.Artifacts");
 
-        // Job configuration
+        // ✅ FIX: Use InProcess toolchain to avoid MSB3027 file locking errors
+        // This runs benchmarks in the same process, avoiding DLL copy issues
         AddJob(Job.Default
+            .WithToolchain(InProcessEmitToolchain.Instance)
             .WithGcServer(true)
             .WithGcForce(true)
-            .WithWarmupCount(3)
-            .WithIterationCount(10));
+            .WithWarmupCount(2)      // Reduced for faster runs
+            .WithIterationCount(5)); // Reduced for faster runs
 
         // Diagnostics - Remove ThreadingDiagnoser for .NET 10 compatibility
         AddDiagnoser(MemoryDiagnoser.Default);

@@ -1,4 +1,4 @@
-﻿// <copyright file="Program.cs" company="MPCoreDeveloper">
+// <copyright file="Program.cs" company="MPCoreDeveloper">
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -20,7 +20,7 @@ namespace SharpCoreDB.Profiling;
 /// 
 /// Usage:
 ///   Visual Studio: Debug → Performance Profiler (Alt+F2)
-///   CLI: dotnet run --project SharpCoreDB.Profiling [page-based|columnar|compare|continuous]
+///   CLI: dotnet run --project SharpCoreDB.Profiling [page-based|columnar|compare|continuous|encrypted-select]
 /// </summary>
 internal class Program
 {
@@ -45,21 +45,21 @@ internal class Program
             case "page-based":
             case "pagebased":
             case "1":
-                Console.WriteLine("? Running PAGE_BASED profiling mode (from launch profile)");
+                Console.WriteLine("🔧 Running PAGE_BASED profiling mode (from launch profile)");
                 Console.WriteLine();
                 ProfilePageBasedMode();
                 break;
                 
             case "columnar":
             case "2":
-                Console.WriteLine("? Running COLUMNAR profiling mode (from launch profile)");
+                Console.WriteLine("🔧 Running COLUMNAR profiling mode (from launch profile)");
                 Console.WriteLine();
                 ProfileColumnarMode();
                 break;
                 
             case "compare":
             case "3":
-                Console.WriteLine("? Running COMPARATIVE profiling mode (from launch profile)");
+                Console.WriteLine("🔧 Running COMPARATIVE profiling mode (from launch profile)");
                 Console.WriteLine();
                 ProfilePageBasedMode();
                 Console.WriteLine();
@@ -68,9 +68,17 @@ internal class Program
                 
             case "continuous":
             case "4":
-                Console.WriteLine("? Running CONTINUOUS profiling mode (from launch profile)");
+                Console.WriteLine("🔧 Running CONTINUOUS profiling mode (from launch profile)");
                 Console.WriteLine();
                 ContinuousProfiling();
+                break;
+            
+            case "encrypted-select":
+            case "encrypted":
+            case "5":
+                Console.WriteLine("🔧 Running ENCRYPTED SELECT debug mode");
+                Console.WriteLine();
+                DebugEncryptedSelect();
                 break;
                 
             default:
@@ -80,8 +88,8 @@ internal class Program
         }
         
         Console.WriteLine();
-        Console.WriteLine("? Profiling complete!");
-        Console.WriteLine("? Visual Studio: View results in Performance Profiler tab");
+        Console.WriteLine("✅ Profiling complete!");
+        Console.WriteLine("📊 Visual Studio: View results in Performance Profiler tab");
         Console.WriteLine();
     }
     
@@ -92,6 +100,7 @@ internal class Program
         Console.WriteLine("  2) COLUMNAR Mode (append-only - OLAP workload)");
         Console.WriteLine("  3) Both modes for comparison");
         Console.WriteLine("  4) Continuous profiling (runs until Ctrl+C)");
+        Console.WriteLine("  5) Encrypted SELECT debug");
         Console.WriteLine();
         Console.Write("Choice [1]: ");
         
@@ -99,7 +108,7 @@ internal class Program
         if (string.IsNullOrEmpty(input)) input = "1";
         
         Console.WriteLine();
-        Console.WriteLine("? Starting profiling...");
+        Console.WriteLine("🔬 Starting profiling...");
         Console.WriteLine("  TIP: Use Debug → Performance Profiler (Alt+F2) in Visual Studio");
         Console.WriteLine();
         
@@ -119,9 +128,119 @@ internal class Program
             case "4":
                 ContinuousProfiling();
                 break;
+            case "5":
+                DebugEncryptedSelect();
+                break;
             default:
                 Console.WriteLine("Invalid choice.");
                 break;
+        }
+    }
+
+    /// <summary>
+    /// ✅ NEW: Debug encrypted PageBased SELECT to find the crash cause
+    /// </summary>
+    static void DebugEncryptedSelect()
+    {
+        Console.WriteLine("===== ENCRYPTED SELECT DEBUG =====");
+        Console.WriteLine();
+        
+        var dbPath = Path.Combine(Path.GetTempPath(), $"sharpcoredb_encrypted_debug_{Guid.NewGuid()}");
+        Directory.CreateDirectory(dbPath);
+        
+        try
+        {
+            // ✅ ENCRYPTED PageBased config (same as benchmark)
+            var config = new DatabaseConfig
+            {
+                NoEncryptMode = false,  // ✅ ENCRYPTED!
+                StorageEngineType = StorageEngineType.PageBased,
+                EnablePageCache = true,
+                PageCacheCapacity = 10000,
+                UseGroupCommitWal = true,
+                EnableAdaptiveWalBatching = true,
+                HighSpeedInsertMode = true,
+                UseOptimizedInsertPath = true,
+                WorkloadHint = WorkloadHint.General,
+                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                StrictParameterValidation = false
+            };
+            
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var provider = services.BuildServiceProvider();
+            var factory = provider.GetRequiredService<DatabaseFactory>();
+            
+            Console.WriteLine("📦 Creating encrypted PageBased database...");
+            using var db = (Database)factory.Create(dbPath, "password", false, config);
+            
+            // Create table
+            Console.WriteLine("📋 Creating table...");
+            db.ExecuteSQL(@"CREATE TABLE bench_records (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                age INTEGER,
+                salary DECIMAL,
+                created DATETIME
+            )");
+            
+            // Insert test data
+            Console.WriteLine($"📝 Inserting {RecordCount} records...");
+            var rows = new List<Dictionary<string, object>>(RecordCount);
+            for (int i = 0; i < RecordCount; i++)
+            {
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["id"] = i,
+                    ["name"] = $"User{i}",
+                    ["email"] = $"user{i}@test.com",
+                    ["age"] = 20 + (i % 50),
+                    ["salary"] = (decimal)(30000 + (i % 70000)),
+                    ["created"] = DateTime.Parse("2025-01-01")
+                });
+            }
+            db.BulkInsertAsync("bench_records", rows).GetAwaiter().GetResult();
+            Console.WriteLine($"✅ Inserted {RecordCount} records");
+            
+            // ✅ NOW TRY THE SELECT THAT CRASHES IN BENCHMARK
+            Console.WriteLine();
+            Console.WriteLine("🔍 Testing SELECT with WHERE (this crashes in benchmark)...");
+            
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                var results = db.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
+                sw.Stop();
+                
+                Console.WriteLine($"✅ SELECT succeeded!");
+                Console.WriteLine($"   Rows returned: {results.Count}");
+                Console.WriteLine($"   Time: {sw.ElapsedMilliseconds} ms");
+                
+                // Verify data
+                if (results.Count > 0)
+                {
+                    var first = results[0];
+                    Console.WriteLine($"   First row: id={first["id"]}, name={first["name"]}, age={first["age"]}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ SELECT FAILED!");
+                Console.WriteLine($"   Exception: {ex.GetType().Name}");
+                Console.WriteLine($"   Message: {ex.Message}");
+                Console.WriteLine($"   Stack trace:");
+                Console.WriteLine(ex.StackTrace);
+                
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"   Inner: {ex.InnerException.Message}");
+                }
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(dbPath, true); } catch { }
         }
     }
     

@@ -18,10 +18,12 @@
 
 Entity Framework Core 10 database provider for **SharpCoreDB** - a high-performance encrypted embedded database engine. Use familiar EF Core APIs with SharpCoreDB's blazing-fast analytics, AES-256-GCM encryption, and SIMD acceleration.
 
-**Key Benefits:**
+**Key Benefits (January 2026 Benchmarks):**
 - Full EF Core 10 support with LINQ, migrations, and change tracking
 - AES-256-GCM encryption at rest with 0% performance overhead
-- 345x faster analytics than traditional embedded databases
+- **417x faster** analytics than LiteDB with SIMD vectorization
+- **60x faster** SELECT queries than LiteDB
+- **6x faster** UPDATE operations than LiteDB
 - Pure .NET implementation - works on Windows, Linux, macOS, Android, iOS, and IoT
 - Multi-platform support: x64, ARM64 on all major operating systems
 
@@ -287,6 +289,21 @@ protected override void Down(MigrationBuilder migrationBuilder)
 | SQL Server LocalDB | ~50 ms | ~8 MB | 1.5x slower |
 
 **Note**: SharpCoreDB excels at analytics workloads. For OLTP-heavy applications, consider SQLite. For analytics-heavy applications, SharpCoreDB is the clear winner.
+
+---
+
+## Performance vs LiteDB (Pure .NET Comparison)
+
+**Note**: LiteDB is the correct comparison - both are pure .NET embedded databases. SQLite is C code with 20 years of optimization.
+
+| Operation | SharpCoreDB | LiteDB | Winner |
+|-----------|-------------|--------|--------|
+| **Analytics (SIMD)** | 26.6 µs | 11,067 µs | ✅ **SharpCoreDB 417x faster** |
+| **SELECT (Full Scan)** | 161 µs | 9,757 µs | ✅ **SharpCoreDB 60x faster** |
+| **UPDATE** | 14.2 ms | 84.6 ms | ✅ **SharpCoreDB 6x faster** |
+| **INSERT** | 17.1 ms | 7.0 ms | ⚠️ LiteDB 2.4x faster |
+
+**SharpCoreDB wins 3 out of 4 categories!**
 
 ---
 

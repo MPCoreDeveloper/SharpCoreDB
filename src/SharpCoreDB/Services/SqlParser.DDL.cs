@@ -18,7 +18,8 @@ public partial class SqlParser
     /// <summary>
     /// Executes CREATE TABLE statement with optional STORAGE clause.
     /// Syntax: CREATE TABLE name (columns...) [STORAGE = COLUMNAR|PAGE_BASED]
-    /// Default storage mode is COLUMNAR for backward compatibility.
+    /// Default storage mode is determined by DatabaseConfig.StorageEngineType if present,
+    /// otherwise COLUMNAR for backward compatibility.
     /// </summary>
     private void ExecuteCreateTable(string sql, string[] parts, IWAL? wal)
     {
@@ -48,8 +49,17 @@ public partial class SqlParser
         var columnCheckExpressions = new List<string?>();
         var tableCheckConstraints = new List<string>();
         
-        // ✅ NEW: Parse STORAGE clause (defaults to COLUMNAR)
-        var storageMode = StorageMode.Columnar;
+        // ✅ FIX: Determine default storage mode from DatabaseConfig if present
+        // This ensures encrypted PageBased databases create tables with PageBased mode
+        var storageMode = this.config?.StorageEngineType switch
+        {
+            StorageEngineType.PageBased => StorageMode.PageBased,
+            StorageEngineType.Columnar => StorageMode.Columnar,
+            StorageEngineType.AppendOnly => StorageMode.Columnar, // AppendOnly uses Columnar mode
+            _ => StorageMode.Columnar // Default for backward compatibility
+        };
+        
+        // Parse explicit STORAGE clause (overrides config default)
         var afterParenIndex = colsEnd + 1;
         if (afterParenIndex < sql.Length)
         {
