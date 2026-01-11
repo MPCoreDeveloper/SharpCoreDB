@@ -103,6 +103,7 @@
     <None Include=".github\FUNDING.yml" />
     <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Build all RIDs automatically when packing -->
