@@ -7,6 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <StartupObject>SingleFileDemo</StartupObject>
+    <Version>1.0.5</Version>
+    <PackageId>SharpCoreDB.Demo</PackageId>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Description>Demo app for SharpCoreDB.</Description>
+    <PackageReleaseNotes>v1.0.5: Updated samples to use group commit and index hints; .NET 10 compatibility.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

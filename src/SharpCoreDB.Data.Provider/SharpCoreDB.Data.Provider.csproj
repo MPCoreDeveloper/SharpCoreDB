@@ -16,12 +16,15 @@
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <PackageTags>ado.net;database;data-provider;sharpcoredb</PackageTags>
-    <Version>1.0.2</Version>
+    <Version>1.0.5</Version>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageId>SharpCoreDB.Data.Provider</PackageId>
+    <Description>Data provider layer for SharpCoreDB on .NET 10.</Description>
+    <PackageReleaseNotes>v1.0.5: Provider alignment with batch APIs; transaction stability fixes;</PackageReleaseNotes>
 
     <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>

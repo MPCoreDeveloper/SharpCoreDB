@@ -22,7 +22,9 @@ static IConfig CreateQuickConfig()
         .WithId("QuickHost")
         .WithWarmupCount(1)     // ? At least 1 warmup for JIT
         .WithIterationCount(3)  // ? 3 iterations for statistical stability
-        .WithLaunchCount(1);
+        .WithLaunchCount(1)
+        // Use in-process emit (default) to restore original working mode
+        .WithToolchain(BenchmarkDotNet.Toolchains.InProcess.Emit.InProcessEmitToolchain.Instance);
 
     var resultsPath = Path.Combine("BenchmarkDotNet.Artifacts", "results");
     Directory.CreateDirectory(resultsPath);
@@ -31,7 +33,10 @@ static IConfig CreateQuickConfig()
     var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
     var logFilePath = Path.Combine(resultsPath, $"benchmark_log_{timestamp}.txt");
 
-    return ManualConfig.CreateEmpty()
+    var config = ManualConfig.CreateEmpty();
+    config.UnionRule = ConfigUnionRule.AlwaysUseLocal;
+
+    return config
         .AddJob(job)
         .AddLogger(ConsoleLogger.Default)
         .AddLogger(new StreamLogger(new StreamWriter(logFilePath) { AutoFlush = true })) // ? ALWAYS log to file!
@@ -44,7 +49,7 @@ static IConfig CreateQuickConfig()
         .AddExporter(JsonExporter.Full)
         .AddExporter(RPlotExporter.Default)  // ? Add R plots
         .WithArtifactsPath(resultsPath)
-        .WithOptions(ConfigOptions.DisableOptimizationsValidator | ConfigOptions.JoinSummary | ConfigOptions.StopOnFirstError);
+        .WithOptions(ConfigOptions.DisableOptimizationsValidator | ConfigOptions.JoinSummary);
 }
 
 var config = CreateQuickConfig();
@@ -63,6 +68,22 @@ Console.WriteLine();
 Console.Write("Enter choice: ");
 var input = Console.ReadLine()?.Trim();
 
+// Fallback for non-interactive runs: default to option 2 (cross-engine comparison)
+if (string.IsNullOrWhiteSpace(input))
+{
+    // Try to infer a choice from command-line args (e.g., passing "2")
+    try
+    {
+        var cmdArgs = Environment.GetCommandLineArgs();
+        var choiceArg = cmdArgs.FirstOrDefault(a => a == "1" || a == "2" || a == "3" || a == "4" || a == "5" || a == "0" || a?.Equals("q", StringComparison.OrdinalIgnoreCase) == true);
+        input = string.IsNullOrWhiteSpace(choiceArg) ? "2" : choiceArg; // Default to 2 when no explicit choice
+    }
+    catch
+    {
+        input = "2"; // Safe default
+    }
+}
+
 Summary? summary = null;
 
 // ? GUARANTEED: Log file that ALWAYS gets written
@@ -80,12 +101,12 @@ try
     switch (input)
     {
         case "1":
-            Console.WriteLine("Running PageBasedStorageBenchmark (Quick)…");
+            Console.WriteLine("Running PageBasedStorageBenchmark (Quick)â€¦");
             logWriter.WriteLine("Running PageBasedStorageBenchmark...");
             summary = BenchmarkRunner.Run<PageBasedStorageBenchmark>(config);
             break;
         case "2":
-            Console.WriteLine("Running StorageEngineComparisonBenchmark (Quick)…");
+            Console.WriteLine("Running StorageEngineComparisonBenchmark (Quick)â€¦");
             logWriter.WriteLine("Running StorageEngineComparisonBenchmark...");
             summary = BenchmarkRunner.Run<StorageEngineComparisonBenchmark>(config);
             break;
@@ -118,8 +139,10 @@ try
             logWriter.WriteLine("User exited.");
             break;
         default:
-            Console.WriteLine("Invalid choice. Run with 1, 2, 3, 4, or 5.");
-            logWriter.WriteLine($"Invalid choice: {input}");
+            // If invalid input provided, default to option 2 for CI stability
+            Console.WriteLine("Invalid choice. Defaulting to option 2 (Cross-engine comparison).\n");
+            logWriter.WriteLine($"Invalid choice: {input}. Defaulting to option 2.");
+            summary = BenchmarkRunner.Run<StorageEngineComparisonBenchmark>(config);
             break;
     }
 

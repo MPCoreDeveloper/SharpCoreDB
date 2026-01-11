@@ -8,13 +8,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.EntityFrameworkCore</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.EntityFrameworkCore</Product>
     <Description>Entity Framework Core provider for SharpCoreDB encrypted database engine. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations. Compatible with SharpCoreDB 1.0.4 DEFAULT values.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.0.1: Updated for compatibility with SharpCoreDB 1.0.4, which adds DEFAULT values. CHECK constraints can be used directly via raw SQL in EF Core applications.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.0.5: minor API documentation; improved query parameter validation options.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;entityframeworkcore;efcore;database;encryption;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

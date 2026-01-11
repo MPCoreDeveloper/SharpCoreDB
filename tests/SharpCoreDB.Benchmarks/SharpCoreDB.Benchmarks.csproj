@@ -27,6 +27,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <Version>1.0.5</Version>
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -35,6 +36,7 @@
     <PublishAot>false</PublishAot>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ServerGarbageCollection>true</ServerGarbageCollection>
+    <PackageReleaseNotes>v1.0.5: Benchmarks updated: age index creation, grouped inserts/updates, fixed LiteDB transaction usage.</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>

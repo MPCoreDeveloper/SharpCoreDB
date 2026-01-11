@@ -124,15 +124,30 @@ public class AsyncTests : IDisposable
     {
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
-        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
-        db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
-        db.ExecuteSQL("INSERT INTO users VALUES (2, 'Bob')");
+        
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+            db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
+            db.ExecuteSQL("INSERT INTO users VALUES (2, 'Bob')");
 
-        // Act
-        var stmt = db.Prepare("SELECT * FROM users WHERE id = ?");
-        db.ExecutePrepared(stmt, new Dictionary<string, object?> { { "0", 1 } });
+            // Act
+            var stmt = db.Prepare("SELECT * FROM users WHERE id = ?");
+            db.ExecutePrepared(stmt, new Dictionary<string, object?> { { "0", 1 } });
 
-        // Assert - no exception means success
+            // Assert - no exception means success
+        }
+        finally
+        {
+            // ✅ FIX: Flush and dispose database before cleanup
+            try
+            {
+                db?.Flush();
+                db?.ForceSave();
+                (db as IDisposable)?.Dispose();
+            }
+            catch { /* Ignore disposal errors */ }
+        }
     }
 
     [Fact]

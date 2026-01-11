@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>14.0</LangVersion>
+    <Version>1.0.5</Version>
+    <PackageId>SharpCoreDB.DebugBenchmark</PackageId>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Description>Debug benchmark harness for SharpCoreDB.</Description>
+    <PackageReleaseNotes>v1.0.5: Stabilized benchmark setup; fixed transaction overlaps; added age index creation.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

@@ -103,8 +103,9 @@ public class DatabaseFactory(IServiceProvider services)
     /// </summary>
     private IDatabase CreateDirectoryDatabase(string dbPath, string masterPassword, DatabaseOptions options)
     {
-        // For now, use existing Database class (will be refactored to use DirectoryStorageProvider)
         var config = options.DatabaseConfig ?? DatabaseConfig.Default;
+        // Apply tuned defaults when missing
+        options.DatabaseConfig = config;
         return new Database(services, dbPath, masterPassword, options.IsReadOnly, config);
     }
 
@@ -113,10 +114,15 @@ public class DatabaseFactory(IServiceProvider services)
     /// </summary>
     private static IDatabase CreateSingleFileDatabase(string dbPath, string masterPassword, DatabaseOptions options)
     {
-        // Create SingleFileStorageProvider
+        options.CreateImmediately = true;
+        // Propagate tuning from DatabaseConfig when available
+        if (options.DatabaseConfig is not null)
+        {
+            options.EnableMemoryMapping = options.DatabaseConfig.UseMemoryMapping;
+        }
+        options.WalBufferSizePages = options.WalBufferSizePages > 0 ? options.WalBufferSizePages : 2048;
+        options.FileShareMode = System.IO.FileShare.Read;
         var provider = SingleFileStorageProvider.Open(dbPath, options);
-        
-        // Return SingleFileDatabase wrapper
         return new SingleFileDatabase(provider, dbPath, masterPassword, options);
     }
 
@@ -655,64 +661,171 @@ internal class SingleFileTable : ITable
     // Stub implementations for ITable interface
     public List<Dictionary<string, object>> Select(string? whereClause, string? orderBy, bool distinct = false) => Select();
     public List<Dictionary<string, object>> Select(string? whereClause, string? orderBy, bool distinct = false, bool noEncrypt = false) => Select();
-    public void Update(string? whereClause, Dictionary<string, object> updates) => throw new NotImplementedException();
+    
+    public void Update(string? whereClause, Dictionary<string, object> updates)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        
+        if (updates.Count == 0)
+        {
+            throw new ArgumentException("Updates dictionary cannot be null or empty", nameof(updates));
+        }
+
+        lock (_tableLock)
+        {
+            // Enumerate all blocks for this table
+            var allBlocks = _storageProvider.EnumerateBlocks()
+                .Where(name => name.StartsWith(_dataBlockName, StringComparison.Ordinal))
+                .ToList();
+
+            foreach (var blockName in allBlocks)
+            {
+                var data = _storageProvider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
+                if (data is null) continue;
+
+                var row = DeserializeRow(data);
+                
+                // Check WHERE clause condition
+                if (!string.IsNullOrWhiteSpace(whereClause) && !EvaluateWhereClause(row, whereClause))
+                {
+                    continue; // Skip rows that don't match WHERE clause
+                }
+
+                // Apply updates to matching row
+                bool rowModified = false;
+                foreach (var kvp in updates)
+                {
+                    if (row.ContainsKey(kvp.Key))
+                    {
+                        row[kvp.Key] = kvp.Value;
+                        rowModified = true;
+                    }
+                }
+
+                if (rowModified)
+                {
+                    // Write updated row back to storage
+                    var updatedData = SerializeRow(row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
+                    _storageProvider.WriteBlockAsync(blockName, updatedData).GetAwaiter().GetResult();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a WHERE clause against a row using simplified parsing.
+    /// Supports basic conditions: column = value, column > value, etc.
+    /// </summary>
+    private bool EvaluateWhereClause(Dictionary<string, object> row, string whereClause)
+    {
+        // Remove "WHERE" prefix if present
+        var condition = whereClause.Trim();
+        if (condition.StartsWith("WHERE", StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition.Substring(5).Trim();
+        }
+
+        // Parse simple conditions: column = value, column > value, etc.
+        string[] operators = [">=", "<=", "!=", "<>", "=", ">", "<"];
+        string? op = null;
+        int opIndex = -1;
+
+        foreach (var testOp in operators)
+        {
+            opIndex = condition.IndexOf(testOp, StringComparison.Ordinal);
+            if (opIndex >= 0)
+            {
+                op = testOp;
+                break;
+            }
+        }
+
+        if (op == null || opIndex < 0)
+        {
+            return true; // No recognizable operator, pass through
+        }
+
+        var columnName = condition.Substring(0, opIndex).Trim();
+        var valueStr = condition.Substring(opIndex + op.Length).Trim();
+
+        if (!row.TryGetValue(columnName, out var rowValue))
+        {
+            return false;
+        }
+
+        // Remove quotes if present
+        if (valueStr.StartsWith('\'') && valueStr.EndsWith('\''))
+        {
+            valueStr = valueStr[1..^1];
+        }
+
+        // Perform comparison based on operator
+        return op switch
+        {
+            "=" => CompareValues(rowValue, valueStr) == 0,
+            "!=" or "<>" => CompareValues(rowValue, valueStr) != 0,
+            ">" => CompareValues(rowValue, valueStr) > 0,
+            "<" => CompareValues(rowValue, valueStr) < 0,
+            ">=" => CompareValues(rowValue, valueStr) >= 0,
+            "<=" => CompareValues(rowValue, valueStr) <= 0,
+            _ => true
+        };
+    }
+
+    /// <summary>
+    /// Compares a row value with a string value, handling type conversions.
+    /// </summary>
+    private static int CompareValues(object? rowValue, string compareStr)
+    {
+        if (rowValue is null)
+        {
+            return string.IsNullOrEmpty(compareStr) ? 0 : -1;
+        }
+
+        // Try numeric comparison first
+        if (rowValue is int intVal && int.TryParse(compareStr, out var intCompare))
+        {
+            return intVal.CompareTo(intCompare);
+        }
+
+        if (rowValue is long longVal && long.TryParse(compareStr, out var longCompare))
+        {
+            return longVal.CompareTo(longCompare);
+        }
+
+        if (rowValue is decimal decVal && decimal.TryParse(compareStr, out var decCompare))
+        {
+            return decVal.CompareTo(decCompare);
+        }
+
+        if (rowValue is double dblVal && double.TryParse(compareStr, out var dblCompare))
+        {
+            return dblVal.CompareTo(dblCompare);
+        }
+
+        // Fall back to string comparison
+        return string.Compare(rowValue.ToString(), compareStr, StringComparison.Ordinal);
+    }
+    
     public void Delete(string? whereClause) => throw new NotImplementedException();
     public void CreateHashIndex(string columnName) => throw new NotImplementedException("Hash indexes are not supported for single-file storage");
-
     public void CreateHashIndex(string indexName, string columnName, bool isUnique = false) => throw new NotImplementedException("Named hash indexes are not supported for single-file storage");
-
     public bool HasHashIndex(string columnName) => false;
-
     public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => null;
-
-    public void IncrementColumnUsage(string columnName)
-    {
-        // Not implemented for single-file storage
-    }
-
+    public void IncrementColumnUsage(string columnName) { }
     public IReadOnlyDictionary<string, long> GetColumnUsage() => new Dictionary<string, long>();
-
-    public void TrackAllColumnsUsage()
-    {
-        // Not implemented for single-file storage
-    }
-
-    public void TrackColumnUsage(string columnName)
-    {
-        // Not implemented for single-file storage
-    }
-
+    public void TrackAllColumnsUsage() { }
+    public void TrackColumnUsage(string columnName) { }
     public bool RemoveHashIndex(string columnName) => false;
-
-    public void ClearAllIndexes()
-    {
-        // Not implemented for single-file storage
-    }
-
+    public void ClearAllIndexes() { }
     public long GetCachedRowCount() => -1;
-
-    public void RefreshRowCount()
-    {
-        // Not implemented for single-file storage
-    }
-
+    public void RefreshRowCount() { }
     public void CreateBTreeIndex(string columnName) => throw new NotImplementedException("B-tree indexes are not supported for single-file storage");
-
     public void CreateBTreeIndex(string indexName, string columnName, bool isUnique = false) => throw new NotImplementedException("Named B-tree indexes are not supported for single-file storage");
-
     public bool HasBTreeIndex(string columnName) => false;
-
-    public void Flush()
-    {
-        // Single-file storage handles flushing automatically
-    }
-
-    public void AddColumn(ColumnDefinition columnDef)
-    {
-        // Not implemented for single-file storage
-        throw new NotImplementedException("Adding columns is not supported for single-file storage");
-    }
-
+    public void Flush() { }
+    public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException("Adding columns is not supported for single-file storage");
+    
     /// <summary>
     /// Fallback deletion method for tables without a primary key.
     /// Performs full table scan - O(n) complexity.
@@ -758,10 +871,6 @@ internal class SingleFileTable : ITable
         return true;
     }
 
-    /// <summary>
-    /// Rebuilds the primary key index by scanning all data blocks.
-    /// Called during table initialization from metadata.
-    /// </summary>
     private void RebuildPrimaryKeyIndex()
     {
         if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= _columns.Count)
@@ -828,7 +937,6 @@ internal class SingleFileTable : ITable
         return Encoding.UTF8.GetString(span);
     }
 }
-
 /// <summary>
 /// SQL parser wrapper for single-file databases.
 /// Intercepts DDL operations to work with single-file storage.

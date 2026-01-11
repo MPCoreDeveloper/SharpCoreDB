@@ -24,6 +24,7 @@ public class BenchmarkConfig : ManualConfig
         // Ensure artifacts are always kept and written, even on failures
         Options = ConfigOptions.KeepBenchmarkFiles | ConfigOptions.JoinSummary | ConfigOptions.DisableOptimizationsValidator;
         ArtifactsPath = Path.Combine(AppContext.BaseDirectory, "BenchmarkDotNet.Artifacts");
+        UnionRule = ConfigUnionRule.AlwaysUseLocal;
 
         // ✅ FIX: Use InProcess toolchain to avoid MSB3027 file locking errors
         // This runs benchmarks in the same process, avoiding DLL copy issues

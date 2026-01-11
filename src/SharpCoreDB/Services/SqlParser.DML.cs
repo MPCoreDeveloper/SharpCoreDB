@@ -47,6 +47,10 @@ public partial class SqlParser
                 ExecuteCreateIndex(sql, parts, wal);
                 break;
             
+            case (SqlConstants.CREATE, "UNIQUE"):
+                ExecuteCreateIndex(sql, parts, wal);
+                break;
+            
             case (SqlConstants.INSERT, SqlConstants.INTO):
                 ExecuteInsert(sql, wal);
                 break;

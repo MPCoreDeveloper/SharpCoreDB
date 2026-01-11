@@ -40,9 +40,22 @@ public partial class Database
         }
         
         CompiledQueryPlan? compiledPlan = null;
-        if (sql.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        
+        // ✅ FIX: Skip compilation for parameterized queries to avoid hangs
+        bool isSelectQuery = sql.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
+        bool hasParameters = sql.Contains('@') || sql.Contains('?');
+        
+        if (isSelectQuery && !hasParameters)  // Only compile non-parameterized queries
         {
-            compiledPlan = QueryCompiler.Compile(sql);
+            try
+            {
+                compiledPlan = QueryCompiler.Compile(sql);
+            }
+            catch
+            {
+                // Compilation failed - fallback to normal execution
+                compiledPlan = null;
+            }
         }
         
         return new DataStructures.PreparedStatement(sql, plan, compiledPlan);

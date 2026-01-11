@@ -7,7 +7,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>SharpCoreDB.Serilog.Sinks</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Serilog.Sinks</Product>
@@ -24,6 +24,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReleaseNotes>v1.0.5: Improved logging around batch operations and transactions;</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

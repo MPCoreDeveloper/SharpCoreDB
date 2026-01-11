@@ -88,6 +88,23 @@ public sealed class QueryExecutor
         return ExecuteWithParametersLegacy(table, plan, parameters);
     }
 
+    /// <summary>
+    /// Executes plan and returns zero-copy StructRow enumeration.
+    /// </summary>
+    public IEnumerable<StructRow> ExecuteStruct(ExecutionPlan plan)
+    {
+        if (!tables.TryGetValue(plan.TableName, out var table))
+            throw new InvalidOperationException($"Table '{plan.TableName}' does not exist");
+
+        if (table is Table concreteTable)
+        {
+            // Return scan; caller can materialize or post-process
+            return concreteTable.ScanStructRows(enableCaching: false).ToList();
+        }
+
+        throw new NotSupportedException("StructRow execution supported only for core Table instances");
+    }
+
     #region StructRow-Based Execution (Optimized Path)
 
     /// <summary>

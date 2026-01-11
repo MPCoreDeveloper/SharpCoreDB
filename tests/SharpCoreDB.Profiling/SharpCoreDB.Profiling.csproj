@@ -8,6 +8,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <Version>1.0.5</Version>
+    <PackageId>SharpCoreDB.Profiling</PackageId>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Description>Profiling harness for SharpCoreDB.</Description>
+    <PackageReleaseNotes>v1.0.5: Added profiling scenarios for single-file WAL and page cache; updated to .NET 10.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

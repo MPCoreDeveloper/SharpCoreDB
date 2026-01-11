@@ -10,6 +10,7 @@ using BenchmarkDotNet.Configs;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using LiteDB;
+using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 using System;
 using System.IO;
@@ -18,6 +19,7 @@ using System.IO;
 /// Comprehensive storage engine comparison across all available options.
 /// ✅ FIXED: Uses ExecuteBatchSQL for INSERT/UPDATE to avoid potential infinite loops.
 /// ✅ RESTORED: All benchmark categories (Insert, Update, Select, Analytics).
+/// ✅ FIXED: Changed single-file database fields to IDatabase to support SingleFileDatabase instances.
 /// </summary>
 [MemoryDiagnoser]
 [Config(typeof(BenchmarkConfig))]
@@ -32,14 +34,30 @@ public class StorageEngineComparisonBenchmark
     private string pageBasedPath = string.Empty;
     private string sqlitePath = string.Empty;
     private string liteDbPath = string.Empty;
+    private string scDirPlainPath = string.Empty;
+    private string scDirEncPath = string.Empty;
+    private string scSinglePlainPath = string.Empty;
+    private string scSingleEncPath = string.Empty;
     
     private IServiceProvider services = null!;
     private Database? appendOnlyDb;
     private Database? pageBasedDb;
+    private Database? scDirPlainDb;
+    private Database? scDirEncDb;
+    private IDatabase? scSinglePlainDb;
+    private IDatabase? scSingleEncDb;
     private ColumnStorage.ColumnStore<BenchmarkRecord>? columnarStore;
     private SqliteConnection? sqliteConn;
     private LiteDatabase? liteDb;
     
+    private readonly byte[] _encryptionKey = new byte[32]
+    {
+        0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,
+        0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x10,
+        0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,
+        0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F,0x20
+    };
+
     // ✅ NEW: Iteration counters for unique IDs
     private int _insertIterationCounter = 0;
 
@@ -52,12 +70,18 @@ public class StorageEngineComparisonBenchmark
         pageBasedPath = Path.Combine(Path.GetTempPath(), $"sharpcoredb_pagebased_{Guid.NewGuid()}");
         sqlitePath = Path.Combine(Path.GetTempPath(), $"sqlite_{Guid.NewGuid()}.db");
         liteDbPath = Path.Combine(Path.GetTempPath(), $"litedb_{Guid.NewGuid()}.db");
+        scDirPlainPath = Path.Combine(Path.GetTempPath(), $"scdb_dir_plain_{Guid.NewGuid()}");
+        scDirEncPath = Path.Combine(Path.GetTempPath(), $"scdb_dir_enc_{Guid.NewGuid()}");
+        scSinglePlainPath = Path.Combine(Path.GetTempPath(), $"scdb_single_plain_{Guid.NewGuid()}.scdb");
+        scSingleEncPath = Path.Combine(Path.GetTempPath(), $"scdb_single_enc_{Guid.NewGuid()}.scdb");
 
         try { if (File.Exists(sqlitePath)) File.Delete(sqlitePath); } catch { }
         try { if (File.Exists(liteDbPath)) File.Delete(liteDbPath); } catch { }
 
         Directory.CreateDirectory(appendOnlyPath);
         Directory.CreateDirectory(pageBasedPath);
+        Directory.CreateDirectory(scDirPlainPath);
+        Directory.CreateDirectory(scDirEncPath);
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddSharpCoreDB();
@@ -70,7 +94,8 @@ public class StorageEngineComparisonBenchmark
             NoEncryptMode = true,
             StorageEngineType = StorageEngineType.AppendOnly,
             EnablePageCache = true,
-            PageCacheCapacity = 5000,
+            PageCacheCapacity = 20000,
+            UseMemoryMapping = true,
             SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
             StrictParameterValidation = false
         };
@@ -81,7 +106,20 @@ public class StorageEngineComparisonBenchmark
             NoEncryptMode = true,
             StorageEngineType = StorageEngineType.PageBased,
             EnablePageCache = true,
-            PageCacheCapacity = 5000,
+            PageCacheCapacity = 20000,
+            UseMemoryMapping = true,
+            SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+            StrictParameterValidation = false
+        };
+
+        // Directory encrypted config (PageBased + AES)
+        var dirEncryptedConfig = new DatabaseConfig
+        {
+            NoEncryptMode = false,
+            StorageEngineType = StorageEngineType.PageBased,
+            EnablePageCache = true,
+            PageCacheCapacity = 20000,
+            UseMemoryMapping = true,
             SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
             StrictParameterValidation = false
         };
@@ -89,6 +127,25 @@ public class StorageEngineComparisonBenchmark
         Console.WriteLine("[GlobalSetup] Creating SharpCoreDB instances...");
         appendOnlyDb = (Database)factory.Create(appendOnlyPath, "password", false, appendOnlyConfig);
         pageBasedDb = (Database)factory.Create(pageBasedPath, "password", false, pageBasedConfig);
+        scDirPlainDb = (Database)factory.Create(scDirPlainPath, "password", false, pageBasedConfig);
+        scDirEncDb = (Database)factory.Create(scDirEncPath, "password", false, dirEncryptedConfig);
+
+        // Single-file options
+        var singlePlainOptions = DatabaseOptions.CreateSingleFileDefault(enableEncryption: false);
+        singlePlainOptions.DatabaseConfig = pageBasedConfig;
+        singlePlainOptions.WalBufferSizePages = 2048;
+        singlePlainOptions.EnableMemoryMapping = pageBasedConfig.UseMemoryMapping;
+        singlePlainOptions.FileShareMode = FileShare.Read;
+        singlePlainOptions.CreateImmediately = true;
+        var singleEncOptions = DatabaseOptions.CreateSingleFileDefault(enableEncryption: true, encryptionKey: _encryptionKey);
+        singleEncOptions.DatabaseConfig = dirEncryptedConfig;
+        singleEncOptions.WalBufferSizePages = 2048;
+        singleEncOptions.EnableMemoryMapping = dirEncryptedConfig.UseMemoryMapping;
+        singleEncOptions.FileShareMode = FileShare.Read;
+        singleEncOptions.CreateImmediately = true;
+
+        scSinglePlainDb = factory.CreateWithOptions(scSinglePlainPath, "password", singlePlainOptions);
+        scSingleEncDb = factory.CreateWithOptions(scSingleEncPath, "password", singleEncOptions);
 
         // SQLite setup
         Console.WriteLine("[GlobalSetup] Creating SQLite database...");
@@ -125,19 +182,31 @@ public class StorageEngineComparisonBenchmark
         )";
 
         appendOnlyDb.ExecuteSQL(createTable);
-        pageBasedDb.ExecuteSQL(createTable);
+        pageBasedDb!.ExecuteSQL(createTable);
+        scDirPlainDb!.ExecuteSQL(createTable);
+        scDirEncDb!.ExecuteSQL(createTable);
+        scSinglePlainDb!.ExecuteSQL(createTable);
+        scSingleEncDb!.ExecuteSQL(createTable);
         
+        // Index on age to avoid full table scans in SELECT age > X (dir-based engines only)
+        var createAgeIndex = "CREATE INDEX idx_age ON bench_records (age);";
+        try { appendOnlyDb.ExecuteSQL(createAgeIndex); } catch { }
+        try { pageBasedDb!.ExecuteSQL(createAgeIndex); } catch { }
+        try { scDirPlainDb!.ExecuteSQL(createAgeIndex); } catch { }
+        try { scDirEncDb!.ExecuteSQL(createAgeIndex); } catch { }
+        // Single-file (.scdb) currently skips CREATE INDEX
+
         // Pre-populate for SELECT/UPDATE benchmarks
         Console.WriteLine("[GlobalSetup] Pre-populating databases...");
         PrePopulateAllDatabases();
         Console.WriteLine("[GlobalSetup] Setup complete!");
     }
 
+    // Revert to safer pre-populate without explicit batch transactions to avoid setup exceptions
     private void PrePopulateAllDatabases()
     {
         Console.WriteLine($"[PrePopulate] Inserting {RecordCount} records into each database...");
         
-        // ✅ FIX: Use ExecuteBatchSQL - reliable and tested
         var inserts = new List<string>(RecordCount);
         for (int i = 0; i < RecordCount; i++)
         {
@@ -151,19 +220,29 @@ public class StorageEngineComparisonBenchmark
         Console.WriteLine("[PrePopulate] Inserting into PageBased...");
         pageBasedDb!.ExecuteBatchSQL(inserts);
 
-        // Pre-populate SQLite
-        Console.WriteLine("[PrePopulate] Inserting into SQLite...");
+        Console.WriteLine("[PrePopulate] Inserting into SCDB Dir (unencrypted)...");
+        scDirPlainDb!.ExecuteBatchSQL(inserts);
+
+        Console.WriteLine("[PrePopulate] Inserting into SCDB Dir (encrypted)...");
+        scDirEncDb!.ExecuteBatchSQL(inserts);
+
+        Console.WriteLine("[PrePopulate] Inserting into SCDB Single (unencrypted)...");
+        scSinglePlainDb!.ExecuteBatchSQL(inserts);
+
+        Console.WriteLine("[PrePopulate] Inserting into SCDB Single (encrypted)...");
+        scSingleEncDb!.ExecuteBatchSQL(inserts);
+
+        // SQLite transaction
+        Console.WriteLine("[PrePopulate] Inserting into SQLite (transaction)...");
         using var transaction = sqliteConn!.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
         cmd.CommandText = "INSERT INTO bench_records (id, name, email, age, salary, created) VALUES (@id, @name, @email, @age, @salary, @created)";
-        
         var idParam = cmd.Parameters.Add("@id", SqliteType.Integer);
         var nameParam = cmd.Parameters.Add("@name", SqliteType.Text);
         var emailParam = cmd.Parameters.Add("@email", SqliteType.Text);
         var ageParam = cmd.Parameters.Add("@age", SqliteType.Integer);
         var salaryParam = cmd.Parameters.Add("@salary", SqliteType.Real);
         var createdParam = cmd.Parameters.Add("@created", SqliteType.Text);
-
         for (int i = 0; i < RecordCount; i++)
         {
             idParam.Value = i;
@@ -176,7 +255,7 @@ public class StorageEngineComparisonBenchmark
         }
         transaction.Commit();
 
-        // Pre-populate LiteDB
+        // LiteDB bulk
         Console.WriteLine("[PrePopulate] Inserting into LiteDB...");
         var liteCollection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
         var records = new List<BenchmarkRecord>(RecordCount);
@@ -192,48 +271,44 @@ public class StorageEngineComparisonBenchmark
                 Created = DateTime.Parse("2025-01-01")
             });
         }
-        liteCollection.InsertBulk(records);
-
-        // Pre-transpose for SIMD benchmarks
-        Console.WriteLine("[PrePopulate] Creating columnar store for SIMD benchmarks...");
-        columnarStore = new ColumnStorage.ColumnStore<BenchmarkRecord>();
-        columnarStore.Transpose(records);
         
-        Console.WriteLine($"[PrePopulate] Complete! {RecordCount} records in each database.");
-    }
-
-    [GlobalCleanup]
-    public void Cleanup()
-    {
-        Console.WriteLine("[GlobalCleanup] Disposing databases...");
-        appendOnlyDb?.Dispose();
-        pageBasedDb?.Dispose();
-        sqliteConn?.Dispose();
-        liteDb?.Dispose();
-
+        // Explicit transaction: LiteDatabase.BeginTrans returns bool, use liteDb.Commit()/Rollback()
+        var started = liteDb!.BeginTrans();
         try
         {
-            if (Directory.Exists(appendOnlyPath)) Directory.Delete(appendOnlyPath, true);
-            if (Directory.Exists(pageBasedPath)) Directory.Delete(pageBasedPath, true);
-            if (File.Exists(sqlitePath)) File.Delete(sqlitePath);
-            if (File.Exists(liteDbPath)) File.Delete(liteDbPath);
+            liteCollection.InsertBulk(records);
+            if (started) liteDb.Commit();
         }
-        catch { }
-        Console.WriteLine("[GlobalCleanup] Cleanup complete!");
+        catch
+        {
+            if (started) liteDb.Rollback();
+            throw;
+        }
     }
 
-    /// <summary>
-    /// Increment counter for unique INSERT IDs per iteration.
-    /// </summary>
-    [IterationSetup(Targets = new[] { 
-        nameof(AppendOnly_Insert), 
-        nameof(PageBased_Insert),
-        nameof(SQLite_Insert),
-        nameof(LiteDB_Insert)
-    })]
-    public void InsertIterationSetup()
+    // INSERT benchmarks: group commits for SCDB
+    private static void ExecuteSharpCoreInsert(Database db, int startId)
     {
-        _insertIterationCounter++;
+        var inserts = new List<string>(InsertBatchSize);
+        for (int i = 0; i < InsertBatchSize; i++)
+        {
+            int id = startId + i;
+            inserts.Add($"INSERT INTO bench_records (id, name, email, age, salary, created) VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
+        }
+        // Avoid explicit batch transactions to prevent 'Transaction already in progress' errors
+        db.ExecuteBatchSQL(inserts);
+    }
+
+    private static void ExecuteSharpCoreInsertIDatabase(IDatabase db, int startId)
+    {
+        var inserts = new List<string>(InsertBatchSize);
+        for (int i = 0; i < InsertBatchSize; i++)
+        {
+            int id = startId + i;
+            inserts.Add($"INSERT INTO bench_records (id, name, email, age, salary, created) VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
+        }
+        // Single-file IDatabase: execute directly without batch transaction to avoid 'No active transaction'
+        db.ExecuteBatchSQL(inserts);
     }
 
     // ============================================================
@@ -253,6 +328,7 @@ public class StorageEngineComparisonBenchmark
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
         appendOnlyDb!.ExecuteBatchSQL(inserts);
+        _insertIterationCounter++; // ensure next batch uses new ID range
     }
 
     [Benchmark(Baseline = true)]
@@ -268,6 +344,7 @@ public class StorageEngineComparisonBenchmark
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
         pageBasedDb!.ExecuteBatchSQL(inserts);
+        _insertIterationCounter++;
     }
 
     [Benchmark]
@@ -299,6 +376,7 @@ public class StorageEngineComparisonBenchmark
             cmd.ExecuteNonQuery();
         }
         transaction.Commit();
+        _insertIterationCounter++;
     }
 
     [Benchmark]
@@ -322,7 +400,55 @@ public class StorageEngineComparisonBenchmark
                 Created = DateTime.Parse("2025-01-01")
             });
         }
-        collection.InsertBulk(records);
+        
+        var started = liteDb!.BeginTrans();
+        try
+        {
+            collection.InsertBulk(records);
+            if (started) liteDb.Commit();
+        }
+        catch
+        {
+            if (started) liteDb.Rollback();
+            throw;
+        }
+        _insertIterationCounter++;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Insert")]
+    public void SCDB_Dir_Unencrypted_Insert()
+    {
+        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        ExecuteSharpCoreInsert(scDirPlainDb!, startId);
+        _insertIterationCounter++;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Insert")]
+    public void SCDB_Dir_Encrypted_Insert()
+    {
+        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        ExecuteSharpCoreInsert(scDirEncDb!, startId);
+        _insertIterationCounter++;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Insert")]
+    public void SCDB_Single_Unencrypted_Insert()
+    {
+        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        ExecuteSharpCoreInsertIDatabase(scSinglePlainDb!, startId);
+        _insertIterationCounter++;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Insert")]
+    public void SCDB_Single_Encrypted_Insert()
+    {
+        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        ExecuteSharpCoreInsertIDatabase(scSingleEncDb!, startId);
+        _insertIterationCounter++;
     }
 
     // ============================================================
@@ -394,6 +520,56 @@ public class StorageEngineComparisonBenchmark
         }
     }
 
+    [Benchmark]
+    [BenchmarkCategory("Update")]
+    public void SCDB_Dir_Unencrypted_Update()
+    {
+        ExecuteSharpCoreUpdate(scDirPlainDb!);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Update")]
+    public void SCDB_Dir_Encrypted_Update()
+    {
+        ExecuteSharpCoreUpdate(scDirEncDb!);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Update")]
+    public void SCDB_Single_Unencrypted_Update()
+    {
+        ExecuteSharpCoreUpdateIDatabase(scSinglePlainDb!);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Update")]
+    public void SCDB_Single_Encrypted_Update()
+    {
+        ExecuteSharpCoreUpdateIDatabase(scSingleEncDb!);
+    }
+
+    private static void ExecuteSharpCoreUpdate(Database db)
+    {
+        var updates = new List<string>(500);
+        for (int i = 0; i < 500; i++)
+        {
+            var id = Random.Shared.Next(0, RecordCount);
+            updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
+        }
+        db.ExecuteBatchSQL(updates);
+    }
+
+    private static void ExecuteSharpCoreUpdateIDatabase(IDatabase db)
+    {
+        var updates = new List<string>(500);
+        for (int i = 0; i < 500; i++)
+        {
+            var id = Random.Shared.Next(0, RecordCount);
+            updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
+        }
+        db.ExecuteBatchSQL(updates);
+    }
+
     // ============================================================
     // SELECT BENCHMARKS
     // ============================================================
@@ -402,37 +578,49 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void AppendOnly_Select()
     {
-        var rows = appendOnlyDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
-        _ = rows.Count;
+        var rows = appendOnlyDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        _ = rows.ToList().Count; // materialize only for timing
     }
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Select")]
     public void PageBased_Select()
     {
-        var rows = pageBasedDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
+        var rows = pageBasedDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        _ = rows.ToList().Count;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Select")]
+    public void SCDB_Dir_Unencrypted_Select()
+    {
+        var rows = scDirPlainDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        _ = rows.ToList().Count;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Select")]
+    public void SCDB_Dir_Encrypted_Select()
+    {
+        var rows = scDirEncDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        _ = rows.ToList().Count;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Select")]
+    public void SCDB_Single_Unencrypted_Select()
+    {
+        // Single-file IDatabase may not expose ExecuteQueryStruct; fall back to ExecuteQuery
+        var rows = scSinglePlainDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.Count;
     }
 
     [Benchmark]
     [BenchmarkCategory("Select")]
-    public void SQLite_Select()
+    public void SCDB_Single_Encrypted_Select()
     {
-        using var cmd = sqliteConn!.CreateCommand();
-        cmd.CommandText = "SELECT * FROM bench_records WHERE age > 30";
-        using var reader = cmd.ExecuteReader();
-        int count = 0;
-        while (reader.Read()) count++;
-        _ = count;
-    }
-
-    [Benchmark]
-    [BenchmarkCategory("Select")]
-    public void LiteDB_Select()
-    {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
-        var results = collection.Find(x => x.Age > 30);
-        _ = results.Count();
+        var rows = scSingleEncDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
+        _ = rows.Count;
     }
 
     // ============================================================

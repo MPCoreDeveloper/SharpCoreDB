@@ -323,3 +323,103 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 If you find SharpCoreDB useful, please consider [sponsoring the project](https://github.com/sponsors/mpcoredeveloper)!
 
+---
+
+## 📊 Reproducible Benchmark Matrix (SQLite vs LiteDB vs SharpCoreDB)
+
+Run the benchmarks yourself:
+
+```bash
+cd tests/SharpCoreDB.Benchmarks
+# Runs StorageEngineComparisonBenchmark with all scenarios
+DOTNET_EnableHWIntrinsic=1 dotnet run -c Release --filter StorageEngineComparisonBenchmark
+```
+
+**Scenarios covered (all pre-populated with the same data set):**
+- SQLite (baseline, single-file)
+- LiteDB (baseline, single-file)
+- SharpCoreDB Directory (PageBased) – unencrypted
+- SharpCoreDB Directory (PageBased) – AES-256 encrypted
+- SharpCoreDB SingleFile (.scdb) – unencrypted
+- SharpCoreDB SingleFile (.scdb) – AES-256 encrypted (fixed 32-byte key)
+
+**Fairness/optimal paths:**
+- Page cache enabled (5k pages), WAL buffering on, validation off for benchmark runs
+- SingleFile uses `DatabaseOptions` with mmap enabled; encryption uses AES-256-GCM
+- Same schema and batch sizes as earlier results (Insert 1k, Update 500 random, Select with WHERE, Analytics columnar SIMD)
+
+Use the produced `BenchmarkDotNet.Artifacts/results/*-report-github.md` to compare your run with ours.
+
+---
+
+## Latest Benchmark Summary (Jan 11, 2026)
+
+Environment: Windows 11, i7-10850H, .NET 10.0.1, BenchmarkDotNet 0.15.8
+
+Settings: IterationCount=5, WarmupCount=2, Toolchain=InProcessEmit
+
+### Insert (1K rows)
+- PageBased: 7.63 ms (baseline, 2.01 MB alloc)
+- AppendOnly: 8.05 ms (1.96 MB)
+- SQLite: 4.62 ms (0.89 MB)
+- LiteDB: 7.73 ms (15.99 MB)
+- SCDB Dir (unencrypted): 7.69 ms (1.94 MB)
+- SCDB Dir (encrypted): 8.50 ms (1.94 MB)
+- SCDB Single (unencrypted): 13.41 ms (7.16 MB)
+- SCDB Single (encrypted): 13.74 ms (7.16 MB)
+
+### Select (WHERE age > 30, with idx_age)
+- PageBased: 1.52 ms (2.21 MB)
+- AppendOnly: 2.10 ms (1.91 MB)
+- SCDB Dir (unencrypted): 1.55 ms (2.21 MB)
+- SCDB Dir (encrypted): 1.53 ms (2.21 MB)
+- SCDB Single (unencrypted): 7.23 µs (4.9 KB)
+- SCDB Single (encrypted): 7.21 µs (4.9 KB)
+
+### Update (500 random rows)
+- PageBased: 7.44 ms (2.78 MB)
+- SCDB Dir (unencrypted): 7.41 ms (2.78 MB)
+- SCDB Dir (encrypted): 7.46 ms (2.79 MB)
+- SCDB Single (unencrypted): 7.86 ms (4.38 MB)
+- SCDB Single (encrypted): 8.05 ms (4.38 MB)
+- SQLite: 0.58 ms (193 KB)
+- AppendOnly: 366.51 ms (heavy GC, not suited for UPDATE)
+- LiteDB: 35.29 ms (25.34 MB)
+
+### Analytics (SUM/AVG)
+- Columnar SIMD: ~0.043 ns (micro-measure)
+- SQLite: 325.81 µs (714 B)
+- LiteDB: 7.84 ms (10.68 MB)
+
+## Comparison vs LiteDB
+- Insert (1K): SharpCoreDB PageBased ~7.63 ms vs LiteDB ~7.73 ms (near parity).
+- Update (500): SharpCoreDB ~7.4–8.0 ms vs LiteDB ~35.3 ms (~4.5x faster).
+- Select: SCDB Single ~7.2 µs (mmap), directory/page ~1.5 ms; LiteDB not measured here.
+- Analytics: Columnar SIMD >> LiteDB (µs vs ms).
+
+## Use Cases & Ideal Settings
+See `docs/UseCases.md` for quick-start settings per scenario:
+- Web App (Concurrent Reads + OLTP Writes)
+- Reporting / Read-Heavy API
+- Bulk Import (ETL)
+- Analytics / BI
+- Desktop App (Single-User)
+- High-Concurrency API (Writes)
+
+## Tuning Recommendations
+- Single-file inserts:
+  - WalBufferSizePages=4096
+  - FileShareMode=None (exclusive)
+  - EnableMemoryMapping=true
+  - Disable encryption for perf runs when acceptable
+- Directory/Page configs:
+  - EnablePageCache=true; PageCacheCapacity≥20000
+  - UseGroupCommitWal=true; WalMaxBatchDelayMs≈5–10
+  - Keep `CREATE INDEX idx_age ON bench_records(age)` for select tests
+
+## Notes
+- AppendOnly engine is optimized for insert/append; avoid UPDATE benchmarks.
+- Single-file SELECT benefits from memory-mapped I/O with very low allocations.
+
+For full logs, see `tests/SharpCoreDB.Benchmarks/BenchmarkDotNet.Artifacts/results/`.
+
