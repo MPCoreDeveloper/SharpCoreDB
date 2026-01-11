@@ -220,6 +220,12 @@ public sealed class SubqueryExecutor
             results = ApplyWhere(results, query.Where, outerRow);
         }
 
+        // Apply aggregates if present (for scalar subqueries)
+        if (query.Columns.Any(c => !string.IsNullOrEmpty(c.AggregateFunction)))
+        {
+            results = ApplyAggregates(results, query.Columns);
+        }
+
         // Apply GROUP BY
         if (query.GroupBy is not null)
         {
@@ -384,15 +390,45 @@ public sealed class SubqueryExecutor
     }
 
     /// <summary>
-    /// Applies GROUP BY (simplified implementation).
+    /// Applies GROUP BY clause.
+    /// Groups rows by the specified columns and returns one row per group.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private List<Dictionary<string, object>> ApplyGroupBy(
         List<Dictionary<string, object>> rows,
         GroupByNode groupBy)
     {
-        // Simplified: Return as-is (full GROUP BY requires aggregate support)
-        return rows;
+        if (groupBy.Columns.Count == 0)
+            return rows;
+
+        // Group by the specified columns
+        var groups = rows.GroupBy(row =>
+        {
+            // Create a key from the group-by column values
+            var keyParts = new List<object>();
+            foreach (var colRef in groupBy.Columns)
+            {
+                var columnName = colRef.ColumnName;
+                if (row.TryGetValue(columnName, out var value))
+                {
+                    keyParts.Add(value ?? DBNull.Value);
+                }
+                else
+                {
+                    keyParts.Add(DBNull.Value);
+                }
+            }
+            return string.Join("|", keyParts.Select(v => v?.ToString() ?? "NULL"));
+        });
+
+        // Return one row per group (first row from each group)
+        var result = new List<Dictionary<string, object>>();
+        foreach (var group in groups)
+        {
+            result.Add(new Dictionary<string, object>(group.First()));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -423,6 +459,63 @@ public sealed class SubqueryExecutor
         return firstItem.IsAscending
             ? rows.OrderBy(r => r.TryGetValue(columnName, out var v) ? v : null).ToList()
             : rows.OrderByDescending(r => r.TryGetValue(columnName, out var v) ? v : null).ToList();
+    }
+
+    /// <summary>
+    /// Applies aggregate functions to columns.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static List<Dictionary<string, object>> ApplyAggregates(
+        List<Dictionary<string, object>> rows,
+        List<ColumnNode> columns)
+    {
+        var result = new Dictionary<string, object>();
+
+        foreach (var column in columns)
+        {
+            if (string.IsNullOrEmpty(column.AggregateFunction))
+                continue;
+
+            var func = column.AggregateFunction.ToUpperInvariant();
+            var columnName = column.Name;
+
+            switch (func)
+            {
+                case "AVG":
+                    var avgValues = rows
+                        .Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Select(r => Convert.ToDecimal(r[columnName]))
+                        .ToList();
+                    result[columnName] = avgValues.Count > 0 ? avgValues.Sum() / avgValues.Count : 0m;
+                    break;
+                case "SUM":
+                    var sumValues = rows
+                        .Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Select(r => Convert.ToDecimal(r[columnName]));
+                    result[columnName] = sumValues.Sum();
+                    break;
+                case "COUNT":
+                    var count = rows.Count(r => r.TryGetValue(columnName, out var v) && v is not null);
+                    result[columnName] = (long)count;
+                    break;
+                case "MIN":
+                    var minValues = rows
+                        .Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Select(r => Convert.ToDecimal(r[columnName]));
+                    result[columnName] = minValues.Any() ? minValues.Min() : 0m;
+                    break;
+                case "MAX":
+                    var maxValues = rows
+                        .Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Select(r => Convert.ToDecimal(r[columnName]));
+                    result[columnName] = maxValues.Any() ? maxValues.Max() : 0m;
+                    break;
+                default:
+                    throw new NotSupportedException($"Aggregate function {func} not supported");
+            }
+        }
+
+        return [result];
     }
 
     /// <summary>

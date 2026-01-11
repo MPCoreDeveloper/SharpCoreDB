@@ -266,8 +266,8 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes CREATE INDEX statement.
-    /// ENHANCED: Supports BTREE and HASH index types.
-    /// Syntax: CREATE INDEX idx_name ON table(column) [USING BTREE|HASH]
+    /// ENHANCED: Supports BTREE and HASH index types, and UNIQUE indexes.
+    /// Syntax: CREATE [UNIQUE] INDEX idx_name ON table(column) [USING BTREE|HASH]
     /// </summary>
     private void ExecuteCreateIndex(string sql, string[] parts, IWAL? wal)
     {
@@ -284,8 +284,18 @@ public partial class SqlParser
             throw new InvalidOperationException("CREATE INDEX requires ON clause");
         }
 
-        // Extract index NAME (e.g., "idx_email")
-        var indexName = parts[2];
+        // Determine if this is CREATE UNIQUE INDEX (parts[1] == "UNIQUE") or CREATE INDEX
+        // For CREATE INDEX: parts[2] is the index name
+        // For CREATE UNIQUE INDEX: parts[3] is the index name
+        var isUnique = parts.Length > 1 && parts[1].Equals("UNIQUE", StringComparison.OrdinalIgnoreCase);
+        var indexNamePosition = isUnique ? 3 : 2;
+        
+        if (indexNamePosition >= parts.Length)
+        {
+            throw new InvalidOperationException("CREATE INDEX requires an index name");
+        }
+        
+        var indexName = parts[indexNamePosition];
 
         // Extract table name - handle case where parenthesis is attached (e.g., "users(email)")
         var tableNameRaw = parts[onIdx + 1];
@@ -334,14 +344,14 @@ public partial class SqlParser
             }
         }
 
-        // Create the appropriate index type
+        // Create the appropriate index type with uniqueness constraint
         if (indexType == IndexType.BTree)
         {
-            this.tables[tableName].CreateBTreeIndex(indexName, columnName);
+            this.tables[tableName].CreateBTreeIndex(indexName, columnName, isUnique);
         }
         else
         {
-            this.tables[tableName].CreateHashIndex(indexName, columnName);
+            this.tables[tableName].CreateHashIndex(indexName, columnName, isUnique);
         }
         
         wal?.Log(sql);

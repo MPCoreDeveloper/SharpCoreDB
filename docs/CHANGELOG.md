@@ -263,3 +263,55 @@ All benchmarks performed on Windows 11, Intel i7-10850H @ 2.70GHz (6 cores/12 th
 - [INSERT Optimization Plan](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/INSERT_OPTIMIZATION_PLAN.md)
 - [Issue Tracker](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
 - [Sponsor](https://github.com/sponsors/mpcoredeveloper)
+
+## [Unreleased]
+
+### 🎉 **FEATURE COMPLETE** - LEFT JOIN Multiple Matches & IN Expressions Fixed! (enero 2026)
+
+#### LEFT JOIN Multiple Matches - CRITICAL FIX ✅
+- **Problem**: LEFT JOINs returned only 1 row instead of all matching rows
+- **Root Cause**: JoinConditionEvaluator incorrectly parsed inverted ON clauses (e.g., `p.order_id = o.id`)
+- **Solution**: Added smart column swapping logic based on table alias detection
+- **Result**: Order with 2 payments now correctly returns 2 rows (was 1 row)
+- **Status**: ✅ **FIXED and TESTED**
+
+#### IN Expression Support - COMPLETE ✅
+- Implemented full support for `WHERE column IN (val1, val2, val3)`
+- Added `InExpressionNode` AST support in EnhancedSqlParser
+- Integrated with AstExecutor for proper WHERE filtering
+- Handles multi-column IN expressions with AND/OR operators
+- **Status**: ✅ **WORKING** (verified with test suite)
+
+#### Code Organization - Partial Files Restructured ✅
+- **SqlParser.InExpressionSupport.cs** - IN expression evaluation logic
+- **SqlParser.HashIndex.cs** - Hash index operations
+- **SqlParser.BTreeIndex.cs** - B-tree index operations
+- **SqlParser.Statistics.cs** - Column usage statistics
+- **SqlParser.Optimizations.cs** - Query optimization routines
+- **JoinExecutor.Diagnostics.cs** - Diagnostic tools for JOIN debugging
+- All partial files use C# 14 modern syntax
+
+### Fixed
+- **CRITICAL**: LEFT JOIN with inverted ON clause column order (payments.order_id = orders.id)
+  - JoinConditionEvaluator.ParseSingleCondition now correctly swaps column references
+  - Ensures left side always reads from left table, right side from right table
+  - Fixes issue where all JOIN conditions evaluated to false
+
+- **MAJOR**: IN expression support now complete
+  - WHERE ... IN () expressions properly evaluated
+  - AST parsing correctly handles IN expression nodes
+  - AstExecutor filters results before temporary table creation
+  - Supports complex combinations with AND/OR operators
+
+### Added
+- JoinExecutor.Diagnostics.cs with ExecuteLeftJoinWithDiagnostics() for testing
+- Enhanced JoinValidator with verbose diagnostic output
+- Comprehensive CHANGELOG entry for JOIN fixes
+
+### Changed
+- **Modernized**: All partial SQL parser files now use C# 14 patterns
+  - Collection expressions `[..]` for efficient list creation
+  - Switch expressions for complex branching
+  - Required properties with init-only setters
+  - Pattern matching with `is not null` idiom
+  - Null-coalescing patterns

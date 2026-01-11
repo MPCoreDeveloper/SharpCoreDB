@@ -147,6 +147,18 @@ public partial class PageManager : IDisposable
         public int FreeSpace => FreeSpaceOffset - PAGE_HEADER_SIZE - (RecordCount * SLOT_SIZE);
 
         /// <summary>
+        /// Reinitializes the page buffer if it has been disposed.
+        /// Called by ObjectPool when returning a page for reuse.
+        /// </summary>
+        internal void EnsureBufferAllocated()
+        {
+            if (_data == null)
+            {
+                _data = _pool.Rent(PAGE_SIZE);
+            }
+        }
+
+        /// <summary>
         /// Serializes page to byte array (8KB) - uses ArrayPool for buffer.
         /// Optimized: Zero-copy serialization with pooled buffer.
         /// </summary>
@@ -371,6 +383,14 @@ public partial class PageManager : IDisposable
             // Clear the page before returning to pool
             if (obj != null)
             {
+                // ✅ FIX: Ensure the page has a valid buffer after being disposed
+                // When a page is disposed, its _data buffer is returned to ArrayPool and set to null.
+                // We need to rent a new buffer so the page is ready for reuse.
+                obj.EnsureBufferAllocated();
+                
+                // ✅ FIX: Clear the page data buffer to prevent leaking data between reuses
+                obj.Data.Clear();
+                
                 obj.IsDirty = false;
                 obj.LSN = 0;
                 obj.RecordCount = 0;
@@ -412,6 +432,10 @@ public partial class PageManager : IDisposable
         headerPage.PrevPageId = 0;
         headerPage.IsDirty = true;
 
+        // ✅ FIX: Zero out the entire page data buffer to prevent reading garbage
+        // ArrayPool.Rent() does NOT guarantee zeroed buffers!
+        headerPage.Data.Clear();
+
         var dataStart = PAGE_HEADER_SIZE;
         BinaryPrimitives.WriteUInt64LittleEndian(headerPage.Data[dataStart..], 0x5348415250434F52);
         BinaryPrimitives.WriteUInt32LittleEndian(headerPage.Data[(dataStart + 8)..], 1);
@@ -421,6 +445,9 @@ public partial class PageManager : IDisposable
 
         WritePage(headerPage);
         FlushDirtyPages();
+        
+        // ✅ FIX: Ensure file is flushed to disk immediately after initialization
+        pagesFile.Flush(flushToDisk: true);
 
         freeListHead = 0;
     }
@@ -1398,7 +1425,7 @@ public partial class PageManager : IDisposable
                 if (storedChecksum != computedChecksum)
                     throw new InvalidDataException($"Page {page.PageId} checksum mismatch");
 
-                buffer.AsSpan(PAGE_HEADER_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE).CopyTo(page.Data);
+                buffer.AsSpan(PAGE_HEADER_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE).CopyTo(page.Data[PAGE_HEADER_SIZE..]);
 
                 return page;
             }
@@ -1621,18 +1648,20 @@ public partial class PageManager : IDisposable
             {
                 FlushDirtyPages();
 
-                // Dispose all cached pages to return buffers to pools
-                foreach (var page in clockCache.GetAllPages())
-                {
-                    page.Dispose();
-                    pagePool.Return(page);
-                }
-
+                // ✅ FIX: Flush and close file BEFORE disposing pages
+                // This ensures page buffers aren't returned to pool until file I/O is complete
                 if (pagesFile != null)
                 {
                     pagesFile.Flush(flushToDisk: true);
                     pagesFile.Close();
                     pagesFile.Dispose();
+                }
+
+                // Now safe to dispose pages and return buffers to pools
+                foreach (var page in clockCache.GetAllPages())
+                {
+                    page.Dispose();
+                    pagePool.Return(page);
                 }
             }
             catch

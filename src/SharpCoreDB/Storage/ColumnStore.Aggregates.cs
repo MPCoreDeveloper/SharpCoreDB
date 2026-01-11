@@ -231,7 +231,7 @@ public sealed partial class ColumnStore<T>
             for (; i < end; i++) partialSum += data[i];
             partialSums[threadId] = partialSum;
         });
-        return unchecked((int)partialSums.Sum());
+        return partialSums.Sum() > int.MaxValue ? int.MaxValue : (int)partialSums.Sum();
     }
 
     private static long SumInt64ParallelSIMD(long[] data)
@@ -470,7 +470,7 @@ public sealed partial class ColumnStore<T>
 
     private static int SumInt32SIMDDirect(int[] data)
     {
-        int sum = 0;
+        long sum = 0;
         int i = 0;
 
         if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
@@ -481,18 +481,10 @@ public sealed partial class ColumnStore<T>
             for (int j = 0; j < Vector256<int>.Count; j++)
                 sum += vsum[j];
         }
-        else if (Vector128.IsHardwareAccelerated && data.Length >= Vector128<int>.Count)
-        {
-            var vsum = Vector128<int>.Zero;
-            for (; i <= data.Length - Vector128<int>.Count; i += Vector128<int>.Count)
-                vsum = Vector128.Add(vsum, Vector128.Create(data.AsSpan(i)));
-            for (int j = 0; j < Vector128<int>.Count; j++)
-                sum += vsum[j];
-        }
 
         for (; i < data.Length; i++)
             sum += data[i];
-        return sum;
+        return (int)sum;
     }
 
     private static long SumInt64SIMDDirect(long[] data)

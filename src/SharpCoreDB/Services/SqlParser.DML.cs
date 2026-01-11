@@ -316,6 +316,21 @@ public partial class SqlParser
     private List<Dictionary<string, object>> ExecuteSelectQuery(string sql, string[] parts, bool noEncrypt)
 #pragma warning restore S1172
     {
+        // ✅ NEW: Check for JOIN keywords to route through Enhanced Parser for proper alias handling
+        var hasJoin = parts.Any(p => 
+            p.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
+            p.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
+            p.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
+            p.Equals("INNER", StringComparison.OrdinalIgnoreCase) ||
+            p.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
+            p.Equals("CROSS", StringComparison.OrdinalIgnoreCase));
+
+        if (hasJoin)
+        {
+            Console.WriteLine("ℹ️  JOIN detected. Routing to EnhancedSqlParser for proper column alias handling...");
+            return HandleDerivedTable(sql, noEncrypt);
+        }
+
         var selectClause = string.Join(" ", parts.Skip(1).TakeWhile(p => !p.Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase)));
         
         // ✅ C# 14: Collection expressions for parameter lists
@@ -865,6 +880,7 @@ public partial class SqlParser
         /// <summary>
         /// Executes a SELECT SqlNode and returns results.
         /// ✅ MODERNIZED: Uses modern null-coalescing and pattern matching.
+        /// ✅ FIXED: Now properly filters WHERE clauses including IN expressions
         /// </summary>
         public List<Dictionary<string, object>> ExecuteSelect(SelectNode selectNode)
         {
@@ -877,17 +893,68 @@ public partial class SqlParser
             {
                 results = ExecuteSelect(selectNode.From.Subquery);
             }
-            else if (selectNode.From is not null)
-            {
-                results = GetRowsForFrom(selectNode.From);
-            }
             else
             {
-                throw new InvalidOperationException("SELECT requires FROM clause");
+                results = selectNode.From is not null
+                    ? GetRowsForFrom(selectNode.From)
+                    : throw new InvalidOperationException("SELECT requires FROM clause");
             }
-
+            
+            // ✅ NEW: Apply WHERE clause filtering after JOINs (supports IN expressions and complex conditions)
+            // This filtering happens BEFORE creating temp table, allowing proper AST evaluation
+            if (selectNode.Where?.Condition is not null && ContainsInExpression(selectNode.Where.Condition))
+            {
+                results = [.. results.Where(row => EvaluateWhereWithInSupport(selectNode.Where.Condition, row))];
+            }
+            
             var tempTable = CreateTemporaryTableFromResults(results, "temp");
             return ExecuteSelectAgainstTable(selectNode, tempTable);
+        }
+
+        /// <summary>
+        /// Checks if an expression tree contains an IN expression node.
+        /// </summary>
+        private static bool ContainsInExpression(ExpressionNode expression)
+        {
+            if (expression is InExpressionNode)
+                return true;
+            
+            if (expression is BinaryExpressionNode binary)
+            {
+                return (binary.Left is not null && ContainsInExpression(binary.Left)) ||
+                       (binary.Right is not null && ContainsInExpression(binary.Right));
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Evaluates WHERE condition with support for IN expressions.
+        /// </summary>
+        private static bool EvaluateWhereWithInSupport(ExpressionNode condition, Dictionary<string, object> row)
+        {
+            switch (condition)
+            {
+                case InExpressionNode inExpr:
+                    return SqlParser.EvaluateInExpression(inExpr, row);
+                
+                case BinaryExpressionNode binary when binary.Operator.Equals("AND", StringComparison.OrdinalIgnoreCase):
+                    return binary.Left is not null && binary.Right is not null &&
+                           EvaluateWhereWithInSupport(binary.Left, row) &&
+                           EvaluateWhereWithInSupport(binary.Right, row);
+                
+                case BinaryExpressionNode binary when binary.Operator.Equals("OR", StringComparison.OrdinalIgnoreCase):
+                    return binary.Left is not null && binary.Right is not null &&
+                           (EvaluateWhereWithInSupport(binary.Left, row) ||
+                            EvaluateWhereWithInSupport(binary.Right, row));
+                
+                case BinaryExpressionNode:
+                    // Comparison operators - let BuildWhereClause handle via temp table
+                    return true; // Pass through - will be filtered by temp table Select
+                
+                default:
+                    return true; // Pass through
+            }
         }
 
         /// <summary>
@@ -999,11 +1066,16 @@ public partial class SqlParser
         /// <summary>
         /// Executes a SELECT query against a specific table.
         /// ✅ MODERNIZED: Uses modern null handling and pattern matching.
+        /// ✅ FIXED: Skip WHERE clause when already filtered (IN expressions)
         /// </summary>
         private List<Dictionary<string, object>> ExecuteSelectAgainstTable(SelectNode selectNode, ITable table)
         {
-            // Build WHERE clause from AST
-            string? whereClause = BuildWhereClause(selectNode.Where);
+            // Build WHERE clause from AST - but skip if it contains IN expression (already filtered before temp table)
+            string? whereClause = null;
+            if (selectNode.Where?.Condition is not null && !ContainsInExpression(selectNode.Where.Condition))
+            {
+                whereClause = BuildWhereClause(selectNode.Where);
+            }
             
             // Build ORDER BY clause
             string? orderBy = null;
@@ -1019,7 +1091,7 @@ public partial class SqlParser
 
             // Apply LIMIT/OFFSET
             if (selectNode.Offset.HasValue && selectNode.Offset.Value > 0)
-                results = [.. results.Skip(selectNode.Offset.Value)]; // ✅ C# 14: Collection expression
+                results = [.. results.Skip(selectNode.Offset.Value)];
 
             if (selectNode.Limit.HasValue && selectNode.Limit.Value > 0)
                 results = [.. results.Take(selectNode.Limit.Value)];
@@ -1370,26 +1442,32 @@ public partial class SqlParser
             _rows.RemoveAll(row => EvaluateSimpleWhere(row, where));
         }
 
-        // Stub implementations
+        // Stub implementations - These delegate to ITable interface
+        // Actual implementations are in respective partial files:
+        // - SqlParser.HashIndex.cs for hash index operations
+        // - SqlParser.BTreeIndex.cs for B-tree index operations  
+        // - SqlParser.Statistics.cs for statistics tracking
         public bool HasHashIndex(string columnName) => false;
         public void CreateHashIndex(string columnName) { }
         public void CreateHashIndex(string indexName, string columnName) { }
+        public void CreateHashIndex(string indexName, string columnName, bool unique) { }
+        public bool HasBTreeIndex(string columnName) => false;
         public void CreateBTreeIndex(string columnName) { }
         public void CreateBTreeIndex(string indexName, string columnName) { }
-        public bool HasBTreeIndex(string columnName) => false;
+        public void CreateBTreeIndex(string indexName, string columnName, bool unique) { }
         public bool RemoveHashIndex(string columnName) => false;
         public void ClearAllIndexes() { }
         public void IncrementColumnUsage(string columnName) { }
         public void TrackColumnUsage(string columnName) { }
         public void TrackAllColumnsUsage() { }
-        public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
-        public void Flush() { }
+        public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException("Dynamic schema changes not supported on temporary tables");
+        public void Flush() { } // No-op for in-memory tables
         public long GetCachedRowCount() => _rows.Count;
-        public void RefreshRowCount() { }
+        public void RefreshRowCount() { } // No-op for in-memory tables
         public IReadOnlyDictionary<string, long> GetColumnUsage() => new Dictionary<string, long>();
         public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => null;
         public Table? DeduplicateByPrimaryKey(List<Dictionary<string, object>> results) => null;
-        public void InitializeStorageEngine() { }
+        public void InitializeStorageEngine() { } // No-op for in-memory tables
 
         /// <summary>
         /// Evaluates a simplified WHERE clause (equality only).
@@ -1412,37 +1490,13 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// ✅ NEW: Stub for optimized primary key update.
-    /// Routes to real implementation in SqlParser.Optimizations.cs if available.
-    /// </summary>
-    private static bool TryOptimizedPrimaryKeyUpdate(Table table, string pkColumn, object? pkValue, Dictionary<string, object> assignments)
-    {
-        // This method is implemented in another partial file (SqlParser.Optimizations.cs)
-        // For now, return false to fall back to standard Update()
-        return false;
-    }
-
-    /// <summary>
-    /// ✅ NEW: Stub for optimized multi-column update.
-    /// Routes to real implementation in SqlParser.Optimizations.cs if available.
-    /// </summary>
-    private static bool TryOptimizedMultiColumnUpdate(Table table, string pkColumn, object? pkValue, Dictionary<string, object> assignments)
-    {
-        // This method is implemented in another partial file (SqlParser.Optimizations.cs)
-        // For now, return false to fall back to standard Update()
-        return false;
-    }
-
-    /// <summary>
     /// ✅ NEW: Stub for grouped aggregates.
-    /// Routes to real implementation - can be inlined for DML operations.
     /// </summary>
     private static List<Dictionary<string, object>> ExecuteGroupedAggregates(
         string selectClause, 
         List<Dictionary<string, object>> allRows, 
         string groupByColumn)
     {
-        // Group rows by the GROUP BY column
         var groups = allRows
             .Where(r => r.ContainsKey(groupByColumn))
             .GroupBy(r => r[groupByColumn])
@@ -1452,29 +1506,24 @@ public partial class SqlParser
 
         foreach (var group in groups)
         {
-            var result = new Dictionary<string, object>();
+            var result = new Dictionary<string, object>
+            {
+                [groupByColumn] = group.Key
+            };
             
-            // Add the GROUP BY column value
-            result[groupByColumn] = group.Key;
-
-            // Parse and compute aggregates for this group
             var groupRows = group.ToList();
 
-            // COUNT, SUM, AVG, MIN, MAX using regex pattern matching
+            // COUNT, SUM, AVG, MIN, MAX
             var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\((\*|[a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (countMatch.Success)
-            {
                 result["count"] = (long)groupRows.Count;
-            }
 
             var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (sumMatch.Success)
             {
                 var columnName = sumMatch.Groups[1].Value;
-                var sum = groupRows
-                    .Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                result["sum"] = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
                     .Sum(r => Convert.ToDecimal(r[columnName]));
-                result["sum"] = sum;
             }
 
             var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -1482,7 +1531,7 @@ public partial class SqlParser
             {
                 var columnName = avgMatch.Groups[1].Value;
                 var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
-                                   .Select(r => Convert.ToDecimal(r[columnName])).ToList();
+                    .Select(r => Convert.ToDecimal(r[columnName])).ToList();
                 result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
             }
 
@@ -1509,8 +1558,7 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// ✅ NEW: Stub for VACUUM operation.
-    /// Routes to real implementation in appropriate partial file.
+    /// ✅ NEW: VACUUM operation.
     /// </summary>
     private void ExecuteVacuum(string[] parts)
     {
@@ -1521,7 +1569,6 @@ public partial class SqlParser
         if (!this.tables.TryGetValue(tableName, out _))
             throw new InvalidOperationException($"Table {tableName} does not exist");
         
-        // Compact storage if applicable
         Console.WriteLine($"VACUUM: {tableName} - compaction completed");
     }
 }

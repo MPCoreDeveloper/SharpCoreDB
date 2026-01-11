@@ -60,9 +60,18 @@ public class TempDatabaseFixture : IDisposable
             if (disposing)
             {
                 // Clean up the temporary database
-                if (Directory.Exists(_tempDbPath))
+                try
                 {
-                    Directory.Delete(_tempDbPath, true);
+                    if (Directory.Exists(_tempDbPath))
+                    {
+                        // Give OS a moment to release file handles
+                        System.Threading.Thread.Sleep(100);
+                        Directory.Delete(_tempDbPath, true);
+                    }
+                }
+                catch
+                {
+                    // Best effort cleanup
                 }
                 if (_serviceProvider is IDisposable disposableProvider)
                 {

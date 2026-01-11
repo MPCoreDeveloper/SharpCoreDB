@@ -6,12 +6,14 @@
 namespace SharpCoreDB.Storage;
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 
 /// <summary>
 /// Write-Ahead Log (WAL) manager for crash recovery.
@@ -266,32 +268,52 @@ internal sealed class WalManager : IDisposable
         return _provider.GetInternalFileStream();
     }
 
-    private static void WriteWalEntry(Span<byte> buffer, WalLogEntry entry)
+    private static unsafe void WriteWalEntry(Span<byte> buffer, WalLogEntry entry)
     {
-        var walEntry = new WalEntry
+        if (buffer.Length < WalEntry.SIZE)
         {
-            Lsn = entry.Lsn,
-            TransactionId = entry.TransactionId,
-            Timestamp = (ulong)entry.Timestamp,
-            Operation = (ushort)entry.Operation,
-            BlockIndex = 0,
-            PageId = 0,
-            DataLength = (ushort)(entry.DataLength > 4000 ? 4000 : entry.DataLength)
-        };
+            throw new ArgumentException($"Buffer too small: {buffer.Length} < {WalEntry.SIZE}");
+        }
 
-        // Set block name (truncated to 32 bytes)
+        int offset = 0;
+
+        // Write primitive fields
+        BinaryPrimitives.WriteUInt64LittleEndian(buffer[offset..], entry.Lsn);
+        offset += 8;
+        
+        BinaryPrimitives.WriteUInt64LittleEndian(buffer[offset..], entry.TransactionId);
+        offset += 8;
+        
+        BinaryPrimitives.WriteUInt64LittleEndian(buffer[offset..], (ulong)entry.Timestamp);
+        offset += 8;
+        
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], (ushort)entry.Operation);
+        offset += 2;
+        
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], 0); // BlockIndex
+        offset += 2;
+        
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], 0); // PageId
+        offset += 2;
+        
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], (ushort)(entry.DataLength > 4000 ? 4000 : entry.DataLength));
+        offset += 2;
+
+        // Write block name (32 bytes)
+        var blockNameSpan = buffer.Slice(offset, 32);
+        blockNameSpan.Clear();
         if (!string.IsNullOrEmpty(entry.BlockName))
         {
             var nameBytes = Encoding.UTF8.GetBytes(entry.BlockName);
             var nameSpan = nameBytes.AsSpan(0, Math.Min(nameBytes.Length, 32));
-            nameSpan.CopyTo(walEntry.BlockName);
+            nameSpan.CopyTo(blockNameSpan);
         }
+        offset += 32;
 
-        // Set checksum
-        var checksum = SHA256.HashData(buffer[..(WalEntry.SIZE - 32)]);
-        checksum.CopyTo(walEntry.Checksum);
-
-        MemoryMarshal.Write(buffer, in walEntry);
+        // Calculate and write checksum (32 bytes)
+        var checksumSpan = buffer.Slice(offset, 32);
+        var checksum = SHA256.HashData(buffer[..(offset)]);
+        checksum.CopyTo(checksumSpan);
     }
 }
 
@@ -342,6 +364,7 @@ internal struct WalHeader
     public ulong TailOffset;
 }
 
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
 internal struct WalEntry
 {
     public const int SIZE = 64;
@@ -353,14 +376,7 @@ internal struct WalEntry
     public ushort BlockIndex;
     public ushort PageId;
     public ushort DataLength;
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-    public byte[] BlockName;
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-    public byte[] Checksum;
-
-    public WalEntry()
-    {
-        BlockName = new byte[32];
-        Checksum = new byte[32];
-    }
+    public unsafe fixed byte BlockName[32];
+    public unsafe fixed byte Checksum[32];
 }
+#pragma warning restore CS0649

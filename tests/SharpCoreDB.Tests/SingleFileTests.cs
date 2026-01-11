@@ -6,6 +6,7 @@
 using Xunit;
 using SharpCoreDB;
 using System.IO;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SharpCoreDB.Tests;
 
@@ -19,9 +20,10 @@ public class SingleFileTests : IDisposable
 
     public SingleFileTests()
     {
-#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type
-        _factory = new DatabaseFactory(null);
-#pragma warning restore CS8625
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var provider = services.BuildServiceProvider();
+        _factory = provider.GetRequiredService<DatabaseFactory>();
         _testFilePath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid():N}.scdb");
     }
 

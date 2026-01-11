@@ -81,6 +81,53 @@ internal sealed class JoinValidator
             Console.WriteLine($"  {string.Join(", ", row.Select(kv => $"{kv.Key}={kv.Value ?? "NULL"}"))}");
         }
         
+        // ✅ NOW TEST JUST THE JOIN PART WITHOUT SELECT/ORDER BY COMPLICATIONS
+        Console.WriteLine("\n[DIAGNOSTIC] Raw JOIN test (bypass full query pipeline):");
+        var allOrdersRaw = db.ExecuteQuery("SELECT * FROM orders");
+        var allPaymentsRaw = db.ExecuteQuery("SELECT * FROM payments");
+        
+        Console.WriteLine($"[DIAGNOSTIC] Total orders: {allOrdersRaw.Count}");
+        Console.WriteLine($"[DIAGNOSTIC] Total payments: {allPaymentsRaw.Count}");
+        
+        // Filter to orders 1-3
+        var orders123Data = allOrdersRaw.Where(r => 
+        {
+            var id = r["id"].ToString();
+            return id == "1" || id == "2" || id == "3";
+        }).ToList();
+        
+        Console.WriteLine($"\n[DIAGNOSTIC] Orders 1-3 data:");
+        foreach (var order in orders123Data)
+        {
+            Console.WriteLine($"  Order {order["id"]}: customer_id={order["customer_id"]}, amount={order["amount"]}");
+        }
+        
+        Console.WriteLine($"\n[DIAGNOSTIC] All payments data:");
+        foreach (var payment in allPaymentsRaw)
+        {
+            Console.WriteLine($"  Payment {payment["id"]}: order_id={payment["order_id"]}, method={payment["method"]}");
+        }
+        
+        // Manual match checking
+        Console.WriteLine($"\n[DIAGNOSTIC] Expected matches (manually calculated):");
+        foreach (var order in orders123Data)
+        {
+            var orderId = order["id"].ToString();
+            var matchingPayments = allPaymentsRaw.Where(p => p["order_id"].ToString() == orderId).ToList();
+            if (matchingPayments.Count == 0)
+            {
+                Console.WriteLine($"  Order {orderId}: NO MATCHES (should emit 1 NULL row)");
+            }
+            else
+            {
+                Console.WriteLine($"  Order {orderId}: {matchingPayments.Count} matches");
+                foreach (var payment in matchingPayments)
+                {
+                    Console.WriteLine($"    - Payment {payment["id"]}: {payment["method"]}");
+                }
+            }
+        }
+        
         // ✅ Now test WITH ORDER BY
         Console.WriteLine("\n[DIAGNOSTIC] Testing LEFT JOIN WITH ORDER BY:");
         var sql = @"SELECT o.id as order_id, o.customer_id, p.id as payment_id, p.method

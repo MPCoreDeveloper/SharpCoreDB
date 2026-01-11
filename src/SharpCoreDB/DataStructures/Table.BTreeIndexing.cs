@@ -62,14 +62,15 @@ public partial class Table
 
     /// <summary>
     /// Creates a named B-tree index on the specified column.
-    /// Supports SQL syntax: CREATE INDEX idx_name ON table(column) USING BTREE.
+    /// Supports SQL syntax: CREATE [UNIQUE] INDEX idx_name ON table(column) USING BTREE.
     /// </summary>
     /// <param name="indexName">The index name (e.g., "idx_age_btree").</param>
     /// <param name="columnName">The column name to index (e.g., "age").</param>
-    public void CreateBTreeIndex(string indexName, string columnName)
+    /// <param name="isUnique">Whether to enforce uniqueness (default: false).</param>
+    public void CreateBTreeIndex(string indexName, string columnName, bool isUnique = false)
     {
 #if DEBUG
-        Console.WriteLine($"[BTREE] CreateBTreeIndex called: indexName='{indexName}', columnName='{columnName}'");
+        Console.WriteLine($"[BTREE] CreateBTreeIndex called: indexName='{indexName}', columnName='{columnName}', isUnique={isUnique}");
 #endif
 
         CreateBTreeIndex(columnName);
@@ -81,7 +82,7 @@ public partial class Table
             this.indexNameToColumn[indexName] = columnName;
             
 #if DEBUG
-            Console.WriteLine($"[BTREE] ✅ Named index '{indexName}' mapped to column '{columnName}'");
+            Console.WriteLine($"[BTREE] ✅ Named index '{indexName}' mapped to column '{columnName}' (unique={isUnique})");
 #endif
         }
         finally

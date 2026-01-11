@@ -36,7 +36,7 @@ public partial class Table
             return; // Already registered
         
         var colIdx = this.Columns.IndexOf(columnName);
-        var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx]);
+        var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], false);
         
         this.rwLock.EnterWriteLock();
         try
@@ -57,8 +57,9 @@ public partial class Table
     /// </summary>
     /// <param name="indexName">The index name (e.g., "idx_email").</param>
     /// <param name="columnName">The column name to index (e.g., "email").</param>
+    /// <param name="isUnique">Whether to enforce uniqueness (default: false).</param>
     /// <exception cref="InvalidOperationException">Thrown when column doesn't exist or index name already used.</exception>
-    public void CreateHashIndex(string indexName, string columnName)
+    public void CreateHashIndex(string indexName, string columnName, bool isUnique = false)
     {
         if (!this.Columns.Contains(columnName)) 
             throw new InvalidOperationException($"Column {columnName} not found");
@@ -74,7 +75,7 @@ public partial class Table
             if (!this.registeredIndexes.ContainsKey(columnName))
             {
                 var colIdx = this.Columns.IndexOf(columnName);
-                var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx]);
+                var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], isUnique);
                 this.registeredIndexes[columnName] = metadata;
             }
             
@@ -460,7 +461,7 @@ public partial class Table
     /// <summary>
     /// Metadata for a registered hash index (not yet loaded).
     /// </summary>
-    private sealed record IndexMetadata(string ColumnName, DataType ColumnType);
+    private sealed record IndexMetadata(string ColumnName, DataType ColumnType, bool IsUnique = false);
 
     private sealed class IndexManager : IDisposable
     {

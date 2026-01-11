@@ -62,6 +62,7 @@ public class DatabaseFactory(IServiceProvider services)
         
         // Auto-detect storage mode by file extension
         var options = DetectStorageMode(dbPath, config);
+        options.IsReadOnly = isReadOnly;
         
         return CreateWithOptions(dbPath, masterPassword, options);
     }
@@ -104,7 +105,7 @@ public class DatabaseFactory(IServiceProvider services)
     {
         // For now, use existing Database class (will be refactored to use DirectoryStorageProvider)
         var config = options.DatabaseConfig ?? DatabaseConfig.Default;
-        return new Database(services, dbPath, masterPassword, false, config);
+        return new Database(services, dbPath, masterPassword, options.IsReadOnly, config);
     }
 
     /// <summary>
@@ -224,13 +225,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         // Handle basic queries
         var upperSql = sql.Trim().ToUpperInvariant();
         
-        if (upperSql.Contains("SELECT"))
-        {
-            // Use SingleFileSqlParser for queries
-            var sqlParser = new SingleFileSqlParser(this, _tableDirectoryManager);
-            return sqlParser.ExecuteQuery(sql, parameters ?? new Dictionary<string, object?>());
-        }
-        else if (upperSql.Contains("STORAGE"))
+        // ✅ FIX: Check for special STORAGE table query FIRST (before general SELECT routing)
+        // This handles: SELECT * FROM STORAGE, SELECT COUNT(*) FROM STORAGE, etc.
+        if (upperSql.Contains("FROM STORAGE") || upperSql.Contains("FROM[STORAGE]"))
         {
             // Return storage statistics
             var stats = GetStorageStatistics();
@@ -245,6 +242,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
                     ["BlockCount"] = stats.BlockCount
                 }
             ];
+        }
+        else if (upperSql.Contains("SELECT"))
+        {
+            // Use SingleFileSqlParser for queries
+            var sqlParser = new SingleFileSqlParser(this, _tableDirectoryManager);
+            return sqlParser.ExecuteQuery(sql, parameters ?? new Dictionary<string, object?>());
         }
         
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
@@ -561,6 +564,24 @@ internal class SingleFileTable : ITable
         _storageProvider.WriteBlockAsync(_dataBlockName, data).GetAwaiter().GetResult();
     }
 
+    public long[] InsertBatch(List<Dictionary<string, object>> rows)
+    {
+        // Not implemented for single-file storage - fall back to individual inserts
+        var positions = new long[rows.Count];
+        for (int i = 0; i < rows.Count; i++)
+        {
+            Insert(rows[i]);
+            positions[i] = i;
+        }
+        return positions;
+    }
+
+    public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount)
+    {
+        // Not implemented for single-file storage
+        throw new NotImplementedException("InsertBatchFromBuffer is not supported for single-file storage");
+    }
+
     public void Update(Dictionary<string, object> row)
     {
         // For simplicity, just append - real implementation would need indexing
@@ -636,25 +657,61 @@ internal class SingleFileTable : ITable
     public List<Dictionary<string, object>> Select(string? whereClause, string? orderBy, bool distinct = false, bool noEncrypt = false) => Select();
     public void Update(string? whereClause, Dictionary<string, object> updates) => throw new NotImplementedException();
     public void Delete(string? whereClause) => throw new NotImplementedException();
-    public void CreateHashIndex(string columnName) => throw new NotImplementedException();
-    public void CreateHashIndex(string indexName, string columnName) => throw new NotImplementedException();
+    public void CreateHashIndex(string columnName) => throw new NotImplementedException("Hash indexes are not supported for single-file storage");
+
+    public void CreateHashIndex(string indexName, string columnName, bool isUnique = false) => throw new NotImplementedException("Named hash indexes are not supported for single-file storage");
+
     public bool HasHashIndex(string columnName) => false;
-    public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => (0, 0, 0.0);
-    public void IncrementColumnUsage(string columnName) { }
+
+    public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => null;
+
+    public void IncrementColumnUsage(string columnName)
+    {
+        // Not implemented for single-file storage
+    }
+
     public IReadOnlyDictionary<string, long> GetColumnUsage() => new Dictionary<string, long>();
-    public void TrackAllColumnsUsage() { }
-    public void TrackColumnUsage(string columnName) { }
+
+    public void TrackAllColumnsUsage()
+    {
+        // Not implemented for single-file storage
+    }
+
+    public void TrackColumnUsage(string columnName)
+    {
+        // Not implemented for single-file storage
+    }
+
     public bool RemoveHashIndex(string columnName) => false;
-    public void ClearAllIndexes() => throw new NotImplementedException();
-    public long GetCachedRowCount() => _primaryKeyIndex.Count;
-    public void RefreshRowCount() { }
-    public void CreateBTreeIndex(string columnName) => throw new NotImplementedException();
-    public void CreateBTreeIndex(string indexName, string columnName) => throw new NotImplementedException();
+
+    public void ClearAllIndexes()
+    {
+        // Not implemented for single-file storage
+    }
+
+    public long GetCachedRowCount() => -1;
+
+    public void RefreshRowCount()
+    {
+        // Not implemented for single-file storage
+    }
+
+    public void CreateBTreeIndex(string columnName) => throw new NotImplementedException("B-tree indexes are not supported for single-file storage");
+
+    public void CreateBTreeIndex(string indexName, string columnName, bool isUnique = false) => throw new NotImplementedException("Named B-tree indexes are not supported for single-file storage");
+
     public bool HasBTreeIndex(string columnName) => false;
-    public long[] InsertBatch(List<Dictionary<string, object>> rows) => throw new NotImplementedException();
-    public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => throw new NotImplementedException();
-    public void Flush() { }
-    public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+
+    public void Flush()
+    {
+        // Single-file storage handles flushing automatically
+    }
+
+    public void AddColumn(ColumnDefinition columnDef)
+    {
+        // Not implemented for single-file storage
+        throw new NotImplementedException("Adding columns is not supported for single-file storage");
+    }
 
     /// <summary>
     /// Fallback deletion method for tables without a primary key.

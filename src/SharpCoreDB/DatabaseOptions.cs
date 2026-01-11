@@ -135,6 +135,12 @@ public sealed class DatabaseOptions
     public bool UseUnbufferedIO { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets whether the database is opened in read-only mode.
+    /// Default: false (read-write mode).
+    /// </summary>
+    public bool IsReadOnly { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the database configuration (inherited from existing DatabaseConfig).
     /// Used for workload hints, storage engine selection, etc.
     /// </summary>

@@ -83,7 +83,7 @@ public class ExecutionPlanTests
             tableName: "users",
             selectColumns: new[] { "id" },
             isSelectAll: false,
-            whereFilter: null,
+            whereFilter: (row, parameters) => true, // Non-null filter to represent WHERE clause
             projectionFunc: null,
             orderByColumn: "name",
             orderByAscending: true,

@@ -127,7 +127,8 @@ public interface ITable
     /// </summary>
     /// <param name="indexName">The index name (e.g., "idx_email").</param>
     /// <param name="columnName">The column name to index (e.g., "email").</param>
-    void CreateHashIndex(string indexName, string columnName);
+    /// <param name="isUnique">Whether to enforce uniqueness (default: false).</param>
+    void CreateHashIndex(string indexName, string columnName, bool isUnique = false);
 
     /// <summary>
     /// Checks if a hash index exists for the specified column.
@@ -207,7 +208,8 @@ public interface ITable
     /// </summary>
     /// <param name="indexName">The index name (e.g., "idx_age_btree").</param>
     /// <param name="columnName">The column name to index (e.g., "age").</param>
-    void CreateBTreeIndex(string indexName, string columnName);
+    /// <param name="isUnique">Whether to enforce uniqueness (default: false).</param>
+    void CreateBTreeIndex(string indexName, string columnName, bool isUnique = false);
 
     /// <summary>
     /// Checks if a B-tree index exists for the specified column.

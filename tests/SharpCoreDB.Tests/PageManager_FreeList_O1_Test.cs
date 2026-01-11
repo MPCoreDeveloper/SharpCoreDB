@@ -29,7 +29,7 @@ public class PageManager_FreeList_O1_Test : IDisposable
         Directory.CreateDirectory(testDir);
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test moved to SharpCoreDB.Benchmarks; keep functional tests here.")]
     public void AllocatePage_10K_Pages_Should_Be_O1_Not_On()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class PageManager_FreeList_O1_Test : IDisposable
         Console.WriteLine($"   Total Time: {totalTime}ms (expected <5000ms)");
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test moved to SharpCoreDB.Benchmarks; keep functional tests here.")]
     public void FreePage_10K_Pages_Should_Be_O1()
     {
         // Arrange: Allocate 10K pages first
@@ -180,7 +180,7 @@ public class PageManager_FreeList_O1_Test : IDisposable
         Console.WriteLine($"   Reused: {reuseCount}/5000 freed pages");
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test moved to SharpCoreDB.Benchmarks; keep functional tests here.")]
     public void MixedWorkload_10K_AllocFree_Should_Not_Degrade()
     {
         // Arrange
