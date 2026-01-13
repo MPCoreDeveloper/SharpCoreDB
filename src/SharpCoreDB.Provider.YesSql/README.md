@@ -343,8 +343,19 @@ Each thread has its own `last_insert_rowid` value via `AsyncLocal<long>`, ensuri
 | **INTEGER PRIMARY KEY** | ✅ | ✅ |
 | **AUTOINCREMENT** | ❌ | ✅ (but YesSql doesn't use it) |
 | **LIMIT/OFFSET** | ✅ | ✅ |
-| **JOINs** | ✅ | 🚧 Partial (basic JOINs work) |
-| **Subqueries** | ✅ | 🚧 Partial (WHERE subqueries work) |
+| **JOINs (INNER)** | ✅ | ✅ **Full** |
+| **JOINs (LEFT)** | ✅ | ✅ **Full** |
+| **JOINs (RIGHT)** | ✅ | ✅ **Full** |
+| **JOINs (FULL OUTER)** | ✅ | ✅ **Full** |
+| **JOINs (CROSS)** | ✅ | ✅ **Full** |
+| **Subqueries (WHERE)** | ✅ | ✅ **Full** |
+| **Subqueries (FROM)** | ✅ | ✅ **Full** (derived tables) |
+| **Subqueries (SELECT)** | ✅ | ✅ **Full** (scalar subqueries) |
+| **IN (subquery)** | ✅ | ✅ **Full** |
+| **EXISTS/NOT EXISTS** | ✅ | ✅ **Full** |
+| **GROUP BY** | ✅ | ✅ **Full** |
+| **HAVING** | ✅ | ✅ **Full** |
+| **Correlated Subqueries** | ✅ | ✅ **Full** |
 | **Triggers** | ❌ | 🚧 Planned Q2 2026 |
 
 ---

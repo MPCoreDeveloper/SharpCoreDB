@@ -96,8 +96,103 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 - **DDL**: CREATE TABLE, DROP TABLE, CREATE INDEX, DROP INDEX
 - **DML**: INSERT, SELECT, UPDATE, DELETE, INSERT BATCH
 - **Queries**: WHERE, ORDER BY, LIMIT, OFFSET, BETWEEN
-- **Aggregates**: COUNT, SUM, AVG, MIN, MAX, GROUP BY
-- **Advanced**: JOINs, subqueries, complex expressions
+- **Aggregates**: COUNT, SUM, AVG, MIN, MAX, GROUP BY, HAVING
+- **JOINs**: ✅ **INNER, LEFT, RIGHT, FULL OUTER, CROSS** (Q1 2026 - **Complete**)
+- **Subqueries**: ✅ **WHERE, FROM, SELECT, IN, EXISTS, Correlated** (Q1 2026 - **Complete**)
+- **Advanced**: Complex expressions, multi-table queries, query optimization
+
+---
+
+## ✅ **Recently Completed Features (Q1 2026)**
+
+### 🔗 **Full JOIN Support** - PRODUCTION READY
+
+All JOIN types are fully implemented with hash join optimization:
+
+```csharp
+// INNER JOIN - Only matched rows
+var results = db.ExecuteQuery(@"
+    SELECT u.name, o.amount
+    FROM users u
+    INNER JOIN orders o ON u.id = o.user_id
+    WHERE o.amount > 100
+");
+
+// LEFT OUTER JOIN - All left rows + matched right (NULL for unmatched)
+var results = db.ExecuteQuery(@"
+    SELECT u.name, o.amount
+    FROM users u
+    LEFT JOIN orders o ON u.id = o.user_id
+");
+
+// FULL OUTER JOIN - All rows from both sides
+var results = db.ExecuteQuery(@"
+    SELECT u.name, o.amount
+    FROM users u
+    FULL OUTER JOIN orders o ON u.id = o.user_id
+");
+
+// Multi-table JOINs
+var results = db.ExecuteQuery(@"
+    SELECT c.name, r.name as region, SUM(o.amount) as total
+    FROM customers c
+    LEFT JOIN regions r ON c.region_id = r.id
+    LEFT JOIN orders o ON o.customer_id = c.id
+    GROUP BY c.name, r.name
+");
+```
+
+**Performance**: Hash join (O(n+m)) for large datasets, nested loop for small datasets  
+**Implementation**: `JoinExecutor.cs` with automatic algorithm selection
+
+---
+
+### 📊 **Full Subquery Support** - PRODUCTION READY
+
+All subquery types with automatic caching:
+
+```csharp
+// Scalar subquery in SELECT (cached for performance)
+var results = db.ExecuteQuery(@"
+    SELECT name, 
+           salary,
+           (SELECT AVG(salary) FROM employees) as avg_salary,
+           salary - (SELECT AVG(salary) FROM employees) as diff
+    FROM employees
+");
+
+// Derived table in FROM
+var results = db.ExecuteQuery(@"
+    SELECT dept_id, avg_salary
+    FROM (
+        SELECT department_id as dept_id, 
+               AVG(salary) as avg_salary
+        FROM employees
+        GROUP BY department_id
+    ) dept_avg
+    WHERE avg_salary > 50000
+");
+
+// IN with subquery
+var results = db.ExecuteQuery(@"
+    SELECT * FROM orders
+    WHERE customer_id IN (
+        SELECT id FROM customers WHERE country = 'USA'
+    )
+");
+
+// Correlated EXISTS
+var results = db.ExecuteQuery(@"
+    SELECT * FROM orders o
+    WHERE EXISTS (
+        SELECT 1 FROM customers c 
+        WHERE c.id = o.customer_id AND c.active = 1
+    )
+");
+```
+
+**Performance**: Non-correlated subqueries cached (O(1) after first execution)  
+**Implementation**: `SubqueryExecutor.cs` with streaming execution and caching
 
 ---
 
@@ -221,6 +316,9 @@ var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
 | **Pure .NET** | ✅ | ❌ (P/Invoke) | ✅ |
 | **Hash Indexes** | ✅ **O(1)** | ✅ | ✅ |
 | **B-tree Indexes** | ✅ **O(log n)** | ✅ | ✅ |
+| **JOINs (All Types)** | ✅ **Full (INNER/LEFT/RIGHT/FULL/CROSS)** | ✅ | ✅ |
+| **Subqueries (All Types)** | ✅ **Full (WHERE/FROM/SELECT/IN/EXISTS)** | ✅ | ✅ |
+| **Correlated Subqueries** | ✅ **Full with caching** | ✅ | ✅ |
 | **AVX-512/AVX2** | ✅ | ❌ | ❌ |
 | **NativeAOT Ready** | ✅ | ❌ | ⚠️ Limited |
 | **Async/Await** | ✅ **Full** | ⚠️ Limited | ⚠️ Limited |
