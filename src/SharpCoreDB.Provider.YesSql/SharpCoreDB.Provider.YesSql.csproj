@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SharpCoreDB.Provider.YesSql</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- YesSql Core for abstractions -->
+    <PackageReference Include="YesSql.Core" Version="5.4.7" />
+    
+    <!-- Use Sqlite provider as base (most compatible with SharpCoreDB) -->
+    <PackageReference Include="YesSql.Provider.Sqlite" Version="5.4.7" />
+    
+    <!-- DI for OrchardCore integration -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference to SharpCoreDB core (for IDatabase) -->
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    
+    <!-- Reference to ADO.NET provider -->
+    <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+  </ItemGroup>
+
+</Project>

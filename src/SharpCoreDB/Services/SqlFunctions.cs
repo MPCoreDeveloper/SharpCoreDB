@@ -130,6 +130,19 @@ public static class SqlFunctions
     }
 
     /// <summary>
+    /// Returns the ROWID of the most recent successful INSERT operation.
+    /// Thread-safe: Each thread has its own last insert rowid.
+    /// Compatible with SQLite's last_insert_rowid() function.
+    /// </summary>
+    /// <param name="database">The database instance.</param>
+    /// <returns>The ROWID of the last inserted row, or 0 if no inserts have occurred.</returns>
+    public static long LastInsertRowId(IDatabase database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        return database.GetLastInsertRowId();
+    }
+
+    /// <summary>
     /// Evaluates a SQL function call.
     /// </summary>
     /// <param name="functionName">The function name.</param>

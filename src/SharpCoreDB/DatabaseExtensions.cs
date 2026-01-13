@@ -191,6 +191,17 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public DatabaseOptions Options => _options;
     public IStorageProvider StorageProvider => _storageProvider;
 
+    // ✅ NEW: last_insert_rowid() support for SQLite compatibility
+    private long _lastInsertRowId;
+    
+    /// <inheritdoc />
+    public long GetLastInsertRowId() => _lastInsertRowId;
+
+    /// <summary>
+    /// Sets the last insert rowid (called internally after inserts).
+    /// </summary>
+    internal void SetLastInsertRowId(long rowId) => _lastInsertRowId = rowId;
+
     public IDatabase Initialize(string dbPath, string masterPassword) => this;
 
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)

@@ -1,0 +1,86 @@
+// <copyright file="SharpCoreDbConnectionFactory.cs" company="MPCoreDeveloper">
+// Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+// </copyright>
+
+using System.Data.Common;
+using SharpCoreDB.Data.Provider;
+using YesSql;
+
+namespace SharpCoreDB.Provider.YesSql;
+
+/// <summary>
+/// Connection factory for SharpCoreDB that integrates with YesSql.
+/// Creates SharpCoreDB ADO.NET connections for YesSql to use.
+/// Implements YesSql.IConnectionFactory for OrchardCore compatibility.
+/// </summary>
+public sealed class SharpCoreDbConnectionFactory : IConnectionFactory
+{
+    private string? _connectionString;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SharpCoreDbConnectionFactory"/> class.
+    /// </summary>
+    public SharpCoreDbConnectionFactory()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SharpCoreDbConnectionFactory"/> class with a connection string.
+    /// </summary>
+    /// <param name="connectionString">The connection string.</param>
+    public SharpCoreDbConnectionFactory(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    /// <summary>
+    /// Sets the connection string for this factory.
+    /// Called by YesSql configuration.
+    /// </summary>
+    /// <param name="connectionString">The connection string.</param>
+    public void SetConnectionString(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    /// <summary>
+    /// Creates a new database connection using the SharpCoreDB provider.
+    /// YesSql will set the ConnectionString after creation if not already set.
+    /// </summary>
+    /// <returns>A new SharpCoreDB database connection.</returns>
+    public DbConnection CreateConnection()
+    {
+        var connection = SharpCoreDBProviderFactory.Instance.CreateConnection()
+            ?? throw new InvalidOperationException("Failed to create SharpCoreDB connection");
+
+        // Set connection string if we have one
+        if (!string.IsNullOrEmpty(_connectionString))
+        {
+            connection.ConnectionString = _connectionString;
+        }
+
+        return connection;
+    }
+
+    /// <summary>
+    /// Gets the DbProviderFactory for creating connections and commands.
+    /// Required by YesSql for ADO.NET operations.
+    /// </summary>
+    public DbProviderFactory DbProviderFactory => SharpCoreDBProviderFactory.Instance;
+
+    /// <summary>
+    /// Gets the DbConnection type for reflection and type checking.
+    /// Required by YesSql 5.4.7+ for connection pooling and diagnostics.
+    /// </summary>
+    public Type DbConnectionType => typeof(SharpCoreDBConnection);
+
+    /// <summary>
+    /// Disposes resources (none needed for stateless factory).
+    /// </summary>
+    public void Dispose()
+    {
+        // No resources to dispose - factory is stateless
+        GC.SuppressFinalize(this);
+    }
+}

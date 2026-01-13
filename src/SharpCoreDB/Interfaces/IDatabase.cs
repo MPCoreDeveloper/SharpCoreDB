@@ -11,6 +11,7 @@ using SharpCoreDB.Storage;
 /// Interface for the database engine.
 /// ✅ NEW: Compiled query support for zero-parse execution (5-10x faster).
 /// ✅ NEW: VACUUM support for single-file storage defragmentation.
+/// ✅ NEW: last_insert_rowid() support for SQLite compatibility.
 /// </summary>
 public interface IDatabase
 {
@@ -199,6 +200,15 @@ public interface IDatabase
     /// Gets the database storage mode (Directory or SingleFile).
     /// </summary>
     StorageMode StorageMode { get; }
+
+    /// <summary>
+    /// Gets the ROWID of the most recent successful INSERT operation.
+    /// Returns the row position (file offset or page slot) of the last inserted row.
+    /// Thread-safe: Each thread has its own last insert rowid.
+    /// Compatible with SQLite's last_insert_rowid() function.
+    /// </summary>
+    /// <returns>The ROWID of the last inserted row, or 0 if no inserts have occurred.</returns>
+    long GetLastInsertRowId();
 
     /// <summary>
     /// Gets storage statistics (file size, fragmentation, block count, etc.).

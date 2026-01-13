@@ -153,6 +153,9 @@ public partial class Table
                 var engine = GetOrCreateStorageEngine();
                 long position = engine.Insert(Name, rowData);
 
+                // ✅ NEW: Track last_insert_rowid() for SQLite compatibility
+                _database?.SetLastInsertRowId(position);
+
                 // Update indexes (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
@@ -389,6 +392,12 @@ public partial class Table
         {
             // ✅ ROUTE TO ENGINE: Single InsertBatch() call (within transaction)!
             long[] positions = engine.InsertBatch(Name, serializedRows);
+
+            // ✅ NEW: Track last_insert_rowid() for SQLite compatibility (last row in batch)
+            if (positions.Length > 0)
+            {
+                _database?.SetLastInsertRowId(positions[^1]);
+            }
 
             // Update indexes
             var unloadedIndexes = new List<string>();

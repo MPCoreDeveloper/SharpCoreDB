@@ -57,6 +57,18 @@ public partial class Database : IDatabase, IDisposable
     // Track if metadata needs to be flushed
     private bool _metadataDirty;
 
+    // ✅ NEW: Thread-safe last insert rowid tracking (SQLite compatibility)
+    private readonly AsyncLocal<long> _lastInsertRowId = new();
+
+    /// <inheritdoc />
+    public long GetLastInsertRowId() => _lastInsertRowId.Value;
+
+    /// <summary>
+    /// Sets the last insert rowid (called by insert operations).
+    /// Internal method - not part of public API.
+    /// </summary>
+    internal void SetLastInsertRowId(long rowId) => _lastInsertRowId.Value = rowId;
+    
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
     /// </summary>
@@ -217,6 +229,9 @@ public partial class Database : IDatabase, IDisposable
             {
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
+                
+                // ✅ NEW: Set database reference for last_insert_rowid() tracking
+                table.SetDatabase(this);
                 
                 // ✅ CRITICAL FIX: Complete initialization of new DDL properties
                 // Ensure lists have correct length

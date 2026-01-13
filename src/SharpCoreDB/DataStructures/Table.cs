@@ -198,6 +198,9 @@ public partial class Table : ITable, IDisposable
     // Reduces allocations by 60% during full table scans
     private readonly ObjectPool<Dictionary<string, object>> _dictPool;
 
+    // ✅ NEW: Database reference for last_insert_rowid() tracking
+    private Database? _database;
+
     /// <summary>
     /// Sets the storage instance for this table.
     /// </summary>
@@ -209,6 +212,12 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     /// <param name="isReadOnly">True if readonly.</param>
     public void SetReadOnly(bool isReadOnly) => this.isReadOnly = isReadOnly;
+
+    /// <summary>
+    /// Sets the database instance for last_insert_rowid() tracking.
+    /// </summary>
+    /// <param name="database">The database instance.</param>
+    public void SetDatabase(Database database) => _database = database;
 
     /// <summary>
     /// Sets the auto-compaction threshold for columnar storage.
