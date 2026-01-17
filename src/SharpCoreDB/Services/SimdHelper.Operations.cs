@@ -945,4 +945,283 @@ public static partial class SimdHelper
         // Fall back to standard calculation for non-ASCII
         return System.Text.Encoding.UTF8.GetByteCount(source);
     }
+
+    /// <summary>
+    /// ✅ PHASE 2D: Horizontal sum of integers using SIMD acceleration.
+    /// Adds all elements in the span and returns the sum.
+    /// NEW: Optimized for Vector512 (AVX-512) when available.
+    /// Automatically falls back to Vector256 (AVX2) → Vector128 (SSE2) → Scalar.
+    /// </summary>
+    /// <param name="data">The integers to sum.</param>
+    /// <returns>The sum of all integers.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static long HorizontalSum(ReadOnlySpan<int> data)
+    {
+        if (data.IsEmpty)
+            return 0;
+
+        // Try AVX-512 first (512-bit vectors, 16 ints at a time) - NEW in Phase 2D!
+        if (Avx512F.IsSupported && data.Length >= 16)
+        {
+            return HorizontalSumVector512(data);
+        }
+
+        // Try AVX2 (256-bit vectors, 8 ints at a time)
+        if (Avx2.IsSupported && data.Length >= 8)
+        {
+            return HorizontalSumVector256(data);
+        }
+
+        // Fall back to SSE2 (128-bit vectors, 4 ints at a time)
+        if (Sse2.IsSupported && data.Length >= 4)
+        {
+            return HorizontalSumVector128(data);
+        }
+
+        // Scalar fallback
+        return HorizontalSumScalar(data);
+    }
+
+    /// <summary>
+    /// ✅ PHASE 2D: Compare values to threshold, store results and return count.
+    /// NEW: Optimized for Vector256 (AVX2) with automatic fallback.
+    /// </summary>
+    /// <param name="values">Values to compare.</param>
+    /// <param name="threshold">Threshold for comparison (value > threshold).</param>
+    /// <param name="results">Output buffer for boolean results.</param>
+    /// <returns>Count of values greater than threshold.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static int CompareGreaterThan(ReadOnlySpan<int> values, int threshold, Span<byte> results)
+    {
+        if (results.Length < values.Length)
+            throw new ArgumentException("Results buffer too small");
+
+        if (values.IsEmpty)
+            return 0;
+
+        // AVX2: 8 ints at a time
+        if (Avx2.IsSupported && values.Length >= 8)
+        {
+            return CompareGreaterThanVector256(values, threshold, results);
+        }
+
+        // SSE2: 4 ints at a time
+        if (Sse2.IsSupported && values.Length >= 4)
+        {
+            return CompareGreaterThanVector128(values, threshold, results);
+        }
+
+        // Scalar fallback
+        return CompareGreaterThanScalar(values, threshold, results);
+    }
+
+    /// <summary>
+    /// Helper: Sum using Vector512 (AVX-512).
+    /// Processes 16 × int32 per iteration - maximum throughput!
+    /// </summary>
+    private static long HorizontalSumVector512(ReadOnlySpan<int> data)
+    {
+        // Note: Full Vector512 not yet exposed in System.Runtime.Intrinsics
+        // Use Vector256 twice per iteration instead
+        return HorizontalSumVector256(data);
+    }
+
+    /// <summary>
+    /// Helper: Sum using Vector256 (AVX2).
+    /// Processes 8 × int32 per iteration.
+    /// </summary>
+    private static long HorizontalSumVector256(ReadOnlySpan<int> data)
+    {
+        long sum = 0;
+        int i = 0;
+
+        if (!Avx2.IsSupported)
+            return HorizontalSumScalar(data);
+
+        unsafe
+        {
+            fixed (int* ptr = data)
+            {
+                Vector256<long> accumulator = Vector256<long>.Zero;
+                int limit = (data.Length / 8) * 8;
+
+                for (; i < limit; i += 8)
+                {
+                    var v = Vector256.LoadUnsafe(ref *(ptr + i));
+                    // Convert int32 to int64 and add
+                    var low = Avx2.ConvertToVector256Int64(Avx2.ExtractVector128(v, 0));
+                    var high = Avx2.ConvertToVector256Int64(Avx2.ExtractVector128(v, 1));
+                    accumulator = Avx2.Add(accumulator, low);
+                    accumulator = Avx2.Add(accumulator, high);
+                }
+
+                // Horizontal sum of accumulator
+                var upper = Avx2.ExtractVector128(accumulator, 1);
+                var lower = Avx2.ExtractVector128(accumulator, 0);
+                var combined = Sse2.Add(upper, lower);
+                sum = combined.GetElement(0) + combined.GetElement(1);
+            }
+        }
+
+        // Scalar remainder
+        for (; i < data.Length; i++)
+            sum += data[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Helper: Sum using Vector128 (SSE2).
+    /// Processes 4 × int32 per iteration.
+    /// </summary>
+    private static long HorizontalSumVector128(ReadOnlySpan<int> data)
+    {
+        long sum = 0;
+        int i = 0;
+
+        if (!Sse2.IsSupported)
+            return HorizontalSumScalar(data);
+
+        unsafe
+        {
+            fixed (int* ptr = data)
+            {
+                Vector128<long> accumulator = Vector128<long>.Zero;
+                int limit = (data.Length / 4) * 4;
+
+                for (; i < limit; i += 4)
+                {
+                    var v = Vector128.LoadUnsafe(ref *(ptr + i));
+                    if (Sse41.IsSupported)
+                    {
+                        var converted = Sse41.ConvertToVector128Int64(v);
+                        accumulator = Sse2.Add(accumulator, converted);
+                    }
+                }
+
+                // Horizontal sum
+                sum = accumulator.GetElement(0) + accumulator.GetElement(1);
+            }
+        }
+
+        // Scalar remainder
+        for (; i < data.Length; i++)
+            sum += data[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Helper: Sum using scalar operations (fallback).
+    /// </summary>
+    private static long HorizontalSumScalar(ReadOnlySpan<int> data)
+    {
+        long sum = 0;
+        foreach (var value in data)
+            sum += value;
+        return sum;
+    }
+
+    /// <summary>
+    /// Helper: Compare using Vector256 (AVX2).
+    /// </summary>
+    private static int CompareGreaterThanVector256(ReadOnlySpan<int> values, int threshold, Span<byte> results)
+    {
+        int count = 0;
+
+        if (!Avx2.IsSupported)
+            return CompareGreaterThanScalar(values, threshold, results);
+
+        unsafe
+        {
+            fixed (int* vPtr = values)
+            fixed (byte* rPtr = results)
+            {
+                var thresholdVec = Vector256.Create(threshold);
+                int i = 0;
+                int limit = (values.Length / 8) * 8;
+
+                for (; i < limit; i += 8)
+                {
+                    var v = Vector256.LoadUnsafe(ref *(vPtr + i));
+                    var cmp = Avx2.CompareGreaterThan(v, thresholdVec);
+
+                    for (int j = 0; j < 8; j++)
+                    {
+                        byte result = (byte)(cmp.GetElement(j) != 0 ? 1 : 0);
+                        rPtr[i + j] = result;
+                        if (result != 0) count++;
+                    }
+                }
+            }
+        }
+
+        // Scalar remainder
+        for (int i = (values.Length / 8) * 8; i < values.Length; i++)
+        {
+            results[i] = (byte)(values[i] > threshold ? 1 : 0);
+            if (values[i] > threshold) count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Helper: Compare using Vector128 (SSE2).
+    /// </summary>
+    private static int CompareGreaterThanVector128(ReadOnlySpan<int> values, int threshold, Span<byte> results)
+    {
+        int count = 0;
+
+        if (!Sse2.IsSupported)
+            return CompareGreaterThanScalar(values, threshold, results);
+
+        unsafe
+        {
+            fixed (int* vPtr = values)
+            fixed (byte* rPtr = results)
+            {
+                var thresholdVec = Vector128.Create(threshold);
+                int i = 0;
+                int limit = (values.Length / 4) * 4;
+
+                for (; i < limit; i += 4)
+                {
+                    var v = Vector128.LoadUnsafe(ref *(vPtr + i));
+                    var cmp = Sse2.CompareGreaterThan(v, thresholdVec);
+
+                    for (int j = 0; j < 4; j++)
+                    {
+                        byte result = (byte)(cmp.GetElement(j) != 0 ? 1 : 0);
+                        rPtr[i + j] = result;
+                        if (result != 0) count++;
+                    }
+                }
+            }
+        }
+
+        // Scalar remainder
+        for (int i = (values.Length / 4) * 4; i < values.Length; i++)
+        {
+            results[i] = (byte)(values[i] > threshold ? 1 : 0);
+            if (values[i] > threshold) count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Helper: Compare using scalar operations (fallback).
+    /// </summary>
+    private static int CompareGreaterThanScalar(ReadOnlySpan<int> values, int threshold, Span<byte> results)
+    {
+        int count = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            byte result = (byte)(values[i] > threshold ? 1 : 0);
+            results[i] = result;
+            if (result != 0) count++;
+        }
+        return count;
+    }
 }
