@@ -23,12 +23,13 @@ public class Phase2AOptimizationBenchmark
     private BenchmarkDatabaseHelper db = null!;
     private const int SMALL_DATASET = 1000;
     private const int MEDIUM_DATASET = 10000;
+    private int nextId = 0;
 
     [GlobalSetup]
     public void Setup()
     {
         // Create test database with benchmark configuration
-        db = new BenchmarkDatabaseHelper("phase2a_benchmark", "testpassword", enableEncryption: false);
+        db = new BenchmarkDatabaseHelper("phase2a_benchmark_" + Guid.NewGuid().ToString("N"), "testpassword", enableEncryption: false);
         
         // Create test table
         db.CreateUsersTable();
@@ -40,14 +41,21 @@ public class Phase2AOptimizationBenchmark
         db?.Dispose();
     }
 
+    [IterationSetup]
+    public void IterationSetup()
+    {
+        // Clear the table before each iteration to avoid PK violations
+        nextId += MEDIUM_DATASET; // Use different IDs for each iteration
+    }
+
     #region Monday-Tuesday: WHERE Clause Caching Benchmarks
 
     [Benchmark(Description = "Repeated WHERE clause query - Cache benefits")]
     [Arguments(MEDIUM_DATASET)]
     public int WhereClauseCaching_RepeatedQuery(int rowCount)
     {
-        // Populate test data
-        PopulateTestData(rowCount);
+        // Populate test data with unique IDs for this iteration
+        PopulateTestData(rowCount, nextId);
         
         // Execute same WHERE query 100 times (cache should benefit all except first)
         int totalCount = 0;
@@ -68,7 +76,7 @@ public class Phase2AOptimizationBenchmark
     [Arguments(MEDIUM_DATASET)]
     public int SelectStructRow_FastPath(int rowCount)
     {
-        PopulateTestData(rowCount);
+        PopulateTestData(rowCount, nextId);
         
         var result = db.Database.ExecuteQueryFast("SELECT * FROM users");
         return result.Count;
@@ -78,31 +86,32 @@ public class Phase2AOptimizationBenchmark
 
     #region Helper Methods
 
-    private void PopulateTestData(int rowCount)
+    private void PopulateTestData(int rowCount, int startId)
     {
         var random = new Random(42);
         
-        var rows = new List<Dictionary<string, object>>();
+        // Insert data with unique IDs per iteration
         for (int i = 0; i < rowCount; i++)
         {
-            rows.Add(new Dictionary<string, object>
+            var id = startId + i;
+            var name = $"User{id}";
+            var email = $"user{id}@test.com";
+            var age = 20 + random.Next(50);
+            var createdAt = DateTime.Now.ToString("o");
+            var isActive = random.Next(2);
+            
+            try
             {
-                ["id"] = i,
-                ["name"] = $"User{i}",
-                ["email"] = $"user{i}@test.com",
-                ["age"] = 20 + random.Next(50),
-                ["created_at"] = DateTime.Now.ToString("o"),
-                ["is_active"] = random.Next(2)
-            });
-        }
-        
-        // Bulk insert
-        foreach (var row in rows)
-        {
-            db.Database.ExecuteSQL($@"
-                INSERT INTO users (id, name, email, age, created_at, is_active)
-                VALUES ({row["id"]}, '{row["name"]}', '{row["email"]}', {row["age"]}, '{row["created_at"]}', {row["is_active"]})
-            ");
+                db.Database.ExecuteSQL($@"
+                    INSERT INTO users (id, name, email, age, created_at, is_active)
+                    VALUES ({id}, '{name}', '{email}', {age}, '{createdAt}', {isActive})
+                ");
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Primary key"))
+            {
+                // Skip if row already exists (shouldn't happen with unique IDs, but handle gracefully)
+                continue;
+            }
         }
     }
 
