@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -11,9 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
-    <ProjectReference Include="..\src\SharpCoreDB.Provider.YesSql\SharpCoreDB.Provider.YesSql.csproj" />
-    <ProjectReference Include="..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+    <ProjectReference Include="..\..\..\src\SharpCoreDB.Provider.YesSql\SharpCoreDB.Provider.YesSql.csproj" />
+    <ProjectReference Include="..\..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
   </ItemGroup>
 
   <ItemGroup>
