@@ -1,0 +1,326 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: vi\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Facebook.pot\n"
+"X-Crowdin-File-ID: 742\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Vietnamese\n"
+"Language: vi_VN\n"
+"PO-Revision-Date: 2024-09-09 17:03\n"
+
+#. .Add(S["Configuration"], configuration => configuration
+#: OrchardCore.Facebook\AdminMenu.cs:25
+msgctxt "OrchardCore.Facebook.AdminMenu"
+msgid "Configuration"
+msgstr "Cấu hình"
+
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Facebook\AdminMenu.cs:26
+msgctxt "OrchardCore.Facebook.AdminMenu"
+msgid "Settings"
+msgstr "Cài đặt"
+
+#. .Add(S["Meta App"], S["Meta App"].PrefixPosition(), metaApp => metaApp
+#. .Add(S["Meta App"], S["Meta App"].PrefixPosition(), metaApp => metaApp
+#: OrchardCore.Facebook\AdminMenu.cs:27
+#: OrchardCore.Facebook\AdminMenu.cs:27
+msgctxt "OrchardCore.Facebook.AdminMenu"
+msgid "Meta App"
+msgstr ""
+
+#. .Add(S["Security"], security => security
+#: OrchardCore.Facebook\AdminMenuLogin.cs:25
+msgctxt "OrchardCore.Facebook.AdminMenuLogin"
+msgid "Security"
+msgstr "Bảo mật"
+
+#. .Add(S["Authentication"], authentication => authentication
+#: OrchardCore.Facebook\AdminMenuLogin.cs:26
+msgctxt "OrchardCore.Facebook.AdminMenuLogin"
+msgid "Authentication"
+msgstr "Xác thực"
+
+#. .Add(S["Meta"], S["Meta"].PrefixPosition(), meta => meta
+#. .Add(S["Meta"], S["Meta"].PrefixPosition(), meta => meta
+#: OrchardCore.Facebook\AdminMenuLogin.cs:27
+#: OrchardCore.Facebook\AdminMenuLogin.cs:27
+msgctxt "OrchardCore.Facebook.AdminMenuLogin"
+msgid "Meta"
+msgstr ""
+
+#. .Add(S["Configuration"], configuration => configuration
+#: OrchardCore.Facebook\AdminMenuPixel.cs:26
+msgctxt "OrchardCore.Facebook.AdminMenuPixel"
+msgid "Configuration"
+msgstr ""
+
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Facebook\AdminMenuPixel.cs:27
+msgctxt "OrchardCore.Facebook.AdminMenuPixel"
+msgid "Settings"
+msgstr ""
+
+#. .Add(S["Meta Pixel"], S["Meta Pixel"].PrefixPosition(), pixel => pixel
+#. .Add(S["Meta Pixel"], S["Meta Pixel"].PrefixPosition(), pixel => pixel
+#: OrchardCore.Facebook\AdminMenuPixel.cs:28
+#: OrchardCore.Facebook\AdminMenuPixel.cs:28
+msgctxt "OrchardCore.Facebook.AdminMenuPixel"
+msgid "Meta Pixel"
+msgstr ""
+
+#. [RegularExpression(@"\/[-A-Za-z0-9+&@#\/%?=~_|!:,.;]+[-A-Za-z0-9+&@#\/%=~_|]", ErrorMessage = "Invalid path")]
+#: OrchardCore.Facebook\Login\ViewModels\FacebookLoginSettingsViewModel.cs:7
+msgctxt "OrchardCore.Facebook.Login.ViewModels.FacebookLoginSettingsViewModel"
+msgid "Invalid path"
+msgstr "Đường dẫn không hợp lệ"
+
+#. results.Add(new ValidationResult(S["The AppId is required."], new[]
+#: OrchardCore.Facebook\Services\FacebookService.cs:43
+msgctxt "OrchardCore.Facebook.Services.FacebookService"
+msgid "The AppId is required."
+msgstr "AppId là bắt buộc."
+
+#. results.Add(new ValidationResult(S["The App Secret is required."], new[]
+#: OrchardCore.Facebook\Services\FacebookService.cs:51
+msgctxt "OrchardCore.Facebook.Services.FacebookService"
+msgid "The App Secret is required."
+msgstr "App Secret là bắt buộc."
+
+#. context.Updater.ModelState.AddModelError(nameof(model.Liquid), S["The FaceBook Body doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
+#: OrchardCore.Facebook\Widgets\Drivers\FacebookPluginPartDisplayDriver.cs:78
+msgctxt "OrchardCore.Facebook.Widgets.Drivers.FacebookPluginPartDisplayDriver"
+msgid "The FaceBook Body doesn't contain a valid Liquid expression. Details: {0}"
+msgstr "FaceBook Body không chứa biểu thức Liquid hợp lệ. Chi tiết: {0}"
+
+#. context.Updater.ModelState.AddModelError(nameof(model.Liquid), S["The Body doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
+#: OrchardCore.Facebook\Widgets\Settings\FacebookPluginPartSettingsDisplayDriver.cs:41
+msgctxt "OrchardCore.Facebook.Widgets.Settings.FacebookPluginPartSettingsDisplayDriver"
+msgid "The Body doesn't contain a valid Liquid expression. Details: {0}"
+msgstr "Body không chứa biểu thức Liquid hợp lệ. Chi tiết: {0}"
+
+#. <h5>@T["Facebook Login Settings"]</h5>
+#: OrchardCore.Facebook\Views\Items\FacebookLoginDeploymentStep.Edit.cshtml:3
+msgctxt "OrchardCore.Facebook.Views.Items.FacebookLoginDeploymentStep.Edit"
+msgid "Facebook Login Settings"
+msgstr "Cài đặt đăng nhập Facebook"
+
+#. <h5>@T["Facebook Login Settings"]</h5>
+#: OrchardCore.Facebook\Views\Items\FacebookLoginDeploymentStep.Summary.cshtml:3
+msgctxt "OrchardCore.Facebook.Views.Items.FacebookLoginDeploymentStep.Summary"
+msgid "Facebook Login Settings"
+msgstr "Cài đặt đăng nhập Facebook"
+
+#. <span class="hint">@T["Adds Facebook Login settings to the plan."]</span>
+#: OrchardCore.Facebook\Views\Items\FacebookLoginDeploymentStep.Summary.cshtml:5
+msgctxt "OrchardCore.Facebook.Views.Items.FacebookLoginDeploymentStep.Summary"
+msgid "Adds Facebook Login settings to the plan."
+msgstr "Thêm cài đặt Đăng nhập Facebook vào kế hoạch."
+
+#. <h4 class="card-title">@T["Facebook Login Settings"]</h4>
+#: OrchardCore.Facebook\Views\Items\FacebookLoginDeploymentStep.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Facebook.Views.Items.FacebookLoginDeploymentStep.Thumbnail"
+msgid "Facebook Login Settings"
+msgstr "Cài đặt đăng nhập Facebook"
+
+#. <p>@T["Exports the Facebook Login settings."]</p>
+#: OrchardCore.Facebook\Views\Items\FacebookLoginDeploymentStep.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Facebook.Views.Items.FacebookLoginDeploymentStep.Thumbnail"
+msgid "Exports the Facebook Login settings."
+msgstr "Xuất cài đặt đăng nhập Facebook."
+
+#. @T["The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."]
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."
+msgstr ""
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Facebook/#facebook-login" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:6
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "See documentation"
+msgstr "Xem tài liệu"
+
+#. <h3>@T["Login Settings"]</h3>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:9
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "Login Settings"
+msgstr "Cài đặt Đăng nhập"
+
+#. <label asp-for="CallbackPath" class="form-label">@T["CallbackPath"]</label>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:12
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "CallbackPath"
+msgstr ""
+
+#. <span class="hint">@T["The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."]</span>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:15
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."
+msgstr "Đường dẫn yêu cầu trong đường dẫn cơ sở của ứng dụng nơi tác nhân người dùng sẽ được trả về. Phần mềm trung gian sẽ xử lý yêu cầu này khi nó đến."
+
+#. <label class="form-check-label" class="form-label" asp-for="SaveTokens">@T["Store tokens"]</label>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:21
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "Store tokens"
+msgstr "Lưu trữ tokens"
+
+#. <span class="hint dashed">@T["Store external authentication tokens for reuse"]</span>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:22
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "Store external authentication tokens for reuse"
+msgstr "Lưu trữ tokens xác thực để sử dụng lại"
+
+#. <span class="hint">@T["<a href=\"{0}\">Meta Integration settings</a> must be configured in order to use the Login Feature", @Url.RouteUrl(new { area = "OrchardCore.Settings", controller = "Admin", groupId = OrchardCore.Facebook.FacebookConstants.Features.Core })]</span>
+#: OrchardCore.Facebook\Views\FacebookLoginSettings.Edit.cshtml:27
+msgctxt "OrchardCore.Facebook.Views.FacebookLoginSettings.Edit"
+msgid "<a href=\"{0}\">Meta Integration settings</a> must be configured in order to use the Login Feature"
+msgstr ""
+
+#. <label asp-for="PixelId" class="form-label">@T["Pixel Identifier"]</label>
+#: OrchardCore.Facebook\Views\FacebookPixelSettings.Edit.cshtml:6
+msgctxt "OrchardCore.Facebook.Views.FacebookPixelSettings.Edit"
+msgid "Pixel Identifier"
+msgstr ""
+
+#. <span class="hint">@T["The Pixel ID found on the Meta Data Sources portal."]</span>
+#: OrchardCore.Facebook\Views\FacebookPixelSettings.Edit.cshtml:9
+msgctxt "OrchardCore.Facebook.Views.FacebookPixelSettings.Edit"
+msgid "The Pixel ID found on the Meta Data Sources portal."
+msgstr ""
+
+#. <label asp-for="Liquid" class="@Orchard.GetLabelClasses()">@T["Body"]</label>
+#: OrchardCore.Facebook\Views\FacebookPluginPart.Edit.cshtml:13
+msgctxt "OrchardCore.Facebook.Views.FacebookPluginPart.Edit"
+msgid "Body"
+msgstr "Nội dung"
+
+#. <span class="hint">@T["The template of the plugin, in Liquid format."]</span>
+#: OrchardCore.Facebook\Views\FacebookPluginPart.Edit.cshtml:16
+msgctxt "OrchardCore.Facebook.Views.FacebookPluginPart.Edit"
+msgid "The template of the plugin, in Liquid format."
+msgstr "Template của plugin, có định dạng Liquid."
+
+#. <label asp-for="Liquid" class="form-label">@T["Body"]</label>
+#: OrchardCore.Facebook\Views\FacebookPluginPartSettings.Edit.cshtml:13
+msgctxt "OrchardCore.Facebook.Views.FacebookPluginPartSettings.Edit"
+msgid "Body"
+msgstr "Nội dung"
+
+#. <span class="hint">@T["The default template of the plugin, in Liquid format."]</span>
+#: OrchardCore.Facebook\Views\FacebookPluginPartSettings.Edit.cshtml:15
+msgctxt "OrchardCore.Facebook.Views.FacebookPluginPartSettings.Edit"
+msgid "The default template of the plugin, in Liquid format."
+msgstr "Template mặc định của plugin, có định dạng Liquid."
+
+#. @T["The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."]
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."
+msgstr ""
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Facebook/#core-components" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:6
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "See documentation"
+msgstr "Xem tài liệu"
+
+#. <p class="alert alert-danger">@T["An error occurred while decrypting a setting. Please apply and save."]</p>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:11
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "An error occurred while decrypting a setting. Please apply and save."
+msgstr "Đã xảy ra lỗi khi giải mã cài đặt. Hãy áp dụng và lưu lại."
+
+#. <h3>@T["Meta Integration"]</h3>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:14
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Meta Integration"
+msgstr ""
+
+#. <label asp-for="AppId" class="form-label">@T["Application Identifier"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:17
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Application Identifier"
+msgstr "Nhận dạng Ứng dụng"
+
+#. <span class="hint">@T["The Application ID found on the Meta developer portal parameters."]</span>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "The Application ID found on the Meta developer portal parameters."
+msgstr ""
+
+#. <label asp-for="AppSecret" class="form-label">@T["Secret Key"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:24
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Secret Key"
+msgstr "Khóa Bí mật"
+
+#. <span class="hint">@T["The Application secret key found on the Meta developer portal parameters."]</span>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:27
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "The Application secret key found on the Meta developer portal parameters."
+msgstr ""
+
+#. <label asp-for="Version" class="form-label">@T["Javascript SDK Version"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:32
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Javascript SDK Version"
+msgstr "Phiên bản SDK Javascript"
+
+#. <label asp-for="SdkJs" class="form-label">@T["Javascript Sdk js"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:35
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Javascript Sdk js"
+msgstr ""
+
+#. <span class="hint">@T["Determines which versions of the Graph API and any API dialogs or plugins are invoked. Default is v3.2"]</span>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:40
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Determines which versions of the Graph API and any API dialogs or plugins are invoked. Default is v3.2"
+msgstr "Xác định phiên bản nào của Graph API và bất kỳ hộp thoại hoặc plugin API nào được gọi. Mặc định là v3.2"
+
+#. <span class="hint">@T["Determines which sdk js file to load. Default is sdk.js but you can change it as needed. Eg. to render the chat plugin use sdk/xfbml.customerchat.js and <a target=\"_blank\" href=\"https://developers.facebook.com/docs/messenger-platform/discovery/customer-chat-plugin#steps\">follow instructions</a>"]</span>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:46
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Determines which sdk js file to load. Default is sdk.js but you can change it as needed. Eg. to render the chat plugin use sdk/xfbml.customerchat.js and <a target=\"_blank\" href=\"https://developers.facebook.com/docs/messenger-platform/discovery/customer-chat-plugin#steps\">follow instructions</a>"
+msgstr "Xác định tập tin sdk js nào để tải. Mặc định là sdk.js nhưng bạn có thể thay đổi nếu cần. Ví dụ. để kết xuất chat plugin, hãy sử dụng sdk/xfbml.customerchat.js và <a target=\"_blank\" href=\"https://developers.facebook.com/docs/messenger-platform/discovery/customer-chat-plugin#steps\">làm theo hướng dẫn</a>"
+
+#. <label class="form-check-label">@T["Init on every page"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:52
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Init on every page"
+msgstr "Chạy trên mỗi trang"
+
+#. <label asp-for="FBInitParams" class="form-label">@T["Parameters for the FB.init() call"]</label>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:59
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "Parameters for the FB.init() call"
+msgstr "Các tham số gọi FB.init()"
+
+#. <span class="hint">@T["AppId and Version are filled automatically. Check the <a target=\"_blank\" href=\"https://developers.facebook.com/docs/javascript/reference/FB.init/v3.2\">reference doc for the <code>FB.init</code></a> function for more info"]</span>
+#: OrchardCore.Facebook\Views\FacebookSettings.Edit.cshtml:62
+msgctxt "OrchardCore.Facebook.Views.FacebookSettings.Edit"
+msgid "AppId and Version are filled automatically. Check the <a target=\"_blank\" href=\"https://developers.facebook.com/docs/javascript/reference/FB.init/v3.2\">reference doc for the <code>FB.init</code></a> function for more info"
+msgstr "AppId và Phiên bản được điền tự động. Kiểm tra <a target=\"_blank\" href=\"https://developers.facebook.com/docs/javascript/reference/FB.init/v3.2\">tham khảo tài liệu chức năng<code>FB.init</code></a> để có thêm thông tin"
+
+#. <span class="icon"><i class="fa-brands fa-meta" aria-hidden="true"></i></span><span class="title">@T["Meta"]</span>
+#: OrchardCore.Facebook\Views\NavigationItemText-facebook.Id.cshtml:1
+msgctxt "OrchardCore.Facebook.Views.NavigationItemText-facebook.Id"
+msgid "Meta"
+msgstr ""
+
+#. <span class="icon"><i class="fa-brands fa-meta" aria-hidden="true"></i></span><span class="title">@T["Meta App"]</span>
+#: OrchardCore.Facebook\Views\NavigationItemText-facebookApp.Id.cshtml:1
+msgctxt "OrchardCore.Facebook.Views.NavigationItemText-facebookApp.Id"
+msgid "Meta App"
+msgstr ""
+
+#. <span class="icon"><i class="fa-brands fa-meta" aria-hidden="true"></i></span><span class="title">@T["Meta Pixel"]</span>
+#: OrchardCore.Facebook\Views\NavigationItemText-facebookPixel.Id.cshtml:1
+msgctxt "OrchardCore.Facebook.Views.NavigationItemText-facebookPixel.Id"
+msgid "Meta Pixel"
+msgstr ""
+

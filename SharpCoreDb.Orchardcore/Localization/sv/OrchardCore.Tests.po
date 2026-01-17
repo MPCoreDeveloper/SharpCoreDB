@@ -1,0 +1,50 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: sv-SE\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Tests.pot\n"
+"X-Crowdin-File-ID: 891\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Swedish\n"
+"Language: sv_SE\n"
+"PO-Revision-Date: 2023-12-22 16:31\n"
+
+#. public override LocalizedString DisplayText => S["Add Task"];
+#: OrchardCore.Tests\Workflows\Activities\AddTask.cs:19
+msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
+msgid "Add Task"
+msgstr ""
+
+#. public override LocalizedString Category => S["Test"];
+#: OrchardCore.Tests\Workflows\Activities\AddTask.cs:21
+msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
+msgid "Test"
+msgstr ""
+
+#. return Outcomes(S["Done"]);
+#: OrchardCore.Tests\Workflows\Activities\AddTask.cs:37
+msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
+msgid "Done"
+msgstr ""
+
+#. public override LocalizedString DisplayText => S["Write Line Task"];
+#: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:21
+msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
+msgid "Write Line Task"
+msgstr ""
+
+#. public override LocalizedString Category => S["Test"];
+#: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:23
+msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
+msgid "Test"
+msgstr ""
+
+#. return Outcomes(S["Done"]);
+#: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:33
+msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
+msgid "Done"
+msgstr ""
+

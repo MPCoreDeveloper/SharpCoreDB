@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ja\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Email.Core.pot\n"
+"X-Crowdin-File-ID: 738\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Japanese\n"
+"Language: ja_JP\n"
+"PO-Revision-Date: 2024-08-24 20:06\n"
+
+#. return EmailResult.FailedResult(S["Email settings must be configured before an Email message can be sent."]);
+#: OrchardCore.Email.Core\Services\DefaultEmailService.cs:35
+msgctxt "OrchardCore.Email.Core.Services.DefaultEmailService"
+msgid "Email settings must be configured before an Email message can be sent."
+msgstr ""
+
+#. .Select(address => S["Invalid email address for the sender: '{0}'.", address]);
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:22
+msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgid "Invalid email address for the sender: '{0}'."
+msgstr ""
+
+#. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
+#. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
+#. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
+#. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:30
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:36
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:42
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:48
+msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgid "Invalid email address for the recipient: '{0}'."
+msgstr ""
+
+#. AddError(context, string.Empty, [S["The mail message should have at least one of these headers: To, Cc or Bcc."]]);
+#: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:54
+msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgid "The mail message should have at least one of these headers: To, Cc or Bcc."
+msgstr ""
+

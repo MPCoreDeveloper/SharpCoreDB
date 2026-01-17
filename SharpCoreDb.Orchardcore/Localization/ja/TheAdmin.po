@@ -1,0 +1,104 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ja\n"
+"X-Crowdin-File: /main/Localization/TheAdmin.pot\n"
+"X-Crowdin-File-ID: 848\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Japanese\n"
+"Language: ja_JP\n"
+"PO-Revision-Date: 2024-08-24 20:43\n"
+
+#. <button type="button" class="leftbar-compactor" title="@T["Collapse / expand menu"]">
+#. <span class="d-none">@T["Collapse / expand menu"]</span>
+#: TheAdmin\Views\Layout.cshtml:72
+#: TheAdmin\Views\Layout.cshtml:73
+msgctxt "TheAdmin.Views.Layout"
+msgid "Collapse / expand menu"
+msgstr "メニューを閉じる/広げる"
+
+#. <div id="confirmRemoveModalMetadata" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this element?"]" data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]" data-ok-class="btn-danger" data-cancel-class="btn-secondary"></div>
+#: TheAdmin\Views\Layout.cshtml:92
+msgctxt "TheAdmin.Views.Layout"
+msgid "Delete"
+msgstr "削除"
+
+#. <div id="confirmRemoveModalMetadata" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this element?"]" data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]" data-ok-class="btn-danger" data-cancel-class="btn-secondary"></div>
+#: TheAdmin\Views\Layout.cshtml:92
+msgctxt "TheAdmin.Views.Layout"
+msgid "Are you sure you want to remove this element?"
+msgstr "この項目を削除してよろしいですか"
+
+#. <div id="confirmRemoveModalMetadata" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this element?"]" data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]" data-ok-class="btn-danger" data-cancel-class="btn-secondary"></div>
+#: TheAdmin\Views\Layout.cshtml:92
+msgctxt "TheAdmin.Views.Layout"
+msgid "Ok"
+msgstr "はい"
+
+#. <div id="confirmRemoveModalMetadata" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this element?"]" data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]" data-ok-class="btn-danger" data-cancel-class="btn-secondary"></div>
+#: TheAdmin\Views\Layout.cshtml:92
+msgctxt "TheAdmin.Views.Layout"
+msgid "Cancel"
+msgstr "キャンセル"
+
+#. <input id="filter" class="form-control" placeholder="@T["Filter"]" type="search" data-bs-toggle="tooltip" data-bs-placement="right" data-html="true" title="Ctrl+Shift+F" />
+#: TheAdmin\Views\Navigation-admin.cshtml:17
+msgctxt "TheAdmin.Views.Navigation-admin"
+msgid "Filter"
+msgstr "フィルタ"
+
+#: TheAdmin\Views\Pager_First.cshtml:0
+msgctxt "TheAdmin.Views.Pager_First"
+msgid "Go to first page."
+msgstr "最初のページへ"
+
+#: TheAdmin\Views\Pager_Last.cshtml:0
+msgctxt "TheAdmin.Views.Pager_Last"
+msgid "Go to last page."
+msgstr "最後のページへ"
+
+#: TheAdmin\Views\Pager_Next.cshtml:0
+msgctxt "TheAdmin.Views.Pager_Next"
+msgid "Go to next page."
+msgstr "次のページへ"
+
+#: TheAdmin\Views\Pager_Previous.cshtml:0
+msgctxt "TheAdmin.Views.Pager_Previous"
+msgid "Go to previous page."
+msgstr "前のページへ"
+
+#. <nav aria-label="@T["Listing pages"]">
+#: TheAdmin\Views\Pager.cshtml:6
+msgctxt "TheAdmin.Views.Pager"
+msgid "Listing pages"
+msgstr "一覧ページ"
+
+#. <button class="btn btn-link nav-link dropdown-toggle" id="bd-theme" type="button" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
+#. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
+#: TheAdmin\Views\ToggleTheme.cshtml:3
+#: TheAdmin\Views\ToggleTheme.cshtml:5
+msgctxt "TheAdmin.Views.ToggleTheme"
+msgid "Toggle theme"
+msgstr "テーマの切り替え"
+
+#. <span class="ps-2">@T["Auto"]</span>
+#: TheAdmin\Views\ToggleTheme.cshtml:13
+msgctxt "TheAdmin.Views.ToggleTheme"
+msgid "Auto"
+msgstr "自動"
+
+#. <span class="ps-2">@T["Light"]</span>
+#: TheAdmin\Views\ToggleTheme.cshtml:21
+msgctxt "TheAdmin.Views.ToggleTheme"
+msgid "Light"
+msgstr "ライト"
+
+#. <span class="ps-2">@T["Dark"]</span>
+#: TheAdmin\Views\ToggleTheme.cshtml:29
+msgctxt "TheAdmin.Views.ToggleTheme"
+msgid "Dark"
+msgstr "ダーク"
+

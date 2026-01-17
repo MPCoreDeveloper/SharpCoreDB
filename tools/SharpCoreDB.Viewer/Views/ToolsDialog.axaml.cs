@@ -5,6 +5,7 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Diagnostics;
 using Avalonia.Markup.Xaml;
 using SharpCoreDB.Viewer.ViewModels;
 

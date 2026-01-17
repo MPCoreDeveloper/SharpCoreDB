@@ -1,0 +1,98 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: es-ES\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.UrlRewriting.Core.pot\n"
+"X-Crowdin-File-ID: 958\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Spanish\n"
+"Language: es_ES\n"
+"PO-Revision-Date: 2024-11-17 13:12\n"
+
+#. context.Result.Fail(new ValidationResult(S["Rule name is required"], [nameof(RewriteRule.Name)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\RewriteRuleHandler.cs:38
+msgctxt "OrchardCore.UrlRewriting.Handlers.RewriteRuleHandler"
+msgid "Rule name is required"
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Source name is required"], [nameof(RewriteRule.Source)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\RewriteRuleHandler.cs:43
+msgctxt "OrchardCore.UrlRewriting.Handlers.RewriteRuleHandler"
+msgid "Source name is required"
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The Match URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.Pattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRedirectRuleHandler.cs:36
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRedirectRuleHandler"
+msgid "The Match URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["A valid Match URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.Pattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRedirectRuleHandler.cs:40
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRedirectRuleHandler"
+msgid "A valid Match URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The Substitution URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.SubstitutionPattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRedirectRuleHandler.cs:45
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRedirectRuleHandler"
+msgid "The Substitution URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["A valid Substitution URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.SubstitutionPattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRedirectRuleHandler.cs:49
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRedirectRuleHandler"
+msgid "A valid Substitution URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The Match URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.Pattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRewriteRuleHandler.cs:36
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRewriteRuleHandler"
+msgid "The Match URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["A valid Match URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.Pattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRewriteRuleHandler.cs:40
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRewriteRuleHandler"
+msgid "A valid Match URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The Substitution URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.SubstitutionPattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRewriteRuleHandler.cs:45
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRewriteRuleHandler"
+msgid "The Substitution URL Pattern is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["A valid Substitution URL Pattern is required."], [nameof(UrlRedirectSourceMetadata.SubstitutionPattern)]));
+#: OrchardCore.UrlRewriting.Core\Handlers\UrlRewriteRuleHandler.cs:49
+msgctxt "OrchardCore.UrlRewriting.Handlers.UrlRewriteRuleHandler"
+msgid "A valid Substitution URL Pattern is required."
+msgstr ""
+
+#. DisplayName = S["Redirect"];
+#: OrchardCore.UrlRewriting.Core\Services\UrlRedirectRuleSource.cs:19
+msgctxt "OrchardCore.UrlRewriting.Services.UrlRedirectRuleSource"
+msgid "Redirect"
+msgstr ""
+
+#. Description = S["URL Redirect Rule"];
+#: OrchardCore.UrlRewriting.Core\Services\UrlRedirectRuleSource.cs:20
+msgctxt "OrchardCore.UrlRewriting.Services.UrlRedirectRuleSource"
+msgid "URL Redirect Rule"
+msgstr ""
+
+#. DisplayName = S["Rewrite"];
+#: OrchardCore.UrlRewriting.Core\Services\UrlRewriteRuleSource.cs:19
+msgctxt "OrchardCore.UrlRewriting.Services.UrlRewriteRuleSource"
+msgid "Rewrite"
+msgstr ""
+
+#. Description = S["URL Rewrite Rule"];
+#: OrchardCore.UrlRewriting.Core\Services\UrlRewriteRuleSource.cs:20
+msgctxt "OrchardCore.UrlRewriting.Services.UrlRewriteRuleSource"
+msgid "URL Rewrite Rule"
+msgstr ""
+

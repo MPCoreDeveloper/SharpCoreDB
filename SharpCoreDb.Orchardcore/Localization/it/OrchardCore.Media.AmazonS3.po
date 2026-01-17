@@ -1,0 +1,92 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: it\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Media.AmazonS3.pot\n"
+"X-Crowdin-File-ID: 864\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Italian\n"
+"Language: it_IT\n"
+"PO-Revision-Date: 2024-11-12 17:06\n"
+
+#. builder.Add(S["Configuration"], configuration => configuration
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:17
+msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
+msgid "Configuration"
+msgstr "Configurazione"
+
+#. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
+#. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:18
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:18
+msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
+msgid "Media"
+msgstr "Multimedia"
+
+#. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
+#. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:19
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:19
+msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
+msgid "Amazon S3 Options"
+msgstr "Opzioni Amazon S3"
+
+#. await _notifier.ErrorAsync(H["The Amazon S3 Media feature is enabled, but it was not configured with appsettings.json."]);
+#: OrchardCore.Media.AmazonS3\Controllers\AdminController.cs:40
+msgctxt "OrchardCore.Media.AmazonS3.AdminController"
+msgid "The Amazon S3 Media feature is enabled, but it was not configured with appsettings.json."
+msgstr "La funzionalità Amazon S3 Media è abilitata, ma non è stata configurata con appsettings.json."
+
+#. context.ErrorMessage = S["Failed to remove the Amazon S3 Bucket '{0}'.", _options.BucketName];
+#. context.ErrorMessage = S["Failed to remove the Amazon S3 Bucket '{0}'.", _options.BucketName];
+#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:121
+#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:127
+msgctxt "OrchardCore.Media.AmazonS3.Services.AwsTenantEventsBase"
+msgid "Failed to remove the Amazon S3 Bucket '{0}'."
+msgstr "Rimozione dell'Amazon S3 Bucket '{0}' fallita."
+
+#. <h1>@RenderTitleSegments(T["Amazon S3 storage options"])</h1>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:2
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Amazon S3 storage options"
+msgstr "Opzioni di archiviazione Amazon S3"
+
+#. @T["Amazon S3 storage is configured with appsettings.json."]
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:5
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Amazon S3 storage is configured with appsettings.json."
+msgstr "L'archiviazione Amazon S3 è configurata con il file appsettings.json."
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Media.AmazonS3/#configuration" target="_blank">@T["See documentation."]</a>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:6
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "See documentation."
+msgstr "Vedi la documentazione."
+
+#. <label asp-for="BucketName" class="col-sm-2 col-form-label">@T["Bucket Name"]</label>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:10
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Bucket Name"
+msgstr "Nome del Bucket"
+
+#. <label asp-for="BasePath" class="col-sm-2 col-form-label">@T["Base Path"]</label>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:17
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Base Path"
+msgstr "Percorso base"
+
+#. <label class="form-check-label" asp-for="CreateBucket">@T["Create Bucket"]</label>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:26
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Create Bucket"
+msgstr "Crea Bucket"
+
+#. <span class="hint">@T["Whether a bucket is created on startup if it does not exist."]</span>
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:27
+msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
+msgid "Whether a bucket is created on startup if it does not exist."
+msgstr "Seleziona questo campo per indicare se il Bucket va creato all'avvio, nel caso in cui non esistesse."
+

@@ -18,9 +18,18 @@ namespace SharpCoreDB.Provider.YesSql;
 /// </summary>
 public static class SharpCoreDbConfigurationExtensions
 {
+    private static readonly object _storeInitLock = new();
+    private static IStore? _store;
+    private static bool _isInitialized;
+    private static Exception? _lastInitError;
+
     /// <summary>
     /// Adds YesSql with SharpCoreDB as the database provider.
     /// This is the primary integration point for OrchardCore.
+    /// 
+    /// CRITICAL: Uses Lazy<IStore> to defer store initialization until first use.
+    /// This allows DI setup to complete without errors on fresh databases where
+    /// schema tables don't exist yet. The store is initialized lazily when first accessed.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="connectionString">SharpCoreDB connection string (Data Source=path;Password=xxx).</param>
@@ -39,18 +48,65 @@ public static class SharpCoreDbConfigurationExtensions
         // Register SharpCoreDB provider factory
         RegisterProviderFactory();
 
-        // Register YesSql Store with SharpCoreDB
-        services.AddSingleton<IStore>(sp =>
-        {
-            var config = new Configuration();
-            config.UseSharpCoreDB(connectionString, tablePrefix, isolationLevel);
-            
-            // YesSql Store requires initialization - use InitializeAsync
-            var storeTask = StoreFactory.CreateAndInitializeAsync(config);
-            return storeTask.GetAwaiter().GetResult();
-        });
+        // Register store configuration
+        services.AddSingleton(sp => CreateConfiguration(connectionString, tablePrefix, isolationLevel));
+        
+        // CRITICAL FIX: Use Lazy<IStore> to defer initialization until first use
+        // This prevents the "table doesn't exist" error during DI setup
+        services.AddSingleton<Lazy<IStore>>(sp => new Lazy<IStore>(() => GetOrCreateStore(sp)));
+        
+        // Register IStore as a factory that accesses the Lazy<IStore>.Value
+        // This ensures the store is only created when first accessed, not during DI setup
+        services.AddSingleton<IStore>(sp => sp.GetRequiredService<Lazy<IStore>>().Value);
 
         return services;
+    }
+
+    /// <summary>
+    /// Gets or creates the YesSql Store with lazy initialization.
+    /// This handles both fresh databases (where schema doesn't exist) and configured databases.
+    /// </summary>
+    private static IStore GetOrCreateStore(IServiceProvider sp)
+    {
+        // If already successfully initialized, return cached store
+        if (_store != null && _isInitialized)
+        {
+            return _store;
+        }
+
+        lock (_storeInitLock)
+        {
+            // Double-check after acquiring lock
+            if (_store != null && _isInitialized)
+            {
+                return _store;
+            }
+
+            var config = sp.GetRequiredService<Configuration>();
+
+            try
+            {
+                // Attempt to create and initialize the store
+                var storeTask = StoreFactory.CreateAndInitializeAsync(config);
+                _store = storeTask.GetAwaiter().GetResult();
+                _isInitialized = true;
+                _lastInitError = null;
+                return _store;
+            }
+            catch (Exception ex)
+            {
+                // Store initialization failed. On fresh databases, this is expected.
+                // Cache the error and re-throw so the caller can handle it.
+                System.Diagnostics.Debug.WriteLine($"Store initialization failed: {ex.Message}");
+                
+                _lastInitError = ex;
+                _isInitialized = false;
+                _store = null;
+                
+                // Re-throw and let Program.cs error handling deal with it
+                throw;
+            }
+        }
     }
 
     /// <summary>
@@ -129,5 +185,18 @@ public static class SharpCoreDbConfigurationExtensions
         DbProviderFactories.RegisterFactory(
             "SharpCoreDB",
             SharpCoreDbProviderFactory.Instance);
+    }
+
+    /// <summary>
+    /// Creates and configures a YesSql Configuration for SharpCoreDB.
+    /// </summary>
+    private static Configuration CreateConfiguration(
+        string connectionString,
+        string? tablePrefix,
+        IsolationLevel isolationLevel)
+    {
+        var config = new Configuration();
+        config.UseSharpCoreDB(connectionString, tablePrefix, isolationLevel);
+        return config;
     }
 }

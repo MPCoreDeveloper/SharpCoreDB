@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: zh-TW\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Infrastructure.pot\n"
+"X-Crowdin-File-ID: 760\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Chinese Traditional\n"
+"Language: zh_TW\n"
+"PO-Revision-Date: 2024-08-24 20:16\n"
+
+#. await Context.Output.WriteLineAsync(S["List of available commands:"]);
+#: OrchardCore.Infrastructure\Commands\Builtin\HelpCommand.cs:21
+msgctxt "OrchardCore.Environment.Commands.Builtin.HelpCommand"
+msgid "List of available commands:"
+msgstr ""
+
+#. await Context.Output.WriteLineAsync(S["Command {0} doesn't exist", command]);
+#: OrchardCore.Infrastructure\Commands\Builtin\HelpCommand.cs:45
+msgctxt "OrchardCore.Environment.Commands.Builtin.HelpCommand"
+msgid "Command {0} doesn't exist"
+msgstr ""
+
+#. return S["{0}.{1}: no help text", descriptor.MethodInfo.DeclaringType?.FullName, descriptor.MethodInfo.Name];
+#: OrchardCore.Infrastructure\Commands\Builtin\HelpCommand.cs:66
+msgctxt "OrchardCore.Environment.Commands.Builtin.HelpCommand"
+msgid "{0}.{1}: no help text"
+msgstr ""
+
+#. throw new Exception(S["Multiple commands found matching arguments \"{0}\". Commands available: {1}.",
+#: OrchardCore.Infrastructure\Commands\DefaultCommandManager.cs:34
+msgctxt "OrchardCore.Environment.Commands.DefaultCommandManager"
+msgid "Multiple commands found matching arguments \"{0}\". Commands available: {1}."
+msgstr ""
+
+#. throw new Exception(S["No command found matching arguments \"{0}\". Commands available: {1}.",
+#: OrchardCore.Infrastructure\Commands\DefaultCommandManager.cs:37
+msgctxt "OrchardCore.Environment.Commands.DefaultCommandManager"
+msgid "No command found matching arguments \"{0}\". Commands available: {1}."
+msgstr ""
+

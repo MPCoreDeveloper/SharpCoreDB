@@ -1,0 +1,32 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: it\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Search.AzureAI.Core.pot\n"
+"X-Crowdin-File-ID: 950\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Italian\n"
+"Language: it_IT\n"
+"PO-Revision-Date: 2024-11-19 14:56\n"
+
+#. context.Errors.Add(S["No index name was provided in the '{0}' recipe step.", Name]);
+#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:52
+msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
+msgid "No index name was provided in the '{0}' recipe step."
+msgstr "Nessun nome indice è stato fornito nello step '{0}' della ricetta."
+
+#. context.Errors.Add(S["Invalid index name was provided in the recipe step. IndexName: {0}.", indexInfo.IndexName]);
+#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:59
+msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
+msgid "Invalid index name was provided in the recipe step. IndexName: {0}."
+msgstr "È stato fornito un nome di indice non valido nello step della ricetta. IndexName: {0}."
+
+#. context.Errors.Add(S["No {0} were provided in the recipe step. IndexName: {1}.", nameof(indexInfo.IndexedContentTypes), indexInfo.IndexName]);
+#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:66
+msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
+msgid "No {0} were provided in the recipe step. IndexName: {1}."
+msgstr "Nessun {0} è stato fornito nello step della ricetta. IndexName: {1}."
+

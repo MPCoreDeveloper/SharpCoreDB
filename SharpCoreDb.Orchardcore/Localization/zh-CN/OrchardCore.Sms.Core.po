@@ -1,0 +1,50 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: zh-CN\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Sms.Core.pot\n"
+"X-Crowdin-File-ID: 895\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"PO-Revision-Date: 2024-09-23 09:57\n"
+
+#. public LocalizedString Name => S["Log - writes messages to the logs"];
+#: OrchardCore.Sms.Core\Services\LogSmsProvider.cs:13
+msgctxt "OrchardCore.Sms.Services.LogSmsProvider"
+msgid "Log - writes messages to the logs"
+msgstr "日志 - 将消息写入日志"
+
+#. public LocalizedString Name => S["SMS Notifications"];
+#: OrchardCore.Sms.Core\Services\SmsNotificationProvider.cs:22
+msgctxt "OrchardCore.Sms.Services.SmsNotificationProvider"
+msgid "SMS Notifications"
+msgstr "短信通知"
+
+#. return SmsResult.Failed(S["SMS settings must be configured before an SMS message can be sent."]);
+#: OrchardCore.Sms.Core\Services\SmsService.cs:26
+msgctxt "OrchardCore.Sms.Services.SmsService"
+msgid "SMS settings must be configured before an SMS message can be sent."
+msgstr "短信设置必须先配置，然后才能发送短信。"
+
+#. public LocalizedString Name => S["Twilio"];
+#: OrchardCore.Sms.Core\Services\TwilioSmsProvider.cs:24
+msgctxt "OrchardCore.Sms.Services.TwilioSmsProvider"
+msgid "Twilio"
+msgstr "Twilio"
+
+#. return SmsResult.Failed(S["SMS message was not send."]);
+#: OrchardCore.Sms.Core\Services\TwilioSmsProvider.cs:87
+msgctxt "OrchardCore.Sms.Services.TwilioSmsProvider"
+msgid "SMS message was not send."
+msgstr "短信未发送。"
+
+#. return SmsResult.Failed(S["SMS message was not send. Error: {0}", ex.Message]);
+#: OrchardCore.Sms.Core\Services\TwilioSmsProvider.cs:93
+msgctxt "OrchardCore.Sms.Services.TwilioSmsProvider"
+msgid "SMS message was not send. Error: {0}"
+msgstr "短信未发送。错误： {0}"
+

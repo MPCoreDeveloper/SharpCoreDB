@@ -123,9 +123,11 @@ public sealed class DatabaseOptions
 
     /// <summary>
     /// Gets or sets the file share mode for single-file databases.
-    /// Default: FileShare.None (exclusive access).
+    /// Default: FileShare.ReadWrite (allow concurrent access within same process).
+    /// This is safe because SharpCoreDB has internal locking via _transactionLock.
+    /// Use FileShare.None for exclusive access across processes.
     /// </summary>
-    public FileShare FileShareMode { get; set; } = FileShare.None;
+    public FileShare FileShareMode { get; set; } = FileShare.ReadWrite;
 
     /// <summary>
     /// Gets or sets whether to use unbuffered I/O (O_DIRECT on Linux).

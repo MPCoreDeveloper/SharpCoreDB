@@ -1,0 +1,578 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: fi\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Notifications.pot\n"
+"X-Crowdin-File-ID: 889\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Finnish\n"
+"Language: fi_FI\n"
+"PO-Revision-Date: 2024-11-10 15:06\n"
+
+#. public override LocalizedString DisplayText => S["Notify Content's Owner Task"];
+#: OrchardCore.Notifications\Activities\NotifyContentOwnerTask.cs:34
+msgctxt "OrchardCore.Notifications.Activities.NotifyContentOwnerTask"
+msgid "Notify Content's Owner Task"
+msgstr "Ilmoita sisällön omistajalle tehtävä"
+
+#. public override LocalizedString DisplayText => S["Notify Specific Users Task"];
+#: OrchardCore.Notifications\Activities\NotifyUserTask.cs:34
+msgctxt "OrchardCore.Notifications.Activities.NotifyUserTask"
+msgid "Notify Specific Users Task"
+msgstr ""
+
+#. public override LocalizedString Category => S["Notifications"];
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:36
+msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
+msgid "Notifications"
+msgstr "Ilmoitukset"
+
+#. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
+msgid "Done"
+msgstr "Valmis"
+
+#. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
+msgid "Failed"
+msgstr "Epäonnistui"
+
+#. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
+msgid "Failed: no user found"
+msgstr "Epäonnistui: käyttäjää ei löytynyt"
+
+#. new(S["Read"], nameof(NotificationStatus.Read)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:95
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Read"
+msgstr "Lue"
+
+#. new(S["Unread"], nameof(NotificationStatus.Unread)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:96
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Unread"
+msgstr ""
+
+#. new(S["Recently created"], nameof(NotificationOrder.Latest)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:100
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Recently created"
+msgstr "Äskettäin luodut"
+
+#. new(S["Previously created"], nameof(NotificationOrder.Oldest)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:101
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Previously created"
+msgstr "Aikaisemmin luodut"
+
+#. new(S["Mark as read"], nameof(NotificationBulkAction.Read)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:105
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Mark as read"
+msgstr "Merkitse luetuksi"
+
+#. new(S["Mark as unread"], nameof(NotificationBulkAction.Unread)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:106
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Mark as unread"
+msgstr "Merkitse lukemattomaksi"
+
+#. new(S["Remove"], nameof(NotificationBulkAction.Remove)),
+#: OrchardCore.Notifications\Controllers\AdminController.cs:107
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "Remove"
+msgstr "Poista"
+
+#. await _notifier.SuccessAsync(H["{0} {1} unread successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#. await _notifier.SuccessAsync(H["{0} {1} read successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#. await _notifier.SuccessAsync(H["{0} {1} removed successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#. await _notifier.SuccessAsync(H["{0} {1} read successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#: OrchardCore.Notifications\Controllers\AdminController.cs:201
+#: OrchardCore.Notifications\Controllers\AdminController.cs:223
+#: OrchardCore.Notifications\Controllers\AdminController.cs:235
+#: OrchardCore.Notifications\Controllers\AdminController.cs:272
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "notification"
+msgid_plural "notifications"
+msgstr[0] "ilmoitus"
+msgstr[1] "ilmoitukset"
+
+#. await _notifier.SuccessAsync(H["{0} {1} unread successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#: OrchardCore.Notifications\Controllers\AdminController.cs:201
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "{0} {1} unread successfully."
+msgstr ""
+
+#. await _notifier.SuccessAsync(H["{0} {1} read successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#. await _notifier.SuccessAsync(H["{0} {1} read successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#: OrchardCore.Notifications\Controllers\AdminController.cs:223
+#: OrchardCore.Notifications\Controllers\AdminController.cs:272
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "{0} {1} read successfully."
+msgstr "{0} {1} luettu onnistuneesti."
+
+#. await _notifier.SuccessAsync(H["{0} {1} removed successfully.", counter, H.Plural(counter, "notification", "notifications")]);
+#: OrchardCore.Notifications\Controllers\AdminController.cs:235
+msgctxt "OrchardCore.Notifications.Controllers.AdminController"
+msgid "{0} {1} removed successfully."
+msgstr "{0} {1} poistettiin onnistuneesti."
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Subject), S["Subject field does not contain a valid Liquid expression. Details: {0}", string.Join(' ', subjectErrors)]);
+#: OrchardCore.Notifications\Drivers\NotifyUserTaskActivityDisplayDriver.cs:73
+msgctxt "OrchardCore.Notifications.Drivers.NotifyUserTaskActivityDisplayDriver"
+msgid "Subject field does not contain a valid Liquid expression. Details: {0}"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Summary), S["Summary field does not contain a valid Liquid expression. Details: {0}", string.Join(' ', summaryErrors)]);
+#: OrchardCore.Notifications\Drivers\NotifyUserTaskActivityDisplayDriver.cs:78
+msgctxt "OrchardCore.Notifications.Drivers.NotifyUserTaskActivityDisplayDriver"
+msgid "Summary field does not contain a valid Liquid expression. Details: {0}"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.TextBody), S["Text Body field does not contain a valid Liquid expression. Details: {0}", string.Join(' ', textBodyErrors)]);
+#: OrchardCore.Notifications\Drivers\NotifyUserTaskActivityDisplayDriver.cs:83
+msgctxt "OrchardCore.Notifications.Drivers.NotifyUserTaskActivityDisplayDriver"
+msgid "Text Body field does not contain a valid Liquid expression. Details: {0}"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.HtmlBody), S["HTML Body field does not contain a valid Liquid expression. Details: {0}", string.Join(' ', htmlBodyErrors)]);
+#: OrchardCore.Notifications\Drivers\NotifyUserTaskActivityDisplayDriver.cs:88
+msgctxt "OrchardCore.Notifications.Drivers.NotifyUserTaskActivityDisplayDriver"
+msgid "HTML Body field does not contain a valid Liquid expression. Details: {0}"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.UserNames), S["Please provide at least one username to notify."]);
+#: OrchardCore.Notifications\Drivers\NotifyUserTaskDisplayDriver.cs:38
+msgctxt "OrchardCore.Notifications.Drivers.NotifyUserTaskDisplayDriver"
+msgid "Please provide at least one username to notify."
+msgstr ""
+
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Notification Center"])</h1></zone>
+#: OrchardCore.Notifications\Views\Admin\List.cshtml:3
+msgctxt "OrchardCore.Notifications.Views.Admin.List"
+msgid "Notification Center"
+msgstr "Ilmoituskeskus"
+
+#. <div class="btn-group" title="@T["Actions"]">
+#. <span>@T["Actions"]</span>
+#: OrchardCore.Notifications\Views\Notification.SummaryAdmin.cshtml:72
+#: OrchardCore.Notifications\Views\Notification.SummaryAdmin.cshtml:74
+msgctxt "OrchardCore.Notifications.Views.Notification.SummaryAdmin"
+msgid "Actions"
+msgstr "Toiminnot"
+
+#. @T["Mark as read"]
+#: OrchardCore.Notifications\Views\NotificationsActions_SummaryAdmin.cshtml:10
+msgctxt "OrchardCore.Notifications.Views.NotificationsActions_SummaryAdmin"
+msgid "Mark as read"
+msgstr "Merkitse luetuksi"
+
+#. @T["No notifications found."]
+#: OrchardCore.Notifications\Views\NotificationsAdminList.cshtml:62
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminList"
+msgid "No notifications found."
+msgstr "Ei ilmoituksia."
+
+#. selectedItems.text($(":checkbox[name='itemIds']:checked").length + ' @T["selected"]');
+#. selectedItems.text(selectedItemsCount + ' @T["selected"]');
+#: OrchardCore.Notifications\Views\NotificationsAdminList.cshtml:117
+#: OrchardCore.Notifications\Views\NotificationsAdminList.cshtml:128
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminList"
+msgid "selected"
+msgstr "valitut"
+
+#. @T["Actions"]
+#: OrchardCore.Notifications\Views\NotificationsAdminList.Fields.BulkActions.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminList.Fields.BulkActions"
+msgid "Actions"
+msgstr "Toiminnot"
+
+#. data-url-af="RemoveUrl UnsafeUrl" data-title="@T["Delete"]" data-message="@T["Are you sure you to mark all notifications as read?"]"
+#: OrchardCore.Notifications\Views\NotificationsAdminListActionBarButtons.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListActionBarButtons"
+msgid "Delete"
+msgstr "Poista"
+
+#. data-url-af="RemoveUrl UnsafeUrl" data-title="@T["Delete"]" data-message="@T["Are you sure you to mark all notifications as read?"]"
+#: OrchardCore.Notifications\Views\NotificationsAdminListActionBarButtons.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListActionBarButtons"
+msgid "Are you sure you to mark all notifications as read?"
+msgstr "Haluatko varmasti merkitä kaikki ilmoitukset luetuiksi?"
+
+#. data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]">@T["Mark All as Read"]</a>
+#: OrchardCore.Notifications\Views\NotificationsAdminListActionBarButtons.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListActionBarButtons"
+msgid "Ok"
+msgstr "Ok"
+
+#. data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]">@T["Mark All as Read"]</a>
+#: OrchardCore.Notifications\Views\NotificationsAdminListActionBarButtons.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListActionBarButtons"
+msgid "Cancel"
+msgstr "Peruuta"
+
+#. data-ok-text="@T["Ok"]" data-cancel-text="@T["Cancel"]">@T["Mark All as Read"]</a>
+#: OrchardCore.Notifications\Views\NotificationsAdminListActionBarButtons.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListActionBarButtons"
+msgid "Mark All as Read"
+msgstr "Merkitse kaikki luetuksi"
+
+#. <a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a>
+#: OrchardCore.Notifications\Views\NotificationsAdminListBulkActions.cshtml:5
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListBulkActions"
+msgid "Bulk Action"
+msgstr "Massatoiminto"
+
+#. <a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a>
+#: OrchardCore.Notifications\Views\NotificationsAdminListBulkActions.cshtml:5
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListBulkActions"
+msgid "Are you sure you want to {0} these items?"
+msgstr "Oletko varma, että haluat {0} nämä kohteet?"
+
+#. <select asp-for="Status" asp-items="@Model.Statuses" class="selectpicker show-tick me-2" data-header="@T["Filter by status"]" data-width="fit" data-selected-text-format="static" data-dropdown-align-right="auto" title="@T["Show"]" data-style="btn-sm">
+#: OrchardCore.Notifications\Views\NotificationsAdminListFilters.cshtml:4
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
+msgid "Filter by status"
+msgstr "Suodata tilan mukaan"
+
+#. <select asp-for="Status" asp-items="@Model.Statuses" class="selectpicker show-tick me-2" data-header="@T["Filter by status"]" data-width="fit" data-selected-text-format="static" data-dropdown-align-right="auto" title="@T["Show"]" data-style="btn-sm">
+#: OrchardCore.Notifications\Views\NotificationsAdminListFilters.cshtml:4
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
+msgid "Show"
+msgstr "Näytä"
+
+#. <option value="">@T["All"]</option>
+#: OrchardCore.Notifications\Views\NotificationsAdminListFilters.cshtml:5
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
+msgid "All"
+msgstr "Kaikki"
+
+#. <select asp-for="OrderBy" asp-items="@Model.Sorts" class="selectpicker show-tick" data-header="@T["Sort by"]" data-width="fit" data-selected-text-format="static" data-dropdown-align-right="true" title="@T["Sort"]" data-style="btn-sm"></select>
+#: OrchardCore.Notifications\Views\NotificationsAdminListFilters.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
+msgid "Sort by"
+msgstr "Järjestä"
+
+#. <select asp-for="OrderBy" asp-items="@Model.Sorts" class="selectpicker show-tick" data-header="@T["Sort by"]" data-width="fit" data-selected-text-format="static" data-dropdown-align-right="true" title="@T["Sort"]" data-style="btn-sm"></select>
+#: OrchardCore.Notifications\Views\NotificationsAdminListFilters.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
+msgid "Sort"
+msgstr "Järjestä"
+
+#. <label asp-for="SearchText" class="sr-only">@T["Search"]</label>
+#. <input asp-for="SearchText" class="form-control" placeholder="@T["Search"]" inputmode="search" type="search" autofocus />
+#: OrchardCore.Notifications\Views\NotificationsAdminListSearch.cshtml:7
+#: OrchardCore.Notifications\Views\NotificationsAdminListSearch.cshtml:9
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSearch"
+msgid "Search"
+msgstr "Haku"
+
+#. <label class="form-check-label" for="select-all" id="select-all-label" title="@T["Select All"]"></label>
+#: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
+msgid "Select All"
+msgstr "Valitse kaikki"
+
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
+msgid "1 item"
+msgid_plural "{0} items"
+msgstr[0] "Yksi kohde"
+msgstr[1] "{0} kohdetta"
+
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
+msgid "Items {0} to {1}"
+msgstr "Kohteet {0} - {1}"
+
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
+msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
+msgid " / {0} item in total"
+msgid_plural " / {0} items in total"
+msgstr[0] " / {0} kohde yhteensä"
+msgstr[1] " / {0} kohdetta yhteensä"
+
+#. <a asp-action="Toggle" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-markAsRead="false" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Unread a message"] data-message=@T["Are you sure you want to mark this notification as unread?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Mark as unread"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Unread a message"
+msgstr ""
+
+#. <a asp-action="Toggle" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-markAsRead="false" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Unread a message"] data-message=@T["Are you sure you want to mark this notification as unread?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Mark as unread"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Are you sure you want to mark this notification as unread?"
+msgstr ""
+
+#. <a asp-action="Toggle" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-markAsRead="false" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Unread a message"] data-message=@T["Are you sure you want to mark this notification as unread?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Mark as unread"]</a>
+#. <a asp-action="Delete" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Delete a notification"] data-message=@T["Are you sure you want to delete this notification?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Delete"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:8
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Yes"
+msgstr "Kyllä"
+
+#. <a asp-action="Toggle" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-markAsRead="false" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Unread a message"] data-message=@T["Are you sure you want to mark this notification as unread?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Mark as unread"]</a>
+#. <a asp-action="Delete" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Delete a notification"] data-message=@T["Are you sure you want to delete this notification?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Delete"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:8
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "No"
+msgstr "Ei"
+
+#. <a asp-action="Toggle" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-markAsRead="false" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Unread a message"] data-message=@T["Are you sure you want to mark this notification as unread?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Mark as unread"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Mark as unread"
+msgstr "Merkitse lukemattomaksi"
+
+#. <a asp-action="Delete" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Delete a notification"] data-message=@T["Are you sure you want to delete this notification?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Delete"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Delete a notification"
+msgstr "Poista ilmoitus"
+
+#. <a asp-action="Delete" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Delete a notification"] data-message=@T["Are you sure you want to delete this notification?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Delete"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Are you sure you want to delete this notification?"
+msgstr "Oletko varma, että haluat poistaa tämän ilmoituksen?"
+
+#. <a asp-action="Delete" asp-controller="Admin" asp-route-area="OrchardCore.Notifications" asp-route-notificationId="@Model.Notification.NotificationId" asp-route-returnUrl="@FullRequestPath" data-url-af="UnsafeUrl RemoveUrl" data-title=@T["Delete a notification"] data-message=@T["Are you sure you want to delete this notification?"] data-ok-text="@T["Yes"]" data-cancel-text="@T["No"]" data-ok-class="btn-primary" class="dropdown-item btn-sm">@T["Delete"]</a>
+#: OrchardCore.Notifications\Views\NotificationsButtonActions_SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.NotificationsButtonActions_SummaryAdmin"
+msgid "Delete"
+msgstr "Poista"
+
+#. <h4><i class="fa-solid fa-envelope" aria-hidden="true"></i>@Model.Activity.GetTitleOrDefault(() => T["Notify Content Owner"])</h4>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Design.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Design"
+msgid "Notify Content Owner"
+msgstr "Ilmoita sisällön omistajalle"
+
+#. <label asp-for="Subject" class="form-label">@T["Subject"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:4
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "Subject"
+msgstr "Aihe"
+
+#. <span class="hint">@T["You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "You may use Liquid syntax."
+msgstr "Voit käyttää Liquid-koodia."
+
+#. <label asp-for="Summary" class="form-label">@T["Summary"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "Summary"
+msgstr ""
+
+#. <span class="hint">@T["HTML summary for the notification. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:14
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "HTML summary for the notification. You may use Liquid syntax."
+msgstr ""
+
+#. <label asp-for="TextBody" class="form-label">@T["Text Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:18
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "Text Body"
+msgstr "Tekstin runko"
+
+#. <span class="hint">@T["This optional text body does not support HTML. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:20
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "This optional text body does not support HTML. You may use Liquid syntax."
+msgstr ""
+
+#. <label asp-for="HtmlBody" class="form-label">@T["HTML Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:24
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "HTML Body"
+msgstr "Html- runko"
+
+#. <span class="hint">@T["HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:26
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IsHtmlPreferred">@T["Use HTML Body when possible"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:32
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "Use HTML Body when possible"
+msgstr "Käytä HTML-runkoa kun mahdollista"
+
+#. <span class="hint">@T["When checked, the notification provider will use the HTML body if it supports HTML."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:34
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
+msgid "When checked, the notification provider will use the HTML body if it supports HTML."
+msgstr ""
+
+#. <h4 class="card-title"><i class="fa-solid fa-envelope" aria-hidden="true"></i>@T["Notify Content Owner"]</h4>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Thumbnail.cshtml:1
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Thumbnail"
+msgid "Notify Content Owner"
+msgstr "Ilmoita sisällön omistajalle"
+
+#. <p>@T["Notify content owner"]</p>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Thumbnail.cshtml:2
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Thumbnail"
+msgid "Notify content owner"
+msgstr "Ilmoita sisällön omistajalle"
+
+#. <h4><i class="fa-solid fa-envelope" aria-hidden="true"></i>@Model.Activity.GetTitleOrDefault(() => T["Notify Specific Users"])</h4>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Design.cshtml:8
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Design"
+msgid "Notify Specific Users"
+msgstr ""
+
+#. <label asp-for="UserNames" class="form-label">@T["User names"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Edit.cshtml:4
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Edit"
+msgid "User names"
+msgstr ""
+
+#. <span class="hint">@T["Please provide a comma separated list of user names. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Edit.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Edit"
+msgid "Please provide a comma separated list of user names. You may use Liquid syntax."
+msgstr ""
+
+#. <h4 class="card-title"><i class="fa-solid fa-envelope" aria-hidden="true"></i>@T["Notify Specific Users"]</h4>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Thumbnail.cshtml:1
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Thumbnail"
+msgid "Notify Specific Users"
+msgstr ""
+
+#. <p>@T["Notify specific users"]</p>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Thumbnail.cshtml:2
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Thumbnail"
+msgid "Notify specific users"
+msgstr ""
+
+#. <label asp-for="Subject" class="form-label">@T["Subject"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:4
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "Subject"
+msgstr "Aihe"
+
+#. <span class="hint">@T["You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "You may use Liquid syntax."
+msgstr "Voit käyttää Liquid-koodia."
+
+#. <label asp-for="Summary" class="form-label">@T["Summary"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:11
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "Summary"
+msgstr ""
+
+#. <span class="hint">@T["You may use Liquid syntax. Html is supported."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:14
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "You may use Liquid syntax. Html is supported."
+msgstr ""
+
+#. <label asp-for="TextBody" class="form-label">@T["Text Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:18
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "Text Body"
+msgstr "Tekstin runko"
+
+#. <span class="hint">@T["This optional text body does not support HTML. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:21
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "This optional text body does not support HTML. You may use Liquid syntax."
+msgstr ""
+
+#. <label asp-for="HtmlBody" class="form-label">@T["HTML Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:25
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "HTML Body"
+msgstr "Html- runko"
+
+#. <span class="hint">@T["HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:28
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IsHtmlPreferred">@T["Use HTML Body when possible"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:34
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "Use HTML Body when possible"
+msgstr "Käytä HTML-runkoa kun mahdollista"
+
+#. <span class="hint">@T["When checked, the notification provider will use the HTML body if it supports HTML."]</span>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:36
+msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
+msgid "When checked, the notification provider will use the HTML body if it supports HTML."
+msgstr ""
+
+#. <button type="button" class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="@T["Notifications"]">
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:15
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "Notifications"
+msgstr ""
+
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:0
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "You have more than {0} unread notifications"
+msgstr "Sinulla on enemmän kuin {0} lukematonta ilmotusta"
+
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:0
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "You have {1} unread notification"
+msgid_plural "You have {0} unread notifications"
+msgstr[0] "Sinulla on {1} lukematon ilmotus"
+msgstr[1] "Sinulla on {0} lukematonta ilmotusta"
+
+#. <i class="fa-regular fa-bell" aria-hidden="true" data-bs-toggle="tooltip" data-bs-original-title="@T["You have no unread notifications"]"></i>
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:32
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "You have no unread notifications"
+msgstr "Sinulla ei ole lukemattomia ilmotuksia"
+
+#. <li class="text-center">@T["You have no unread notifications."]</li>
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:54
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "You have no unread notifications."
+msgstr ""
+
+#. <a class="dropdown-item fw-bold" asp-action="List" asp-controller="Admin" asp-area="@NotificationConstants.Features.Notifications">@T["Notification Center"]</a>
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:64
+msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
+msgid "Notification Center"
+msgstr "Ilmoituskeskus"
+
+#. <label asp-for="Methods" class="form-label">@T["Notification Methods"]</label>
+#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:7
+msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
+msgid "Notification Methods"
+msgstr "Ilmoitustavat"
+
+#. @T["Select all notification methods to receive."]
+#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:10
+msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
+msgid "Select all notification methods to receive."
+msgstr "Valitse kaikki ilmoitustavat."
+
+#. <span class="hint">@T["From the list above, you can sort the notification priority where the most important method is on the top."]</span>
+#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:30
+msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
+msgid "From the list above, you can sort the notification priority where the most important method is on the top."
+msgstr ""
+

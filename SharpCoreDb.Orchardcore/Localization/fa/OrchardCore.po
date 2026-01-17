@@ -1,0 +1,74 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: fa\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.pot\n"
+"X-Crowdin-File-ID: 893\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Persian\n"
+"Language: fa_IR\n"
+"PO-Revision-Date: 2024-08-24 20:49\n"
+
+#. context.ErrorMessage = S["The tenant should not be the '{0}' tenant.", ShellSettings.DefaultShellName];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:41
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "The tenant should not be the '{0}' tenant."
+msgstr "مستاجر نباید مستاجر \"{0}\" باشد."
+
+#. context.ErrorMessage = S["The tenant '{0}' should be 'Disabled' or 'Uninitialized'.", shellSettings.Name];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:48
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "The tenant '{0}' should be 'Disabled' or 'Uninitialized'."
+msgstr "مستاجر \"{0}\" باید \"غیرفعال\" یا \"غیر اولیه\" باشد."
+
+#. context.ErrorMessage = S["Failed to create a 'ShellContext' before removing the tenant."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:68
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to create a 'ShellContext' before removing the tenant."
+msgstr "قبل از حذف مستاجر، «ShellContext» ایجاد نشد."
+
+#. context.ErrorMessage = S["Failed to acquire a lock before executing the tenant handlers."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:82
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to acquire a lock before executing the tenant handlers."
+msgstr "قبل از اجرای گردانندگان مستاجر، قفل دریافت نشد."
+
+#. context.ErrorMessage = S["Failed to execute the tenant handler '{0}'.", type];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:115
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to execute the tenant handler '{0}'."
+msgstr "اجراکننده مستاجر \"{0}\" ناموفق بود."
+
+#. context.ErrorMessage = S["Failed to acquire a lock before executing the host handlers."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:135
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to acquire a lock before executing the host handlers."
+msgstr "قبل از اجرای کنترل‌کننده‌های میزبان، قفل دریافت نشد."
+
+#. context.ErrorMessage = S["Failed to execute the host handler '{0}'.", type];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:170
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to execute the host handler '{0}'."
+msgstr "اجراکننده میزبان «{0}» ناموفق بود."
+
+#. context.ErrorMessage = S["Failed to remove the shell settings."];
+#: OrchardCore\Shell\Removing\ShellSettingsRemovingHandler.cs:46
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellSettingsRemovingHandler"
+msgid "Failed to remove the shell settings."
+msgstr "تنظیمات پوسته حذف نشد."
+
+#. context.ErrorMessage = S["Failed to remove the site folder '{0}'.", shellAppDataFolder];
+#: OrchardCore\Shell\Removing\ShellSiteFolderRemovingHandler.cs:67
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellSiteFolderRemovingHandler"
+msgid "Failed to remove the site folder '{0}'."
+msgstr "پوشه سایت \"{0}\" حذف نشد."
+
+#. context.ErrorMessage = S["Failed to remove the web root folder '{0}'.", shellWebRootFolder];
+#: OrchardCore\Shell\Removing\ShellWebRootRemovingHandler.cs:71
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellWebRootRemovingHandler"
+msgid "Failed to remove the web root folder '{0}'."
+msgstr "پوشه ریشه وب \"{0}\" حذف نشد."
+

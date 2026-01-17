@@ -1,0 +1,46 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=4; plural=((n%10==1 && n%100!=11) ? 0 : ((n%10 >= 2 && n%10 <=4 && (n%100 < 12 || n%100 > 14)) ? 1 : ((n%10 == 0 || (n%10 >= 5 && n%10 <=9)) || (n%100 >= 11 && n%100 <= 14)) ? 2 : 3));\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ru\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Apis.GraphQL.pot\n"
+"X-Crowdin-File-ID: 702\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Russian\n"
+"Language: ru_RU\n"
+"PO-Revision-Date: 2024-09-09 16:59\n"
+
+#. .Add(S["Configuration"], configuration => configuration
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:18
+msgctxt "OrchardCore.Apis.GraphQL.AdminMenu"
+msgid "Configuration"
+msgstr "Конфигурация"
+
+#. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
+#. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:19
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:19
+msgctxt "OrchardCore.Apis.GraphQL.AdminMenu"
+msgid "GraphiQL"
+msgstr "GraphiQL"
+
+#. S["'{0}' exceeds the maximum number of results for '{1}' ({2})", value.Value, arg.Name, _maxNumberOfResults],
+#: OrchardCore.Apis.GraphQL\ValidationRules\MaxNumberOfResultsValidationRule.cs:58
+msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.MaxNumberOfResultsValidationRule"
+msgid "'{0}' exceeds the maximum number of results for '{1}' ({2})"
+msgstr "'{0}' превышает максимальное количество результатов для '{1}' ({2})"
+
+#. S["Authorization is required to access {0}.", operationName],
+#: OrchardCore.Apis.GraphQL\ValidationRules\RequiresPermissionValidationRule.cs:68
+msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.RequiresPermissionValidationRule"
+msgid "Authorization is required to access {0}."
+msgstr "Для доступа к {0} требуется авторизация."
+
+#. S["Authorization is required to access the node. {0}", nodeName],
+#: OrchardCore.Apis.GraphQL\ValidationRules\RequiresPermissionValidationRule.cs:121
+msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.RequiresPermissionValidationRule"
+msgid "Authorization is required to access the node. {0}"
+msgstr "Для доступа к узлу требуется авторизация. {0}"
+

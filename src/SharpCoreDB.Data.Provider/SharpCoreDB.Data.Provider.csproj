@@ -61,4 +61,8 @@
     <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Condition="Exists('..\SharpCoreDB\SharpCoreDB.jpg')" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+  </ItemGroup>
+
 </Project>

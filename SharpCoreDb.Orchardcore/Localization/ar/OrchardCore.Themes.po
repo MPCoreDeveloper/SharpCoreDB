@@ -1,0 +1,232 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ar\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Themes.pot\n"
+"X-Crowdin-File-ID: 830\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Arabic\n"
+"Language: ar_SA\n"
+"PO-Revision-Date: 2024-11-10 14:57\n"
+
+#. .Add(S["Design"], NavigationConstants.AdminMenuDesignPosition, design => design
+#: OrchardCore.Themes\AdminMenu.cs:18
+msgctxt "OrchardCore.Themes.AdminMenu"
+msgid "Design"
+msgstr "تصميم"
+
+#. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
+#. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
+#: OrchardCore.Themes\AdminMenu.cs:20
+#: OrchardCore.Themes\AdminMenu.cs:20
+msgctxt "OrchardCore.Themes.AdminMenu"
+msgid "Themes"
+msgstr "السمات"
+
+#. await _notifier.SuccessAsync(H["{0} was enabled", feature.Name ?? feature.Id]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:145
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "{0} was enabled"
+msgstr "{0} مفعل"
+
+#. await _notifier.SuccessAsync(H["{0} was set as the default {1} theme", feature.Name ?? feature.Id, isAdmin ? "Admin" : "Site"]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:148
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "{0} was set as the default {1} theme"
+msgstr "{0} تم تعيينة كسمة إفتراضية لـ {1}"
+
+#. await _notifier.SuccessAsync(H["The Site theme was reset."]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:165
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "The Site theme was reset."
+msgstr "تم إعادة تعيين سمة الموقع."
+
+#. await _notifier.SuccessAsync(H["The Admin theme was reset."]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:180
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "The Admin theme was reset."
+msgstr "تم إعادة تعيين سمة لوحة التحكم."
+
+#. await _notifier.SuccessAsync(H["{0} was disabled.", feature.Name ?? feature.Id]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:203
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "{0} was disabled."
+msgstr ""
+
+#. await _notifier.SuccessAsync(H["{0} was enabled.", feature.Name ?? feature.Id]);
+#: OrchardCore.Themes\Controllers\AdminController.cs:226
+msgctxt "OrchardCore.Themes.Controllers.AdminController"
+msgid "{0} was enabled."
+msgstr ""
+
+#. throw new InvalidOperationException(H["The theme \"{0}\" is already in the stack of themes that need features disabled.", themeName].ToString());
+#: OrchardCore.Themes\Services\ThemeService.cs:39
+msgctxt "OrchardCore.Themes.Services.ThemeService"
+msgid "The theme \"{0}\" is already in the stack of themes that need features disabled."
+msgstr "السمة \"{0}\" موجودة مسبقاً على مجموعة السمات اللاتي تحتاج إلى تعطيل الميزات."
+
+#. throw new InvalidOperationException(H["The theme \"{0}\" is already in the stack of themes that need features enabled.", themeName].ToString());
+#: OrchardCore.Themes\Services\ThemeService.cs:76
+msgctxt "OrchardCore.Themes.Services.ThemeService"
+msgid "The theme \"{0}\" is already in the stack of themes that need features enabled."
+msgstr "السمة \"{0}\" موجودة مسبقاً على مجموعة السمات اللاتي تحتاج إلى تمكين الميزات."
+
+#. await _notifier.SuccessAsync(H["{0} was enabled.", enabledFeature.Name]);
+#: OrchardCore.Themes\Services\ThemeService.cs:119
+msgctxt "OrchardCore.Themes.Services.ThemeService"
+msgid "{0} was enabled."
+msgstr "{0} مفعل."
+
+#. await _notifier.SuccessAsync(H["{0} was disabled.", feature.Name]);
+#: OrchardCore.Themes\Services\ThemeService.cs:146
+msgctxt "OrchardCore.Themes.Services.ThemeService"
+msgid "{0} was disabled."
+msgstr "{0} معطل."
+
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Themes"])</h1></zone>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:11
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Themes"
+msgstr "السمات"
+
+#. <p>@T["There are no themes installed."]</p>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:15
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "There are no themes installed."
+msgstr "لا توجد سمات متاحة للتنصيب."
+
+#. <h4>@T["Reset current themes"]</h4>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:29
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Reset current themes"
+msgstr "إعادة ضبط السمات"
+
+#. <p>@T["The following actions reset the themes. It is used for sites that can't use theming."]</p>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:30
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "The following actions reset the themes. It is used for sites that can't use theming."
+msgstr "الإجراءات التالية تعيد ضبط السمات. يتم إستخدامها للمواقع التي لا تستخم السمات."
+
+#. <a asp-action="ResetSiteTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Site Theme"]" data-message="@T["Are you sure you want to reset the Site theme?"]" class="btn btn-danger">@T["Reset Site Theme"]</a>
+#. <a asp-action="ResetSiteTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Site Theme"]" data-message="@T["Are you sure you want to reset the Site theme?"]" class="btn btn-danger">@T["Reset Site Theme"]</a>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:31
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:31
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Reset Site Theme"
+msgstr "إعادة تعيين سمة الموقع"
+
+#. <a asp-action="ResetSiteTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Site Theme"]" data-message="@T["Are you sure you want to reset the Site theme?"]" class="btn btn-danger">@T["Reset Site Theme"]</a>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:31
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Are you sure you want to reset the Site theme?"
+msgstr "هل أنت متأكد من أنك تريد إعادة ضبط سمة الموقع؟"
+
+#. <a asp-action="ResetAdminTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Admin Theme"]" data-message="@T["Are you sure you want to reset the Admin theme?"]" class="btn btn-danger">@T["Reset Admin Theme"]</a>
+#. <a asp-action="ResetAdminTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Admin Theme"]" data-message="@T["Are you sure you want to reset the Admin theme?"]" class="btn btn-danger">@T["Reset Admin Theme"]</a>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:32
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:32
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Reset Admin Theme"
+msgstr "إعادة تعيين سمة لوحة التحكم"
+
+#. <a asp-action="ResetAdminTheme" data-url-af="UnsafeUrl RemoveUrl" data-title="@T["Reset Admin Theme"]" data-message="@T["Are you sure you want to reset the Admin theme?"]" class="btn btn-danger">@T["Reset Admin Theme"]</a>
+#: OrchardCore.Themes\Views\Admin\Index.cshtml:32
+msgctxt "OrchardCore.Themes.Views.Admin.Index"
+msgid "Are you sure you want to reset the Admin theme?"
+msgstr "هل أنت متأكد من أنك تريد إعادة ضبط سمة لوحة التحكم؟"
+
+#. <span class="icon"><i class="fa-solid fa-desktop" aria-hidden="true"></i></span><span class="title">@T["Design"]</span>
+#: OrchardCore.Themes\Views\NavigationItemText-themes.Id.cshtml:1
+msgctxt "OrchardCore.Themes.Views.NavigationItemText-themes.Id"
+msgid "Design"
+msgstr "تصميم"
+
+#. <button type="submit" class="btn btn-sm btn-primary">@T["Make Current"]</button>
+#: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsMakeCurrent.SummaryAdmin.cshtml:7
+msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsMakeCurrent.SummaryAdmin"
+msgid "Make Current"
+msgstr ""
+
+#. <button type="submit" class="btn btn-sm btn-secondary">@T["Disable"]</button>
+#: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsToggleState.SummaryAdmin.cshtml:9
+msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsToggleState.SummaryAdmin"
+msgid "Disable"
+msgstr ""
+
+#. <button type="submit" class="btn btn-sm btn-secondary">@T["Enable"]</button>
+#: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsToggleState.SummaryAdmin.cshtml:16
+msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsToggleState.SummaryAdmin"
+msgid "Enable"
+msgstr ""
+
+#. <span class="text-muted">@T["This is the current Admin theme"]</span>
+#: OrchardCore.Themes\Views\Items\ThemeEntry-Current.SummaryAdmin.cshtml:8
+msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-Current.SummaryAdmin"
+msgid "This is the current Admin theme"
+msgstr ""
+
+#. <span class="text-muted">@T["This is the current Site theme"]</span>
+#: OrchardCore.Themes\Views\Items\ThemeEntry-Current.SummaryAdmin.cshtml:13
+msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-Current.SummaryAdmin"
+msgid "This is the current Site theme"
+msgstr ""
+
+#. <h5>@T["Themes"]</h5>
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Edit.cshtml:3
+msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Edit"
+msgid "Themes"
+msgstr "السمات"
+
+#. <h5>@T["Themes"]</h5>
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Summary.cshtml:3
+msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Summary"
+msgid "Themes"
+msgstr "السمات"
+
+#. <span class="hint">@T["Adds the currently selected site theme and admin theme to the plan."]</span>
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Summary.cshtml:5
+msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Summary"
+msgid "Adds the currently selected site theme and admin theme to the plan."
+msgstr "اضف السمات المحددة حالياً للخطة."
+
+#. <h4 class="card-title">@T["Themes"]</h4>
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Thumbnail"
+msgid "Themes"
+msgstr "السمات"
+
+#. <p>@T["Exports the currently selected site theme and admin theme."]</p>
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Thumbnail"
+msgid "Exports the currently selected site theme and admin theme."
+msgstr "صدر السمات المحدة حالياً."
+
+#. <button class="btn btn-link nav-link dropdown-toggle" id="bd-theme" type="button" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
+#. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
+#: OrchardCore.Themes\Views\ToggleTheme.cshtml:3
+#: OrchardCore.Themes\Views\ToggleTheme.cshtml:5
+msgctxt "OrchardCore.Themes.Views.ToggleTheme"
+msgid "Toggle theme"
+msgstr ""
+
+#. <span class="ps-2">@T["Auto"]</span>
+#: OrchardCore.Themes\Views\ToggleTheme.cshtml:13
+msgctxt "OrchardCore.Themes.Views.ToggleTheme"
+msgid "Auto"
+msgstr ""
+
+#. <span class="ps-2">@T["Light"]</span>
+#: OrchardCore.Themes\Views\ToggleTheme.cshtml:21
+msgctxt "OrchardCore.Themes.Views.ToggleTheme"
+msgid "Light"
+msgstr ""
+
+#. <span class="ps-2">@T["Dark"]</span>
+#: OrchardCore.Themes\Views\ToggleTheme.cshtml:29
+msgctxt "OrchardCore.Themes.Views.ToggleTheme"
+msgid "Dark"
+msgstr ""
+

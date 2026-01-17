@@ -1,0 +1,122 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: el\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Sms.Azure.pot\n"
+"X-Crowdin-File-ID: 954\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Greek\n"
+"Language: el_GR\n"
+"PO-Revision-Date: 2024-11-10 15:10\n"
+
+#. await _notifier.WarningAsync(H["You have successfully disabled the default SMS provider. The SMS service is now disable and will remain disabled until you designate a new default provider."]);
+#: OrchardCore.Sms.Azure\Drivers\AzureSettingsDisplayDriver.cs:86
+msgctxt "OrchardCore.Sms.Azure.Drivers.AzureSettingsDisplayDriver"
+msgid "You have successfully disabled the default SMS provider. The SMS service is now disable and will remain disabled until you designate a new default provider."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.PhoneNumber), S["The phone number is a required."]);
+#: OrchardCore.Sms.Azure\Drivers\AzureSettingsDisplayDriver.cs:103
+msgctxt "OrchardCore.Sms.Azure.Drivers.AzureSettingsDisplayDriver"
+msgid "The phone number is a required."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.PhoneNumber), S["Invalid phone number."]);
+#: OrchardCore.Sms.Azure\Drivers\AzureSettingsDisplayDriver.cs:107
+msgctxt "OrchardCore.Sms.Azure.Drivers.AzureSettingsDisplayDriver"
+msgid "Invalid phone number."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.ConnectionString), S["Connection string is required."]);
+#: OrchardCore.Sms.Azure\Drivers\AzureSettingsDisplayDriver.cs:114
+msgctxt "OrchardCore.Sms.Azure.Drivers.AzureSettingsDisplayDriver"
+msgid "Connection string is required."
+msgstr ""
+
+#. => S["Azure Communication Services"];
+#: OrchardCore.Sms.Azure\Services\AzureSmsProvider.cs:22
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProvider"
+msgid "Azure Communication Services"
+msgstr ""
+
+#. return SmsResult.Failed(S["The Azure Communication Provider is disabled."]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:38
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "The Azure Communication Provider is disabled."
+msgstr ""
+
+#. return SmsResult.Failed(S["A phone number is required for the recipient.", message.To]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:45
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "A phone number is required for the recipient."
+msgstr ""
+
+#. return SmsResult.Failed(S["Invalid phone number format for the recipient: '{0}'.", message.To]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:50
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "Invalid phone number format for the recipient: '{0}'."
+msgstr ""
+
+#. return SmsResult.Failed(S["The message body is required.", message.To]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:55
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "The message body is required."
+msgstr ""
+
+#. return SmsResult.Failed(S["SMS message was not send."]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:69
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "SMS message was not send."
+msgstr ""
+
+#. return SmsResult.Failed(S["An error occurred while sending an SMS."]);
+#: OrchardCore.Sms.Azure\Services\AzureSmsProviderBase.cs:75
+msgctxt "OrchardCore.Sms.Azure.Services.AzureSmsProviderBase"
+msgid "An error occurred while sending an SMS."
+msgstr ""
+
+#. => S["Default Azure Communication Services"];
+#: OrchardCore.Sms.Azure\Services\DefaultAzureSmsProvider.cs:22
+msgctxt "OrchardCore.Sms.Azure.Services.DefaultAzureSmsProvider"
+msgid "Default Azure Communication Services"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IsEnabled">@T["Enable"]</label>
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:10
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "Enable"
+msgstr ""
+
+#. <label asp-for="PhoneNumber" class="form-label">@T["Phone Number"]</label>
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:17
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "Phone Number"
+msgstr ""
+
+#. <span class="hint">@T["The default phone number to use as a sender. Phone number must include a country code. For example, +1 for United States."]</span>
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "The default phone number to use as a sender. Phone number must include a country code. For example, +1 for United States."
+msgstr ""
+
+#. <label asp-for="ConnectionString" class="form-label">@T["Connection String"]</label>
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:24
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "Connection String"
+msgstr ""
+
+#. <input asp-for="ConnectionString" class="form-control" type="password" autocomplete="new-password" placeholder="@(Model.HasConnectionString ? T["Enter a new value to replace the existing secret"] : T["Enter the connection string"])" />
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:25
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "Enter a new value to replace the existing secret"
+msgstr ""
+
+#. <input asp-for="ConnectionString" class="form-control" type="password" autocomplete="new-password" placeholder="@(Model.HasConnectionString ? T["Enter a new value to replace the existing secret"] : T["Enter the connection string"])" />
+#: OrchardCore.Sms.Azure\Views\AzureSmsSettings.Edit.cshtml:25
+msgctxt "OrchardCore.Sms.Azure.Views.AzureSmsSettings.Edit"
+msgid "Enter the connection string"
+msgstr ""
+

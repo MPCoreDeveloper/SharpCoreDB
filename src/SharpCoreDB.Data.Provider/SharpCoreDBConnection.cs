@@ -90,6 +90,8 @@ public sealed class SharpCoreDBConnection : DbConnection
 
     /// <summary>
     /// Opens the database connection.
+    /// Uses a pool to share database instances across multiple connections,
+    /// preventing file locking issues that occur when each connection creates its own instance.
     /// </summary>
     public override void Open()
     {
@@ -103,14 +105,12 @@ public sealed class SharpCoreDBConnection : DbConnection
         {
             _state = ConnectionState.Connecting;
 
-            // Set up dependency injection for SharpCoreDB
-            var services = new ServiceCollection();
-            services.AddSharpCoreDB();
-            _serviceProvider = services.BuildServiceProvider();
-
-            // Create database instance
-            var factory = _serviceProvider.GetRequiredService<DatabaseFactory>();
-            _database = factory.Create(_dataSource, _password ?? "default", isReadOnly: false);
+            // Acquire database instance from pool (or create new one)
+            var password = _password ?? "default";
+            _database = SharpCoreDBInstancePool.Instance.AcquireInstance(
+                _dataSource,
+                password,
+                _connectionString ?? string.Empty);
 
             _state = ConnectionState.Open;
         }
@@ -134,6 +134,8 @@ public sealed class SharpCoreDBConnection : DbConnection
 
     /// <summary>
     /// Closes the database connection.
+    /// Releases the reference to the database instance in the pool.
+    /// When all connections are closed, the instance is disposed and removed from the pool.
     /// </summary>
     public override void Close()
     {
@@ -142,28 +144,13 @@ public sealed class SharpCoreDBConnection : DbConnection
 
         try
         {
-            // ? FIX: FORCE save metadata on close to ensure persistence
-            if (_database != null)
+            // Release database reference from pool (decrements ref count)
+            if (_database != null && !string.IsNullOrWhiteSpace(_connectionString) && !string.IsNullOrWhiteSpace(_password))
             {
-                try
-                {
-                    _database.ForceSave();
-                }
-                catch (Exception ex)
-                {
-#if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"{ex.Message}");
-#endif
-                    // Suppress exception to allow connection to close gracefully
-                    _ = ex; // Avoid unused variable warning
-                }
+                SharpCoreDBInstancePool.Instance.ReleaseInstance(_connectionString, _password ?? "default");
             }
             
             _database = null;
-            
-            if (_serviceProvider is IDisposable disposable)
-                disposable.Dispose();
-            
             _serviceProvider = null;
             _state = ConnectionState.Closed;
         }

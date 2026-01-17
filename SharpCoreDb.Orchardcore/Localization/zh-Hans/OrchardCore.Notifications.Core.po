@@ -1,0 +1,20 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: zh-CN\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Notifications.Core.pot\n"
+"X-Crowdin-File-ID: 887\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"PO-Revision-Date: 2024-08-24 20:15\n"
+
+#. public LocalizedString Name => S["Email Notifications"];
+#: OrchardCore.Notifications.Core\Services\EmailNotificationProvider.cs:22
+msgctxt "OrchardCore.Notifications.Services.EmailNotificationProvider"
+msgid "Email Notifications"
+msgstr "电子邮件通知"
+

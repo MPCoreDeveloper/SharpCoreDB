@@ -121,7 +121,10 @@ public class DatabaseFactory(IServiceProvider services)
             options.EnableMemoryMapping = options.DatabaseConfig.UseMemoryMapping;
         }
         options.WalBufferSizePages = options.WalBufferSizePages > 0 ? options.WalBufferSizePages : 2048;
-        options.FileShareMode = System.IO.FileShare.Read;
+        // Allow ReadWrite sharing to support multiple connections accessing the same file
+        // SharpCoreDB has internal locking (_transactionLock) for thread-safe concurrent access
+        // This is now safe because SharpCoreDBConnection uses instance pooling to share database objects
+        options.FileShareMode = System.IO.FileShare.ReadWrite;
         var provider = SingleFileStorageProvider.Open(dbPath, options);
         return new SingleFileDatabase(provider, dbPath, masterPassword, options);
     }

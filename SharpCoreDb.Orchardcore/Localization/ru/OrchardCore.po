@@ -1,0 +1,74 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=4; plural=((n%10==1 && n%100!=11) ? 0 : ((n%10 >= 2 && n%10 <=4 && (n%100 < 12 || n%100 > 14)) ? 1 : ((n%10 == 0 || (n%10 >= 5 && n%10 <=9)) || (n%100 >= 11 && n%100 <= 14)) ? 2 : 3));\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ru\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.pot\n"
+"X-Crowdin-File-ID: 893\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Russian\n"
+"Language: ru_RU\n"
+"PO-Revision-Date: 2024-08-24 20:49\n"
+
+#. context.ErrorMessage = S["The tenant should not be the '{0}' tenant.", ShellSettings.DefaultShellName];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:41
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "The tenant should not be the '{0}' tenant."
+msgstr ""
+
+#. context.ErrorMessage = S["The tenant '{0}' should be 'Disabled' or 'Uninitialized'.", shellSettings.Name];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:48
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "The tenant '{0}' should be 'Disabled' or 'Uninitialized'."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to create a 'ShellContext' before removing the tenant."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:68
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to create a 'ShellContext' before removing the tenant."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to acquire a lock before executing the tenant handlers."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:82
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to acquire a lock before executing the tenant handlers."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to execute the tenant handler '{0}'.", type];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:115
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to execute the tenant handler '{0}'."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to acquire a lock before executing the host handlers."];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:135
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to acquire a lock before executing the host handlers."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to execute the host handler '{0}'.", type];
+#: OrchardCore\Shell\Removing\ShellRemovalManager.cs:170
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellRemovalManager"
+msgid "Failed to execute the host handler '{0}'."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to remove the shell settings."];
+#: OrchardCore\Shell\Removing\ShellSettingsRemovingHandler.cs:46
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellSettingsRemovingHandler"
+msgid "Failed to remove the shell settings."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to remove the site folder '{0}'.", shellAppDataFolder];
+#: OrchardCore\Shell\Removing\ShellSiteFolderRemovingHandler.cs:67
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellSiteFolderRemovingHandler"
+msgid "Failed to remove the site folder '{0}'."
+msgstr ""
+
+#. context.ErrorMessage = S["Failed to remove the web root folder '{0}'.", shellWebRootFolder];
+#: OrchardCore\Shell\Removing\ShellWebRootRemovingHandler.cs:71
+msgctxt "OrchardCore.Environment.Shell.Removing.ShellWebRootRemovingHandler"
+msgid "Failed to remove the web root folder '{0}'."
+msgstr ""
+

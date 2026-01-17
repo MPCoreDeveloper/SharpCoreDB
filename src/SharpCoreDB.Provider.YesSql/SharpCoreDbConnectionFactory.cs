@@ -14,7 +14,7 @@ namespace SharpCoreDB.Provider.YesSql;
 /// Creates SharpCoreDB ADO.NET connections for YesSql to use.
 /// Implements YesSql.IConnectionFactory for OrchardCore compatibility.
 /// </summary>
-public sealed class SharpCoreDbConnectionFactory : IConnectionFactory
+public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposable
 {
     private string? _connectionString;
 
@@ -64,23 +64,27 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory
     }
 
     /// <summary>
+    /// Disposes resources.
+    /// No cleanup needed: DbProviderFactory is a singleton instance (SharpCoreDBProviderFactory.Instance).
+    /// Individual connections created by CreateConnection() are disposed by the caller (YesSql).
+    /// </summary>
+    public void Dispose()
+    {
+        // No resources to dispose:
+        // - DbProviderFactory is a singleton, not owned by this factory
+        // - Connections are disposed by YesSql after use
+        // - _connectionString is just a string
+    }
+
+    /// <summary>
     /// Gets the DbProviderFactory for creating connections and commands.
     /// Required by YesSql for ADO.NET operations.
     /// </summary>
-    public DbProviderFactory DbProviderFactory => SharpCoreDBProviderFactory.Instance;
+    public static  DbProviderFactory DbProviderFactory => SharpCoreDBProviderFactory.Instance;
 
     /// <summary>
     /// Gets the DbConnection type for reflection and type checking.
     /// Required by YesSql 5.4.7+ for connection pooling and diagnostics.
     /// </summary>
     public Type DbConnectionType => typeof(SharpCoreDBConnection);
-
-    /// <summary>
-    /// Disposes resources (none needed for stateless factory).
-    /// </summary>
-    public void Dispose()
-    {
-        // No resources to dispose - factory is stateless
-        GC.SuppressFinalize(this);
-    }
 }

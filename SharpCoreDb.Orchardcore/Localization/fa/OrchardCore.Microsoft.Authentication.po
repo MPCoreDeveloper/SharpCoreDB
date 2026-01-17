@@ -1,0 +1,342 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: fa\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Microsoft.Authentication.pot\n"
+"X-Crowdin-File-ID: 782\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Persian\n"
+"Language: fa_IR\n"
+"PO-Revision-Date: 2024-11-10 14:48\n"
+
+#. .Add(S["Security"], security => security
+#: OrchardCore.Microsoft.Authentication\AdminMenuAAD.cs:25
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuAAD"
+msgid "Security"
+msgstr "امنیت"
+
+#. .Add(S["Authentication"], authentication => authentication
+#: OrchardCore.Microsoft.Authentication\AdminMenuAAD.cs:26
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuAAD"
+msgid "Authentication"
+msgstr "احراز هویت"
+
+#. .Add(S["Microsoft Entra ID"], S["Microsoft Entra ID"].PrefixPosition(), entraId => entraId
+#. .Add(S["Microsoft Entra ID"], S["Microsoft Entra ID"].PrefixPosition(), entraId => entraId
+#: OrchardCore.Microsoft.Authentication\AdminMenuAAD.cs:27
+#: OrchardCore.Microsoft.Authentication\AdminMenuAAD.cs:27
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuAAD"
+msgid "Microsoft Entra ID"
+msgstr ""
+
+#. .Add(S["Security"], security => security
+#: OrchardCore.Microsoft.Authentication\AdminMenuMicrosoftAccount.cs:25
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuMicrosoftAccount"
+msgid "Security"
+msgstr "امنیت"
+
+#. .Add(S["Authentication"], authentication => authentication
+#: OrchardCore.Microsoft.Authentication\AdminMenuMicrosoftAccount.cs:26
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuMicrosoftAccount"
+msgid "Authentication"
+msgstr "احراز هویت"
+
+#. .Add(S["Microsoft"], S["Microsoft"].PrefixPosition(), microsoft => microsoft
+#. .Add(S["Microsoft"], S["Microsoft"].PrefixPosition(), microsoft => microsoft
+#: OrchardCore.Microsoft.Authentication\AdminMenuMicrosoftAccount.cs:27
+#: OrchardCore.Microsoft.Authentication\AdminMenuMicrosoftAccount.cs:27
+msgctxt "OrchardCore.Microsoft.Authentication.AdminMenuMicrosoftAccount"
+msgid "Microsoft"
+msgstr "مایکروسافت"
+
+#. yield return new ValidationResult(S["DisplayName is required"], new string[] { nameof(settings.DisplayName) });
+#: OrchardCore.Microsoft.Authentication\Services\AzureADService.cs:53
+msgctxt "OrchardCore.Microsoft.Authentication.Services.AzureADService"
+msgid "DisplayName is required"
+msgstr "DisplayName ضروری است"
+
+#. yield return new ValidationResult(S["AppId is required"], new string[] { nameof(settings.AppId) });
+#: OrchardCore.Microsoft.Authentication\Services\AzureADService.cs:58
+msgctxt "OrchardCore.Microsoft.Authentication.Services.AzureADService"
+msgid "AppId is required"
+msgstr "AppId ضروری است"
+
+#. yield return new ValidationResult(S["TenantId is required"], new string[] { nameof(settings.TenantId) });
+#: OrchardCore.Microsoft.Authentication\Services\AzureADService.cs:63
+msgctxt "OrchardCore.Microsoft.Authentication.Services.AzureADService"
+msgid "TenantId is required"
+msgstr "TenantId ضروری است"
+
+#. yield return new ValidationResult(S["AppId is required"], new string[] { nameof(settings.AppId) });
+#: OrchardCore.Microsoft.Authentication\Services\MicrosoftAccountService.cs:52
+msgctxt "OrchardCore.Microsoft.Authentication.Services.MicrosoftAccountService"
+msgid "AppId is required"
+msgstr "AppId ضروری است"
+
+#. yield return new ValidationResult(S["AppSecret is required"], new string[] { nameof(settings.AppSecret) });
+#: OrchardCore.Microsoft.Authentication\Services\MicrosoftAccountService.cs:57
+msgctxt "OrchardCore.Microsoft.Authentication.Services.MicrosoftAccountService"
+msgid "AppSecret is required"
+msgstr "AppSecret ضروری است"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "Application Id is required")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\AzureADSettingsViewModel.cs:10
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.AzureADSettingsViewModel"
+msgid "Application Id is required"
+msgstr "شناسه برنامه مورد نیاز است"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "Tenant Id is required")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\AzureADSettingsViewModel.cs:13
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.AzureADSettingsViewModel"
+msgid "Tenant Id is required"
+msgstr "شناسه مستاجر الزامی است"
+
+#. [RegularExpression(@"\/[-A-Za-z0-9+&@#\/%?=~_|!:,.;]+[-A-Za-z0-9+&@#\/%=~_|]", ErrorMessage = "Invalid path")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\AzureADSettingsViewModel.cs:16
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.AzureADSettingsViewModel"
+msgid "Invalid path"
+msgstr "مسیر نامعتبر"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "Application Id is required")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\MicrosoftAccountSettingsViewModel.cs:7
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.MicrosoftAccountSettingsViewModel"
+msgid "Application Id is required"
+msgstr "شناسه برنامه مورد نیاز است"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "Application Secret is required")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\MicrosoftAccountSettingsViewModel.cs:10
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.MicrosoftAccountSettingsViewModel"
+msgid "Application Secret is required"
+msgstr "رمز برنامه مورد نیاز است"
+
+#. [RegularExpression(@"\/[-A-Za-z0-9+&@#\/%?=~_|!:,.;]+[-A-Za-z0-9+&@#\/%=~_|]", ErrorMessage = "Invalid path")]
+#: OrchardCore.Microsoft.Authentication\ViewModels\MicrosoftAccountSettingsViewModel.cs:13
+msgctxt "OrchardCore.Microsoft.Authentication.ViewModels.MicrosoftAccountSettingsViewModel"
+msgid "Invalid path"
+msgstr "مسیر نامعتبر"
+
+#. <h5>@T["Microsoft Entra ID Settings"]</h5>
+#: OrchardCore.Microsoft.Authentication\Views\Items\AzureADDeploymentStep.Edit.cshtml:3
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.AzureADDeploymentStep.Edit"
+msgid "Microsoft Entra ID Settings"
+msgstr "تنظیمات Microsoft Entra ID"
+
+#. <h5>@T["Microsoft Entra ID Settings"]</h5>
+#: OrchardCore.Microsoft.Authentication\Views\Items\AzureADDeploymentStep.Summary.cshtml:3
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.AzureADDeploymentStep.Summary"
+msgid "Microsoft Entra ID Settings"
+msgstr "تنظیمات Microsoft Entra ID"
+
+#. <span class="hint">@T["Adds Microsoft Entra ID settings to the plan."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\Items\AzureADDeploymentStep.Summary.cshtml:5
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.AzureADDeploymentStep.Summary"
+msgid "Adds Microsoft Entra ID settings to the plan."
+msgstr "تنظیمات Microsoft Entra ID را به طرح اضافه می کند."
+
+#. <h4 class="card-title">@T["Microsoft Entra ID Settings"]</h4>
+#: OrchardCore.Microsoft.Authentication\Views\Items\AzureADDeploymentStep.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.AzureADDeploymentStep.Thumbnail"
+msgid "Microsoft Entra ID Settings"
+msgstr "تنظیمات Microsoft Entra ID"
+
+#. <p>@T["Exports the Microsoft Entra ID settings."]</p>
+#: OrchardCore.Microsoft.Authentication\Views\Items\AzureADDeploymentStep.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.AzureADDeploymentStep.Thumbnail"
+msgid "Exports the Microsoft Entra ID settings."
+msgstr "از تنظیمات Microsoft Entra ID خروجی می گیرد."
+
+#. <h5>@T["Microsoft Account Settings"]</h5>
+#: OrchardCore.Microsoft.Authentication\Views\Items\MicrosoftAccountDeploymentStep.Edit.cshtml:1
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.MicrosoftAccountDeploymentStep.Edit"
+msgid "Microsoft Account Settings"
+msgstr ""
+
+#. <h5>@T["Microsoft Account Settings"]</h5>
+#: OrchardCore.Microsoft.Authentication\Views\Items\MicrosoftAccountDeploymentStep.Summary.cshtml:1
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.MicrosoftAccountDeploymentStep.Summary"
+msgid "Microsoft Account Settings"
+msgstr ""
+
+#. <span class="hint">@T["Adds Microsoft Account settings to the plan."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\Items\MicrosoftAccountDeploymentStep.Summary.cshtml:3
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.MicrosoftAccountDeploymentStep.Summary"
+msgid "Adds Microsoft Account settings to the plan."
+msgstr ""
+
+#. <h4 class="card-title">@T["Microsoft Account Settings"]</h4>
+#: OrchardCore.Microsoft.Authentication\Views\Items\MicrosoftAccountDeploymentStep.Thumbnail.cshtml:1
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.MicrosoftAccountDeploymentStep.Thumbnail"
+msgid "Microsoft Account Settings"
+msgstr ""
+
+#. <p>@T["Exports the Microsoft Account settings."]</p>
+#: OrchardCore.Microsoft.Authentication\Views\Items\MicrosoftAccountDeploymentStep.Thumbnail.cshtml:2
+msgctxt "OrchardCore.Microsoft.Authentication.Views.Items.MicrosoftAccountDeploymentStep.Thumbnail"
+msgid "Exports the Microsoft Account settings."
+msgstr ""
+
+#. @T["The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."]
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."
+msgstr ""
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Microsoft.Authentication/#microsoft-account" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:6
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "See documentation"
+msgstr "مستندات را ببینید"
+
+#. <p class="alert alert-danger">@T["An error occurred while decrypting a setting. Please apply and save."]</p>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:11
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "An error occurred while decrypting a setting. Please apply and save."
+msgstr "هنگام رمزگشایی یک تنظیم خطایی روی داد. لطفا اعمال و ذخیره کنید."
+
+#. <h3>@T["Microsoft Account Authentication Settings"]</h3>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:14
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "Microsoft Account Authentication Settings"
+msgstr "تنظیمات مربوط به احرازهویت حساب‌کاربری Microsoft"
+
+#. <label asp-for="AppId" class="form-label">@T["AppId"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:17
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "AppId"
+msgstr "AppId"
+
+#. <span class="hint">@T["The Application ID found on the Microsoft developer portal parameters."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "The Application ID found on the Microsoft developer portal parameters."
+msgstr "شناسه برنامه‌کاربردی، موجود در پارامترهای پورتال توسعه‌دهندگان Microsoft."
+
+#. <label asp-for="AppSecret" class="form-label">@T["Secret Key"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:24
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "Secret Key"
+msgstr "کلید رمز"
+
+#. <span class="hint">@T["The Application secret key found on the Microsoft developer portal parameters."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:27
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "The Application secret key found on the Microsoft developer portal parameters."
+msgstr "کلید رمز برنامه‌کاربردی، موجود در پارامترهای پورتال توسعه‌دهندگان Microsoft."
+
+#. <label asp-for="CallbackPath" class="form-label">@T["CallbackPath"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:31
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "CallbackPath"
+msgstr "CallbackPath"
+
+#. <span class="hint">@T["The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:34
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."
+msgstr "مسیر درخواست به همراه مسیر پایه (base path) برنامه‌کاربردی، جایی که user agent برگردانده می‌شود. این درخواست هنگام ورود، توسط middleware پردازش خواهد شد."
+
+#. <label class="form-check-label" asp-for="SaveTokens">@T["Store tokens"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:40
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "Store tokens"
+msgstr "ذخیره توکن ها"
+
+#. <span class="hint dashed">@T["Store external authentication tokens for reuse"]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftAccountSettings.Edit.cshtml:41
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftAccountSettings.Edit"
+msgid "Store external authentication tokens for reuse"
+msgstr "توکن های احراز هویت خارجی را برای استفاده مجدد ذخیره کنید"
+
+#. @T["The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."]
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "The website might be restarted upon saving the settings, potentially leading to temporary unresponsiveness during the process."
+msgstr ""
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Microsoft.Authentication/#azure-active-directory" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:6
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "See documentation"
+msgstr ""
+
+#. <h3>@T["Microsoft Entra ID Authentication Settings"]</h3>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:9
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "Microsoft Entra ID Authentication Settings"
+msgstr ""
+
+#. <label asp-for="DisplayName" class="form-label">@T["Display Name"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:12
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "Display Name"
+msgstr ""
+
+#. <span class="hint">@T["The display name of the provider."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:15
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "The display name of the provider."
+msgstr ""
+
+#. <label asp-for="AppId" class="form-label">@T["AppId"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:19
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "AppId"
+msgstr ""
+
+#. <span class="hint">@T["The Application ID found on the Microsoft Entra ID App registration parameters."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:22
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "The Application ID found on the Microsoft Entra ID App registration parameters."
+msgstr ""
+
+#. <label asp-for="TenantId" class="form-label">@T["TenantId"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:26
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "TenantId"
+msgstr ""
+
+#. <span class="hint">@T["The Tenant (Directory) ID found on the Microsoft Entra ID App registration parameters. For multi-tenant App registrations, use 'common' or 'organizations'."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:29
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "The Tenant (Directory) ID found on the Microsoft Entra ID App registration parameters. For multi-tenant App registrations, use 'common' or 'organizations'."
+msgstr ""
+
+#. <label asp-for="CallbackPath" class="form-label">@T["CallbackPath"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:33
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "CallbackPath"
+msgstr ""
+
+#. <span class="hint">@T["The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:36
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "The request path within the application's base path where the user-agent will be returned. The middleware will process this request when it arrives."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="SaveTokens">@T["Store tokens"]</label>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:42
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "Store tokens"
+msgstr ""
+
+#. <span class="hint dashed">@T["Store external authentication tokens for reuse"]</span>
+#: OrchardCore.Microsoft.Authentication\Views\MicrosoftEntraIDSettings.Edit.cshtml:43
+msgctxt "OrchardCore.Microsoft.Authentication.Views.MicrosoftEntraIDSettings.Edit"
+msgid "Store external authentication tokens for reuse"
+msgstr ""
+
+#. <span class="icon"><i class="fa-solid fa-cloud" aria-hidden="true"></i></span><span class="title">@T["Microsoft Entra ID"]</span>
+#: OrchardCore.Microsoft.Authentication\Views\NavigationItemText-microsoft-entra-id.Id.cshtml:1
+msgctxt "OrchardCore.Microsoft.Authentication.Views.NavigationItemText-microsoft-entra-id.Id"
+msgid "Microsoft Entra ID"
+msgstr ""
+
+#. <span class="icon"><i class="fa-brands fa-microsoft" aria-hidden="true"></i></span><span class="title">@T["Microsoft"]</span>
+#: OrchardCore.Microsoft.Authentication\Views\NavigationItemText-microsoft.Id.cshtml:1
+msgctxt "OrchardCore.Microsoft.Authentication.Views.NavigationItemText-microsoft.Id"
+msgid "Microsoft"
+msgstr "مایکروسافت"
+

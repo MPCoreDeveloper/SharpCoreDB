@@ -1,0 +1,38 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: sv-SE\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.PublishLater.pot\n"
+"X-Crowdin-File-ID: 792\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Swedish\n"
+"Language: sv_SE\n"
+"PO-Revision-Date: 2023-12-22 16:31\n"
+
+#. <button class="btn btn-outline-success text-nowrap btn-publish-later" type="submit" name="submit.Save" value="submit.PublishLater">@T["Publish Later"]</button>
+#: OrchardCore.PublishLater\Views\PublishLaterPart.Edit.cshtml:12
+msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.Edit"
+msgid "Publish Later"
+msgstr "Publicera senare"
+
+#. <button class="btn btn-warning text-nowrap btn-publish-later" type="submit" name="submit.Save" value="submit.CancelPublishLater">@T["Cancel Publish Later"]</button>
+#: OrchardCore.PublishLater\Views\PublishLaterPart.Edit.cshtml:19
+msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.Edit"
+msgid "Cancel Publish Later"
+msgstr "Avbryt senare publicering"
+
+#. <option value="" selected="@string.IsNullOrEmpty(currentEditor)">@T["Standard"]</option>
+#: OrchardCore.PublishLater\Views\PublishLaterPart.Option.cshtml:4
+msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.Option"
+msgid "Standard"
+msgstr ""
+
+#. <span class="hint">@T["Scheduled to be published on {0}", (object)(await DisplayAsync(await New.DateTime(Utc: Model.ScheduledPublishUtc)))]</span>
+#: OrchardCore.PublishLater\Views\PublishLaterPart.SummaryAdmin.cshtml:6
+msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.SummaryAdmin"
+msgid "Scheduled to be published on {0}"
+msgstr "Schemalagd för att publiceras {0}"
+

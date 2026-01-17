@@ -1,0 +1,298 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: es-ES\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Email.Smtp.pot\n"
+"X-Crowdin-File-ID: 948\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Spanish\n"
+"Language: es_ES\n"
+"PO-Revision-Date: 2024-08-24 21:33\n"
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.DefaultSender), S["The Default Sender is a required field."]);
+#: OrchardCore.Email.Smtp\Drivers\SmtpSettingsDisplayDriver.cs:114
+msgctxt "OrchardCore.Email.Smtp.Drivers.SmtpSettingsDisplayDriver"
+msgid "The Default Sender is a required field."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.DefaultSender), S["The Default Sender is invalid."]);
+#: OrchardCore.Email.Smtp\Drivers\SmtpSettingsDisplayDriver.cs:118
+msgctxt "OrchardCore.Email.Smtp.Drivers.SmtpSettingsDisplayDriver"
+msgid "The Default Sender is invalid."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Host), S["The {0} field is required.", "Host name"]);
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.PickupDirectoryLocation), S["The {0} field is required.", "Pickup directory location"]);
+#: OrchardCore.Email.Smtp\Drivers\SmtpSettingsDisplayDriver.cs:124
+#: OrchardCore.Email.Smtp\Drivers\SmtpSettingsDisplayDriver.cs:129
+msgctxt "OrchardCore.Email.Smtp.Drivers.SmtpSettingsDisplayDriver"
+msgid "The {0} field is required."
+msgstr ""
+
+#. public override LocalizedString DisplayName => S["Simple Mail Transfer Protocol (Default SMTP)"];
+#: OrchardCore.Email.Smtp\Services\DefaultSmtpEmailProvider.cs:20
+msgctxt "OrchardCore.Email.Smtp.Services.DefaultSmtpEmailProvider"
+msgid "Simple Mail Transfer Protocol (Default SMTP)"
+msgstr ""
+
+#. public override LocalizedString DisplayName => S["Simple Mail Transfer Protocol (SMTP)"];
+#: OrchardCore.Email.Smtp\Services\SmtpEmailProvider.cs:20
+msgctxt "OrchardCore.Email.Smtp.Services.SmtpEmailProvider"
+msgid "Simple Mail Transfer Protocol (SMTP)"
+msgstr ""
+
+#. return EmailResult.FailedResult(S["The SMTP Email Provider is disabled."]);
+#: OrchardCore.Email.Smtp\Services\SmtpEmailProviderBase.cs:42
+msgctxt "OrchardCore.Email.Smtp.Services.SmtpEmailProviderBase"
+msgid "The SMTP Email Provider is disabled."
+msgstr ""
+
+#. return EmailResult.FailedResult(nameof(message.From), S["Invalid email address for the sender: '{0}'.", senderAddress]);
+#: OrchardCore.Email.Smtp\Services\SmtpEmailProviderBase.cs:56
+msgctxt "OrchardCore.Email.Smtp.Services.SmtpEmailProviderBase"
+msgid "Invalid email address for the sender: '{0}'."
+msgstr ""
+
+#. return EmailResult.FailedResult([S["An error occurred while sending an email: '{0}'", ex.Message]]);
+#: OrchardCore.Email.Smtp\Services\SmtpEmailProviderBase.cs:84
+msgctxt "OrchardCore.Email.Smtp.Services.SmtpEmailProviderBase"
+msgid "An error occurred while sending an email: '{0}'"
+msgstr ""
+
+#. return SmtpResult.Failed([S["Unable to find any SMTP providers."]]);
+#: OrchardCore.Email.Smtp\Services\SmtpService.cs:33
+msgctxt "OrchardCore.Email.Services.SmtpService"
+msgid "Unable to find any SMTP providers."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IsEnabled">@T["Enable SMTP Provider"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:9
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Enable SMTP Provider"
+msgstr ""
+
+#. <label asp-for="DefaultSender" class="form-label">@T["Sender email address"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:15
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Sender email address"
+msgstr ""
+
+#. <span class="hint">@T["The default email address to use as a sender, unless the email sender is set."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:18
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The default email address to use as a sender, unless the email sender is set."
+msgstr ""
+
+#. <label asp-for="DeliveryMethod" class="form-label">@T["Delivery method"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:22
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Delivery method"
+msgstr ""
+
+#. @T["Network"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:25
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Network"
+msgstr ""
+
+#. @T["Specified pickup directory"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:28
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Specified pickup directory"
+msgstr ""
+
+#. <span class="hint">@T["The delivery method used when sending email. Use Network in production. The other options can be useful when developing and testing."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:32
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The delivery method used when sending email. Use Network in production. The other options can be useful when developing and testing."
+msgstr ""
+
+#. <h2 class="card-title">@T["Network delivery options"]</h2>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:40
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Network delivery options"
+msgstr ""
+
+#. <label asp-for="Host" class="form-label">@T["Host name"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:46
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Host name"
+msgstr ""
+
+#. <span class="hint">@T["The SMTP server domain, e.g. <i>smtp.mailprovider.com</i>."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:49
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The SMTP server domain, e.g. <i>smtp.mailprovider.com</i>."
+msgstr ""
+
+#. <label asp-for="Port" class="form-label">@T["Port number"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:56
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Port number"
+msgstr ""
+
+#. <span class="hint">@T["The SMTP server port, usually 25."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:59
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The SMTP server port, usually 25."
+msgstr ""
+
+#. <label asp-for="ProxyHost" class="form-label">@T["Proxy host name"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:69
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Proxy host name"
+msgstr ""
+
+#. <span class="hint">@T["The proxy server is optional."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:72
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The proxy server is optional."
+msgstr ""
+
+#. <label asp-for="ProxyPort" class="form-label">@T["Proxy port number"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:79
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Proxy port number"
+msgstr ""
+
+#. <span class="hint">@T["The proxy port is optional."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:82
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The proxy port is optional."
+msgstr ""
+
+#. <label asp-for="EncryptionMethod" class="form-label">@T["Encryption method to use"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:89
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Encryption method to use"
+msgstr ""
+
+#. @T["None"] - @T["Connect to server using insecure connection."]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:92
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "None"
+msgstr ""
+
+#. @T["None"] - @T["Connect to server using insecure connection."]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:92
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Connect to server using insecure connection."
+msgstr ""
+
+#. @T["SSL/TLS"] - @T["Connect to server using SSL/TSL secure connection"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:95
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "SSL/TLS"
+msgstr ""
+
+#. @T["SSL/TLS"] - @T["Connect to server using SSL/TSL secure connection"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:95
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Connect to server using SSL/TSL secure connection"
+msgstr ""
+
+#. @T["STARTTLS"] - @T["Connect to server using insecure connection and upgrade to secure using SSL/TLS"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:98
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "STARTTLS"
+msgstr ""
+
+#. @T["STARTTLS"] - @T["Connect to server using insecure connection and upgrade to secure using SSL/TLS"]
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:98
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Connect to server using insecure connection and upgrade to secure using SSL/TLS"
+msgstr ""
+
+#. <span class="hint">@T["The encryption method used when connecting to mail server."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:102
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The encryption method used when connecting to mail server."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="AutoSelectEncryption">@T["Auto Select Encryption method"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:108
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Auto Select Encryption method"
+msgstr ""
+
+#. <span class="hint dashed">@T["Check to let the system select the encryption method based on port."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:109
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Check to let the system select the encryption method based on port."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="RequireCredentials">@T["Require credentials"] </label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:115
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Require credentials"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="UseDefaultCredentials">@T["Use Windows authentication"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:122
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Use Windows authentication"
+msgstr ""
+
+#. <span class="hint d-block">@T["When this option is selected, the application pool or host-process identity is used to authenticate with the mail server."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:123
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "When this option is selected, the application pool or host-process identity is used to authenticate with the mail server."
+msgstr ""
+
+#. <label asp-for="UserName" class="form-label">@T["User name"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:128
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "User name"
+msgstr ""
+
+#. <span class="hint">@T["The username for authentication."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:131
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The username for authentication."
+msgstr ""
+
+#. <label asp-for="Password" class="form-label">@T["Password"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:135
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Password"
+msgstr ""
+
+#. <span class="hint">@T["The password for authentication."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:138
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "The password for authentication."
+msgstr ""
+
+#. <h2 class="card-title">@T["Specified pickup directory delivery options"]</h2>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:149
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Specified pickup directory delivery options"
+msgstr ""
+
+#. <label asp-for="PickupDirectoryLocation" class="form-label">@T["Pickup directory location"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:152
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Pickup directory location"
+msgstr ""
+
+#. <span class="hint">@T[@"E.g. <i>C:\Path\To\This\Site\PickedUpEmail</i> to place emails in a <i>PickedUpEmail</i> directory on the C drive."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:155
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "E.g. <i>C:\\Path\\To\\This\\Site\\PickedUpEmail</i> to place emails in a <i>PickedUpEmail</i> directory on the C drive."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IgnoreInvalidSslCertificate">@T["Ignore Invalid SSL Certificate"]</label>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:165
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Ignore Invalid SSL Certificate"
+msgstr ""
+
+#. <span class="hint dashed">@T["Ignores SSL certificate check if it's invalid."]</span>
+#: OrchardCore.Email.Smtp\Views\SmtpSettings.Edit.cshtml:166
+msgctxt "OrchardCore.Email.Smtp.Views.SmtpSettings.Edit"
+msgid "Ignores SSL certificate check if it's invalid."
+msgstr ""
+
