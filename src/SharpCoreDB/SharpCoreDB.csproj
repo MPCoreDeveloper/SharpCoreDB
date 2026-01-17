@@ -18,6 +18,13 @@
     <!-- Suppress only StyleCop warnings that conflict with project style -->
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309;S3267;S1135;S1144;S1172;S2325;S1186;S927;S1006;S4144</NoWarn>
     
+    <!-- Phase 2C: Dynamic PGO Optimization (NET 10 / C# 14) -->
+    <!-- Enables tiered JIT compilation with profile-guided optimization -->
+    <!-- Expected improvement: 1.2-2x for hot paths -->
+    <TieredPGO>true</TieredPGO>
+    <TieredPGOOptimize>true</TieredPGOOptimize>
+    <PublishTieredAot>true</PublishTieredAot>
+    
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
     <Version>1.0.5</Version>
