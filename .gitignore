@@ -411,3 +411,4 @@ packages/
 # JetBrains Rider
 .idea/
 *.sln.iml
+/SharpCoreDb.Orchardcore/wwwroot/Default/is-cache
