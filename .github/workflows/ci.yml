@@ -29,6 +29,12 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Configure NuGet feeds for previews
+      run: |
+        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+        dotnet nuget add source https://myget.org/F/orchardcore-preview/api/v3/index.json --name orchardcore-preview --configfile NuGet.Config || true
+      shell: bash
         
     - name: Restore dependencies
       run: dotnet restore SharpCoreDB.CI.slnf
