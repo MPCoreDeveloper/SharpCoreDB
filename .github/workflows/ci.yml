@@ -31,13 +31,13 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
     - name: Restore dependencies
-      run: dotnet restore SharpCoreDB.sln
+      run: dotnet restore SharpCoreDB.CI.slnf
       
     - name: Build
-      run: dotnet build SharpCoreDB.sln --configuration Release --no-restore
+      run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore
       
     - name: Test
-      run: dotnet test SharpCoreDB.sln --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage"
+      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage"
       
     - name: Upload test results
       if: always()

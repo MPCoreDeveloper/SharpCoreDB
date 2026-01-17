@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Exclude from CI builds - requires OrchardCore 3.0 preview packages -->
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <ExcludeFromSourceBuild>true</ExcludeFromSourceBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,9 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
-    <ProjectReference Include="..\..\..\src\SharpCoreDB.Provider.YesSql\SharpCoreDB.Provider.YesSql.csproj" />
-    <ProjectReference Include="..\..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+    <ProjectReference Include="..\..\..\..\src\SharpCoreDB.Provider.YesSql\SharpCoreDB.Provider.YesSql.csproj" />
+    <ProjectReference Include="..\..\..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
   </ItemGroup>
 
   <ItemGroup>
