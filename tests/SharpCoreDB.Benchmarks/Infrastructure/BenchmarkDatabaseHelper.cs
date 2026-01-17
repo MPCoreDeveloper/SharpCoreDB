@@ -21,6 +21,11 @@ public class BenchmarkDatabaseHelper : IDisposable
     private readonly HashSet<int> insertedIds = new();
     private readonly bool isEncrypted;
 
+    /// <summary>
+    /// Gets the underlying Database instance for advanced operations.
+    /// </summary>
+    public Database Database => database;
+
     public BenchmarkDatabaseHelper(string dbPath, string password = "benchmark_password", bool enableEncryption = true, DatabaseConfig? config = null)
     {
         this.isEncrypted = enableEncryption;

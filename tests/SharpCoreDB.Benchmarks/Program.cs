@@ -63,6 +63,7 @@ Console.WriteLine("  2) Cross-engine comparison (StorageEngineComparisonBenchmar
 Console.WriteLine("  3) UPDATE performance - Priority 1 validation (UpdatePerformanceTest)");
 Console.WriteLine("  4) SELECT optimization - Phase-by-phase speedup (SelectOptimizationTest)");
 Console.WriteLine("  5) StructRow API - Zero-copy performance (StructRowBenchmark)");
+Console.WriteLine("  6) Phase 2A Optimizations - WHERE/SELECT*/Type conversion/Batch (Phase2AOptimizationBenchmark)");
 Console.WriteLine("  0) Exit");
 Console.WriteLine();
 Console.Write("Enter choice: ");
@@ -75,7 +76,7 @@ if (string.IsNullOrWhiteSpace(input))
     try
     {
         var cmdArgs = Environment.GetCommandLineArgs();
-        var choiceArg = cmdArgs.FirstOrDefault(a => a == "1" || a == "2" || a == "3" || a == "4" || a == "5" || a == "0" || a?.Equals("q", StringComparison.OrdinalIgnoreCase) == true);
+        var choiceArg = cmdArgs.FirstOrDefault(a => a == "1" || a == "2" || a == "3" || a == "4" || a == "5" || a == "6" || a == "0" || a?.Equals("q", StringComparison.OrdinalIgnoreCase) == true);
         input = string.IsNullOrWhiteSpace(choiceArg) ? "2" : choiceArg; // Default to 2 when no explicit choice
     }
     catch
@@ -131,6 +132,13 @@ try
             CrossEngineBenchmark.RunCrossEngineBenchmarks();
             Console.WriteLine("\nStructRowBenchmark completed.");
             logWriter.WriteLine("StructRowBenchmark completed.");
+            break;
+        case "6":
+            Console.WriteLine("Running Phase2AOptimizationBenchmark (Phase 2A Optimizations)...");
+            logWriter.WriteLine("Running Phase2AOptimizationBenchmark...");
+            summary = BenchmarkRunner.Run<Phase2AOptimizationBenchmark>(config);
+            Console.WriteLine("\nPhase2AOptimizationBenchmark completed.");
+            logWriter.WriteLine("Phase2AOptimizationBenchmark completed.");
             break;
         case "0":
         case "q":
