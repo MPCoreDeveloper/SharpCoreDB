@@ -66,7 +66,7 @@ public class Phase2D_ModernSimdBenchmark
     [Benchmark(Description = "Sum - Modern SIMD Vector256")]
     public long Sum_ModernSimdVector256()
     {
-        return ModernSimdOptimizer.ModernHorizontalSum(testData);
+        return ModernSimdOptimizer.UniversalHorizontalSum(testData);
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public class Phase2D_ModernSimdBenchmark
     [Benchmark(Description = "Compare - Modern SIMD Vector256")]
     public int Compare_ModernSimdVector256()
     {
-        return ModernSimdOptimizer.ModernCompareGreaterThan(testData, 500, resultBuffer);
+        return ModernSimdOptimizer.UniversalCompareGreaterThan(testData, 500, resultBuffer);
     }
 
     /// <summary>
@@ -121,7 +121,11 @@ public class Phase2D_ModernSimdBenchmark
     [Benchmark(Description = "MultiplyAdd - Modern SIMD Vector256")]
     public long MultiplyAdd_ModernSimdVector256()
     {
-        ModernSimdOptimizer.ModernMultiplyAdd(testData, testData2, multiplyAddResults);
+        // Scalar multiply-add for now (Vector512/256 not yet automated)
+        for (int i = 0; i < testData.Length; i++)
+        {
+            multiplyAddResults[i] += (long)testData[i] * testData2[i];
+        }
         
         long sum = 0;
         foreach (var value in multiplyAddResults)
@@ -133,9 +137,9 @@ public class Phase2D_ModernSimdBenchmark
     /// Test SIMD capability detection
     /// </summary>
     [Benchmark(Description = "SIMD Capability Check")]
-    public bool SimdCapabilityCheck()
+    public SimdCapability SimdCapabilityCheck()
     {
-        return ModernSimdOptimizer.SupportsModernSimd;
+        return ModernSimdOptimizer.DetectSimdCapability();
     }
 }
 
@@ -183,7 +187,7 @@ public class Phase2D_CacheAwareSimdBenchmark
     [Benchmark(Description = "Large Data Sum - Modern SIMD")]
     public long LargeDataSum_ModernSimd()
     {
-        return ModernSimdOptimizer.ModernHorizontalSum(largeData);
+        return ModernSimdOptimizer.UniversalHorizontalSum(largeData);
     }
 
     /// <summary>
@@ -198,7 +202,7 @@ public class Phase2D_CacheAwareSimdBenchmark
         // 5 passes over data
         for (int pass = 0; pass < 5; pass++)
         {
-            total += ModernSimdOptimizer.ModernHorizontalSum(largeData);
+            total += ModernSimdOptimizer.UniversalHorizontalSum(largeData);
         }
         
         return total;
@@ -257,10 +261,7 @@ public class Phase2D_VectorThroughputBenchmark
     [Benchmark(Description = "Vector Throughput - SIMD")]
     public int VectorThroughput_Simd()
     {
-        if (!ModernSimdOptimizer.SupportsModernSimd)
-            return 0;
-
-        long sum = ModernSimdOptimizer.ModernHorizontalSum(data);
+        long sum = ModernSimdOptimizer.UniversalHorizontalSum(data);
         return (int)(sum & 0xFF);
     }
 
