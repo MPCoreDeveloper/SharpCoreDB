@@ -301,17 +301,60 @@ public partial class Table
         // Step 2: ✅ PHASE 1 OPTIMIZATION: Bulk buffer allocation
         // Calculate total size upfront to minimize allocations
         int totalEstimatedSize = 0;
-        Span<int> rowSizes = rows.Count <= 256 ? stackalloc int[rows.Count] : new int[rows.Count];
+        int[] rowSizesArray = new int[rows.Count];
         
         for (int i = 0; i < rows.Count; i++)
         {
-            rowSizes[i] = EstimateRowSize(rows[i]);
-            totalEstimatedSize += rowSizes[i];
+            rowSizesArray[i] = EstimateRowSize(rows[i]);
+            totalEstimatedSize += rowSizesArray[i];
         }
 
-        // Rent a single large buffer for all rows
-        byte[] batchBuffer = ArrayPool<byte>.Shared.Rent(totalEstimatedSize);
+        // ✅ NEW OPTIMIZATION: Parallel serialization for very large batches (>10k rows)
+        // This leverages multi-core CPUs for serialization overhead reduction
         var serializedRows = new List<byte[]>(rows.Count);
+        
+        if (rows.Count > 10000)
+        {
+            // Parallel serialization for massive batches
+            var parallelResults = new byte[rows.Count][];
+            System.Threading.Tasks.Parallel.For(0, rows.Count, i =>
+            {
+                var row = rows[i];
+                int estimatedSize = rowSizesArray[i];
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+                try
+                {
+                    Span<byte> rowBuffer = buffer.AsSpan(0, estimatedSize);
+                    if (SimdHelper.IsSimdSupported)
+                    {
+                        SimdHelper.ZeroBuffer(rowBuffer);
+                    }
+                    else
+                    {
+                        rowBuffer.Clear();
+                    }
+
+                    int bytesWritten = 0;
+                    foreach (var col in this.Columns)
+                    {
+                        int colIdx = columnIndexCache[col];
+                        int written = WriteTypedValueToSpan(rowBuffer.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
+                        bytesWritten += written;
+                    }
+
+                    parallelResults[i] = rowBuffer.Slice(0, bytesWritten).ToArray();
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+                }
+            });
+            
+            return (parallelResults.ToList(), rows);
+        }
+        
+        // Sequential serialization for normal batches (<10k rows)
+        byte[] batchBuffer = ArrayPool<byte>.Shared.Rent(totalEstimatedSize);
 
         try
         {
@@ -320,7 +363,7 @@ public partial class Table
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
-                int estimatedSize = rowSizes[i];
+                int estimatedSize = rowSizesArray[i];
                 
                 // Serialize directly into batch buffer section
                 Span<byte> rowBuffer = batchBuffer.AsSpan(bufferOffset, estimatedSize);
