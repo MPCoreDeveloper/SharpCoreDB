@@ -93,11 +93,29 @@ public partial class Database
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal Func<Dictionary<string, object>, bool> GetOrCompileWhereClause(string whereClause)
     {
-        // TODO: Implement WHERE clause caching
-        // - Check cache for compiled expression
-        // - If miss: parse and compile
-        // - Cache result for reuse
-        return row => true; // Default: no filtering
+        ArgumentNullException.ThrowIfNull(whereClause);
+        
+        whereClause = whereClause.Trim();
+        
+        // Empty WHERE clause = no filtering
+        if (string.IsNullOrEmpty(whereClause))
+        {
+            return row => true;
+        }
+        
+        // Try cache first
+        if (WhereClauseExpressionCache.TryGetValue(whereClause, out var cached))
+        {
+            return cached;
+        }
+        
+        // Cache miss: Compile new predicate
+        var compiled = SqlParserPerformanceOptimizations.CompileWhereClause(whereClause);
+        
+        // Store in cache for future use
+        WhereClauseExpressionCache.GetOrAdd(whereClause, _ => compiled);
+        
+        return compiled;
     }
 
     /// <summary>
