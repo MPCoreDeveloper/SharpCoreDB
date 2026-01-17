@@ -15,24 +15,32 @@ namespace SharpCoreDB.Benchmarks;
 /// - Wednesday: SELECT* StructRow Path (2-3x + 25x memory)
 /// - Thursday: Type Conversion Caching (5-10x)
 /// - Friday: Batch PK Validation (1.1-1.3x)
+/// 
+/// CRITICAL: Data is populated ONCE in GlobalSetup, not per-iteration!
+/// This measures QUERY performance, not insert performance.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2AOptimizationBenchmark
 {
     private BenchmarkDatabaseHelper db = null!;
-    private const int SMALL_DATASET = 1000;
-    private const int MEDIUM_DATASET = 10000;
-    private int nextId = 0;
+    private const int DATASET_SIZE = 10000;
 
     [GlobalSetup]
     public void Setup()
     {
         // Create test database with benchmark configuration
-        db = new BenchmarkDatabaseHelper("phase2a_benchmark_" + Guid.NewGuid().ToString("N"), "testpassword", enableEncryption: false);
+        db = new BenchmarkDatabaseHelper(
+            "phase2a_benchmark_" + Guid.NewGuid().ToString("N").Substring(0, 8), 
+            "testpassword", 
+            enableEncryption: false);
         
         // Create test table
         db.CreateUsersTable();
+        
+        // CRITICAL: Populate data ONCE in GlobalSetup, not per-iteration
+        // This ensures we measure QUERY performance, not insert performance
+        PopulateTestDataOnce();
     }
 
     [GlobalCleanup]
@@ -41,24 +49,23 @@ public class Phase2AOptimizationBenchmark
         db?.Dispose();
     }
 
-    [IterationSetup]
-    public void IterationSetup()
-    {
-        // Clear the table before each iteration to avoid PK violations
-        nextId += MEDIUM_DATASET; // Use different IDs for each iteration
-    }
-
     #region Monday-Tuesday: WHERE Clause Caching Benchmarks
 
-    [Benchmark(Description = "Repeated WHERE clause query - Cache benefits")]
-    [Arguments(MEDIUM_DATASET)]
-    public int WhereClauseCaching_RepeatedQuery(int rowCount)
+    /// <summary>
+    /// Repeated WHERE clause query - demonstrates cache benefits.
+    /// First execution compiles and caches the predicate.
+    /// Subsequent executions reuse cached predicate (99%+ hit rate).
+    /// 
+    /// Expected improvement: 50-100x for repeated queries
+    /// </summary>
+    [Benchmark(Description = "WHERE caching: Execute same WHERE 100x (cache benefits)")]
+    public int WhereClauseCaching_RepeatedQuery()
     {
-        // Populate test data with unique IDs for this iteration
-        PopulateTestData(rowCount, nextId);
-        
-        // Execute same WHERE query 100 times (cache should benefit all except first)
+        // Execute same WHERE query 100 times
+        // First run: compiles and caches predicate
+        // Runs 2-100: reuse cached predicate (99%+ cache hit rate)
         int totalCount = 0;
+        
         for (int i = 0; i < 100; i++)
         {
             var result = db.Database.ExecuteQuery("SELECT * FROM users WHERE age > 25");
@@ -72,12 +79,29 @@ public class Phase2AOptimizationBenchmark
 
     #region Wednesday: SELECT* StructRow Fast Path Benchmarks
 
-    [Benchmark(Description = "SELECT * using fast path (StructRow)")]
-    [Arguments(MEDIUM_DATASET)]
-    public int SelectStructRow_FastPath(int rowCount)
+    /// <summary>
+    /// SELECT * using traditional Dictionary path (baseline).
+    /// Each row materializes to Dictionary<string, object>.
+    /// 
+    /// Expected memory: ~200 bytes per row = 2MB for 10k rows
+    /// </summary>
+    [Benchmark(Description = "SELECT * Dictionary path (baseline)")]
+    public int SelectDictionary_Path()
     {
-        PopulateTestData(rowCount, nextId);
-        
+        var result = db.Database.ExecuteQuery("SELECT * FROM users");
+        return result.Count;
+    }
+
+    /// <summary>
+    /// SELECT * using fast path with StructRow (optimized).
+    /// Uses zero-copy StructRow instead of Dictionary.
+    /// 
+    /// Expected improvement: 2-3x faster, 25x less memory
+    /// Expected memory: ~20 bytes per row = 200KB for 10k rows
+    /// </summary>
+    [Benchmark(Description = "SELECT * StructRow fast path (optimized)")]
+    public int SelectStructRow_FastPath()
+    {
         var result = db.Database.ExecuteQueryFast("SELECT * FROM users");
         return result.Count;
     }
@@ -86,14 +110,18 @@ public class Phase2AOptimizationBenchmark
 
     #region Helper Methods
 
-    private void PopulateTestData(int rowCount, int startId)
+    /// <summary>
+    /// Populate test data ONCE in GlobalSetup.
+    /// This ensures benchmarks measure QUERY performance, not insert performance.
+    /// </summary>
+    private void PopulateTestDataOnce()
     {
         var random = new Random(42);
         
-        // Insert data with unique IDs per iteration
-        for (int i = 0; i < rowCount; i++)
+        // Bulk insert to minimize insertion overhead
+        for (int i = 0; i < DATASET_SIZE; i++)
         {
-            var id = startId + i;
+            var id = i;
             var name = $"User{id}";
             var email = $"user{id}@test.com";
             var age = 20 + random.Next(50);
@@ -109,7 +137,7 @@ public class Phase2AOptimizationBenchmark
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("Primary key"))
             {
-                // Skip if row already exists (shouldn't happen with unique IDs, but handle gracefully)
+                // Skip if row already exists
                 continue;
             }
         }
