@@ -10,14 +10,10 @@ namespace SharpCoreDB.Benchmarks;
 
 /// <summary>
 /// Phase 2A Optimization Benchmarks
-/// Measures actual performance improvements from:
-/// - Monday-Tuesday: WHERE Clause Caching (50-100x for repeated)
-/// - Wednesday: SELECT* StructRow Path (2-3x + 25x memory)
-/// - Thursday: Type Conversion Caching (5-10x)
-/// - Friday: Batch PK Validation (1.1-1.3x)
 /// 
-/// CRITICAL: Data is populated ONCE in GlobalSetup, not per-iteration!
-/// This measures QUERY performance, not insert performance.
+/// IMPORTANT: These benchmarks measure specific optimizations:
+/// - WHERE caching: Compilation is cached, but results still materialized
+/// - SELECT* path: Zero-copy StructRow vs Dictionary materialization
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
@@ -38,8 +34,7 @@ public class Phase2AOptimizationBenchmark
         // Create test table
         db.CreateUsersTable();
         
-        // CRITICAL: Populate data ONCE in GlobalSetup, not per-iteration
-        // This ensures we measure QUERY performance, not insert performance
+        // Populate data ONCE in GlobalSetup
         PopulateTestDataOnce();
     }
 
@@ -52,25 +47,52 @@ public class Phase2AOptimizationBenchmark
     #region Monday-Tuesday: WHERE Clause Caching Benchmarks
 
     /// <summary>
-    /// Repeated WHERE clause query - demonstrates cache benefits.
-    /// First execution compiles and caches the predicate.
-    /// Subsequent executions reuse cached predicate (99%+ hit rate).
-    /// 
-    /// Expected improvement: 50-100x for repeated queries
+    /// Baseline: Single WHERE query (no cache benefit yet).
+    /// This is the first execution where compilation happens.
     /// </summary>
-    [Benchmark(Description = "WHERE caching: Execute same WHERE 100x (cache benefits)")]
-    public int WhereClauseCaching_RepeatedQuery()
+    [Benchmark(Description = "WHERE single query (baseline, no cache)")]
+    public int WhereCaching_SingleQuery()
     {
-        // Execute same WHERE query 100 times
-        // First run: compiles and caches predicate
-        // Runs 2-100: reuse cached predicate (99%+ cache hit rate)
+        // Execute WHERE once - this compiles and caches the predicate
+        var result = db.Database.ExecuteQuery("SELECT * FROM users WHERE age > 25");
+        return result.Count;
+    }
+
+    /// <summary>
+    /// WHERE repeated 10x - tests cache effectiveness.
+    /// After first execution, predicate should be cached.
+    /// Expected: Similar performance to first query (filtering still needed).
+    /// Cache benefit: Reduced compilation overhead.
+    /// </summary>
+    [Benchmark(Description = "WHERE repeated 10x (cache benefits)")]
+    public int WhereCaching_Repeated10()
+    {
         int totalCount = 0;
-        
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < 10; i++)
         {
             var result = db.Database.ExecuteQuery("SELECT * FROM users WHERE age > 25");
             totalCount += result.Count;
         }
+        return totalCount;
+    }
+
+    /// <summary>
+    /// Different WHERE clause - tests cache separation.
+    /// Different predicate = new cache entry.
+    /// Verifies cache works correctly for different queries.
+    /// </summary>
+    [Benchmark(Description = "WHERE different clause (tests cache isolation)")]
+    public int WhereCaching_DifferentClause()
+    {
+        int totalCount = 0;
+        
+        // Query 1: age > 25 (may use cached predicate)
+        var result1 = db.Database.ExecuteQuery("SELECT * FROM users WHERE age > 25");
+        totalCount += result1.Count;
+        
+        // Query 2: age < 40 (different predicate = new cache entry)
+        var result2 = db.Database.ExecuteQuery("SELECT * FROM users WHERE age < 40");
+        totalCount += result2.Count;
         
         return totalCount;
     }
@@ -82,8 +104,7 @@ public class Phase2AOptimizationBenchmark
     /// <summary>
     /// SELECT * using traditional Dictionary path (baseline).
     /// Each row materializes to Dictionary<string, object>.
-    /// 
-    /// Expected memory: ~200 bytes per row = 2MB for 10k rows
+    /// Expected: ~200 bytes per row overhead
     /// </summary>
     [Benchmark(Description = "SELECT * Dictionary path (baseline)")]
     public int SelectDictionary_Path()
@@ -94,10 +115,8 @@ public class Phase2AOptimizationBenchmark
 
     /// <summary>
     /// SELECT * using fast path with StructRow (optimized).
-    /// Uses zero-copy StructRow instead of Dictionary.
-    /// 
-    /// Expected improvement: 2-3x faster, 25x less memory
-    /// Expected memory: ~20 bytes per row = 200KB for 10k rows
+    /// Uses zero-copy StructRow instead of Dictionary materialization.
+    /// Expected: 2-3x faster, 25x less memory
     /// </summary>
     [Benchmark(Description = "SELECT * StructRow fast path (optimized)")]
     public int SelectStructRow_FastPath()
@@ -110,15 +129,10 @@ public class Phase2AOptimizationBenchmark
 
     #region Helper Methods
 
-    /// <summary>
-    /// Populate test data ONCE in GlobalSetup.
-    /// This ensures benchmarks measure QUERY performance, not insert performance.
-    /// </summary>
     private void PopulateTestDataOnce()
     {
         var random = new Random(42);
         
-        // Bulk insert to minimize insertion overhead
         for (int i = 0; i < DATASET_SIZE; i++)
         {
             var id = i;
@@ -137,7 +151,6 @@ public class Phase2AOptimizationBenchmark
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("Primary key"))
             {
-                // Skip if row already exists
                 continue;
             }
         }
