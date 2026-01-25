@@ -107,6 +107,23 @@ internal sealed class SchemaSetup
             try
             {
                 var results = concreteDb.InsertBatch(tableName, rows);
+                
+                // ✅ CRITICAL: Refresh table row count cache after batch insert
+                // InsertBatch writes to disk, but table's cached row count is stale
+                // Without refresh, subsequent SELECTs won't see the new rows
+                if (concreteDb is SharpCoreDB.Database dbWithRefresh)
+                {
+                    // Force table to refresh its cached row count from disk
+                    var tablesField = typeof(SharpCoreDB.Database)
+                        .GetField("tables", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    
+                    if (tablesField?.GetValue(dbWithRefresh) is Dictionary<string, SharpCoreDB.Interfaces.ITable> tables &&
+                        tables.TryGetValue(tableName, out var table))
+                    {
+                        table.RefreshRowCount();
+                    }
+                }
+                
                 return results.Length;
             }
             catch
