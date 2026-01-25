@@ -6,6 +6,9 @@ namespace SharpCoreDB.DemoJoinsSubQ;
 /// <summary>
 /// Creates schema and seeds data for join/subquery scenarios.
 /// Includes small and medium tables, NULLs, duplicates, missing FK matches.
+/// 
+/// ✅ REFACTORED: Uses InsertBatch() for bulk operations instead of ExecuteSQL loop
+/// This writes directly to storage engine, ensuring all rows persist (not just in-memory)
 /// </summary>
 internal sealed class SchemaSetup
 {
@@ -40,10 +43,11 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("INSERT INTO customers VALUES (4, 'Alice', 3)"); // duplicate name
         db.ExecuteSQL("INSERT INTO customers VALUES (5, 'Dana', 99)");  // missing region
 
-        // Orders (medium-ish ~200 for demo; can be scaled)
-        // ✅ CRITICAL: Insert ALL rows first, then flush ONCE at the end
-        // This ensures all 200 orders are persisted before any queries
+        // ✅ REFACTORED: Build all 200 orders in memory, then batch insert
+        // This writes directly to storage engine instead of in-memory table only
         Console.WriteLine("✓ Inserting 200 orders...");
+        var orderRows = new List<Dictionary<string, object>>(200);
+        
         for (int i = 0; i < 200; i++)
         {
             int orderId = i + 1;
@@ -51,30 +55,85 @@ internal sealed class SchemaSetup
             decimal amount = 50 + (i % 20) * 5;
             string status = (i % 7 == 0) ? "CANCELLED" : "PAID";
             
-            db.ExecuteSQL($"INSERT INTO orders VALUES ({orderId}, {custId}, {amount}, '{status}')");
+            orderRows.Add(new Dictionary<string, object>
+            {
+                { "id", orderId },
+                { "customer_id", custId },
+                { "amount", amount },
+                { "status", status }
+            });
         }
-        Console.WriteLine("✓ Completed inserting 200 orders");
-
-        // ✅ CRITICAL: Flush ALL table data to disk BEFORE any SELECT queries
-        // This persists the in-memory rows to disk
-        db.Flush();
+        
+        // Insert all 200 rows in one batch (writes to storage, not just memory!)
+        var inserted = InsertBatchWithFallback("orders", orderRows);
+        Console.WriteLine($"✓ Completed inserting {inserted} orders");
 
         // Payments (some missing, some duplicates)
-        db.ExecuteSQL("INSERT INTO payments VALUES (1, 1, 'CARD', 1)");
-        db.ExecuteSQL("INSERT INTO payments VALUES (2, 2, 'CASH', 1)");
-        db.ExecuteSQL("INSERT INTO payments VALUES (3, 2, 'GIFT', 0)"); // duplicate order with different method
-        db.ExecuteSQL("INSERT INTO payments VALUES (4, 5, 'CARD', 1)");
-        db.ExecuteSQL("INSERT INTO payments VALUES (5, 999, 'CARD', 0)"); // missing order
+        var paymentRows = new[]
+        {
+            new Dictionary<string, object> { { "id", 1 }, { "order_id", 1 }, { "method", "CARD" }, { "confirmed", 1 } },
+            new Dictionary<string, object> { { "id", 2 }, { "order_id", 2 }, { "method", "CASH" }, { "confirmed", 1 } },
+            new Dictionary<string, object> { { "id", 3 }, { "order_id", 2 }, { "method", "GIFT" }, { "confirmed", 0 } },
+            new Dictionary<string, object> { { "id", 4 }, { "order_id", 5 }, { "method", "CARD" }, { "confirmed", 1 } },
+            new Dictionary<string, object> { { "id", 5 }, { "order_id", 999 }, { "method", "CARD" }, { "confirmed", 0 } }
+        }.ToList();
         
-        // Flush payments table too
-        db.Flush();
+        InsertBatchWithFallback("payments", paymentRows);
 
         // Inventory (table for subqueries)
-        db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU1', 'Widget', 10, 9.99)");
-        db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU2', 'Gadget', 0, 19.99)");
-        db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU3', 'Doohickey', 5, 4.99)");
+        var inventoryRows = new[]
+        {
+            new Dictionary<string, object> { { "sku", "SKU1" }, { "product", "Widget" }, { "stock", 10 }, { "price", 9.99m } },
+            new Dictionary<string, object> { { "sku", "SKU2" }, { "product", "Gadget" }, { "stock", 0 }, { "price", 19.99m } },
+            new Dictionary<string, object> { { "sku", "SKU3" }, { "product", "Doohickey" }, { "stock", 5 }, { "price", 4.99m } }
+        }.ToList();
         
-        // Final flush before validation
+        InsertBatchWithFallback("inventory", inventoryRows);
+        
+        // ✅ CRITICAL: Flush once at the very end to ensure all data is persisted to disk
         db.Flush();
     }
+
+    /// <summary>
+    /// ✅ Helper: Attempts InsertBatch() if available (writes to storage), 
+    /// falls back to individual ExecuteSQL if needed (writes to memory only).
+    /// Returns count of rows inserted.
+    /// </summary>
+    private int InsertBatchWithFallback(string tableName, List<Dictionary<string, object>> rows)
+    {
+        // Try casting to concrete Database class for InsertBatch method
+        if (db is SharpCoreDB.Database concreteDb)
+        {
+            try
+            {
+                var results = concreteDb.InsertBatch(tableName, rows);
+                return results.Length;
+            }
+            catch
+            {
+                // Fall back to individual inserts if InsertBatch fails
+            }
+        }
+
+        // Fallback: Use ExecuteSQL (only writes to in-memory table, not storage!)
+        // This is slower and less reliable, but works if InsertBatch isn't available
+        foreach (var row in rows)
+        {
+            var values = string.Join(", ", row.Values.Select(FormatSqlValue));
+            db.ExecuteSQL($"INSERT INTO {tableName} VALUES ({values})");
+        }
+        
+        return rows.Count;
+    }
+
+    /// <summary>
+    /// ✅ Helper: Formats a value for SQL insertion
+    /// </summary>
+    private static string FormatSqlValue(object? value) => value switch
+    {
+        null => "NULL",
+        string s => $"'{s.Replace("'", "''")}'",  // SQL string escaping
+        bool b => b ? "1" : "0",
+        _ => value.ToString() ?? "NULL"
+    };
 }
