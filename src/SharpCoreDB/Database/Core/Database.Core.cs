@@ -364,26 +364,26 @@ public partial class Database : IDatabase, IDisposable
 
         try
         {
-            // ✅ UNIFIED: Delegate to IStorageEngine for consistent persistence
-            // This guarantees data flush across all engine types (AppendOnly, PageBased, Columnar)
+            // ✅ CRITICAL: Flush BOTH storage engine AND all table data
+            // Storage engine handles low-level persistence, but table data lives in memory
+            // Must flush tables to disk before calling storageEngine.Flush()
+            foreach (var table in tables.Values)
+            {
+                try
+                {
+                    table.Flush();  // Persist in-memory table data
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Flush] WARNING: Failed to flush table {table.Name}: {ex.Message}");
+                    _ = ex;
+                }
+            }
+            
+            // Then flush storage engine (handles any remaining WAL/transaction buffers)
             if (storageEngine is not null)
             {
                 storageEngine.Flush();
-            }
-            else
-            {
-                // Fallback for readonly or uninitialized state
-                foreach (var table in tables.Values)
-                {
-                    try
-                    {
-                        table.Flush();
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Flush] WARNING: Failed to flush table {table.Name}: {ex.Message}");
-                    }
-                }
             }
             
             SaveMetadata();
