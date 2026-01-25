@@ -41,11 +41,12 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("INSERT INTO customers VALUES (5, 'Dana', 99)");  // missing region
 
         // Orders (medium-ish ~200 for demo; can be scaled)
+        // ✅ NO PERIODIC FLUSH NEEDED: When validation queries run, they'll auto-flush dirty data
         Console.WriteLine("✓ Inserting 200 orders...");
         for (int i = 0; i < 200; i++)
         {
             int orderId = i + 1;
-            int custId = (i % 5) + 1; // distribute over 5 customers
+            int custId = (i % 5) + 1;
             decimal amount = 50 + (i % 20) * 5;
             string status = (i % 7 == 0) ? "CANCELLED" : "PAID";
             

@@ -37,6 +37,14 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
+            // ✅ CRITICAL FIX: Flush dirty data BEFORE SELECT
+            // This ensures SELECT sees all uncommitted inserts/updates/deletes
+            // Without this, SELECTs run against stale in-memory state
+            if (_metadataDirty || _batchUpdateActive)
+            {
+                Flush();
+            }
+            
             ExecuteSelectQuery(sql, null);
             return;
         }
@@ -95,6 +103,14 @@ public partial class Database
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
+            // ✅ CRITICAL FIX: Flush dirty data BEFORE SELECT
+            // This ensures SELECT sees all uncommitted inserts/updates/deletes
+            // Without this, SELECTs run against stale in-memory state
+            if (_metadataDirty || _batchUpdateActive)
+            {
+                Flush();
+            }
+            
             ExecuteSelectQuery(sql, parameters);
             return;
         }
