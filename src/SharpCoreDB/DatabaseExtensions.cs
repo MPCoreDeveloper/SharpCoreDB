@@ -24,7 +24,7 @@ public static class DatabaseExtensions
     /// </summary>
     public static IServiceCollection AddSharpCoreDB(this IServiceCollection services)
     {
-        ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14
+        ArgumentNullException.ThrowIfNull(services);  // ? C# 14
         
         services.AddSingleton<ICryptoService, CryptoService>();
         services.AddTransient<DatabaseFactory>();
@@ -194,7 +194,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public DatabaseOptions Options => _options;
     public IStorageProvider StorageProvider => _storageProvider;
 
-    // ✅ NEW: last_insert_rowid() support for SQLite compatibility
+    // ? NEW: last_insert_rowid() support for SQLite compatibility
     private long _lastInsertRowId;
     
     /// <inheritdoc />
@@ -209,7 +209,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
 
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
     {
-        // ✅ CRITICAL FIX: Use optimized batch execution with transaction grouping
+        // ? CRITICAL FIX: Use optimized batch execution with transaction grouping
         // Instead of: foreach(sql) ExecuteSQL(sql) -> 1K statements = 10x slower
         // Now: Group INSERTs + single transaction = matches LiteDB performance
         SingleFileDatabaseBatchExtension.ExecuteBatchSQLOptimized(this, sqlStatements);
@@ -217,7 +217,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
 
     public Task ExecuteBatchSQLAsync(IEnumerable<string> sqlStatements, CancellationToken cancellationToken = default)
     {
-        // ✅ Use optimized batch execution - same as sync version
+        // ? Use optimized batch execution - same as sync version
         SingleFileDatabaseBatchExtension.ExecuteBatchSQLOptimized(this, sqlStatements);
         return Task.CompletedTask;
     }
@@ -242,7 +242,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         // Handle basic queries
         var upperSql = sql.Trim().ToUpperInvariant();
         
-        // ✅ FIX: Check for special STORAGE table query FIRST (before general SELECT routing)
+        // ? FIX: Check for special STORAGE table query FIRST (before general SELECT routing)
         // This handles: SELECT * FROM STORAGE, SELECT COUNT(*) FROM STORAGE, etc.
         if (upperSql.Contains("FROM STORAGE") || upperSql.Contains("FROM[STORAGE]"))
         {

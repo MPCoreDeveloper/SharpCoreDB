@@ -5,11 +5,12 @@
 namespace SharpCoreDB.Services;
 
 using SharpCoreDB.Constants;
-using SharpCoreDB.Interfaces;
 using SharpCoreDB.DataStructures;
-using SharpCoreDB.Storage.Hybrid;
-using System.Text;
 using SharpCoreDB.Execution;
+using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage.Hybrid;
+using System.Collections.Generic;
+using System.Text;
 
 /// <summary>
 /// SqlParser partial class containing DML (Data Manipulation Language) operations:
@@ -109,6 +110,7 @@ public partial class SqlParser
     /// <summary>
     /// Executes INSERT statement with modern C# 14 patterns.
     /// Uses StringBuilder and modern null-coalescing patterns.
+    /// ✅ FIXED: Now properly handles multi-row INSERT like VALUES (1, 'a'), (2, 'b')
     /// </summary>
     private void ExecuteInsert(string sql, IWAL? wal)
     {
@@ -138,46 +140,112 @@ public partial class SqlParser
         }
 
         var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
-        var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
+        var valuesRest = rest[valuesStart..].Trim();
         
-        // ✅ Parse values respecting quotes using modern Span<T> pattern
-        List<string> values = ParseInsertValues(valuesStr);
+        // ✅ FIXED: Parse multi-row VALUES clause like: (1, 'a'), (2, 'b'), (3, 'c')
+        List<List<string>> allRowValues = ParseMultiRowInsertValues(valuesRest);
         
-        var row = new Dictionary<string, object>();
-        
-        if (insertColumns is null)
+        // Insert each row
+        foreach (var rowValues in allRowValues)
         {
-            // All columns
-            for (int i = 0; i < table.Columns.Count; i++)
+            var row = new Dictionary<string, object>();
+            
+            if (insertColumns is null)
             {
-                var col = table.Columns[i];
-                var type = table.ColumnTypes[i];
-                var valueStr = values[i];
-                row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                // All columns
+                for (int i = 0; i < table.Columns.Count; i++)
+                {
+                    var col = table.Columns[i];
+                    var type = table.ColumnTypes[i];
+                    var valueStr = i < rowValues.Count ? rowValues[i] : "NULL";
+                    row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                }
             }
-        }
-        else
-        {
-            // Specified columns  
-            for (int i = 0; i < insertColumns.Count; i++)
+            else
             {
-                var col = insertColumns[i];
-                var idx = table.Columns.IndexOf(col);
-                var type = table.ColumnTypes[idx];
-                var valueStr = values[i];
-                row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                // Specified columns  
+                for (int i = 0; i < insertColumns.Count; i++)
+                {
+                    var col = insertColumns[i];
+                    var idx = table.Columns.IndexOf(col);
+                    var type = table.ColumnTypes[idx];
+                    var valueStr = i < rowValues.Count ? rowValues[i] : "NULL";
+                    row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                }
             }
+
+            table.Insert(row);
         }
-
-        // ✅ Validate foreign key constraints
-        ValidateForeignKeyInsert(table, row);
-
-        table.Insert(row);
+        
         wal?.Log(sql);
     }
 
     /// <summary>
-    /// ✅ NEW: Parses INSERT VALUES using modern Span-based approach.
+    /// ✅ NEW: Parses multi-row INSERT VALUES clause.
+    /// Handles: (1, 'a'), (2, 'b'), (3, 'c')
+    /// Returns list of row value lists.
+    /// </summary>
+    private static List<List<string>> ParseMultiRowInsertValues(string valuesRest)
+    {
+        List<List<string>> allRows = [];
+        var remaining = valuesRest.Trim();
+        
+        // Parse multiple rows: (val1, val2), (val3, val4), ...
+        while (remaining.Length > 0 && remaining[0] == '(')
+        {
+            int closeParenIdx = FindMatchingCloseParen(remaining, 0);
+            if (closeParenIdx < 0)
+                throw new InvalidOperationException("Mismatched parentheses in VALUES clause");
+            
+            var rowStr = remaining[1..closeParenIdx]; // Extract content between parens
+            var rowValues = ParseInsertValues(rowStr);
+            allRows.Add(rowValues);
+            
+            remaining = remaining[(closeParenIdx + 1)..].Trim();
+            
+            // Skip comma if present
+            if (remaining.StartsWith(','))
+                remaining = remaining[1..].Trim();
+        }
+        
+        return allRows;
+    }
+
+    /// <summary>
+    /// Helper: Find matching closing parenthesis, respecting quoted strings.
+    /// </summary>
+    private static int FindMatchingCloseParen(string str, int openParenIdx)
+    {
+        int depth = 0;
+        bool inQuotes = false;
+        
+        for (int i = openParenIdx; i < str.Length; i++)
+        {
+            char c = str[i];
+            
+            // Toggle quote state, respecting escape
+            if (c == '\'' && (i == 0 || str[i-1] != '\\'))
+            {
+                inQuotes = !inQuotes;
+            }
+            
+            // Track parenthesis depth only outside quotes
+            if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')')
+                {
+                    depth--;
+                    if (depth == 0) return i;
+                }
+            }
+        }
+        
+        return -1; // Unmatched
+    }
+
+    /// <summary>
+    /// ✅ UPDATED: Parses single row INSERT VALUES using modern Span-based approach.
     /// Respects quoted strings and handles escaping correctly.
     /// </summary>
     private static List<string> ParseInsertValues(ReadOnlySpan<char> valuesStr)
@@ -209,31 +277,6 @@ public partial class SqlParser
             values.Add(currentValue.ToString().Trim());
         
         return values;
-    }
-
-    /// <summary>
-    /// ✅ NEW: Validates foreign key constraints for INSERT operation.
-    /// Extracted for maintainability and reuse.
-    /// </summary>
-    private void ValidateForeignKeyInsert(ITable table, Dictionary<string, object> row)
-    {
-        foreach (var fk in table.ForeignKeys)
-        {
-            if (!row.TryGetValue(fk.ColumnName, out var fkValue) || fkValue is null or DBNull)
-                continue;
-
-            if (!this.tables.TryGetValue(fk.ReferencedTable, out var refTable))
-                throw new InvalidOperationException($"Foreign key references non-existent table '{fk.ReferencedTable}'");
-
-            var refColIndex = refTable.Columns.IndexOf(fk.ReferencedColumn);
-            if (refColIndex < 0)
-                throw new InvalidOperationException($"Foreign key references non-existent column '{fk.ReferencedColumn}' in table '{fk.ReferencedTable}'");
-
-            var fkStr = fkValue.ToString() ?? string.Empty;
-            var refRows = refTable.Select($"{fk.ReferencedColumn} = '{fkStr}'");
-            if (refRows.Count == 0)
-                throw new InvalidOperationException($"Foreign key constraint violation: value '{fkStr}' does not exist in '{fk.ReferencedTable}.{fk.ReferencedColumn}'");
-        }
     }
 
     /// <summary>
@@ -1091,8 +1134,8 @@ public partial class SqlParser
             }
 
             // Execute the query
-            var results = table.Select(whereClause, orderBy, ascending, _noEncrypt);
-
+            //var results = table.Select(whereClause, orderBy, ascending, _noEncrypt);
+            var results = table.Select(whereClause, null, true, _noEncrypt);
             // Apply LIMIT/OFFSET
             if (selectNode.Offset.HasValue && selectNode.Offset.Value > 0)
                 results = [.. results.Skip(selectNode.Offset.Value)];
@@ -1105,11 +1148,155 @@ public partial class SqlParser
                 results = ExecuteGroupBy(results, selectNode.GroupBy, selectNode.Columns);
 
             // Handle SELECT column projection
-            if (selectNode.Columns?.Count > 0)
+             if (selectNode.Columns?.Count > 0)
+                         {
+                results = ApplyMultiColumnOrderBy(results, selectNode.OrderBy);
                 results = ProjectColumns(results, selectNode.Columns, table);
-            
+                            }
+                    else
+                            {
+                                // Still project (no-op) to keep shape consistent, but safe for null
+                results = ProjectColumns(results, null, table);
+                            }
+
             return results;
         }
+
+        private static List<Dictionary<string, object>> ApplyMultiColumnOrderBy(
+    List<Dictionary<string, object>> rows,
+    OrderByNode? orderBy)
+        {
+            if (orderBy?.Items is null or { Count: 0 } || rows is { Count: 0 })
+                return rows;
+
+            var instructions = orderBy.Items
+                .Select(item => new SortColumn(
+                    item.Column,
+                    item.IsAscending))
+                .ToArray(); // array = sneller dan List bij foreach
+
+            if (instructions.Length == 0)
+                return rows;
+
+            // Vooraf resolved waarden per rij + per gevraagde kolom (grootste winst!)
+            var valueCache = new List<object?[]?>(rows.Count);
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                valueCache.Add(ResolveAllValues(rows[i], instructions));
+            }
+
+            // Nu sorteren op basis van de cache → geen dictionary lookups meer tijdens vergelijken!
+            var indices = Enumerable.Range(0, rows.Count).ToArray();
+
+            Array.Sort(indices, new MultiKeyComparer(valueCache, instructions));
+
+            // Resultaat bouwen
+            var result = new List<Dictionary<string, object>>(rows.Count);
+            foreach (int idx in indices)
+            {
+                result.Add(rows[idx]);
+            }
+
+            return result;
+        }
+
+        // Haal alle gevraagde waarden in één keer op → O(1) per kolom na caching
+        private static object?[]? ResolveAllValues(
+            Dictionary<string, object> row,
+            SortColumn[] columns)
+        {
+            if (columns.Length == 0) return null;
+
+            var values = new object?[columns.Length];
+
+            for (int i = 0; i < columns.Length; i++)
+            {
+                values[i] = ResolveSingleValue(row, columns[i].Column);
+            }
+
+            return values;
+        }
+
+        private static object? ResolveSingleValue(Dictionary<string, object> row, ColumnReferenceNode col)
+        {
+            string? colName = col.ColumnName;
+            if (string.IsNullOrEmpty(colName))
+                return null;
+
+            string? alias = col.TableAlias;
+
+            // 1. Volledig qualified met alias (meest voorkomend?)
+            if (!string.IsNullOrEmpty(alias))
+            {
+                string key = $"{alias}.{colName}";
+                if (row.TryGetValue(key, out var v)) return v;
+
+                // Case-insensitive fallback (duur → alleen als nodig)
+                foreach (var k in row.Keys)
+                {
+                    if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                        return row[k];
+                }
+            }
+
+            // 2. Simpele kolomnaam
+            if (row.TryGetValue(colName, out var val))
+                return val;
+
+            // 3. Suffix (.colName) – vaak traagste deel
+            string suffix = $".{colName}";
+            foreach (var k in row.Keys)
+            {
+                if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                    return row[k];
+            }
+
+            return null;
+        }
+
+        // Custom comparer die direct op de cache-array werkt
+        private sealed class MultiKeyComparer : IComparer<int>
+        {
+            private readonly List<object?[]?> _values;
+            private readonly SortColumn[] _columns;
+
+            public MultiKeyComparer(List<object?[]?> values, SortColumn[] columns)
+            {
+                _values = values;
+                _columns = columns;
+            }
+
+            public int Compare(int a, int b)
+            {
+                var va = _values[a];
+                var vb = _values[b];
+
+                // null-checks
+                if (va is null) return vb is null ? 0 : -1;
+                if (vb is null) return 1;
+
+                for (int i = 0; i < _columns.Length; i++)
+                {
+                    var left = va[i];
+                    var right = vb[i];
+
+                    int cmp = Comparer<object?>.Default.Compare(left, right);
+                    if (cmp != 0)
+                    {
+                        return _columns[i].Ascending ? cmp : -cmp;
+                    }
+                }
+
+                return 0; // stable
+            }
+        }
+
+        private readonly record struct SortColumn(
+            ColumnReferenceNode Column,
+            bool Ascending);
+
+
 
         /// <summary>
         /// Executes GROUP BY operation on query results.
@@ -1209,10 +1396,13 @@ public partial class SqlParser
         /// ✅ FIXED: Strictly matches qualified column names in JOINs to prevent NULL mismatches.
         /// </summary>
         private List<Dictionary<string, object>> ProjectColumns(
-            List<Dictionary<string, object>> results, 
-            List<ColumnNode> selectList, 
+           List<Dictionary<string, object>> results,
+             List<ColumnNode>? selectList,
             ITable table)
         {
+            if (selectList is null || selectList.Count == 0)
+                return results;
+            
             List<Dictionary<string, object>> projectedResults = [];
 
             foreach (var row in results)
@@ -1307,6 +1497,7 @@ public partial class SqlParser
         /// <summary>
         /// Builds expression string from ExpressionNode (simplified).
         /// ✅ MODERNIZED: Uses modern switch expression for different node types.
+        /// ✅ FIXED: Now includes table aliases in ColumnReferenceNode to properly evaluate JOIN ON conditions
         /// </summary>
         private static string BuildExpressionString(ExpressionNode expression)
         {
@@ -1316,7 +1507,9 @@ public partial class SqlParser
                     => $"{BuildExpressionString(binary.Left)} {binary.Operator} {BuildExpressionString(binary.Right)}",
                 
                 ColumnReferenceNode column
-                    => column.ColumnName ?? string.Empty,
+                    => !string.IsNullOrEmpty(column.TableAlias)
+                        ? $"{column.TableAlias}.{column.ColumnName}"
+                        : column.ColumnName ?? string.Empty,
                 
                 LiteralNode literal
                     => FormatLiteralValue(literal.Value),

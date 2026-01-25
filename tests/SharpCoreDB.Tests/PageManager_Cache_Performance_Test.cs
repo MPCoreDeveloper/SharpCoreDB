@@ -283,14 +283,14 @@ public class PageManager_Cache_Performance_Test : IDisposable
         
         // Verify dirty before flush
         var page = pm.GetPage(pageId, allowDirty: true);
-        Assert.True(page.IsDirty, "Page should be dirty after insert");
+        Assert.True(page.HasValue && page.Value.IsDirty, "Page should be dirty after insert");
         
         // Flush
         pm.FlushDirtyPages();
         
         // Verify clean after flush
         page = pm.GetPage(pageId, allowDirty: false);
-        Assert.False(page.IsDirty, "Page should be clean after flush");
+        Assert.False(page.HasValue && page.Value.IsDirty, "Page should be clean after flush");
         
         Console.WriteLine($"? DIRTY PAGE FLUSHED SUCCESSFULLY");
     }

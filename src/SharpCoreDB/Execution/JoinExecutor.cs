@@ -130,6 +130,7 @@ public static class JoinExecutor
     /// <summary>
     /// Executes a CROSS JOIN (Cartesian product) between two table result sets.
     /// Returns all combinations of left and right rows.
+    /// ✅ UPDATED: Pass sample rows to MergeRows for consistency
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static IEnumerable<Dictionary<string, object>> ExecuteCrossJoin(
@@ -138,11 +139,17 @@ public static class JoinExecutor
         string? leftAlias,
         string? rightAlias)
     {
-        foreach (var leftRow in leftRows)
+        var leftList = leftRows as List<Dictionary<string, object>> ?? leftRows.ToList();
+        var rightList = rightRows as List<Dictionary<string, object>> ?? rightRows.ToList();
+        
+        var sampleLeft = leftList.Count > 0 ? leftList[0] : null;
+        var sampleRight = rightList.Count > 0 ? rightList[0] : null;
+        
+        foreach (var leftRow in leftList)
         {
-            foreach (var rightRow in rightRows)
+            foreach (var rightRow in rightList)
             {
-                yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias);
+                yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias, sampleLeft, sampleRight);
             }
         }
     }
@@ -155,6 +162,7 @@ public static class JoinExecutor
     /// Executes hash join algorithm.
     /// Build phase: Create hash table from smaller input.
     /// Probe phase: Stream larger input and lookup matches.
+    /// ✅ CRITICAL FIX: Pass sample rows to MergeRows for NULL column generation
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static IEnumerable<Dictionary<string, object>> ExecuteHashJoin(
@@ -169,6 +177,10 @@ public static class JoinExecutor
         bool buildLeft = leftRows.Count <= rightRows.Count;
         var buildSide = buildLeft ? leftRows : rightRows;
         var probeSide = buildLeft ? rightRows : leftRows;
+
+        // ✅ Get sample rows for NULL placeholder generation
+        var sampleLeftRow = leftRows.Count > 0 ? leftRows[0] : null;
+        var sampleRightRow = rightRows.Count > 0 ? rightRows[0] : null;
 
         // Build hash table (group by hash of row for equality)
         var hashTable = new Dictionary<int, List<Dictionary<string, object>>>();
@@ -204,7 +216,7 @@ public static class JoinExecutor
                         foundMatch = true;
                         matchedBuildRows.Add(buildRow);
                         matchedProbeRows.Add(probeRow);
-                        yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias);
+                        yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
                     }
                 }
             }
@@ -212,13 +224,13 @@ public static class JoinExecutor
             // LEFT/FULL JOIN: Emit unmatched probe rows if probing right side
             if (!foundMatch && (joinType is JoinType.Left or JoinType.Full) && !buildLeft)
             {
-                yield return MergeRows(probeRow, null, leftAlias, rightAlias);
+                yield return MergeRows(probeRow, null, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
             }
 
             // RIGHT/FULL JOIN: Emit unmatched probe rows if probing left side
             if (!foundMatch && (joinType is JoinType.Right or JoinType.Full) && buildLeft)
             {
-                yield return MergeRows(null, probeRow, leftAlias, rightAlias);
+                yield return MergeRows(null, probeRow, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
             }
         }
 
@@ -229,7 +241,7 @@ public static class JoinExecutor
             {
                 if (!matchedBuildRows.Contains(buildRow))
                 {
-                    yield return MergeRows(buildRow, null, leftAlias, rightAlias);
+                    yield return MergeRows(buildRow, null, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
                 }
             }
         }
@@ -241,7 +253,7 @@ public static class JoinExecutor
             {
                 if (!matchedBuildRows.Contains(buildRow))
                 {
-                    yield return MergeRows(null, buildRow, leftAlias, rightAlias);
+                    yield return MergeRows(null, buildRow, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
                 }
             }
         }
@@ -254,6 +266,7 @@ public static class JoinExecutor
     /// <summary>
     /// Executes nested loop join algorithm (fallback for small datasets).
     /// O(n * m) complexity but no memory overhead.
+    /// ✅ CRITICAL FIX: Properly emit NULL columns for unmatched outer join rows
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static IEnumerable<Dictionary<string, object>> ExecuteNestedLoopJoin(
@@ -267,6 +280,10 @@ public static class JoinExecutor
         HashSet<Dictionary<string, object>> matchedLeftRows = [];
         HashSet<Dictionary<string, object>> matchedRightRows = [];
 
+        // ✅ Get sample rows to extract column structure for NULL placeholder generation
+        var sampleLeftRow = leftRows.Count > 0 ? leftRows[0] : null;
+        var sampleRightRow = rightRows.Count > 0 ? rightRows[0] : null;
+
         // Nested loop through both sides
         foreach (var leftRow in leftRows)
         {
@@ -279,25 +296,25 @@ public static class JoinExecutor
                     foundMatch = true;
                     matchedLeftRows.Add(leftRow);
                     matchedRightRows.Add(rightRow);
-                    yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias);
+                    yield return MergeRows(leftRow, rightRow, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
                 }
             }
 
-            // LEFT/FULL JOIN: Emit unmatched left rows
+            // LEFT/FULL JOIN: Emit unmatched left rows with NULL placeholders for right columns
             if (!foundMatch && (joinType is JoinType.Left or JoinType.Full))
             {
-                yield return MergeRows(leftRow, null, leftAlias, rightAlias);
+                yield return MergeRows(leftRow, null, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
             }
         }
 
-        // RIGHT/FULL JOIN: Emit unmatched right rows
+        // RIGHT/FULL JOIN: Emit unmatched right rows with NULL placeholders for left columns
         if (joinType is JoinType.Right or JoinType.Full)
         {
             foreach (var rightRow in rightRows)
             {
                 if (!matchedRightRows.Contains(rightRow))
                 {
-                    yield return MergeRows(null, rightRow, leftAlias, rightAlias);
+                    yield return MergeRows(null, rightRow, leftAlias, rightAlias, sampleLeftRow, sampleRightRow);
                 }
             }
         }
@@ -309,14 +326,17 @@ public static class JoinExecutor
 
     /// <summary>
     /// Merges two rows into a single joined row.
-    /// Handles null rows for outer joins.
+    /// Handles null rows for outer joins by adding NULL placeholders.
+    /// ✅ CRITICAL FIX: Add NULL columns for unmatched outer join rows
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Dictionary<string, object> MergeRows(
         Dictionary<string, object>? leftRow,
         Dictionary<string, object>? rightRow,
         string? leftAlias,
-        string? rightAlias)
+        string? rightAlias,
+        Dictionary<string, object>? sampleLeftRow,
+        Dictionary<string, object>? sampleRightRow)
     {
         Dictionary<string, object> result = [];
 
@@ -331,6 +351,17 @@ public static class JoinExecutor
                 result[columnName] = value;
             }
         }
+        else if (sampleLeftRow is not null)
+        {
+            // ✅ RIGHT/FULL JOIN: Add NULL placeholders for left table columns
+            foreach (var key in sampleLeftRow.Keys)
+            {
+                string columnName = string.IsNullOrEmpty(leftAlias)
+                    ? key
+                    : $"{leftAlias}.{key}";
+                result[columnName] = DBNull.Value;
+            }
+        }
 
         // Add right columns
         if (rightRow is not null)
@@ -341,6 +372,17 @@ public static class JoinExecutor
                     ? key
                     : $"{rightAlias}.{key}";
                 result[columnName] = value;
+            }
+        }
+        else if (sampleRightRow is not null)
+        {
+            // ✅ LEFT/FULL JOIN: Add NULL placeholders for right table columns
+            foreach (var key in sampleRightRow.Keys)
+            {
+                string columnName = string.IsNullOrEmpty(rightAlias)
+                    ? key
+                    : $"{rightAlias}.{key}";
+                result[columnName] = DBNull.Value;
             }
         }
 

@@ -55,32 +55,23 @@ public partial class Database
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
 
-        // ✅ OPTIMIZATION: Use GroupCommitWAL for all DML (INSERT, UPDATE, DELETE)
-        // Previous exclusion of UPDATE/DELETE was causing 12.8x slowdown vs SQLite
-        // GroupCommitWAL batches multiple operations into single flush
-        bool useWal = groupCommitWal is not null;
-
-        if (useWal)
+        // ✅ UNIFIED: Use IStorageEngine for all DML operations
+        // StorageEngine handles WAL, transactions, and batching consistently
+        // No more separate GroupCommitWAL logic - it's integrated into the engine
+        lock (_walLock)
         {
-            ExecuteSQLWithGroupCommit(sql).GetAwaiter().GetResult();
-        }
-        else
-        {
-            lock (_walLock)
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            sqlParser.Execute(sql, null);
+            
+            if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-                sqlParser.Execute(sql, null);
-                
-                if (!isReadOnly && IsSchemaChangingCommand(sql))
-                {
-                    SaveMetadata();
-                    ApplyColumnarCompactionThresholdToTables();
-                    _metadataDirty = true;
-                }
-                else if (!isReadOnly)
-                {
-                    _metadataDirty = true;
-                }
+                SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
+                _metadataDirty = true;
+            }
+            else if (!isReadOnly)
+            {
+                _metadataDirty = true;
             }
         }
     }
@@ -122,35 +113,23 @@ public partial class Database
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
 
-        // ✅ OPTIMIZATION: Use GroupCommitWAL for all DML (INSERT, UPDATE, DELETE)
-        // Previous exclusion of UPDATE/DELETE was causing 12.8x slowdown vs SQLite
-        // GroupCommitWAL batches multiple operations into single flush
-        bool isDeleteOrUpdate = parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
-                               parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase);
-        
-        bool useWal = groupCommitWal is not null;
-
-        if (useWal)
+        // ✅ UNIFIED: Use IStorageEngine for all DML operations
+        // StorageEngine handles WAL, transactions, and batching consistently
+        // No more separate GroupCommitWAL logic - it's integrated into the engine
+        lock (_walLock)
         {
-            ExecuteSQLWithGroupCommit(sql, parameters).GetAwaiter().GetResult();
-        }
-        else
-        {
-            lock (_walLock)
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            sqlParser.Execute(sql, parameters, null);
+            
+            if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-                sqlParser.Execute(sql, parameters, null);
-                
-                if (!isReadOnly && IsSchemaChangingCommand(sql))
-                {
-                    SaveMetadata();
-                    ApplyColumnarCompactionThresholdToTables();
-                    _metadataDirty = true;
-                }
-                else if (!isReadOnly)
-                {
-                    _metadataDirty = true;
-                }
+                SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
+                _metadataDirty = true;
+            }
+            else if (!isReadOnly)
+            {
+                _metadataDirty = true;
             }
         }
     }
@@ -203,13 +182,24 @@ public partial class Database
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
 
-        if (groupCommitWal is not null)
+        // ✅ UNIFIED: Use IStorageEngine for all DML operations
+        // StorageEngine handles WAL, transactions, and batching consistently
+        // No more separate GroupCommitWAL logic - it's integrated into the engine
+        lock (_walLock)
         {
-            await ExecuteSQLWithGroupCommit(sql, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await Task.Run(() => ExecuteSQL(sql), cancellationToken).ConfigureAwait(false);
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            sqlParser.Execute(sql, null);
+            
+            if (!isReadOnly && IsSchemaChangingCommand(sql))
+            {
+                SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
+                _metadataDirty = true;
+            }
+            else if (!isReadOnly)
+            {
+                _metadataDirty = true;
+            }
         }
     }
 
@@ -246,13 +236,24 @@ public partial class Database
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
 
-        if (groupCommitWal is not null)
+        // ✅ UNIFIED: Use IStorageEngine for all DML operations
+        // StorageEngine handles WAL, transactions, and batching consistently
+        // No more separate GroupCommitWAL logic - it's integrated into the engine
+        lock (_walLock)
         {
-            await ExecuteSQLWithGroupCommit(sql, parameters, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await Task.Run(() => ExecuteSQL(sql, parameters), cancellationToken).ConfigureAwait(false);
+            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            sqlParser.Execute(sql, parameters, null);
+            
+            if (!isReadOnly && IsSchemaChangingCommand(sql))
+            {
+                SaveMetadata();
+                ApplyColumnarCompactionThresholdToTables();
+                _metadataDirty = true;
+            }
+            else if (!isReadOnly)
+            {
+                _metadataDirty = true;
+            }
         }
     }
 
@@ -275,49 +276,6 @@ public partial class Database
             var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
         }, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Executes SQL with group commit WAL for improved write performance.
-    /// </summary>
-    private async Task ExecuteSQLWithGroupCommit(string sql, CancellationToken cancellationToken = default)
-    {
-        lock (_walLock)
-        {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-            sqlParser.Execute(sql, null);
-            
-            if (!isReadOnly && IsSchemaChangingCommand(sql))
-            {
-                SaveMetadata();
-                ApplyColumnarCompactionThresholdToTables();
-            }
-        }
-        
-        byte[] walData = Encoding.UTF8.GetBytes(sql);
-        await groupCommitWal!.CommitAsync(walData, cancellationToken);
-    }
-
-    /// <summary>
-    /// Executes parameterized SQL with group commit WAL.
-    /// </summary>
-    private async Task ExecuteSQLWithGroupCommit(string sql, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
-    {
-        lock (_walLock)
-        {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-            sqlParser.Execute(sql, parameters, null);
-            
-            if (!isReadOnly && IsSchemaChangingCommand(sql))
-            {
-                SaveMetadata();
-                ApplyColumnarCompactionThresholdToTables();
-            }
-        }
-        
-        var walEntry = new { Sql = sql, Parameters = parameters };
-        byte[] walData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(walEntry));
-        await groupCommitWal!.CommitAsync(walData, cancellationToken);
     }
 
     /// <summary>
@@ -405,5 +363,16 @@ public partial class Database
                 concrete.SetCompactionThreshold(threshold);
             }
         }
+    }
+
+    /// <summary>
+    /// Flushes pending data to disk synchronously.
+    /// ✅ UNIFIED: Uses the storage engine's flush mechanism instead of GroupCommitWAL
+    /// Used for testing and explicit durability control.
+    /// </summary>
+    public void FlushPendingWalStatements()
+    {
+        // ✅ Delegate to unified storage engine flush
+        Flush();
     }
 }

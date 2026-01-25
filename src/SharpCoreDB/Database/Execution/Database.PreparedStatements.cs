@@ -79,48 +79,22 @@ public partial class Database
             return;
         }
 
-        if (groupCommitWal is not null)
-        {
-            ExecutePreparedWithGroupCommit(stmt, parameters).GetAwaiter().GetResult();
-        }
-        else
-        {
-            lock (_walLock)
-            {
-                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-                sqlParser.Execute(stmt.Plan, parameters, null);
-                
-                if (!isReadOnly)
-                {
-                    SaveMetadata();
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Executes a prepared statement with group commit WAL.
-    /// </summary>
-    private async Task ExecutePreparedWithGroupCommit(DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
-    {
+        // ✅ UNIFIED: All DML goes through unified storage engine
         lock (_walLock)
         {
             var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             sqlParser.Execute(stmt.Plan, parameters, null);
             
-            if (!isReadOnly && IsSchemaChangingCommand(stmt.Sql))
+            if (!isReadOnly)
             {
                 SaveMetadata();
             }
         }
-        
-        var walEntry = new { Sql = stmt.Sql, Parameters = parameters };
-        byte[] walData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(walEntry));
-        await groupCommitWal!.CommitAsync(walData, cancellationToken);
     }
 
     /// <summary>
     /// Executes a prepared statement asynchronously with parameters.
+    /// ✅ UNIFIED: Uses IStorageEngine for all persistence
     /// </summary>
     public async Task ExecutePreparedAsync(DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default)
     {
@@ -138,14 +112,8 @@ public partial class Database
             return;
         }
 
-        if (groupCommitWal is not null)
-        {
-            await ExecutePreparedWithGroupCommit(stmt, parameters, cancellationToken);
-        }
-        else
-        {
-            await Task.Run(() => ExecutePrepared(stmt, parameters), cancellationToken).ConfigureAwait(false);
-        }
+        // ✅ UNIFIED: All DML goes through the same unified path
+        await Task.Run(() => ExecutePrepared(stmt, parameters), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

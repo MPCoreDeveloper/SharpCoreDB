@@ -185,7 +185,7 @@ public partial class PageBasedEngine
                 try
                 {
                     var page = manager.GetPage(new Storage.Hybrid.PageManager.PageId(pageId), allowDirty: true);
-                    if (page.IsDirty)
+                    if (page.HasValue && page.Value.IsDirty)
                     {
                         // WritePage is internal - use reflection or expose method
                         // For now, let FlushDirtyPages handle all pages

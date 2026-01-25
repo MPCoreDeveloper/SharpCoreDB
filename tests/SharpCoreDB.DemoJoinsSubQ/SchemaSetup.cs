@@ -30,7 +30,7 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY, order_id INTEGER, method TEXT, confirmed INTEGER)");
         db.ExecuteSQL("CREATE TABLE inventory (sku TEXT PRIMARY KEY, product TEXT, stock INTEGER, price DECIMAL)");
 
-        // Regions (small)
+        // Regions (small) - using multi-row INSERT
         db.ExecuteSQL("INSERT INTO regions VALUES (1, 'NA'), (2, 'EU'), (3, 'APAC')");
 
         // Customers (small with NULL region, duplicate names)
@@ -41,7 +41,6 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("INSERT INTO customers VALUES (5, 'Dana', 99)");  // missing region
 
         // Orders (medium-ish ~200 for demo; can be scaled)
-        // ✅ FIX: Use single-row INSERTs since multi-row syntax isn't supported
         Console.WriteLine("✓ Inserting 200 orders...");
         for (int i = 0; i < 200; i++)
         {

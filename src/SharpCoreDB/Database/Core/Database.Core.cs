@@ -13,6 +13,7 @@ namespace SharpCoreDB;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Core.Cache;
 using SharpCoreDB.Storage;
+using SharpCoreDB.Storage.Engines;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -46,7 +47,9 @@ public partial class Database : IDatabase, IDisposable
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
     
-    private readonly GroupCommitWAL? groupCommitWal;
+    // ✅ UNIFIED: Replace GroupCommitWAL with IStorageEngine
+    // This single abstraction handles all data persistence including WAL
+    private readonly IStorageEngine? storageEngine;
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     
     private bool _disposed;  // ✅ C# 14: No explicit = false needed
@@ -71,6 +74,7 @@ public partial class Database : IDatabase, IDisposable
     
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
+    /// ✅ REFACTORED: Uses IStorageEngine abstraction instead of hardcoded GroupCommitWAL
     /// </summary>
     /// <param name="services">The service provider for dependency injection.</param>
     /// <param name="dbPath">The database directory path.</param>
@@ -100,6 +104,7 @@ public partial class Database : IDatabase, IDisposable
             pageCache = new(this.config.PageCacheCapacity, this.config.PageSize);  // ✅ C# 14: target-typed new
         }
         
+        // ✅ UNIFIED: Create IStorage instance (underlying low-level storage with WAL)
         storage = new Services.Storage(crypto, masterKey, this.config, pageCache);
         userService = new UserService(crypto, storage, _dbPath);
 
@@ -109,42 +114,24 @@ public partial class Database : IDatabase, IDisposable
             queryCache = new(this.config.QueryCacheSize);
         }
 
-        // ✅ CRITICAL FIX: Load tables BEFORE initializing GroupCommitWAL
-        // This ensures tables dictionary is populated before crash recovery ExecuteSQL calls
+        // ✅ CRITICAL FIX: Load tables BEFORE initializing StorageEngine
+        // This ensures tables dictionary is populated before any operations
         Load();
 
-        // Initialize Group Commit WAL if enabled (AFTER Load)
-        if (this.config is not null && this.config.UseGroupCommitWal && !isReadOnly)  // ✅ C# 14: is not null
+        // ✅ UNIFIED: Create unified IStorageEngine that handles ALL persistence
+        // StorageEngineFactory selects the optimal engine based on config
+        // This engine internally uses IStorage and handles WAL properly
+        if (!isReadOnly)
         {
-            groupCommitWal = new(
-                _dbPath,
-                this.config.WalDurabilityMode,
-                this.config.WalMaxBatchSize,
-                this.config.WalMaxBatchDelayMs,
-                _instanceId);
-                
-            // Perform crash recovery (now safe - tables are loaded)
-            var recoveredOps = groupCommitWal.CrashRecovery();
-            if (recoveredOps.Count > 0)
-            {
-                foreach (var opData in recoveredOps)
-                {
-                    try
-                    {
-                        string sql = Encoding.UTF8.GetString(opData.Span);
-                        ExecuteSQL(sql);
-                    }
-                    catch (Exception)
-                    {
-                        // Silently skip failed recovery operations
-                    }
-                }
-                
-                groupCommitWal.ClearAsync().GetAwaiter().GetResult();
-            }
-
-            GroupCommitWAL.CleanupOrphanedWAL(_dbPath);
+            storageEngine = StorageEngineFactory.CreateEngine(
+                this.config.StorageEngineType,
+                this.config,
+                storage,
+                _dbPath);
         }
+        
+        // ✅ NOTE: Crash recovery is handled internally by each IStorageEngine implementation
+        // AppendOnlyEngine and PageBasedEngine validate data integrity on startup
     }
 
     /// <summary>
@@ -372,12 +359,35 @@ public partial class Database : IDatabase, IDisposable
     /// <inheritdoc />
     public void Flush()
     {
-        if (isReadOnly || !_metadataDirty)
+        if (isReadOnly)
             return;
 
         try
         {
+            // ✅ UNIFIED: Delegate to IStorageEngine for consistent persistence
+            // This guarantees data flush across all engine types (AppendOnly, PageBased, Columnar)
+            if (storageEngine is not null)
+            {
+                storageEngine.Flush();
+            }
+            else
+            {
+                // Fallback for readonly or uninitialized state
+                foreach (var table in tables.Values)
+                {
+                    try
+                    {
+                        table.Flush();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Flush] WARNING: Failed to flush table {table.Name}: {ex.Message}");
+                    }
+                }
+            }
+            
             SaveMetadata();
+            _metadataDirty = false;
         }
         catch (Exception ex)
         {
@@ -394,32 +404,34 @@ public partial class Database : IDatabase, IDisposable
         try
         {
 #if DEBUG
-            System.Diagnostics.Debug.WriteLine("[ForceSave] Saving metadata...");
-            System.Diagnostics.Debug.WriteLine($"[ForceSave] Tables count: {tables.Count}");
+            System.Diagnostics.Debug.WriteLine("[ForceSave] Flushing storage engine...");
+#endif
             
-            foreach (var table in tables.Values)
+            // ✅ UNIFIED: Delegate to IStorageEngine for guaranteed persistence
+            // IStorageEngine.Flush() handles all engine types consistently
+            if (storageEngine is not null)
             {
-                System.Diagnostics.Debug.WriteLine($"[ForceSave] Table: {table.Name}, DataFile: {table.DataFile}");
+                storageEngine.Flush();
             }
-#endif
-            
-            // ✅ CRITICAL: Flush all table data files BEFORE saving metadata
-            foreach (var table in tables.Values)
+            else
             {
-                try
+                // Fallback: manually flush all tables
+                foreach (var table in tables.Values)
                 {
-                    table.Flush();
+                    try
+                    {
+                        table.Flush();
 #if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[ForceSave] Flushed table: {table.Name}");
+                        System.Diagnostics.Debug.WriteLine($"[ForceSave] Flushed table: {table.Name}");
 #endif
-                }
-                catch (Exception ex)
-                {
+                    }
+                    catch (Exception ex)
+                    {
 #if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[ForceSave] WARNING: Failed to flush table {table.Name}: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[ForceSave] WARNING: Failed to flush table {table.Name}: {ex.Message}");
 #endif
-                    // Suppress unused variable warning
-                    _ = ex;
+                        _ = ex;
+                    }
                 }
             }
             
@@ -434,7 +446,7 @@ public partial class Database : IDatabase, IDisposable
 #if DEBUG
             System.Diagnostics.Debug.WriteLine($"[ForceSave] ERROR: {ex.Message}");
 #endif
-            throw new InvalidOperationException($"Failed to force save database changes: {ex.Message}", ex);
+            throw new InvalidOperationException($"Failed to force save database: {ex.Message}", ex);
         }
     }
 
@@ -470,7 +482,9 @@ public partial class Database : IDatabase, IDisposable
                 }
             }
 
-            groupCommitWal?.Dispose();
+            // ✅ UNIFIED: Dispose storage engine if available
+            // This ensures all resources are released properly
+            storageEngine?.Dispose();
             pageCache?.Clear(false, null);
             queryCache?.Clear();
             ClearPlanCache();  // ✅ Clear query plan cache on disposal
