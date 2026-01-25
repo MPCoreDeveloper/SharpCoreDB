@@ -364,6 +364,11 @@ public partial class Database : IDatabase, IDisposable
 
         try
         {
+            // ✅ CRITICAL: Flush WAL batch buffer FIRST
+            // Rows 101-200 may still be queued in the batch buffer waiting for batch completion
+            // Must flush them before storage engine
+            FlushBatchWalBuffer();
+            
             // ✅ CRITICAL: Flush BOTH storage engine AND all table data
             // Storage engine handles low-level persistence, but table data lives in memory
             // Must flush tables to disk before calling storageEngine.Flush()

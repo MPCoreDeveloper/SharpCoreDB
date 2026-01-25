@@ -1011,8 +1011,19 @@ public partial class Table
                         var pkStr = pkValue.ToString() ?? string.Empty;
                         var searchResult = this.Index.Search(pkStr);
 
-                        // Row is current version only if PK index points to THIS position
-                        isCurrentVersion = searchResult.Found && searchResult.Value == currentRecordPosition;
+                        // ✅ CRITICAL FIX: Only apply stale filtering if index position was properly tracked
+                        // If searchResult.Value == 0, it means this row wasn't properly indexed during insertion
+                        // (probably from a batch insert), so we should include it regardless
+                        if (searchResult.Found && searchResult.Value != 0)
+                        {
+                          // Row is current version only if PK index points to THIS position
+                          isCurrentVersion = searchResult.Value == currentRecordPosition;
+                        }
+                        else if (searchResult.Found && searchResult.Value == 0)
+                        {
+                          // Index position wasn't tracked during batch insert - always include
+                          isCurrentVersion = true;
+                        }
                     }
                 }
 

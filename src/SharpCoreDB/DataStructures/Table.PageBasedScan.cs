@@ -50,6 +50,7 @@ public partial class Table
             
             // Iterate all records using the engine
             int recordCount = 0;
+            int deserializeFailureCount = 0;
             foreach (var (_, data) in engine.GetAllRecords(Name))
             {
                 recordCount++;
@@ -67,7 +68,8 @@ public partial class Table
                     if (row == null)
                     {
 #if DEBUG
-                        Console.WriteLine($"[ScanPageBasedTable] Record #{recordCount} failed to deserialize");
+                        deserializeFailureCount++;
+                        Console.WriteLine($"[ScanPageBasedTable] ❌ Record #{recordCount} failed to deserialize");
 #endif
                         continue;
                     }
@@ -89,7 +91,7 @@ public partial class Table
             }
             
 #if DEBUG
-            Console.WriteLine($"[ScanPageBasedTable] Total records found: {recordCount}, after filtering: {results.Count}");
+            Console.WriteLine($"[ScanPageBasedTable] ✅ Total records found: {recordCount}, deserialization failures: {deserializeFailureCount}, after filtering: {results.Count}");
 #endif
         }
         catch

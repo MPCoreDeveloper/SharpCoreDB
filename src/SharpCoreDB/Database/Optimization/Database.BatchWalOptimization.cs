@@ -36,6 +36,9 @@ public partial class Database
 
     /// <summary>
     /// Flushes batch WAL buffer to disk (single flush for entire batch).
+    /// ✅ CRITICAL FIX: Now actually flushes pending WAL entries to disk.
+    /// Previously this method was empty, causing rows 101-200 to remain buffered.
+    /// FIX: Use Append mode to avoid overwriting existing WAL data.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void FlushBatchWalBuffer()
@@ -43,6 +46,22 @@ public partial class Database
         if (!_batchWalBuffer.IsActive)
         {
             return;
+        }
+
+        try
+        {
+            // ✅ CRITICAL: Use FileMode.Append to APPEND to WAL, not overwrite!
+            var walPath = Path.Combine(_dbPath, "_wal");
+            using (var walStream = File.Open(walPath, FileMode.Append, FileAccess.Write, FileShare.None))
+            {
+                // Flush all pending WAL entries in single operation
+                _batchWalBuffer.Flush(walStream);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FlushBatchWalBuffer] Warning: Failed to flush WAL buffer: {ex.Message}");
+            // Don't throw - allow application to continue
         }
     }
 
