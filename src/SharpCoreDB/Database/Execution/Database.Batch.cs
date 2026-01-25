@@ -292,16 +292,6 @@ public partial class Database
             try
             {
                 var positions = table.InsertBatch(rows);
-                
-                // ✅ CRITICAL: After writing to storage, also sync the in-memory table cache
-                // InsertBatch writes to disk directly, bypassing the normal Insert() path
-                // which means table._rows stays out-of-sync with disk
-                // Manually insert each row to sync in-memory cache with what's now on disk
-                foreach (var row in rows)
-                {
-                    table.Insert(row);
-                }
-                
                 storage.CommitAsync().GetAwaiter().GetResult();
                 return positions;
             }
@@ -344,16 +334,6 @@ public partial class Database
                 try
                 {
                     var positions = table.InsertBatch(rows);
-                    
-                    // ✅ CRITICAL: Sync in-memory table cache after batch insert
-                    // InsertBatch writes to disk directly, bypassing the normal Insert() path
-                    // which means table._rows stays out-of-sync with disk
-                    // Manually insert each row to sync in-memory cache with what's now on disk
-                    foreach (var row in rows)
-                    {
-                        table.Insert(row);
-                    }
-                    
                     storage.CommitAsync().GetAwaiter().GetResult();
                     return positions;
                 }
