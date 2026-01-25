@@ -108,26 +108,20 @@ internal sealed class SchemaSetup
             {
                 var results = concreteDb.InsertBatch(tableName, rows);
                 
-                // ✅ CRITICAL: Refresh table row count cache after batch insert
-                // InsertBatch writes to disk, but table's cached row count is stale
-                // Without refresh, subsequent SELECTs won't see the new rows
-                if (concreteDb is SharpCoreDB.Database dbWithRefresh)
+                // ✅ CRITICAL: Sync in-memory table cache with batch insert
+                // InsertBatch writes to disk, but the table's _rows list stays at old count
+                // Simply re-insert all batch rows into the table to update in-memory cache
+                // This ensures table.Select() sees all rows, not just cached ones
+                foreach (var row in rows)
                 {
-                    // Force table to refresh its cached row count from disk
-                    var tablesField = typeof(SharpCoreDB.Database)
-                        .GetField("tables", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    
-                    if (tablesField?.GetValue(dbWithRefresh) is Dictionary<string, SharpCoreDB.Interfaces.ITable> tables &&
-                        tables.TryGetValue(tableName, out var table))
-                    {
-                        table.RefreshRowCount();
-                    }
+                    db.ExecuteSQL(FormatInsertStatement(tableName, row));
                 }
                 
                 return results.Length;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"InsertBatch failed: {ex.Message}, falling back to ExecuteSQL");
                 // Fall back to individual inserts if InsertBatch fails
             }
         }
@@ -136,11 +130,19 @@ internal sealed class SchemaSetup
         // This is slower and less reliable, but works if InsertBatch isn't available
         foreach (var row in rows)
         {
-            var values = string.Join(", ", row.Values.Select(FormatSqlValue));
-            db.ExecuteSQL($"INSERT INTO {tableName} VALUES ({values})");
+            db.ExecuteSQL(FormatInsertStatement(tableName, row));
         }
         
         return rows.Count;
+    }
+
+    /// <summary>
+    /// ✅ Helper: Formats a single-row INSERT statement
+    /// </summary>
+    private string FormatInsertStatement(string tableName, Dictionary<string, object> row)
+    {
+        var values = string.Join(", ", row.Values.Select(FormatSqlValue));
+        return $"INSERT INTO {tableName} VALUES ({values})";
     }
 
     /// <summary>
