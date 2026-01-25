@@ -41,7 +41,8 @@ internal sealed class SchemaSetup
         db.ExecuteSQL("INSERT INTO customers VALUES (5, 'Dana', 99)");  // missing region
 
         // Orders (medium-ish ~200 for demo; can be scaled)
-        // ✅ NO PERIODIC FLUSH NEEDED: When validation queries run, they'll auto-flush dirty data
+        // ✅ CRITICAL: Insert ALL rows first, then flush ONCE at the end
+        // This ensures all 200 orders are persisted before any queries
         Console.WriteLine("✓ Inserting 200 orders...");
         for (int i = 0; i < 200; i++)
         {
@@ -54,16 +55,26 @@ internal sealed class SchemaSetup
         }
         Console.WriteLine("✓ Completed inserting 200 orders");
 
+        // ✅ CRITICAL: Flush ALL table data to disk BEFORE any SELECT queries
+        // This persists the in-memory rows to disk
+        db.Flush();
+
         // Payments (some missing, some duplicates)
         db.ExecuteSQL("INSERT INTO payments VALUES (1, 1, 'CARD', 1)");
         db.ExecuteSQL("INSERT INTO payments VALUES (2, 2, 'CASH', 1)");
         db.ExecuteSQL("INSERT INTO payments VALUES (3, 2, 'GIFT', 0)"); // duplicate order with different method
         db.ExecuteSQL("INSERT INTO payments VALUES (4, 5, 'CARD', 1)");
         db.ExecuteSQL("INSERT INTO payments VALUES (5, 999, 'CARD', 0)"); // missing order
+        
+        // Flush payments table too
+        db.Flush();
 
         // Inventory (table for subqueries)
         db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU1', 'Widget', 10, 9.99)");
         db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU2', 'Gadget', 0, 19.99)");
         db.ExecuteSQL("INSERT INTO inventory VALUES ('SKU3', 'Doohickey', 5, 4.99)");
+        
+        // Final flush before validation
+        db.Flush();
     }
 }
