@@ -186,7 +186,7 @@ internal sealed class TableDirectoryManager : IDisposable
             return new List<ColumnDefinitionEntry>();
         }
         
-        return LoadColumnDefinitions(metadata.Value.ColumnDefsOffset, (int)metadata.Value.ColumnCount);
+        return LoadColumnDefinitions(tableName, (int)metadata.Value.ColumnCount);
     }
 
     /// <summary>
@@ -203,7 +203,7 @@ internal sealed class TableDirectoryManager : IDisposable
         }
         
         var totalIndexes = (int)(metadata.Value.HashIndexCount + metadata.Value.BTreeIndexCount);
-        return LoadIndexDefinitions(metadata.Value.IndexDefsOffset, totalIndexes);
+        return LoadIndexDefinitions(tableName, totalIndexes);
     }
 
     /// <summary>
@@ -395,16 +395,96 @@ internal sealed class TableDirectoryManager : IDisposable
         }
     }
 
-    private List<ColumnDefinitionEntry> LoadColumnDefinitions(ulong offset, int count)
+    private List<ColumnDefinitionEntry> LoadColumnDefinitions(string tableName, int count)
     {
-        // Simplified implementation
-        return new List<ColumnDefinitionEntry>();
+        if (count <= 0)
+        {
+            return new List<ColumnDefinitionEntry>();
+        }
+        
+        try
+        {
+            // Read column definitions from storage block
+            var blockName = $"table:{tableName}:columns";
+            var blockData = _provider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            
+            if (blockData == null || blockData.Length == 0)
+            {
+                return new List<ColumnDefinitionEntry>();
+            }
+            
+            var columns = new List<ColumnDefinitionEntry>(count);
+            var span = blockData.AsSpan();
+            var offset = 0;
+            
+            // Read column definition entries
+            for (int i = 0; i < count; i++)
+            {
+                if (offset + ColumnDefinitionEntry.FIXED_SIZE > span.Length)
+                {
+                    break; // Corrupted or incomplete data
+                }
+                
+                var column = MemoryMarshal.Read<ColumnDefinitionEntry>(span.Slice(offset, ColumnDefinitionEntry.FIXED_SIZE));
+                columns.Add(column);
+                offset += ColumnDefinitionEntry.FIXED_SIZE;
+                
+                // Skip variable parts (default value and check constraint lengths)
+                offset += (int)column.DefaultValueLength;
+                offset += (int)column.CheckLength;
+            }
+            
+            return columns;
+        }
+        catch
+        {
+            // If loading fails, return empty list
+            return new List<ColumnDefinitionEntry>();
+        }
     }
 
-    private List<IndexDefinitionEntry> LoadIndexDefinitions(ulong offset, int count)
+    private List<IndexDefinitionEntry> LoadIndexDefinitions(string tableName, int count)
     {
-        // Simplified implementation
-        return new List<IndexDefinitionEntry>();
+        if (count <= 0)
+        {
+            return new List<IndexDefinitionEntry>();
+        }
+        
+        try
+        {
+            // Read index definitions from storage block
+            var blockName = $"table:{tableName}:indexes";
+            var blockData = _provider.ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            
+            if (blockData == null || blockData.Length == 0)
+            {
+                return new List<IndexDefinitionEntry>();
+            }
+            
+            var indexes = new List<IndexDefinitionEntry>(count);
+            var span = blockData.AsSpan();
+            var offset = 0;
+            
+            // Read index definition entries
+            for (int i = 0; i < count; i++)
+            {
+                if (offset + IndexDefinitionEntry.SIZE > span.Length)
+                {
+                    break; // Corrupted or incomplete data
+                }
+                
+                var index = MemoryMarshal.Read<IndexDefinitionEntry>(span.Slice(offset, IndexDefinitionEntry.SIZE));
+                indexes.Add(index);
+                offset += IndexDefinitionEntry.SIZE;
+            }
+            
+            return indexes;
+        }
+        catch
+        {
+            // If loading fails, return empty list
+            return new List<IndexDefinitionEntry>();
+        }
     }
 
     private static uint GetTableId(string tableName)

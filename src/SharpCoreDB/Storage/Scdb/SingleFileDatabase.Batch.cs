@@ -111,10 +111,9 @@ internal static class SingleFileDatabaseBatchExtension
                 // Execute remaining non-INSERT statements
                 if (nonInserts.Count > 0)
                 {
-                    var sqlParser = new SingleFileSqlParser(database, tableDirectoryManager);
                     foreach (var sql in nonInserts)
                     {
-                        sqlParser.Execute(sql, null);
+                        database.ExecuteSQL(sql, null);
                     }
                 }
                 

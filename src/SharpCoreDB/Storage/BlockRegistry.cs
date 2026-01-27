@@ -80,16 +80,20 @@ internal sealed class BlockRegistry : IDisposable
 
         byte[] buffer;
         int totalSize;
+        KeyValuePair<string, BlockEntry>[] entriesSnapshot;
 
         // Prepare data inside lock (fast, synchronous)
         lock (_registryLock)
         {
             if (!_isDirty) return; // Double-check after lock
 
-            // Calculate required size
-            var headerSize = BlockRegistryHeader.SIZE;
-            var entrySize = BlockEntry.SIZE;
-            totalSize = headerSize + (_blocks.Count * entrySize);
+            // Take a snapshot to avoid concurrent mutations during flush
+            entriesSnapshot = _blocks.ToArray();
+
+            // Compute struct sizes using runtime sizeof to avoid mismatches
+            var headerSize = System.Runtime.CompilerServices.Unsafe.SizeOf<BlockRegistryHeader>();
+            var entrySize = System.Runtime.CompilerServices.Unsafe.SizeOf<BlockEntry>();
+            totalSize = headerSize + (entriesSnapshot.Length * entrySize);
 
             if ((ulong)totalSize > _registryLength)
             {
@@ -107,25 +111,31 @@ internal sealed class BlockRegistry : IDisposable
             {
                 Magic = BlockRegistryHeader.MAGIC,
                 Version = BlockRegistryHeader.CURRENT_VERSION,
-                BlockCount = (ulong)_blocks.Count,
+                BlockCount = (ulong)entriesSnapshot.Length,
                 TotalSize = (ulong)totalSize,
                 LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
 
-            var headerSpan = span[..BlockRegistryHeader.SIZE];
+            var headerSpan = span[..headerSize];
             MemoryMarshal.Write(headerSpan, in header);
 
-            // Write block entries
-            var offset = BlockRegistryHeader.SIZE;
-            foreach (var (blockName, blockEntry) in _blocks)
+            // Write block entries from snapshot
+            var offset = headerSize;
+            foreach (var kvp in entriesSnapshot)
             {
-                // Create entry with name
+                var (blockName, blockEntry) = kvp;
                 var namedEntry = BlockEntry.WithName(blockName, blockEntry);
-                
-                var entrySpan = span.Slice(offset, BlockEntry.SIZE);
+
+                // Bounds guard: ensure we have enough space for the entry
+                if (offset + entrySize > totalSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
+                }
+
+                var entrySpan = span.Slice(offset, entrySize);
                 MemoryMarshal.Write(entrySpan, in namedEntry);
-                
-                offset += BlockEntry.SIZE;
+                offset += entrySize;
             }
 
             _isDirty = false;
@@ -137,7 +147,9 @@ internal sealed class BlockRegistry : IDisposable
             var fileStream = GetFileStream();
             fileStream.Position = (long)_registryOffset;
             await fileStream.WriteAsync(buffer.AsMemory(0, totalSize), cancellationToken);
-            await fileStream.FlushAsync(cancellationToken);
+            // ✅ CRITICAL: Flush to disk immediately, not just kernel buffers
+            // The registry contains checksums that must be persisted before reads occur
+            fileStream.Flush(flushToDisk: true);
         }
         finally
         {

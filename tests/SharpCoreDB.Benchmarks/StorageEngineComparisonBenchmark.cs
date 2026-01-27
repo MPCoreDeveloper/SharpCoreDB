@@ -133,15 +133,15 @@ public class StorageEngineComparisonBenchmark
         // Single-file options
         var singlePlainOptions = DatabaseOptions.CreateSingleFileDefault(enableEncryption: false);
         singlePlainOptions.DatabaseConfig = pageBasedConfig;
-        singlePlainOptions.WalBufferSizePages = 2048;
+        singlePlainOptions.WalBufferSizePages = 1024;
         singlePlainOptions.EnableMemoryMapping = pageBasedConfig.UseMemoryMapping;
-        singlePlainOptions.FileShareMode = FileShare.Read;
+        singlePlainOptions.FileShareMode = FileShare.ReadWrite;
         singlePlainOptions.CreateImmediately = true;
         var singleEncOptions = DatabaseOptions.CreateSingleFileDefault(enableEncryption: true, encryptionKey: _encryptionKey);
         singleEncOptions.DatabaseConfig = dirEncryptedConfig;
-        singleEncOptions.WalBufferSizePages = 2048;
+        singleEncOptions.WalBufferSizePages = 1024;
         singleEncOptions.EnableMemoryMapping = dirEncryptedConfig.UseMemoryMapping;
-        singleEncOptions.FileShareMode = FileShare.Read;
+        singleEncOptions.FileShareMode = FileShare.ReadWrite;
         singleEncOptions.CreateImmediately = true;
 
         scSinglePlainDb = factory.CreateWithOptions(scSinglePlainPath, "password", singlePlainOptions);
@@ -200,6 +200,44 @@ public class StorageEngineComparisonBenchmark
         Console.WriteLine("[GlobalSetup] Pre-populating databases...");
         PrePopulateAllDatabases();
         Console.WriteLine("[GlobalSetup] Setup complete!");
+    }
+
+    /// <summary>
+    /// ✅ ARCHITECTURAL FIX: Only flush databases after each iteration.
+    /// 
+    /// REMOVED: Dispose/recreate logic - it was based on a false assumption about OS cache coherency.
+    /// 
+    /// ROOT CAUSE ANALYSIS:
+    /// The original code tried to "invalidate OS cache" by reopening databases, but this caused
+    /// table schema loss because TableDirectoryManager metadata wasn't being persisted during ForceSave().
+    /// 
+    /// PROPER SOLUTION:
+    /// 1. Single-file databases use WAL (Write-Ahead Log) which has different caching characteristics
+    ///    than memory-mapped directory databases - they don't suffer from the same cache issues.
+    /// 2. ForceSave() ensures all committed data is flushed to disk via fsync().
+    /// 3. OS page cache invalidation is unnecessary for correctness - it's a performance red herring.
+    /// 
+    /// LONG-TERM FIX:
+    /// SingleFileDatabase.ForceSave() has been enhanced to also persist schema metadata via
+    /// TableDirectoryManager.Flush(), ensuring complete durability for crash recovery scenarios.
+    /// </summary>
+    [IterationCleanup]
+    public void IterationCleanup()
+    {
+        try
+        {
+            // Flush all databases to ensure WAL, data, and schema metadata are persisted
+            scSinglePlainDb?.ForceSave();
+            scSingleEncDb?.ForceSave();
+            appendOnlyDb?.ForceSave();
+            pageBasedDb?.ForceSave();
+            scDirPlainDb?.ForceSave();
+            scDirEncDb?.ForceSave();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[IterationCleanup] Warning: Failed to flush database: {ex.Message}");
+        }
     }
 
     // Revert to safer pre-populate without explicit batch transactions to avoid setup exceptions

@@ -34,6 +34,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private readonly TableDirectoryManager _tableDirectoryManager;
     private readonly ConcurrentDictionary<string, BlockMetadata> _blockCache;
     private readonly Lock _transactionLock = new();
+    // ✅ C# 14 / .NET 10: async-friendly gate to serialize I/O and registry updates without blocking threads
+    private readonly SemaphoreSlim _ioGate = new(1, 1);
     private bool _isInTransaction;
     private bool _disposed;
     private ScdbFileHeader _header;
@@ -186,14 +188,34 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             return ReadOnlySpan<byte>.Empty;
         }
 
+        // Guard against invalid lengths
+        if (entry.Length == 0)
+        {
+            return ReadOnlySpan<byte>.Empty;
+        }
+
+        // If length cannot fit in int (required by span overload), fallback to stream
+        if (entry.Length > int.MaxValue)
+        {
+            // Fallback: regular read (allocates)
+            var largeLen = checked((long)entry.Length);
+            var buffer = new byte[checked((int)Math.Min(entry.Length, (ulong)int.MaxValue))];
+            _fileStream.Position = (long)entry.Offset;
+            _fileStream.ReadExactly(buffer);
+            return buffer;
+        }
+
         // Use memory-mapped file for zero-copy access
         if (_memoryMappedFile != null)
         {
             try
             {
+                var viewOffset = checked((long)entry.Offset);
+                var viewLength = checked((long)entry.Length);
+
                 using var accessor = _memoryMappedFile.CreateViewAccessor(
-                    (long)entry.Offset,  // ✅ Cast ulong to long
-                    (long)entry.Length,  // ✅ Cast ulong to long
+                    viewOffset,
+                    viewLength,
                     MemoryMappedFileAccess.Read);
 
                 byte* ptr = null;
@@ -211,10 +233,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         }
 
         // Fallback: regular read (allocates)
-        var buffer = new byte[entry.Length];
+        var buffer2 = new byte[(int)entry.Length];
         _fileStream.Position = (long)entry.Offset;
-        _fileStream.ReadExactly(buffer);  // ✅ Use ReadExactly for exact reads
-        return buffer;
+        _fileStream.ReadExactly(buffer2);
+        return buffer2;
     }
 
     /// <inheritdoc/>
@@ -265,72 +287,93 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // Calculate required pages
-        var requiredPages = (data.Length + _header.PageSize - 1) / _header.PageSize;
-        
-        ulong offset;
-        BlockEntry entry;
-
-        if (_blockRegistry.TryGetBlock(blockName, out var existingEntry))
+        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            var existingPages = (existingEntry.Length + (ulong)_header.PageSize - 1) / (ulong)_header.PageSize;
+            // Calculate required pages
+            var requiredPages = (data.Length + _header.PageSize - 1) / _header.PageSize;
+            
+            ulong offset;
+            BlockEntry entry;
 
-            if (requiredPages <= (int)existingPages)
+            if (_blockRegistry.TryGetBlock(blockName, out var existingEntry))
             {
-                // Fits in existing space
-                offset = existingEntry.Offset;
-                entry = existingEntry with { Length = (ulong)data.Length, Flags = existingEntry.Flags | (uint)BlockFlags.Dirty };
+                var existingPages = (existingEntry.Length + (ulong)_header.PageSize - 1) / (ulong)_header.PageSize;
+
+                if (requiredPages <= (int)existingPages)
+                {
+                    // Fits in existing space
+                    offset = existingEntry.Offset;
+                    entry = existingEntry with { Length = (ulong)data.Length, Flags = existingEntry.Flags | (uint)BlockFlags.Dirty };
+                }
+                else
+                {
+                    // Need more space: free old, allocate new
+                    _freeSpaceManager.FreePages(existingEntry.Offset, (int)existingPages);
+                    offset = _freeSpaceManager.AllocatePages(requiredPages);
+                    entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = (uint)BlockFlags.Dirty };
+                }
             }
             else
             {
-                // Need more space: free old, allocate new
-                _freeSpaceManager.FreePages(existingEntry.Offset, (int)existingPages);
+                // New block
                 offset = _freeSpaceManager.AllocatePages(requiredPages);
-                entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = (uint)BlockFlags.Dirty };
+                entry = new BlockEntry
+                {
+                    BlockType = (uint)Scdb.BlockType.TableData,
+                    Offset = offset,
+                    Length = (ulong)data.Length,
+                    Flags = (uint)BlockFlags.Dirty
+                };
             }
-        }
-        else
-        {
-            // New block
-            offset = _freeSpaceManager.AllocatePages(requiredPages);
-            entry = new BlockEntry
+
+            // Compute checksum
+            var checksum = SHA256.HashData(data.Span);
+            entry = SetChecksum(entry, checksum);
+
+            // Write to WAL first (crash safety)
+            if (_isInTransaction)
             {
-                BlockType = (uint)Scdb.BlockType.TableData,
-                Offset = offset,
-                Length = (ulong)data.Length,
-                Flags = (uint)BlockFlags.Dirty
+                await _walManager.LogWriteAsync(blockName, offset, data, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Write data
+            _fileStream.Position = (long)offset;
+            await _fileStream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
+            
+            // ✅ CRITICAL: Flush file buffers to disk immediately
+            // This ensures the checksum (calculated on memory buffer) matches disk data
+            // before we store the checksum in the registry. Prevents checksum mismatch
+            // errors on subsequent reads if OS hasn't flushed buffers yet.
+            _fileStream.Flush(flushToDisk: true);
+
+            // Update registry
+            _blockRegistry.AddOrUpdateBlock(blockName, entry);
+            
+            // ✅ CRITICAL FIX: Immediately flush registry to disk after update
+            // The registry contains the checksum that must be persisted ONLY AFTER the data
+            // it references is fully written. This prevents race conditions where a concurrent
+            // read gets the new checksum from the in-memory registry but reads stale data from disk.
+            // Without this flush, BenchmarkDotNet iterations can trigger InvalidDataException during SELECT queries.
+            await _blockRegistry.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+            // Update cache
+            _blockCache[blockName] = new BlockMetadata
+            {
+                Name = blockName,
+                BlockType = entry.BlockType,
+                Size = (long)entry.Length,
+                Offset = (long)entry.Offset,
+                Checksum = checksum,
+                IsEncrypted = _options.EnableEncryption,
+                IsDirty = true,
+                LastModified = DateTime.UtcNow
             };
         }
-
-        // Compute checksum
-        var checksum = SHA256.HashData(data.Span);
-        entry = SetChecksum(entry, checksum);
-
-        // Write to WAL first (crash safety)
-        if (_isInTransaction)
+        finally
         {
-            await _walManager.LogWriteAsync(blockName, offset, data, cancellationToken);
+            _ioGate.Release();
         }
-
-        // Write data
-        _fileStream.Position = (long)offset;
-        await _fileStream.WriteAsync(data, cancellationToken);
-
-        // Update registry
-        _blockRegistry.AddOrUpdateBlock(blockName, entry);
-
-        // Update cache
-        _blockCache[blockName] = new BlockMetadata
-        {
-            Name = blockName,
-            BlockType = entry.BlockType,
-            Size = (long)entry.Length,
-            Offset = (long)entry.Offset,
-            Checksum = checksum,
-            IsEncrypted = _options.EnableEncryption,
-            IsDirty = true,
-            LastModified = DateTime.UtcNow
-        };
     }
 
     /// <inheritdoc/>
@@ -338,22 +381,30 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (!_blockRegistry.TryGetBlock(blockName, out var entry))
+        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return null;
+            if (!_blockRegistry.TryGetBlock(blockName, out var entry))
+            {
+                return null;
+            }
+
+            var buffer = new byte[entry.Length];
+            _fileStream.Position = (long)entry.Offset;
+            await _fileStream.ReadExactlyAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);  // ✅ Use ReadExactlyAsync
+
+            // Validate checksum
+            if (!ValidateChecksum(entry, buffer))
+            {
+                throw new InvalidDataException($"Checksum mismatch for block '{blockName}'");
+            }
+
+            return buffer;
         }
-
-        var buffer = new byte[entry.Length];
-        _fileStream.Position = (long)entry.Offset;
-        await _fileStream.ReadExactlyAsync(buffer.AsMemory(), cancellationToken);  // ✅ Use ReadExactlyAsync
-
-        // Validate checksum
-        if (!ValidateChecksum(entry, buffer))
+        finally
         {
-            throw new InvalidDataException($"Checksum mismatch for block '{blockName}'");
+            _ioGate.Release();
         }
-
-        return buffer;
     }
 
     /// <inheritdoc/>
@@ -438,13 +489,16 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // Checkpoint WAL
         await _walManager.CheckpointAsync(cancellationToken);
 
-        // Flush file
-        await _fileStream.FlushAsync(cancellationToken);
+        // Flush file buffers to disk before updating header
+        _fileStream.Flush(flushToDisk: true);
 
         // Update header
         _header.LastTransactionId++;
         _header.LastCheckpointLsn = _walManager.CurrentLsn;
         await WriteHeaderAsync(cancellationToken);
+
+        // Ensure header is persisted
+        _fileStream.Flush(flushToDisk: true);
     }
 
     /// <inheritdoc/>
