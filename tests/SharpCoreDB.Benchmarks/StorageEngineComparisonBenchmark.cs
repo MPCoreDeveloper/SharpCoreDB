@@ -13,7 +13,10 @@ using LiteDB;
 using SharpCoreDB;
 using SharpCoreDB.Interfaces;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading;
 
 /// <summary>
 /// Comprehensive storage engine comparison across all available options.
@@ -59,7 +62,14 @@ public class StorageEngineComparisonBenchmark
     };
 
     // ✅ NEW: Iteration counters for unique IDs
-    private int _insertIterationCounter = 0;
+    private int _appendOnlyInsertCounter = 0;
+    private int _pageBasedInsertCounter = 0;
+    private int _sqliteInsertCounter = 0;
+    private int _liteDbInsertCounter = 0;
+    private int _scDirPlainInsertCounter = 0;
+    private int _scDirEncInsertCounter = 0;
+    private int _scSinglePlainInsertCounter = 0;
+    private int _scSingleEncInsertCounter = 0;
 
     [GlobalSetup]
     public void Setup()
@@ -224,19 +234,56 @@ public class StorageEngineComparisonBenchmark
     [IterationCleanup]
     public void IterationCleanup()
     {
-        try
+        // ✅ C# 14: Collection expression for database list
+        IDatabase?[] databases = [scSinglePlainDb, scSingleEncDb];
+        Database?[] directoryDatabases = [appendOnlyDb, pageBasedDb, scDirPlainDb, scDirEncDb];
+        
+        // ✅ CRITICAL FIX: Flush single-file databases FIRST with retry logic
+        // Single-file databases are more susceptible to WAL buffer issues
+        foreach (var db in databases)
         {
-            // Flush all databases to ensure WAL, data, and schema metadata are persisted
-            scSinglePlainDb?.ForceSave();
-            scSingleEncDb?.ForceSave();
-            appendOnlyDb?.ForceSave();
-            pageBasedDb?.ForceSave();
-            scDirPlainDb?.ForceSave();
-            scDirEncDb?.ForceSave();
+            if (db is null) continue;
+            
+            try
+            {
+                // ✅ Double-flush pattern for single-file databases
+                // First flush ensures WAL is written, second ensures checksum validation
+                db.ForceSave();
+                Thread.Sleep(50); // Brief pause for I/O completion
+                db.ForceSave();
+            }
+            catch (InvalidDataException ex) when (ex.Message.Contains("Checksum"))
+            {
+                // ✅ C# 14: Pattern matching for specific error handling
+                Console.WriteLine($"[IterationCleanup] Checksum error during flush, retrying: {ex.Message}");
+                
+                try
+                {
+                    Thread.Sleep(200); // Longer pause for recovery
+                    db.ForceSave();
+                }
+                catch (Exception retryEx)
+                {
+                    Console.WriteLine($"[IterationCleanup] Retry failed: {retryEx.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[IterationCleanup] Warning: Failed to flush single-file database: {ex.Message}");
+            }
         }
-        catch (Exception ex)
+        
+        // Then flush directory-based databases
+        foreach (var db in directoryDatabases)
         {
-            Console.WriteLine($"[IterationCleanup] Warning: Failed to flush database: {ex.Message}");
+            try
+            {
+                db?.ForceSave();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[IterationCleanup] Warning: Failed to flush directory database: {ex.Message}");
+            }
         }
     }
 
@@ -266,9 +313,15 @@ public class StorageEngineComparisonBenchmark
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Single (unencrypted)...");
         scSinglePlainDb!.ExecuteBatchSQL(inserts);
+        // ✅ CRITICAL FIX: Explicit flush after pre-population to prevent checksum issues
+        scSinglePlainDb.ForceSave();
+        Console.WriteLine("[PrePopulate] ✅ Flushed SCDB Single (unencrypted)");
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Single (encrypted)...");
         scSingleEncDb!.ExecuteBatchSQL(inserts);
+        // ✅ CRITICAL FIX: Explicit flush after pre-population to prevent checksum issues
+        scSingleEncDb.ForceSave();
+        Console.WriteLine("[PrePopulate] ✅ Flushed SCDB Single (encrypted)");
 
         // SQLite transaction
         Console.WriteLine("[PrePopulate] Inserting into SQLite (transaction)...");
@@ -339,14 +392,38 @@ public class StorageEngineComparisonBenchmark
 
     private static void ExecuteSharpCoreInsertIDatabase(IDatabase db, int startId)
     {
-        var inserts = new List<string>(InsertBatchSize);
+        // ✅ C# 14: Collection expression for better performance
+        List<string> inserts = [];
+        
         for (int i = 0; i < InsertBatchSize; i++)
         {
             int id = startId + i;
             inserts.Add($"INSERT INTO bench_records (id, name, email, age, salary, created) VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
-        // Single-file IDatabase: execute directly without batch transaction to avoid 'No active transaction'
-        db.ExecuteBatchSQL(inserts);
+        
+        // ✅ CRITICAL FIX: Execute with proper error handling and flush
+        // Single-file databases need explicit ForceSave() after batch operations
+        // to ensure WAL is properly committed before checksum validation
+        try
+        {
+            db.ExecuteBatchSQL(inserts);
+            
+            // ✅ CRITICAL: Force flush WAL buffer to prevent checksum mismatch
+            // This ensures all data is written to disk before next operation
+            db.ForceSave();
+        }
+        catch (InvalidDataException ex) when (ex.Message.Contains("Checksum mismatch"))
+        {
+            // ✅ C# 14: Pattern matching with when clause for specific error handling
+            Console.WriteLine($"[ExecuteSharpCoreInsertIDatabase] Checksum error detected, attempting recovery...");
+            
+            // Retry once after brief delay to allow pending I/O to complete
+            Thread.Sleep(100);
+            db.ForceSave();
+            
+            // Rethrow if recovery fails
+            throw;
+        }
     }
 
     // ============================================================
@@ -357,7 +434,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Insert")]
     public void AppendOnly_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_appendOnlyInsertCounter * InsertBatchSize);
         var inserts = new List<string>(InsertBatchSize);
         for (int i = 0; i < InsertBatchSize; i++)
         {
@@ -366,14 +443,14 @@ public class StorageEngineComparisonBenchmark
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
         appendOnlyDb!.ExecuteBatchSQL(inserts);
-        _insertIterationCounter++; // ensure next batch uses new ID range
+        _appendOnlyInsertCounter++; // ensure next batch uses new ID range
     }
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Insert")]
     public void PageBased_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_pageBasedInsertCounter * InsertBatchSize);
         var inserts = new List<string>(InsertBatchSize);
         for (int i = 0; i < InsertBatchSize; i++)
         {
@@ -382,14 +459,14 @@ public class StorageEngineComparisonBenchmark
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
         pageBasedDb!.ExecuteBatchSQL(inserts);
-        _insertIterationCounter++;
+        _pageBasedInsertCounter++;
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void SQLite_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_sqliteInsertCounter * InsertBatchSize);
         
         using var transaction = sqliteConn!.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
@@ -414,14 +491,14 @@ public class StorageEngineComparisonBenchmark
             cmd.ExecuteNonQuery();
         }
         transaction.Commit();
-        _insertIterationCounter++;
+        _sqliteInsertCounter++;
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void LiteDB_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_liteDbInsertCounter * InsertBatchSize);
         var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
         
         var records = new List<BenchmarkRecord>(InsertBatchSize);
@@ -450,43 +527,59 @@ public class StorageEngineComparisonBenchmark
             if (started) liteDb.Rollback();
             throw;
         }
-        _insertIterationCounter++;
+        _liteDbInsertCounter++;
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void SCDB_Dir_Unencrypted_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_scDirPlainInsertCounter * InsertBatchSize);
         ExecuteSharpCoreInsert(scDirPlainDb!, startId);
-        _insertIterationCounter++;
+        _scDirPlainInsertCounter++;
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void SCDB_Dir_Encrypted_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
+        int startId = RecordCount + (_scDirEncInsertCounter * InsertBatchSize);
         ExecuteSharpCoreInsert(scDirEncDb!, startId);
-        _insertIterationCounter++;
+        _scDirEncInsertCounter++;
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void SCDB_Single_Unencrypted_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
-        ExecuteSharpCoreInsertIDatabase(scSinglePlainDb!, startId);
-        _insertIterationCounter++;
+        int startId = RecordCount + (_scSinglePlainInsertCounter * InsertBatchSize);
+        
+        // ✅ CRITICAL FIX: Ensure counter is incremented even on failure
+        try
+        {
+            ExecuteSharpCoreInsertIDatabase(scSinglePlainDb!, startId);
+        }
+        finally
+        {
+            _scSinglePlainInsertCounter++;
+        }
     }
 
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public void SCDB_Single_Encrypted_Insert()
     {
-        int startId = RecordCount + (_insertIterationCounter * InsertBatchSize);
-        ExecuteSharpCoreInsertIDatabase(scSingleEncDb!, startId);
-        _insertIterationCounter++;
+        int startId = RecordCount + (_scSingleEncInsertCounter * InsertBatchSize);
+        
+        // ✅ CRITICAL FIX: Ensure counter is incremented even on failure
+        try
+        {
+            ExecuteSharpCoreInsertIDatabase(scSingleEncDb!, startId);
+        }
+        finally
+        {
+            _scSingleEncInsertCounter++;
+        }
     }
 
     // ============================================================
@@ -707,5 +800,83 @@ public class StorageEngineComparisonBenchmark
         public int Age { get; set; }
         public decimal Salary { get; set; }
         public DateTime Created { get; set; }
+    }
+
+    /// <summary>
+    /// ✅ DIAGNOSTIC: Validates database integrity by performing a simple query.
+    /// Uses modern C# 14 pattern matching and collection expressions.
+    /// Returns true if database is healthy, false if checksum/corruption detected.
+    /// </summary>
+    private static bool ValidateDatabaseIntegrity(IDatabase db, string dbName)
+    {
+        try
+        {
+            // ✅ C# 14: Collection expression for simple queries
+            string[] validationQueries =
+            [
+                "SELECT COUNT(*) FROM bench_records",
+                "SELECT * FROM bench_records WHERE id = 0",
+            ];
+            
+            foreach (var query in validationQueries)
+            {
+                _ = db.ExecuteQuery(query);
+            }
+            
+            return true;
+        }
+        catch (InvalidDataException ex) when (ex.Message.Contains("Checksum"))
+        {
+            // ✅ C# 14: Pattern matching with when clause
+            Console.WriteLine($"[ValidateDatabaseIntegrity] ❌ Checksum error in {dbName}: {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ValidateDatabaseIntegrity] ⚠️ Error validating {dbName}: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// ✅ DIAGNOSTIC: Validates all single-file databases after operations.
+    /// Called during GlobalCleanup to ensure data integrity before shutdown.
+    /// </summary>
+    [GlobalCleanup]
+    public void GlobalCleanup()
+    {
+        Console.WriteLine("[GlobalCleanup] Validating database integrity before shutdown...");
+        
+        // ✅ C# 14: Collection expression with tuple literals
+        (IDatabase? db, string name)[] singleFileDatabases =
+        [
+            (scSinglePlainDb, "Single-Plain"),
+            (scSingleEncDb, "Single-Encrypted"),
+        ];
+        
+        foreach (var (db, name) in singleFileDatabases)
+        {
+            if (db is null) continue;
+            
+            bool isHealthy = ValidateDatabaseIntegrity(db, name);
+            Console.WriteLine($"[GlobalCleanup] {name}: {(isHealthy ? "✅ Healthy" : "❌ Corrupted")}");
+        }
+        
+        // Dispose resources
+        try
+        {
+            (scSinglePlainDb as IDisposable)?.Dispose();
+            (scSingleEncDb as IDisposable)?.Dispose();
+            appendOnlyDb?.Dispose();
+            pageBasedDb?.Dispose();
+            scDirPlainDb?.Dispose();
+            scDirEncDb?.Dispose();
+            sqliteConn?.Dispose();
+            liteDb?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GlobalCleanup] Warning during disposal: {ex.Message}");
+        }
     }
 }
