@@ -25,6 +25,7 @@ public partial class Database
     /// <summary>
     /// Prepares a SQL statement for efficient repeated execution.
     /// For SELECT queries, compiles to expression trees for zero-parse execution.
+    /// ✅ Task 2.1: Includes JIT warmup for expression trees
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
     /// <returns>A prepared statement instance.</returns>
@@ -50,6 +51,44 @@ public partial class Database
             try
             {
                 compiledPlan = QueryCompiler.Compile(sql);
+                
+                // ✅ Task 2.1: JIT Warmup - pre-compile expression tree delegates
+                if (compiledPlan?.WhereFilter != null)
+                {
+                    // Create dummy row for warmup
+                    var dummyRow = new Dictionary<string, object>();
+                    
+                    // Warm up the WHERE filter (5-10 invocations for JIT)
+                    for (int i = 0; i < 10; i++)
+                    {
+                        try
+                        {
+                            _ = compiledPlan.WhereFilter(dummyRow);
+                        }
+                        catch
+                        {
+                            // Warmup may fail on dummy data - that's OK
+                            break;
+                        }
+                    }
+                }
+
+                // ✅ Task 2.1: Warmup projection function if present
+                if (compiledPlan?.ProjectionFunc != null)
+                {
+                    var dummyRow = new Dictionary<string, object>();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        try
+                        {
+                            _ = compiledPlan.ProjectionFunc(dummyRow);
+                        }
+                        catch
+                        {
+                            break;
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {

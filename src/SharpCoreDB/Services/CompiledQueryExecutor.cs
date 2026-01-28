@@ -46,41 +46,78 @@ public class CompiledQueryExecutor
             throw new InvalidOperationException($"Table {plan.TableName} does not exist");
         }
 
-        // ✅ OPTIMIZED: Use pre-compiled filter expression instead of re-parsing WHERE clause
-        // Get all rows from the table
+        // ✅ OPTIMIZED (Task 2.1): Single-pass filtering + ordering instead of LINQ chaining
+        // Eliminates multiple .ToList() allocations
         var allRows = table.Select();
-        var results = allRows;
+        var filtered = new List<Dictionary<string, object>>(allRows.Count);
 
-        // Apply WHERE filter using compiled expression tree (zero parsing!)
+        // Apply WHERE filter (single pass, no intermediate list)
         if (plan.HasWhereClause && plan.WhereFilter is not null)
         {
-            results = allRows.Where(plan.WhereFilter).ToList();
+            foreach (var row in allRows)
+            {
+                if (plan.WhereFilter(row))
+                {
+                    filtered.Add(row);
+                }
+            }
+        }
+        else
+        {
+            // No filter - copy all rows
+            filtered.AddRange(allRows);
         }
 
-        // Apply ORDER BY
+        // Apply ORDER BY (in-place sort, no intermediate allocation)
         if (!string.IsNullOrEmpty(plan.OrderByColumn))
         {
-            results = plan.OrderByAscending
-                ? results.OrderBy(row => row.TryGetValue(plan.OrderByColumn, out var val) ? val : null).ToList()
-                : results.OrderByDescending(row => row.TryGetValue(plan.OrderByColumn, out var val) ? val : null).ToList();
+            filtered.Sort((a, b) =>
+            {
+                // Safe dictionary lookup with null handling
+                var aVal = a.TryGetValue(plan.OrderByColumn, out var av) ? av : null;
+                var bVal = b.TryGetValue(plan.OrderByColumn, out var bv) ? bv : null;
+
+                // Compare values
+                return CompareValues(aVal, bVal);
+            });
+
+            // Reverse if descending
+            if (!plan.OrderByAscending)
+            {
+                filtered.Reverse();
+            }
         }
 
-        // Apply OFFSET
-        if (plan.Offset.HasValue && plan.Offset.Value > 0)
+        // Apply OFFSET + LIMIT (combined to avoid second allocation)
+        var offset = plan.Offset ?? 0;
+        var limit = plan.Limit ?? int.MaxValue;
+
+        List<Dictionary<string, object>> results;
+        if (offset > 0 || limit < int.MaxValue)
         {
-            results = results.Skip(plan.Offset.Value).ToList();
-        }
+            // Only allocate if OFFSET/LIMIT applied
+            results = new List<Dictionary<string, object>>(Math.Min(filtered.Count - offset, limit));
+            var end = Math.Min(offset + limit, filtered.Count);
 
-        // Apply LIMIT
-        if (plan.Limit.HasValue && plan.Limit.Value > 0)
+            for (int i = offset; i < end; i++)
+            {
+                results.Add(filtered[i]);
+            }
+        }
+        else
         {
-            results = results.Take(plan.Limit.Value).ToList();
+            results = filtered;
         }
 
-        // Apply projection if needed
+        // Apply projection if needed (final transformation)
         if (plan.HasProjection && plan.ProjectionFunc is not null && results.Count > 0)
         {
-            results = results.Select(plan.ProjectionFunc).ToList();
+            var projected = new List<Dictionary<string, object>>(results.Count);
+            foreach (var row in results)
+            {
+                projected.Add(plan.ProjectionFunc(row));
+            }
+            results = projected;
         }
 
         return results;
@@ -190,5 +227,32 @@ public class CompiledQueryExecutor
         if (limitIndex > 0) endIndex = Math.Min(endIndex, limitIndex);
 
         return sql.Substring(whereIndex + 6, endIndex - whereIndex - 6).Trim();
+    }
+
+    /// <summary>
+    /// ✅ Compares two values safely (handles nulls, different types).
+    /// </summary>
+    private static int CompareValues(object? a, object? b)
+    {
+        // Null handling
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+
+        // Try direct comparison first
+        if (a is IComparable comp)
+        {
+            try
+            {
+                return comp.CompareTo(b);
+            }
+            catch
+            {
+                // Fall through to string comparison
+            }
+        }
+
+        // Fallback to string comparison
+        return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 }
