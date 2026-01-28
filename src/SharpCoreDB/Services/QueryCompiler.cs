@@ -260,9 +260,11 @@ public static class QueryCompiler
             left = Expression.Convert(left, typeof(IComparable));
         }
         
-        if (right.Type == typeof(object))
+        // ✅ FIX: Always convert right to object for CompareTo parameter
+        // CompareTo expects object, not specific types like int
+        if (right.Type != typeof(object))
         {
-            right = Expression.Convert(right, typeof(object)); // Keep as object for CompareTo parameter
+            right = Expression.Convert(right, typeof(object));
         }
 
         // Call: left.CompareTo(right)

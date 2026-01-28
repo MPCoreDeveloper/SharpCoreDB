@@ -43,4 +43,14 @@
     <PackageReleaseNotes>v1.0.5: Benchmarks updated: age index creation, grouped inserts/updates, fixed LiteDB transaction usage.</PackageReleaseNotes>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="BenchmarkConfig.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="BenchmarkConfig.cs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>
