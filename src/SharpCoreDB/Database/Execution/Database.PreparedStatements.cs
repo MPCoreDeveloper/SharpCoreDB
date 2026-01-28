@@ -25,7 +25,7 @@ public partial class Database
     /// <summary>
     /// Prepares a SQL statement for efficient repeated execution.
     /// For SELECT queries, compiles to expression trees for zero-parse execution.
-    /// ✅ Task 2.1: Includes JIT warmup for expression trees
+    /// ✅ Task 2.2: Now enables compilation for parameterized queries!
     /// </summary>
     /// <param name="sql">The SQL statement to prepare.</param>
     /// <returns>A prepared statement instance.</returns>
@@ -42,50 +42,57 @@ public partial class Database
         
         CompiledQueryPlan? compiledPlan = null;
         
-        // ✅ FIX: Skip compilation for parameterized queries to avoid hangs
+        // ✅ Task 2.2: Enable compilation for BOTH parameterized AND non-parameterized queries!
         bool isSelectQuery = sql.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
-        bool hasParameters = sql.Contains('@') || sql.Contains('?');
         
-        if (isSelectQuery && !hasParameters)  // Only compile non-parameterized queries
+        if (isSelectQuery)
         {
             try
             {
+                // ✅ Task 2.2: Extract parameter information if present
+                var hasParameters = ParameterExtractor.HasParameters(sql);
+                var parameters = hasParameters ? ParameterExtractor.ExtractParameters(sql) : [];
+                
+                // ✅ Task 2.2: Compile with parameter support
                 compiledPlan = QueryCompiler.Compile(sql);
                 
-                // ✅ Task 2.1: JIT Warmup - pre-compile expression tree delegates
-                if (compiledPlan?.WhereFilter != null)
+                if (compiledPlan != null)
                 {
-                    // Create dummy row for warmup
-                    var dummyRow = new Dictionary<string, object>();
-                    
-                    // Warm up the WHERE filter (5-10 invocations for JIT)
-                    for (int i = 0; i < 10; i++)
+                    // ✅ Task 2.1: JIT Warmup - pre-compile expression tree delegates
+                    if (compiledPlan.WhereFilter != null)
                     {
-                        try
+                        // Create dummy row for warmup
+                        var dummyRow = new Dictionary<string, object>();
+                        
+                        // Warm up the WHERE filter (5-10 invocations for JIT)
+                        for (int i = 0; i < 10; i++)
                         {
-                            _ = compiledPlan.WhereFilter(dummyRow);
-                        }
-                        catch
-                        {
-                            // Warmup may fail on dummy data - that's OK
-                            break;
+                            try
+                            {
+                                _ = compiledPlan.WhereFilter(dummyRow);
+                            }
+                            catch
+                            {
+                                // Warmup may fail on dummy data - that's OK
+                                break;
+                            }
                         }
                     }
-                }
 
-                // ✅ Task 2.1: Warmup projection function if present
-                if (compiledPlan?.ProjectionFunc != null)
-                {
-                    var dummyRow = new Dictionary<string, object>();
-                    for (int i = 0; i < 5; i++)
+                    // ✅ Task 2.1: Warmup projection function if present
+                    if (compiledPlan.ProjectionFunc != null)
                     {
-                        try
+                        var dummyRow = new Dictionary<string, object>();
+                        for (int i = 0; i < 5; i++)
                         {
-                            _ = compiledPlan.ProjectionFunc(dummyRow);
-                        }
-                        catch
-                        {
-                            break;
+                            try
+                            {
+                                _ = compiledPlan.ProjectionFunc(dummyRow);
+                            }
+                            catch
+                            {
+                                break;
+                            }
                         }
                     }
                 }
@@ -93,7 +100,9 @@ public partial class Database
             catch (Exception ex)
             {
                 // Compilation failed - fallback to normal execution
+                #if DEBUG
                 Console.WriteLine($"⚠️ Query compilation failed: {ex.Message}");
+                #endif
                 compiledPlan = null;
             }
         }
