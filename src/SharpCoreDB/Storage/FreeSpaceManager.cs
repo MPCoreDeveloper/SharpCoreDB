@@ -9,6 +9,7 @@ using SharpCoreDB.Storage.Scdb;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,6 +35,11 @@ internal sealed class FreeSpaceManager : IDisposable
     private ulong _totalPages;
     private ulong _freePages;
 
+    // ✅ C# 14: Pre-allocation settings for optimal file growth
+    private const int MIN_EXTENSION_PAGES = 256;      // 1 MB @ 4KB pages
+    private const int EXTENSION_GROWTH_FACTOR = 2;    // Double size each time
+    private ulong _preallocatedPages = 0;
+
     public FreeSpaceManager(SingleFileStorageProvider provider, ulong fsmOffset, ulong fsmLength, int pageSize)
     {
         _provider = provider;
@@ -51,10 +57,7 @@ internal sealed class FreeSpaceManager : IDisposable
 
     public ulong AllocatePages(int count)
     {
-        if (count <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(count));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
 
         lock (_allocationLock)
         {
@@ -65,7 +68,23 @@ internal sealed class FreeSpaceManager : IDisposable
             {
                 // No space found, extend file
                 startPage = _totalPages;
-                ExtendFile(count);
+                
+                // ✅ Calculate extension size (grow exponentially)
+                var requiredPages = (ulong)count;
+                var currentSize = _totalPages;
+                var extensionSize = Math.Max(
+                    MIN_EXTENSION_PAGES,
+                    Math.Max(requiredPages, currentSize / EXTENSION_GROWTH_FACTOR)
+                );
+                
+                ExtendFile((int)extensionSize);
+                _preallocatedPages = extensionSize - requiredPages;
+
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine(
+                    $"[FSM] Extended file by {extensionSize} pages " +
+                    $"(requested: {count}, preallocated: {_preallocatedPages})");
+#endif
             }
 
             // Mark pages as allocated
@@ -250,14 +269,50 @@ internal sealed class FreeSpaceManager : IDisposable
 
     private void ExtendFile(int pages)
     {
-        _totalPages += (ulong)pages;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pages);
+
+        var newTotalPages = _totalPages + (ulong)pages;
+        var newFileSize = (long)(newTotalPages * (ulong)_pageSize);
+        
+        // ✅ OPTIMIZED: Set file length explicitly (pre-allocates space on disk)
+        // NOTE: SetLength may fail if MemoryMappedFile is active (Windows limitation)
+        // In that case, file will grow on-demand when written to
+        var fileStream = GetFileStream();
+        try
+        {
+            fileStream.SetLength(newFileSize);
+        }
+        catch (IOException ex) when (ex.Message.Contains("user-mapped section"))
+        {
+            // Windows limitation: Cannot resize file with active memory mapping
+            // File will grow on-demand when written to - this is acceptable
+            // Log for debugging but don't fail the operation
+            Debug.WriteLine($"[FSM] Could not pre-allocate file (MMF active): {ex.Message}");
+        }
+        
+        // ✅ Update free space tracking
+        for (ulong i = _totalPages; i < newTotalPages; i++)
+        {
+            if (i < (ulong)_l1Bitmap.Length)
+            {
+                _l1Bitmap.Set((int)i, false); // Mark as free
+            }
+        }
+        
         _freePages += (ulong)pages;
+        _totalPages = newTotalPages;
         
         // Expand bitmap if needed
         if ((int)_totalPages > _l1Bitmap.Length)
         {
             _l1Bitmap.Length = (int)_totalPages * 2;
         }
+
+#if DEBUG
+        Debug.WriteLine(
+            $"[FSM] Extended file to {newFileSize} bytes " +
+            $"({newTotalPages} pages, {_freePages} free)");
+#endif
     }
 
     /// <summary>
