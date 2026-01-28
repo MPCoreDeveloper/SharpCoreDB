@@ -19,6 +19,20 @@ using System.Text.RegularExpressions;
 /// Now parses SQL once, executes multiple times with parameter binding.
 /// Expected performance: 5-10x faster than re-parsing for repeated queries.
 /// Target: 1000 identical SELECTs in less than 8ms total.
+/// 
+/// ✅ CRITICAL DESIGN PRINCIPLE: Decimal Storage & Comparison
+/// 
+/// SharpCoreDB stores decimals as binary representations using decimal.GetBits(),
+/// which produces culture-neutral (invariant) binary data. All decimal comparisons
+/// and conversions in this compiler MUST use CultureInfo.InvariantCulture to
+/// maintain consistency with the storage format.
+/// 
+/// Key implications:
+/// - CompareValuesRuntime() uses ConvertToDecimalInvariant() for all numeric comparisons
+/// - String-to-decimal parsing always uses InvariantCulture
+/// - No locale-specific decimal separators are supported (by design)
+/// 
+/// See: TypeConverter.cs, BinaryRowDecoder.cs, Table.Serialization.cs
 /// </summary>
 public static class QueryCompiler
 {
@@ -60,6 +74,9 @@ public static class QueryCompiler
             {
                 selectColumns.AddRange(selectNode.Columns.Select(c => c.Name));
             }
+
+            // ✅ PHASE 2.4: Build column index mapping for direct array access
+            var columnIndices = BuildColumnIndexMapping(selectColumns, isSelectAll);
 
             // Compile WHERE clause to expression tree
             Func<Dictionary<string, object>, bool>? whereFilter = null;
@@ -112,7 +129,9 @@ public static class QueryCompiler
                 selectNode.Offset,
                 parameterNames,
                 physicalPlan,
-                physicalPlan.EstimatedCost);
+                physicalPlan.EstimatedCost,
+                columnIndices,  // ✅ PHASE 2.4: Pass column indices
+                useDirectColumnAccess: columnIndices.Count > 0);  // ✅ Enable if indices available
         }
         catch (Exception ex)
         {
@@ -230,6 +249,30 @@ public static class QueryCompiler
     }
 
     /// <summary>
+    /// Builds a column index mapping for direct array access optimization.
+    /// ✅ PHASE 2.4: Pre-computes indices to enable O(1) array access without string hashing.
+    /// </summary>
+    private static Dictionary<string, int> BuildColumnIndexMapping(List<string> selectColumns, bool isSelectAll)
+    {
+        var indices = new Dictionary<string, int>();
+        
+        // For SELECT *, we can't determine columns until execution time
+        // Indices will be populated dynamically from the table schema
+        if (isSelectAll)
+        {
+            return indices;  // Empty - will be populated at runtime
+        }
+        
+        // For specific columns, assign sequential indices
+        for (int i = 0; i < selectColumns.Count; i++)
+        {
+            indices[selectColumns[i]] = i;
+        }
+        
+        return indices;
+    }
+
+    /// <summary>
     /// Finds a common numeric type for two types, preferring wider types.
     /// Returns null if types are not numeric or incompatible.
     /// </summary>
@@ -249,41 +292,161 @@ public static class QueryCompiler
     }
 
     /// <summary>
-    /// Creates a comparison expression using IComparable.CompareTo for object-typed values.
+    /// Creates a comparison expression using safe numeric comparison.
     /// This handles dynamic comparisons where types are only known at runtime.
+    /// ✅ FIX: Use helper method that safely handles numeric type conversions
     /// </summary>
     private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
     {
-        // Convert both to IComparable if they're object-typed
-        if (left.Type == typeof(object))
-        {
-            left = Expression.Convert(left, typeof(IComparable));
-        }
+        // ✅ NEW APPROACH: Create a runtime helper that handles all type conversions
+        // This avoids expression tree complexity and handles all edge cases
+        var compareMethod = typeof(QueryCompiler).GetMethod(nameof(CompareValuesRuntime), 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         
-        // ✅ FIX: Always convert right to object for CompareTo parameter
-        // CompareTo expects object, not specific types like int
+        // Ensure both sides are object type for the helper
+        if (left.Type != typeof(object))
+            left = Expression.Convert(left, typeof(object));
         if (right.Type != typeof(object))
-        {
             right = Expression.Convert(right, typeof(object));
+        
+        // Call: CompareValuesRuntime(left, right, op)
+        var opConstant = Expression.Constant(op);
+        var compareCall = Expression.Call(compareMethod, left, right, opConstant);
+        
+        return compareCall;
+    }
+
+    /// <summary>
+    /// Runtime helper for comparing values safely (handles nulls, type mismatches).
+    /// This is called from compiled expressions to handle dynamic comparisons.
+    /// ✅ NOTE: Decimals are stored using decimal.GetBits() (culture-neutral format).
+    ///          Comparisons must also use invariant culture for consistency.
+    /// </summary>
+    private static bool CompareValuesRuntime(object? left, object? right, string op)
+    {
+        // Null handling
+        if (left == null && right == null) 
+            return op is "=" or "==" or "<=" or ">=";
+        if (left == null) 
+            return op is "!=" or "<>" or "<" or "<=";
+        if (right == null) 
+            return op is "!=" or "<>" or ">" or ">=";
+
+        // Numeric comparison: normalize to decimal with invariant culture
+        if (IsNumericValue(left) && IsNumericValue(right))
+        {
+            // ✅ CRITICAL: Use invariant culture for decimal conversion
+            // SharpCoreDB stores decimals as binary bits (via decimal.GetBits)
+            // which is culture-neutral, so comparisons must also be invariant
+            var leftDecimal = ConvertToDecimalInvariant(left);
+            var rightDecimal = ConvertToDecimalInvariant(right);
+            
+            return op switch
+            {
+                ">" => leftDecimal > rightDecimal,
+                ">=" => leftDecimal >= rightDecimal,
+                "<" => leftDecimal < rightDecimal,
+                "<=" => leftDecimal <= rightDecimal,
+                "=" or "==" => leftDecimal == rightDecimal,
+                "!=" or "<>" => leftDecimal != rightDecimal,
+                _ => false
+            };
         }
 
-        // Call: left.CompareTo(right)
-        var compareToMethod = typeof(IComparable).GetMethod(nameof(IComparable.CompareTo), [typeof(object)])!;
-        var compareCall = Expression.Call(left, compareToMethod, right);
+        // String comparison
+        if (left is string leftStr && right is string rightStr)
+        {
+            var cmp = string.Compare(leftStr, rightStr, StringComparison.Ordinal);
+            return op switch
+            {
+                ">" => cmp > 0,
+                ">=" => cmp >= 0,
+                "<" => cmp < 0,
+                "<=" => cmp <= 0,
+                "=" or "==" => cmp == 0,
+                "!=" or "<>" => cmp != 0,
+                _ => false
+            };
+        }
 
-        // Compare result with 0: compareTo > 0, compareTo >= 0, etc.
-        var zero = Expression.Constant(0);
+        // IComparable fallback
+        if (left is IComparable comp)
+        {
+            try
+            {
+                var cmp = comp.CompareTo(right);
+                return op switch
+                {
+                    ">" => cmp > 0,
+                    ">=" => cmp >= 0,
+                    "<" => cmp < 0,
+                    "<=" => cmp <= 0,
+                    "=" or "==" => cmp == 0,
+                    "!=" or "<>" => cmp != 0,
+                    _ => false
+                };
+            }
+            catch
+            {
+                // Fall through
+            }
+        }
 
+        // Default: string comparison
+        var leftString = left.ToString() ?? string.Empty;
+        var rightString = right.ToString() ?? string.Empty;
+        var comparison = string.Compare(leftString, rightString, StringComparison.Ordinal);
+        
         return op switch
         {
-            ">" => Expression.GreaterThan(compareCall, zero),
-            ">=" => Expression.GreaterThanOrEqual(compareCall, zero),
-            "<" => Expression.LessThan(compareCall, zero),
-            "<=" => Expression.LessThanOrEqual(compareCall, zero),
-            "=" or "==" => Expression.Equal(compareCall, zero),
-            "!=" or "<>" => Expression.NotEqual(compareCall, zero),
-            _ => throw new NotSupportedException($"Operator {op} not supported for IComparable comparison")
+            ">" => comparison > 0,
+            ">=" => comparison >= 0,
+            "<" => comparison < 0,
+            "<=" => comparison <= 0,
+            "=" or "==" => comparison == 0,
+            "!=" or "<>" => comparison != 0,
+            _ => false
         };
+    }
+
+    /// <summary>
+    /// Converts a runtime value to decimal using invariant culture.
+    /// ✅ CRITICAL: Must use invariant culture because SharpCoreDB stores decimals
+    ///              as binary representations (via decimal.GetBits()), which are
+    ///              culture-neutral. All conversions must maintain this invariance.
+    /// </summary>
+    private static decimal ConvertToDecimalInvariant(object value)
+    {
+        return value switch
+        {
+            int i => i,
+            long l => l,
+            double d => (decimal)d,
+            decimal m => m,
+            float f => (decimal)f,
+            byte b => b,
+            short s => s,
+            uint ui => ui,
+            ulong ul => ul,
+            ushort us => us,
+            sbyte sb => sb,
+            // String conversion with invariant culture
+            string str => decimal.TryParse(str, System.Globalization.NumberStyles.Number, 
+                System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : 0m,
+            _ => 0m
+        };
+    }
+
+    /// <summary>
+    /// Checks if a runtime value is numeric.
+    /// ✅ CRITICAL: Must include all numeric types that ConvertToDecimalInvariant supports
+    ///              to maintain consistency across comparisons and conversions.
+    /// </summary>
+    private static bool IsNumericValue(object? value)
+    {
+        return value is 
+            int or long or double or decimal or float or 
+            byte or short or uint or ulong or ushort or sbyte;
     }
 
     /// <summary>
