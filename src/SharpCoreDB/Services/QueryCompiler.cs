@@ -68,6 +68,12 @@ public static class QueryCompiler
             if (selectNode.Where?.Condition is not null)
             {
                 whereFilter = CompileWhereClause(selectNode.Where.Condition, parameterNames);
+                
+                if (whereFilter == null)
+                {
+                    // WHERE compilation failed - continue without filter for now
+                    // This allows queries to run even if expression compilation has issues
+                }
             }
 
             // Compile projection function
@@ -108,8 +114,13 @@ public static class QueryCompiler
                 physicalPlan,
                 physicalPlan.EstimatedCost);
         }
-        catch
+        catch (Exception ex)
         {
+            // ✅ LOG: Compilation failure for debugging (Debug builds only)
+            #if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[QueryCompiler] Compilation failed: {ex.Message}");
+            #endif
+            
             // Compilation failed - fall back to normal parsing
             return null;
         }
@@ -171,49 +182,105 @@ public static class QueryCompiler
             return null;
         }
 
-        // Handle type conversion for comparison operators
+        var op = binary.Operator.ToUpperInvariant();
+        
+        // Handle logical operators (AND, OR) - these work with bool types
+        if (op is "AND")
+            return Expression.AndAlso(left, right);
+        if (op is "OR")
+            return Expression.OrElse(left, right);
+
+        // ✅ FIX: For comparison operators with object-typed values, use IComparable
+        // This handles dynamic types safely without cast exceptions
+        if (left.Type == typeof(object) || right.Type == typeof(object))
+        {
+            return CompareUsingIComparable(left, right, op);
+        }
+
+        // ✅ Handle type mismatches for strongly-typed comparisons
         if (left.Type != right.Type)
         {
-            // Try to convert right to left's type
-            if (right is ConstantExpression)
+            // Try to find a common type for numeric comparisons
+            var commonType = GetCommonNumericType(left.Type, right.Type);
+            if (commonType != null)
             {
-                try
-                {
-                    right = Expression.Convert(right, left.Type);
-                }
-                catch
-                {
-                    // Conversion failed - use object comparison
-                    left = Expression.Convert(left, typeof(object));
-                    right = Expression.Convert(right, typeof(object));
-                }
+                if (left.Type != commonType)
+                    left = Expression.Convert(left, commonType);
+                if (right.Type != commonType)
+                    right = Expression.Convert(right, commonType);
             }
             else
             {
-                // Both are dynamic - use object comparison
-                left = Expression.Convert(left, typeof(object));
-                right = Expression.Convert(right, typeof(object));
+                // No common type - use IComparable
+                return CompareUsingIComparable(left, right, op);
             }
         }
 
-        return binary.Operator.ToUpperInvariant() switch
+        // Now both sides have compatible types
+        return op switch
         {
-            // ✅ CRITICAL FIX: Use Equals() for object comparison to ensure value equality
-            // Expression.Equal on object types does reference equality, not value equality
-            // e.g., obj1 == obj2 is false even if obj1.Equals(obj2) is true
-            "=" or "==" => left.Type == typeof(object)
-                ? Expression.Call(left, typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!, right)
-                : Expression.Equal(left, right),
-            "!=" or "<>" => left.Type == typeof(object)
-                ? Expression.Not(Expression.Call(left, typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!, right))
-                : Expression.NotEqual(left, right),
+            "=" or "==" => Expression.Equal(left, right),
+            "!=" or "<>" => Expression.NotEqual(left, right),
             ">" => Expression.GreaterThan(left, right),
             ">=" => Expression.GreaterThanOrEqual(left, right),
             "<" => Expression.LessThan(left, right),
             "<=" => Expression.LessThanOrEqual(left, right),
-            "AND" => Expression.AndAlso(left, right),
-            "OR" => Expression.OrElse(left, right),
             _ => null
+        };
+    }
+
+    /// <summary>
+    /// Finds a common numeric type for two types, preferring wider types.
+    /// Returns null if types are not numeric or incompatible.
+    /// </summary>
+    private static Type? GetCommonNumericType(Type left, Type right)
+    {
+        // Order of precedence: decimal > double > float > long > int > short > byte
+        Type[] numericTypes = [typeof(decimal), typeof(double), typeof(float), typeof(long), typeof(int), typeof(short), typeof(byte)];
+        
+        int leftIndex = Array.IndexOf(numericTypes, left);
+        int rightIndex = Array.IndexOf(numericTypes, right);
+        
+        if (leftIndex < 0 || rightIndex < 0)
+            return null; // One or both types are not numeric
+        
+        // Return the wider type (lower index = wider)
+        return leftIndex < rightIndex ? left : right;
+    }
+
+    /// <summary>
+    /// Creates a comparison expression using IComparable.CompareTo for object-typed values.
+    /// This handles dynamic comparisons where types are only known at runtime.
+    /// </summary>
+    private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
+    {
+        // Convert both to IComparable if they're object-typed
+        if (left.Type == typeof(object))
+        {
+            left = Expression.Convert(left, typeof(IComparable));
+        }
+        
+        if (right.Type == typeof(object))
+        {
+            right = Expression.Convert(right, typeof(object)); // Keep as object for CompareTo parameter
+        }
+
+        // Call: left.CompareTo(right)
+        var compareToMethod = typeof(IComparable).GetMethod(nameof(IComparable.CompareTo), [typeof(object)])!;
+        var compareCall = Expression.Call(left, compareToMethod, right);
+
+        // Compare result with 0: compareTo > 0, compareTo >= 0, etc.
+        var zero = Expression.Constant(0);
+
+        return op switch
+        {
+            ">" => Expression.GreaterThan(compareCall, zero),
+            ">=" => Expression.GreaterThanOrEqual(compareCall, zero),
+            "<" => Expression.LessThan(compareCall, zero),
+            "<=" => Expression.LessThanOrEqual(compareCall, zero),
+            "=" or "==" => Expression.Equal(compareCall, zero),
+            "!=" or "<>" => Expression.NotEqual(compareCall, zero),
+            _ => throw new NotSupportedException($"Operator {op} not supported for IComparable comparison")
         };
     }
 

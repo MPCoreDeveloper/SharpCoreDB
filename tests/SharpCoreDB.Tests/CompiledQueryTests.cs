@@ -240,16 +240,6 @@ public class CompiledQueryTests
 
             // Act - Prepare query once
             var stmt = db.Prepare("SELECT * FROM test_data WHERE value > 500");
-            
-            // TODO: QueryCompiler.Compile() currently returns null for this query, 
-            // causing fallback to SqlParser (slow path). Once compilation works, 
-            // this test should pass with <2000ms. Until then, we expect slower performance.
-            // For now, we skip the assertion to allow the test to pass while QueryCompiler is being fixed.
-            if (stmt.CompiledPlan == null)
-            {
-                Console.WriteLine("⚠️ SKIPPING TEST: CompiledPlan is null - QueryCompiler.Compile() failed");
-                return; // Skip the rest of the test
-            }
 
             // Warm-up
             _ = db.ExecuteCompiledQuery(stmt);
