@@ -46,18 +46,23 @@ public class CompiledQueryExecutor
             throw new InvalidOperationException($"Table {plan.TableName} does not exist");
         }
 
-        // ✅ PRAGMATIC APPROACH: Use table's built-in Select with WHERE string
-        // This still avoids SQL parsing overhead while delegating filtering to the table
-        var whereClause = ExtractWhereClause(plan.Sql);
-        
-        var results = string.IsNullOrEmpty(whereClause) 
-            ? table.Select() 
-            : table.Select(whereClause, plan.OrderByColumn, plan.OrderByAscending);
+        // ✅ OPTIMIZED: Use pre-compiled filter expression instead of re-parsing WHERE clause
+        // Get all rows from the table
+        var allRows = table.Select();
+        var results = allRows;
 
-        // Apply projection if needed
-        if (plan.HasProjection && plan.ProjectionFunc is not null && results.Count > 0)
+        // Apply WHERE filter using compiled expression tree (zero parsing!)
+        if (plan.HasWhereClause && plan.WhereFilter is not null)
         {
-            results = results.Select(plan.ProjectionFunc).ToList();
+            results = allRows.Where(plan.WhereFilter).ToList();
+        }
+
+        // Apply ORDER BY
+        if (!string.IsNullOrEmpty(plan.OrderByColumn))
+        {
+            results = plan.OrderByAscending
+                ? results.OrderBy(row => row.TryGetValue(plan.OrderByColumn, out var val) ? val : null).ToList()
+                : results.OrderByDescending(row => row.TryGetValue(plan.OrderByColumn, out var val) ? val : null).ToList();
         }
 
         // Apply OFFSET
@@ -70,6 +75,12 @@ public class CompiledQueryExecutor
         if (plan.Limit.HasValue && plan.Limit.Value > 0)
         {
             results = results.Take(plan.Limit.Value).ToList();
+        }
+
+        // Apply projection if needed
+        if (plan.HasProjection && plan.ProjectionFunc is not null && results.Count > 0)
+        {
+            results = results.Select(plan.ProjectionFunc).ToList();
         }
 
         return results;

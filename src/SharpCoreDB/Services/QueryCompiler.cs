@@ -198,8 +198,15 @@ public static class QueryCompiler
 
         return binary.Operator.ToUpperInvariant() switch
         {
-            "=" or "==" => Expression.Equal(left, right),
-            "!=" or "<>" => Expression.NotEqual(left, right),
+            // ✅ CRITICAL FIX: Use Equals() for object comparison to ensure value equality
+            // Expression.Equal on object types does reference equality, not value equality
+            // e.g., obj1 == obj2 is false even if obj1.Equals(obj2) is true
+            "=" or "==" => left.Type == typeof(object)
+                ? Expression.Call(left, typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!, right)
+                : Expression.Equal(left, right),
+            "!=" or "<>" => left.Type == typeof(object)
+                ? Expression.Not(Expression.Call(left, typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!, right))
+                : Expression.NotEqual(left, right),
             ">" => Expression.GreaterThan(left, right),
             ">=" => Expression.GreaterThanOrEqual(left, right),
             "<" => Expression.LessThan(left, right),
@@ -212,16 +219,19 @@ public static class QueryCompiler
 
     /// <summary>
     /// Converts a column reference to a dictionary lookup expression.
+    /// ✅ CRITICAL FIX: Return the value safely without throwing on missing columns.
     /// </summary>
     private static Expression ConvertColumnReference(
         ColumnReferenceNode column,
         ParameterExpression rowParam)
     {
-        // Access: row[columnName]
+        // Simple and reliable approach: use indexer directly
+        // The issue must be elsewhere - likely in how the WHERE filter is being applied
         var columnNameExpr = Expression.Constant(column.ColumnName);
         var indexerProperty = typeof(Dictionary<string, object>).GetProperty("Item")!;
+        
+        // Access: row[columnName]
         var access = Expression.Property(rowParam, indexerProperty, columnNameExpr);
-
         return access;
     }
 

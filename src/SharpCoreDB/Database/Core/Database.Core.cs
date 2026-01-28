@@ -50,6 +50,10 @@ public partial class Database : IDatabase, IDisposable
     // ✅ UNIFIED: Replace GroupCommitWAL with IStorageEngine
     // This single abstraction handles all data persistence including WAL
     private readonly IStorageEngine? storageEngine;
+    
+    // ✅ OPTIONAL: GroupCommitWAL instance when UseGroupCommitWal is enabled
+    private readonly Services.GroupCommitWAL? groupCommitWal;
+    
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     
     private bool _disposed;  // ✅ C# 14: No explicit = false needed
@@ -128,6 +132,19 @@ public partial class Database : IDatabase, IDisposable
                 this.config,
                 storage,
                 _dbPath);
+            
+            // ✅ OPTIONAL: Create GroupCommitWAL instance if UseGroupCommitWal is enabled
+            // This provides instance-specific WAL files for concurrent database instances
+            if (this.config.UseGroupCommitWal)
+            {
+                groupCommitWal = new Services.GroupCommitWAL(
+                    _dbPath,
+                    this.config.WalDurabilityMode,
+                    this.config.WalMaxBatchSize,
+                    this.config.WalMaxBatchDelayMs,
+                    _instanceId,
+                    this.config.EnableAdaptiveWalBatching);
+            }
         }
         
         // ✅ NOTE: Crash recovery is handled internally by each IStorageEngine implementation
@@ -490,6 +507,7 @@ public partial class Database : IDatabase, IDisposable
             // ✅ UNIFIED: Dispose storage engine if available
             // This ensures all resources are released properly
             storageEngine?.Dispose();
+            groupCommitWal?.Dispose();  // ✅ Dispose GroupCommitWAL if it was created
             pageCache?.Clear(false, null);
             queryCache?.Clear();
             ClearPlanCache();  // ✅ Clear query plan cache on disposal

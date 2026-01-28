@@ -51,9 +51,10 @@ public partial class Database
             {
                 compiledPlan = QueryCompiler.Compile(sql);
             }
-            catch
+            catch (Exception ex)
             {
                 // Compilation failed - fallback to normal execution
+                Console.WriteLine($"⚠️ Query compilation failed: {ex.Message}");
                 compiledPlan = null;
             }
         }

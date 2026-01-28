@@ -1393,7 +1393,8 @@ public partial class SqlParser
         /// <summary>
         /// Projects columns from query results based on SELECT list.
         /// ✅ MODERNIZED: Uses modern null handling and pattern matching.
-        /// ✅ FIXED: Strictly matches qualified column names in JOINs to prevent NULL mismatches.
+        /// ✅ FIXED: Enhanced alias resolution with multiple fallback strategies for JOIN operations.
+        /// Handles both strict matching (LEFT JOIN NULLs) and flexible resolution (INNER JOIN aliases).
         /// </summary>
         private List<Dictionary<string, object>> ProjectColumns(
            List<Dictionary<string, object>> results,
@@ -1426,27 +1427,53 @@ public partial class SqlParser
                         
                         if (!string.IsNullOrEmpty(columnNode.TableAlias))
                         {
-                            // ✅ STRICT MODE: When table alias is specified (e.g., "p.id"), ONLY match the qualified name
-                            // This prevents "p.id" from incorrectly matching "o.id" when p.id is NULL in a LEFT JOIN
+                            // ✅ ENHANCED: Multi-strategy resolution for aliased columns
                             var qualifiedName = $"{columnNode.TableAlias}.{columnName}";
                             
-                            // Try exact match
+                            // Strategy 1: Try exact qualified match (e.g., "c.name")
                             if (row.TryGetValue(qualifiedName, out value))
                             {
                                 found = true;
                             }
+                            // Strategy 2: Try case-insensitive qualified match
                             else
                             {
-                                // Try case-insensitive match
                                 var matchingKey = row.Keys.FirstOrDefault(k => 
                                     k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
                                 
                                 if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
+                                {
                                     found = true;
+                                }
+                                // Strategy 3: Try suffix match for full table names (e.g., "customers.name" when alias is "c")
+                                else
+                                {
+                                    matchingKey = row.Keys.FirstOrDefault(k => 
+                                        k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase) &&
+                                        !k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
+                                    
+                                    if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
+                                    {
+                                        found = true;
+                                    }
+                                    // Strategy 4: Try unqualified column name as last resort
+                                    // This handles cases where JOIN executor uses bare column names
+                                    else if (row.TryGetValue(columnName, out value))
+                                    {
+                                        // ⚠️ CAREFUL: Only use unqualified if no other qualified columns with same name exist
+                                        // This prevents "c.id" from matching "o.id" incorrectly
+                                        var otherQualifiedExists = row.Keys.Any(k => 
+                                            k.Contains('.') && 
+                                            k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase) &&
+                                            !k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
+                                        
+                                        if (!otherQualifiedExists)
+                                        {
+                                            found = true;
+                                        }
+                                    }
+                                }
                             }
-                            
-                            // Do NOT fall back to unqualified names when qualified name specified
-                            // This is the key fix for LEFT JOIN NULL handling
                         }
                         else
                         {
@@ -1467,12 +1494,9 @@ public partial class SqlParser
                             }
                         }
                         
-                        if (found || !string.IsNullOrEmpty(columnNode.TableAlias))
-                        {
-                            // Include the column even if not found (preserves NULL for LEFT JOIN)
-                            var alias = columnNode.Alias ?? columnName;
-                            projectedRow[alias] = value ?? DBNull.Value;
-                        }
+                        // Always include the column in result (NULL if not found)
+                        var alias = columnNode.Alias ?? columnName;
+                        projectedRow[alias] = found ? (value ?? DBNull.Value) : DBNull.Value;
                     }
                 }
 

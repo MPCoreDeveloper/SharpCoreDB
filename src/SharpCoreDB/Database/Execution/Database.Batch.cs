@@ -459,7 +459,19 @@ public partial class Database
 
         lock (_walLock)
         {
-            storage.BeginTransaction();
+            // ✅ CRITICAL FIX: Don't start outer transaction for batched inserts
+            // Let each InsertBatch handle its own transaction to ensure proper commit visibility
+            // The issue: If we start a transaction here, InsertBatch sees IsInTransaction=true
+            // and skips its own commit, leaving data buffered until the outer commit.
+            // But the outer commit doesn't properly flush table-level caches!
+            
+            bool hasNonInserts = nonInserts.Count > 0;
+            bool needsOuterTransaction = hasNonInserts || statements.Any(IsSchemaChangingCommand);
+            
+            if (needsOuterTransaction)
+            {
+                storage.BeginTransaction();
+            }
             
             try
             {
@@ -467,6 +479,8 @@ public partial class Database
                 {
                     if (tables.TryGetValue(tableName, out var table))
                     {
+                        // ✅ Each InsertBatch handles its own transaction and commit
+                        // This ensures data is properly flushed and visible to subsequent queries
                         table.InsertBatch(rows);
                     }
                 }
@@ -486,11 +500,36 @@ public partial class Database
                     SaveMetadata();
                 }
                 
-                storage.CommitAsync().GetAwaiter().GetResult();
+                if (needsOuterTransaction)
+                {
+                    storage.CommitAsync().GetAwaiter().GetResult();
+                    storage.FlushTransactionBuffer();
+                }
+                
+                // ✅ FIX: Force tables to refresh row count from disk to ensure visibility
+                if (insertsByTable.Count > 0)
+                {
+                    foreach (var tableName in insertsByTable.Keys)
+                    {
+                        if (tables.TryGetValue(tableName, out var table))
+                        {
+                            table.RefreshRowCount();
+                        }
+                    }
+                }
+                
+                // ✅ FIX: Set metadata dirty flag to ensure ExecuteCompiledQuery flushes before reading
+                if (insertsByTable.Count > 0 || nonInserts.Count > 0)
+                {
+                    _metadataDirty = true;
+                }
             }
             catch
             {
-                storage.Rollback();
+                if (needsOuterTransaction)
+                {
+                    storage.Rollback();
+                }
                 throw;
             }
         }

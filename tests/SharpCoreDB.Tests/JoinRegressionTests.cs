@@ -245,6 +245,13 @@ public sealed class JoinRegressionTests : IDisposable
             INNER JOIN payments p ON p.order_id = o.id
         ");
 
+        // Debug: Show what keys are in the result
+        if (results.Count > 0)
+        {
+            Console.WriteLine($"Result keys: {string.Join(", ", results[0].Keys)}");
+            Console.WriteLine($"Result values: {string.Join(", ", results[0].Select(kv => $"{kv.Key}={kv.Value}"))}");
+        }
+
         // Assert
         Assert.Single(results);
         
