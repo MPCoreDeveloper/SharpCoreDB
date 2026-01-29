@@ -51,7 +51,11 @@ public class BTreeIndexTests
         Assert.Contains(300, results);
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    /// <summary>
+    /// ✅ Phase 4: Range query test - now enabled with complete FindRange implementation.
+    /// Tests that FindRange returns only values within the specified range (inclusive).
+    /// </summary>
+    [Fact]
     public void BTreeIndex_FindRange_ReturnsCorrectResults()
     {
         // Arrange
@@ -90,7 +94,11 @@ public class BTreeIndexTests
         Assert.Empty(results);
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    /// <summary>
+    /// ✅ Phase 4: Range query test with strings - enabled for ordinal comparison validation.
+    /// B-tree uses ordinal comparison which is 10-100x faster than culture-aware.
+    /// </summary>
+    [Fact]
     public void BTreeIndex_FindRange_WorksWithStrings()
     {
         // Arrange
@@ -111,7 +119,11 @@ public class BTreeIndexTests
         Assert.Contains(4, results); // Dave
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    /// <summary>
+    /// ✅ Phase 4: Range query test with DateTime - enabled for temporal range queries.
+    /// Common use case: "Find orders between start_date and end_date".
+    /// </summary>
+    [Fact]
     public void BTreeIndex_FindRange_WorksWithDates()
     {
         // Arrange
