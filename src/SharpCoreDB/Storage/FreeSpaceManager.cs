@@ -35,9 +35,9 @@ internal sealed class FreeSpaceManager : IDisposable
     private ulong _totalPages;
     private ulong _freePages;
 
-    // ✅ C# 14: Pre-allocation settings for optimal file growth
-    private const int MIN_EXTENSION_PAGES = 256;      // 1 MB @ 4KB pages
-    private const int EXTENSION_GROWTH_FACTOR = 2;    // Double size each time
+    // ✅ C# 14: Pre-allocation settings for optimal file growth - Phase 3 optimized
+    private const int MIN_EXTENSION_PAGES = 2560;      // 10 MB @ 4KB pages (increased from 1 MB)
+    private const int EXTENSION_GROWTH_FACTOR = 4;     // Quadruple size each time (increased from 2x)
     private ulong _preallocatedPages = 0;
 
     public FreeSpaceManager(SingleFileStorageProvider provider, ulong fsmOffset, ulong fsmLength, int pageSize)

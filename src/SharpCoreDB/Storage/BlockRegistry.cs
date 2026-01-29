@@ -44,9 +44,9 @@ internal sealed class BlockRegistry : IDisposable
     private long _totalBlocksWritten;
     private long _batchedFlushes;
     
-    // ✅ Configuration
-    private const int BATCH_THRESHOLD = 50;           // Flush after N dirty blocks
-    private const int FLUSH_INTERVAL_MS = 100;        // Or flush every 100ms
+    // ✅ Configuration - Phase 3 optimized for bulk operations
+    private const int BATCH_THRESHOLD = 200;           // Flush after N dirty blocks (increased from 50)
+    private const int FLUSH_INTERVAL_MS = 500;         // Or flush every 500ms (increased from 100ms)
     
     private bool _disposed;
 

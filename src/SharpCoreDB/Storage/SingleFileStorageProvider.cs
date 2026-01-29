@@ -76,6 +76,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     // ✅ C# 14 / .NET 10: async-friendly gate to serialize I/O and registry updates without blocking threads
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     
+    // ✅ Phase 3.2: Block metadata cache for fast lookups
+    private readonly BlockMetadataCache _metadataCache = new();
+    
     // ✅ C# 14: Write-behind cache for batched disk writes (Task 1.3)
     private Channel<WriteOperation> _writeQueue = Channel.CreateBounded<WriteOperation>(
         new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.Wait });
@@ -83,9 +86,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private readonly CancellationTokenSource _writeCts = new();
     private readonly Lock _writeBatchLock = new();
     
-    // ✅ Configuration for write batching
-    private const int WRITE_BATCH_SIZE = 50;           // Batch 50 writes together
-    private const int WRITE_BATCH_TIMEOUT_MS = 50;     // Or flush after 50ms
+    // ✅ Configuration for write batching - Phase 3 optimized
+    private const int WRITE_BATCH_SIZE = 200;          // Batch 200 writes together (increased from 50)
+    private const int WRITE_BATCH_TIMEOUT_MS = 200;    // Or flush after 200ms (increased from 50ms)
     
     private bool _isInTransaction;
     private bool _disposed;
@@ -432,6 +435,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 LastModified = DateTime.UtcNow
             };
 
+            // ✅ Phase 3.2: Update metadata cache for fast reads
+            _metadataCache.Add(blockName, writeOp.Entry);
+            
             // ✅ Update registry immediately (for visibility, actual flush is batched)
             _blockRegistry.AddOrUpdateBlock(blockName, writeOp.Entry);
         }
@@ -442,6 +448,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// ✅ Phase 3.2: Uses metadata cache for fast lookups.
+    /// ✅ Phase 3.3: Uses ArrayPool for buffer allocation to reduce GC pressure.
+    /// </remarks>
     public async Task<byte[]?> ReadBlockAsync(string blockName, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -449,39 +459,62 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_blockRegistry.TryGetBlock(blockName, out var entry))
+            // ✅ Phase 3.2: Try metadata cache first (fast path)
+            BlockEntry entry;
+            if (!_metadataCache.TryGet(blockName, out entry))
             {
-                return null;
-            }
-
-            var buffer = new byte[entry.Length];
-            _fileStream.Position = (long)entry.Offset;
-            await _fileStream.ReadExactlyAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);  // ✅ Use ReadExactlyAsync
-
-            // Validate checksum; if mismatch, attempt self-heal by updating registry/checksum
-            if (!ValidateChecksum(entry, buffer))
-            {
-                Console.WriteLine($"[SingleFileStorageProvider] Checksum mismatch for block '{blockName}', attempting self-heal");
-                var repairedEntry = SetChecksum(entry, SHA256.HashData(buffer));
-                _blockRegistry.AddOrUpdateBlock(blockName, repairedEntry);
-                await _blockRegistry.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-                _blockCache[blockName] = new BlockMetadata
+                // Cache miss - fetch from registry and cache it
+                if (!_blockRegistry.TryGetBlock(blockName, out entry))
                 {
-                    Name = blockName,
-                    BlockType = repairedEntry.BlockType,
-                    Size = (long)repairedEntry.Length,
-                    Offset = (long)repairedEntry.Offset,
-                    Checksum = GetChecksum(repairedEntry),
-                    IsEncrypted = _options.EnableEncryption,
-                    IsDirty = (repairedEntry.Flags & (uint)BlockFlags.Dirty) != 0,
-                    LastModified = DateTime.UtcNow
-                };
-
-                return buffer;
+                    return null;
+                }
+                
+                // Add to cache for future reads
+                _metadataCache.Add(blockName, entry);
             }
 
-            return buffer;
+            // ✅ Phase 3.3: Rent buffer from ArrayPool (zero allocation)
+            var pooledBuffer = ArrayPool<byte>.Shared.Rent((int)entry.Length);
+            try
+            {
+                var buffer = pooledBuffer.AsMemory(0, (int)entry.Length);
+                _fileStream.Position = (long)entry.Offset;
+                await _fileStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                // Validate checksum; if mismatch, attempt self-heal
+                if (!ValidateChecksum(entry, buffer.Span))
+                {
+                    Console.WriteLine($"[SingleFileStorageProvider] Checksum mismatch for block '{blockName}', attempting self-heal");
+                    var repairedEntry = SetChecksum(entry, SHA256.HashData(buffer.Span));
+                    _blockRegistry.AddOrUpdateBlock(blockName, repairedEntry);
+                    await _blockRegistry.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    
+                    // ✅ Phase 3.2: Update cache with repaired entry
+                    _metadataCache.Add(blockName, repairedEntry);
+
+                    _blockCache[blockName] = new BlockMetadata
+                    {
+                        Name = blockName,
+                        BlockType = repairedEntry.BlockType,
+                        Size = (long)repairedEntry.Length,
+                        Offset = (long)repairedEntry.Offset,
+                        Checksum = GetChecksum(repairedEntry),
+                        IsEncrypted = _options.EnableEncryption,
+                        IsDirty = (repairedEntry.Flags & (uint)BlockFlags.Dirty) != 0,
+                        LastModified = DateTime.UtcNow
+                    };
+                }
+
+                // ✅ Phase 3.3: Copy to result array (caller owns this memory)
+                var result = new byte[entry.Length];
+                buffer.Span.CopyTo(result);
+                return result;
+            }
+            finally
+            {
+                // ✅ Phase 3.3: Return buffer to pool
+                ArrayPool<byte>.Shared.Return(pooledBuffer);
+            }
         }
         finally
         {
@@ -556,6 +589,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// <summary>
     /// ✅ C# 14: Writes a batch of operations to disk with sequential I/O.
     /// Sorts operations by offset for optimal disk access patterns.
+    /// Phase 3.1: Uses async flush for better performance.
+    /// Phase 3.3: Uses Span for zero-copy writes.
     /// </summary>
     private async Task WriteBatchToDiskAsync(List<WriteOperation> batch, CancellationToken cancellationToken)
     {
@@ -570,12 +605,13 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             foreach (var op in batch)
             {
                 _fileStream.Position = (long)op.Offset;
-                _fileStream.Write(op.Data);
+                // ✅ Phase 3.3: Use Span for zero-copy write
+                _fileStream.Write(op.Data.AsSpan());
             }
-
-            // ✅ Single flush for entire batch (avoids per-write overhead)
-            _fileStream.Flush(flushToDisk: false); // OS buffer only
         }
+
+        // ✅ Phase 3: Async flush outside lock for better concurrency
+        await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
         // ✅ Update registry and cache (no immediate flush - batched by BlockRegistry)
         foreach (var op in batch)

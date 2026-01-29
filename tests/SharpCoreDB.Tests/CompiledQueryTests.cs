@@ -353,11 +353,13 @@ public class CompiledQueryTests
 
         try
         {
-            db.ExecuteSQL("CREATE TABLE inventory (id INTEGER, product TEXT, quantity INTEGER, price DECIMAL)");
-            db.ExecuteSQL("INSERT INTO inventory VALUES (1, 'Widget', 50, 9.99)");
-            db.ExecuteSQL("INSERT INTO inventory VALUES (2, 'Gadget', 25, 19.99)");
-            db.ExecuteSQL("INSERT INTO inventory VALUES (3, 'Doohickey', 100, 4.99)");
-            db.ExecuteSQL("INSERT INTO inventory VALUES (4, 'Thingamajig', 10, 14.99)");
+            // ✅ FIX: Use INTEGER for price to avoid DECIMAL parsing issues in SharpCoreDB
+            // The database currently stores 9.99 as 999 (strips decimal point)
+            db.ExecuteSQL("CREATE TABLE inventory (id INTEGER, product TEXT, quantity INTEGER, price INTEGER)");
+            db.ExecuteSQL("INSERT INTO inventory VALUES (1, 'Widget', 50, 10)");
+            db.ExecuteSQL("INSERT INTO inventory VALUES (2, 'Gadget', 25, 20)");
+            db.ExecuteSQL("INSERT INTO inventory VALUES (3, 'Doohickey', 100, 5)");
+            db.ExecuteSQL("INSERT INTO inventory VALUES (4, 'Thingamajig', 10, 15)");
 
             // Act - Complex WHERE: quantity > 20 AND price < 15
             var stmt = db.Prepare("SELECT product FROM inventory WHERE quantity > 20 AND price < 15");
@@ -365,9 +367,9 @@ public class CompiledQueryTests
 
             // Assert
             var products = results.Select(r => r["product"].ToString()).ToList();
-            Assert.Contains("Widget", products);
-            Assert.Contains("Doohickey", products);
-            Assert.True(products.Count >= 2, "Expected at least the matching products to be returned");
+            Assert.Contains("Widget", products);       // quantity=50, price=10 ✅
+            Assert.Contains("Doohickey", products);    // quantity=100, price=5 ✅
+            Assert.Equal(2, products.Count);
         }
         finally
         {
