@@ -148,7 +148,6 @@ Records are stored in a **self-describing binary format**. This means type infor
 │                                                  │
 │ ... (repeat for all columns)                     │
 └──────────────────────────────────────────────────┘
-```
 
 #### Type Markers
 
@@ -592,7 +591,7 @@ Free Space Map Layout:
 ├─────────────────────────────────────────────┤
 │ L2 Extent Map (Variable)                    │
 │ ├─ Each extent: [StartPage: 8B][Count: 8B] │
-│ └─ Optimized for large allocations          │
+│ └─ Optimized for large allocations         │
 └─────────────────────────────────────────────┘
 ```
 
@@ -679,7 +678,7 @@ internal sealed class BlockRegistry
 for (int i = 0; i < 1000; i++)
 {
     registry.SetBlock(names[i], entries[i]);
-    registry.Flush();  // ← Flushes to disk EVERY time!
+    registry.Flush();  // Flushes to disk EVERY time!
 }
 // Result: 1000 disk writes
 
@@ -932,8 +931,8 @@ Page Layout (4KB = 4096 bytes):
 Offset 0-3:              [ColumnCount: 4]
 Offset 4-20:             [Column 1 metadata + value]
 Offset 21-60:            [Column 2 metadata + value]
-Offset 61-3200:          [Column 3: Short string]
-Offset 3201-4090:        [Column 4: Long string (890 bytes)]
+Offset 61-3200:          [Column 3 metadata + value (large string)]
+Offset 3201-4090:        [Column 4: Short string]
 Offset 4091-4095:        [unused: 5 bytes]
                          ↑ NO SPLITTING NEEDED
                          Record fits entirely (4091 bytes < 4096)
@@ -1107,102 +1106,64 @@ var metrics = blockRegistry.GetMetrics();
 
 ### Q2: How big can strings be?
 
-**A:** Theoretically up to 2 GB (int32 limit per string). Practically:
-- Small strings (< 1 KB): Very fast
-- Medium strings (1-100 MB): Still efficient
-- Large strings (> 100 MB): Will fragment disk, consider BLOB storage
+**A:** Limited by the **page size**, not theoretically unlimited:
 
-### Q3: How do I know where a record ends?
+**Default (4KB page):**
+- Page capacity: 4096 bytes total
+- Page header overhead: 40 bytes
+- **Available for data: 4056 bytes**
+- Minus serialization overhead for column metadata
+- **Practical limit: ~4000-4050 bytes per complete record** (all columns combined!)
 
-**A:** Via Block Registry! Each record is stored as a block:
+**Example breakdown:**
 ```csharp
-BlockEntry entry = registry["Users_Row_001"];
-ulong startOffset = entry.Offset;
-ulong endOffset = entry.Offset + entry.Length;
+// 4KB page (4096 bytes)
+Page structure:
+├─ Header: 40 bytes
+└─ Data: 4056 bytes
+
+Record with multiple columns:
+├─ ColumnCount (4 bytes)
+├─ Column 1 metadata + value
+├─ Column 2 metadata + value
+├─ Column 3 metadata + value (large string)
+└─ Must ALL fit in 4056 bytes!
+
+If total > 4056 bytes → ERROR!
 ```
 
-### Q4: Can strings be NULL?
+**For larger strings:**
+- ✅ Increase page size: Use 8KB, 16KB, or 32KB pages
+- ✅ Use BLOB storage: For data > page size
+- ✅ Normalize schema: Split into multiple records
 
-**A:** Yes, via type marker 0:
+**What Happens If You Try to Store Too Much?**
+
 ```csharp
-case null:
-    buffer[offset++] = 0;  // Type: Null
-    // No value follows
+// Example: Trying to store record > page size
+
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["LargeText"] = new string('X', 4100),  // 4100 bytes!
+};
+
+try
+{
+    db.InsertRecord(row);
+}
+catch (InvalidOperationException ex)
+{
+    // Exception message:
+    // "Record too large (4158 bytes) for page size (4096 bytes)"
+    // Serialized size is 4158, but max is 4056!
+    
+    Console.WriteLine(ex.Message);
+}
+
+// Code that causes this:
+// if (recordData.Length > MAX_RECORD_SIZE)  // MAX_RECORD_SIZE ≈ 4056
+//     return Error("Record too large for page");
 ```
 
-### Q5: What about Unicode?
-
-**A:** UTF-8 encoding, automatic length adjustment:
-```csharp
-"Café"     → 5 bytes (C-a-f-[2-byte é])
-"日本"     → 6 bytes (3 chars × 2 bytes each)
-"🚀"       → 4 bytes (1 char × 4 bytes)
-```
-
-### Q6: Can I modify strings directly without rewriting the record?
-
-**A:** No, SharpCoreDB works immutably:
-1. Load record (deserialize)
-2. Modify in memory
-3. Serialize & write new block
-4. Update registry
-5. Mark old block as free (WAL handles recovery)
-
-### Q7: What about compression?
-
-**A:** Not currently implemented. Reserved in header for future use.
-Current focus: Zero-allocation serialization is faster than compression overhead.
-
-### Q8: How is free space distributed?
-
-**A:** Non-contiguous! Records can be scattered throughout the file:
-```
-File layout:
-[Block1: 4KB] [Block2: 8KB] [Free: 2KB] [Block3: 4KB] [Free: 1KB] [Block4: 2KB]
-```
-No fragmentation warning needed - FSM manages this transparently.
-
-### Q9: Can I store an entire table in one "block"?
-
-**A:** No, each row is a separate block. Advantages:
-- Finer-grained locking
-- Better cache-locality
-- Flexible sizing
-
-### Q10: How do transactions work?
-
-**A:** Managed via WAL (Write-Ahead Log):
-1. Begin transaction
-2. Writes go to WAL first
-3. On commit, registry updated
-4. On crash, WAL replayed
-
----
-
-## 📚 Related Documentation
-
-- `FILE_FORMAT_DESIGN.md` - Low-level binary format details
-- `SCHEMA_PERSISTENCE_TECHNICAL_DETAILS.md` - Schema storage
-- `CODING_STANDARDS_CSHARP14.md` - Code style guide
-- Phase 3 completion reports - Performance benchmarks
-
----
-
-## 🎓 Summary
-
-| Aspect | Answer |
-|--------|--------|
-| **Fixed-length strings?** | ❌ No! Variable-length with 4-byte length prefix |
-| **Max string size?** | 2 GB (int32 limit) |
-| **Free space needed?** | ❌ No! Automatic exponential file growth |
-| **Record boundaries?** | Via Block Registry (O(1) lookup) |
-| **Column boundaries?** | Self-describing binary format (no fixed positions) |
-| **Unicode support?** | ✅ Full UTF-8 support |
-| **Performance?** | 3x faster than JSON, zero-allocation serialization |
-
----
-
-**Last Updated:** January 2025  
-**Phase:** 3.3 (Serialization & Storage Optimization)  
-**Status:** Complete
 
