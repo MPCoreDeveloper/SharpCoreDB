@@ -13,8 +13,9 @@ This document describes in detail how SharpCoreDB serializes, stores, and manage
 5. [Free Space Management](#free-space-management)
 6. [Block Registry](#block-registry)
 7. [Record & Column Boundaries](#record--column-boundaries)
-8. [Performance Considerations](#performance-considerations)
-9. [FAQ](#faq)
+8. [Record Sizing & Page Boundaries](#record-sizing--page-boundaries)
+9. [Performance Considerations](#performance-considerations)
+10. [FAQ](#faq)
 
 ---
 
@@ -692,8 +693,6 @@ Step 5: Register in Block Registry
 **Columns don't have fixed boundaries!** They are self-describing:
 
 ```
-Record layout (no fixed column offsets):
-
 Record in memory:
 ┌──────────────────────────────────────┐
 │ [ColumnCount: 4]                     │ ← Always at offset 0
@@ -746,6 +745,233 @@ public static Dictionary<string, object> Deserialize(ReadOnlySpan<byte> data)
 // Key insight: offset advances based on ACTUAL data sizes
 // No fixed column positions needed!
 ```
+
+---
+
+## 📄 Record Sizing & Page Boundaries
+
+### Critical Constraint: Records Must Fit in a Single Page
+
+**Important:** A record CANNOT be split across multiple pages.
+
+#### Why?
+
+```csharp
+// Records are atomic units stored in blocks
+BlockEntry entry = new BlockEntry
+{
+    BlockName = "Users_Row_001",
+    Offset = 1048576,        // Start of page 256
+    Length = 3950,           // Entire record size (< 4096)
+    Checksum = [...],
+    // ...
+};
+
+// The Block Registry stores:
+// - Start offset (byte position)
+// - Total length (entire record size)
+// - This makes lookups O(1) and atomic
+```
+
+#### What Happens If a Record Would Exceed Page Size?
+
+```csharp
+// Example: 4KB page size (default)
+
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Biography"] = new string('X', 4100),  // 4100 bytes!
+};
+
+// Serialization:
+// ColumnCount (4) + "UserId" metadata (20) + 4 bytes (int32)
+//   + "Biography" metadata (30) + 4100 bytes (string data)
+// ≈ 4 + 20 + 4 + 30 + 4100 = 4158 bytes
+//
+// Result: 4158 > 4096 (page size)
+// ❌ ERROR! Record too large for page!
+```
+
+#### Solution 1: Increase Page Size
+
+```csharp
+// Create database with larger pages
+var options = new DatabaseOptions
+{
+    PageSize = 8192,  // 8 KB pages → can hold bigger records
+    CreateImmediately = true,
+};
+
+var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
+
+// Now record of 4158 bytes fits in 8192-byte page ✅
+```
+
+#### Solution 2: Use BLOB Storage for Large Strings
+
+```csharp
+// Don't store huge strings as columns
+// Instead, use a reference/ID
+
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["BioFileId"] = "bio_12345",  // Reference to external BLOB
+};
+
+// Then separately store large file:
+var largeFile = new byte[10_000_000];  // 10 MB
+blobStorage.WriteLargeBlob("bio_12345", largeFile);
+```
+
+### How Pages Are Allocated
+
+SharpCoreDB allocates pages as **complete units**. You cannot split data across page boundaries:
+
+```
+File Layout (4KB page size):
+
+Page 0 (0-4095):         [Header: 512 bytes][unused: 3584 bytes]
+Page 1 (4096-8191):      [Block Registry data: 2000 bytes][unused: 2096]
+Page 2 (8192-12287):     [FSM data: 1500 bytes][unused: 2596]
+Page 3 (12288-16383):    [Users_Row_001: 50 bytes][unused: 4046] ← Wasted space!
+Page 4 (16384-20479):    [Users_Row_002: 100 bytes][unused: 3996] ← Wasted space!
+...
+
+Even though Row_001 is only 50 bytes, it occupies an entire 4096-byte page.
+```
+
+**Why?** Because the Block Registry tracks:
+```csharp
+// Block boundaries are PAGE-aligned
+public ulong Offset;  // Always a multiple of PageSize (4096)
+public ulong Length;  // Actual data size (can be < PageSize)
+
+// Example:
+// Offset = 12288 (Page 3 start, multiple of 4096)
+// Length = 50 (actual record bytes)
+```
+
+### String Splitting: The Reality
+
+If you have a long string that would exceed the page:
+
+```csharp
+// BEFORE serialization - THIS DOESN'T HAPPEN
+// The entire record (including all strings) is serialized to binary
+byte[] binary = Serialize(row);  // ← Complete binary in memory
+int recordSize = binary.Length;
+
+// Check if record fits in a page
+if (recordSize > PageSize)
+{
+    throw new InvalidOperationException(
+        $"Record too large ({recordSize} bytes) for page size ({PageSize} bytes)");
+}
+
+// If it fits, allocate ONE page and write entire record
+ulong pageOffset = FSM.AllocatePages(1);  // ← Allocates 1 full page
+provider.WriteBytes(pageOffset, binary);  // ← Write entire record at once
+```
+
+### Example: Long String at End of Page
+
+**Scenario:** You have a string that's close to the page boundary
+
+```
+Page Layout (4KB = 4096 bytes):
+
+Offset 0-3:              [ColumnCount: 4]
+Offset 4-20:             [Column 1 metadata + value]
+Offset 21-60:            [Column 2 metadata + value]
+Offset 61-3200:          [Column 3: Short string]
+Offset 3201-4090:        [Column 4: Long string (890 bytes)]
+Offset 4091-4095:        [unused: 5 bytes]
+                         ↑ NO SPLITTING NEEDED
+                         Record fits entirely (4091 bytes < 4096)
+```
+
+**What if record was 4097 bytes?**
+```
+❌ ERROR! Record doesn't fit in page.
+   Must increase PageSize or reduce record size.
+```
+
+### The Key Insight: No Padding, No Splitting
+
+```csharp
+// 1. Records are serialized completely in memory
+byte[] recordBinary = Serialize(row);
+// recordBinary could be 50 bytes or 3000 bytes
+
+// 2. FSM allocates ONE page (regardless of record size)
+ulong pageStart = FSM.AllocatePages(1);
+// pageStart = multiple of PageSize (e.g., 4096, 8192, 12288, ...)
+
+// 3. Write record to that page
+provider.WriteBytes(pageStart, recordBinary);
+// Writes 50 bytes OR 3000 bytes
+// NO PADDING to reach 4096 bytes
+// NO SPLITTING across pages
+
+// 4. Block Registry tracks exact length
+registry[recordName] = new BlockEntry
+{
+    Offset = pageStart,
+    Length = recordBinary.Length,  // ← EXACT size, not padded
+};
+```
+
+### Performance Implication
+
+```csharp
+// With variable-length records:
+Page 1: 50-byte record → 4046 bytes wasted space per page
+Page 2: 100-byte record → 3996 bytes wasted space per page
+Page 3: 3000-byte record → 1096 bytes wasted space per page
+Page 4: 30-byte record → 4066 bytes wasted space per page
+```
+
+**This is normal and acceptable because:**
+1. ✅ FSM tracks free space (can reuse partially-filled pages for small records)
+2. ✅ Compression not needed (data is already binary, not JSON overhead)
+3. ✅ Simpler architecture (no split-record complexity)
+4. ✅ Atomic writes (record written once, completely)
+
+### How FSM Reuses Wasted Space
+
+```csharp
+// FSM doesn't care about wasted space within a page
+// It tracks FREE PAGES, not free bytes
+
+FSM State:
+├─ Page 0: Allocated (Header)
+├─ Page 1: Allocated (Registry)
+├─ Page 2: Allocated (FSM)
+├─ Page 3: Allocated (50-byte record) ← Still counts as ALLOCATED
+├─ Page 4: Allocated (100-byte record) ← Still counts as ALLOCATED
+├─ Page 5: FREE ← Can reuse this
+└─ ...
+
+// When inserting a small record (30 bytes):
+// Option 1: Reuse Page 3 (already allocated, has room)
+// Option 2: Allocate new Page 5
+
+// SharpCoreDB behavior:
+// - Phase 1: Always allocate new pages (simpler)
+// - Phase 3: Could implement "sub-page allocation" (future optimization)
+```
+
+### Summary: Page Boundaries & Strings
+
+| Situation | What Happens | Result |
+|-----------|--------------|--------|
+| Small record (< page size) | Allocates 1 page, writes record, registers block | ✅ Works |
+| Large record (> page size) | Throws error during serialization | ❌ Error |
+| String at page end | String included in serialized record (no split) | ✅ Stays together |
+| Multiple pages needed | Not supported; use larger page size | ⚠️ Design limit |
 
 ---
 
