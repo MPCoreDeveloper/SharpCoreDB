@@ -157,7 +157,7 @@ Allocation Strategy:
 
 ### How FSM Works
 
-The **Free Space Map (FSM)** behaves vrije pagina's. Dit is een 2-level bitmap:
+The **Free Space Map (FSM)** tracks free pages. This is a 2-level bitmap:
 
 [Detailed explanation with code examples]
 

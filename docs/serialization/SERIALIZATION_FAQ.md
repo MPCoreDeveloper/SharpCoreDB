@@ -1,25 +1,25 @@
 # SharpCoreDB Serialization FAQ & Technical Deep Dive
 
-> **Antwoorden op veel gestelde vragen over serialisatie, strings, free space, en record boundaries**
+Answers to frequently asked questions about serialization, strings, free space, and record boundaries.
 
 ---
 
 ## 🎯 The Discussion Context
 
-Jij zei: *"Ik heb geen fixed-length op mijn string waarden"*  
-Iemand anders zei: *"Dan heb je veel vrije ruimte nodig"*
+You said: *"I don't have fixed-length string values"*  
+Someone else said: *"Then you need lots of free space"*
 
 **Verdict: ❌ WRONG!**
 
-SharpCoreDB's variable-length serialization is **optimaal ontworpen** voor strings zonder vaste lengte. Geen verspilling, geen overhead.
+SharpCoreDB's variable-length serialization is **optimally designed** for strings without fixed lengths. No waste, no overhead.
 
 ---
 
 ## 📚 Frequently Asked Questions
 
-### Q1: Werkt variable-length zonder problemen?
+### Q1: Does variable-length work without problems?
 
-**A: Ja, absoluut.** SharpCoreDB uses **length-prefixed variable-length encoding**:
+**A: Yes, absolutely.** SharpCoreDB uses **length-prefixed variable-length encoding**:
 
 ```
 ┌─────────────┬────────────────────┐
@@ -36,14 +36,14 @@ Example: "John Doe" (8 characters, 8 bytes in UTF-8)
 **Why it works:**
 - Parser reads the length first (4 bytes)
 - Then reads exactly that many bytes
-- No ambiguity about where field ends
+- No ambiguity about where the field ends
 - Works for any UTF-8 string (ASCII, Unicode, Emoji)
 
 ---
 
-### Q2: Heb ik veel vrije ruimte nodig in mijn data files?
+### Q2: Do I need lots of free space in my data files?
 
-**A: Nee. Integendeel - variable-length strings **sparen** ruimte!**
+**A: No. In fact - variable-length strings **save** space!**
 
 Comparison:
 
@@ -81,9 +81,9 @@ Variable-length (avg 20 bytes):
 
 ---
 
-### Q3: Hoe weet de parser waar een string eindigt?
+### Q3: How does the parser know where a string ends?
 
-**A: Via de 4-byte length prefix.**
+**A: Via the 4-byte length prefix.**
 
 ```
 Deserialization algorithm:
@@ -112,7 +112,7 @@ DONE! Next field starts at offset 13.
 
 ---
 
-### Q4: Hoe zit het met column boundaries?
+### Q4: What about column boundaries?
 
 **A: Columns are also length-prefixed and self-describing.**
 
@@ -142,9 +142,9 @@ Parser reads:
 
 ---
 
-### Q5: Kunnen strings echt willekeurig lang zijn?
+### Q5: Can strings really be arbitrarily long?
 
-**A: Ja, tot 2 GB per string (int32 limit).**
+**A: Yes, up to 2 GB per string (int32 limit).**
 
 Size constraints:
 
@@ -175,7 +175,7 @@ var row = new Dictionary<string, object>
 
 ---
 
-### Q6: Hoe zit het met fragmentation?
+### Q6: What about fragmentation?
 
 **A: FSM handles it transparently.**
 
@@ -208,7 +208,7 @@ Next allocation:
 
 ---
 
-### Q7: Hoe werkt de Free Space Map?
+### Q7: How does the Free Space Map work?
 
 **A: Two-level bitmap, O(1) allocation.**
 
@@ -248,7 +248,7 @@ Result: Exponential growth, fewer allocations needed!
 
 ---
 
-### Q8: Hoe zit het met record lookup?
+### Q8: What about record lookup?
 
 **A: O(1) via Block Registry hash table.**
 
@@ -278,7 +278,7 @@ var entry = blockRegistry["Users_Row_001"];
 
 ---
 
-### Q9: Hoe zit het met Unicode / Emoji?
+### Q9: What about Unicode / Emoji?
 
 **A: Full UTF-8 support, automatic byte length adjustment.**
 
@@ -311,7 +311,7 @@ foreach (var (str, expectedBytes) in testStrings)
 
 ---
 
-### Q10: Hoe lang duurt serialisatie?
+### Q10: How fast is serialization?
 
 **A: Very fast due to zero-allocation design.**
 
@@ -351,7 +351,7 @@ SharpCoreDB: Balanced for both speed and size
 
 ---
 
-### Q11: Wat gebeurt er als een string NULL is?
+### Q11: What if a string is NULL?
 
 **A: Type marker 0, no data bytes.**
 
@@ -379,7 +379,7 @@ Total: 5 bytes.
 
 ---
 
-### Q12: Kan ik records in-place updaten?
+### Q12: Can I update records in-place?
 
 **A: No, SharpCoreDB is write-immutable per-block.**
 
@@ -417,7 +417,7 @@ Result:
 
 ---
 
-### Q13: Hoe zit het met batching?
+### Q13: What about batching?
 
 **A: Critical for performance. Always use batch operations.**
 
@@ -458,7 +458,7 @@ private const int FLUSH_INTERVAL_MS = 500;   // Or every 500ms
 
 ---
 
-### Q14: Hoe zit het met transacties en recovery?
+### Q14: What about transactions and recovery?
 
 **A: WAL (Write-Ahead Log) ensures durability.**
 
@@ -497,7 +497,7 @@ Result: ✅ ACID guarantees
 
 ---
 
-### Q15: Hoe groot wordt mijn database file echt?
+### Q15: How big will my database file actually be?
 
 **A: Approximately:**
 

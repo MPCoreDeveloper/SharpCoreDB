@@ -1,16 +1,14 @@
 # SharpCoreDB Serialization & Storage Format Guide
 
-> **Dutch Title:** SharpCoreDB Serialisatie en Opslag Format Gids
-
-Dit document beschrijft in detail hoe SharpCoreDB records serialiseert, opslaat, en beheert in databestanden. Het antwoordt op alle vragen over string-constraints, free space management, en record/column boundaries.
+This document describes in detail how SharpCoreDB serializes, stores, and manages records in data files. It answers all questions about string constraints, free space management, and record/column boundaries.
 
 ---
 
-## 📋 Inhoudsopgave
+## 📋 Table of Contents
 
-1. [Overzicht](#overzicht)
+1. [Overview](#overview)
 2. [File Format (.scdb)](#file-format-scdb)
-3. [Record Serialisatie](#record-serialisatie)
+3. [Record Serialization](#record-serialization)
 4. [String Handling & Size Constraints](#string-handling--size-constraints)
 5. [Free Space Management](#free-space-management)
 6. [Block Registry](#block-registry)
@@ -20,19 +18,19 @@ Dit document beschrijft in detail hoe SharpCoreDB records serialiseert, opslaat,
 
 ---
 
-## 🎯 Overzicht
+## 🎯 Overview
 
-SharpCoreDB gebruikt een **single-file binary format** (`.scdb`) voor duurzame opslag. Het systeem is gebaseerd op deze principes:
+SharpCoreDB uses a **single-file binary format** (`.scdb`) for persistent storage. The system is based on these principles:
 
 | Aspect | Details |
 |--------|---------|
-| **Format** | Binary (niet JSON, niet SQL) - 3x sneller dan JSON |
+| **Format** | Binary (not JSON, not SQL) - 3x faster than JSON |
 | **Layout** | Fixed header + variable regions (FSM, WAL, Registry, Tables) |
-| **Encoding** | UTF-8 voor strings; Little-Endian voor integers |
+| **Encoding** | UTF-8 for strings; Little-Endian for integers |
 | **String Storage** | Variable-length; prefixed with 4-byte length field |
-| **No Fixed-Length Requirement** | Strings kunnen willekeurig lang zijn (beperkt door beschikbare schijfruimte) |
+| **No Fixed-Length Requirement** | Strings can be arbitrarily long (limited by available disk space) |
 | **Encryption** | Optional AES-256-GCM |
-| **Compression** | Niet geïmplementeerd (reserved in header) |
+| **Compression** | Not implemented (reserved in header) |
 
 ---
 
@@ -127,28 +125,28 @@ public struct ScdbFileHeader
 
 ---
 
-## 🔄 Record Serialisatie
+## 🔄 Record Serialization
 
 ### Binary Format Specification
 
-Records worden opgeslagen in een **self-describing binary format**. Dit betekent dat type-informatie **ingebedded** is in de data zelf.
+Records are stored in a **self-describing binary format**. This means type information is **embedded** in the data itself.
 
 #### Record Layout
 
 ```
-┌──────────────────────────────────────────────┐
-│ Binary Record Format                         │
-├──────────────────────────────────────────────┤
+┌──────────────────────────────────────────────────┐
+│ Binary Record Format                             │
+├──────────────────────────────────────────────────┤
 │ [ColumnCount: 4 bytes]  ← int32, little-endian
-│                                              │
-│ For each column:                             │
-│  ├─ [NameLength: 4 bytes] ← int32            │
-│  ├─ [ColumnName: N bytes] ← UTF-8 string    │
-│  ├─ [TypeMarker: 1 byte]  ← Type indicator  │
-│  └─ [Value: variable]     ← Type-specific   │
-│                                              │
-│ ... (repeat for all columns)                 │
-└──────────────────────────────────────────────┘
+│                                                  │
+│ For each column:                                 │
+│  ├─ [NameLength: 4 bytes] ← int32                │
+│  ├─ [ColumnName: N bytes] ← UTF-8 string        │
+│  ├─ [TypeMarker: 1 byte]  ← Type indicator      │
+│  └─ [Value: variable]     ← Type-specific       │
+│                                                  │
+│ ... (repeat for all columns)                     │
+└──────────────────────────────────────────────────┘
 ```
 
 #### Type Markers
@@ -171,7 +169,7 @@ public enum BinaryTypeMarker : byte
 
 #### Concrete Example
 
-Stel je voor we hebben:
+Suppose we have:
 
 ```csharp
 var row = new Dictionary<string, object>
@@ -183,7 +181,7 @@ var row = new Dictionary<string, object>
 };
 ```
 
-Dit wordt geserialiseerd als:
+This is serialized as:
 
 ```
 Offset  Size  Value                  Explanation
@@ -340,16 +338,16 @@ public static class BinaryRowSerializer
 
 ## 🔤 String Handling & Size Constraints
 
-### ❌ Misconception: "Je hebt veel vrije ruimte nodig"
+### ❌ Misconception: "You need lots of free space"
 
-**Dit is NIET waar!** Hier is waarom:
+**This is NOT true!** Here's why:
 
-#### 1. **Strings zijn variable-length**
-- Een record met 10 bytes strings hoeft maar 10 bytes schijfruimte
-- Een record met 10MB strings hoeft 10MB schijfruimte
-- **Geen vaste grootte per kolom** → geen verspilling
+#### 1. **Strings are variable-length**
+- A record with 10-byte strings needs only 10 bytes of disk space
+- A record with 10MB strings needs 10MB of disk space
+- **No fixed size per column** → no wasted space
 
-#### 2. **Length-prefixing solve boundaries**
+#### 2. **Length-prefixing solves boundaries**
 
 ```
 String Layout:
@@ -405,7 +403,7 @@ foreach (var str in testStrings)
 
 ### ⚠️ What About Record Size Limits?
 
-**Records kunnen NIET groter zijn dan een blok** (page size).
+**Records CANNOT be larger than a block** (page size).
 
 ```csharp
 // Example: Default 4KB page size
@@ -425,7 +423,7 @@ var row = new Dictionary<string, object>
 // Total: ~7034 bytes > 4096 bytes ❌ ERROR
 ```
 
-**Oplossing:** Verhoog page size
+**Solution:** Increase page size
 
 ```csharp
 var options = new DatabaseOptions
@@ -452,7 +450,7 @@ var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
 // File size = sum of all actual record sizes (no padding)
 ```
 
-**Geen vaste overhead per record!** Alleen de bytes die je gebruikt.
+**No fixed overhead per record!** Only the bytes you use.
 
 ---
 
@@ -460,7 +458,7 @@ var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
 
 ### How FSM Works
 
-De **Free Space Map (FSM)** beheerd vrije pagina's. Dit is een 2-level bitmap:
+The **Free Space Map (FSM)** manages free pages. This is a 2-level bitmap:
 
 ```csharp
 internal sealed class FreeSpaceManager
@@ -657,9 +655,9 @@ registry.FlushAsync();  // ← Single batched flush!
 
 ```
 Step 1: User writes a row
-┌────────────────────────────────┐
-│ row = {Id: 42, Name: "John"}   │
-└────────────────────────────────┘
+┌────────────────────────────────────┐
+│ row = {Id: 42, Name: "John"}       │
+└────────────────────────────────────┘
                 ↓
 Step 2: Serialize to binary
 ┌────────────────────────────────────────────────────┐
@@ -828,39 +826,39 @@ var metrics = blockRegistry.GetMetrics();
 
 ## ❓ FAQ
 
-### Q1: Moet ik veel vrije ruimte reserveren?
+### Q1: Do I need to reserve lots of free space?
 
-**A:** Nee! Vrije ruimte wordt automatisch beheerd via FSM. Bestanden groeien exponentieel:
-- Eerste groei: +10 MB
-- Volgende groeien: exponentieel (2x, 4x, ...)
+**A:** No! Free space is managed automatically via FSM. Files grow exponentially:
+- First growth: +10 MB
+- Subsequent growth: exponential (2x, 4x, ...)
 - No pre-allocation needed
 
-### Q2: Hoe groot kunnen strings worden?
+### Q2: How big can strings be?
 
-**A:** Theoretisch tot 2 GB (int32 limit per string). Praktisch:
+**A:** Theoretically up to 2 GB (int32 limit per string). Practically:
 - Small strings (< 1 KB): Very fast
 - Medium strings (1-100 MB): Still efficient
 - Large strings (> 100 MB): Will fragment disk, consider BLOB storage
 
-### Q3: Hoe weet ik waar een record eindigt?
+### Q3: How do I know where a record ends?
 
-**A:** Via Block Registry! Elk record is opgeslagen als een block:
+**A:** Via Block Registry! Each record is stored as a block:
 ```csharp
 BlockEntry entry = registry["Users_Row_001"];
 ulong startOffset = entry.Offset;
 ulong endOffset = entry.Offset + entry.Length;
 ```
 
-### Q4: Kunnen strings NULL zijn?
+### Q4: Can strings be NULL?
 
-**A:** Ja, via type marker 0:
+**A:** Yes, via type marker 0:
 ```csharp
 case null:
     buffer[offset++] = 0;  // Type: Null
     // No value follows
 ```
 
-### Q5: Wat gebeurt er met Unicode?
+### Q5: What about Unicode?
 
 **A:** UTF-8 encoding, automatic length adjustment:
 ```csharp
@@ -869,39 +867,39 @@ case null:
 "🚀"       → 4 bytes (1 char × 4 bytes)
 ```
 
-### Q6: Kan ik strings direkt wijzigen zonder het record opnieuw te schrijven?
+### Q6: Can I modify strings directly without rewriting the record?
 
-**A:** Nee, SharpCoreDB werkt immutable:
+**A:** No, SharpCoreDB works immutably:
 1. Load record (deserialize)
 2. Modify in memory
 3. Serialize & write new block
 4. Update registry
 5. Mark old block as free (WAL handles recovery)
 
-### Q7: Hoe werkt compression?
+### Q7: What about compression?
 
-**A:** Momenteel niet geïmplementeerd. Reserved in header voor toekomstige use.
-Huidige focus: Zero-allocation serialization is sneller dan compression overhead.
+**A:** Not currently implemented. Reserved in header for future use.
+Current focus: Zero-allocation serialization is faster than compression overhead.
 
-### Q8: Hoe is de free space distributed?
+### Q8: How is free space distributed?
 
-**A:** Non-contiguous! Records kunnen overal in het bestand staan:
+**A:** Non-contiguous! Records can be scattered throughout the file:
 ```
 File layout:
 [Block1: 4KB] [Block2: 8KB] [Free: 2KB] [Block3: 4KB] [Free: 1KB] [Block4: 2KB]
 ```
-Geen fragmentatie-waarschuwing nodig - FSM beheert dit transparant.
+No fragmentation warning needed - FSM manages this transparently.
 
-### Q9: Kan ik een hele tabel in één "block" opslaan?
+### Q9: Can I store an entire table in one "block"?
 
-**A:** Nee, iedere rij is een apart block. Voordelen:
-- Fijnere granulariteit bij locking
-- Betere cache-locality
-- Flexibel grootten
+**A:** No, each row is a separate block. Advantages:
+- Finer-grained locking
+- Better cache-locality
+- Flexible sizing
 
-### Q10: Hoe zit het met transacties?
+### Q10: How do transactions work?
 
-**A:** Beheerd via WAL (Write-Ahead Log):
+**A:** Managed via WAL (Write-Ahead Log):
 1. Begin transaction
 2. Writes go to WAL first
 3. On commit, registry updated
