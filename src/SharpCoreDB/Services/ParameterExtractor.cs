@@ -6,6 +6,7 @@
 namespace SharpCoreDB.Services;
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -49,6 +50,7 @@ internal sealed class ParameterExtractor
     /// <summary>
     /// Extracts all parameters from a SQL query.
     /// ✅ C# 14: Collection expression for result
+    /// ✅ Skips parameters inside SQL string literals
     /// </summary>
     /// <param name="sql">The SQL query string.</param>
     /// <returns>Array of parameter information, in order of appearance.</returns>
@@ -56,7 +58,9 @@ internal sealed class ParameterExtractor
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
-        var matches = ParameterPattern.Matches(sql);
+        // Remove string literals before extracting parameters, but track original positions
+        var (sqlWithoutLiterals, positionMap) = RemoveStringLiteralsWithPositionMap(sql);
+        var matches = ParameterPattern.Matches(sqlWithoutLiterals);
 
         if (matches.Count == 0)
         {
@@ -71,6 +75,9 @@ internal sealed class ParameterExtractor
             var match = matches[i];
             var paramName = match.Groups[1].Value;  // Get capture group (without @)
             var fullName = $"@{paramName}";
+            
+            // Map position back to original SQL
+            int originalPosition = positionMap[match.Index];
 
             // Only add unique parameters (first occurrence only)
             if (seen.Add(paramName))
@@ -80,12 +87,164 @@ internal sealed class ParameterExtractor
                     Name = paramName,
                     FullName = fullName,
                     Index = parameters.Count,  // Sequential index for unique params
-                    Position = match.Index
+                    Position = originalPosition
                 });
             }
         }
 
         return [..parameters];  // ✅ C# 14: Spread operator for collection expression
+    }
+
+    /// <summary>
+    /// Removes SQL string literals and returns a mapping of new positions to original positions.
+    /// ✅ Handles escaped quotes ('') correctly.
+    /// ✅ Zero-allocation for small strings using stackalloc
+    /// </summary>
+    /// <param name="sql">The SQL query string.</param>
+    /// <returns>Tuple of (SQL with literals removed, position mapping array).</returns>
+    private static (string, int[]) RemoveStringLiteralsWithPositionMap(string sql)
+    {
+        Span<char> result = stackalloc char[sql.Length <= 512 ? sql.Length : 0];
+        char[]? rentedArray = null;
+        int[]? positionMapArray = null;
+        
+        if (sql.Length > 512)
+        {
+            rentedArray = ArrayPool<char>.Shared.Rent(sql.Length);
+            result = rentedArray.AsSpan(0, sql.Length);
+        }
+
+        positionMapArray = ArrayPool<int>.Shared.Rent(sql.Length);
+        Span<int> positionMap = positionMapArray.AsSpan(0, sql.Length);
+
+        try
+        {
+            bool inString = false;
+            int writePos = 0;
+
+            for (int i = 0; i < sql.Length; i++)
+            {
+                char c = sql[i];
+
+                if (c == '\'')
+                {
+                    // Check if it's an escaped quote ('')
+                    if (i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        // Escaped quote - replace both with spaces and map both
+                        result[writePos] = ' ';
+                        positionMap[writePos] = i;
+                        writePos++;
+                        result[writePos] = ' ';
+                        positionMap[writePos] = i + 1;
+                        writePos++;
+                        i++; // Skip the next quote
+                        continue;
+                    }
+
+                    // Toggle string state
+                    inString = !inString;
+                    result[writePos] = ' '; // Replace quote with space
+                    positionMap[writePos] = i;
+                    writePos++;
+                }
+                else if (inString)
+                {
+                    // Inside string literal - replace with space
+                    result[writePos] = ' ';
+                    positionMap[writePos] = i;
+                    writePos++;
+                }
+                else
+                {
+                    // Outside string literal - keep character
+                    result[writePos] = c;
+                    positionMap[writePos] = i;
+                    writePos++;
+                }
+            }
+
+            var resultString = new string(result[..writePos]);
+            var finalMap = positionMap[..writePos].ToArray();
+            return (resultString, finalMap);
+        }
+        finally
+        {
+            if (rentedArray != null)
+            {
+                ArrayPool<char>.Shared.Return(rentedArray);
+            }
+            if (positionMapArray != null)
+            {
+                ArrayPool<int>.Shared.Return(positionMapArray);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes SQL string literals (single-quoted strings) from SQL text.
+    /// ✅ Handles escaped quotes ('') correctly.
+    /// ✅ Zero-allocation for small strings using stackalloc
+    /// </summary>
+    /// <param name="sql">The SQL query string.</param>
+    /// <returns>SQL with string literals replaced by spaces.</returns>
+    private static string RemoveStringLiterals(string sql)
+    {
+        Span<char> result = stackalloc char[sql.Length <= 512 ? sql.Length : 0];
+        char[]? rentedArray = null;
+        
+        if (sql.Length > 512)
+        {
+            rentedArray = ArrayPool<char>.Shared.Rent(sql.Length);
+            result = rentedArray.AsSpan(0, sql.Length);
+        }
+
+        try
+        {
+            bool inString = false;
+            int writePos = 0;
+
+            for (int i = 0; i < sql.Length; i++)
+            {
+                char c = sql[i];
+
+                if (c == '\'')
+                {
+                    // Check if it's an escaped quote ('')
+                    if (i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        // Escaped quote - replace both with spaces
+                        result[writePos++] = ' ';
+                        result[writePos++] = ' ';
+                        i++; // Skip the next quote
+                        continue;
+                    }
+
+                    // Toggle string state
+                    inString = !inString;
+                    result[writePos++] = ' '; // Replace quote with space
+                }
+                else if (inString)
+                {
+                    // Inside string literal - replace with space
+                    result[writePos++] = ' ';
+                }
+                else
+                {
+                    // Outside string literal - keep character
+                    result[writePos++] = c;
+                }
+            }
+
+            return new string(result[..writePos]);
+        }
+        finally
+        {
+            if (rentedArray != null)
+            {
+                ArrayPool<char>.Shared.Return(rentedArray);
+            }
+        }
     }
 
     /// <summary>
@@ -109,6 +268,29 @@ internal sealed class ParameterExtractor
     public static bool AreParametersValid(string sql)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+
+        // First, check if SQL contains any @ symbols that could be parameters
+        int atIndex = sql.IndexOf('@');
+        if (atIndex == -1)
+        {
+            return true;  // No @ symbols, so no parameters to validate
+        }
+
+        // Check for invalid parameter patterns (@ followed by digit)
+        for (int i = 0; i < sql.Length; i++)
+        {
+            if (sql[i] == '@' && i + 1 < sql.Length)
+            {
+                char nextChar = sql[i + 1];
+                // If @ is followed by a digit, it's an invalid parameter
+                if (char.IsDigit(nextChar))
+                {
+                    return false;
+                }
+                // If @ is followed by something that's not a letter, underscore, or whitespace, it might be invalid
+                // But we'll let the regex extraction handle the full validation
+            }
+        }
 
         var parameters = ExtractParameters(sql);
 
@@ -185,11 +367,16 @@ internal sealed class ParameterExtractor
         ArgumentNullException.ThrowIfNull(providedParameters);
 
         var expected = GetExpectedParameters(sql);
+        
+        // Create case-insensitive key set from provided parameters for lookup
+        var providedKeysLower = new HashSet<string>(
+            providedParameters.Keys.Select(k => k.StartsWith("@") ? k.Substring(1).ToLowerInvariant() : k.ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
 
         // Check if all expected parameters are provided
         foreach (var paramName in expected)
         {
-            if (!providedParameters.ContainsKey(paramName) && !providedParameters.ContainsKey($"@{paramName}"))
+            if (!providedKeysLower.Contains(paramName.ToLowerInvariant()))
             {
                 return (false, $"Missing required parameter: {paramName}");
             }

@@ -90,8 +90,10 @@ public class BlockRegistryBatchingTests : IDisposable
         
         var initialMetrics = registry.GetMetrics();
         
-        // Act - Add exactly 200 blocks (Phase 3 threshold increased from 50 to 200)
-        for (int i = 0; i < 200; i++)
+        // Act - Add exactly 200 blocks (Phase 3 threshold = 200, triggers batched flush)
+        // Registry capacity: (16384 - 64 header) / 64 per entry = ~255 max entries
+        const int blockCount = 200;
+        for (int i = 0; i < blockCount; i++)
         {
             var data = new byte[512];
             Random.Shared.NextBytes(data);
@@ -156,8 +158,11 @@ public class BlockRegistryBatchingTests : IDisposable
             await provider.WriteBlockAsync($"small_block_{i}", data);
         }
         
-        // Wait for periodic flush (Phase 3: 500ms interval + buffer)
-        await Task.Delay(700);
+        // Wait for periodic flush (Phase 3: 500ms interval)
+        // Timer starts when BlockRegistry is created, so first tick could be anywhere from 0-500ms
+        // Wait 1200ms to ensure at least one full timer cycle completes after writes
+        // (worst case: writes happen just after a tick, next tick at +500ms, check at +700ms might miss it)
+        await Task.Delay(1200);
         
         // Assert - Periodic timer should have flushed
         var finalMetrics = registry.GetMetrics();
@@ -182,8 +187,10 @@ public class BlockRegistryBatchingTests : IDisposable
         
         var initialMetrics = registry.GetMetrics();
         
-        // Act - Concurrent writes from multiple tasks (reduced from 200 to 100 for registry size)
-        var tasks = Enumerable.Range(0, 100).Select(async i =>
+        // Act - Concurrent writes from multiple tasks
+        // Registry capacity: (16384 - 64 header) / 64 per entry = ~255 max entries
+        const int blockCount = 100;
+        var tasks = Enumerable.Range(0, blockCount).Select(async i =>
         {
             var data = new byte[512];
             Random.Shared.NextBytes(data);
@@ -201,10 +208,10 @@ public class BlockRegistryBatchingTests : IDisposable
         var totalFlushes = finalMetrics.TotalFlushes - initialMetrics.TotalFlushes;
         
         Assert.True(totalFlushes < 10, 
-            $"Expected <10 flushes for 100 concurrent writes, got {totalFlushes}");
+            $"Expected <10 flushes for {blockCount} concurrent writes, got {totalFlushes}");
         
         // Verify all blocks exist (this is more important than BlocksWritten counter)
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < blockCount; i++)
         {
             Assert.True(provider.BlockExists($"concurrent_{i}"),
                 $"Block concurrent_{i} should exist after concurrent write");

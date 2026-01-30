@@ -53,6 +53,17 @@ internal sealed class WalManager : IDisposable
 
     public ulong CurrentLsn => _currentLsn;
 
+    internal bool HasPendingEntries
+    {
+        get
+        {
+            lock (_walLock)
+            {
+                return _pendingEntries.Count > 0;
+            }
+        }
+    }
+
     public void BeginTransaction()
     {
         lock (_walLock)

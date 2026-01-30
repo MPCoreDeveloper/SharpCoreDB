@@ -29,6 +29,17 @@ internal sealed class TableDirectoryManager : IDisposable
     private bool _isDirty;
     private bool _disposed;
 
+    internal bool IsDirty
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _isDirty;
+            }
+        }
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TableDirectoryManager"/> class.
     /// </summary>

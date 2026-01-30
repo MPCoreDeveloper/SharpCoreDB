@@ -68,6 +68,8 @@ internal sealed class BlockRegistry : IDisposable
     }
 
     public int Count => _blocks.Count;
+
+    internal bool HasDirtyEntries => Interlocked.CompareExchange(ref _dirtyCount, 0, 0) > 0;
     
     /// <summary>
     /// Gets performance metrics for monitoring.

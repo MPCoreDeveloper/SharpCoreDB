@@ -411,7 +411,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     private void ExecuteInsertInternal(string sql)
     {
         var regex = new Regex(
-            @"INSERT\s+INTO\s+(\w+)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)",
+            @"INSERT\s+INTO\s+(\w+)\s*(?:\((.*?)\))?\s*VALUES\s*\((.*?)\)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
         
         var match = regex.Match(sql);
@@ -421,7 +421,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         }
 
         var tableName = match.Groups[1].Value.Trim();
-        var columnNames = match.Groups[2].Value.Split(',').Select(c => c.Trim()).ToList();
+        var columnNames = string.IsNullOrWhiteSpace(match.Groups[2].Value) 
+            ? null
+            : match.Groups[2].Value.Split(',').Select(c => c.Trim()).ToList();
         var values = match.Groups[3].Value.Split(',').Select(v => v.Trim()).ToList();
         
         if (!_tables.TryGetValue(tableName, out var table))
@@ -430,10 +432,24 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         }
 
         var row = new Dictionary<string, object>();
-        for (int i = 0; i < columnNames.Count && i < values.Count; i++)
+        
+        if (columnNames == null)
         {
-            var value = ParseValue(values[i]);
-            row[columnNames[i]] = value;
+            // No column list provided: use table columns in order
+            for (int i = 0; i < table.Columns.Count && i < values.Count; i++)
+            {
+                var value = ParseValue(values[i]);
+                row[table.Columns[i]] = value;
+            }
+        }
+        else
+        {
+            // Column list provided
+            for (int i = 0; i < columnNames.Count && i < values.Count; i++)
+            {
+                var value = ParseValue(values[i]);
+                row[columnNames[i]] = value;
+            }
         }
         
         table.Insert(row);
@@ -1118,6 +1134,8 @@ internal class SingleFileTable : ITable
         private static string ReadString(ReadOnlySpan<byte> data, ref int offset)
         {
             var length = ReadInt32(data, ref offset);
+            if (length < 0 || offset + length > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: length={length}, remaining={data.Length - offset}");
             var str = Utf8.GetString(data.Slice(offset, length));
             offset += length;
             return str;
@@ -1132,6 +1150,8 @@ internal class SingleFileTable : ITable
         private static byte[] ReadBytes(ReadOnlySpan<byte> data, ref int offset)
         {
             var length = ReadInt32(data, ref offset);
+            if (length < 0 || offset + length > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: length={length}, remaining={data.Length - offset}");
             var result = new byte[length];
             data.Slice(offset, length).CopyTo(result);
             offset += length;
@@ -1148,6 +1168,8 @@ internal class SingleFileTable : ITable
 
         private static Guid ReadGuid(ReadOnlySpan<byte> data, ref int offset)
         {
+            if (offset + 16 > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: need 16 bytes, have {data.Length - offset}");
             var guid = new Guid(data.Slice(offset, 16));
             offset += 16;
             return guid;
@@ -1199,6 +1221,8 @@ internal class SingleFileTable : ITable
 
         private static bool ReadBoolean(ReadOnlySpan<byte> data, ref int offset)
         {
+            if (offset + 1 > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: need 1 bytes, have {data.Length - offset}");
             var value = data[offset] != 0;
             offset += 1;
             return value;
@@ -1213,6 +1237,8 @@ internal class SingleFileTable : ITable
 
         private static int ReadInt32(ReadOnlySpan<byte> data, ref int offset)
         {
+            if (offset + 4 > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: need 4 bytes, have {data.Length - offset}");
             var value = BinaryPrimitives.ReadInt32LittleEndian(data.Slice(offset, 4));
             offset += 4;
             return value;
@@ -1234,6 +1260,8 @@ internal class SingleFileTable : ITable
 
         private static long ReadInt64(ReadOnlySpan<byte> data, ref int offset)
         {
+            if (offset + 8 > data.Length)
+                throw new InvalidOperationException($"Truncated at offset {offset}: need 8 bytes, have {data.Length - offset}");
             var value = BinaryPrimitives.ReadInt64LittleEndian(data.Slice(offset, 8));
             offset += 8;
             return value;

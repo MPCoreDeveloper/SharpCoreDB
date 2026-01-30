@@ -33,9 +33,14 @@ internal static class SingleFileDatabaseBatchExtension
         public Dictionary<string, int> ColumnIndexMap { get; set; } = new();
     }
 
+    // ✅ FIX: Static lock for cross-instance synchronization
+    // Using reflection to get instance lock is unreliable - use static lock instead
+    private static readonly Lock _staticBatchLock = new();
+
     /// <summary>
     /// Optimized batch SQL execution with transaction grouping.
     /// Parses INSERT statements, groups them by table, and executes as single transaction.
+    /// ✅ FIX: Uses static lock to ensure proper serialization across concurrent calls.
     /// </summary>
     public static void ExecuteBatchSQLOptimized(
         SingleFileDatabase database, 
@@ -46,21 +51,24 @@ internal static class SingleFileDatabaseBatchExtension
         var statements = sqlStatements as string[] ?? [.. sqlStatements];
         if (statements.Length == 0) return;
 
-        var batchUpdateLock = database.GetType()
-            .GetField("_batchUpdateLock", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.GetValue(database) as Lock 
-            ?? new Lock();
-
-        lock (batchUpdateLock)
+        // ✅ FIX: Use static lock instead of reflection-based instance lock
+        // Reflection could fail silently, creating a new lock each time (no synchronization!)
+        lock (_staticBatchLock)
         {
             var storageProvider = database.StorageProvider;
             var tableDirectoryManager = database.GetType()
                 .GetField("_tableDirectoryManager", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 ?.GetValue(database) as dynamic;
 
+            var isInTransactionBefore = storageProvider.IsInTransaction;
+            
             try
             {
-                storageProvider.BeginTransaction();
+                // Only start transaction if not already in one
+                if (!isInTransactionBefore)
+                {
+                    storageProvider.BeginTransaction();
+                }
                 
                 // Group INSERT statements by table for batch processing
                 Dictionary<string, List<Dictionary<string, object>>> insertsByTable = new();
@@ -117,15 +125,21 @@ internal static class SingleFileDatabaseBatchExtension
                     }
                 }
                 
-                // Commit all changes in single transaction
-                storageProvider.CommitTransactionAsync().GetAwaiter().GetResult();
-                tableDirectoryManager?.Flush();
+                // Only commit if we started the transaction
+                if (!isInTransactionBefore)
+                {
+                    storageProvider.CommitTransactionAsync().GetAwaiter().GetResult();
+                    tableDirectoryManager?.Flush();
+                }
             }
             catch
             {
                 try
                 {
-                    storageProvider.RollbackTransaction();
+                    if (!isInTransactionBefore)
+                    {
+                        storageProvider.RollbackTransaction();
+                    }
                 }
                 catch { }
                 throw;
@@ -185,13 +199,17 @@ internal static class SingleFileDatabaseBatchExtension
                 }
             }
 
-            // Extract column list if present
+            // Extract column list if present (must come BEFORE VALUES keyword)
             List<string>? insertColumns = null;
-            var colStart = afterInto.IndexOf('(');
             var rest = afterInto;
             
-            if (colStart >= 0)
+            // ✅ FIX: Only treat '(' as column list if it comes BEFORE VALUES
+            var valuesPosition = afterInto.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase);
+            var colStart = afterInto.IndexOf('(');
+            
+            if (colStart >= 0 && (valuesPosition < 0 || colStart < valuesPosition))
             {
+                // Column list exists before VALUES clause
                 var colEnd = afterInto.IndexOf(')', colStart);
                 if (colEnd > colStart)
                 {

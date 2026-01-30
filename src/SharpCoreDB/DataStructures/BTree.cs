@@ -166,22 +166,39 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         var y = parent.childrenArray[i];
         var z = new Node(nodeCapacity) { IsLeaf = y.IsLeaf };
         InsertChild(parent, i + 1, z);
-        InsertKey(parent, i, y.keysArray[this.degree - 1]);
+        
         int t = this.degree;
+        int midIndex = t - 1;  // Index of the middle key
         int copyCount = t - 1;
 
-        Array.Copy(y.keysArray, t, z.keysArray, 0, copyCount);
-        z.keysCount = copyCount;
-        y.keysCount = copyCount;
-
+        // Promote middle key to parent as separator
+        InsertKey(parent, i, y.keysArray[midIndex]);
+        
         if (y.IsLeaf)
         {
-            Array.Copy(y.valuesArray, t, z.valuesArray, 0, copyCount);
-            z.valuesCount = copyCount;
-            y.valuesCount = copyCount;
+            // B+ tree: For leaf nodes, middle key stays in the right child (duplicate)
+            // Left child: keys [0..midIndex-1]
+            // Right child: keys [midIndex..end] (includes middle key)
+            Array.Copy(y.keysArray, midIndex, z.keysArray, 0, t);
+            Array.Copy(y.valuesArray, midIndex, z.valuesArray, 0, t);
+            z.keysCount = t;
+            z.valuesCount = t;
+            y.keysCount = midIndex;
+            y.valuesCount = midIndex;
         }
         else
         {
+            // Internal node: middle key is promoted, NOT duplicated
+            // Left child: keys [0..midIndex-1]
+            // Right child: keys [midIndex+1..end]
+            Array.Copy(y.keysArray, t, z.keysArray, 0, copyCount);
+            Array.Copy(y.valuesArray, t, z.valuesArray, 0, copyCount);
+            z.keysCount = copyCount;
+            z.valuesCount = copyCount;
+            y.keysCount = copyCount;
+            y.valuesCount = copyCount;
+            
+            // Copy children pointers for internal nodes
             Array.Copy(y.childrenArray, t, z.childrenArray, 0, t);
             z.childrenCount = t;
             y.childrenCount = t;
@@ -311,6 +328,18 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         }
         node.keysArray[node.keysCount - 1] = default!;
         node.keysCount--;
+        
+        // Keep valuesCount in sync with keysCount
+        if (pos < node.valuesCount)
+        {
+            var valueSpan = node.valuesArray.AsSpan();
+            if (pos < node.valuesCount - 1)
+            {
+                valueSpan.Slice(pos + 1, node.valuesCount - pos - 1).CopyTo(valueSpan.Slice(pos, node.valuesCount - pos - 1));
+            }
+            node.valuesArray[node.valuesCount - 1] = default!;
+            node.valuesCount--;
+        }
     }
 
     private static void RemoveValueAt(Node node, int pos)
@@ -329,10 +358,26 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     private static void InsertKey(Node node, int pos, TKey key)
     {
         if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
-        var span = node.keysArray.AsSpan();
-        span.Slice(pos, node.keysCount - pos).CopyTo(span.Slice(pos + 1, node.keysCount - pos));
+        if (node.valuesCount == node.valuesArray.Length) ResizeValues(node);
+        
+        // Shift existing keys to make room
+        var keySpan = node.keysArray.AsSpan();
+        if (pos < node.keysCount && node.keysCount > 0)
+        {
+            keySpan.Slice(pos, node.keysCount - pos).CopyTo(keySpan.Slice(pos + 1, node.keysCount - pos));
+        }
         node.keysArray[pos] = key;
         node.keysCount++;
+        
+        // Keep valuesCount in sync with keysCount, even for internal nodes where values are meaningless
+        // This is critical to prevent array copy errors in InsertKeyValue
+        var valueSpan = node.valuesArray.AsSpan();
+        if (pos < node.valuesCount && node.valuesCount > 0)
+        {
+            valueSpan.Slice(pos, node.valuesCount - pos).CopyTo(valueSpan.Slice(pos + 1, node.valuesCount - pos));
+        }
+        node.valuesArray[pos] = default!;  // Internal nodes don't use values, but keep array consistent
+        node.valuesCount++;
     }
 
     private static void InsertChild(Node node, int pos, Node child)
@@ -425,40 +470,37 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
                     yield break; // Exceeded end, stop
                 
                 // Key is in range [start, end]
-                var value = node.valuesArray[i];
-                
-                // Handle multi-value case (for non-unique indexes)
-                if (value is List<long> positions)
-                {
-                    foreach (var pos in positions)
-                    {
-                        yield return (TValue)(object)pos;
-                    }
-                }
-                else
-                {
-                    yield return value;
-                }
+                yield return node.valuesArray[i];
             }
         }
         else
         {
-            // Internal node: find which children might contain our range
-            // ✅ OPTIMIZED: Binary search to find first child that might contain start
-            int startChildIdx = FindLowerBoundChild(node, start);
+            // Internal node: mirror the InOrderTraversal pattern
+            // Visit child[i] for each i in [0, keysCount), then visit child[keysCount]
             
-            // Visit all children that might overlap with [start, end]
-            for (int i = startChildIdx; i < node.childrenCount; i++)
+            for (int i = 0; i < node.keysCount; i++)
             {
-                // Check if this child's range might overlap with [start, end]
-                // ✅ OPTIMIZED: Early exit if we've passed the end of range
-                if (i > 0 && i - 1 < node.keysCount && CompareKeys(node.keysArray[i - 1], end) > 0)
+                // Visit child[i] - it contains keys that come before keys[i]
+                if (i < node.childrenCount)
                 {
-                    yield break; // All remaining children are beyond range
+                    foreach (var value in RangeScanOptimized(node.childrenArray[i], start, end))
+                    {
+                        yield return value;
+                    }
                 }
                 
-                // Recursively scan this child
-                foreach (var value in RangeScanOptimized(node.childrenArray[i], start, end))
+                // After visiting child[i], check if keys[i] > end
+                // If so, we've gone past our range and can stop
+                if (CompareKeys(node.keysArray[i], end) > 0)
+                {
+                    yield break;
+                }
+            }
+            
+            // Visit the rightmost child[keysCount]
+            if (node.keysCount < node.childrenCount)
+            {
+                foreach (var value in RangeScanOptimized(node.childrenArray[node.keysCount], start, end))
                 {
                     yield return value;
                 }
@@ -510,7 +552,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     /// Used for ORDER BY optimization and full index scans.
     /// Note: For range queries, use RangeScan() for better performance (O(log n + k) vs O(n)).
     /// </summary>
-    public IEnumerable<(TKey Key, TValue Value)> InOrderTraversal()
+    public IEnumerable<(TKey Key, TValue)> InOrderTraversal()
     {
         if (this.root == null)
             yield break;
@@ -524,7 +566,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     /// <summary>
     /// Internal in-order traversal helper that recursively traverses the tree.
     /// </summary>
-    private IEnumerable<(TKey Key, TValue Value)> InOrderTraversalWithKeys(Node? node)
+    private IEnumerable<(TKey Key, TValue)> InOrderTraversalWithKeys(Node? node)
     {
         if (node == null)
             yield break;
@@ -540,10 +582,12 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         else
         {
             // For internal nodes, interleave children and keys
+            // Pattern: visit child[0], child[1], ..., child[keysCount-1], then child[keysCount]
             for (int i = 0; i < node.keysCount; i++)
             {
-                // Visit left child
-                if (i < node.childrenCount)
+                // Visit child[i] before processing key[i]
+                // child[i] contains all keys < key[i] (or between key[i-1] and key[i] for i>0)
+                if (i < node.childrenCount && node.childrenArray[i] != null)
                 {
                     foreach (var pair in InOrderTraversalWithKeys(node.childrenArray[i]))
                     {
@@ -551,15 +595,12 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
                     }
                 }
                 
-                // Visit key (for internal nodes, values may not be meaningful)
-                if (node.IsLeaf)
-                {
-                    yield return (node.keysArray[i], node.valuesArray[i]);
-                }
+                // Internal nodes: keys are just separators, don't yield them
+                // (values are only meaningful in leaves)
             }
             
-            // Visit rightmost child
-            if (node.keysCount < node.childrenCount)
+            // Visit rightmost child[keysCount] which contains keys >= key[keysCount-1]
+            if (node.keysCount < node.childrenCount && node.childrenArray[node.keysCount] != null)
             {
                 foreach (var pair in InOrderTraversalWithKeys(node.childrenArray[node.keysCount]))
                 {

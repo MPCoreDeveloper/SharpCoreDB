@@ -68,6 +68,9 @@ public sealed class FreeSpaceManagerTests : IDisposable
             await provider.WriteBlockAsync($"block_{i}", data);
         }
 
+        // ✅ Wait for all queued writes to complete before checking file size
+        await provider.FlushPendingWritesAsync();
+
         var finalFileSize = fileStream.Length;
 
         // Assert - File should have minimal extensions
@@ -131,29 +134,38 @@ public sealed class FreeSpaceManagerTests : IDisposable
         }
 
         await System.Threading.Tasks.Task.WhenAll(tasks);
+        
+        // ✅ Wait for all queued writes to complete before checking file size
+        await provider.FlushPendingWritesAsync();
+        
         var finalFileSize = fileStream.Length;
 
-        // Assert - File growth should be reasonable
+        // Assert - File growth should be reasonable with Phase 3 optimization
+        // ✅ UPDATED: MIN_EXTENSION_PAGES = 2560 (10 MB) for performance
+        // With 50 blocks × 1024 bytes = 51,200 bytes, expect single 10 MB extension
         var totalBlockSize = 50 * 1024;
         var expectedMinSize = initialFileSize + totalBlockSize;
-        var expectedMaxSize = expectedMinSize * 2;
+        
+        // ✅ FIX: Account for 10 MB preallocation (2560 pages @ 4KB)
+        const int MIN_EXTENSION_SIZE = 2560 * 4096; // 10,485,760 bytes
+        var expectedMaxSize = initialFileSize + MIN_EXTENSION_SIZE + (totalBlockSize * 2); // Allow overhead
 
         Assert.True(finalFileSize >= expectedMinSize,
             $"File size {finalFileSize} should be >= {expectedMinSize}");
         Assert.True(finalFileSize <= expectedMaxSize,
-            $"File size {finalFileSize} should be <= {expectedMaxSize}");
+            $"File size {finalFileSize} should be <= {expectedMaxSize} (Phase 3: 10MB preallocation)");
     }
 
     [Fact]
     public void ConstantsExistForPreallocation()
     {
         // Arrange & Act
-        // These constants should exist (MIN_EXTENSION_PAGES = 256, EXTENSION_GROWTH_FACTOR = 2)
-        const int MIN_EXTENSION_PAGES = 256; // 1 MB @ 4KB pages
+        // ✅ UPDATED: Phase 3 optimization values (increased from 512 pages = 2MB)
+        const int MIN_EXTENSION_PAGES = 2560; // 10 MB @ 4KB pages (Phase 3: aggressive preallocation)
         const int EXTENSION_GROWTH_FACTOR = 2; // Double size each time
 
         // Assert
-        Assert.Equal(256, MIN_EXTENSION_PAGES);
+        Assert.Equal(2560, MIN_EXTENSION_PAGES);
         Assert.Equal(2, EXTENSION_GROWTH_FACTOR);
     }
 
