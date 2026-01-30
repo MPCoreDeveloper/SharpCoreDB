@@ -451,25 +451,22 @@ var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
 // Now record of 4058 bytes fits in 8KB page ✅
 ```
 
-#### Option 2: Use BLOB Storage for Large Data
+#### Option 2: Store Externally
+
 ```csharp
-// Don't store huge strings as regular columns
+// Don't store huge strings as columns
 // Instead, use a reference/ID
 
 var row = new Dictionary<string, object>
 {
     ["UserId"] = 1,
     ["Name"] = "John Doe",
-    ["BioFileId"] = "bio_12345",  // Reference to external blob
+    ["BioFileId"] = "bio_12345",  // Reference to external file
 };
 
 // Then separately store large file:
 var largeFile = File.ReadAllBytes("large_biography.txt");  // 10 MB
-blobStorage.WriteLargeBlob("bio_12345", largeFile);
-
-// On read:
-string bioFileId = (string)row["BioFileId"];
-byte[] largeBio = blobStorage.ReadLargeBlob(bioFileId);
+// Use your own file management (filesystem, cloud storage, etc.)
 ```
 
 #### Option 3: Normalize Your Schema
@@ -853,7 +850,7 @@ var options = new DatabaseOptions
 var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
 ```
 
-#### Solution 2: Use BLOB Storage for Large Strings
+#### Solution 2: Store Externally
 
 ```csharp
 // Don't store huge strings as columns
@@ -863,12 +860,12 @@ var row = new Dictionary<string, object>
 {
     ["UserId"] = 1,
     ["Name"] = "John Doe",
-    ["BioFileId"] = "bio_12345",  // Reference to external BLOB
+    ["BioFileId"] = "bio_12345",  // Reference to external file
 };
 
 // Then separately store large file:
-var largeFile = new byte[10_000_000];  // 10 MB
-blobStorage.WriteLargeBlob("bio_12345", largeFile);
+var largeFile = File.ReadAllBytes("large_biography.txt");  // 10 MB
+// Use your own file management (filesystem, cloud storage, etc.)
 ```
 
 ### How Pages Are Allocated
@@ -1134,7 +1131,7 @@ If total > 4056 bytes → ERROR!
 
 **For larger strings:**
 - ✅ Increase page size: Use 8KB, 16KB, or 32KB pages
-- ✅ Use BLOB storage: For data > page size
+- ✅ Store externally: Use filesystem or cloud storage references
 - ✅ Normalize schema: Split into multiple records
 
 **What Happens If You Try to Store Too Much?**
@@ -1164,6 +1161,16 @@ catch (InvalidOperationException ex)
 // Code that causes this:
 // if (recordData.Length > MAX_RECORD_SIZE)  // MAX_RECORD_SIZE ≈ 4056
 //     return Error("Record too large for page");
-```
+
+
+
+
+
+
+
+
+
+
+
 
 
