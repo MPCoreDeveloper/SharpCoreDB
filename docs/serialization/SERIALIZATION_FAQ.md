@@ -41,42 +41,30 @@ Example: "John Doe" (8 characters, 8 bytes in UTF-8)
 
 ---
 
-### Q2: Do I need lots of free space in my data files?
+### Q2: How big can strings be?
 
-**A: No. In fact - variable-length strings **save** space!**
+**A:** Limited by the **page size**, not theoretically unlimited:
 
-Comparison:
+**Default (4KB page):**
+- Page data capacity: 4056 bytes (4096 - 40 header)
+- Minus serialization overhead for other columns
+- **Practical limit: 4000-4050 bytes per single string**
 
-```
-Fixed-length approach (WASTE):
-┌─────────────────────────────────────────┐
-│ Name (255 bytes, fixed)                 │
-│ ├─ "John" (4 bytes)                     │
-│ └─ Padding (251 bytes of zeros) ❌      │
-└─────────────────────────────────────────┘
-Total: 255 bytes per record
+**For larger strings:**
+- ✅ Increase page size: Use 8KB, 16KB, or 32KB pages
+- ✅ Use BLOB storage: For data > page size
+- ✅ Normalize schema: Split into multiple records
 
-SharpCoreDB variable-length (EFFICIENT):
-┌──────┬──────┐
-│ 04   │ John │
-├──────┴──────┤
-│ 4 + 4 = 8 bytes ✅
-└──────────────┘
-Total: 8 bytes per record
+**Example:**
+```csharp
+// Default 4KB page:
+// ❌ Cannot fit 10MB string in one record!
 
-Savings: 255 - 8 = 247 bytes per record!
-```
+// Solution: Either increase page size
+var options = new DatabaseOptions { PageSize = 16384 };  // 16KB
 
-**Real-world example:**
-```
-1,000,000 records with mostly short names:
-
-Fixed-length (255 bytes):
-├─ 1,000,000 × 255 = 255 MB per name field
-
-Variable-length (avg 20 bytes):
-├─ 1,000,000 × 20 = 20 MB per name field
-└─ Savings: 235 MB (92% reduction!) ✅
+// OR use BLOB storage
+blobStorage.WriteLargeBlob("doc_id", largeData);
 ```
 
 ---

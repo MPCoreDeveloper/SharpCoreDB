@@ -369,15 +369,24 @@ Example: "日本" (2 characters = 6 bytes UTF-8)
 └──────────────────┴────────────────────────────────────────────────────┘
 ```
 
-### 3. **Size Constraints in SharpCoreDB**
+### ⚠️ CRITICAL: Actual Size Constraints in SharpCoreDB
+
+**CORRECTION:** The actual constraint is NOT "2GB per string" but rather **"record must fit in one page"**.
 
 | Constraint | Limit | Why |
 |-----------|-------|-----|
-| **Max string length** | 2,147,483,647 bytes (2GB per string) | Limited by int32 length field |
-| **Max record size** | Limited by page size (4KB default, can be 8KB, 16KB) | Record must fit in one block |
-| **Max block size** | Theoretically unlimited (file size dependent) | Blocks can span multiple pages |
-| **Max column count** | 2,147,483,647 columns | Limited by int32 column count |
-| **File size** | Limited by filesystem | ext4: 16TB, NTFS: 8EB (technically) |
+| **Max record size** | ~4056 bytes (default 4KB page) | Record must fit in one page (4096 - 40 header bytes) |
+| **Max page size** | Configurable 4KB-64KB | Can be increased at database creation |
+| **Max column count** | 2,147,483,647 | Limited by int32 column count in serialization |
+| **Max file size** | Limited by filesystem | ext4: 16TB, NTFS: 8EB (technically) |
+| **Single string in record** | ~4000-8000 bytes practical | Dependent on page size and other columns |
+
+**WARNING:** If you have a record (including all columns) that exceeds the page size, you'll get an error:
+```csharp
+// This will fail if total serialized size > PageSize:
+if (recordData.Length > MAX_RECORD_SIZE)  // MAX_RECORD_SIZE ≈ 4056 bytes
+    return Error("Record too large for page");
+```
 
 ### 4. **Unicode Support**
 
@@ -402,56 +411,95 @@ foreach (var str in testStrings)
 }
 ```
 
-### ⚠️ What About Record Size Limits?
+### ⚠️ What About Large Strings?
 
-**Records CANNOT be larger than a block** (page size).
+**You CANNOT store arbitrarily large strings in a single record.**
 
 ```csharp
-// Example: Default 4KB page size
+// Example: 4KB page size (DEFAULT_PAGE_SIZE = 4096)
 
 var row = new Dictionary<string, object>
 {
-    ["Name"] = new string('A', 3000),      // ✅ Fits
-    ["Data"] = new string('B', 4000),      // ❌ Might not fit!
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["Biography"] = new string('X', 4000),  // 4000 bytes!
 };
 
-// Why?
-// Total record:
-// - ColumnCount (4) + NameLength (4) + "Name" (4) + TypeMarker (1) 
-//   + StringLength (4) + 3000 bytes = ~3021 bytes ✅
-// - NameLength (4) + "Data" (4) + TypeMarker (1) 
-//   + StringLength (4) + 4000 bytes = ~4013 bytes
-// Total: ~7034 bytes > 4096 bytes ❌ ERROR
+// Serialization:
+// - ColumnCount (4 bytes)
+// - Column 1: NameLen(4) + "UserId"(6) + Type(1) + Value(4) = 15 bytes
+// - Column 2: NameLen(4) + "Name"(4) + Type(1) + StrLen(4) + "John Doe"(8) = 21 bytes  
+// - Column 3: NameLen(4) + "Biography"(9) + Type(1) + StrLen(4) + 4000 bytes = 4018 bytes
+// TOTAL: 4 + 15 + 21 + 4018 = 4058 bytes
+//
+// Result: 4058 > 4056 (MAX_PAGE_DATA_SIZE)
+// ❌ ERROR! Record too large for page!
 ```
 
-**Solution:** Increase page size
+**What are your options?**
 
+#### Option 1: Increase Page Size
 ```csharp
+// Create database with larger pages
 var options = new DatabaseOptions
 {
-    PageSize = 8192,  // 8KB pages → supports larger records
+    PageSize = 8192,  // 8 KB pages (8192 - 40 = 8152 bytes data)
     CreateImmediately = true,
 };
 
 var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
+
+// Now record of 4058 bytes fits in 8KB page ✅
 ```
 
-### 5. **No Free Space Waste**
-
+#### Option 2: Use BLOB Storage for Large Data
 ```csharp
-// Example: Table with 1000 rows
+// Don't store huge strings as regular columns
+// Instead, use a reference/ID
 
-// Scenario 1: All short strings (100 bytes each)
-// File size: 1000 × (4 + 8 + 100) = ~112 KB
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["BioFileId"] = "bio_12345",  // Reference to external blob
+};
 
-// Scenario 2: All long strings (10 MB each)
-// File size: 1000 × (4 + 8 + 10,485,760) ≈ 10.5 GB
+// Then separately store large file:
+var largeFile = File.ReadAllBytes("large_biography.txt");  // 10 MB
+blobStorage.WriteLargeBlob("bio_12345", largeFile);
 
-// Scenario 3: Mixed strings
-// File size = sum of all actual record sizes (no padding)
+// On read:
+string bioFileId = (string)row["BioFileId"];
+byte[] largeBio = blobStorage.ReadLargeBlob(bioFileId);
 ```
 
-**No fixed overhead per record!** Only the bytes you use.
+#### Option 3: Normalize Your Schema
+```csharp
+// Split into multiple records instead of one large record
+
+// INSTEAD OF:
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["Biography"] = new string('X', 10000),  // ❌ Too large!
+};
+
+// DO THIS:
+var userRecord = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+};
+
+var bioRecord = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["BioContent"] = "Lorem ipsum...",  // Smaller chunks
+};
+
+// Store in separate table or with separate keys
+```
 
 ---
 
@@ -799,13 +847,11 @@ var row = new Dictionary<string, object>
 // Create database with larger pages
 var options = new DatabaseOptions
 {
-    PageSize = 8192,  // 8 KB pages → can hold bigger records
+    PageSize = 8192,  // 8 KB pages → supports larger records
     CreateImmediately = true,
 };
 
 var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
-
-// Now record of 4158 bytes fits in 8192-byte page ✅
 ```
 
 #### Solution 2: Use BLOB Storage for Large Strings
