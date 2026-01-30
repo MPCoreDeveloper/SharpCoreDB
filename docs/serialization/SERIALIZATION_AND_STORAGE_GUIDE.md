@@ -1221,7 +1221,7 @@ Changing page size would require:
 var row = new Dictionary<string, object>
 {
     ["UserId"] = 1,
-    ["Biography"] = new string('X', 100_000),  // 100KB!
+    ["Biography"] = new string('X', 100000),  // 100KB!
 };
 
 // ✅ DO: Split into manageable pieces
@@ -1251,6 +1251,207 @@ var userWithRef = new Dictionary<string, object>
     ["UserId"] = 1,
     ["BioFileRef"] = "user_1_bio.txt",  // Small reference
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+````````
+
+This is the description of what the code block changes:
+Add comprehensive LOB (Large Object) storage proposal as a future enhancement, explaining how it would work and why it's needed
+
+This is the code block that represents the suggested code change:
+
+````````markdown
+---
+
+## 🚀 Future Enhancement: LOB (Large Object) Storage
+
+### The Vision: Automatic Overflow Handling
+
+Instead of throwing an error, SharpCoreDB could automatically redirect large columns to external storage:
+
+```csharp
+// FUTURE FEATURE (not yet implemented)
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["Biography"] = new string('X', 1_000_000),  // 1MB - would overflow!
+};
+
+// What COULD happen:
+// 1. Serialize record: Biography > threshold (e.g., 2KB)
+// 2. Automatically create LOB reference: "LOB_12345.dat"
+// 3. Store huge string in external file
+// 4. Store pointer in record: ["Biography"] = "LOB_12345.dat"
+// 5. On read: Automatically dereference pointer, fetch from disk
+
+// Result: ✅ Works! No error, transparent to developer
+```
+
+### How It Would Work (Architecture)
+
+```
+Current (v1):
+┌──────────────────────────────────────┐
+│ Record (all data in page)            │
+├──────────────────────────────────────┤
+│ [UserId: 4][Name: 20][Biography: ???]│ ← Doesn't fit!
+└──────────────────────────────────────┘
+
+Future (LOB Overflow):
+┌──────────────────────────────────────┐
+│ Record (in page)                     │
+├──────────────────────────────────────┤
+│ [UserId: 4][Name: 20][BioRef: 32]   │ ← Pointer to LOB
+└──────────────────────────────────────┘
+           ↓
+    [External Storage]
+    ┌─────────────────────────┐
+    │ LOB_12345.dat (1MB)     │
+    │ [Biography data: full]  │
+    └─────────────────────────┘
+```
+
+### Implementation Requirements
+
+This would require:
+
+1. **LOB Storage Layer**
+   - Separate file or directory for large objects
+   - Naming scheme: `LOB_<hash>.dat`
+   - Reference counting (cleanup when record deleted)
+
+2. **Automatic Threshold Detection**
+   ```csharp
+   // Configuration:
+   DatabaseConfig.LobThresholdBytes = 2048;  // Columns > 2KB → LOB
+   ```
+
+3. **Transparent Dereferencing**
+   - On read: Automatically fetch LOB data
+   - On write: Check if value exceeds threshold
+   - On delete: Clean up orphaned LOBs
+
+4. **Garbage Collection**
+   - Track which LOBs are referenced
+   - Periodically clean up orphaned files
+   - Similar to VACUUM in PostgreSQL
+
+5. **Serialization Changes**
+   ```csharp
+   // Type markers would need:
+   LobReference = 9,  // [LOB_ID: string pointer]
+   
+   // On serialization:
+   if (strBytes.Length > LOB_THRESHOLD)
+   {
+       // Create LOB file
+       var lobId = CreateLobFile(strBytes);
+       // Store reference instead
+       WriteValue(buffer, lobId, BinaryTypeMarker.LobReference);
+   }
+   ```
+
+### Comparison with Current Workarounds
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Error (current)** | Simple architecture | User must handle large data |
+| **Increase page size** | No code changes needed | Wastes space for small records |
+| **External file refs** | Works today | Manual management |
+| **LOB Overflow (future)** | ✅ Transparent, automatic | Complex implementation |
+
+### Why This Isn't Trivial
+
+```csharp
+// Challenges:
+
+// 1. Reference counting
+//    - Track which LOBs are in use
+//    - Handle cascade deletes
+//    - Update when records are modified
+
+// 2. Transaction consistency
+//    - LOB creation happens AFTER record write
+//    - Need to handle crashes between two writes
+//    - Requires WAL entries for LOB operations
+
+// 3. Performance implications
+//    - Reading a record now requires potential I/O for LOB
+//    - Cache LOB data? How much memory?
+//    - Compression? Encryption?
+
+// 4. Backward compatibility
+//    - Old records have no LOBs
+//    - New records might have LOBs
+//    - Format version must change
+```
+
+### Proposal: Phase 5 Feature
+
+This would be perfect for **Phase 5** after current performance work is complete:
+
+**Goals:**
+- ✅ Support arbitrary-sized strings transparently
+- ✅ Maintain page size constraints
+- ✅ Zero API changes for users
+- ✅ Automatic compression of LOB data
+
+**Tasks:**
+1. Design LOB file format
+2. Implement LOB storage layer
+3. Update BinaryRowSerializer with threshold logic
+4. Add reference tracking to Block Registry
+5. Implement garbage collection
+6. Add tests for edge cases (crashes during LOB creation, etc.)
+
+### Temporary Workaround (Today)
+
+Until LOB support is added, use this pattern:
+
+```csharp
+// Create a "LOB Reference" table
+var lobTable = db.CreateTable("LOBData");
+
+// Store large data separately
+var largeContent = new string('X', 1_000_000);
+var lobEntry = new Dictionary<string, object>
+{
+    ["LobId"] = Guid.NewGuid().ToString(),
+    ["Owner"] = "Users",
+    ["OwnerKey"] = 42,
+    ["Data"] = largeContent,
+};
+lobTable.Insert(lobEntry);
+
+// Store reference in main record
+var userRecord = new Dictionary<string, object>
+{
+    ["UserId"] = 42,
+    ["Name"] = "John Doe",
+    ["BiographyLobId"] = lobEntry["LobId"],  // Reference only
+};
+usersTable.Insert(userRecord);
+
+// On read:
+var user = usersTable.FindById(42);
+var lobId = user["BiographyLobId"];
+var biography = lobTable.FindByLobId(lobId)["Data"];
+```
+
+---
 
 
 
