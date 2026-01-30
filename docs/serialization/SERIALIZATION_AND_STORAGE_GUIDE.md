@@ -843,7 +843,7 @@ var row = new Dictionary<string, object>
 // Create database with larger pages
 var options = new DatabaseOptions
 {
-    PageSize = 8192,  // 8 KB pages → supports larger records
+    PageSize = 8192,  // 8 KB pages → 8152 bytes available
     CreateImmediately = true,
 };
 
@@ -1266,7 +1266,6 @@ var userWithRef = new Dictionary<string, object>
 
 
 ````````
-
 This is the description of what the code block changes:
 Add comprehensive LOB (Large Object) storage proposal as a future enhancement, explaining how it would work and why it's needed
 
@@ -1449,6 +1448,355 @@ usersTable.Insert(userRecord);
 var user = usersTable.FindById(42);
 var lobId = user["BiographyLobId"];
 var biography = lobTable.FindByLobId(lobId)["Data"];
+```
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+````````
+
+This is the description of what the code block changes:
+Add practical string size calculator with formulas, examples, and API design for table creation
+
+This is the code block that represents the suggested code change:
+
+````````markdown
+---
+
+## 📏 String Size Calculator & Table Design Guide
+
+### The Reality: Calculate Your Maximum String Size
+
+When creating a table, you need to know: **Given all my columns, how large can a single string column be?**
+
+#### Formula
+
+```
+MaxStringSize = (PageSize - HeaderSize - OtherColumnsSize - SerializationOverhead)
+```
+
+**Breaking it down:**
+
+```csharp
+// Step 1: Fixed overhead per record
+int columnCount = 4;
+int baseOverhead = sizeof(int);  // ColumnCount: 4 bytes
+
+// Step 2: Per-column overhead (for NON-string columns)
+int userIdOverhead = sizeof(int) + 1;  // NameLen(4) + Name(6) + Type(1) + Value(4) = 15
+int emailOverhead = sizeof(int) + 1;   // NameLen(4) + Name(5) + Type(1) = 10
+
+// Step 3: String column breakdown
+// For a string, the formula is:
+// NameLen(4) + ColumnName(N) + Type(1) + StringLen(4) + StringData(X)
+int bioColumnNameLen = "Biography".Length;  // 9 bytes
+int bioOverhead = 4 + bioColumnNameLen + 1 + 4;  // = 18 bytes
+// Remaining space for string data:
+int availableForBioData = MAX_PAGE_DATA_SIZE - baseOverhead - userIdOverhead - emailOverhead - bioOverhead;
+
+// Example with 4KB page (4056 bytes available):
+// 4056 - 4 - 15 - 10 - 18 = 4009 bytes available for Biography string!
+```
+
+### Practical Examples
+
+#### Example 1: Small Records (4KB page)
+
+```csharp
+// Table schema:
+// ┌─────────────────┬──────────┬────────┐
+// │ Column          │ Type     │ Size   │
+// ├─────────────────┼──────────┼────────┤
+// │ UserId          │ Int32    │ 4 bytes│
+// │ Email           │ String   │ 50 max │
+// │ Name            │ String   │ 100 max│
+// │ Bio             │ String   │ ??? max│
+// └─────────────────┴──────────┴────────┘
+
+var schema = new Dictionary<string, (string Type, int? MaxBytes)>
+{
+    ["UserId"] = ("Int32", 4),
+    ["Email"] = ("String", 50),     // Fixed max of 50 bytes
+    ["Name"] = ("String", 100),     // Fixed max of 100 bytes
+    ["Bio"] = ("String", null),     // Variable - calculate below
+};
+
+// Calculation:
+int pageDataSize = 4056;  // 4KB page - 40 byte header
+int overhead = 0;
+
+// Base: ColumnCount
+overhead += 4;
+
+// Column 1: UserId (Int32)
+overhead += 4;  // NameLen("UserId" = 6)
+overhead += 6;
+overhead += 1;  // Type marker
+overhead += 4;  // Value
+
+// Column 2: Email (String, max 50 bytes)
+overhead += 4;  // NameLen("Email" = 5)
+overhead += 5;
+overhead += 1;  // Type marker
+overhead += 4;  // StringLen
+overhead += 50; // Max string data
+
+// Column 3: Name (String, max 100 bytes)
+overhead += 4;  // NameLen("Name" = 4)
+overhead += 4;
+overhead += 1;  // Type marker
+overhead += 4;  // StringLen
+overhead += 100;// Max string data
+
+// Column 4: Bio (String, remaining)
+overhead += 4;  // NameLen("Bio" = 3)
+overhead += 3;
+overhead += 1;  // Type marker
+overhead += 4;  // StringLen
+
+// Available for Bio string:
+int maxBioSize = pageDataSize - overhead;  // = 4056 - 192 = 3864 bytes!
+
+Console.WriteLine($"Max Bio string: {maxBioSize} bytes");
+// Result: Bio can be up to 3864 bytes (3.8KB)
+```
+
+#### Example 2: Larger Records (8KB page)
+
+```csharp
+// Same schema, but with 8KB page (8152 bytes available):
+int pageDataSize8KB = 8152;
+int maxBioSize8KB = pageDataSize8KB - 192;  // = 7960 bytes!
+
+Console.WriteLine($"Max Bio string (8KB page): {maxBioSize8KB} bytes");
+// Result: Bio can be up to 7960 bytes (7.96KB)
+```
+
+#### Example 3: Complex Schema
+
+```csharp
+var complexSchema = new Dictionary<string, (string Type, int? MaxBytes)>
+{
+    ["Id"] = ("ULID", 26),          // ULID as string: "01ARZ3NDEKTSV4RRFFQ69G5FAV" = 26 bytes
+    ["CreatedAt"] = ("DateTime", 8),
+    ["UpdatedAt"] = ("DateTime", 8),
+    ["Status"] = ("String", 20),    // enum: "ACTIVE", "INACTIVE", etc.
+    ["JSON"] = ("String", null),    // Variable - calculate!
+};
+
+// Calculation:
+int baseOverhead = 4 + (4+2+1+26) + (4+9+1+8) + (4+9+1+8) + (4+6+1+4+20) + (4+4+1+4);
+// = 4 + 33 + 22 + 22 + 39 + 13
+// = 133 bytes
+
+int maxJsonSize = 4056 - 133;  // = 3923 bytes for JSON!
+```
+
+### Implementation: Add to Table Creation API
+
+```csharp
+// PROPOSAL: TableSchema with size validation
+
+public class TableSchema
+{
+    public int PageSize { get; set; }
+    public List<ColumnDefinition> Columns { get; set; }
+    
+    /// <summary>
+    /// Validates that all records will fit within page size.
+    /// Returns: (maxStringSize for each string column, warnings)
+    /// </summary>
+    public TableSizeAnalysis AnalyzeSize()
+    {
+        int maxDataSize = PageSize - 40;  // Header overhead
+        int fixedOverhead = CalculateFixedOverhead();
+        
+        if (fixedOverhead >= maxDataSize)
+        {
+            throw new InvalidOperationException(
+                $"Table schema too large! Fixed overhead ({fixedOverhead}) " +
+                $"exceeds page data size ({maxDataSize})");
+        }
+        
+        return new TableSizeAnalysis
+        {
+            PageSize = PageSize,
+            FixedOverhead = fixedOverhead,
+            AvailableForStrings = maxDataSize - fixedOverhead,
+            StringColumnLimits = CalculateStringLimits(),
+        };
+    }
+}
+
+public class TableSizeAnalysis
+{
+    public int PageSize { get; set; }
+    public int FixedOverhead { get; set; }
+    public int AvailableForStrings { get; set; }
+    public Dictionary<string, int> StringColumnLimits { get; set; }  // Column name → max bytes
+}
+
+// USAGE:
+var schema = new TableSchema
+{
+    PageSize = 4096,
+    Columns = new List<ColumnDefinition>
+    {
+        new("UserId", "Int32"),
+        new("Email", "String", maxLength: 50),
+        new("Name", "String", maxLength: 100),
+        new("Bio", "String"),  // No max - will be calculated
+    }
+};
+
+var analysis = schema.AnalyzeSize();
+Console.WriteLine($"Page size: {analysis.PageSize} bytes");
+Console.WriteLine($"Fixed overhead: {analysis.FixedOverhead} bytes");
+Console.WriteLine($"Available for strings: {analysis.AvailableForStrings} bytes");
+Console.WriteLine();
+foreach (var col in analysis.StringColumnLimits)
+{
+    Console.WriteLine($"{col.Key}: max {col.Value} bytes");
+}
+
+// Output:
+// Page size: 4096 bytes
+// Fixed overhead: 192 bytes
+// Available for strings: 3864 bytes
+// 
+// Email: max 50 bytes
+// Name: max 100 bytes
+// Bio: max 3714 bytes (remaining)
+```
+
+### Practical Decision Tree
+
+When designing your table:
+
+```
+Do you have large strings?
+│
+├─ NO (all < 1KB)
+│  └─ Use 4KB page (default) ✅
+│
+├─ YES, 1-5KB strings
+│  └─ Use 8KB page
+│
+├─ YES, 5-50KB strings  
+│  └─ Use 16KB page OR split into multiple records
+│
+└─ YES, > 50KB strings
+   └─ Use external storage (Phase 5 LOB feature)
+      OR split into multiple records
+```
+
+### Best Practices
+
+**1. Always Calculate BEFORE Creating Table**
+
+```csharp
+// BAD: Create table, then discover strings don't fit
+var db = new SharpCoreDB();
+var usersTable = db.CreateTable("Users");
+
+// GOOD: Calculate first, then create
+var analysis = new TableSchema { ... }.AnalyzeSize();
+if (analysis.AvailableForStrings < expectedMaxStringSize)
+{
+    // Use larger page size
+}
+```
+
+**2. Document Your Schema**
+
+```csharp
+// Document the size constraints
+public class UserRecord
+{
+    public int UserId { get; set; }
+    
+    /// <summary>
+    /// Email address. Max 50 bytes (typically 40-50 bytes for realistic emails).
+    /// </summary>
+    public string Email { get; set; }
+    
+    /// <summary>
+    /// Full name. Max 100 bytes (typically 30-80 bytes for realistic names).
+    /// </summary>
+    public string Name { get; set; }
+    
+    /// <summary>
+    /// Biography text. Max 3714 bytes (based on 4KB page with other columns).
+    /// If you need larger biographies, use external storage or increase page size to 8KB (7960 bytes).
+    /// </summary>
+    public string Bio { get; set; }
+}
+```
+
+**3. Add Validation**
+
+```csharp
+// Validate before insert
+public class User
+{
+    private const int MaxBioBytes = 3714;
+    
+    public void ValidateForInsert()
+    {
+        int bioBytes = Encoding.UTF8.GetByteCount(Bio ?? "");
+        if (bioBytes > MaxBioBytes)
+        {
+            throw new ArgumentException(
+                $"Bio exceeds max size: {bioBytes} > {MaxBioBytes} bytes");
+        }
+    }
+}
+```
+
+**4. Test Edge Cases**
+
+```csharp
+[Fact]
+public void InsertRecord_WithMaxSizeString_Should_Succeed()
+{
+    var row = new Dictionary<string, object>
+    {
+        ["UserId"] = 1,
+        ["Email"] = "test@example.com",
+        ["Name"] = "John Doe",
+        ["Bio"] = new string('X', 3714),  // Max size
+    };
+    
+    // Should succeed
+    usersTable.Insert(row);
+}
+
+[Fact]
+public void InsertRecord_WithOversizeString_Should_Throw()
+{
+    var row = new Dictionary<string, object>
+    {
+        ["UserId"] = 1,
+        ["Email"] = "test@example.com",
+        ["Name"] = "John Doe",
+        ["Bio"] = new string('X', 3715),  // One byte over!
+    };
+    
+    // Should throw InvalidOperationException
+    Assert.Throws<InvalidOperationException>(() => usersTable.Insert(row));
+}
 ```
 
 ---
