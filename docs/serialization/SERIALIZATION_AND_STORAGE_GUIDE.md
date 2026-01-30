@@ -829,11 +829,11 @@ var row = new Dictionary<string, object>
 };
 
 // Serialization:
-// ColumnCount (4) + "UserId" metadata (20) + 4 bytes (int32)
-//   + "Biography" metadata (30) + 4100 bytes (string data)
-// ≈ 4 + 20 + 4 + 30 + 4100 = 4158 bytes
+// ColumnCount (4) + UserId metadata (15) + Name metadata (21) 
+// + Biography metadata (4030) + 4100 bytes (string data)
+// ≈ 4 + 15 + 21 + 4030 + 4100 = 8206 bytes
 //
-// Result: 4158 > 4096 (page size)
+// Result: 8206 > 4096 (page size)
 // ❌ ERROR! Record too large for page!
 ```
 
@@ -1156,11 +1156,101 @@ catch (InvalidOperationException ex)
     // Serialized size is 4158, but max is 4056!
     
     Console.WriteLine(ex.Message);
+    // FIX: Increase page size BEFORE inserting large records
 }
 
 // Code that causes this:
 // if (recordData.Length > MAX_RECORD_SIZE)  // MAX_RECORD_SIZE ≈ 4056
 //     return Error("Record too large for page");
+
+// ⚠️ IMPORTANT: Page size is FIXED at database creation time
+// You CANNOT change it dynamically after creation.
+// All existing pages, FSM, and Block Registry depend on it.
+// Changing page size requires complete database migration.
+```
+
+**Best Practice: Pre-calculate and Plan Page Size**
+
+```csharp
+// BEFORE creating database, estimate your largest record:
+
+var largestExpectedRow = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+    ["Description"] = "Some description...",
+    ["LargeText"] = new string('X', 5000),  // Large column
+};
+
+// Estimate serialized size:
+// ColumnCount(4) + UserId metadata(15) + Name metadata(21) 
+// + Description metadata(30) + LargeText metadata(4030) ≈ 4100 bytes
+
+// Since 4100 > 4056 (max for 4KB page), choose larger page:
+var options = new DatabaseOptions
+{
+    PageSize = 8192,  // 8KB page → 8152 bytes available ✅
+    CreateImmediately = true,
+};
+
+var db = new SharpCoreDB(options);
+
+// Now large records will work!
+db.InsertRecord(largestExpectedRow);  // ✅ Success
+```
+
+**Why Dynamic Page Size Isn't Practical**
+
+SharpCoreDB's architecture makes dynamic page resizing impossible without complete database migration:
+
+1. **File Header**: Page size is stored once, read at startup
+2. **FSM (Free Space Map)**: Bitmap assumes fixed page size
+3. **Block Registry**: Offsets are multiples of current page size
+4. **Existing Records**: All stored with current page boundaries
+
+Changing page size would require:
+- ❌ Reading every page from disk
+- ❌ Recalculating all offsets
+- ❌ Rebuilding entire FSM
+- ❌ Rewriting entire file
+
+**Solution: Design Your Schema Appropriately**
+
+```csharp
+// ❌ DON'T: Store entire biography in one record
+var row = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Biography"] = new string('X', 100_000),  // 100KB!
+};
+
+// ✅ DO: Split into manageable pieces
+var userRecord = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["Name"] = "John Doe",
+};
+
+var bioChunk1 = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["BioPart"] = 1,
+    ["Content"] = "First part...",  // ~2KB
+};
+
+var bioChunk2 = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["BioPart"] = 2,
+    ["Content"] = "Second part...",  // ~2KB
+};
+
+// OR: Store reference + external file
+var userWithRef = new Dictionary<string, object>
+{
+    ["UserId"] = 1,
+    ["BioFileRef"] = "user_1_bio.txt",  // Small reference
+};
 
 
 
