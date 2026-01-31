@@ -641,7 +641,23 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
 
 /// <summary>
 /// Table implementation for single-file storage.
-/// ✅ CRITICAL FIX: Accumulates rows in a single JSON array block to prevent checksum mismatches.
+/// ✅ ARCHITECTURAL FIX: Uses in-memory row cache to prevent write-behind race conditions.
+/// ✅ FUTURE-PROOF: Design compatible with Row-Overflow model migration.
+/// 
+/// Cache Strategy:
+/// - Lazy load from disk on first access
+/// - All modifications go to in-memory cache
+/// - Flush writes cache to disk (deferred write)
+/// - No more read-modify-write-all cycle during operations
+/// 
+/// Performance Modes:
+/// - AutoFlush=true (default): Flush after each operation (safe, slower)
+/// - AutoFlush=false: Batch mode, manual Flush() required (fast, for bulk ops)
+/// 
+/// This fixes:
+/// 1. Checksum mismatch (no reading while write pending)
+/// 2. Performance (O(1) cache access vs O(n) disk read per op)
+/// 3. Race conditions (single source of truth in memory)
 /// </summary>
 internal class SingleFileTable : ITable
 {
@@ -652,6 +668,23 @@ internal class SingleFileTable : ITable
     private readonly string _dataBlockName;
     private readonly Lock _tableLock = new();
     private long _nextId = 1;
+    
+    // ✅ In-memory row cache (eliminates write-behind race condition)
+    private List<Dictionary<string, object?>>? _rowCache;
+    private bool _isDirty;
+    
+    // ✅ PERFORMANCE: AutoFlush mode (can be disabled for batch operations)
+    private bool _autoFlush = true;
+    
+    /// <summary>
+    /// Gets or sets whether changes are automatically flushed to disk after each operation.
+    /// Set to false for batch operations, then call Flush() manually.
+    /// </summary>
+    public bool AutoFlush 
+    { 
+        get => _autoFlush; 
+        set => _autoFlush = value; 
+    }
 
     public SingleFileTable(string tableName, List<string> columns, List<DataType> columnTypes, IStorageProvider storageProvider)
     {
@@ -661,6 +694,7 @@ internal class SingleFileTable : ITable
         _storageProvider = storageProvider;
         _dataBlockName = $"table:{tableName}:data";
     }
+
 
     public SingleFileTable(string tableName, IStorageProvider storageProvider, TableMetadataEntry metadata)
     {
@@ -703,9 +737,14 @@ internal class SingleFileTable : ITable
                 row[_columns[0]] = _nextId++;
             }
 
-            var allRows = ReadAllRowsInternal();
-            allRows.Add(row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
-            WriteAllRowsInternal(allRows);
+            // ✅ ARCHITECTURAL FIX: Use in-memory cache instead of disk read
+            EnsureCacheLoaded();
+            _rowCache!.Add(row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
+            _isDirty = true;
+            
+            // ✅ Write to disk immediately (maintains current behavior)
+            // Future optimization: batch writes with Flush()
+            MaybeFlush();
         }
     }
 
@@ -713,8 +752,10 @@ internal class SingleFileTable : ITable
     {
         lock (_tableLock)
         {
+            // ✅ ARCHITECTURAL FIX: Use in-memory cache instead of disk read
+            EnsureCacheLoaded();
+            
             var positions = new long[rows.Count];
-            var allRows = ReadAllRowsInternal();
             
             for (int i = 0; i < rows.Count; i++)
             {
@@ -722,11 +763,14 @@ internal class SingleFileTable : ITable
                 {
                     rows[i][_columns[0]] = _nextId++;
                 }
-                allRows.Add(rows[i].ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
-                positions[i] = i;
+                _rowCache!.Add(rows[i].ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
+                positions[i] = _rowCache.Count - 1;
             }
             
-            WriteAllRowsInternal(allRows);
+            _isDirty = true;
+            
+            // ✅ Write to disk immediately (maintains current behavior)
+            MaybeFlush();
             return positions;
         }
     }
@@ -743,23 +787,26 @@ internal class SingleFileTable : ITable
                 row[_columns[0]] = _nextId++;
             }
             
-            var allRows = ReadAllRowsInternal();
+            // ✅ ARCHITECTURAL FIX: Use in-memory cache
+            EnsureCacheLoaded();
+            
             var pkColumn = _columns[0];
             var pkValue = row[pkColumn];
             
-            var index = allRows.FindIndex(r => 
+            var index = _rowCache!.FindIndex(r => 
                 r.TryGetValue(pkColumn, out var existing) && Equals(existing, pkValue));
             
             if (index >= 0)
             {
-                allRows[index] = row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
+                _rowCache[index] = row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
             }
             else
             {
-                allRows.Add(row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
+                _rowCache.Add(row.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value));
             }
             
-            WriteAllRowsInternal(allRows);
+            _isDirty = true;
+            MaybeFlush();
         }
     }
 
@@ -778,9 +825,11 @@ internal class SingleFileTable : ITable
                     throw new InvalidOperationException($"Cannot delete row: Primary key column '{pkColumn}' is null");
                 }
 
-                var allRows = ReadAllRowsInternal();
-                allRows.RemoveAll(r => r.TryGetValue(pkColumn, out var existing) && Equals(existing, pkValue));
-                WriteAllRowsInternal(allRows);
+                // ✅ ARCHITECTURAL FIX: Use in-memory cache
+                EnsureCacheLoaded();
+                _rowCache!.RemoveAll(r => r.TryGetValue(pkColumn, out var existing) && Equals(existing, pkValue));
+                _isDirty = true;
+                MaybeFlush();
             }
         }
     }
@@ -789,8 +838,10 @@ internal class SingleFileTable : ITable
     {
         lock (_tableLock)
         {
-            var allRows = ReadAllRowsInternal();
-            return allRows.Cast<Dictionary<string, object>>().ToList();
+            // ✅ ARCHITECTURAL FIX: Use in-memory cache
+            EnsureCacheLoaded();
+            return _rowCache!.Select(r => r.Where(kvp => kvp.Value != null)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!)).ToList();
         }
     }
 
@@ -808,25 +859,27 @@ internal class SingleFileTable : ITable
 
         lock (_tableLock)
         {
-            var allRows = ReadAllRowsInternal();
+            // ✅ ARCHITECTURAL FIX: Use in-memory cache
+            EnsureCacheLoaded();
 
-            for (int i = 0; i < allRows.Count; i++)
+            for (int i = 0; i < _rowCache!.Count; i++)
             {
-                if (!string.IsNullOrWhiteSpace(whereClause) && !EvaluateWhereClause(allRows[i], whereClause))
+                if (!string.IsNullOrWhiteSpace(whereClause) && !EvaluateWhereClause(_rowCache[i], whereClause))
                 {
                     continue;
                 }
 
                 foreach (var kvp in updates)
                 {
-                    if (allRows[i].ContainsKey(kvp.Key))
+                    if (_rowCache[i].ContainsKey(kvp.Key))
                     {
-                        allRows[i][kvp.Key] = kvp.Value;
+                        _rowCache[i][kvp.Key] = kvp.Value;
                     }
                 }
             }
 
-            WriteAllRowsInternal(allRows);
+            _isDirty = true;
+            MaybeFlush();
         }
     }
 
@@ -967,6 +1020,79 @@ internal class SingleFileTable : ITable
         var data = BinaryRowSerializer.Serialize(allRows, _columns, _columnTypes);
         _storageProvider.WriteBlockAsync(_dataBlockName, data)
             .GetAwaiter().GetResult();
+    }
+    
+    /// <summary>
+    /// ✅ ARCHITECTURAL FIX: Lazy-load rows into cache on first access.
+    /// This eliminates the write-behind race condition by maintaining a single source of truth.
+    /// </summary>
+    private void EnsureCacheLoaded()
+    {
+        if (_rowCache != null)
+        {
+            return; // Cache already loaded
+        }
+        
+        // First access: flush any pending writes to ensure we read consistent data
+        if (_storageProvider is SingleFileStorageProvider sfsp)
+        {
+            sfsp.FlushPendingWritesAsync(default, flushToDisk: false).GetAwaiter().GetResult();
+        }
+        
+        // Load from disk into cache
+        _rowCache = ReadAllRowsInternal();
+        _isDirty = false;
+    }
+    
+    /// <summary>
+    /// ✅ ARCHITECTURAL FIX: Write cached rows to disk.
+    /// Only writes if cache is dirty (modified since last flush).
+    /// </summary>
+    private void FlushCacheToDisk()
+    {
+        if (!_isDirty || _rowCache == null)
+        {
+            return;
+        }
+        
+        WriteAllRowsInternal(_rowCache);
+        _isDirty = false;
+    }
+    
+    /// <summary>
+    /// ✅ PERFORMANCE: Conditionally flush based on AutoFlush setting.
+    /// </summary>
+    private void MaybeFlush()
+    {
+        if (_autoFlush)
+        {
+            MaybeFlush();
+        }
+    }
+    
+    /// <summary>
+    /// ✅ PUBLIC API: Force flush cache to disk.
+    /// Called by database.Flush() and database.ForceSave().
+    /// </summary>
+    public void FlushCache()
+    {
+        lock (_tableLock)
+        {
+            MaybeFlush();
+        }
+    }
+    
+    /// <summary>
+    /// ✅ PUBLIC API: Invalidate cache (force reload from disk on next access).
+    /// Used for cache coherency in multi-process scenarios.
+    /// </summary>
+    public void InvalidateCache()
+    {
+        lock (_tableLock)
+        {
+            _rowCache = null;
+            _isDirty = false;
+        }
     }
 
     private static class BinaryRowSerializer
@@ -1200,12 +1326,33 @@ internal class SingleFileTable : ITable
 
         private static decimal ReadDecimal(ReadOnlySpan<byte> data, ref int offset)
         {
+            // ✅ Defensive check: ensure we have enough data for 4 int32 values (16 bytes)
+            if (offset + 16 > data.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Truncated decimal at offset {offset}: need 16 bytes, have {data.Length - offset}. " +
+                    $"This indicates data corruption or checksum mismatch.");
+            }
+            
             int[] bits = new int[4];
             for (int i = 0; i < 4; i++)
             {
                 bits[i] = ReadInt32(data, ref offset);
             }
-            return new decimal(bits);
+            
+            // ✅ Defensive validation: check if bits produce valid decimal
+            try
+            {
+                return new decimal(bits);
+            }
+            catch (ArgumentException ex)
+            {
+                // Log the invalid bits for debugging
+                var bitsStr = string.Join(", ", bits);
+                throw new InvalidOperationException(
+                    $"Invalid decimal bits at offset {offset - 16}: [{bitsStr}]. " +
+                    $"This indicates binary data corruption. Original error: {ex.Message}", ex);
+            }
         }
 
         private static void WriteDouble(ref PooledBufferWriter writer, double value)

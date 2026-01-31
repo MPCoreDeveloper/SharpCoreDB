@@ -41,6 +41,7 @@ internal static class SingleFileDatabaseBatchExtension
     /// Optimized batch SQL execution with transaction grouping.
     /// Parses INSERT statements, groups them by table, and executes as single transaction.
     /// ✅ FIX: Uses static lock to ensure proper serialization across concurrent calls.
+    /// ✅ PERFORMANCE: Disables auto-flush during batch, single flush at end.
     /// </summary>
     public static void ExecuteBatchSQLOptimized(
         SingleFileDatabase database, 
@@ -61,6 +62,20 @@ internal static class SingleFileDatabaseBatchExtension
                 ?.GetValue(database) as dynamic;
 
             var isInTransactionBefore = storageProvider.IsInTransaction;
+            
+            // ✅ PERFORMANCE: Collect all tables and disable auto-flush during batch
+            var tablesToFlush = new HashSet<SingleFileTable>();
+            var originalAutoFlushStates = new Dictionary<SingleFileTable, bool>();
+            
+            foreach (var table in database.Tables.Values)
+            {
+                if (table is SingleFileTable sft)
+                {
+                    originalAutoFlushStates[sft] = sft.AutoFlush;
+                    sft.AutoFlush = false;
+                    tablesToFlush.Add(sft);
+                }
+            }
             
             try
             {
@@ -108,6 +123,7 @@ internal static class SingleFileDatabaseBatchExtension
                 }
 
                 // Execute batch inserts per table
+                // ✅ PERFORMANCE: AutoFlush already disabled - no per-op flush
                 foreach (var (tableName, rows) in insertsByTable)
                 {
                     if (database.Tables.TryGetValue(tableName, out var table))
@@ -116,13 +132,20 @@ internal static class SingleFileDatabaseBatchExtension
                     }
                 }
 
-                // Execute remaining non-INSERT statements
+                // Execute remaining non-INSERT statements (UPDATEs, DELETEs, etc.)
+                // ✅ PERFORMANCE: AutoFlush disabled - no per-op flush
                 if (nonInserts.Count > 0)
                 {
                     foreach (var sql in nonInserts)
                     {
                         database.ExecuteSQL(sql, null);
                     }
+                }
+                
+                // ✅ PERFORMANCE: Flush ALL modified table caches ONCE at end of batch
+                foreach (var sft in tablesToFlush)
+                {
+                    sft.FlushCache();
                 }
                 
                 // Only commit if we started the transaction
@@ -143,6 +166,14 @@ internal static class SingleFileDatabaseBatchExtension
                 }
                 catch { }
                 throw;
+            }
+            finally
+            {
+                // ✅ PERFORMANCE: Restore original AutoFlush states
+                foreach (var (sft, wasAutoFlush) in originalAutoFlushStates)
+                {
+                    sft.AutoFlush = wasAutoFlush;
+                }
             }
         }
     }

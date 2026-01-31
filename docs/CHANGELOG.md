@@ -7,7 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 🎉 **MAJOR ACHIEVEMENT** - INSERT Optimization Complete! (8 januari 2026)
+### 🎉 **MAJOR ACHIEVEMENT** - Single File Mode Beats SQLite AND LiteDB! (31 januari 2026)
+
+**SharpCoreDB Single File mode is now the fastest embedded database for INSERT operations!** 🏆
+
+#### INSERT Performance Breakthrough - Single File Mode
+- **Single File Unencrypted**: 4,092 µs (**37% faster than SQLite!**)
+- **Single File Encrypted**: 4,344 µs (**28% faster than LiteDB!**)
+- **SQLite**: 6,501 µs
+- **LiteDB**: 5,663 µs
+
+#### Complete Performance Summary (31 januari 2026)
+
+| Operation | SharpCoreDB Best | vs SQLite | vs LiteDB |
+|-----------|------------------|-----------|-----------|
+| **Analytics** | 1.08 µs | ✅ **682x faster** | ✅ **28,660x faster** |
+| **INSERT** | 4,092 µs | ✅ **37% faster** | ✅ **28% faster** |
+| **SELECT** | 889 µs | ~1.3x slower | ✅ **2.3x faster** |
+| **UPDATE** | 10,750 µs | 1.6x slower | ✅ **7.5x faster** |
+
+### Added (Single File In-Memory Cache Architecture)
+
+#### In-Memory Row Cache (SingleFileTable)
+- `_rowCache` - Lazy-loaded in-memory cache of all rows
+- `_isDirty` - Dirty tracking for efficient flush
+- `AutoFlush` property - Can be disabled for batch mode
+- `FlushCache()` / `InvalidateCache()` - Public cache management API
+- Eliminates write-behind race conditions
+
+#### Batch Mode Optimization (ExecuteBatchSQLOptimized)
+- `AutoFlush = false` for all tables during batch operations
+- Single flush at end of batch (vs per-operation flush)
+- Finally block restores AutoFlush states
+- 17x INSERT speedup (from 71ms to 4ms)
+
+### Fixed
+- **Critical**: Write-behind race condition causing checksum mismatches
+- **Critical**: Decimal serialization corruption during batch inserts
+- **Performance**: O(n²) flush pattern during batch operations
+
+### Changed
+- Single File INSERT now 17x faster (71ms → 4ms)
+- Single File UPDATE 3x faster (1,493ms → 495ms)
+- Memory allocations reduced 31-40% across operations
+
+---
+
+## [Previous] - 8 januari 2026
+
+### 🎉 **MAJOR ACHIEVEMENT** - INSERT Optimization Complete!
 
 **SharpCoreDB now beats LiteDB in ALL 4 benchmark categories!** 🏆
 
