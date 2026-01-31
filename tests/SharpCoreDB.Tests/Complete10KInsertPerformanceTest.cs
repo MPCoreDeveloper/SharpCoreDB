@@ -14,7 +14,7 @@ namespace SharpCoreDB.Tests;
 
 /// <summary>
 /// Complete 10K insert performance test comparing all optimization levels.
-/// Goal: Within 20-30% of SQLite (SQLite: 42ms ? Target: 50-55ms).
+/// Goal: Within 20-30% of SQLite (SQLite: 42ms → Target: 50-55ms).
 /// 
 /// Tests 5 configurations:
 /// 1. Baseline (no optimizations)
@@ -23,6 +23,7 @@ namespace SharpCoreDB.Tests;
 /// 4. BulkImport config
 /// 5. UseOptimizedInsertPath (delayed transpose + buffered encryption)
 /// </summary>
+[Collection("PerformanceTests")]
 public sealed class Complete10KInsertPerformanceTest : IDisposable
 {
     private readonly ITestOutputHelper _output;

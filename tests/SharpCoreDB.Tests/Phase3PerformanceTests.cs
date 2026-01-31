@@ -20,6 +20,7 @@ using Xunit;
 /// Tests the critical path: 500 updates should complete in <150ms (down from 506ms).
 /// C# 14: Uses modern async patterns and assertions.
 /// </summary>
+[Collection("PerformanceTests")]
 public sealed class Phase3PerformanceTests : IDisposable
 {
     private readonly string _testDir;

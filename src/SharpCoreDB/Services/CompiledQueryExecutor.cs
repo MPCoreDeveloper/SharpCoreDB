@@ -66,74 +66,121 @@ public class CompiledQueryExecutor
         ITable table)
     {
         var allRows = table.Select();
-        var filtered = new List<Dictionary<string, object>>(allRows.Count);
+        var indexedRows = new List<(Dictionary<string, object> Row, IndexedRowData Indexed)>(allRows.Count);
+        var indexedFilter = plan.WhereFilterIndexed;
+        var dictionaryFilter = plan.WhereFilter;
 
         // Apply WHERE filter with optimized indexed row access
-        if (plan.HasWhereClause && plan.WhereFilter is not null)
+        if (plan.HasWhereClause)
         {
             foreach (var row in allRows)
             {
-                // ✅ OPTIMIZATION: WHERE filter still uses dictionary
-                // (compiled to accept Dictionary<string, object>)
-                // IndexedRowData is internal optimization for future phases
-                if (plan.WhereFilter(row))
+                var indexedRow = new IndexedRowData(plan.ColumnIndices);
+                indexedRow.PopulateFromDictionary(row);
+
+                // ✅ OPTIMIZATION: Use indexed filter when available
+                if (indexedFilter is not null)
                 {
-                    filtered.Add(row);
+                    if (indexedFilter(indexedRow))
+                    {
+                        indexedRows.Add((row, indexedRow));
+                    }
+                }
+                else if (dictionaryFilter is not null && dictionaryFilter(row))
+                {
+                    indexedRows.Add((row, indexedRow));
                 }
             }
         }
         else
         {
-            filtered.AddRange(allRows);
+            foreach (var row in allRows)
+            {
+                var indexedRow = new IndexedRowData(plan.ColumnIndices);
+                indexedRow.PopulateFromDictionary(row);
+                indexedRows.Add((row, indexedRow));
+            }
         }
 
         // Apply ORDER BY (in-place sort)
         if (!string.IsNullOrEmpty(plan.OrderByColumn))
         {
-            filtered.Sort((a, b) =>
+            if (plan.ColumnIndices.TryGetValue(plan.OrderByColumn, out var orderIndex))
             {
-                var aVal = a.TryGetValue(plan.OrderByColumn, out var av) ? av : null;
-                var bVal = b.TryGetValue(plan.OrderByColumn, out var bv) ? bv : null;
-                return CompareValues(aVal, bVal);
-            });
+                indexedRows.Sort((a, b) => CompareValues(a.Indexed[orderIndex], b.Indexed[orderIndex]));
+            }
+            else
+            {
+                indexedRows.Sort((a, b) =>
+                {
+                    var aVal = a.Row.TryGetValue(plan.OrderByColumn, out var av) ? av : null;
+                    var bVal = b.Row.TryGetValue(plan.OrderByColumn, out var bv) ? bv : null;
+                    return CompareValues(aVal, bVal);
+                });
+            }
 
             if (!plan.OrderByAscending)
-                filtered.Reverse();
+                indexedRows.Reverse();
         }
 
         // Apply OFFSET + LIMIT
         var offset = plan.Offset ?? 0;
         var limit = plan.Limit ?? int.MaxValue;
 
-        List<Dictionary<string, object>> results;
+        List<(Dictionary<string, object> Row, IndexedRowData Indexed)> window;
         if (offset > 0 || limit < int.MaxValue)
         {
-            results = new List<Dictionary<string, object>>(
-                Math.Min(filtered.Count - offset, limit));
-            var end = Math.Min(offset + limit, filtered.Count);
+            window = new List<(Dictionary<string, object>, IndexedRowData)>(
+                Math.Min(Math.Max(indexedRows.Count - offset, 0), limit));
+            var end = Math.Min(offset + limit, indexedRows.Count);
 
             for (int i = offset; i < end; i++)
             {
-                results.Add(filtered[i]);
+                window.Add(indexedRows[i]);
             }
         }
         else
         {
-            results = filtered;
+            window = indexedRows;
         }
 
-        // Apply projection
-        if (plan.HasProjection && plan.ProjectionFunc is not null && results.Count > 0)
+        // Apply projection using indexed access (fast path)
+        if (plan.HasProjection && plan.ProjectionFunc is not null && window.Count > 0)
         {
-            var projected = new List<Dictionary<string, object>>(results.Count);
-            foreach (var row in results)
+            var projected = new List<Dictionary<string, object>>(window.Count);
+            foreach (var item in window)
             {
-                projected.Add(plan.ProjectionFunc(row));
+                projected.Add(ProjectFromIndexedRow(plan, item.Indexed));
             }
-            results = projected;
+
+            return projected;
+        }
+
+        // No projection - return original rows
+        var results = new List<Dictionary<string, object>>(window.Count);
+        foreach (var item in window)
+        {
+            results.Add(item.Row);
         }
 
         return results;
+    }
+
+    private static Dictionary<string, object> ProjectFromIndexedRow(
+        CompiledQueryPlan plan,
+        IndexedRowData indexedRow)
+    {
+        var projected = new Dictionary<string, object>(plan.SelectColumns.Count);
+
+        foreach (var column in plan.SelectColumns)
+        {
+            if (plan.ColumnIndices.TryGetValue(column, out var index))
+            {
+                projected[column] = indexedRow[index];
+            }
+        }
+
+        return projected;
     }
 
     /// <summary>

@@ -15,6 +15,7 @@ namespace SharpCoreDB.Tests;
 /// Target: 5-10x speedup for repeated SELECT queries.
 /// Goal: 1000 identical SELECTs in less than 8ms total.
 /// </summary>
+[Collection("PerformanceTests")]
 public class CompiledQueryTests
 {
     private readonly string _testDbPath;
@@ -266,8 +267,8 @@ public class CompiledQueryTests
         }
     }
 
-    [Fact(Skip = "Query compilation performance benchmark: CPU and JIT-dependent. TODO: Use BenchmarkDotNet for accurate cross-platform measurements with proper warmup and hardware baselines.")]
-    public void CompiledQuery_VsRegularQuery_ShowsPerformanceGain()
+    [Fact]
+    public void CompiledQuery_VsRegularQuery_ReturnsSameResults()
     {
         // Arrange
         var factory = _serviceProvider.GetRequiredService<DatabaseFactory>();
@@ -276,36 +277,29 @@ public class CompiledQueryTests
         try
         {
             db.ExecuteSQL("CREATE TABLE benchdata (id INTEGER, name TEXT, value REAL)");
+
+            var insertStatements = new List<string>();
             for (int i = 1; i <= 200; i++)
             {
-                db.ExecuteSQL($"INSERT INTO benchdata VALUES ({i}, 'Entry{i}', {i * 1.5})");
+                insertStatements.Add($"INSERT INTO benchdata VALUES ({i}, 'Entry{i}', {i * 1.5})");
             }
+
+            db.ExecuteBatchSQL(insertStatements);
 
             var sql = "SELECT * FROM benchdata WHERE value > 150";
 
-            // Act 1 - Regular query execution (1000 times)
-            var sw1 = Stopwatch.StartNew();
-            for (int i = 0; i < 1000; i++)
-            {
-                _ = db.ExecuteQuery(sql);
-            }
-            sw1.Stop();
-
-            // Act 2 - Compiled query execution (1000 times)
+            // Act
+            var regularResults = db.ExecuteQuery(sql);
             var stmt = db.Prepare(sql);
-            var sw2 = Stopwatch.StartNew();
-            for (int i = 0; i < 1000; i++)
-            {
-                _ = db.ExecuteCompiledQuery(stmt);
-            }
-            sw2.Stop();
+            var compiledResults = db.ExecuteCompiledQuery(stmt);
 
-            // Assert - Allow modest gain to avoid flakiness while still ensuring compiled path isn't slower
-            var speedup = (double)sw1.ElapsedMilliseconds / Math.Max(sw2.ElapsedMilliseconds, 1);
-            Assert.True(speedup >= 0.8, 
-                $"Compiled queries should not be dramatically slower than regular ones. Regular: {sw1.ElapsedMilliseconds}ms, Compiled: {sw2.ElapsedMilliseconds}ms, Speedup: {speedup:F2}x");
+            // Assert
+            Assert.Equal(regularResults.Count, compiledResults.Count);
 
-            Console.WriteLine($"? Performance gain: {speedup:F2}x faster (Regular: {sw1.ElapsedMilliseconds}ms, Compiled: {sw2.ElapsedMilliseconds}ms)");
+            var regularIds = regularResults.Select(r => Convert.ToInt32(r["id"])).Order().ToList();
+            var compiledIds = compiledResults.Select(r => Convert.ToInt32(r["id"])).Order().ToList();
+            Assert.Equal(regularIds, compiledIds);
+            Assert.True(stmt.IsCompiled, "Statement should have a compiled plan");
         }
         finally
         {

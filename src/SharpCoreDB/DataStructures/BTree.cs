@@ -215,6 +215,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     /// ✅ OPTIMIZED: Uses ordinal comparison + binary search instead of culture-aware + linear scan.
     /// This is called for EVERY primary key lookup, so this optimization is critical.
     /// Performance improvement: 50-200x faster lookups for string keys.
+    /// ⚠️ B+ tree: Values exist only in leaf nodes. Internal nodes have separator keys only.
     /// </summary>
     private static (bool Found, TValue? Value) Search(Node? node, TKey key)
     {
@@ -235,8 +236,16 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             
             if (cmp == 0)
             {
-                // Found exact match in this node
-                return (true, node.valuesArray[mid]);
+                // ✅ B+ tree: Found matching key, but only return if it's a leaf node
+                // Internal nodes contain separator keys with null values
+                if (node.IsLeaf)
+                {
+                    return (true, node.valuesArray[mid]);
+                }
+                // Key found in internal node - descend to leaf to get actual value
+                // The actual data is duplicated in the right child's leftmost leaf
+                left = mid + 1;
+                break;
             }
             else if (cmp < 0)
             {

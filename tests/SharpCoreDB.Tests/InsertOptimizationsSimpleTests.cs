@@ -13,6 +13,7 @@ namespace SharpCoreDB.Tests;
 /// <summary>
 /// Simple tests for insert optimizations (no database dependencies).
 /// </summary>
+[Collection("PerformanceTests")]
 public sealed class InsertOptimizationsSimpleTests
 {
     [Fact]

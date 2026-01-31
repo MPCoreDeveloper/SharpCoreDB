@@ -48,6 +48,13 @@ public class CompiledQueryPlan
     public Func<Dictionary<string, object>, bool>? WhereFilter { get; }
 
     /// <summary>
+    /// Gets the compiled WHERE clause filter delegate for indexed rows.
+    /// Returns null if no WHERE clause exists or indexed compilation is unavailable.
+    /// ✅ PHASE 2.5: Enables direct column access in WHERE evaluation.
+    /// </summary>
+    public Func<IndexedRowData, bool>? WhereFilterIndexed { get; }
+
+    /// <summary>
     /// Gets the compiled projection delegate.
     /// Projects full row to selected columns only.
     /// </summary>
@@ -81,7 +88,7 @@ public class CompiledQueryPlan
     /// <summary>
     /// Gets whether this query has a WHERE clause.
     /// </summary>
-    public bool HasWhereClause => WhereFilter is not null;
+    public bool HasWhereClause => WhereFilter is not null || WhereFilterIndexed is not null;
 
     /// <summary>
     /// Gets whether this query has projections.
@@ -120,6 +127,7 @@ public class CompiledQueryPlan
     /// <param name="selectColumns">The columns to select.</param>
     /// <param name="isSelectAll">Whether this is SELECT *.</param>
     /// <param name="whereFilter">The compiled WHERE filter.</param>
+    /// <param name="whereFilterIndexed">The compiled indexed WHERE filter.</param>
     /// <param name="projectionFunc">The compiled projection function.</param>
     /// <param name="orderByColumn">The ORDER BY column.</param>
     /// <param name="orderByAscending">Whether ORDER BY is ascending.</param>
@@ -136,6 +144,7 @@ public class CompiledQueryPlan
         List<string> selectColumns,
         bool isSelectAll,
         Func<Dictionary<string, object>, bool>? whereFilter,
+        Func<IndexedRowData, bool>? whereFilterIndexed,
         Func<Dictionary<string, object>, Dictionary<string, object>>? projectionFunc,
         string? orderByColumn,
         bool orderByAscending,
@@ -152,6 +161,7 @@ public class CompiledQueryPlan
         SelectColumns = selectColumns;
         IsSelectAll = isSelectAll;
         WhereFilter = whereFilter;
+        WhereFilterIndexed = whereFilterIndexed;
         ProjectionFunc = projectionFunc;
         OrderByColumn = orderByColumn;
         OrderByAscending = orderByAscending;

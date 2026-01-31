@@ -18,6 +18,7 @@ using Xunit;
 /// Verifies that registry flushes are batched to reduce I/O operations.
 /// Target: Reduce flushes from 500 to &lt;10 for batch updates.
 /// </summary>
+[Collection("PerformanceTests")]
 public class BlockRegistryBatchingTests : IDisposable
 {
     private readonly string _testDbPath;
@@ -54,7 +55,8 @@ public class BlockRegistryBatchingTests : IDisposable
         await Task.WhenAll(tasks);
         
         // Wait for batched flush to complete
-        await Task.Delay(200);
+        // ✅ OPTIMIZED: Reduced from 200ms to 50ms - batching happens quickly
+        await Task.Delay(50);
         
         // Assert - Should have flushed much less than 100 times
         var finalMetrics = registry.GetMetrics();
@@ -101,7 +103,8 @@ public class BlockRegistryBatchingTests : IDisposable
         }
         
         // Wait briefly for threshold-triggered flush
-        await Task.Delay(100);
+        // ✅ OPTIMIZED: Reduced from 100ms to 30ms - threshold flush is immediate
+        await Task.Delay(30);
         
         // Assert - Should have triggered at least one batched flush
         var finalMetrics = registry.GetMetrics();
@@ -160,9 +163,9 @@ public class BlockRegistryBatchingTests : IDisposable
         
         // Wait for periodic flush (Phase 3: 500ms interval)
         // Timer starts when BlockRegistry is created, so first tick could be anywhere from 0-500ms
-        // Wait 1200ms to ensure at least one full timer cycle completes after writes
-        // (worst case: writes happen just after a tick, next tick at +500ms, check at +700ms might miss it)
-        await Task.Delay(1200);
+        // ✅ OPTIMIZED: Reduced from 1200ms to 600ms - one timer interval is sufficient
+        // (worst case: writes happen just after a tick, next tick at +500ms)
+        await Task.Delay(600);
         
         // Assert - Periodic timer should have flushed
         var finalMetrics = registry.GetMetrics();
@@ -198,7 +201,10 @@ public class BlockRegistryBatchingTests : IDisposable
         });
         
         await Task.WhenAll(tasks);
-        await Task.Delay(700); // Wait for all batches to flush (Phase 3: 500ms interval)
+        
+        // ✅ OPTIMIZED: Reduced from 700ms to 100ms, then force flush
+        // We don't need to wait for periodic timer - just ensure tasks complete and force flush
+        await Task.Delay(100);
         
         // ✅ Force final flush to ensure all writes are persisted
         await registry.ForceFlushAsync();

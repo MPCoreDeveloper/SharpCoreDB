@@ -18,6 +18,7 @@ namespace SharpCoreDB.Tests;
 /// - Random reads: &lt;1ms for 1K reads (cached)
 /// - Random writes: &lt;2ms for 1K writes (cached)
 /// </summary>
+[Collection("PerformanceTests")]
 public class PageManager_Cache_Performance_Test : IDisposable
 {
     private readonly string testDir;

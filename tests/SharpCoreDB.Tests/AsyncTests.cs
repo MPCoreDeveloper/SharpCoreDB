@@ -5,6 +5,7 @@ namespace SharpCoreDB.Tests;
 /// <summary>
 /// Tests for async database operations.
 /// </summary>
+[Collection("PerformanceTests")]
 public class AsyncTests : IDisposable
 {
     private readonly string _testDbPath;
@@ -25,12 +26,19 @@ public class AsyncTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
 
-        // Act
-        await db.ExecuteSQLAsync("CREATE TABLE async_test (id INTEGER, name TEXT)");
+        try
+        {
+            // Act
+            await db.ExecuteSQLAsync("CREATE TABLE async_test (id INTEGER, name TEXT)");
 
-        // Assert - verify table exists by inserting data
-        await db.ExecuteSQLAsync("INSERT INTO async_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "TestName" } });
-        db.ExecuteSQL("SELECT * FROM async_test"); // Verify no exception
+            // Assert - verify table exists by inserting data
+            await db.ExecuteSQLAsync("INSERT INTO async_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "TestName" } });
+            db.ExecuteSQL("SELECT * FROM async_test"); // Verify no exception
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -38,14 +46,22 @@ public class AsyncTests : IDisposable
     {
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
-        db.ExecuteSQL("CREATE TABLE async_insert (id INTEGER, value TEXT)");
+        
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE async_insert (id INTEGER, value TEXT)");
 
-        // Act
-        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Value1" } });
-        await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Value2" } });
+            // Act
+            await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Value1" } });
+            await db.ExecuteSQLAsync("INSERT INTO async_insert VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Value2" } });
 
-        // Assert
-        db.ExecuteSQL("SELECT * FROM async_insert"); // Should not throw
+            // Assert
+            db.ExecuteSQL("SELECT * FROM async_insert"); // Should not throw
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -54,13 +70,20 @@ public class AsyncTests : IDisposable
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
 
-        // Act
-        await db.ExecuteSQLAsync("CREATE TABLE multi_async (id INTEGER PRIMARY KEY, data TEXT)");
-        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "First" } });
-        await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Second" } });
-        await db.ExecuteSQLAsync("UPDATE multi_async SET data = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "Updated" }, { "1", 1 } });
+        try
+        {
+            // Act
+            await db.ExecuteSQLAsync("CREATE TABLE multi_async (id INTEGER PRIMARY KEY, data TEXT)");
+            await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "First" } });
+            await db.ExecuteSQLAsync("INSERT INTO multi_async VALUES (?, ?)", new Dictionary<string, object?> { { "0", 2 }, { "1", "Second" } });
+            await db.ExecuteSQLAsync("UPDATE multi_async SET data = ? WHERE id = ?", new Dictionary<string, object?> { { "0", "Updated" }, { "1", 1 } });
 
-        // Assert - no exception means success
+            // Assert - no exception means success
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -70,12 +93,19 @@ public class AsyncTests : IDisposable
         var db = _factory.Create(_testDbPath, "testpass");
         using var cts = new CancellationTokenSource();
 
-        // Act
-        await db.ExecuteSQLAsync("CREATE TABLE cancel_test (id INTEGER, name TEXT)", cts.Token);
-        await db.ExecuteSQLAsync("INSERT INTO cancel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" } }, cts.Token);
+        try
+        {
+            // Act
+            await db.ExecuteSQLAsync("CREATE TABLE cancel_test (id INTEGER, name TEXT)", cts.Token);
+            await db.ExecuteSQLAsync("INSERT INTO cancel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "Test" } }, cts.Token);
 
-        // Assert
-        db.ExecuteSQL("SELECT * FROM cancel_test"); // Should work
+            // Assert
+            db.ExecuteSQL("SELECT * FROM cancel_test"); // Should work
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -83,20 +113,28 @@ public class AsyncTests : IDisposable
     {
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
-        db.ExecuteSQL("CREATE TABLE parallel_test (id INTEGER, thread_id TEXT)");
-
-        // Act - execute multiple async inserts in parallel
-        var tasks = new List<Task>();
-        for (int i = 0; i < 10; i++)
+        
+        try
         {
-            int taskId = i;
-            tasks.Add(db.ExecuteSQLAsync("INSERT INTO parallel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", taskId }, { "1", $"thread_{taskId}" } }));
+            db.ExecuteSQL("CREATE TABLE parallel_test (id INTEGER, thread_id TEXT)");
+
+            // Act - execute multiple async inserts in parallel
+            var tasks = new List<Task>();
+            for (int i = 0; i < 10; i++)
+            {
+                int taskId = i;
+                tasks.Add(db.ExecuteSQLAsync("INSERT INTO parallel_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", taskId }, { "1", $"thread_{taskId}" } }));
+            }
+
+            await Task.WhenAll(tasks);
+
+            // Assert - verify all inserts completed
+            db.ExecuteSQL("SELECT * FROM parallel_test");
         }
-
-        await Task.WhenAll(tasks);
-
-        // Assert - verify all inserts completed
-        db.ExecuteSQL("SELECT * FROM parallel_test");
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -110,13 +148,20 @@ public class AsyncTests : IDisposable
         };
         var db = _factory.Create(_testDbPath, "testpass", false, config);
 
-        // Act
-        await db.ExecuteSQLAsync("CREATE TABLE config_test (id INTEGER, value TEXT)");
-        await db.ExecuteSQLAsync("INSERT INTO config_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "CachedValue" } });
+        try
+        {
+            // Act
+            await db.ExecuteSQLAsync("CREATE TABLE config_test (id INTEGER, value TEXT)");
+            await db.ExecuteSQLAsync("INSERT INTO config_test VALUES (?, ?)", new Dictionary<string, object?> { { "0", 1 }, { "1", "CachedValue" } });
 
-        // Assert
-        var stats = db.GetQueryCacheStatistics();
-        Assert.True(stats.Count >= 0); // Cache should be enabled
+            // Assert
+            var stats = db.GetQueryCacheStatistics();
+            Assert.True(stats.Count >= 0); // Cache should be enabled
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     [Fact]
@@ -155,14 +200,22 @@ public class AsyncTests : IDisposable
     {
         // Arrange
         var db = _factory.Create(_testDbPath, "testpass");
-        db.ExecuteSQL("CREATE TABLE prepared_test (id INTEGER, value TEXT)");
+        
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE prepared_test (id INTEGER, value TEXT)");
 
-        // Act
-        var stmt = db.Prepare("INSERT INTO prepared_test VALUES (?, ?)");
-        await db.ExecutePreparedAsync(stmt, new Dictionary<string, object?> { { "0", 1 }, { "1", "PreparedValue" } });
+            // Act
+            var stmt = db.Prepare("INSERT INTO prepared_test VALUES (?, ?)");
+            await db.ExecutePreparedAsync(stmt, new Dictionary<string, object?> { { "0", 1 }, { "1", "PreparedValue" } });
 
-        // Assert - verify insert worked
-        db.ExecuteSQL("SELECT * FROM prepared_test"); // Should not throw
+            // Assert - verify insert worked
+            db.ExecuteSQL("SELECT * FROM prepared_test"); // Should not throw
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
     }
 
     public void Dispose()

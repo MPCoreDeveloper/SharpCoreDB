@@ -75,17 +75,35 @@ public static class QueryCompiler
                 selectColumns.AddRange(selectNode.Columns.Select(c => c.Name));
             }
 
-            // ✅ PHASE 2.4: Build column index mapping for direct array access
-            var columnIndices = BuildColumnIndexMapping(selectColumns, isSelectAll);
+            // Extract ORDER BY
+            string? orderByColumn = null;
+            bool orderByAscending = true;
+
+            if (selectNode.OrderBy?.Items.Count > 0)
+            {
+                orderByColumn = selectNode.OrderBy.Items[0].Column.ColumnName;
+                orderByAscending = selectNode.OrderBy.Items[0].IsAscending;
+            }
+
+            var whereColumns = CollectColumnNames(selectNode.Where?.Condition);
+
+            // ✅ PHASE 2.5: Build column index mapping for indexed WHERE and ORDER BY
+            var columnIndices = BuildColumnIndexMapping(selectColumns, isSelectAll, whereColumns, orderByColumn);
 
             // Compile WHERE clause to expression tree
             Func<Dictionary<string, object>, bool>? whereFilter = null;
+            Func<IndexedRowData, bool>? whereFilterIndexed = null;
             var parameterNames = new HashSet<string>();
 
             if (selectNode.Where?.Condition is not null)
             {
                 whereFilter = CompileWhereClause(selectNode.Where.Condition, parameterNames);
-                
+
+                if (columnIndices.Count > 0)
+                {
+                    whereFilterIndexed = CompileWhereClauseIndexed(selectNode.Where.Condition, columnIndices);
+                }
+
                 if (whereFilter == null)
                 {
                     // WHERE compilation failed - continue without filter for now
@@ -100,16 +118,6 @@ public static class QueryCompiler
                 projectionFunc = CompileProjection(selectColumns);
             }
 
-            // Extract ORDER BY
-            string? orderByColumn = null;
-            bool orderByAscending = true;
-
-            if (selectNode.OrderBy?.Items.Count > 0)
-            {
-                orderByColumn = selectNode.OrderBy.Items[0].Column.ColumnName;
-                orderByAscending = selectNode.OrderBy.Items[0].IsAscending;
-            }
-
             // Build optimizer plan (lightweight, cacheable)
             var stats = new Dictionary<string, TableStatistics>();
             var optimizer = new QueryOptimizer(new CostEstimator(stats));
@@ -122,6 +130,7 @@ public static class QueryCompiler
                 selectColumns,
                 isSelectAll,
                 whereFilter,
+                whereFilterIndexed,
                 projectionFunc,
                 orderByColumn,
                 orderByAscending,
@@ -152,6 +161,9 @@ public static class QueryCompiler
         ExpressionNode condition,
         HashSet<string> parameterNames)
     {
+        ArgumentNullException.ThrowIfNull(condition);
+        ArgumentNullException.ThrowIfNull(parameterNames);
+
         // Parameter for the row dictionary
         var rowParam = Expression.Parameter(typeof(Dictionary<string, object>), "row");
 
@@ -166,6 +178,136 @@ public static class QueryCompiler
         // Compile to delegate
         var lambda = Expression.Lambda<Func<Dictionary<string, object>, bool>>(filterExpr, rowParam);
         return lambda.Compile();
+    }
+
+    /// <summary>
+    /// Compiles a WHERE clause expression to an indexed filter delegate.
+    /// ✅ PHASE 2.5: Uses IndexedRowData for direct column access.
+    /// </summary>
+    private static Func<IndexedRowData, bool>? CompileWhereClauseIndexed(
+        ExpressionNode condition,
+        Dictionary<string, int> columnIndices)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        ArgumentNullException.ThrowIfNull(columnIndices);
+
+        var rowParam = Expression.Parameter(typeof(IndexedRowData), "row");
+        var filterExpr = ConvertToLinqExpressionIndexed(condition, rowParam, columnIndices);
+
+        if (filterExpr is null)
+        {
+            return null;
+        }
+
+        var lambda = Expression.Lambda<Func<IndexedRowData, bool>>(filterExpr, rowParam);
+        return lambda.Compile();
+    }
+
+    /// <summary>
+    /// Converts an AST expression node to a LINQ expression (indexed row path).
+    /// </summary>
+    private static Expression? ConvertToLinqExpressionIndexed(
+        ExpressionNode node,
+        ParameterExpression rowParam,
+        Dictionary<string, int> columnIndices)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(columnIndices);
+
+        return node switch
+        {
+            BinaryExpressionNode binary => ConvertBinaryExpressionIndexed(binary, rowParam, columnIndices),
+            ColumnReferenceNode column => ConvertColumnReferenceIndexed(column, rowParam, columnIndices),
+            LiteralNode literal => ConvertLiteral(literal),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Converts a binary expression for indexed rows.
+    /// </summary>
+    private static Expression? ConvertBinaryExpressionIndexed(
+        BinaryExpressionNode binary,
+        ParameterExpression rowParam,
+        Dictionary<string, int> columnIndices)
+    {
+        ArgumentNullException.ThrowIfNull(binary);
+
+        if (binary.Left is null || binary.Right is null)
+        {
+            return null;
+        }
+
+        var left = ConvertToLinqExpressionIndexed(binary.Left, rowParam, columnIndices);
+        var right = ConvertToLinqExpressionIndexed(binary.Right, rowParam, columnIndices);
+
+        if (left is null || right is null)
+        {
+            return null;
+        }
+
+        var op = binary.Operator.ToUpperInvariant();
+
+        if (op is "AND")
+            return Expression.AndAlso(left, right);
+        if (op is "OR")
+            return Expression.OrElse(left, right);
+
+        if (left.Type == typeof(object) || right.Type == typeof(object))
+        {
+            return CompareUsingIComparable(left, right, op);
+        }
+
+        if (left.Type != right.Type)
+        {
+            var commonType = GetCommonNumericType(left.Type, right.Type);
+            if (commonType != null)
+            {
+                if (left.Type != commonType)
+                    left = Expression.Convert(left, commonType);
+                if (right.Type != commonType)
+                    right = Expression.Convert(right, commonType);
+            }
+            else
+            {
+                return CompareUsingIComparable(left, right, op);
+            }
+        }
+
+        return op switch
+        {
+            "=" or "==" => Expression.Equal(left, right),
+            "!=" or "<>" => Expression.NotEqual(left, right),
+            ">" => Expression.GreaterThan(left, right),
+            ">=" => Expression.GreaterThanOrEqual(left, right),
+            "<" => Expression.LessThan(left, right),
+            "<=" => Expression.LessThanOrEqual(left, right),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Converts a column reference to an indexed row lookup expression.
+    /// ✅ PHASE 2.5: Uses integer indexers when available.
+    /// </summary>
+    private static Expression ConvertColumnReferenceIndexed(
+        ColumnReferenceNode column,
+        ParameterExpression rowParam,
+        Dictionary<string, int> columnIndices)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        ArgumentNullException.ThrowIfNull(columnIndices);
+
+        if (columnIndices.TryGetValue(column.ColumnName, out var index))
+        {
+            var indexExpr = Expression.Constant(index);
+            var indexerProperty = typeof(IndexedRowData).GetProperty("Item", [typeof(int)])!;
+            return Expression.Property(rowParam, indexerProperty, indexExpr);
+        }
+
+        var columnNameExpr = Expression.Constant(column.ColumnName);
+        var stringIndexer = typeof(IndexedRowData).GetProperty("Item", [typeof(string)])!;
+        return Expression.Property(rowParam, stringIndexer, columnNameExpr);
     }
 
     /// <summary>
@@ -193,8 +335,13 @@ public static class QueryCompiler
         ParameterExpression rowParam,
         HashSet<string> parameterNames)
     {
-        var left = ConvertToLinqExpression(binary.Left!, rowParam, parameterNames);
-        var right = ConvertToLinqExpression(binary.Right!, rowParam, parameterNames);
+        if (binary.Left is null || binary.Right is null)
+        {
+            return null;
+        }
+
+        var left = ConvertToLinqExpression(binary.Left, rowParam, parameterNames);
+        var right = ConvertToLinqExpression(binary.Right, rowParam, parameterNames);
 
         if (left is null || right is null)
         {
@@ -202,24 +349,19 @@ public static class QueryCompiler
         }
 
         var op = binary.Operator.ToUpperInvariant();
-        
-        // Handle logical operators (AND, OR) - these work with bool types
+
         if (op is "AND")
             return Expression.AndAlso(left, right);
         if (op is "OR")
             return Expression.OrElse(left, right);
 
-        // ✅ FIX: For comparison operators with object-typed values, use IComparable
-        // This handles dynamic types safely without cast exceptions
         if (left.Type == typeof(object) || right.Type == typeof(object))
         {
             return CompareUsingIComparable(left, right, op);
         }
 
-        // ✅ Handle type mismatches for strongly-typed comparisons
         if (left.Type != right.Type)
         {
-            // Try to find a common type for numeric comparisons
             var commonType = GetCommonNumericType(left.Type, right.Type);
             if (commonType != null)
             {
@@ -230,12 +372,10 @@ public static class QueryCompiler
             }
             else
             {
-                // No common type - use IComparable
                 return CompareUsingIComparable(left, right, op);
             }
         }
 
-        // Now both sides have compatible types
         return op switch
         {
             "=" or "==" => Expression.Equal(left, right),
@@ -249,27 +389,16 @@ public static class QueryCompiler
     }
 
     /// <summary>
-    /// Builds a column index mapping for direct array access optimization.
-    /// ✅ PHASE 2.4: Pre-computes indices to enable O(1) array access without string hashing.
+    /// Converts a column reference to a dictionary lookup expression.
+    /// ✅ CRITICAL FIX: Return the value safely without throwing on missing columns.
     /// </summary>
-    private static Dictionary<string, int> BuildColumnIndexMapping(List<string> selectColumns, bool isSelectAll)
+    private static Expression ConvertColumnReference(
+        ColumnReferenceNode column,
+        ParameterExpression rowParam)
     {
-        var indices = new Dictionary<string, int>();
-        
-        // For SELECT *, we can't determine columns until execution time
-        // Indices will be populated dynamically from the table schema
-        if (isSelectAll)
-        {
-            return indices;  // Empty - will be populated at runtime
-        }
-        
-        // For specific columns, assign sequential indices
-        for (int i = 0; i < selectColumns.Count; i++)
-        {
-            indices[selectColumns[i]] = i;
-        }
-        
-        return indices;
+        var columnNameExpr = Expression.Constant(column.ColumnName);
+        var indexerProperty = typeof(Dictionary<string, object>).GetProperty("Item")!;
+        return Expression.Property(rowParam, indexerProperty, columnNameExpr);
     }
 
     /// <summary>
@@ -278,69 +407,54 @@ public static class QueryCompiler
     /// </summary>
     private static Type? GetCommonNumericType(Type left, Type right)
     {
-        // Order of precedence: decimal > double > float > long > int > short > byte
         Type[] numericTypes = [typeof(decimal), typeof(double), typeof(float), typeof(long), typeof(int), typeof(short), typeof(byte)];
-        
+
         int leftIndex = Array.IndexOf(numericTypes, left);
         int rightIndex = Array.IndexOf(numericTypes, right);
-        
+
         if (leftIndex < 0 || rightIndex < 0)
-            return null; // One or both types are not numeric
-        
-        // Return the wider type (lower index = wider)
+            return null;
+
         return leftIndex < rightIndex ? left : right;
     }
 
     /// <summary>
     /// Creates a comparison expression using safe numeric comparison.
-    /// This handles dynamic comparisons where types are only known at runtime.
-    /// ✅ FIX: Use helper method that safely handles numeric type conversions
     /// </summary>
     private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
     {
-        // ✅ NEW APPROACH: Create a runtime helper that handles all type conversions
-        // This avoids expression tree complexity and handles all edge cases
-        var compareMethod = typeof(QueryCompiler).GetMethod(nameof(CompareValuesRuntime), 
+        var compareMethod = typeof(QueryCompiler).GetMethod(nameof(CompareValuesRuntime),
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        
-        // Ensure both sides are object type for the helper
+
         if (left.Type != typeof(object))
             left = Expression.Convert(left, typeof(object));
         if (right.Type != typeof(object))
             right = Expression.Convert(right, typeof(object));
-        
-        // Call: CompareValuesRuntime(left, right, op)
+
         var opConstant = Expression.Constant(op);
         var compareCall = Expression.Call(compareMethod, left, right, opConstant);
-        
+
         return compareCall;
     }
 
     /// <summary>
     /// Runtime helper for comparing values safely (handles nulls, type mismatches).
-    /// This is called from compiled expressions to handle dynamic comparisons.
-    /// ✅ NOTE: Decimals are stored using decimal.GetBits() (culture-neutral format).
-    ///          Comparisons must also use invariant culture for consistency.
+    /// ✅ NOTE: Decimals use invariant culture to match storage format.
     /// </summary>
     private static bool CompareValuesRuntime(object? left, object? right, string op)
     {
-        // Null handling
-        if (left == null && right == null) 
+        if (left == null && right == null)
             return op is "=" or "==" or "<=" or ">=";
-        if (left == null) 
+        if (left == null)
             return op is "!=" or "<>" or "<" or "<=";
-        if (right == null) 
+        if (right == null)
             return op is "!=" or "<>" or ">" or ">=";
 
-        // Numeric comparison: normalize to decimal with invariant culture
         if (IsNumericValue(left) && IsNumericValue(right))
         {
-            // ✅ CRITICAL: Use invariant culture for decimal conversion
-            // SharpCoreDB stores decimals as binary bits (via decimal.GetBits)
-            // which is culture-neutral, so comparisons must also be invariant
             var leftDecimal = ConvertToDecimalInvariant(left);
             var rightDecimal = ConvertToDecimalInvariant(right);
-            
+
             return op switch
             {
                 ">" => leftDecimal > rightDecimal,
@@ -353,7 +467,6 @@ public static class QueryCompiler
             };
         }
 
-        // String comparison
         if (left is string leftStr && right is string rightStr)
         {
             var cmp = string.Compare(leftStr, rightStr, StringComparison.Ordinal);
@@ -369,7 +482,6 @@ public static class QueryCompiler
             };
         }
 
-        // IComparable fallback
         if (left is IComparable comp)
         {
             try
@@ -388,15 +500,13 @@ public static class QueryCompiler
             }
             catch
             {
-                // Fall through
             }
         }
 
-        // Default: string comparison
         var leftString = left.ToString() ?? string.Empty;
         var rightString = right.ToString() ?? string.Empty;
         var comparison = string.Compare(leftString, rightString, StringComparison.Ordinal);
-        
+
         return op switch
         {
             ">" => comparison > 0,
@@ -410,61 +520,27 @@ public static class QueryCompiler
     }
 
     /// <summary>
-    /// Converts a runtime value to decimal using invariant culture.
-    /// ✅ CRITICAL: Must use invariant culture because SharpCoreDB stores decimals
-    ///              as binary representations (via decimal.GetBits()), which are
-    ///              culture-neutral. All conversions must maintain this invariance.
+    /// Checks if a value is numeric (int, long, double, decimal, float).
+    /// </summary>
+    private static bool IsNumericValue(object value)
+    {
+        return value is int or long or double or decimal or float or byte or short or uint or ulong or ushort or sbyte;
+    }
+
+    /// <summary>
+    /// Converts a value to decimal using invariant culture.
     /// </summary>
     private static decimal ConvertToDecimalInvariant(object value)
     {
         return value switch
         {
-            int i => i,
-            long l => l,
-            double d => (decimal)d,
             decimal m => m,
-            float f => (decimal)f,
-            byte b => b,
-            short s => s,
-            uint ui => ui,
-            ulong ul => ul,
-            ushort us => us,
-            sbyte sb => sb,
-            // String conversion with invariant culture
-            string str => decimal.TryParse(str, System.Globalization.NumberStyles.Number, 
-                System.Globalization.CultureInfo.InvariantCulture, out var result) ? result : 0m,
-            _ => 0m
+            double d => Convert.ToDecimal(d, System.Globalization.CultureInfo.InvariantCulture),
+            float f => Convert.ToDecimal(f, System.Globalization.CultureInfo.InvariantCulture),
+            string s => decimal.Parse(s, System.Globalization.CultureInfo.InvariantCulture),
+            IConvertible convertible => Convert.ToDecimal(convertible, System.Globalization.CultureInfo.InvariantCulture),
+            _ => Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture)
         };
-    }
-
-    /// <summary>
-    /// Checks if a runtime value is numeric.
-    /// ✅ CRITICAL: Must include all numeric types that ConvertToDecimalInvariant supports
-    ///              to maintain consistency across comparisons and conversions.
-    /// </summary>
-    private static bool IsNumericValue(object? value)
-    {
-        return value is 
-            int or long or double or decimal or float or 
-            byte or short or uint or ulong or ushort or sbyte;
-    }
-
-    /// <summary>
-    /// Converts a column reference to a dictionary lookup expression.
-    /// ✅ CRITICAL FIX: Return the value safely without throwing on missing columns.
-    /// </summary>
-    private static Expression ConvertColumnReference(
-        ColumnReferenceNode column,
-        ParameterExpression rowParam)
-    {
-        // Simple and reliable approach: use indexer directly
-        // The issue must be elsewhere - likely in how the WHERE filter is being applied
-        var columnNameExpr = Expression.Constant(column.ColumnName);
-        var indexerProperty = typeof(Dictionary<string, object>).GetProperty("Item")!;
-        
-        // Access: row[columnName]
-        var access = Expression.Property(rowParam, indexerProperty, columnNameExpr);
-        return access;
     }
 
     /// <summary>
@@ -518,7 +594,7 @@ public static class QueryCompiler
         CompiledQueryPlan plan,
         Dictionary<string, object?> parameters)
     {
-        if (!plan.HasWhereClause)
+        if (plan.WhereFilter is null)
         {
             return null;
         }
@@ -529,7 +605,104 @@ public static class QueryCompiler
             // Execute the original filter with parameter substitution
             // This is a simplified approach - for full performance, we'd need to
             // rebuild the expression tree with parameter values substituted
-            return plan.WhereFilter!(row);
+            return plan.WhereFilter(row);
         };
+    }
+
+    /// <summary>
+    /// Builds a column index mapping for direct array access optimization.
+    /// ✅ PHASE 2.4: Pre-computes indices to enable O(1) array access without string hashing.
+    /// </summary>
+    private static Dictionary<string, int> BuildColumnIndexMapping(
+        List<string> selectColumns,
+        bool isSelectAll,
+        IReadOnlyCollection<string> whereColumns,
+        string? orderByColumn)
+    {
+        ArgumentNullException.ThrowIfNull(selectColumns);
+        ArgumentNullException.ThrowIfNull(whereColumns);
+
+        Dictionary<string, int> indices = [];
+        List<string> columns = [];
+        HashSet<string> seen = [];
+
+        void AddColumn(string? column)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+            {
+                return;
+            }
+
+            if (seen.Add(column))
+            {
+                columns.Add(column);
+            }
+        }
+
+        if (!isSelectAll)
+        {
+            foreach (var column in selectColumns)
+            {
+                AddColumn(column);
+            }
+        }
+
+        foreach (var column in whereColumns)
+        {
+            AddColumn(column);
+        }
+
+        AddColumn(orderByColumn);
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            indices[columns[i]] = i;
+        }
+
+        return indices;
+    }
+
+    private static HashSet<string> CollectColumnNames(ExpressionNode? node)
+    {
+        if (node is null)
+        {
+            return [];
+        }
+
+        HashSet<string> columns = [];
+        CollectColumnNames(node, columns);
+        return columns;
+    }
+
+    private static void CollectColumnNames(ExpressionNode node, HashSet<string> columns)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(columns);
+
+        switch (node)
+        {
+            case ColumnReferenceNode column:
+                if (!string.IsNullOrWhiteSpace(column.ColumnName))
+                {
+                    columns.Add(column.ColumnName);
+                }
+                break;
+            case BinaryExpressionNode binary:
+                if (binary.Left is not null)
+                {
+                    CollectColumnNames(binary.Left, columns);
+                }
+                if (binary.Right is not null)
+                {
+                    CollectColumnNames(binary.Right, columns);
+                }
+                break;
+            case InExpressionNode inExpression:
+                if (inExpression.Expression is not null)
+                {
+                    CollectColumnNames(inExpression.Expression, columns);
+                }
+                break;
+        }
     }
 }
