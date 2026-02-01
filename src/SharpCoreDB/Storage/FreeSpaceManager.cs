@@ -10,9 +10,13 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+
+// ✅ SCDB Phase 2: Public type alias for user-facing API
+using Extent = SharpCoreDB.Storage.Scdb.FreeExtent;
 
 /// <summary>
 /// Free Space Map (FSM) for O(1) page allocation.
@@ -30,6 +34,10 @@ internal sealed class FreeSpaceManager : IDisposable
     private readonly BitArray _l1Bitmap; // 1 bit per page
     private readonly List<FreeExtent> _l2Extents; // Large free extents
     private readonly Lock _allocationLock = new();
+    
+    // ✅ SCDB Phase 2: ExtentAllocator for optimized extent allocation
+    private readonly ExtentAllocator _extentAllocator;
+    
     private bool _isDirty;
     private bool _disposed;
     private ulong _totalPages;
@@ -51,8 +59,128 @@ internal sealed class FreeSpaceManager : IDisposable
         _totalPages = 0;
         _freePages = 0;
 
+        // ✅ SCDB Phase 2: Initialize ExtentAllocator
+        _extentAllocator = new ExtentAllocator
+        {
+            Strategy = AllocationStrategy.BestFit  // Default: minimize fragmentation
+        };
+
         // Load existing FSM from disk
         LoadFsm();
+    }
+
+    // ========================================
+    // ✅ SCDB Phase 2: Public API for page/extent allocation
+    // ========================================
+
+    /// <summary>
+    /// Allocates a single page.
+    /// </summary>
+    /// <returns>Page ID of allocated page.</returns>
+    public ulong AllocatePage()
+    {
+        var offset = AllocatePages(1);
+        return offset / (ulong)_pageSize; // Convert byte offset to page ID
+    }
+
+    /// <summary>
+    /// Allocates a contiguous extent of pages.
+    /// ✅ SCDB Phase 2: Uses ExtentAllocator for optimized allocation.
+    /// </summary>
+    /// <param name="pageCount">Number of pages to allocate.</param>
+    /// <returns>Extent representing the allocated pages.</returns>
+    public Extent AllocateExtent(int pageCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pageCount);
+
+        lock (_allocationLock)
+        {
+            // ✅ Try to allocate from existing free extents first (O(log n))
+            var existingExtent = _extentAllocator.Allocate(pageCount);
+            
+            if (existingExtent.HasValue)
+            {
+                // Found suitable extent, mark pages as allocated
+                for (var i = 0UL; i < (ulong)pageCount; i++)
+                {
+                    _l1Bitmap.Set((int)(existingExtent.Value.StartPage + i), true);
+                }
+                
+                _freePages -= (ulong)pageCount;
+                _isDirty = true;
+                
+                return new Extent(existingExtent.Value.StartPage, (ulong)pageCount);
+            }
+
+            // No suitable extent found, allocate new pages
+            var offset = AllocatePages(pageCount);
+            var startPage = offset / (ulong)_pageSize;
+
+            return new Extent(startPage, (ulong)pageCount);
+        }
+    }
+
+    /// <summary>
+    /// Frees a single page.
+    /// </summary>
+    /// <param name="pageId">Page ID to free.</param>
+    public void FreePage(ulong pageId)
+    {
+        var offset = pageId * (ulong)_pageSize;
+        FreePages(offset, 1);
+    }
+
+    /// <summary>
+    /// Frees an extent of pages.
+    /// ✅ SCDB Phase 2: Uses ExtentAllocator for coalescing.
+    /// </summary>
+    /// <param name="extent">Extent to free.</param>
+    public void FreeExtent(Extent extent)
+    {
+        var offset = extent.StartPage * (ulong)_pageSize;
+        FreePages(offset, (int)extent.Length);
+        
+        // ✅ Add to ExtentAllocator for future reuse
+        lock (_allocationLock)
+        {
+            _extentAllocator.Free(extent);
+            _isDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Gets comprehensive FSM statistics.
+    /// ✅ SCDB Phase 2: Includes ExtentAllocator metrics.
+    /// </summary>
+    /// <returns>Statistics including fragmentation and extent information.</returns>
+    public FsmStatistics GetDetailedStatistics()
+    {
+        lock (_allocationLock)
+        {
+            var usedPages = _totalPages - _freePages;
+            var largestExtent = _extentAllocator.GetLargestExtentSize();
+            var extentCount = _extentAllocator.ExtentCount;
+
+            // Calculate fragmentation percentage
+            // Fragmentation = (1 - (largest_extent / free_pages)) * 100
+            var fragmentation = 0.0;
+            if (_freePages > 0)
+            {
+                fragmentation = (1.0 - ((double)largestExtent / (double)_freePages)) * 100.0;
+                fragmentation = Math.Max(0, Math.Min(100, fragmentation)); // Clamp 0-100
+            }
+
+            return new FsmStatistics
+            {
+                TotalPages = (long)_totalPages,
+                FreePages = (long)_freePages,
+                UsedPages = (long)usedPages,
+                FreeSpace = (long)_freePages * _pageSize,
+                LargestExtent = (long)largestExtent,
+                ExtentCount = extentCount,
+                FragmentationPercent = fragmentation
+            };
+        }
     }
 
     public ulong AllocatePages(int count)
@@ -157,7 +285,7 @@ internal sealed class FreeSpaceManager : IDisposable
             
             // Calculate L2 extent size
             var extentCount = _l2Extents.Count;
-            var extentSizeBytes = extentCount * FreeExtent.SIZE;
+            var extentSizeBytes = extentCount * Scdb.FreeExtent.SIZE;
             
             // Total size
             totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
@@ -199,7 +327,7 @@ internal sealed class FreeSpaceManager : IDisposable
             for (var i = 0; i < extentCount; i++)
             {
                 var extent = _l2Extents[i];
-                var extentSpan = span.Slice(extentOffset + (i * FreeExtent.SIZE), FreeExtent.SIZE);
+                var extentSpan = span.Slice(extentOffset + (i * Scdb.FreeExtent.SIZE), Scdb.FreeExtent.SIZE);
                 MemoryMarshal.Write(extentSpan, in extent);
             }
 
@@ -233,6 +361,7 @@ internal sealed class FreeSpaceManager : IDisposable
         }
         finally
         {
+            _extentAllocator?.Dispose();  // ✅ SCDB Phase 2: Dispose ExtentAllocator
             _disposed = true;
         }
     }
@@ -366,7 +495,7 @@ internal sealed class FreeSpaceManager : IDisposable
             // Read L2 extents
             if (extentCount > 0)
             {
-                var extentBufferSize = extentCount * FreeExtent.SIZE;
+                var extentBufferSize = extentCount * Scdb.FreeExtent.SIZE;
                 var extentBuffer = ArrayPool<byte>.Shared.Rent(extentBufferSize);
                 try
                 {
@@ -375,8 +504,8 @@ internal sealed class FreeSpaceManager : IDisposable
 
                     for (var i = 0; i < extentCount; i++)
                     {
-                        var offset = i * FreeExtent.SIZE;
-                        var extent = MemoryMarshal.Read<FreeExtent>(extentSpan[offset..]);
+                        var offset = i * Scdb.FreeExtent.SIZE;
+                        var extent = MemoryMarshal.Read<Scdb.FreeExtent>(extentSpan[offset..]);
                         _l2Extents.Add(extent);
                     }
                 }
