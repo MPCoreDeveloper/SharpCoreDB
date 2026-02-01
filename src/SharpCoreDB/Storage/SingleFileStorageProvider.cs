@@ -223,6 +223,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal TableDirectoryManager TableDirectoryManager => _tableDirectoryManager;
 
+    /// <summary>
+    /// Gets the WAL manager for transaction operations.
+    /// ✅ Phase 3: Exposed for crash recovery testing.
+    /// </summary>
+    internal WalManager WalManager => _walManager;
+
     /// <inheritdoc/>
     public bool BlockExists(string blockName)
     {
