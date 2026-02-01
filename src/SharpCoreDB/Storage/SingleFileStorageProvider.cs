@@ -865,6 +865,22 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         Volatile.Write(ref _hasPendingWrites, 0);
     }
 
+    /// <summary>
+    /// Performs a WAL checkpoint, ensuring all committed transactions are durable.
+    /// ✅ SCDB Phase 3: Explicit checkpoint coordination.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task CheckpointAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
+        // First flush all pending writes
+        await FlushInternalAsync(cancellationToken, flushToDisk: true).ConfigureAwait(false);
+        
+        // Then checkpoint the WAL
+        await _walManager.CheckpointAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public async Task<VacuumResult> VacuumAsync(VacuumMode mode, CancellationToken cancellationToken = default)
     {
