@@ -239,7 +239,7 @@ public class StorageEngineTests : IDisposable
         var crypto = new CryptoService();
         var key = new byte[32];
         var config = new DatabaseConfig { NoEncryptMode = true };
-        var storage = new Storage(crypto, key, config);
+        var storage = new Services.Storage(crypto, key, config, null);
 
         using var engine = new AppendOnlyEngine(storage, testDbPath);
 
@@ -258,7 +258,7 @@ public class StorageEngineTests : IDisposable
         var crypto = new CryptoService();
         var key = new byte[32];
         var config = new DatabaseConfig { NoEncryptMode = true };
-        var storage = new Storage(crypto, key, config);
+        var storage = new Services.Storage(crypto, key, config, null);
 
         using var engine = new AppendOnlyEngine(storage, testDbPath);
 
@@ -323,7 +323,7 @@ public class StorageEngineTests : IDisposable
         var crypto = new CryptoService();
         var key = new byte[32];
         var config = new DatabaseConfig { NoEncryptMode = true };
-        var storage = new Storage(crypto, key, config);
+        var storage = new Services.Storage(crypto, key, config, null);
 
         using var engine = StorageEngineFactory.CreateEngine(
             StorageEngineType.AppendOnly,

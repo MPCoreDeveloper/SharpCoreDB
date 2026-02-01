@@ -47,6 +47,11 @@ public partial class Database : IDatabase, IDisposable
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
     
+    // ✅ SCDB Phase 1: Storage provider abstraction
+    // Null when using legacy directory-based storage (IStorage)
+    // Non-null when using modern SCDB single-file storage
+    private readonly IStorageProvider? _storageProvider;
+    
     // ✅ UNIFIED: Replace GroupCommitWAL with IStorageEngine
     // This single abstraction handles all data persistence including WAL
     private readonly IStorageEngine? storageEngine;
@@ -79,13 +84,21 @@ public partial class Database : IDatabase, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.
     /// ✅ REFACTORED: Uses IStorageEngine abstraction instead of hardcoded GroupCommitWAL
+    /// ✅ SCDB Phase 1: Optionally accepts IStorageProvider for modern SCDB storage
     /// </summary>
     /// <param name="services">The service provider for dependency injection.</param>
     /// <param name="dbPath">The database directory path.</param>
     /// <param name="masterPassword">The master encryption password.</param>
     /// <param name="isReadOnly">Whether the database is readonly.</param>
     /// <param name="config">Optional database configuration.</param>
-    public Database(IServiceProvider services, string dbPath, string masterPassword, bool isReadOnly = false, DatabaseConfig? config = null)
+    /// <param name="storageProvider">Optional storage provider (for SCDB mode). If null, uses legacy IStorage.</param>
+    public Database(
+        IServiceProvider services, 
+        string dbPath, 
+        string masterPassword, 
+        bool isReadOnly = false, 
+        DatabaseConfig? config = null,
+        IStorageProvider? storageProvider = null)
     {
         ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14: Modern validation
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
@@ -94,6 +107,8 @@ public partial class Database : IDatabase, IDisposable
         _dbPath = dbPath;
         this.isReadOnly = isReadOnly;
         this.config = config ?? DatabaseConfig.Default;
+        _storageProvider = storageProvider;  // ✅ SCDB Phase 1: Store storage provider
+        
         Directory.CreateDirectory(_dbPath);
         
         var crypto = services.GetRequiredService<ICryptoService>();
@@ -153,18 +168,46 @@ public partial class Database : IDatabase, IDisposable
 
     /// <summary>
     /// Loads database metadata from disk and initializes tables.
+    /// ✅ SCDB Phase 1: Uses IStorageProvider when available, falls back to IStorage for legacy mode
     /// </summary>
     private void Load()
     {
-        var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
-        var metaExists = File.Exists(metaPath);
+        string? metaJson;
+        bool metaExists;
         
+        if (_storageProvider is not null)
+        {
+            // ✅ SCDB Phase 1: Use modern storage provider (block-based)
+            metaExists = _storageProvider.BlockExists("sys:metadata");
+            
 #if DEBUG
-        System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from: {metaPath}");
-        System.Diagnostics.Debug.WriteLine($"[Load] File exists: {metaExists}");
+            System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from storage provider");
+            System.Diagnostics.Debug.WriteLine($"[Load] Block exists: {metaExists}");
 #endif
-        
-        var metaJson = storage.Read(metaPath);
+            
+            if (metaExists)
+            {
+                var metaBytes = _storageProvider.ReadBlockAsync("sys:metadata").GetAwaiter().GetResult();
+                metaJson = metaBytes is not null ? System.Text.Encoding.UTF8.GetString(metaBytes) : null;
+            }
+            else
+            {
+                metaJson = null;
+            }
+        }
+        else
+        {
+            // ✅ Legacy: Use IStorage (file-based)
+            var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName);
+            metaExists = File.Exists(metaPath);
+            
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from: {metaPath}");
+            System.Diagnostics.Debug.WriteLine($"[Load] File exists: {metaExists}");
+#endif
+            
+            metaJson = storage.Read(metaPath);
+        }
 
         // ✅ CRITICAL: If metadata file exists but cannot be decrypted, abort
         if (metaExists && metaJson is null)  // ✅ C# 14: is null pattern
@@ -298,6 +341,7 @@ public partial class Database : IDatabase, IDisposable
 
     /// <summary>
     /// Saves database metadata to disk.
+    /// ✅ SCDB Phase 1: Uses IStorageProvider when available, falls back to IStorage for legacy mode
     /// </summary>
     private void SaveMetadata()
     {
@@ -316,7 +360,19 @@ public partial class Database : IDatabase, IDisposable
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
-        storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), JsonSerializer.Serialize(meta));
+        var metaJson = JsonSerializer.Serialize(meta);
+        
+        if (_storageProvider is not null)
+        {
+            // ✅ SCDB Phase 1: Use modern storage provider (block-based)
+            var metaBytes = System.Text.Encoding.UTF8.GetBytes(metaJson);
+            _storageProvider.WriteBlockAsync("sys:metadata", metaBytes).GetAwaiter().GetResult();
+        }
+        else
+        {
+            // ✅ Legacy: Use IStorage (file-based)
+            storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), metaJson);
+        }
         
         _metadataDirty = false;
     }
@@ -402,6 +458,12 @@ public partial class Database : IDatabase, IDisposable
                 }
             }
             
+            // ✅ SCDB Phase 1: Flush storage provider if using SCDB mode
+            if (_storageProvider is not null)
+            {
+                _storageProvider.FlushAsync().GetAwaiter().GetResult();
+            }
+            
             // Then flush storage engine (handles any remaining WAL/transaction buffers)
             if (storageEngine is not null)
             {
@@ -428,6 +490,12 @@ public partial class Database : IDatabase, IDisposable
 #if DEBUG
             System.Diagnostics.Debug.WriteLine("[ForceSave] Flushing storage engine...");
 #endif
+            
+            // ✅ SCDB Phase 1: Flush storage provider if using SCDB mode
+            if (_storageProvider is not null)
+            {
+                _storageProvider.FlushAsync().GetAwaiter().GetResult();
+            }
             
             // ✅ UNIFIED: Delegate to IStorageEngine for guaranteed persistence
             // IStorageEngine.Flush() handles all engine types consistently
@@ -504,6 +572,9 @@ public partial class Database : IDatabase, IDisposable
                 }
             }
 
+            // ✅ SCDB Phase 1: Dispose storage provider if using SCDB mode
+            _storageProvider?.Dispose();
+            
             // ✅ UNIFIED: Dispose storage engine if available
             // This ensures all resources are released properly
             storageEngine?.Dispose();

@@ -323,7 +323,7 @@ public class BlockRegistryBatchingTests : IDisposable
     /// Helper to access internal BlockRegistry for testing.
     /// Uses reflection to access private field.
     /// </summary>
-    private static Storage.BlockRegistry GetBlockRegistry(SingleFileStorageProvider provider)
+    private static global::SharpCoreDB.Storage.BlockRegistry GetBlockRegistry(SingleFileStorageProvider provider)
     {
         var field = typeof(SingleFileStorageProvider)
             .GetField("_blockRegistry", 
@@ -335,7 +335,7 @@ public class BlockRegistryBatchingTests : IDisposable
             throw new InvalidOperationException("Unable to access _blockRegistry field");
         }
         
-        var registry = field.GetValue(provider) as Storage.BlockRegistry;
+        var registry = field.GetValue(provider) as global::SharpCoreDB.Storage.BlockRegistry;
         if (registry == null)
         {
             throw new InvalidOperationException("_blockRegistry is null");
