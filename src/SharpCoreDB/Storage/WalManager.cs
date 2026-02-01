@@ -477,9 +477,9 @@ internal sealed class WalManager : IDisposable
     /// Reads WAL entries for recovery.
     /// Used by RecoveryManager to replay transactions.
     /// </summary>
-    internal async Task<List<WalEntry>> ReadEntriesSinceCheckpointAsync(CancellationToken cancellationToken = default)
+    internal async Task<List<Scdb.WalEntry>> ReadEntriesSinceCheckpointAsync(CancellationToken cancellationToken = default)
     {
-        var entries = new List<WalEntry>();
+        var entries = new List<Scdb.WalEntry>();
         var fileStream = GetFileStream();
 
         ulong startOffset, endOffset;
@@ -519,11 +519,11 @@ internal sealed class WalManager : IDisposable
     /// <summary>
     /// Deserializes WalEntry from byte buffer.
     /// </summary>
-    private static WalEntry DeserializeWalEntry(ReadOnlySpan<byte> buffer)
+    private static Scdb.WalEntry DeserializeWalEntry(ReadOnlySpan<byte> buffer)
     {
         int offset = 0;
 
-        var entry = new WalEntry
+        var entry = new Scdb.WalEntry
         {
             Lsn = BinaryPrimitives.ReadUInt64LittleEndian(buffer[offset..]),
         };
@@ -552,7 +552,7 @@ internal sealed class WalManager : IDisposable
     /// <summary>
     /// Validates WAL entry checksum.
     /// </summary>
-    private static bool ValidateWalEntryChecksum(ReadOnlySpan<byte> buffer, WalEntry entry)
+    private static bool ValidateWalEntryChecksum(ReadOnlySpan<byte> buffer, Scdb.WalEntry entry)
     {
         const int checksumOffset = 30; // After header fields
         const int dataOffset = checksumOffset + 32;
