@@ -335,6 +335,7 @@ internal sealed class WalManager : IDisposable
     /// <summary>
     /// Serializes WalEntry to byte buffer with checksum.
     /// C# 14: Uses modern unsafe code patterns.
+    /// Format: Lsn(8) + TxId(8) + Timestamp(8) + Op(2) + BlockIdx(2) + PageId(8) + DataLen(2) + Checksum(32) + Data(4000)
     /// </summary>
     private static unsafe void SerializeWalEntry(Span<byte> buffer, WalEntry entry)
     {
@@ -369,22 +370,45 @@ internal sealed class WalManager : IDisposable
         BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], entry.DataLength);
         offset += 2;
         
-        // Skip checksum for now (will calculate after)
+        // Mark checksum offset (will write after computing hash)
         var checksumOffset = offset;
         offset += 32;
         
+        // Data payload comes after checksum (offset now at Data field)
+        var dataOffset = offset;
+        
         // Write data payload (if any)
-        if (entry.DataLength > 0)
+        if (entry.DataLength > 0 && entry.DataLength <= WalEntry.MAX_DATA_LENGTH)
         {
-            // In real implementation, copy from entry.Data
-            // For now, zero-filled as Data field needs to be populated by caller
+            // In real implementation: copy from entry.Data
+            // For Phase 3: zero-filled (data writing is stub)
+            // Data will be populated when actual operations are logged
         }
         
         // Calculate and write SHA-256 checksum
+        // Hash: header (before checksum) + data payload
         using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        sha256.AppendData(buffer[..checksumOffset]); // Header
-        sha256.AppendData(buffer[offset..(offset + entry.DataLength)]); // Data
+        sha256.AppendData(buffer[..checksumOffset]); // Header fields
+        
+        if (entry.DataLength > 0 && entry.DataLength <= WalEntry.MAX_DATA_LENGTH)
+        {
+            sha256.AppendData(buffer.Slice(dataOffset, entry.DataLength)); // Data payload
+        }
+        
         var checksum = sha256.GetHashAndReset();
+        
+        // Validate checksum size and buffer space
+        if (checksum.Length != 32)
+        {
+            throw new InvalidOperationException($"SHA256 checksum must be 32 bytes, got {checksum.Length}");
+        }
+        
+        if (checksumOffset + 32 > buffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(buffer), 
+                $"Buffer too small for checksum at offset {checksumOffset}, buffer size {buffer.Length}");
+        }
+        
         checksum.CopyTo(buffer.Slice(checksumOffset, 32));
     }
 
@@ -647,37 +671,5 @@ internal enum WalOperation
     PageFree = 9
 }
 
-internal struct WalHeader
-{
-    public const uint MAGIC = 0x20230522;
-    public const ushort CURRENT_VERSION = 1;
-    public const int SIZE = 64;
-    public const int DEFAULT_ENTRY_SIZE = 4096;
-
-    public uint Magic;
-    public ushort Version;
-    public ushort EntrySize;
-    public uint MaxEntries;
-    public ulong CurrentLsn;
-    public ulong LastCheckpoint;
-    public ulong HeadOffset;
-    public ulong TailOffset;
-}
-
-#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
-internal struct WalEntry
-{
-    public const int SIZE = 64;
-    public const int MAX_DATA_LENGTH = 4000;
-
-    public ulong Lsn;
-    public ulong TransactionId;
-    public ulong Timestamp;
-    public ushort Operation;
-    public ushort BlockIndex;
-    public ulong PageId;
-    public ushort DataLength;
-    public unsafe fixed byte BlockName[32];
-    public unsafe fixed byte Checksum[32];
-}
-#pragma warning restore CS0649
+// ✅ PHASE 3 FIX: Using Scdb.WalHeader and Scdb.WalEntry from ScdbStructures.cs
+// Removed duplicate definitions that had incorrect SIZE (64 vs 4096)
