@@ -27,14 +27,14 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.0.5</Version>
+    <Version>1.0.6</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.0.5: Core engine stabilization and performance tuning.
-    Group commit WAL fixes for overlapping transactions; improved single-file insert path; added XML docs.
+    <PackageReleaseNotes>v1.0.6 (2026-02-01): Added full subquery and JOIN support; core engine stabilization and performance tuning.
+      Group commit WAL fixes for overlapping transactions; improved single-file insert path; added XML docs.
     </PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

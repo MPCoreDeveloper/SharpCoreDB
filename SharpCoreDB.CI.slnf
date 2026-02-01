@@ -2,19 +2,14 @@
   "solution": {
     "path": "SharpCoreDB.sln",
     "projects": [
+      "src\\SharpCoreDB\\SharpCoreDB.csproj",
       "src\\SharpCoreDB.Data.Provider\\SharpCoreDB.Data.Provider.csproj",
       "src\\SharpCoreDB.EntityFrameworkCore\\SharpCoreDB.EntityFrameworkCore.csproj",
       "src\\SharpCoreDB.Extensions\\SharpCoreDB.Extensions.csproj",
       "src\\SharpCoreDB.Provider.YesSql\\SharpCoreDB.Provider.YesSql.csproj",
       "src\\SharpCoreDB.Serilog.Sinks\\SharpCoreDB.Serilog.Sinks.csproj",
-      "src\\SharpCoreDB\\SharpCoreDB.csproj",
-      "tests\\SharpCoreDB.Benchmarks\\SharpCoreDB.Benchmarks.csproj",
-      "tests\\SharpCoreDB.DemoJoinsSubQ\\SharpCoreDB.DemoJoinsSubQ.csproj",
-      "tests\\SharpCoreDB.Profiling\\SharpCoreDB.Profiling.csproj",
       "tests\\SharpCoreDB.Tests\\SharpCoreDB.Tests.csproj",
-      "tools\\SharpCoreDB.DebugBenchmark\\SharpCoreDB.DebugBenchmark.csproj",
-      "tools\\SharpCoreDB.Demo\\SharpCoreDB.Demo.csproj",
-      "tools\\SharpCoreDB.Viewer\\SharpCoreDB.Viewer.csproj"
+      "tools\\SharpCoreDB.Demo\\SharpCoreDB.Demo.csproj"
     ]
   }
 }

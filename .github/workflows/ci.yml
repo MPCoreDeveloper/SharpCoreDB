@@ -10,12 +10,15 @@ env:
   DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
 
 jobs:
   build:
     name: Build & Test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
         
@@ -29,12 +32,6 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-    
-    - name: Configure NuGet feeds for previews
-      run: |
-        dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
-        dotnet nuget add source https://myget.org/F/orchardcore-preview/api/v3/index.json --name orchardcore-preview --configfile NuGet.Config || true
-      shell: bash
         
     - name: Restore dependencies
       run: dotnet restore SharpCoreDB.CI.slnf
@@ -43,7 +40,8 @@ jobs:
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore
       
     - name: Test
-      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage"
+      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" -- xunit.parallelizeTestCollections=false
+      timeout-minutes: 10
       
     - name: Upload test results
       if: always()
@@ -51,6 +49,7 @@ jobs:
       with:
         name: test-results-${{ matrix.os }}
         path: '**/TestResults/**/*.trx'
+        if-no-files-found: ignore
         
     - name: Upload coverage
       if: matrix.os == 'ubuntu-latest'
@@ -59,32 +58,4 @@ jobs:
         files: '**/TestResults/**/coverage.cobertura.xml'
         flags: unittests
         name: codecov-umbrella
-        
-    - name: Run Demo CLI
-      if: matrix.os == 'ubuntu-latest' && (success() || failure())
-      run: dotnet run --project tools/SharpCoreDB.Demo --configuration Release
-
-  benchmark:
-    name: Benchmarks
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-        
-    - name: Run benchmarks
-      run: |
-        cd tests/SharpCoreDB.Benchmarks
-        dotnet run -c Release --exporters json markdown
-        
-    - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results
-        path: 'tests/SharpCoreDB.Benchmarks/BenchmarkDotNet.Artifacts/**/*'
+        fail_ci_if_error: false

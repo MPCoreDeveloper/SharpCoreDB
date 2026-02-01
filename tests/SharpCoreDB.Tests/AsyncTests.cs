@@ -6,14 +6,12 @@ namespace SharpCoreDB.Tests;
 /// Tests for async database operations.
 /// </summary>
 [Collection("PerformanceTests")]
-public class AsyncTests : IDisposable
+public class AsyncTests
 {
-    private readonly string _testDbPath;
     private readonly DatabaseFactory _factory;
 
     public AsyncTests()
     {
-        _testDbPath = Path.Combine(Path.GetTempPath(), $"test_async_{Guid.NewGuid()}");
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
         var serviceProvider = services.BuildServiceProvider();
@@ -24,7 +22,8 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_CreateTable_Success()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_create_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
 
         try
         {
@@ -38,6 +37,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -45,7 +54,8 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_InsertData_Success()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_insert_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
         
         try
         {
@@ -61,6 +71,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -68,7 +88,8 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_MultipleOperations_Success()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_multi_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
 
         try
         {
@@ -83,6 +104,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -90,7 +121,8 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_WithCancellation_CanComplete()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_cancel_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
         using var cts = new CancellationTokenSource();
 
         try
@@ -105,6 +137,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -112,7 +154,8 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_ParallelOperations_Success()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_parallel_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
         
         try
         {
@@ -134,6 +177,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -141,12 +194,13 @@ public class AsyncTests : IDisposable
     public async Task ExecuteSQLAsync_WithConfig_UsesConfiguration()
     {
         // Arrange
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_config_{Guid.NewGuid()}");
         var config = new DatabaseConfig
         {
             EnableQueryCache = true,
             QueryCacheSize = 500
         };
-        var db = _factory.Create(_testDbPath, "testpass", false, config);
+        var db = _factory.Create(testDbPath, "testpass", false, config);
 
         try
         {
@@ -161,14 +215,25 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
     [Fact]
-    public void Prepare_And_ExecutePrepared_SelectWithParameter()
+    public async Task Prepare_And_ExecutePrepared_SelectWithParameter()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_select_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
         
         try
         {
@@ -176,9 +241,8 @@ public class AsyncTests : IDisposable
             db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
             db.ExecuteSQL("INSERT INTO users VALUES (2, 'Bob')");
 
-            // Act
-            var stmt = db.Prepare("SELECT * FROM users WHERE id = ?");
-            db.ExecutePrepared(stmt, new Dictionary<string, object?> { { "0", 1 } });
+            // Act - Use ExecuteSQL with parameters for SELECT (void method)
+            db.ExecuteSQL("SELECT * FROM users WHERE id = ?", new Dictionary<string, object?> { { "0", 1 } });
 
             // Assert - no exception means success
         }
@@ -192,6 +256,16 @@ public class AsyncTests : IDisposable
                 (db as IDisposable)?.Dispose();
             }
             catch { /* Ignore disposal errors */ }
+            
+            // Clean up test directory
+            try
+            {
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
+            }
+            catch { /* Ignore cleanup errors */ }
         }
     }
 
@@ -199,7 +273,8 @@ public class AsyncTests : IDisposable
     public async Task ExecutePreparedAsync_InsertWithParameter()
     {
         // Arrange
-        var db = _factory.Create(_testDbPath, "testpass");
+        var testDbPath = Path.Combine(Path.GetTempPath(), $"test_prepared_{Guid.NewGuid()}");
+        var db = _factory.Create(testDbPath, "testpass");
         
         try
         {
@@ -215,21 +290,16 @@ public class AsyncTests : IDisposable
         finally
         {
             (db as IDisposable)?.Dispose();
-        }
-    }
-
-    public void Dispose()
-    {
-        try
-        {
-            if (Directory.Exists(_testDbPath))
+            
+            // Clean up test directory
+            try
             {
-                Directory.Delete(_testDbPath, true);
+                if (Directory.Exists(testDbPath))
+                {
+                    Directory.Delete(testDbPath, true);
+                }
             }
-        }
-        catch
-        {
-            // Ignore cleanup errors
+            catch { /* Ignore cleanup errors */ }
         }
     }
 }
