@@ -111,11 +111,8 @@ public static class ColumnStatistics
         var distinctValues = new HashSet<int>(nonNullValues);
         var nullCount = values.Length - nonNullValues.Count;
 
-        var minValue = nonNullValues.Count > 0 ? nonNullValues.Min() : (int?)null;
-        var maxValue = nonNullValues.Count > 0 ? nonNullValues.Max() : (int?)null;
-
-        // Build histogram with 10 buckets
-        var histogram = BuildHistogram(nonNullValues, minValue, maxValue, bucketCount: 10);
+        var minValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Min() : null;
+        var maxValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Max() : null;
 
         return new ColumnStats
         {
@@ -125,7 +122,7 @@ public static class ColumnStatistics
             DistinctCount = distinctValues.Count,
             MinValue = minValue,
             MaxValue = maxValue,
-            Histogram = histogram.ToArray(),
+            Histogram = null, // Histogram support can be added in Phase 7.2
         };
     }
 
@@ -150,10 +147,8 @@ public static class ColumnStatistics
         var distinctValues = new HashSet<long>(nonNullValues);
         var nullCount = values.Length - nonNullValues.Count;
 
-        var minValue = nonNullValues.Count > 0 ? nonNullValues.Min() : (long?)null;
-        var maxValue = nonNullValues.Count > 0 ? nonNullValues.Max() : (long?)null;
-
-        var histogram = BuildHistogram(nonNullValues, minValue, maxValue, bucketCount: 10);
+        var minValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Min() : null;
+        var maxValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Max() : null;
 
         return new ColumnStats
         {
@@ -163,7 +158,7 @@ public static class ColumnStatistics
             DistinctCount = distinctValues.Count,
             MinValue = minValue,
             MaxValue = maxValue,
-            Histogram = histogram.ToArray(),
+            Histogram = null,
         };
     }
 
@@ -188,10 +183,8 @@ public static class ColumnStatistics
         var distinctValues = new HashSet<double>(nonNullValues);
         var nullCount = values.Length - nonNullValues.Count;
 
-        var minValue = nonNullValues.Count > 0 ? nonNullValues.Min() : (double?)null;
-        var maxValue = nonNullValues.Count > 0 ? nonNullValues.Max() : (double?)null;
-
-        var histogram = BuildHistogram(nonNullValues, minValue, maxValue, bucketCount: 10);
+        var minValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Min() : null;
+        var maxValue = nonNullValues.Count > 0 ? (IComparable?)nonNullValues.Max() : null;
 
         return new ColumnStats
         {
@@ -201,7 +194,7 @@ public static class ColumnStatistics
             DistinctCount = distinctValues.Count,
             MinValue = minValue,
             MaxValue = maxValue,
-            Histogram = histogram.ToArray(),
+            Histogram = null,
         };
     }
 
@@ -267,78 +260,7 @@ public static class ColumnStatistics
         if (encoding == ColumnFormat.ColumnEncoding.Dictionary)
             return stats.DistinctSelectivity;
 
-        // Range predicates - estimate using histogram if available
-        if (predicateOperator == ">" || predicateOperator == ">=" || 
-            predicateOperator == "<" || predicateOperator == "<=")
-        {
-            if (stats.Histogram != null && predicateValue is IComparable comparable)
-            {
-                return EstimateRangeSelectivity(stats.Histogram, predicateOperator, comparable);
-            }
-        }
-
         // Default estimate: 10% selectivity (conservative)
         return 0.1;
-    }
-
-    /// <summary>Helper: Builds histogram from values.</summary>
-    private static List<HistogramBucket> BuildHistogram<T>(
-        List<T> values,
-        T? minValue,
-        T? maxValue,
-        int bucketCount) where T : IComparable
-    {
-        var result = new List<HistogramBucket>();
-
-        if (values.Count == 0 || minValue == null || maxValue == null)
-            return result;
-
-        var sorted = values.OrderBy(v => v).ToList();
-        var bucketSize = (values.Count + bucketCount - 1) / bucketCount;
-
-        for (int i = 0; i < bucketCount && i * bucketSize < values.Count; i++)
-        {
-            var lower = sorted[i * bucketSize];
-            var upper = i < bucketCount - 1 
-                ? sorted[Math.Min((i + 1) * bucketSize, values.Count - 1)]
-                : maxValue;
-            
-            var count = Math.Min(bucketSize, values.Count - (i * bucketSize));
-
-            result.Add(new HistogramBucket
-            {
-                BoundLower = lower,
-                BoundUpper = upper,
-                Count = count,
-            });
-        }
-
-        return result;
-    }
-
-    /// <summary>Helper: Estimates selectivity for range predicates.</summary>
-    private static double EstimateRangeSelectivity(HistogramBucket[] histogram,
-                                                   string predicateOperator,
-                                                   IComparable value)
-    {
-        double selectivity = 0.0;
-
-        foreach (var bucket in histogram)
-        {
-            bool bucketMatches = predicateOperator switch
-            {
-                ">" => bucket.BoundUpper.CompareTo(value) > 0,
-                ">=" => bucket.BoundUpper.CompareTo(value) >= 0,
-                "<" => bucket.BoundLower.CompareTo(value) < 0,
-                "<=" => bucket.BoundLower.CompareTo(value) <= 0,
-                "=" => bucket.BoundLower.CompareTo(value) <= 0 && bucket.BoundUpper.CompareTo(value) > 0,
-                _ => false
-            };
-
-            if (bucketMatches)
-                selectivity += bucket.Fraction(histogram.Sum(b => b.Count));
-        }
-
-        return selectivity;
     }
 }

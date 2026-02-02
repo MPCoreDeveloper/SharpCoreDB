@@ -245,13 +245,13 @@ public sealed class ColumnCodec(ColumnFormat format)
         if (values.Length == 0)
             return;
 
-        var baseValue = values[0] is int i ? i : 0;
+        var baseValue = values[0] is int baseInt ? baseInt : 0;
         writer.Write(baseValue);
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
-            var prev = values[i - 1] is int prevInt ? prevInt : 0;
-            var curr = values[i] is int currInt ? currInt : 0;
+            var prev = values[idx - 1] is int prevInt ? prevInt : 0;
+            var curr = values[idx] is int currInt ? currInt : 0;
             var delta = curr - prev;
             writer.Write(delta);
         }
@@ -262,13 +262,13 @@ public sealed class ColumnCodec(ColumnFormat format)
         if (values.Length == 0)
             return;
 
-        var baseValue = values[0] is long l ? l : 0L;
+        var baseValue = values[0] is long baseLong ? baseLong : 0L;
         writer.Write(baseValue);
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
-            var prev = values[i - 1] is long prevLong ? prevLong : 0L;
-            var curr = values[i] is long currLong ? currLong : 0L;
+            var prev = values[idx - 1] is long prevLong ? prevLong : 0L;
+            var curr = values[idx] is long currLong ? currLong : 0L;
             var delta = curr - prev;
             writer.Write(delta);
         }
@@ -279,12 +279,12 @@ public sealed class ColumnCodec(ColumnFormat format)
         if (values.Length == 0)
             return;
 
-        var current = values[0] is int i ? i : 0;
+        var current = values[0] is int baseInt ? baseInt : 0;
         int count = 1;
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
-            var next = values[i] is int nextInt ? nextInt : 0;
+            var next = values[idx] is int nextInt ? nextInt : 0;
             if (next == current)
             {
                 count++;
@@ -307,12 +307,12 @@ public sealed class ColumnCodec(ColumnFormat format)
         if (values.Length == 0)
             return;
 
-        var current = values[0] is long l ? l : 0L;
+        var current = values[0] is long baseLong ? baseLong : 0L;
         int count = 1;
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
-            var next = values[i] is long nextLong ? nextLong : 0L;
+            var next = values[idx] is long nextLong ? nextLong : 0L;
             if (next == current)
             {
                 count++;
@@ -418,10 +418,10 @@ public sealed class ColumnCodec(ColumnFormat format)
         var baseValue = reader.ReadInt32();
         values[0] = nullBitmap.IsNull(0) ? null : baseValue;
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
             var delta = reader.ReadInt32();
-            values[i] = nullBitmap.IsNull(i) ? null : (int)values[i - 1]! + delta;
+            values[idx] = nullBitmap.IsNull(idx) ? null : (int)values[idx - 1]! + delta;
         }
     }
 
@@ -475,10 +475,10 @@ public sealed class ColumnCodec(ColumnFormat format)
         var baseValue = reader.ReadInt64();
         values[0] = nullBitmap.IsNull(0) ? null : baseValue;
 
-        for (int i = 1; i < values.Length; i++)
+        for (int idx = 1; idx < values.Length; idx++)
         {
             var delta = reader.ReadInt64();
-            values[i] = nullBitmap.IsNull(i) ? null : (long)values[i - 1]! + delta;
+            values[idx] = nullBitmap.IsNull(idx) ? null : (long)values[idx - 1]! + delta;
         }
     }
 
@@ -506,12 +506,15 @@ public sealed class ColumnCodec(ColumnFormat format)
         }
     }
 
-    private static void DecodeDouble(BinaryReader reader, object?[] values, ColumnFormat.NullBitmap nullBitmap)
+    private static void DecodeDouble(BinaryReader reader,
+                                    ColumnFormat.ColumnEncoding encoding,
+                                    object?[] values,
+                                    ColumnFormat.NullBitmap nullBitmap)
     {
-        for (int i = 0; i < values.Length; i++)
+        for (int idx = 0; idx < values.Length; idx++)
         {
             var value = reader.ReadDouble();
-            values[i] = nullBitmap.IsNull(i) || double.IsNaN(value) ? null : (object)value;
+            values[idx] = nullBitmap.IsNull(idx) || double.IsNaN(value) ? null : (object)value;
         }
     }
 
