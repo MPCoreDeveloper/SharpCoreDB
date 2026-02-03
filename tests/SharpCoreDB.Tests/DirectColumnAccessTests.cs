@@ -303,7 +303,7 @@ public class DirectColumnAccessTests
         Assert.Null(row["any"]);
     }
 
-    [Fact]
+    [Fact(Skip = "Performance benchmark: CPU-dependent timing. TODO: Use BenchmarkDotNet for consistent cross-platform measurements.")]
     public void IndexedRowData_PerformanceTest_IndexAccess()
     {
         var row = new IndexedRowData(_testIndices);
