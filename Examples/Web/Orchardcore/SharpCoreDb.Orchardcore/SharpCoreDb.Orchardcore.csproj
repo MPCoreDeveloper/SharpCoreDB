@@ -8,9 +8,13 @@
     <IsPackable>false</IsPackable>
     <IsPublishable>false</IsPublishable>
     <ExcludeFromSourceBuild>true</ExcludeFromSourceBuild>
+    <!-- Skip build entirely in CI to avoid package restore failures -->
+    <ExcludeFromBuild Condition="'$(CI)' == 'true' OR '$(GITHUB_ACTIONS)' == 'true'">true</ExcludeFromBuild>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- OrchardCore packages only restored when NOT in CI -->
+  <ItemGroup Condition="'$(CI)' != 'true' AND '$(GITHUB_ACTIONS)' != 'true'">
+    <!-- Requires OrchardCore preview feed: https://nuget.cloudsmith.io/orchardcore/preview/v3/index.json -->
     <PackageReference Include="OrchardCore.Application.Cms.Targets" Version="3.0.0-preview-18884" />
   </ItemGroup>
 
