@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ master, develop ]
 
+permissions:
+  contents: read
+
 env:
   DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
