@@ -87,28 +87,35 @@ public sealed class GorillaCodec
                     trailingZeros = 0;
                 }
 
-                if (prevLeadingZeros >= 0 && leadingZeros >= prevLeadingZeros && trailingZeros >= prevTrailingZeros)
+                // Check if we can reuse previous control block for better compression
+                // The current XOR must fit within the previous control block window
+                int prevBlockSize = 64 - prevLeadingZeros - prevTrailingZeros;
+                bool canReusePrevBlock = prevLeadingZeros >= 0 &&
+                                         leadingZeros >= prevLeadingZeros &&
+                                         trailingZeros >= prevTrailingZeros &&
+                                         prevBlockSize > 0;
+
+                if (canReusePrevBlock)
                 {
-                    // Same or more leading/trailing zeros: write '0' + meaningful bits
+                    // '10' path: reuse previous control block
                     writer.WriteBit(false);
 
-                    // Use previous control block
-                    int blockSize = 64 - prevLeadingZeros - prevTrailingZeros;
+                    // Write meaningful bits using previous control block size
                     ulong meaningfulValue = (xor >> prevTrailingZeros);
-                    if (blockSize < 64)
+                    if (prevBlockSize < 64)
                     {
-                        meaningfulValue &= (1UL << blockSize) - 1;
+                        meaningfulValue &= (1UL << prevBlockSize) - 1;
                     }
-                    writer.WriteBits(meaningfulValue, blockSize);
+                    writer.WriteBits(meaningfulValue, prevBlockSize);
+                    // Note: do NOT update prevLeadingZeros/prevTrailingZeros
                 }
                 else
                 {
-                    // Different leading/trailing zeros: write '1' + control block + meaningful bits
+                    // '11' path: write new control block
                     writer.WriteBit(true);
 
-                    // Write control block: 5 bits for leading zeros, 6 bits for meaningful bits length
-                    // Note: 6 bits can represent 0-63, so we store (meaningfulBits - 1) to represent 1-64
-                    writer.WriteBits((ulong)leadingZeros, 5);
+                    // Write control block: 6 bits for leading zeros (0-63), 6 bits for meaningful bits length (1-64 stored as 0-63)
+                    writer.WriteBits((ulong)leadingZeros, 6);
                     writer.WriteBits((ulong)(meaningfulBits - 1), 6);
 
                     // Write meaningful bits
@@ -177,11 +184,12 @@ public sealed class GorillaCodec
                 int blockSize = 64 - prevLeadingZeros - prevTrailingZeros;
                 ulong meaningfulValue = reader.ReadBits(blockSize);
                 xor = meaningfulValue << prevTrailingZeros;
+                // Note: do NOT update prevLeadingZeros/prevTrailingZeros
             }
             else
             {
                 // '11' -> new control block
-                int leadingZeros = (int)reader.ReadBits(5);
+                int leadingZeros = (int)reader.ReadBits(6);  // 6 bits for leading zeros (0-63)
                 int meaningfulBits = (int)reader.ReadBits(6) + 1; // Add 1 to get 1-64 range
                 int trailingZeros = 64 - leadingZeros - meaningfulBits;
 
