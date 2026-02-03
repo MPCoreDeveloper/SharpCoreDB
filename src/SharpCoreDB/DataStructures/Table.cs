@@ -2,6 +2,7 @@ namespace SharpCoreDB.DataStructures;
 
 using Microsoft.Extensions.ObjectPool;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Hybrid;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -16,6 +17,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using SharpCoreDB.Services;
+
 
 /// <summary>
 /// Implementation of ITable with SIMD-accelerated operations and batch insert optimization.
@@ -177,7 +179,13 @@ public partial class Table : ITable, IDisposable
     private readonly Dictionary<string, string> indexNameToColumn = [];
     
     private IStorage? storage;
+    
+    // ✅ Phase 2: Storage provider reference for delta-update optimization
+    // Used to access SingleFileStorageProvider.UpdateBlockAsync() for Single-File mode
+    private IStorageProvider? _storageProvider;
+    
     private readonly ReaderWriterLockSlim rwLock = new(LockRecursionPolicy.SupportsRecursion);
+
     private bool isReadOnly;
     private readonly IndexManager? indexManager;
     private readonly Channel<IndexUpdate> _indexQueue = Channel.CreateUnbounded<IndexUpdate>();
@@ -208,10 +216,17 @@ public partial class Table : ITable, IDisposable
     public void SetStorage(IStorage storage) => this.storage = storage;
     
     /// <summary>
+    /// ✅ Phase 2: Sets the storage provider for delta-update optimization.
+    /// </summary>
+    /// <param name="storageProvider">The storage provider instance (nullable for directory-based storage).</param>
+    public void SetStorageProvider(IStorageProvider? storageProvider) => _storageProvider = storageProvider;
+    
+    /// <summary>
     /// Sets the readonly flag for this table.
     /// </summary>
     /// <param name="isReadOnly">True if readonly.</param>
     public void SetReadOnly(bool isReadOnly) => this.isReadOnly = isReadOnly;
+
 
     /// <summary>
     /// Sets the database instance for last_insert_rowid() tracking.

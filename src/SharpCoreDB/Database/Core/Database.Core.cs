@@ -277,8 +277,12 @@ public partial class Database : IDatabase, IDisposable
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
                 
+                // ✅ Phase 2: Set storage provider for delta-update optimization
+                table.SetStorageProvider(_storageProvider);
+                
                 // ✅ NEW: Set database reference for last_insert_rowid() tracking
                 table.SetDatabase(this);
+
                 
                 // ✅ CRITICAL FIX: Complete initialization of new DDL properties
                 // Ensure lists have correct length

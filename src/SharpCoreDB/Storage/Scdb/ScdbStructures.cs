@@ -106,10 +106,17 @@ public struct ScdbFileHeader
     /// <summary>Fragmentation percentage (0-10000 = 0.00% - 100.00%)</summary>
     public ulong FragmentationPercent; // 0x00B8: Fragmentation %
 
-    // === Reserved (240 bytes) ===
+    // === Phase 3.3: Delta-Update Support (8 bytes) ===
+    
+    /// <summary>
+    /// Feature flags: Bit 0 = Delta-updates supported (Phase 3.3)
+    /// </summary>
+    public ulong FeatureFlags;         // 0x00C0: Feature capability flags
+    
+    // === Reserved (232 bytes) ===
     
     /// <summary>Reserved for future extensions</summary>
-    public unsafe fixed byte Reserved[240];   // 0x00C0: Reserved space
+    public unsafe fixed byte Reserved[232];   // 0x00C8: Reserved space
 
     // Total: 512 bytes (0x200)
 
@@ -124,11 +131,19 @@ public struct ScdbFileHeader
     
     /// <summary>Default page size (4KB)</summary>
     public const ushort DEFAULT_PAGE_SIZE = 4096;
+    
+    /// <summary>Feature flag: Delta-update support enabled (Phase 3.3)</summary>
+    public const ulong FEATURE_DELTA_UPDATES = 0x0000_0000_0000_0001;
 
     /// <summary>
     /// Validates the header magic and version.
     /// </summary>
     public readonly bool IsValid => Magic == MAGIC && FormatVersion == CURRENT_VERSION;
+    
+    /// <summary>
+    /// Checks if delta-update feature is enabled (Phase 3.3 optimization).
+    /// </summary>
+    public readonly bool SupportsDeltaUpdates => (FeatureFlags & FEATURE_DELTA_UPDATES) != 0;
 
     /// <summary>
     /// Zero-allocation parser from ReadOnlySpan using MemoryMarshal.

@@ -8,6 +8,7 @@ namespace SharpCoreDB;
 using System.Collections.Generic;
 using System.Linq;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage;
 
 /// <summary>
 /// Batch SQL execution for SingleFileDatabase.
@@ -63,6 +64,16 @@ internal static class SingleFileDatabaseBatchExtension
 
             var isInTransactionBefore = storageProvider.IsInTransaction;
             
+            // ✅ Phase 4.2: Begin BlockRegistry batch to defer all flushes until end
+            if (storageProvider is SingleFileStorageProvider singleFileProvider)
+            {
+                var blockRegistry = singleFileProvider.GetType()
+                    .GetField("_blockRegistry", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.GetValue(singleFileProvider) as dynamic;
+                
+                blockRegistry?.BeginBatch();
+            }
+            
             // ✅ PERFORMANCE: Collect all tables and disable auto-flush during batch
             var tablesToFlush = new HashSet<SingleFileTable>();
             var originalAutoFlushStates = new Dictionary<SingleFileTable, bool>();
@@ -85,9 +96,11 @@ internal static class SingleFileDatabaseBatchExtension
                     storageProvider.BeginTransaction();
                 }
                 
-                // Group INSERT statements by table for batch processing
+                // ✅ Group INSERT statements by table for batch processing
                 Dictionary<string, List<Dictionary<string, object>>> insertsByTable = new();
-                List<string> nonInserts = new();
+                // ✅ PHASE 2: Group UPDATE statements by table and primary key for batch processing
+                Dictionary<string, Dictionary<object, Dictionary<string, object>>> updatesByTable = new();
+                List<string> otherStatements = new();
 
                 foreach (var sql in statements)
                 {
@@ -113,12 +126,44 @@ internal static class SingleFileDatabaseBatchExtension
                         }
                         else
                         {
-                            nonInserts.Add(sql);
+                            otherStatements.Add(sql);
+                        }
+                    }
+                    // ✅ PHASE 2: Check if it's an UPDATE statement
+                    else if (upperTrimmed.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Parse UPDATE and group by table + primary key
+                        var parsed = ParseUpdateStatement(database, trimmed);
+                        if (parsed.HasValue)
+                        {
+                            var (tableName, pkValue, updates) = parsed.Value;
+                            
+                            if (!updatesByTable.TryGetValue(tableName, out var tableUpdates))
+                            {
+                                tableUpdates = new Dictionary<object, Dictionary<string, object>>();
+                                updatesByTable[tableName] = tableUpdates;
+                            }
+                            
+                            // ✅ Merge updates for same primary key (last update wins)
+                            if (!tableUpdates.TryGetValue(pkValue, out var existingUpdates))
+                            {
+                                existingUpdates = new Dictionary<string, object>();
+                                tableUpdates[pkValue] = existingUpdates;
+                            }
+                            
+                            foreach (var kvp in updates)
+                            {
+                                existingUpdates[kvp.Key] = kvp.Value;
+                            }
+                        }
+                        else
+                        {
+                            otherStatements.Add(sql);
                         }
                     }
                     else
                     {
-                        nonInserts.Add(sql);
+                        otherStatements.Add(sql);
                     }
                 }
 
@@ -131,12 +176,21 @@ internal static class SingleFileDatabaseBatchExtension
                         table.InsertBatch(rows);
                     }
                 }
-
-                // Execute remaining non-INSERT statements (UPDATEs, DELETEs, etc.)
-                // ✅ PERFORMANCE: AutoFlush disabled - no per-op flush
-                if (nonInserts.Count > 0)
+                
+                // ✅ PHASE 2: Execute batch updates per table (O(n) instead of O(n*m))
+                foreach (var (tableName, tableUpdates) in updatesByTable)
                 {
-                    foreach (var sql in nonInserts)
+                    if (database.Tables.TryGetValue(tableName, out var table) && table is SingleFileTable sft)
+                    {
+                        sft.UpdateBatch(tableUpdates);
+                    }
+                }
+
+                // Execute remaining statements (DELETEs, etc.)
+                // ✅ PERFORMANCE: AutoFlush disabled - no per-op flush
+                if (otherStatements.Count > 0)
+                {
+                    foreach (var sql in otherStatements)
                     {
                         database.ExecuteSQL(sql, null);
                     }
@@ -173,6 +227,16 @@ internal static class SingleFileDatabaseBatchExtension
                 foreach (var (sft, wasAutoFlush) in originalAutoFlushStates)
                 {
                     sft.AutoFlush = wasAutoFlush;
+                }
+                
+                // ✅ Phase 4.2: End BlockRegistry batch - triggers single flush for all updates
+                if (storageProvider is SingleFileStorageProvider sfProvider)
+                {
+                    var blockRegistry = sfProvider.GetType()
+                        .GetField("_blockRegistry", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                        ?.GetValue(sfProvider) as dynamic;
+                    
+                    blockRegistry?.EndBatchAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                 }
             }
         }
@@ -388,5 +452,102 @@ internal static class SingleFileDatabaseBatchExtension
         }
         
         return value.ToString();
+    }
+    
+    /// <summary>
+    /// ✅ PHASE 2: Parses an UPDATE statement and returns (tableName, primaryKeyValue, updates) tuple.
+    /// Format: UPDATE table SET col1 = val1, col2 = val2 WHERE pk_column = pk_value
+    /// Only supports simple primary key equality WHERE clauses.
+    /// </summary>
+    private static (string tableName, object pkValue, Dictionary<string, object> updates)? ParseUpdateStatement(
+        SingleFileDatabase database,
+        string sql)
+    {
+        try
+        {
+            // Pattern: UPDATE table SET assignments WHERE pk_col = pk_val
+            var upperSql = sql.ToUpperInvariant();
+            
+            // Find UPDATE keyword
+            var updateIdx = upperSql.IndexOf("UPDATE", StringComparison.OrdinalIgnoreCase);
+            if (updateIdx < 0) return null;
+            
+            // Find SET keyword
+            var setIdx = upperSql.IndexOf(" SET ", StringComparison.OrdinalIgnoreCase);
+            if (setIdx < 0) return null;
+            
+            // Find WHERE keyword
+            var whereIdx = upperSql.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase);
+            if (whereIdx < 0) return null;
+            
+            // Extract table name (between UPDATE and SET)
+            var tableName = sql[(updateIdx + 6)..setIdx].Trim();
+            if (!database.Tables.TryGetValue(tableName, out var table))
+            {
+                return null;
+            }
+            
+            // Extract SET clause (between SET and WHERE)
+            var setClause = sql[(setIdx + 5)..whereIdx].Trim();
+            
+            // Extract WHERE clause (after WHERE)
+            var whereClause = sql[(whereIdx + 7)..].Trim();
+            
+            // Parse WHERE clause - must be simple "pk_col = pk_value"
+            var equalsIdx = whereClause.IndexOf('=');
+            if (equalsIdx < 0) return null;
+            
+            var whereCol = whereClause[..equalsIdx].Trim();
+            var whereValueStr = whereClause[(equalsIdx + 1)..].Trim();
+            
+            // ✅ Verify WHERE column is the primary key (first column for SingleFileTable)
+            var pkColumn = table.Columns[0];
+            if (!string.Equals(whereCol, pkColumn, StringComparison.OrdinalIgnoreCase))
+            {
+                // Not a simple PK-based UPDATE - fall back to slow path
+                return null;
+            }
+            
+            // Parse the primary key value
+            var pkType = table.ColumnTypes[0];
+            var pkValue = SqlParser.ParseValue(TrimQuotes(whereValueStr.AsSpan()), pkType);
+            if (pkValue is null)
+            {
+                return null;
+            }
+            
+            // Parse SET assignments
+            var updates = new Dictionary<string, object>();
+            foreach (var assignment in setClause.Split(','))
+            {
+                var parts = assignment.Split('=');
+                if (parts.Length != 2) continue;
+                
+                var colName = parts[0].Trim();
+                var valueStr = parts[1].Trim();
+                
+                // Find column type
+                var colIdx = table.Columns.IndexOf(colName);
+                if (colIdx < 0) continue;
+                
+                var colType = table.ColumnTypes[colIdx];
+                var value = SqlParser.ParseValue(TrimQuotes(valueStr.AsSpan()), colType);
+                if (value is not null)
+                {
+                    updates[colName] = value;
+                }
+            }
+            
+            if (updates.Count == 0)
+            {
+                return null;
+            }
+            
+            return (tableName, pkValue, updates);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

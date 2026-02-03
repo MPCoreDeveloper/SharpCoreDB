@@ -100,12 +100,39 @@ internal sealed class BlockRegistry : IDisposable
         
         var dirtyCount = Interlocked.Increment(ref _dirtyCount);
         
-        // Only trigger flush if batch threshold exceeded
-        if (dirtyCount >= BATCH_THRESHOLD)
+        // Only trigger flush if batch threshold exceeded (and not in explicit batch)
+        if (dirtyCount >= BATCH_THRESHOLD && _batchDepth == 0)
         {
             // Signal flush needed (non-blocking)
             _ = Task.Run(async () => await FlushAsync(CancellationToken.None), _flushCts.Token);
             Interlocked.Increment(ref _batchedFlushes);
+        }
+    }
+    
+    // ✅ Phase 4.1: Explicit batch control for ExecuteBatchSQL optimization
+    private int _batchDepth = 0;
+    
+    /// <summary>
+    /// Begins an explicit batch operation. Defers all registry flushes until EndBatch().
+    /// Can be nested - flush only occurs when outermost batch completes.
+    /// </summary>
+    public void BeginBatch()
+    {
+        Interlocked.Increment(ref _batchDepth);
+    }
+    
+    /// <summary>
+    /// Ends an explicit batch operation. Flushes registry if this is the outermost batch.
+    /// </summary>
+    public async Task EndBatchAsync(CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Decrement(ref _batchDepth) == 0)
+        {
+            // Outermost batch complete - flush all pending updates
+            if (Interlocked.CompareExchange(ref _dirtyCount, 0, 0) > 0)
+            {
+                await FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
