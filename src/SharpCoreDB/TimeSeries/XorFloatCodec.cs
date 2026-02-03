@@ -68,12 +68,24 @@ public sealed class XorFloatCodec
                 int trailingZeros = CountTrailingZeros(xor);
                 int meaningfulBits = 64 - leadingZeros - trailingZeros;
 
-                // Write control: 6 bits for leading zeros, 6 bits for length
+                // Ensure meaningful bits is at least 1
+                if (meaningfulBits <= 0)
+                {
+                    meaningfulBits = 64;
+                    leadingZeros = 0;
+                    trailingZeros = 0;
+                }
+
+                // Write control: 6 bits for leading zeros, 6 bits for length (store length - 1)
                 writer.WriteBits((ulong)leadingZeros, 6);
-                writer.WriteBits((ulong)meaningfulBits, 6);
+                writer.WriteBits((ulong)(meaningfulBits - 1), 6);
 
                 // Write meaningful bits
-                ulong meaningfulValue = (xor >> trailingZeros) & ((1UL << meaningfulBits) - 1);
+                ulong meaningfulValue = (xor >> trailingZeros);
+                if (meaningfulBits < 64)
+                {
+                    meaningfulValue &= (1UL << meaningfulBits) - 1;
+                }
                 writer.WriteBits(meaningfulValue, meaningfulBits);
             }
 
@@ -116,7 +128,7 @@ public sealed class XorFloatCodec
 
             // Read control
             int leadingZeros = (int)reader.ReadBits(6);
-            int meaningfulBits = (int)reader.ReadBits(6);
+            int meaningfulBits = (int)reader.ReadBits(6) + 1; // Add 1 to get 1-64 range
             int trailingZeros = 64 - leadingZeros - meaningfulBits;
 
             // Read meaningful bits

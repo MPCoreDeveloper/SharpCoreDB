@@ -229,6 +229,24 @@ public sealed class CompressionTests
         _output.WriteLine("✓ Single value (Gorilla) round-trip");
     }
 
+    [Fact]
+    public void Gorilla_TwoValues_RoundTrip()
+    {
+        // Arrange
+        var values = new[] { 20.0, 20.004999916667085 };
+        var codec = new GorillaCodec();
+
+        // Act
+        var compressed = codec.Compress(values);
+        var decompressed = codec.Decompress(compressed, 2);
+
+        // Assert
+        Assert.Equal(2, decompressed.Length);
+        Assert.Equal(values[0], decompressed[0], precision: 10);
+        Assert.Equal(values[1], decompressed[1], precision: 10);
+        _output.WriteLine($"✓ Two values: {decompressed[0]}, {decompressed[1]}");
+    }
+
     // ========================================
     // XOR Float Compression Tests
     // ========================================

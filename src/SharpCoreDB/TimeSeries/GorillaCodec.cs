@@ -79,6 +79,14 @@ public sealed class GorillaCodec
                 int trailingZeros = CountTrailingZeros(xor);
                 int meaningfulBits = 64 - leadingZeros - trailingZeros;
 
+                // Ensure meaningful bits is at least 1 (xor != 0 guaranteed by earlier check)
+                if (meaningfulBits <= 0)
+                {
+                    meaningfulBits = 64;
+                    leadingZeros = 0;
+                    trailingZeros = 0;
+                }
+
                 if (prevLeadingZeros >= 0 && leadingZeros >= prevLeadingZeros && trailingZeros >= prevTrailingZeros)
                 {
                     // Same or more leading/trailing zeros: write '0' + meaningful bits
@@ -86,7 +94,11 @@ public sealed class GorillaCodec
 
                     // Use previous control block
                     int blockSize = 64 - prevLeadingZeros - prevTrailingZeros;
-                    ulong meaningfulValue = (xor >> prevTrailingZeros) & ((1UL << blockSize) - 1);
+                    ulong meaningfulValue = (xor >> prevTrailingZeros);
+                    if (blockSize < 64)
+                    {
+                        meaningfulValue &= (1UL << blockSize) - 1;
+                    }
                     writer.WriteBits(meaningfulValue, blockSize);
                 }
                 else
@@ -95,11 +107,16 @@ public sealed class GorillaCodec
                     writer.WriteBit(true);
 
                     // Write control block: 5 bits for leading zeros, 6 bits for meaningful bits length
+                    // Note: 6 bits can represent 0-63, so we store (meaningfulBits - 1) to represent 1-64
                     writer.WriteBits((ulong)leadingZeros, 5);
-                    writer.WriteBits((ulong)meaningfulBits, 6);
+                    writer.WriteBits((ulong)(meaningfulBits - 1), 6);
 
                     // Write meaningful bits
-                    ulong meaningfulValue = (xor >> trailingZeros) & ((1UL << meaningfulBits) - 1);
+                    ulong meaningfulValue = (xor >> trailingZeros);
+                    if (meaningfulBits < 64)
+                    {
+                        meaningfulValue &= (1UL << meaningfulBits) - 1;
+                    }
                     writer.WriteBits(meaningfulValue, meaningfulBits);
 
                     prevLeadingZeros = leadingZeros;
@@ -165,7 +182,7 @@ public sealed class GorillaCodec
             {
                 // '11' -> new control block
                 int leadingZeros = (int)reader.ReadBits(5);
-                int meaningfulBits = (int)reader.ReadBits(6);
+                int meaningfulBits = (int)reader.ReadBits(6) + 1; // Add 1 to get 1-64 range
                 int trailingZeros = 64 - leadingZeros - meaningfulBits;
 
                 ulong meaningfulValue = reader.ReadBits(meaningfulBits);
