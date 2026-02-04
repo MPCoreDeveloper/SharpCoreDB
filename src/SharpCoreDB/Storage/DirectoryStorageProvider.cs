@@ -413,8 +413,8 @@ public sealed class DirectoryStorageProvider : IStorageProvider
 
     private string GetBlockPath(string blockName)
     {
-        // Sanitize block name for file system
+        // Sanitize block name for file system and add .dat extension
         var sanitized = blockName.Replace(':', '_').Replace('/', '_').Replace('\\', '_');
-        return Path.Combine(_rootDirectory, sanitized);
+        return Path.Combine(_rootDirectory, sanitized + ".dat");
     }
 }

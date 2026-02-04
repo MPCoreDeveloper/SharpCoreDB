@@ -66,7 +66,7 @@ public sealed class ExtentAllocatorTests : IDisposable
         // Assert
         Assert.NotNull(result);
         Assert.Equal(100UL, result.Value.StartPage);
-        Assert.Equal(50UL, result.Value.Length); // Returns original extent info
+        Assert.Equal(50UL, result.Value.Length); // Returns original extent info (before split)
         Assert.Equal(1, _allocator.ExtentCount); // Remainder should exist
         
         var extents = _allocator.GetExtents();
