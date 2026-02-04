@@ -343,10 +343,21 @@ public partial class SqlParser
     /// <summary>
     /// Executes SELECT statement (console output version).
     /// NOTE: This method is for interactive/demo use only. Use ExecuteQuery() for production.
+    /// Console output is suppressed in CI environments to prevent test log overflow.
     /// </summary>
     private void ExecuteSelect(string sql, string[] parts, bool noEncrypt)
     {
         var results = ExecuteSelectQuery(sql, parts, noEncrypt);
+        
+        // ✅ FIX: Skip console output in CI environments to prevent log overflow
+        // GitHub Actions sets CI=true, Azure DevOps sets TF_BUILD=true
+        if (Environment.GetEnvironmentVariable("CI") is not null ||
+            Environment.GetEnvironmentVariable("TF_BUILD") is not null ||
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is not null)
+        {
+            return;
+        }
+        
         foreach (var row in results)
         {
             Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));

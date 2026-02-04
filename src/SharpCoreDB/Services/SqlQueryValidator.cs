@@ -153,6 +153,7 @@ public static class SqlQueryValidator
             // else: no placeholders but parameters provided - likely already bound, skip warning
         }
 
+
         // Handle warnings based on mode
         if (warnings.Any())
         {
@@ -167,8 +168,15 @@ public static class SqlQueryValidator
             }
             else // Lenient
             {
-                Console.WriteLine($"⚠️  {message}");
-                Console.WriteLine($"   Query: {TruncateQuery(sql)}");
+                // ✅ FIX: Skip console output in CI environments to prevent log overflow
+                // GitHub Actions sets CI=true, Azure DevOps sets TF_BUILD=true
+                if (Environment.GetEnvironmentVariable("CI") is null &&
+                    Environment.GetEnvironmentVariable("TF_BUILD") is null &&
+                    Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is null)
+                {
+                    Console.WriteLine($"⚠️  {message}");
+                    Console.WriteLine($"   Query: {TruncateQuery(sql)}");
+                }
             }
         }
     }
