@@ -139,10 +139,14 @@ public sealed class ExtentAllocatorTests : IDisposable
     [Fact]
     public void Coalesce_AdjacentExtents_Merges()
     {
-        // Arrange
-        _allocator.Free(new FreeExtent(100, 10));
-        _allocator.Free(new FreeExtent(110, 10)); // Adjacent
-        _allocator.Free(new FreeExtent(120, 10)); // Adjacent
+        // Arrange - Use LoadExtents() to bypass auto-coalescing in Free()
+        // Note: Free() automatically coalesces adjacent extents via InsertAndCoalesce()
+        // So we must use LoadExtents() which doesn't auto-coalesce to test manual Coalesce()
+        _allocator.LoadExtents([
+            new FreeExtent(100, 10),
+            new FreeExtent(110, 10),  // Adjacent
+            new FreeExtent(120, 10)   // Adjacent
+        ]);
         
         Assert.Equal(3, _allocator.ExtentCount);
 
