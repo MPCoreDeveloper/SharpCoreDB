@@ -126,8 +126,8 @@ public sealed class DatabaseStorageProviderTests : IDisposable
         db.ForceSave();
 
         // Assert - Metadata should be saved to file (not storage provider)
-        var metadataPath = Path.Combine(_testDbPath, "metadata.json");
-        Assert.True(File.Exists(metadataPath));
+        var metadataPath = Path.Combine(_testDbPath, "meta.dat");  // ← Fixed: Use meta.dat not metadata.json
+        Assert.True(File.Exists(metadataPath), $"Expected metadata file at {metadataPath} but it doesn't exist");
     }
 
     /// <summary>

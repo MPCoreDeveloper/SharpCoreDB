@@ -183,14 +183,18 @@ public sealed class ColumnFormatTests
     [Fact]
     public void ShouldUseDictionary_LowCardinality_ReturnsTrue()
     {
-        // Arrange
-        var values = new[] { "A", "B", "A", "B", "A", "B", "A", "B", "A", "B" };
+        // Arrange - 2 unique values in 100 items = 2% cardinality (well below 10% threshold)
+        var values = new string[100];
+        for (int i = 0; i < 100; i++)
+        {
+            values[i] = i % 2 == 0 ? "A" : "B";
+        }
 
         // Act
         var result = ColumnCompression.ShouldUseDictionary(values);
 
         // Assert
-        Assert.True(result);
+        Assert.True(result);  // 2% < 10% threshold
     }
 
     [Fact]

@@ -113,6 +113,7 @@ public sealed class ExtentAllocator : IDisposable
         lock (_allocationLock)
         {
             var originalCount = _freeExtents.Count;
+            SortExtents();  // ← CRITICAL FIX: Must sort before coalescing
             CoalesceInternal();
             var coalescedCount = originalCount - _freeExtents.Count;
             
