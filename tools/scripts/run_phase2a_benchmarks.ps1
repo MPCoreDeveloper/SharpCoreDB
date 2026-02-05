@@ -1,5 +1,9 @@
 #!/usr/bin/env pwsh
 
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+$benchmarkDir = Join-Path $repoRoot "tests/SharpCoreDB.Benchmarks"
+$outputDir = Join-Path $repoRoot "BenchmarkResults_Phase2A"
+
 # Phase 2A Optimization Benchmarks Runner
 # Measures actual performance improvements for all Week 3 optimizations
 
@@ -7,9 +11,6 @@ Write-Host "╔═════════════════════�
 Write-Host "║       PHASE 2A OPTIMIZATION BENCHMARKS - RUNNING           ║" -ForegroundColor Cyan
 Write-Host "╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
-
-$benchmarkDir = "tests/SharpCoreDB.Benchmarks"
-$outputDir = "BenchmarkResults_Phase2A"
 
 # Create output directory
 if (!(Test-Path $outputDir)) {
@@ -84,4 +85,4 @@ Write-Host ""
 Write-Host "✅ Phase 2A benchmarks complete!" -ForegroundColor Green
 Write-Host ""
 
-cd ../..
+cd $repoRoot

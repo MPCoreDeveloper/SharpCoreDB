@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <Compile Include="SingleFileTest.cs" />
-    <Compile Include="src\SharpCoreDB\Storage\Scdb\ScdbStructures.cs" />
+    <Compile Include="..\..\..\src\SharpCoreDB\Storage\Scdb\ScdbStructures.cs" />
   </ItemGroup>
 
 </Project>
