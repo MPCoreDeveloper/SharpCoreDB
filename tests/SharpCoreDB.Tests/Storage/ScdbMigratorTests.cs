@@ -7,6 +7,7 @@ namespace SharpCoreDB.Tests.Storage;
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Scdb;
@@ -138,14 +139,15 @@ public sealed class ScdbMigratorTests : IDisposable
         });
 
         // Assert
-        _output.WriteLine($"Progress reports: {progressReports.Count}");
-        foreach (var p in progressReports)
+        var localReports = progressReports.ToList();
+        _output.WriteLine($"Progress reports: {localReports.Count}");
+        foreach (var p in localReports)
         {
             _output.WriteLine($"  {p.Message} - {p.PercentComplete:F1}%");
         }
         
         Assert.True(result.Success);
-        Assert.True(progressReports.Count > 0);
+        Assert.True(localReports.Count > 0);
     }
 
     [Fact]
