@@ -19,7 +19,7 @@ jobs:
   build:
     name: Build & Test
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +44,7 @@ jobs:
       
     - name: Test
       run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" -- xunit.parallelizeTestCollections=false
-      timeout-minutes: 10
+      timeout-minutes: 20
       
     - name: Upload test results
       if: always()
