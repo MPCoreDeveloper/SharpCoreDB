@@ -9,7 +9,7 @@
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
-  [![SCDB](https://img.shields.io/badge/SCDB-Phase%201_95%25-yellow.svg)](docs/PROJECT_STATUS_UNIFIED.md)
+  [![Tests](https://img.shields.io/badge/Tests-772_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
 </div>
 
@@ -17,20 +17,19 @@
 
 ## 📌 **Current Status (February 2026)**
 
-### ✅ **PRODUCTION READY - All Phases 1-7 Complete**
+### ✅ **All Phases Complete — Phases 1-8 + DDL Extensions**
 
-**SCDB Phases:**
-- ✅ **Phase 1-6**: 100% Complete (Block Registry → Row Overflow)
-- ✅ **Phase 7**: 100% Complete (Query Optimization: Columnar + SIMD + Cost-Based)
-- 📊 **Performance**: 7,765x faster than baseline, 1.21x faster than LiteDB
-- ✅ **Build**: Successful (0 errors, 0 warnings)
-- ✅ **Tests**: 150+ tests passing
+| Area | Status |
+|------|--------|
+| **Phases 1-7** (Core → Query Optimization) | ✅ Complete |
+| **Phase 8** (Time-Series: compression, buckets, downsampling) | ✅ Complete |
+| **Phase 1.3** (Stored Procedures, Views) | ✅ Complete |
+| **Phase 1.4** (Triggers) | ✅ Complete |
+| **Build** | ✅ 0 errors |
+| **Tests** | ✅ 772 passing, 0 failures |
+| **Production LOC** | ~77,700 |
 
-**Future Roadmap:**
-- 🚧 **Phase 8**: TimeSeries Optimization (PLANNING)
-- 📋 **Phase 9**: TBD
-
-See: [Phase 7 Completion Report](docs/PHASE7_COMPLETE.md) | [SCDB Progress](docs/IMPLEMENTATION_PROGRESS_REPORT.md) | [Unified Roadmap](docs/UNIFIED_ROADMAP.md)
+See: [Project Status](docs/PROJECT_STATUS.md)
 
 ---
 
@@ -38,7 +37,7 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 
 - **License**: MIT
 - **Platform**: .NET 10, C# 14
-- **Status**: ✅ **Production Ready - All Phases (1-7) Complete**
+- **Status**: ✅ **Production Ready — All Phases (1-8) + DDL Extensions Complete**
 - **Encryption**: AES-256-GCM at rest (**0% overhead, sometimes faster!** ✅)
 - **Analytics**: **28,660x faster** than LiteDB with SIMD vectorization ✅
 - **Analytics**: **682x faster** than SQLite with SIMD vectorization ✅
@@ -131,45 +130,47 @@ db.ExecuteSQL("INSERT INTO files VALUES (1, @data)");
 
 ### 🗃️ **SQL Support**
 
-- **DDL**: CREATE TABLE, DROP TABLE, CREATE INDEX, DROP INDEX
-- **DML**: INSERT, SELECT, UPDATE, DELETE, INSERT BATCH
+- **DDL**: CREATE TABLE, DROP TABLE, ALTER TABLE, CREATE INDEX, DROP INDEX
+- **DDL**: CREATE/DROP PROCEDURE, CREATE/DROP VIEW, CREATE/DROP TRIGGER
+- **DML**: INSERT, SELECT, UPDATE, DELETE, INSERT BATCH, EXEC
 - **Queries**: WHERE, ORDER BY, LIMIT, OFFSET, BETWEEN
 - **Aggregates**: COUNT, SUM, AVG, MIN, MAX, GROUP BY, HAVING
-- **JOINs**: ✅ **INNER, LEFT, RIGHT, FULL OUTER, CROSS** (Production Ready)
-- **Subqueries**: ✅ **WHERE, FROM, SELECT, IN, EXISTS, Correlated** (Production Ready)
-- **Advanced**: Complex expressions, multi-table queries, query optimization
+- **JOINs**: ✅ **INNER, LEFT, RIGHT, FULL OUTER, CROSS**
+- **Subqueries**: ✅ **WHERE, FROM, SELECT, IN, EXISTS, Correlated**
+- **Stored Procedures**: ✅ **CREATE PROCEDURE, EXEC with IN/OUT/INOUT parameters**
+- **Views**: ✅ **CREATE VIEW, CREATE MATERIALIZED VIEW**
+- **Triggers**: ✅ **BEFORE/AFTER INSERT/UPDATE/DELETE with NEW/OLD binding**
+- **Advanced**: Complex expressions, multi-table queries, query plan caching
 
-## 🧭 RDBMS Feature Roadmap (Planned)
+## 🧭 RDBMS Feature Status
 
-| Feature | Status | Target | Notes |
-|---------|--------|--------|-------|
-| Triggers | 🚧 Planning | Q2 2026 | BEFORE/AFTER INSERT/UPDATE/DELETE |
-| Stored Procedures | 🚧 Planning | Q2 2026 | Pre-compiled routines |
-| Views | 🚧 Planning | Q2 2026 | Virtual tables |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Stored Procedures | ✅ Complete | CREATE/DROP PROCEDURE, EXEC with parameter binding |
+| Views | ✅ Complete | CREATE VIEW, CREATE MATERIALIZED VIEW, DROP VIEW |
+| Triggers | ✅ Complete | BEFORE/AFTER INSERT/UPDATE/DELETE, NEW/OLD binding |
+| Time-Series | ✅ Complete | Gorilla/Delta-of-Delta/XOR codecs, buckets, downsampling |
 
 ---
 
 ## 📚 Documentation
 
-### Project Status & Roadmap
-- 📖 [Executive Summary](docs/EXECUTIVE_SUMMARY.md)
-- 📖 [Project Status (Unified)](docs/PROJECT_STATUS_UNIFIED.md)
-- 📖 [Unified Roadmap](docs/UNIFIED_ROADMAP.md)
-- 📖 [Feature Status Matrix](docs/FEATURE_STATUS.md)
+### Project Status
+- 📖 [Project Status](docs/PROJECT_STATUS.md)
+- 📖 [Changelog](docs/CHANGELOG.md)
+- 📖 [Benchmark Results](docs/BENCHMARK_RESULTS.md)
 
 ### SCDB Reference
 - 📖 [SCDB Implementation Status](docs/scdb/IMPLEMENTATION_STATUS.md)
-- 📖 [SCDB Phase 1 Complete](docs/scdb/PHASE1_COMPLETE.md)
-- 📖 [SCDB Phase 2 Complete](docs/scdb/PHASE2_COMPLETE.md)
-- 📖 [SCDB Phase 3 Complete](docs/scdb/PHASE3_COMPLETE.md)
-- 📖 [SCDB Phase 4 Design](docs/scdb/PHASE4_DESIGN.md)
-- 📖 [SCDB Phase 5 Complete](docs/scdb/PHASE5_COMPLETE.md)
-- 📖 [SCDB Phase 6 Complete](docs/scdb/PHASE6_COMPLETE.md)
-- 📖 [SCDB Phase 7 Complete](docs/scdb/PHASE7_COMPLETE.md)
+- 📖 [SCDB Phase 1–6 Complete](docs/scdb/)
+- 📖 [Serialization & Storage Guide](docs/serialization/SERIALIZATION_AND_STORAGE_GUIDE.md)
 
-### Additional References
-- 📖 [Performance Regression Fix Plan](docs/PERFORMANCE_REGRESSION_FIX_PLAN.md)
-- 📖 [Priority Work Items](docs/PRIORITY_WORK_ITEMS.md)
+### Guides
+- 📖 [Contributing](docs/CONTRIBUTING.md)
+- 📖 [Use Cases](docs/UseCases.md)
+- 📖 [Embedded & Distributed Guide](docs/SHARPCOREDB_EMBEDDED_DISTRIBUTED_GUIDE.md)
+- 📖 [Migration Guide](docs/migration/MIGRATION_GUIDE.md)
+- 📖 [Query Plan Cache](docs/QUERY_PLAN_CACHE.md)
 
 ---
 
@@ -213,17 +214,19 @@ db.ExecuteSQL("INSERT INTO data VALUES (@blob)");
 ┌─────────────────────────────────────────────────────┐
 │         SharpCoreDB Application Layer                │
 ├─────────────────────────────────────────────────────┤
-│  Database.Core + Query Executor + Index Manager     │
+│  Database.Core + Query Executor + Index Manager      │
 ├─────────────────────────────────────────────────────┤
-│         SCDB Storage Engine (7 Phases - Complete)    │
+│  DDL Extensions: Procedures | Views | Triggers       │
+├─────────────────────────────────────────────────────┤
+│         SCDB Storage Engine (8 Phases - Complete)    │
 ├────────┬────────┬────────┬────────┬────────┬────────┤
-│ Ph.1   │ Ph.2   │ Ph.3   │ Ph.4   │ Ph.5   │ Ph.6/7 │
-│Block   │Extent  │WAL/Rec │Migrate │Harden │Optimize
-│Reg     │Alloc   │overy   │ation   │ing    │Query   │
+│ Ph.1-3 │ Ph.4   │ Ph.5   │ Ph.6   │ Ph.7   │ Ph.8   │
+│Block   │Migrate │Harden  │Row     │Query   │Time    │
+│Reg/WAL │ation   │ing     │Overflow│Optimize│Series  │
 ├────────┴────────┴────────┴────────┴────────┴────────┤
 │  IStorage: File persistence with encryption          │
 ├─────────────────────────────────────────────────────┤
-│  Disk: Database file + WAL + Overflow + Blobs       │
+│  Disk: Database file + WAL + Overflow + Blobs        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -231,13 +234,14 @@ db.ExecuteSQL("INSERT INTO data VALUES (@blob)");
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **SCDB Phases Complete** | Phases 1-7 | ✅ 100% |
-| **Phase 7 (Query Optimization)** | Columnar + SIMD + Planner | ✅ Complete |
+| **SCDB Phases Complete** | Phases 1-8 + DDL Extensions | ✅ 100% |
+| **Phase 8 (Time-Series)** | Codecs, Buckets, Downsampling | ✅ Complete |
+| **Stored Procedures / Views / Triggers** | Phase 1.3-1.4 | ✅ Complete |
 | **Performance Optimization** | 7,765x faster | ✅ Complete |
-| **INSERT Optimization** | 1.21x faster than LiteDB | ✅ Complete |
-| **Advanced SQL** | JOINs + Subqueries | ✅ Complete |
+| **Advanced SQL** | JOINs + Subqueries + Aggregates | ✅ Complete |
 | **Build Status** | 0 errors, 0 warnings | ✅ Success |
-| **Tests** | 150+ passing | ✅ All Passing |
+| **Tests** | 772 passing, 0 failures | ✅ All Passing |
+| **Production LOC** | ~77,700 | ✅ |
 
 ---
 
