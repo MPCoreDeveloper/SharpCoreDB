@@ -88,6 +88,41 @@ public partial class SqlParser
                 ExecuteVacuum(parts);
                 break;
             
+            // Phase 1.3: Stored Procedures
+            case (SqlConstants.CREATE, "PROCEDURE") when parts.Length > 2:
+                ExecuteCreateProcedure(sql, parts, wal);
+                break;
+            
+            case ("DROP", "PROCEDURE") when parts.Length > 2:
+                ExecuteDropProcedure(sql, parts, wal);
+                break;
+            
+            case ("EXEC", _) when parts.Length > 1:
+                ExecuteExecProcedure(sql, parts);
+                break;
+            
+            // Phase 1.3: Views
+            case (SqlConstants.CREATE, "VIEW") when parts.Length > 2:
+                ExecuteCreateView(sql, parts, wal);
+                break;
+            
+            case (SqlConstants.CREATE, "MATERIALIZED") when parts.Length > 3:
+                ExecuteCreateView(sql, parts, wal);
+                break;
+            
+            case ("DROP", "VIEW") when parts.Length > 2:
+                ExecuteDropView(sql, parts, wal);
+                break;
+            
+            // Phase 1.4: Triggers
+            case (SqlConstants.CREATE, "TRIGGER") when parts.Length > 2:
+                ExecuteCreateTrigger(sql, parts, wal);
+                break;
+            
+            case ("DROP", "TRIGGER") when parts.Length > 2:
+                ExecuteDropTrigger(sql, parts, wal);
+                break;
+            
             default:
                 throw new InvalidOperationException($"Unsupported SQL statement: {firstWord} {secondWord}");
         }

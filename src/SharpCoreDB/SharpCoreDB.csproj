@@ -145,6 +145,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SharpCoreDB.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Database\Caching\" />
+    <Folder Include="Database\Procedures\" />
+  </ItemGroup>
 
 </Project>
 
