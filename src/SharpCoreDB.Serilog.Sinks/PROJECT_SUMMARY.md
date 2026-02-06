@@ -6,7 +6,7 @@ A production-ready Serilog sink for SharpCoreDB, providing efficient batch loggi
 
 ## Key Features
 
-* **Efficient Batching**: Uses Serilog.Sinks.PeriodicBatching for optimal performance
+* **Efficient Batching**: Uses `ExecuteBatchSQLAsync` → `InsertBatch` for optimal storage engine throughput
 * **Encrypted Storage**: Leverages SharpCoreDB's AES-256-GCM encryption
 * **High Performance**: 10,000+ logs/second capability
 * **ULID Primary Keys**: Sortable, timestamp-based unique identifiers
@@ -31,9 +31,9 @@ SharpCoreDB.Serilog.Sinks/
 ## Technology Stack
 
 * **.NET 10**: Latest .NET platform
-* **C# 12+**: Modern C# features
-* **Serilog 4.2.0**: Structured logging
-* **Serilog.Sinks.PeriodicBatching 5.0.0**: Batch processing
+* **C# 14**: Modern C# features (Lock class, raw string literals, collection expressions)
+* **Serilog 4.x**: Structured logging
+* **Serilog.Sinks.PeriodicBatching 5.x**: Batch processing
 * **SharpCoreDB**: Encrypted database backend
 
 ## Database Schema
@@ -53,9 +53,10 @@ CREATE TABLE Logs (
 
 * **Write Throughput**: 10,000+ logs/second
 * **Batch Latency**: Sub-millisecond per batch
-* **Memory Usage**: Minimal footprint
+* **Memory Usage**: Minimal footprint (cached INSERT prefix, capacity-hinted StringBuilder)
 * **Storage Overhead**: Efficient with compression
 * **Encryption Overhead**: Near-zero with AES-NI
+* **Thread Safety**: C# 14 `Lock` class with double-check pattern for table init
 
 ## Configuration Options
 

@@ -5,24 +5,25 @@ namespace SharpCoreDB.Serilog.Sinks;
 
 /// <summary>
 /// Configuration options for the SharpCoreDB Serilog sink.
+/// All properties have sensible defaults for high-performance logging.
 /// </summary>
 public class SharpCoreDBSinkOptions
 {
     /// <summary>
     /// Gets or sets the SharpCoreDB database instance to write to.
-    /// If set, this takes precedence over Path/Password.
+    /// If set, this takes precedence over <see cref="Path"/>/<see cref="Password"/>.
     /// </summary>
     public IDatabase? Database { get; set; }
 
     /// <summary>
     /// Gets or sets the path to the .scdb file.
-    /// Used only if Database is not set.
+    /// Used only if <see cref="Database"/> is not set.
     /// </summary>
     public string? Path { get; set; }
 
     /// <summary>
     /// Gets or sets the encryption password for the database.
-    /// Used only if Database is not set.
+    /// Used only if <see cref="Database"/> is not set.
     /// </summary>
     public string? Password { get; set; }
 
@@ -40,13 +41,13 @@ public class SharpCoreDBSinkOptions
 
     /// <summary>
     /// Gets or sets the maximum number of events to include in a single batch.
-    /// Default: 50
+    /// Default: 50. Increase for high-volume scenarios (e.g., 500-1000).
     /// </summary>
     public int BatchPostingLimit { get; set; } = 50;
 
     /// <summary>
     /// Gets or sets the time to wait between checking for event batches.
-    /// Default: 2 seconds
+    /// Default: 2 seconds. Decrease for lower latency (e.g., 500ms).
     /// </summary>
     public TimeSpan? Period { get; set; } = TimeSpan.FromSeconds(2);
 
@@ -58,14 +59,14 @@ public class SharpCoreDBSinkOptions
 
     /// <summary>
     /// Gets or sets the storage engine to use.
-    /// Options: "AppendOnly", "PageBased", "Columnar"
-    /// Default: "AppendOnly" (best for high-volume writes)
+    /// Options: "AppendOnly" (fastest writes), "PageBased" (read/write balance), "Columnar" (analytics).
+    /// Default: "AppendOnly" — optimal for high-volume write-once log workloads.
     /// </summary>
     public string StorageEngine { get; set; } = "AppendOnly";
 
     /// <summary>
     /// Gets or sets the service provider for dependency injection.
-    /// Used only if Database is not set and Path is provided.
+    /// Used only if <see cref="Database"/> is not set and <see cref="Path"/> is provided.
     /// If null, a default service provider will be created.
     /// </summary>
     public IServiceProvider? ServiceProvider { get; set; }

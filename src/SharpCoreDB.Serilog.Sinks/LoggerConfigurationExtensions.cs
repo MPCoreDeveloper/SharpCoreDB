@@ -6,10 +6,13 @@ using Serilog.Sinks.PeriodicBatching;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 using Microsoft.Extensions.DependencyInjection;
+
 namespace SharpCoreDB.Serilog.Sinks;
-/// Michel Posseth 
+
+/// Michel Posseth
 /// <summary>
 /// Extension methods for configuring the SharpCoreDB sink with Serilog.
+/// Provides three overloads: database instance, connection string, and options object.
 /// </summary>
 public static class LoggerConfigurationExtensions
 {
@@ -39,7 +42,6 @@ public static class LoggerConfigurationExtensions
         string storageEngine = "AppendOnly")
     {
         ArgumentNullException.ThrowIfNull(loggerSinkConfiguration);
-
         ArgumentNullException.ThrowIfNull(database);
 
         var actualPeriod = period ?? DefaultPeriod;
@@ -65,6 +67,7 @@ public static class LoggerConfigurationExtensions
 
     /// <summary>
     /// Writes log events to a SharpCoreDB database using a connection string.
+    /// Creates a database instance internally with logging-optimized configuration.
     /// </summary>
     /// <param name="loggerSinkConfiguration">The logger sink configuration.</param>
     /// <param name="path">The path to the .scdb file.</param>
@@ -90,22 +93,14 @@ public static class LoggerConfigurationExtensions
         IServiceProvider? serviceProvider = null)
     {
         ArgumentNullException.ThrowIfNull(loggerSinkConfiguration);
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new ArgumentException("Path cannot be null or whitespace.", nameof(path));
-        }
-
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            throw new ArgumentException("Password cannot be null or whitespace.", nameof(password));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
         // Create or use provided service provider
         var services = serviceProvider ?? CreateDefaultServiceProvider();
         var factory = services.GetRequiredService<DatabaseFactory>();
-        
-        // Create database with optimized config for logging
+
+        // Create database with config optimized for logging workloads
         var config = new DatabaseConfig
         {
             EnableQueryCache = false, // Logs are typically write-once
@@ -131,7 +126,7 @@ public static class LoggerConfigurationExtensions
     }
 
     /// <summary>
-    /// Writes log events to a SharpCoreDB database using options.
+    /// Writes log events to a SharpCoreDB database using an options object.
     /// </summary>
     /// <param name="loggerSinkConfiguration">The logger sink configuration.</param>
     /// <param name="options">The sink options.</param>
@@ -141,10 +136,9 @@ public static class LoggerConfigurationExtensions
         SharpCoreDBSinkOptions options)
     {
         ArgumentNullException.ThrowIfNull(loggerSinkConfiguration);
-
         ArgumentNullException.ThrowIfNull(options);
 
-        if (options.Database != null)
+        if (options.Database is not null)
         {
             return SharpCoreDB(
                 loggerSinkConfiguration,

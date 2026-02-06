@@ -7,13 +7,16 @@ namespace SharpCoreDB.Serilog.Sinks;
 
 /// <summary>
 /// Serilog sink that writes log events to a SharpCoreDB database.
-/// Uses PeriodicBatchingSink for efficient batching of log writes.
+/// C# 14: Uses ExecuteBatchSQLAsync which routes through InsertBatch for optimal storage engine throughput.
+/// Follows zero-allocation principles in hot paths where possible.
 /// </summary>
-public class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
+public sealed class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
 {
     private readonly IDatabase _database;
     private readonly string _tableName;
     private readonly string _storageEngine;
+    private readonly string _insertPrefix;
+    private readonly Lock _initLock = new();
     private bool _tableCreated;
     private bool _disposed;
 
@@ -30,56 +33,48 @@ public class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
         bool autoCreateTable = true,
         string storageEngine = "AppendOnly")
     {
-        _database = database ?? throw new ArgumentNullException(nameof(database));
-        _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
+        _database = database;
+        _tableName = tableName;
         _storageEngine = storageEngine ?? "AppendOnly";
+
+        // PERF: Cache the INSERT prefix — table name never changes after construction
+        _insertPrefix = $"INSERT INTO {_tableName} (Timestamp, Level, Message, Exception, Properties) VALUES (";
 
         if (autoCreateTable)
         {
-            CreateTableIfNotExists();
+            EnsureTableCreated();
         }
     }
 
     /// <summary>
     /// Emits a batch of log events to the database.
+    /// C# 14: Uses ExecuteBatchSQLAsync which internally routes INSERT statements
+    /// through InsertBatch for optimal storage engine throughput.
     /// </summary>
     /// <param name="batch">The batch of log events to write.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task EmitBatchAsync(IEnumerable<LogEvent> batch)
     {
-        if (_disposed)
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // PERF: Build all INSERT statements and batch them via ExecuteBatchSQLAsync
+        // This internally uses InsertBatch for direct storage engine writes (coding standard compliant)
+        List<string> statements = [];
+
+        foreach (var logEvent in batch)
         {
-            ObjectDisposedException.ThrowIf(_disposed, nameof(SharpCoreDBSink));
+            statements.Add(BuildInsertSql(logEvent));
         }
 
-        try
+        if (statements.Count > 0)
         {
-            // Start batch update for better performance
-            _database.BeginBatchUpdate();
+            await _database.ExecuteBatchSQLAsync(statements).ConfigureAwait(false);
 
-            foreach (var logEvent in batch)
-            {
-                await WriteLogEventAsync(logEvent);
-            }
-
-            // Commit the batch
-            _database.EndBatchUpdate();
-        }
-        catch (Exception)
-        {
-            // Cancel batch on error
-            try
-            {
-                _database.CancelBatchUpdate();
-            }
-            catch (Exception cancelEx)
-            {
-                // Log or handle the cancellation error if needed
-                // For now, just ignore errors during cancellation as originally intended
-                System.Diagnostics.Debug.WriteLine($"Batch cancellation failed: {cancelEx}");
-            }
-
-            throw;
+            // Per coding standards: Always flush after writes to ensure data persistence
+            _database.Flush();
         }
     }
 
@@ -87,45 +82,70 @@ public class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
     /// Called when an empty batch is detected.
     /// </summary>
     /// <returns>A completed task.</returns>
-    public Task OnEmptyBatchAsync()
-    {
-        return Task.CompletedTask;
-    }
+    public Task OnEmptyBatchAsync() => Task.CompletedTask;
 
-    private async Task WriteLogEventAsync(LogEvent logEvent)
+    /// <summary>
+    /// Builds a complete INSERT SQL statement for a log event with properly escaped values.
+    /// PERF: Uses cached _insertPrefix to avoid repeated string interpolation of the table name.
+    /// </summary>
+    private string BuildInsertSql(LogEvent logEvent)
     {
-        var timestamp = logEvent.Timestamp.UtcDateTime;
+        var timestamp = logEvent.Timestamp.UtcDateTime.ToString("o");
         var level = logEvent.Level.ToString();
         var message = logEvent.RenderMessage();
         var exception = logEvent.Exception?.ToString();
         var properties = SerializeProperties(logEvent.Properties);
 
-        var sql = $"INSERT INTO {_tableName} (Timestamp, Level, Message, Exception, Properties) VALUES (@0, @1, @2, @3, @4)";
-        var parameters = new Dictionary<string, object?>
-        {
-            { "0", timestamp },
-            { "1", level },
-            { "2", message },
-            { "3", exception },
-            { "4", properties }
-        };
+        var sb = new StringBuilder(_insertPrefix.Length + 256);
+        sb.Append(_insertPrefix);
+        sb.Append('\'').Append(EscapeSqlValue(timestamp)).Append("', ");
+        sb.Append('\'').Append(EscapeSqlValue(level)).Append("', ");
+        sb.Append('\'').Append(EscapeSqlValue(message)).Append("', ");
 
-        await _database.ExecuteSQLAsync(sql, parameters);
+        if (exception is null)
+        {
+            sb.Append("NULL, ");
+        }
+        else
+        {
+            sb.Append('\'').Append(EscapeSqlValue(exception)).Append("', ");
+        }
+
+        if (properties is null)
+        {
+            sb.Append("NULL)");
+        }
+        else
+        {
+            sb.Append('\'').Append(EscapeSqlValue(properties)).Append("')");
+        }
+
+        return sb.ToString();
     }
 
-    private static  string? SerializeProperties(IReadOnlyDictionary<string, LogEventPropertyValue> properties)
+    /// <summary>
+    /// Escapes single quotes in SQL string values to prevent injection.
+    /// </summary>
+    private static string EscapeSqlValue(string value) => value.Replace("'", "''");
+
+    /// <summary>
+    /// Serializes log event properties to a JSON-like string.
+    /// PERF: Pre-allocates StringBuilder with estimated capacity to reduce resizing.
+    /// </summary>
+    private static string? SerializeProperties(IReadOnlyDictionary<string, LogEventPropertyValue> properties)
     {
-        if (properties == null || properties.Count == 0)
+        if (properties is null || properties.Count == 0)
         {
             return null;
         }
 
-        var sb = new StringBuilder();
+        // PERF: Estimate capacity based on property count to reduce StringBuilder resizing
+        var sb = new StringBuilder(properties.Count * 64);
         using var writer = new StringWriter(sb);
-        
+
         writer.Write('{');
         var first = true;
-        
+
         foreach (var kvp in properties)
         {
             if (!first)
@@ -137,86 +157,80 @@ public class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
             writer.Write('"');
             writer.Write(kvp.Key);
             writer.Write("\":");
-            
+
             kvp.Value.Render(writer);
         }
-        
+
         writer.Write('}');
         writer.Flush();
-        
+
         return sb.ToString();
     }
 
-    private void CreateTableIfNotExists()
+    /// <summary>
+    /// Ensures the log table exists. Thread-safe via C# 14 Lock class with double-check pattern.
+    /// </summary>
+    private void EnsureTableCreated()
     {
         if (_tableCreated)
         {
             return;
         }
 
-        try
+        lock (_initLock)
         {
-            // Create table with ULID for better performance and distributed compatibility
-            // ULID is sortable (contains timestamp) and more efficient than GUID
-            var createTableSql = $@"CREATE TABLE {_tableName} (
-                Id ULID AUTO PRIMARY KEY,
-                Timestamp DATETIME,
-                Level TEXT,
-                Message TEXT,
-                Exception TEXT,
-                Properties TEXT
-            ) ENGINE={_storageEngine}";
+            // Double-check after acquiring lock
+            if (_tableCreated)
+            {
+                return;
+            }
 
-            _database.ExecuteSQL(createTableSql);
-            _tableCreated = true;
-        }
-        catch (Exception ex)
-        {
-            // Table might already exist - try a simple query to verify
             try
             {
-                _database.ExecuteQuery($"SELECT COUNT(*) FROM {_tableName}");
+                // Create table with ULID for better performance and distributed compatibility
+                // ULID is sortable (contains timestamp) and more efficient than GUID
+                var createTableSql = $"""
+                    CREATE TABLE {_tableName} (
+                        Id ULID AUTO PRIMARY KEY,
+                        Timestamp DATETIME,
+                        Level TEXT,
+                        Message TEXT,
+                        Exception TEXT,
+                        Properties TEXT
+                    ) ENGINE={_storageEngine}
+                    """;
+
+                _database.ExecuteSQL(createTableSql);
                 _tableCreated = true;
             }
-            catch (Exception innerEx)
+            catch (Exception ex)
             {
-                // Log the exception before rethrowing to satisfy S2737
-                System.Diagnostics.Debug.WriteLine($"Failed to verify table existence: {innerEx}");
-                throw ex;
+                // Table might already exist — verify with a simple query
+                try
+                {
+                    _database.ExecuteQuery($"SELECT COUNT(*) FROM {_tableName}");
+                    _tableCreated = true;
+                }
+                catch (Exception innerEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to verify table existence: {innerEx}");
+                    throw new InvalidOperationException(
+                        $"Could not create or verify log table '{_tableName}'.", ex);
+                }
             }
         }
-    }
-
-    /// <summary>
-    /// Finalizer to ensure resources are released.
-    /// </summary>
-    ~SharpCoreDBSink()
-    {
-        Dispose(false);
     }
 
     /// <summary>
     /// Disposes the sink and releases resources.
+    /// Sealed class — simplified Dispose without Dispose(bool) pattern.
     /// </summary>
     public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Protected implementation of Dispose pattern.
-    /// </summary>
-    /// <param name="disposing">True if called from Dispose; false if called from finalizer.</param>
-    protected virtual void Dispose(bool disposing)
     {
         if (_disposed)
         {
             return;
         }
-
-        // If disposing == true, dispose managed resources here.
-        // No managed or unmanaged resources to dispose in this implementation.
 
         _disposed = true;
     }

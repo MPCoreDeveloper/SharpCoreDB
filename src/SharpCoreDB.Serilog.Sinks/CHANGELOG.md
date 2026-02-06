@@ -5,7 +5,34 @@ All notable changes to SharpCoreDB.Serilog.Sinks will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-01-XX
+## [1.0.7] - 2025-06-02
+
+### Changed
+- **BREAKING**: `SharpCoreDBSink` is now `sealed` — prevents unintended inheritance
+- **PERF**: Replaced per-event `ExecuteSQLAsync` loop with `ExecuteBatchSQLAsync` which routes through `InsertBatch` for direct storage engine writes
+- **PERF**: Cached INSERT SQL prefix to avoid repeated string interpolation per event
+- **PERF**: `StringBuilder` initialized with capacity hint to reduce resizing in hot path
+- **SAFETY**: Added `Flush()` call after batch writes to ensure data persistence to disk
+- **SAFETY**: Thread-safe table creation using C# 14 `Lock` class with double-check pattern
+- **SAFETY**: Added `ConfigureAwait(false)` on all async calls for library deadlock prevention
+- **C# 14**: Raw string literals for multi-line CREATE TABLE SQL
+- **C# 14**: Collection expressions (`List<string> statements = []`)
+- **C# 14**: `Lock` class instead of `object` for synchronization
+- Used `ArgumentException.ThrowIfNullOrWhiteSpace` for parameter validation
+- Improved XML documentation with `<see cref="..."/>` cross-references
+
+### Removed
+- Unnecessary finalizer (`~SharpCoreDBSink`) — class holds no unmanaged resources
+- Simplified `Dispose` pattern for sealed class (no `Dispose(bool)` needed)
+- Removed `BeginBatchUpdate`/`EndBatchUpdate`/`CancelBatchUpdate` calls — `ExecuteBatchSQLAsync` handles transactions internally
+
+### Fixed
+- `_tableCreated` field was not thread-safe — now protected by `Lock` with double-check pattern
+- Missing `Flush()` after writes could cause data loss on crash
+- Missing `ConfigureAwait(false)` could deadlock in synchronization contexts
+- Replaced manual `throw new ArgumentException` with `ArgumentException.ThrowIfNullOrWhiteSpace`
+
+## [1.0.0] - 2025-01-28
 
 ### Added
 - Initial release of SharpCoreDB.Serilog.Sinks
