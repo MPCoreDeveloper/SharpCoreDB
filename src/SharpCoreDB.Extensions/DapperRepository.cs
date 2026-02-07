@@ -1,8 +1,46 @@
 using Dapper;
 using SharpCoreDB.Interfaces;
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace SharpCoreDB.Extensions;
+
+/// <summary>
+/// Caches reflected property metadata per entity type to avoid repeated reflection.
+/// PERF: Hot path — reflection is expensive; cache once per (type, keyColumn) pair.
+/// </summary>
+internal static class EntityMetadataCache
+{
+    private static readonly ConcurrentDictionary<(Type EntityType, string KeyColumn), EntitySqlMetadata> _cache = new();
+
+    /// <summary>
+    /// Gets or creates cached SQL metadata for the given entity type and key column.
+    /// </summary>
+    public static EntitySqlMetadata GetOrCreate(Type entityType, string keyColumn)
+    {
+        return _cache.GetOrAdd((entityType, keyColumn), static key =>
+        {
+            var (type, kc) = key;
+            var nonKeyProperties = type
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead && !string.Equals(p.Name, kc, StringComparison.OrdinalIgnoreCase))
+                .Select(p => p.Name)
+                .ToArray();
+
+            var columns = string.Join(", ", nonKeyProperties);
+            var values = string.Join(", ", nonKeyProperties.Select(n => $"@{n}"));
+            var setClause = string.Join(", ", nonKeyProperties.Select(n => $"{n} = @{n}"));
+
+            return new EntitySqlMetadata(columns, values, setClause);
+        });
+    }
+}
+
+/// <summary>
+/// Cached SQL fragments derived from entity reflection.
+/// </summary>
+internal sealed record EntitySqlMetadata(string InsertColumns, string InsertValues, string UpdateSetClause);
 
 /// <summary>
 /// Generic repository interface for typed data access.
@@ -79,28 +117,17 @@ public interface IDapperRepository<TEntity, TKey> where TEntity : class
 
 /// <summary>
 /// Base repository implementation using Dapper.
+/// C# 14: Uses primary constructor.
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
-public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey> 
+public class DapperRepository<TEntity, TKey>(IDatabase database, string tableName, string keyColumn = "Id")
+    : IDapperRepository<TEntity, TKey> 
     where TEntity : class, new()
 {
-    protected readonly IDatabase Database;
-    protected readonly string TableName;
-    protected readonly string KeyColumn;
-
-    /// <summary>
-    /// Initializes a new instance of the DapperRepository class.
-    /// </summary>
-    /// <param name="database">The database instance.</param>
-    /// <param name="tableName">The table name.</param>
-    /// <param name="keyColumn">The key column name (default: "Id").</param>
-    public DapperRepository(IDatabase database, string tableName, string keyColumn = "Id")
-    {
-        Database = database ?? throw new ArgumentNullException(nameof(database));
-        TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-        KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
-    }
+    protected readonly IDatabase Database = database ?? throw new ArgumentNullException(nameof(database));
+    protected readonly string TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+    protected readonly string KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
 
     /// <inheritdoc />
     public virtual TEntity? GetById(TKey id)
@@ -152,14 +179,8 @@ public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey>
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var properties = typeof(TEntity).GetProperties()
-            .Where(p => p.CanRead && p.Name != KeyColumn)
-            .ToList();
-
-        var columns = string.Join(", ", properties.Select(p => p.Name));
-        var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
-
-        var sql = $"INSERT INTO {TableName} ({columns}) VALUES ({values})";
+        var meta = EntityMetadataCache.GetOrCreate(typeof(TEntity), KeyColumn);
+        var sql = $"INSERT INTO {TableName} ({meta.InsertColumns}) VALUES ({meta.InsertValues})";
         
         using var connection = Database.GetDapperConnection();
         connection.Open();
@@ -171,14 +192,8 @@ public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey>
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var properties = typeof(TEntity).GetProperties()
-            .Where(p => p.CanRead && p.Name != KeyColumn)
-            .ToList();
-
-        var columns = string.Join(", ", properties.Select(p => p.Name));
-        var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
-
-        var sql = $"INSERT INTO {TableName} ({columns}) VALUES ({values})";
+        var meta = EntityMetadataCache.GetOrCreate(typeof(TEntity), KeyColumn);
+        var sql = $"INSERT INTO {TableName} ({meta.InsertColumns}) VALUES ({meta.InsertValues})";
         
         using var connection = Database.GetDapperConnection();
         connection.Open();
@@ -190,12 +205,8 @@ public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey>
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var properties = typeof(TEntity).GetProperties()
-            .Where(p => p.CanRead && p.Name != KeyColumn)
-            .ToList();
-
-        var setClause = string.Join(", ", properties.Select(p => $"{p.Name} = @{p.Name}"));
-        var sql = $"UPDATE {TableName} SET {setClause} WHERE {KeyColumn} = @{KeyColumn}";
+        var meta = EntityMetadataCache.GetOrCreate(typeof(TEntity), KeyColumn);
+        var sql = $"UPDATE {TableName} SET {meta.UpdateSetClause} WHERE {KeyColumn} = @{KeyColumn}";
         
         using var connection = Database.GetDapperConnection();
         connection.Open();
@@ -207,12 +218,8 @@ public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey>
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var properties = typeof(TEntity).GetProperties()
-            .Where(p => p.CanRead && p.Name != KeyColumn)
-            .ToList();
-
-        var setClause = string.Join(", ", properties.Select(p => $"{p.Name} = @{p.Name}"));
-        var sql = $"UPDATE {TableName} SET {setClause} WHERE {KeyColumn} = @{KeyColumn}";
+        var meta = EntityMetadataCache.GetOrCreate(typeof(TEntity), KeyColumn);
+        var sql = $"UPDATE {TableName} SET {meta.UpdateSetClause} WHERE {KeyColumn} = @{KeyColumn}";
         
         using var connection = Database.GetDapperConnection();
         connection.Open();
@@ -278,21 +285,16 @@ public class DapperRepository<TEntity, TKey> : IDapperRepository<TEntity, TKey>
 
 /// <summary>
 /// Read-only repository for query-only scenarios.
+/// C# 14: Uses primary constructor.
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
-public class ReadOnlyDapperRepository<TEntity, TKey> where TEntity : class, new()
+public class ReadOnlyDapperRepository<TEntity, TKey>(IDatabase database, string tableName, string keyColumn = "Id")
+    where TEntity : class, new()
 {
-    protected readonly IDatabase Database;
-    protected readonly string TableName;
-    protected readonly string KeyColumn;
-
-    public ReadOnlyDapperRepository(IDatabase database, string tableName, string keyColumn = "Id")
-    {
-        Database = database ?? throw new ArgumentNullException(nameof(database));
-        TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-        KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
-    }
+    protected readonly IDatabase Database = database ?? throw new ArgumentNullException(nameof(database));
+    protected readonly string TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+    protected readonly string KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
 
     public virtual TEntity? GetById(TKey id)
     {
@@ -337,18 +339,14 @@ public class ReadOnlyDapperRepository<TEntity, TKey> where TEntity : class, new(
 
 /// <summary>
 /// Unit of Work pattern for managing transactions across repositories.
+/// C# 14: Uses primary constructor.
 /// </summary>
-public class DapperUnitOfWork : IDisposable
+public class DapperUnitOfWork(IDatabase database) : IDisposable
 {
-    private readonly IDatabase _database;
+    private readonly IDatabase _database = database ?? throw new ArgumentNullException(nameof(database));
     private DapperConnection? _connection;
     private DapperTransaction? _transaction;
     private bool _disposed;
-
-    public DapperUnitOfWork(IDatabase database)
-    {
-        _database = database ?? throw new ArgumentNullException(nameof(database));
-    }
 
     /// <summary>
     /// Begins a transaction.

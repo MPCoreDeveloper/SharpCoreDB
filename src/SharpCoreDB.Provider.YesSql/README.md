@@ -360,6 +360,36 @@ Each thread has its own `last_insert_rowid` value via `AsyncLocal<long>`, ensuri
 
 ---
 
+## Changelog
+
+### v1.0.7 — Code Quality & C# 14 Improvements
+
+#### SharpCoreDbConnectionFactory
+- Added `volatile` on `_connectionString` for correct visibility across threads.
+- Added `ArgumentException.ThrowIfNullOrWhiteSpace` validation on constructor and `SetConnectionString`.
+- Fixed double-whitespace typo in `DbProviderFactory` property declaration.
+- Improved XML doc comments with `<see cref="..."/>` references.
+
+#### YesSqlConfigurationExtensions
+- **Replaced `object` lock with C# 14 `Lock` class** (`private static readonly Lock _storeInitLock = new()`).
+- Added `volatile` on `_store` and `_isInitialized` for correct double-checked locking.
+- Removed unused `_lastInitError` field — exceptions now propagate directly to callers.
+- **Replaced `try/catch` flow control** in `RegisterProviderFactory()` with `DbProviderFactories.TryGetFactory(...)`.
+- Added `ResetStore()` internal method for testing scenarios (e.g., integration tests that need a fresh store).
+- Streamlined comments — removed redundant inline explanations.
+
+#### SharpCoreDbSetupHelper
+- **Replaced manual `Split('=')` connection string parsing** with `SharpCoreDBConnectionStringBuilder` from `SharpCoreDB.Data.Provider` — handles edge cases (spaces, quoting) correctly.
+- **Replaced `DbProviderFactories.GetFactory("SharpCoreDB")` roundtrip** with direct `SharpCoreDBProviderFactory.Instance.CreateConnection()` — avoids a dictionary lookup on every call.
+- Removed private `RegisterProviderFactory()` wrapper; calls `SharpCoreDbConfigurationExtensions.RegisterProviderFactory()` directly.
+
+#### SharpCoreDbProviderFactory
+- **Added `CreateDataAdapter()` and `CreateCommandBuilder()` overrides** — delegates to the underlying `SharpCoreDBProviderFactory` for full ADO.NET feature parity.
+- Consistent punctuation in exception messages (trailing period).
+- Improved XML doc comments with `<see cref="..."/>` references.
+
+---
+
 ## Troubleshooting
 
 ### Common Issues

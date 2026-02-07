@@ -14,6 +14,7 @@
 |------|---------|--------|------------------|
 | **PROJECT_STATUS.md** | Build metrics, phase completion, test stats | ⭐ Primary | Per release |
 | **README.md** | Main project overview, features, quickstart | ⭐ Primary | Per feature release |
+| **USER_MANUAL.md** | ⭐ **NEW**: Complete developer guide to using SharpCoreDB | ⭐ Primary | Per feature release |
 | **CHANGELOG.md** | Version history and release notes | Current | Per version tag |
 | **CONTRIBUTING.md** | Contribution guidelines and code standards | Current | Infrequently |
 | **QUERY_PLAN_CACHE.md** | Query plan caching implementation details | Reference | Updated Feb 2026 |
@@ -95,12 +96,12 @@ The following were removed in Feb 2026 cleanup as superseded or obsolete:
 
 | Metric | Value |
 |--------|-------|
-| **Active Documents** | 24 |
-| **Root-Level** | 10 |
+| **Active Documents** | 25 |
+| **Root-Level** | 11 |
 | **SCDB Phase Docs** | 9 |
 | **Specialized Guides** | 5 |
 | **Removed (2026 cleanup)** | 50+ |
-| **Total LOC** | ~8,000 |
+| **Total LOC** | ~10,500 |
 
 ---
 

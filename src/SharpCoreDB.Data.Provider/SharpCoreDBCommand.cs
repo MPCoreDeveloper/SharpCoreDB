@@ -483,6 +483,46 @@ public sealed class SharpCoreDBCommand : DbCommand
         return new SharpCoreDBParameter();
     }
 
+    /// <summary>
+    /// Executes the command and returns a typed <see cref="SharpCoreDBDataReader"/>.
+    /// </summary>
+    /// <returns>A data reader for iterating over the results.</returns>
+    public new SharpCoreDBDataReader ExecuteReader()
+    {
+        return (SharpCoreDBDataReader)ExecuteDbDataReader(CommandBehavior.Default);
+    }
+
+    /// <summary>
+    /// Executes the command with the specified behavior and returns a typed <see cref="SharpCoreDBDataReader"/>.
+    /// </summary>
+    /// <param name="behavior">The command behavior.</param>
+    /// <returns>A data reader for iterating over the results.</returns>
+    public new SharpCoreDBDataReader ExecuteReader(CommandBehavior behavior)
+    {
+        return (SharpCoreDBDataReader)ExecuteDbDataReader(behavior);
+    }
+
+    /// <summary>
+    /// Asynchronously executes the command and returns a typed <see cref="SharpCoreDBDataReader"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task containing the data reader.</returns>
+    public new async Task<SharpCoreDBDataReader> ExecuteReaderAsync(CancellationToken cancellationToken = default)
+    {
+        return (SharpCoreDBDataReader)await ExecuteDbDataReaderAsync(CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asynchronously executes the command with the specified behavior and returns a typed <see cref="SharpCoreDBDataReader"/>.
+    /// </summary>
+    /// <param name="behavior">The command behavior.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task containing the data reader.</returns>
+    public new async Task<SharpCoreDBDataReader> ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken = default)
+    {
+        return (SharpCoreDBDataReader)await ExecuteDbDataReaderAsync(behavior, cancellationToken).ConfigureAwait(false);
+    }
+
     private void ValidateCommand()
     {
         if (Connection is null)

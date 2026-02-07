@@ -4,6 +4,7 @@
 // </copyright>
 
 using System.Data.Common;
+using SharpCoreDB.Data.Provider;
 
 namespace SharpCoreDB.Provider.YesSql;
 
@@ -15,39 +16,33 @@ public static class SharpCoreDbSetupHelper
 {
     /// <summary>
     /// Extracts the database file path from a SharpCoreDB connection string.
-    /// Connection string format: Data Source=path;Password=xxx
+    /// Uses <see cref="SharpCoreDBConnectionStringBuilder"/> for reliable parsing.
     /// </summary>
-    /// <param name="connectionString">The SharpCoreDB connection string</param>
-    /// <returns>The extracted database file path, or empty string if not found</returns>
+    /// <param name="connectionString">The SharpCoreDB connection string.</param>
+    /// <returns>The extracted database file path, or empty string if not found.</returns>
     public static string ExtractDatabasePath(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
-            return "";
-
-        var parts = connectionString.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
         {
-            var keyValue = part.Trim().Split(new[] { '=' }, StringSplitOptions.RemoveEmptyEntries);
-            if (keyValue.Length == 2 && 
-                keyValue[0].Trim().Equals("Data Source", StringComparison.OrdinalIgnoreCase))
-            {
-                return keyValue[1].Trim();
-            }
+            return "";
         }
 
-        return "";
+        var builder = new SharpCoreDBConnectionStringBuilder { ConnectionString = connectionString };
+        return builder.Path ?? "";
     }
 
     /// <summary>
     /// Pre-creates the SharpCoreDB database file if it doesn't exist.
     /// This ensures the file is created with proper structure before any initialization.
     /// </summary>
-    /// <param name="connectionString">The SharpCoreDB connection string</param>
+    /// <param name="connectionString">The SharpCoreDB connection string.</param>
     public static void EnsureDatabaseFileExists(string connectionString)
     {
         var dbPath = ExtractDatabasePath(connectionString);
         if (string.IsNullOrEmpty(dbPath))
+        {
             return;
+        }
 
         if (File.Exists(dbPath))
         {
@@ -58,36 +53,26 @@ public static class SharpCoreDbSetupHelper
         try
         {
             System.Diagnostics.Debug.WriteLine($"Creating database file: {dbPath}");
-            
-            // Ensure directory exists
+
             var directory = Path.GetDirectoryName(dbPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            // Create the file by opening a connection
-            RegisterProviderFactory();
-            using (var conn = DbProviderFactories.GetFactory("SharpCoreDB").CreateConnection())
-            {
-                conn.ConnectionString = connectionString;
-                conn.Open();
-                conn.Close();
-            }
+            // Create the file by opening and closing a connection
+            SharpCoreDbConfigurationExtensions.RegisterProviderFactory();
+            using var conn = SharpCoreDBProviderFactory.Instance.CreateConnection()
+                ?? throw new InvalidOperationException("Failed to create SharpCoreDB connection for database initialization.");
+            conn.ConnectionString = connectionString;
+            conn.Open();
+            conn.Close();
+
             System.Diagnostics.Debug.WriteLine($"Database file created successfully: {dbPath}");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to create database file: {ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// Registers the SharpCoreDB provider factory with ADO.NET.
-    /// This is called automatically but is exposed for manual registration if needed.
-    /// </summary>
-    private static void RegisterProviderFactory()
-    {
-        SharpCoreDbConfigurationExtensions.RegisterProviderFactory();
     }
 }

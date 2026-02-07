@@ -144,127 +144,68 @@ db.ExecuteSQL("INSERT INTO files VALUES (1, @data)");
 
 ## 🧭 RDBMS Feature Status
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Stored Procedures | ✅ Complete | CREATE/DROP PROCEDURE, EXEC with parameter binding |
-| Views | ✅ Complete | CREATE VIEW, CREATE MATERIALIZED VIEW, DROP VIEW |
-| Triggers | ✅ Complete | BEFORE/AFTER INSERT/UPDATE/DELETE, NEW/OLD binding |
-| Time-Series | ✅ Complete | Gorilla/Delta-of-Delta/XOR codecs, buckets, downsampling |
+| Feature | Status | Details |
+|---------|--------|---------|
+| Stored Procedures | ✅ Complete | CREATE/DROP PROCEDURE, EXEC with IN/OUT/INOUT parameters, Phase 1.3 |
+| Views | ✅ Complete | CREATE VIEW, CREATE MATERIALIZED VIEW, DROP VIEW, Phase 1.3 |
+| Triggers | ✅ Complete | BEFORE/AFTER INSERT/UPDATE/DELETE, NEW/OLD binding, Phase 1.4 |
+| Time-Series (Phase 8) | ✅ Complete | **Gorilla, Delta-of-Delta, XOR codecs** • **Buckets & Downsampling** • **Retention policies** • **Time-range indexes** |
+| B-tree Indexes | ✅ Complete | Range queries, ORDER BY, BETWEEN, composite indexes |
+| JOINs | ✅ Complete | INNER, LEFT, RIGHT, FULL OUTER, CROSS joins |
+| Subqueries | ✅ Complete | Correlated, IN, EXISTS, scalar subqueries |
+| Aggregates | ✅ Complete | COUNT, SUM, AVG, MIN, MAX, GROUP BY, HAVING |
 
 ---
 
-## 📚 Documentation
+## ⏱️ **Time-Series (Phase 8) Features**
 
-### Project Status
-- 📖 [Project Status](docs/PROJECT_STATUS.md)
-- 📖 [Changelog](docs/CHANGELOG.md)
-- 📖 [Benchmark Results](docs/BENCHMARK_RESULTS.md)
+SharpCoreDB includes **production-grade time-series support** with industry-standard compression:
 
-### SCDB Reference
-- 📖 [SCDB Implementation Status](docs/scdb/IMPLEMENTATION_STATUS.md)
-- 📖 [SCDB Phase 1–6 Complete](docs/scdb/)
-- 📖 [Serialization & Storage Guide](docs/serialization/SERIALIZATION_AND_STORAGE_GUIDE.md)
+### Compression Codecs
+- **Gorilla Codec**: XOR-based floating-point compression (~80% space savings)
+- **Delta-of-Delta Codec**: Integer timestamp compression with second-order deltas
+- **XOR Float Codec**: Specialized IEEE 754 compression for measurements
 
-### Guides
-- 📖 [Contributing](docs/CONTRIBUTING.md)
-- 📖 [Use Cases](docs/UseCases.md)
-- 📖 [Embedded & Distributed Guide](docs/SHARPCOREDB_EMBEDDED_DISTRIBUTED_GUIDE.md)
-- 📖 [Migration Guide](docs/migration/MIGRATION_GUIDE.md)
-- 📖 [Query Plan Cache](docs/QUERY_PLAN_CACHE.md)
+### Capabilities
+- **Automatic Bucketing**: Time-range partitioning for fast queries
+- **Downsampling**: Aggregate high-frequency data into lower-resolution series
+- **Retention Policies**: Automatic archival and cleanup of old data
+- **Time-Range Indexes**: BRIN-style indexes for fast temporal lookups
+- **Bloom Filters**: Efficient time-range filtering
 
----
-
-## 🎯 Getting Started
-
-### Installation
-```bash
-dotnet add package SharpCoreDB
-```
-
-### Basic Usage
+### Example Usage
 ```csharp
-// Initialize with DI
-var services = new ServiceCollection();
-services.AddSharpCoreDB();
-var factory = services.BuildServiceProvider()
-    .GetRequiredService<DatabaseFactory>();
+// Create time-series table
+db.ExecuteSQL(@"
+    CREATE TABLE metrics (
+        timestamp BIGINT,
+        value REAL,
+        tag TEXT,
+        PRIMARY KEY (timestamp, tag)
+    ) WITH TIMESERIES
+");
 
-// Create or open database
-using var db = factory.Create("./mydb", "password");
+// Insert compressed time-series data
+db.ExecuteSQL("INSERT INTO metrics VALUES (@ts, @val, @tag)");
 
-// Create schema
-db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+// Query with time-range filtering (automatic codec decompression)
+var rows = db.ExecuteQuery("SELECT * FROM metrics WHERE timestamp BETWEEN @start AND @end");
 
-// Insert data
-db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
-
-// Query data
-var rows = db.ExecuteQuery("SELECT * FROM users");
-
-// Planned: FILESTREAM storage for large payloads (SCDB Phase 6)
-var largeData = new byte[50_000_000]; // 50MB
-db.ExecuteSQL("INSERT INTO data VALUES (@blob)");
+// Downsample to 1-minute buckets
+var downsampled = db.ExecuteQuery(@"
+    SELECT 
+        bucket_timestamp(timestamp, 60000) as bucket,
+        AVG(value) as avg_value,
+        MAX(value) as max_value
+    FROM metrics
+    GROUP BY bucket
+");
 ```
 
 ---
 
-## 🔄 SCDB Architecture Overview
+## 📖 **Complete User Manual**
 
-```
-┌─────────────────────────────────────────────────────┐
-│         SharpCoreDB Application Layer                │
-├─────────────────────────────────────────────────────┤
-│  Database.Core + Query Executor + Index Manager      │
-├─────────────────────────────────────────────────────┤
-│  DDL Extensions: Procedures | Views | Triggers       │
-├─────────────────────────────────────────────────────┤
-│         SCDB Storage Engine (8 Phases - Complete)    │
-├────────┬────────┬────────┬────────┬────────┬────────┤
-│ Ph.1-3 │ Ph.4   │ Ph.5   │ Ph.6   │ Ph.7   │ Ph.8   │
-│Block   │Migrate │Harden  │Row     │Query   │Time    │
-│Reg/WAL │ation   │ing     │Overflow│Optimize│Series  │
-├────────┴────────┴────────┴────────┴────────┴────────┤
-│  IStorage: File persistence with encryption          │
-├─────────────────────────────────────────────────────┤
-│  Disk: Database file + WAL + Overflow + Blobs        │
-└─────────────────────────────────────────────────────┘
-```
-
-## ✅ Project Snapshot
-
-| Metric | Value | Status |
-|--------|-------|--------|
-| **SCDB Phases Complete** | Phases 1-8 + DDL Extensions | ✅ 100% |
-| **Phase 8 (Time-Series)** | Codecs, Buckets, Downsampling | ✅ Complete |
-| **Stored Procedures / Views / Triggers** | Phase 1.3-1.4 | ✅ Complete |
-| **Performance Optimization** | 7,765x faster | ✅ Complete |
-| **Advanced SQL** | JOINs + Subqueries + Aggregates | ✅ Complete |
-| **Build Status** | 0 errors, 0 warnings | ✅ Success |
-| **Tests** | 772 passing, 0 failures | ✅ All Passing |
-| **Production LOC** | ~77,700 | ✅ |
-
----
-
-## 🏆 Highlights
-
-- **INSERT Performance**: 43% faster than SQLite, 44% faster than LiteDB ✅
-- **Analytics Speed**: 682x faster than SQLite, 28,660x faster than LiteDB ✅
-- **UPDATE Optimization**: 5.4x faster Single-File mode, 280x less memory ✅
-- **Encryption**: AES-256-GCM with 0% overhead ✅
-
----
-
-## 📜 License
-
-MIT License - see LICENSE file for details
-
----
-
-**Ready to use?** Download from [NuGet](https://www.nuget.org/packages/SharpCoreDB) or clone from [GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
-
-**Questions?** See the [docs](docs/) folder or create an [issue](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
-
----
-
-**SharpCoreDB** - High-Performance .NET Database for the Modern Era 🚀
+For comprehensive documentation on using SharpCoreDB in your projects, see:
+📘 **[SharpCoreDB User Manual](docs/USER_MANUAL.md)** — Complete guide for developers
 

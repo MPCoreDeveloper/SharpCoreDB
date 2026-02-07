@@ -7,21 +7,14 @@ namespace SharpCoreDB.Extensions;
 /// Provides a DbTransaction implementation for SharpCoreDB.
 /// Note: This is a simplified implementation as SharpCoreDB transactions are currently limited.
 /// </summary>
-internal class DapperTransaction : DbTransaction
+internal class DapperTransaction(DapperConnection connection, IsolationLevel isolationLevel) : DbTransaction
 {
-    private readonly DapperConnection _connection;
-    private readonly IsolationLevel _isolationLevel;
+    private readonly DapperConnection _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     private bool _isCommitted;
     private bool _isRolledBack;
     private readonly List<string> _sqlStatements = [];
 
-    public DapperTransaction(DapperConnection connection, IsolationLevel isolationLevel)
-    {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        _isolationLevel = isolationLevel;
-    }
-
-    public override IsolationLevel IsolationLevel => _isolationLevel;
+    public override IsolationLevel IsolationLevel => isolationLevel;
 
     protected override DbConnection? DbConnection => _connection;
 
@@ -65,16 +58,9 @@ internal class DapperTransaction : DbTransaction
         if (_isRolledBack)
             throw new InvalidOperationException("Transaction has already been rolled back");
 
-        try
-        {
-            // In a full implementation, this would rollback all tracked statements
-            // SharpCoreDB would need WAL-based rollback support
-            _isRolledBack = true;
-        }
-        catch
-        {
-            throw;
-        }
+        // In a full implementation, this would rollback all tracked statements
+        // SharpCoreDB would need WAL-based rollback support
+        _isRolledBack = true;
     }
 
     protected override void Dispose(bool disposing)
@@ -100,18 +86,12 @@ internal class DapperTransaction : DbTransaction
 /// <summary>
 /// Enhanced transaction support with savepoints (for future implementation).
 /// </summary>
-public class SharpCoreTransaction : IDisposable
+public class SharpCoreTransaction(DapperConnection connection, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted) : IDisposable
 {
-    private readonly DapperConnection _connection;
+    private readonly DapperConnection _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     private DapperTransaction? _transaction;
-    private readonly Stack<string> _savepoints = new();
+    private readonly Stack<string> _savepoints = [];
     private bool _disposed;
-
-    internal SharpCoreTransaction(DapperConnection connection, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
-    {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        // Transaction creation is deferred until needed
-    }
 
     /// <summary>
     /// Creates a savepoint in the transaction.

@@ -1,11 +1,8 @@
-using System.Runtime.Serialization;
-
 namespace SharpCoreDB.Data.Provider;
 
 /// <summary>
 /// Exception thrown by the SharpCoreDB ADO.NET Data Provider.
 /// </summary>
-[Serializable]
 public class SharpCoreDBException : Exception
 {
     /// <summary>
@@ -31,15 +28,4 @@ public class SharpCoreDBException : Exception
         : base(message, innerException)
     {
     }
-
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SharpCoreDBException"/> class with serialized data.
-    /// </summary>
-    
-    protected SharpCoreDBException(SerializationInfo info, StreamingContext context)
-        : base(info, context)
-    {
-    }
-
 }

@@ -116,18 +116,18 @@ public class SharpCoreDBHealthCheck(IDatabase database, HealthCheckOptions? opti
             sw.Stop();
             data["health_check_duration_ms"] = sw.ElapsedMilliseconds;
 
-            // Determine health status based on response time
-            if (_options.DegradedThresholdMs.HasValue && sw.ElapsedMilliseconds > _options.DegradedThresholdMs.Value)
-            {
-                return HealthCheckResult.Degraded(
-                    $"SharpCoreDB is responding slowly ({sw.ElapsedMilliseconds}ms)",
-                    data: data);
-            }
-
+            // Evaluate unhealthy FIRST — a value exceeding both thresholds must be Unhealthy, not Degraded
             if (_options.UnhealthyThresholdMs.HasValue && sw.ElapsedMilliseconds > _options.UnhealthyThresholdMs.Value)
             {
                 return HealthCheckResult.Unhealthy(
                     $"SharpCoreDB response time exceeded threshold ({sw.ElapsedMilliseconds}ms)",
+                    data: data);
+            }
+
+            if (_options.DegradedThresholdMs.HasValue && sw.ElapsedMilliseconds > _options.DegradedThresholdMs.Value)
+            {
+                return HealthCheckResult.Degraded(
+                    $"SharpCoreDB is responding slowly ({sw.ElapsedMilliseconds}ms)",
                     data: data);
             }
 

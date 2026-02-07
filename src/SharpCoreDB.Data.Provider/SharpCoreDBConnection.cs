@@ -18,6 +18,7 @@ public sealed class SharpCoreDBConnection : DbConnection
     private string? _connectionString;
     private string? _dataSource;
     private string? _password;
+    private bool _readOnly;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SharpCoreDBConnection"/> class.
@@ -110,7 +111,8 @@ public sealed class SharpCoreDBConnection : DbConnection
             _database = SharpCoreDBInstancePool.Instance.AcquireInstance(
                 _dataSource,
                 password,
-                _connectionString ?? string.Empty);
+                _connectionString ?? string.Empty,
+                _readOnly);
 
             _state = ConnectionState.Open;
         }
@@ -118,7 +120,7 @@ public sealed class SharpCoreDBConnection : DbConnection
         {
             _state = ConnectionState.Broken;
             
-            // ? FIX: Provide clear error message if sqlite_master is mentioned
+            // Provide clear error message if sqlite_master is mentioned
             if (ex.Message.Contains("sqlite_master", StringComparison.OrdinalIgnoreCase))
             {
                 throw new SharpCoreDBException(
@@ -130,6 +132,18 @@ public sealed class SharpCoreDBConnection : DbConnection
             
             throw new SharpCoreDBException($"Failed to open connection to SharpCoreDB: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Asynchronously opens the database connection.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous open operation.</returns>
+    public override Task OpenAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Open();
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -159,6 +173,16 @@ public sealed class SharpCoreDBConnection : DbConnection
             _state = ConnectionState.Broken;
             throw new SharpCoreDBException("Failed to close connection.", ex);
         }
+    }
+
+    /// <summary>
+    /// Asynchronously closes the database connection.
+    /// </summary>
+    /// <returns>A task representing the asynchronous close operation.</returns>
+    public override Task CloseAsync()
+    {
+        Close();
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -305,6 +329,7 @@ public sealed class SharpCoreDBConnection : DbConnection
         var builder = new SharpCoreDBConnectionStringBuilder { ConnectionString = connectionString };
         _dataSource = builder.Path;
         _password = builder.Password;
+        _readOnly = builder.ReadOnly;
     }
 
     /// <summary>

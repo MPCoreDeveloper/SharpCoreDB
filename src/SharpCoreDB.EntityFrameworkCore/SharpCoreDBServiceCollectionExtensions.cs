@@ -45,7 +45,9 @@ public static class SharpCoreDBServiceCollectionExtensions
             .TryAdd<IQuerySqlGeneratorFactory, SharpCoreDBQuerySqlGeneratorFactory>()
             .TryAdd<ISqlGenerationHelper, SharpCoreDBSqlGenerationHelper>()
             .TryAdd<IMigrationsSqlGenerator, SharpCoreDBMigrationsSqlGenerator>()
-            .TryAdd<IUpdateSqlGenerator, SharpCoreDBUpdateSqlGenerator>();
+            .TryAdd<IUpdateSqlGenerator, SharpCoreDBUpdateSqlGenerator>()
+            .TryAdd<IMethodCallTranslatorPlugin, SharpCoreDBMethodCallTranslatorPlugin>()
+            .TryAdd<IMemberTranslatorPlugin, SharpCoreDBMemberTranslatorPlugin>();
 
         builder.TryAddCoreServices();
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using SharpCoreDB.EntityFrameworkCore.Storage;
+using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.EntityFrameworkCore.Infrastructure;
 
@@ -99,14 +100,23 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
     /// <inheritdoc />
     public override bool HasTables()
     {
-        // For SharpCoreDB, check if any entity tables exist
         try
         {
             _connection.Open();
-            // SharpCoreDB doesn't have a built-in way to check tables
-            // We'll return true if connection works
-            _connection.Close();
-            return true;
+            try
+            {
+                if (_connection.DbConnection is SharpCoreDBConnection sharpConnection
+                    && sharpConnection.DbInstance is IMetadataProvider metadata)
+                {
+                    return metadata.GetTables().Count > 0;
+                }
+
+                return false;
+            }
+            finally
+            {
+                _connection.Close();
+            }
         }
         catch
         {
@@ -120,8 +130,20 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
         try
         {
             await _connection.OpenAsync(cancellationToken);
-            await _connection.CloseAsync();
-            return true;
+            try
+            {
+                if (_connection.DbConnection is SharpCoreDBConnection sharpConnection
+                    && sharpConnection.DbInstance is IMetadataProvider metadata)
+                {
+                    return metadata.GetTables().Count > 0;
+                }
+
+                return false;
+            }
+            finally
+            {
+                await _connection.CloseAsync();
+            }
         }
         catch
         {
@@ -209,7 +231,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
         return $"CREATE TABLE {tableName} ({string.Join(", ", columns)})";
     }
 
-    private string GetColumnType(IProperty property)
+    private static string GetColumnType(IProperty property)
     {
         var clrType = property.ClrType;
         var underlyingType = Nullable.GetUnderlyingType(clrType) ?? clrType;
@@ -221,9 +243,22 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
             nameof(String) => "TEXT",
             nameof(Boolean) => "BOOLEAN",
             nameof(DateTime) => "DATETIME",
+            nameof(DateTimeOffset) => "DATETIME",
             nameof(Decimal) => "DECIMAL",
             nameof(Double) => "REAL",
+            nameof(Single) => "REAL",
             nameof(Guid) => "GUID",
+            nameof(Byte) => "INTEGER",
+            nameof(Int16) => "INTEGER",
+            nameof(SByte) => "INTEGER",
+            nameof(UInt16) => "INTEGER",
+            nameof(UInt32) => "INTEGER",
+            nameof(UInt64) => "LONG",
+            nameof(Char) => "TEXT",
+            _ when underlyingType == typeof(byte[]) => "BLOB",
+            _ when underlyingType == typeof(TimeSpan) => "TEXT",
+            _ when underlyingType == typeof(DateOnly) => "TEXT",
+            _ when underlyingType == typeof(TimeOnly) => "TEXT",
             _ => "TEXT"
         };
     }

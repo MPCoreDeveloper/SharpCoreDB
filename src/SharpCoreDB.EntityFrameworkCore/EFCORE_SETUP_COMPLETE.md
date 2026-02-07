@@ -12,12 +12,12 @@ SharpCoreDB.EntityFrameworkCore is nu volledig geconfigureerd voor NuGet publica
 `SharpCoreDB.EntityFrameworkCore`
 
 ### Versie
-`1.0.0`
+`1.0.6`
 
 ### Dependencies
-- `SharpCoreDB` >= 1.0.0
-- `Microsoft.EntityFrameworkCore` 10.0.1
-- `Microsoft.EntityFrameworkCore.Relational` 10.0.1
+- `SharpCoreDB` >= 1.0.6
+- `Microsoft.EntityFrameworkCore` 10.0.2
+- `Microsoft.EntityFrameworkCore.Relational` 10.0.2
 
 ### Platform Support
 Automatisch voor alle platforms:
@@ -97,18 +97,18 @@ await db.SaveChangesAsync();
 var products = await db.Products.ToListAsync();
 ```
 
-### Met Encryption
+### Met Encryption & Options
 
 ```csharp
 protected override void OnConfiguring(DbContextOptionsBuilder options)
 {
+    // Connection string format: Data Source=path;Password=pass;Cache=Shared|Private
     options.UseSharpCoreDB(
-        "Data Source=shop.db;Encryption=true;Password=SecurePass123",
+        "Data Source=shop.db;Password=SecurePass123;Cache=Shared",
         sharpCoreOptions => 
         {
-            sharpCoreOptions.SetCacheSize(100); // MB
             sharpCoreOptions.CommandTimeout(30);
-            sharpCoreOptions.EnableRetryOnFailure(3);
+            sharpCoreOptions.MaxBatchSize(100);
         });
 }
 ```
@@ -124,7 +124,7 @@ builder.Services.AddDbContext<ShopContext>(options =>
 // appsettings.json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=shop.db;Encryption=true;Password=SecurePass"
+    "DefaultConnection": "Data Source=shop.db;Password=SecurePass;Cache=Shared"
   }
 }
 ```

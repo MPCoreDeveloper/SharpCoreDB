@@ -12,11 +12,11 @@ namespace SharpCoreDB.Provider.YesSql;
 /// <summary>
 /// Connection factory for SharpCoreDB that integrates with YesSql.
 /// Creates SharpCoreDB ADO.NET connections for YesSql to use.
-/// Implements YesSql.IConnectionFactory for OrchardCore compatibility.
+/// Implements <see cref="IConnectionFactory"/> for OrchardCore compatibility.
 /// </summary>
 public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposable
 {
-    private string? _connectionString;
+    private volatile string? _connectionString;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SharpCoreDbConnectionFactory"/> class.
@@ -31,6 +31,7 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposab
     /// <param name="connectionString">The connection string.</param>
     public SharpCoreDbConnectionFactory(string connectionString)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         _connectionString = connectionString;
     }
 
@@ -41,6 +42,7 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposab
     /// <param name="connectionString">The connection string.</param>
     public void SetConnectionString(string connectionString)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         _connectionString = connectionString;
     }
 
@@ -52,9 +54,8 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposab
     public DbConnection CreateConnection()
     {
         var connection = SharpCoreDBProviderFactory.Instance.CreateConnection()
-            ?? throw new InvalidOperationException("Failed to create SharpCoreDB connection");
+            ?? throw new InvalidOperationException("Failed to create SharpCoreDB connection.");
 
-        // Set connection string if we have one
         if (!string.IsNullOrEmpty(_connectionString))
         {
             connection.ConnectionString = _connectionString;
@@ -65,8 +66,8 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposab
 
     /// <summary>
     /// Disposes resources.
-    /// No cleanup needed: DbProviderFactory is a singleton instance (SharpCoreDBProviderFactory.Instance).
-    /// Individual connections created by CreateConnection() are disposed by the caller (YesSql).
+    /// No cleanup needed: <see cref="DbProviderFactory"/> is a singleton instance.
+    /// Individual connections created by <see cref="CreateConnection"/> are disposed by YesSql.
     /// </summary>
     public void Dispose()
     {
@@ -77,13 +78,13 @@ public sealed class SharpCoreDbConnectionFactory : IConnectionFactory, IDisposab
     }
 
     /// <summary>
-    /// Gets the DbProviderFactory for creating connections and commands.
+    /// Gets the <see cref="DbProviderFactory"/> for creating connections and commands.
     /// Required by YesSql for ADO.NET operations.
     /// </summary>
-    public static  DbProviderFactory DbProviderFactory => SharpCoreDBProviderFactory.Instance;
+    public static DbProviderFactory DbProviderFactory => SharpCoreDBProviderFactory.Instance;
 
     /// <summary>
-    /// Gets the DbConnection type for reflection and type checking.
+    /// Gets the <see cref="DbConnection"/> type for reflection and type checking.
     /// Required by YesSql 5.4.7+ for connection pooling and diagnostics.
     /// </summary>
     public Type DbConnectionType => typeof(SharpCoreDBConnection);

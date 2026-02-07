@@ -4,22 +4,33 @@ using System.Data.Common;
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
-/// Represents a ADO.NET transaction for SharpCoreDB.
-/// This is the low-level DbTransaction used by SharpCoreDBConnection.
+/// Represents an ADO.NET transaction for SharpCoreDB.
+/// This is the low-level <see cref="DbTransaction"/> used by <see cref="SharpCoreDBConnection"/>.
+/// Wires Commit/Rollback to IDatabase.EndBatchUpdate/CancelBatchUpdate for real transaction semantics.
 /// </summary>
 public class SharpCoreDBDbTransaction : DbTransaction
 {
     private readonly SharpCoreDBConnection _connection;
     private readonly IsolationLevel _isolationLevel;
+    private bool _completed;
     private bool _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the SharpCoreDBDbTransaction class.
+    /// Initializes a new instance of the <see cref="SharpCoreDBDbTransaction"/> class.
+    /// Begins a batch update transaction on the underlying database if available.
     /// </summary>
     public SharpCoreDBDbTransaction(SharpCoreDBConnection connection, IsolationLevel isolationLevel)
     {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        ArgumentNullException.ThrowIfNull(connection);
+        _connection = connection;
         _isolationLevel = isolationLevel;
+
+        // Start batch update for deferred index rebuilding and WAL batching
+        var db = _connection.DbInstance;
+        if (db is not null && !db.IsBatchUpdateActive)
+        {
+            db.BeginBatchUpdate();
+        }
     }
 
     /// <inheritdoc />
@@ -31,15 +42,32 @@ public class SharpCoreDBDbTransaction : DbTransaction
     /// <inheritdoc />
     public override void Commit()
     {
-        // SharpCoreDB uses WAL for transactions
-        // This is a simplified implementation
+        if (_completed)
+            return;
+
+        _completed = true;
+
+        var db = _connection.DbInstance;
+        if (db is not null && db.IsBatchUpdateActive)
+        {
+            db.EndBatchUpdate();
+            db.Flush();
+        }
     }
 
     /// <inheritdoc />
     public override void Rollback()
     {
-        // SharpCoreDB WAL rollback
-        // Simplified implementation
+        if (_completed)
+            return;
+
+        _completed = true;
+
+        var db = _connection.DbInstance;
+        if (db is not null && db.IsBatchUpdateActive)
+        {
+            db.CancelBatchUpdate();
+        }
     }
 
     /// <inheritdoc />
@@ -47,6 +75,12 @@ public class SharpCoreDBDbTransaction : DbTransaction
     {
         if (!_disposed && disposing)
         {
+            // Auto-rollback uncommitted transaction
+            if (!_completed)
+            {
+                Rollback();
+            }
+
             _disposed = true;
         }
 

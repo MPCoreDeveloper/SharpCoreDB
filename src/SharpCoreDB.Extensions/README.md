@@ -1,185 +1,149 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="200"/>
-  
-  # SharpCoreDB.Extensions
-  
-  **Dapper Integration & Health Checks for SharpCoreDB**
-  
+
+  # SharpCoreDB.Extensions v1.0.6
+
+  **Dapper Integration · Health Checks · Repository Pattern · Bulk Operations · Performance Monitoring**
+
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
-  
+  [![C#](https://img.shields.io/badge/C%23-14-blueviolet.svg)](https://learn.microsoft.com/dotnet/csharp/)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.6-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
+
 </div>
 
 ---
 
-Official extensions for SharpCoreDB providing **Dapper integration** for streamlined data access and **ASP.NET Core health checks** for database monitoring. Built for .NET 10 with C# 14 and optimized for Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.
+Official extensions for **SharpCoreDB** providing Dapper integration, ASP.NET Core health checks, repository pattern, bulk operations, and query performance monitoring. Built for .NET 10 with C# 14.
 
-- **License**: MIT
-- **Platform**: .NET 10, C# 14
-- **Dependencies**: SharpCoreDB 1.0.0, Dapper 2.1.66
-- **Multi-Platform**: Windows (x64/ARM64), Linux (x64/ARM64), macOS (x64/ARM64)
+## Table of Contents
+
+- [Installation](#installation)
+- [Feature Overview](#feature-overview)
+- [Quick Start](#quick-start)
+- [Dapper Integration](#dapper-integration)
+- [Repository Pattern](#repository-pattern)
+- [Bulk Operations](#bulk-operations)
+- [Health Checks](#health-checks)
+- [Performance Monitoring](#performance-monitoring)
+- [Pagination](#pagination)
+- [Type Mapping](#type-mapping)
+- [Platform Support](#platform-support)
+- [API Reference](#api-reference)
 
 ---
 
-## :rocket: Quickstart
-
-### Installation
+## Installation
 
 ```bash
 dotnet add package SharpCoreDB.Extensions
 ```
 
-### Dapper Integration
+**Dependencies** (automatically resolved):
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| SharpCoreDB | 1.0.6 | Core database engine |
+| Dapper | 2.1.66 | Micro-ORM for typed queries |
+| Microsoft.Extensions.Diagnostics.HealthChecks | 10.0.2 | ASP.NET Core health checks |
+
+---
+
+## Feature Overview
+
+| Feature | Namespace | Description |
+|---------|-----------|-------------|
+| **Dapper Connection** | `SharpCoreDB.Extensions` | `DbConnection` adapter for Dapper |
+| **Async Extensions** | `SharpCoreDB.Extensions` | `QueryAsync<T>`, `ExecuteAsync`, `QueryPagedAsync<T>` |
+| **Repository Pattern** | `SharpCoreDB.Extensions` | `DapperRepository<TEntity, TKey>` with CRUD |
+| **Bulk Operations** | `SharpCoreDB.Extensions` | `BulkInsert<T>`, `BulkUpdate<T>`, `BulkDelete<TKey>` |
+| **Health Checks** | `SharpCoreDB.Extensions` | ASP.NET Core `IHealthCheck` integration |
+| **Performance Monitoring** | `SharpCoreDB.Extensions` | `QueryWithMetrics<T>`, `GetPerformanceReport()` |
+| **Mapping Extensions** | `SharpCoreDB.Extensions` | Multi-table JOINs, custom mapping, projections |
+| **Type Mapping** | `SharpCoreDB.Extensions` | `DapperTypeMapper` for .NET ↔ DB type conversion |
+| **Unit of Work** | `SharpCoreDB.Extensions` | `DapperUnitOfWork` for transaction management |
+
+---
+
+## Quick Start
 
 ```csharp
 using SharpCoreDB;
-using SharpCoreDB.Extensions.Dapper;
+using SharpCoreDB.Extensions;
 
-var factory = new DatabaseFactory();
-using var db = factory.Create("./app_db", "StrongPassword!");
+// Create database
+var factory = new DatabaseFactory(serviceProvider);
+using var db = factory.Create("./myapp.scdb", "StrongPassword!");
 
-// Create table
-db.ExecuteSQL("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL)");
+// Create a table
+db.ExecuteSQL("CREATE TABLE products (Id INTEGER PRIMARY KEY, Name TEXT, Price REAL)");
+db.ExecuteSQL("INSERT INTO products VALUES (1, 'Widget', 19.99)");
+db.Flush();
 
-// Get Dapper connection
+// Query with Dapper — strongly typed
 using var connection = db.GetDapperConnection();
+connection.Open();
 
-// Use Dapper for powerful queries
-var products = await connection.QueryAsync<Product>(
-    "SELECT * FROM products WHERE price > @MinPrice",
+var products = connection.Query<Product>("SELECT * FROM products WHERE Price > @MinPrice",
     new { MinPrice = 10.0 });
 
-// Execute commands with Dapper
-await connection.ExecuteAsync(
-    "INSERT INTO products VALUES (@Id, @Name, @Price)",
-    new { Id = 1, Name = "Widget", Price = 19.99 });
-
-// Transactions with Dapper
-using var transaction = connection.BeginTransaction();
-await connection.ExecuteAsync(
-    "UPDATE products SET price = price * 1.1 WHERE id = @Id",
-    new { Id = 1 }, transaction);
-transaction.Commit();
-```
-
-### Health Checks
-
-```csharp
-using SharpCoreDB.Extensions.HealthChecks;
-
-var builder = WebApplication.CreateBuilder(args);
-
-// Add SharpCoreDB health check
-builder.Services.AddHealthChecks()
-    .AddSharpCoreDB(
-        name: "sharpcoredb",
-        dbPath: "./app_db",
-        password: "StrongPassword!",
-        tags: new[] { "db", "sharpcoredb" });
-
-var app = builder.Build();
-
-// Map health check endpoint
-app.MapHealthChecks("/health");
-
-app.Run();
-```
-
----
-
-## :star: Key Features
-
-### :zap: **Dapper Integration**
-
-- **Familiar API**: Use Dapper's powerful fluent API with SharpCoreDB
-- **Full Async Support**: All async methods supported (QueryAsync, ExecuteAsync, etc.)
-- **Type Safety**: Strongly-typed queries with automatic mapping
-- **Performance**: Combines SharpCoreDB's speed with Dapper's efficiency
-- **Transactions**: Full transaction support with BeginTransaction()
-- **Parameter Binding**: Automatic parameter mapping and SQL injection prevention
-
-### :heart: **Health Checks**
-
-- **ASP.NET Core Integration**: Native health check support
-- **Configurable Checks**: Verify database connectivity and basic operations
-- **Custom Tags**: Organize health checks with tags
-- **Failure Details**: Detailed error information for diagnostics
-- **Production Ready**: Built for monitoring and alerting systems
-
-### :globe_with_meridians: **Multi-Platform Support**
-
-- **Windows**: x64, ARM64 with hardware AES acceleration
-- **Linux**: x64, ARM64 with SIMD optimizations
-- **macOS**: x64 (Intel), ARM64 (Apple Silicon)
-- **Mobile**: Android and iOS support
-- **IoT**: Embedded devices and ARM platforms
-- **Platform-Specific Builds**: Optimized assemblies for each runtime
-
----
-
-## :book: Detailed Usage
-
-### Dapper Connection API
-
-```csharp
-using SharpCoreDB;
-using SharpCoreDB.Extensions.Dapper;
-
-var factory = new DatabaseFactory();
-using var db = factory.Create("./app_db", "SecurePassword123!");
-
-// Get connection
-using var connection = db.GetDapperConnection();
-
-// Query operations
-var users = await connection.QueryAsync<User>("SELECT * FROM users");
-var user = await connection.QueryFirstOrDefaultAsync<User>(
-    "SELECT * FROM users WHERE id = @Id", new { Id = 1 });
-
-// Execute operations
-await connection.ExecuteAsync(
-    "INSERT INTO users (id, name, email) VALUES (@Id, @Name, @Email)",
-    new { Id = 1, Name = "Alice", Email = "alice@example.com" });
-
-// Batch operations
-var updates = new[]
+foreach (var p in products)
 {
-    new { Id = 1, Name = "Alice Updated" },
-    new { Id = 2, Name = "Bob Updated" }
-};
-await connection.ExecuteAsync(
-    "UPDATE users SET name = @Name WHERE id = @Id",
-    updates);
-
-// Scalar operations
-var count = await connection.ExecuteScalarAsync<int>(
-    "SELECT COUNT(*) FROM users WHERE age > @MinAge",
-    new { MinAge = 18 });
-
-// Multiple result sets
-using var multi = await connection.QueryMultipleAsync(
-    "SELECT * FROM users; SELECT * FROM products");
-var allUsers = multi.Read<User>();
-var allProducts = multi.Read<Product>();
+    Console.WriteLine($"{p.Name}: ${p.Price}");
+}
 ```
 
-### Transaction Support
+---
+
+## Dapper Integration
+
+### Get a Dapper Connection
 
 ```csharp
-using var connection = db.GetDapperConnection();
+// Extension method on IDatabase
+using var connection = database.GetDapperConnection();
+connection.Open();
+
+// Use all standard Dapper methods
+var users = connection.Query<User>("SELECT * FROM users");
+var user = connection.QueryFirstOrDefault<User>(
+    "SELECT * FROM users WHERE Id = @Id", new { Id = 1 });
+var count = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM users");
+```
+
+### Async Extension Methods
+
+```csharp
+// Direct extensions on IDatabase — no need to manually open connections
+var users = await database.QueryAsync<User>("SELECT * FROM users");
+
+var user = await database.QueryFirstOrDefaultAsync<User>(
+    "SELECT * FROM users WHERE Id = @Id", new { Id = 1 });
+
+var affected = await database.ExecuteAsync(
+    "UPDATE users SET Name = @Name WHERE Id = @Id",
+    new { Name = "Alice", Id = 1 });
+
+var total = await database.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
+```
+
+### Transactions
+
+```csharp
+using var connection = database.GetDapperConnection();
+connection.Open();
 using var transaction = connection.BeginTransaction();
 
 try
 {
-    await connection.ExecuteAsync(
-        "INSERT INTO orders (id, user_id, total) VALUES (@Id, @UserId, @Total)",
-        new { Id = 1, UserId = 100, Total = 99.99 }, transaction);
-    
-    await connection.ExecuteAsync(
-        "UPDATE inventory SET quantity = quantity - @Qty WHERE product_id = @ProductId",
-        new { Qty = 1, ProductId = 42 }, transaction);
-    
+    connection.Execute(
+        "INSERT INTO orders (UserId, Total) VALUES (@UserId, @Total)",
+        new { UserId = 1, Total = 99.99 }, transaction);
+
+    connection.Execute(
+        "UPDATE inventory SET Qty = Qty - 1 WHERE ProductId = @Pid",
+        new { Pid = 42 }, transaction);
+
     transaction.Commit();
 }
 catch
@@ -189,14 +153,316 @@ catch
 }
 ```
 
-### Health Check Configuration
+---
+
+## Repository Pattern
+
+### Basic Usage
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using SharpCoreDB.Extensions.HealthChecks;
+// Create a repository
+var repo = new DapperRepository<User, int>(database, "users", keyColumn: "Id");
 
+// CRUD operations
+repo.Insert(new User { Name = "Alice", Email = "alice@example.com" });
+var user = repo.GetById(1);
+var all = repo.GetAll();
+repo.Update(user);
+repo.Delete(1);
+var count = repo.Count();
+
+// Async variants
+await repo.InsertAsync(user);
+var found = await repo.GetByIdAsync(1);
+await repo.DeleteAsync(1);
+```
+
+### Read-Only Repository
+
+```csharp
+// For query-only scenarios (no Insert/Update/Delete)
+var readRepo = new ReadOnlyDapperRepository<Product, int>(database, "products");
+var products = readRepo.GetAll();
+var total = readRepo.Count();
+```
+
+### Unit of Work
+
+```csharp
+using var uow = new DapperUnitOfWork(database);
+uow.BeginTransaction();
+
+try
+{
+    var userRepo = uow.GetRepository<User, int>("users");
+    var orderRepo = uow.GetRepository<Order, int>("orders");
+
+    userRepo.Insert(new User { Name = "Bob" });
+    orderRepo.Insert(new Order { UserId = 1, Total = 50.0 });
+
+    uow.Commit();
+}
+catch
+{
+    uow.Rollback();
+    throw;
+}
+```
+
+---
+
+## Bulk Operations
+
+```csharp
+// Bulk insert — batched for performance
+var users = Enumerable.Range(1, 10_000)
+    .Select(i => new User { Name = $"User{i}", Email = $"user{i}@test.com" });
+
+int inserted = database.BulkInsert("users", users, batchSize: 1000);
+
+// Async bulk insert with cancellation
+int count = await database.BulkInsertAsync("users", users, batchSize: 500, cancellationToken);
+
+// Bulk update
+database.BulkUpdate("users", updatedUsers, keyProperty: "Id");
+
+// Bulk delete
+database.BulkDelete("users", new[] { 1, 2, 3 }, keyColumn: "Id");
+```
+
+---
+
+## Health Checks
+
+### Basic Setup
+
+```csharp
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddHealthChecks()
+    .AddSharpCoreDB(
+        database,
+        name: "sharpcoredb",
+        testQuery: "SELECT 1",
+        tags: ["db", "ready"]);
+
+var app = builder.Build();
+app.MapHealthChecks("/health");
+```
+
+### Lightweight (Connection Only)
+
+```csharp
+// Best for high-frequency liveness probes
+builder.Services.AddHealthChecks()
+    .AddSharpCoreDBLightweight(database, name: "sharpcoredb-lite");
+```
+
+### Comprehensive (All Diagnostics)
+
+```csharp
+// Includes cache stats, performance metrics, table checks
+builder.Services.AddHealthChecks()
+    .AddSharpCoreDBComprehensive(database, name: "sharpcoredb-full");
+```
+
+### Custom Configuration
+
+```csharp
+builder.Services.AddHealthChecks()
+    .AddSharpCoreDB(database, options =>
+    {
+        options.TestQuery = "SELECT COUNT(*) FROM users";
+        options.DegradedThresholdMs = 500;
+        options.UnhealthyThresholdMs = 2000;
+        options.CheckQueryCache = true;
+        options.CheckPerformanceMetrics = true;
+        options.Timeout = TimeSpan.FromSeconds(5);
+    });
+```
+
+### Health Check Response Example
+
+```json
+{
+  "status": "Healthy",
+  "results": {
+    "sharpcoredb": {
+      "status": "Healthy",
+      "description": "SharpCoreDB is operational",
+      "data": {
+        "connection": "OK",
+        "query_execution_ms": 2,
+        "cache_hit_rate": "85.50%",
+        "health_check_duration_ms": 5
+      }
+    }
+  }
+}
+```
+
+---
+
+## Performance Monitoring
+
+### Query with Metrics
+
+```csharp
+// Track execution time and memory usage
+var result = database.QueryWithMetrics<User>("SELECT * FROM users");
+Console.WriteLine($"Rows: {result.Metrics.RowCount}");
+Console.WriteLine($"Time: {result.Metrics.ExecutionTime.TotalMilliseconds}ms");
+Console.WriteLine($"Memory: {result.Metrics.MemoryUsed} bytes");
+
+// Async variant
+var asyncResult = await database.QueryWithMetricsAsync<User>(
+    "SELECT * FROM users WHERE Active = @Active",
+    new { Active = true },
+    queryName: "ActiveUsers");
+```
+
+### Performance Report
+
+```csharp
+var report = DapperPerformanceExtensions.GetPerformanceReport();
+Console.WriteLine($"Total queries: {report.TotalQueries}");
+Console.WriteLine($"Avg time: {report.AverageExecutionTime.TotalMilliseconds}ms");
+Console.WriteLine($"Slowest: {report.SlowestQuery?.QueryName}");
+Console.WriteLine($"Total memory: {report.TotalMemoryUsed} bytes");
+
+// Clear metrics
+DapperPerformanceExtensions.ClearMetrics();
+```
+
+### Timeout Warnings
+
+```csharp
+var results = database.QueryWithTimeout<User>(
+    "SELECT * FROM users",
+    timeout: TimeSpan.FromSeconds(2),
+    onTimeout: elapsed => Console.WriteLine($"⚠ Query took {elapsed.TotalSeconds}s"));
+```
+
+---
+
+## Pagination
+
+```csharp
+var page = await database.QueryPagedAsync<User>(
+    "SELECT * FROM users ORDER BY Name",
+    pageNumber: 2,
+    pageSize: 25);
+
+Console.WriteLine($"Page {page.PageNumber}/{page.TotalPages}");
+Console.WriteLine($"Total items: {page.TotalCount}");
+Console.WriteLine($"Has next: {page.HasNextPage}");
+
+foreach (var user in page.Items)
+{
+    Console.WriteLine(user.Name);
+}
+```
+
+---
+
+## Type Mapping
+
+### Custom Column Mapping
+
+```csharp
+// Map DB columns to different C# property names
+DapperMappingExtensions.CreateTypeMap<User>(new Dictionary<string, string>
+{
+    ["user_name"] = "Name",
+    ["email_address"] = "Email",
+    ["created_at"] = "CreatedDate"
+});
+```
+
+### Multi-Table JOINs
+
+```csharp
+var orders = database.QueryMultiMapped<Order, User, OrderWithUser>(
+    "SELECT o.*, u.* FROM orders o JOIN users u ON o.UserId = u.Id",
+    (order, user) => new OrderWithUser { Order = order, User = user },
+    splitOn: "Id");
+```
+
+### Custom Mapping Function
+
+```csharp
+var products = database.QueryWithMapping(
+    "SELECT * FROM products",
+    row => new ProductDto
+    {
+        Id = (int)row["Id"],
+        DisplayName = $"{row["Name"]} (${row["Price"]})"
+    });
+```
+
+---
+
+## Platform Support
+
+| Platform | Architecture | Status |
+|----------|-------------|--------|
+| Windows | x64, ARM64 | ✅ Full support |
+| Linux | x64, ARM64 | ✅ Full support |
+| macOS | x64 (Intel), ARM64 (Apple Silicon) | ✅ Full support |
+| Android | ARM64 | ✅ Supported |
+| iOS | ARM64 | ✅ Supported |
+| IoT/Embedded | ARM | ✅ Supported |
+
+---
+
+## API Reference
+
+### Extension Methods on `IDatabase`
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `GetDapperConnection()` | `IDbConnection` | Creates a Dapper-compatible connection |
+| `QueryAsync<T>()` | `Task<IEnumerable<T>>` | Typed async query |
+| `QueryFirstOrDefaultAsync<T>()` | `Task<T?>` | Single result async query |
+| `ExecuteAsync()` | `Task<int>` | Async command execution |
+| `ExecuteScalarAsync<T>()` | `Task<T?>` | Async scalar query |
+| `QueryPagedAsync<T>()` | `Task<PagedResult<T>>` | Paginated async query |
+| `QueryWithMetrics<T>()` | `QueryResult<T>` | Query with performance tracking |
+| `QueryWithMetricsAsync<T>()` | `Task<QueryResult<T>>` | Async query with metrics |
+| `BulkInsert<T>()` | `int` | Batch insert entities |
+| `BulkInsertAsync<T>()` | `Task<int>` | Async batch insert |
+| `BulkUpdate<T>()` | `int` | Batch update entities |
+| `BulkDelete<TKey>()` | `int` | Batch delete by keys |
+| `QueryWithMapping<T>()` | `IEnumerable<T>` | Query with custom mapping |
+| `QueryMapped<T>()` | `IEnumerable<T>` | Auto-mapped query |
+| `QueryMultiMapped<T1,T2,TResult>()` | `IEnumerable<TResult>` | Multi-table JOIN mapping |
+
+### Health Check Builders
+
+| Method | Description |
+|--------|-------------|
+| `AddSharpCoreDB()` | Standard health check |
+| `AddSharpCoreDBLightweight()` | Connection-only (fast) |
+| `AddSharpCoreDBComprehensive()` | All diagnostics (detailed) |
+
+### Classes
+
+| Class | Description |
+|-------|-------------|
+| `DapperRepository<TEntity, TKey>` | Full CRUD repository |
+| `ReadOnlyDapperRepository<TEntity, TKey>` | Read-only repository |
+| `DapperUnitOfWork` | Transaction management |
+| `DapperPerformanceExtensions` | Performance monitoring |
+| `DapperTypeMapper` | .NET ↔ DB type conversion |
+| `PagedResult<T>` | Pagination result container |
+
+---
+
+## License
+
+MIT — see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) for details.
+
+**Built with ❤️ for .NET 10 and C# 14**
 
 // Basic health check
 builder.Services.AddHealthChecks()
@@ -736,6 +1002,6 @@ MIT License - see [LICENSE](../LICENSE) file for details.
 
 **Built with :heart: for the SharpCoreDB ecosystem**
 
-[Report Bug](https://github.com/MPCoreDeveloper/SharpCoreDB/issues) � [Request Feature](https://github.com/MPCoreDeveloper/SharpCoreDB/issues) � [Discussions](https://github.com/MPCoreDeveloper/SharpCoreDB/discussions)
+[Report Bug](https://github.com/MPCoreDeveloper/SharpCoreDB/issues) · [Request Feature](https://github.com/MPCoreDeveloper/SharpCoreDB/issues) · [Discussions](https://github.com/MPCoreDeveloper/SharpCoreDB/discussions)
 
 </div>

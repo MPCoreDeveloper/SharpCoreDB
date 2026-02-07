@@ -17,10 +17,22 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
         [typeof(string)] = new StringTypeMapping("TEXT", System.Data.DbType.String),
         [typeof(bool)] = new BoolTypeMapping("BOOLEAN"),
         [typeof(double)] = new DoubleTypeMapping("REAL"),
+        [typeof(float)] = new FloatTypeMapping("REAL"),
         [typeof(decimal)] = new DecimalTypeMapping("DECIMAL"),
         [typeof(DateTime)] = new DateTimeTypeMapping("DATETIME"),
+        [typeof(DateTimeOffset)] = new DateTimeOffsetTypeMapping("DATETIME"),
+        [typeof(TimeSpan)] = new TimeSpanTypeMapping("TEXT"),
+        [typeof(DateOnly)] = new DateOnlyTypeMapping("TEXT"),
+        [typeof(TimeOnly)] = new TimeOnlyTypeMapping("TEXT"),
         [typeof(Guid)] = new GuidTypeMapping("GUID"),
-        [typeof(byte[])] = new ByteArrayTypeMapping("BLOB")
+        [typeof(byte[])] = new ByteArrayTypeMapping("BLOB"),
+        [typeof(byte)] = new ByteTypeMapping("INTEGER"),
+        [typeof(short)] = new ShortTypeMapping("INTEGER"),
+        [typeof(sbyte)] = new SByteTypeMapping("INTEGER"),
+        [typeof(ushort)] = new UShortTypeMapping("INTEGER"),
+        [typeof(uint)] = new UIntTypeMapping("INTEGER"),
+        [typeof(ulong)] = new ULongTypeMapping("LONG"),
+        [typeof(char)] = new CharTypeMapping("TEXT")
     };
 
     /// <summary>
@@ -54,6 +66,7 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
                 "GUID" => new GuidTypeMapping("GUID"),
                 "ULID" => new StringTypeMapping("ULID", System.Data.DbType.String),
                 "BLOB" => new ByteArrayTypeMapping("BLOB"),
+                "FLOAT" => new FloatTypeMapping("REAL"),
                 _ => null
             };
         }

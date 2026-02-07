@@ -4,14 +4,17 @@ namespace SharpCoreDB.EntityFrameworkCore.Update;
 
 /// <summary>
 /// Modification command batch factory for SharpCoreDB.
-/// Creates batches for INSERT/UPDATE/DELETE operations.
-/// INCOMPLETE IMPLEMENTATION - Placeholder stub only.
+/// Creates batches for INSERT/UPDATE/DELETE operations using singular (one-command-per-batch) strategy.
 /// </summary>
-public class SharpCoreDBModificationCommandBatchFactory : IModificationCommandBatchFactory
+public class SharpCoreDBModificationCommandBatchFactory(
+    ModificationCommandBatchFactoryDependencies dependencies) : IModificationCommandBatchFactory
 {
+    private readonly ModificationCommandBatchFactoryDependencies _dependencies = dependencies
+        ?? throw new ArgumentNullException(nameof(dependencies));
+
     /// <inheritdoc />
     public ModificationCommandBatch Create()
     {
-        throw new NotImplementedException("EF Core provider is incomplete - see EFCORE_STATUS.md");
+        return new SingularModificationCommandBatch(_dependencies);
     }
 }

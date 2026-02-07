@@ -60,6 +60,21 @@ public class DapperConnection(IDatabase database, string connectionString) : DbC
     }
 
     /// <inheritdoc />
+    public override Task OpenAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Open();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public override Task CloseAsync()
+    {
+        Close();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
     {
         if (_state != ConnectionState.Open)
@@ -100,15 +115,10 @@ public class DapperConnection(IDatabase database, string connectionString) : DbC
 /// <summary>
 /// Provides a DbCommand implementation for SharpCoreDB.
 /// </summary>
-internal class DapperCommand : DbCommand
+internal class DapperCommand(IDatabase database) : DbCommand
 {
-    private readonly IDatabase _database;
+    private readonly IDatabase _database = database;
     private string _commandText = string.Empty;
-
-    public DapperCommand(IDatabase database)
-    {
-        _database = database;
-    }
 
     public override string CommandText
     {
@@ -134,8 +144,23 @@ internal class DapperCommand : DbCommand
         if (string.IsNullOrWhiteSpace(_commandText))
             throw new InvalidOperationException("CommandText is not set");
 
-        _database.ExecuteSQL(_commandText);
-        return 1; // Return affected rows (simplified)
+        // Track statement in active transaction for potential rollback
+        if (DbTransaction is DapperTransaction tx)
+        {
+            tx.TrackStatement(_commandText);
+        }
+
+        var parameters = ConvertParametersToDictionary();
+        if (parameters.Count > 0)
+        {
+            _database.ExecuteSQL(_commandText, parameters);
+        }
+        else
+        {
+            _database.ExecuteSQL(_commandText);
+        }
+
+        return 1; // SharpCoreDB does not return affected row counts
     }
 
     public override object? ExecuteScalar()

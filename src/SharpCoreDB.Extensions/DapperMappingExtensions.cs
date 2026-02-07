@@ -178,9 +178,9 @@ public static class DapperMappingExtensions
                     var value = ConvertValue(kvp.Value, property.PropertyType);
                     property.SetValue(obj, value);
                 }
-                catch
+                catch (InvalidCastException)
                 {
-                    // Skip properties that can't be set
+                    // Skip properties that can't be converted — type mismatch between DB and CLR type
                 }
             }
         }

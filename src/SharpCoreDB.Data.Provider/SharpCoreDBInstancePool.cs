@@ -37,7 +37,7 @@ internal sealed class SharpCoreDBInstancePool
     private readonly ConcurrentDictionary<string, PooledInstance> _pool = 
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly object _lockObject = new();
+    private readonly Lock _lockObject = new();
 
     /// <summary>
     /// Gets the singleton instance of the pool.
@@ -49,11 +49,12 @@ internal sealed class SharpCoreDBInstancePool
     /// If an instance exists for the given connection string and password, it is reused
     /// and the reference count is incremented. Otherwise, a new instance is created.
     /// </summary>
-    /// <param name="dbPath">Path to the database file or directory</param>
-    /// <param name="password">Database password</param>
-    /// <param name="connectionString">The full connection string (for cache key)</param>
-    /// <returns>A database instance that must be released via ReleaseInstance</returns>
-    public IDatabase AcquireInstance(string dbPath, string password, string connectionString)
+    /// <param name="dbPath">Path to the database file or directory.</param>
+    /// <param name="password">Database password.</param>
+    /// <param name="connectionString">The full connection string (for cache key).</param>
+    /// <param name="readOnly">Whether the database should be opened in read-only mode.</param>
+    /// <returns>A database instance that must be released via ReleaseInstance.</returns>
+    public IDatabase AcquireInstance(string dbPath, string password, string connectionString, bool readOnly = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -78,7 +79,7 @@ internal sealed class SharpCoreDBInstancePool
             try
             {
                 var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
-                var database = factory.Create(dbPath, password, isReadOnly: false);
+                var database = factory.Create(dbPath, password, isReadOnly: readOnly);
 
                 var instance = new PooledInstance
                 {

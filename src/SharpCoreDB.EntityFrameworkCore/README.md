@@ -7,8 +7,8 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.1-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
-  [![EF Core](https://img.shields.io/badge/EF%20Core-10.0-purple.svg)](https://docs.microsoft.com/ef/core/)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.0.6-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
+  [![EF Core](https://img.shields.io/badge/EF%20Core-10.0.2-purple.svg)](https://docs.microsoft.com/ef/core/)
   
 </div>
 
@@ -16,16 +16,7 @@
 
 ## Overview
 
-Entity Framework Core 10 database provider for **SharpCoreDB** - a high-performance encrypted embedded database engine. Use familiar EF Core APIs with SharpCoreDB's blazing-fast analytics, AES-256-GCM encryption, and SIMD acceleration.
-
-**Key Benefits (January 2026 Benchmarks):**
-- Full EF Core 10 support with LINQ, migrations, and change tracking
-- AES-256-GCM encryption at rest with 0% performance overhead
-- **417x faster** analytics than LiteDB with SIMD vectorization
-- **60x faster** SELECT queries than LiteDB
-- **6x faster** UPDATE operations than LiteDB
-- Pure .NET implementation - works on Windows, Linux, macOS, Android, iOS, and IoT
-- Multi-platform support: x64, ARM64 on all major operating systems
+Entity Framework Core 10 database provider for **SharpCoreDB** — a high-performance encrypted embedded database engine. Use familiar EF Core APIs with SharpCoreDB's AES-256-GCM encryption, SIMD acceleration, and zero-config deployment.
 
 ---
 
@@ -37,639 +28,343 @@ dotnet add package SharpCoreDB.EntityFrameworkCore
 
 **Requirements:**
 - .NET 10.0 or later
-- Entity Framework Core 10.0.1 or later
-- SharpCoreDB 1.0.0 or later (installed automatically)
+- Entity Framework Core 10.0.2 or later
+- SharpCoreDB 1.0.6 or later (installed automatically)
 
 ---
 
 ## Quick Start
 
-### 1. Define Your DbContext
+### 1. Define Your Entities and DbContext
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using SharpCoreDB.EntityFrameworkCore;
 
-public class AppDbContext : DbContext
-{
-    public DbSet<User> Users { get; set; }
-    public DbSet<Product> Products { get; set; }
-    
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        optionsBuilder.UseSharpCoreDB(
-            databasePath: "./myapp.db",
-            password: "MySecurePassword123!",
-            storageEngine: StorageEngine.PageBased
-        );
-    }
-}
-
 public class User
 {
     public int Id { get; set; }
-    public string Name { get; set; }
+    public required string Name { get; set; }
     public int Age { get; set; }
     public decimal Salary { get; set; }
 }
 
-public class Product
+public class AppDbContext : DbContext
 {
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public decimal Price { get; set; }
-    public int Stock { get; set; }
+    public DbSet<User> Users => Set<User>();
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        // Connection string format: Data Source=path;Password=pass;Cache=Shared|Private;ReadOnly=true|false
+        optionsBuilder.UseSharpCoreDB(
+            "Data Source=./myapp.db;Password=MySecurePassword123!");
+    }
 }
 ```
 
 ### 2. Use EF Core Normally
 
 ```csharp
-using (var context = new AppDbContext())
+await using var context = new AppDbContext();
+
+// Create database and tables from model
+await context.Database.EnsureCreatedAsync();
+
+// INSERT
+context.Users.Add(new User { Name = "Alice", Age = 30, Salary = 75000 });
+await context.SaveChangesAsync();
+
+// QUERY with LINQ
+var highEarners = await context.Users
+    .Where(u => u.Salary > 50000)
+    .OrderBy(u => u.Name)
+    .ToListAsync();
+
+// AGGREGATIONS
+var avgSalary = await context.Users.AverageAsync(u => u.Salary);
+var totalSalary = await context.Users.SumAsync(u => u.Salary);
+```
+
+---
+
+## Connection String Format
+
+| Key | Description | Required | Default |
+|-----|-------------|----------|---------|
+| `Data Source` | Path to the database file or directory | ✅ Yes | — |
+| `Password` | Encryption password (AES-256-GCM) | ✅ Yes | `"default"` |
+| `Cache` | `Shared` (connection pooling) or `Private` | No | `Private` |
+| `ReadOnly` | Open database in read-only mode | No | `false` |
+
+**Examples:**
+```
+Data Source=./data.db;Password=MySecurePass123
+Data Source=C:\databases\app.db;Password=Pass;Cache=Shared
+Data Source=/var/data/app.db;Password=Pass;ReadOnly=true
+```
+
+---
+
+## Dependency Injection (ASP.NET Core / Razor Pages)
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Register DbContext with SharpCoreDB
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSharpCoreDB(
+        builder.Configuration.GetConnectionString("SharpCoreDB")
+        ?? "Data Source=./app.db;Password=SecurePassword123;Cache=Shared"));
+
+var app = builder.Build();
+
+// Ensure database is created on startup
+using (var scope = app.Services.CreateScope())
 {
-    // Create database and apply migrations
-    context.Database.EnsureCreated();
-    
-    // Insert data
-    context.Users.Add(new User 
-    { 
-        Name = "Alice", 
-        Age = 30, 
-        Salary = 75000 
-    });
-    context.SaveChanges();
-    
-    // Query with LINQ
-    var highEarners = context.Users
-        .Where(u => u.Salary > 50000)
-        .OrderBy(u => u.Name)
-        .ToList();
-    
-    // Fast analytics with SIMD acceleration
-    var avgSalary = context.Users.Average(u => u.Salary);
-    var totalSalary = context.Users.Sum(u => u.Salary);
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
+```
+
+### appsettings.json
+
+```json
+{
+  "ConnectionStrings": {
+    "SharpCoreDB": "Data Source=./app.db;Password=SecurePassword123;Cache=Shared"
+  }
 }
 ```
 
 ---
 
-## Configuration Options
-
-### UseSharpCoreDB Extension Method
+## Provider-Specific Options
 
 ```csharp
 optionsBuilder.UseSharpCoreDB(
-    databasePath: "./data.db",           // Database file path
-    password: "YourPassword",            // Encryption password (required)
-    storageEngine: StorageEngine.PageBased,  // Storage engine type
-    configureOptions: options => 
+    "Data Source=./data.db;Password=MyPass",
+    options =>
     {
-        // Optional: Configure SharpCoreDB-specific options
-        options.EnableSensitiveDataLogging = true;
-        options.CommandTimeout = TimeSpan.FromSeconds(30);
-    }
-);
+        // Set command timeout (inherited from RelationalDbContextOptionsBuilder)
+        options.CommandTimeout(30);
+
+        // Set max batch size for SaveChanges
+        options.MaxBatchSize(100);
+    });
 ```
 
-### Storage Engine Types
-
-| Engine | Best For | Performance Characteristics |
-|--------|----------|----------------------------|
-| **PageBased** (default) | OLTP workloads | Balanced read/write, in-place updates |
-| **Columnar** | Analytics | 345x faster aggregations, SIMD-accelerated |
-| **AppendOnly** | Logging/streaming | 12% faster inserts, append-only semantics |
-
-### Dependency Injection
+### Generic DbContext Registration
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
-
-var services = new ServiceCollection();
-
-services.AddDbContext<AppDbContext>(options =>
-    options.UseSharpCoreDB("./app.db", "SecurePassword123!"));
-
-var provider = services.BuildServiceProvider();
-var context = provider.GetRequiredService<AppDbContext>();
+// Type-safe registration with UseSharpCoreDB<TContext>
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSharpCoreDB<AppDbContext>(
+        "Data Source=./app.db;Password=Pass123",
+        o => o.CommandTimeout(60)));
 ```
 
 ---
 
-## Features
+## Supported EF Core Features
 
-### [?] Supported EF Core Features
+### ✅ Working
 
-- **CRUD Operations**: Add, Update, Delete, Find
-- **LINQ Queries**: Where, Select, OrderBy, GroupBy, Join
-- **Change Tracking**: Automatic change detection and saving
-- **Migrations**: Database schema migrations
-- **Relationships**: One-to-many, many-to-many navigation properties
-- **Indexes**: Automatic index creation for primary keys and foreign keys
-- **Transactions**: Explicit and implicit transaction support
-- **Async/Await**: Full async support for all operations
-- **Query Filters**: Global query filters
-- **Value Conversions**: Custom type converters
-- **Shadow Properties**: Properties not on entity classes
-- **Owned Types**: Complex types within entities
+| Feature | Status |
+|---------|--------|
+| **CRUD** (Add, Update, Delete, Find) | ✅ Full |
+| **LINQ Queries** (Where, Select, OrderBy, GroupBy, Join) | ✅ Full |
+| **SaveChanges / SaveChangesAsync** | ✅ Full |
+| **EnsureCreated / EnsureDeleted** | ✅ Full |
+| **Transactions** (Begin, Commit, Rollback) | ✅ Full |
+| **Async operations** (ToListAsync, SaveChangesAsync, etc.) | ✅ Full |
+| **Change Tracking** | ✅ Full |
+| **Migrations** (CreateTable, DropTable, AddColumn, DropColumn, CreateIndex, DropIndex, RenameTable, AlterColumn) | ✅ Full |
+| **Type Mappings** (int, long, string, bool, double, float, decimal, DateTime, DateTimeOffset, TimeSpan, DateOnly, TimeOnly, Guid, byte[], byte, short, char, etc.) | ✅ Full |
+| **LINQ String Translations** (Contains → LIKE, StartsWith, EndsWith, ToUpper → UPPER, ToLower → LOWER, Trim, Replace, Substring, EF.Functions.Like) | ✅ Full |
+| **LINQ Member Translations** (DateTime.Now → NOW(), DateTime.UtcNow, string.Length → LENGTH()) | ✅ Full |
+| **SQL Functions** (SUM, AVG, COUNT, GROUP_CONCAT, DATEADD, STRFTIME) | ✅ Full |
+| **Indexes** (B-tree, Unique) | ✅ Full |
+| **Relationships / Navigation Properties** | ✅ Via SQL JOINs |
+| **Connection Pooling** (Cache=Shared) | ✅ Full |
 
-### [?] SharpCoreDB-Specific Features
+### ⚠️ Limitations
 
-- **AES-256-GCM Encryption**: All data encrypted at rest with 0% overhead
-- **SIMD Analytics**: 345x faster aggregations than traditional databases
-- **B-tree Indexes**: O(log n) range queries with ORDER BY support
-- **Hash Indexes**: O(1) point lookups for primary keys
-- **Multi-Platform**: Windows, Linux, macOS, Android, iOS, IoT (x64, ARM64)
-- **Pure .NET**: No native dependencies, works everywhere .NET runs
-- **NativeAOT Ready**: Compatible with ahead-of-time compilation
-
-### [?] DDL Feature Support
-
-SharpCoreDB supports advanced DDL features that enhance data integrity. Here's how they work with EF Core:
-
-#### ? DEFAULT Values (Fully Supported)
-DEFAULT values work seamlessly with EF Core migrations and fluent API:
-
-```csharp
-// Using Data Annotations
-public class Product
-{
-    public int Id { get; set; }
-    [DefaultValue("Unknown")]
-    public string Name { get; set; }
-    
-    [DefaultValue(0)]
-    public decimal Price { get; set; }
-}
-
-// Using Fluent API
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    modelBuilder.Entity<Product>()
-        .Property(p => p.Name)
-        .HasDefaultValue("Unknown");
-        
-    modelBuilder.Entity<Product>()
-        .Property(p => p.CreatedAt)
-        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-}
-```
-
-#### ?? CHECK Constraints (Raw SQL Required)
-**EF Core 10 does not support CHECK constraints in migrations.** Use raw SQL to add CHECK constraints:
-
-```csharp
-// After creating your migration, add CHECK constraints manually
-protected override void Up(MigrationBuilder migrationBuilder)
-{
-    // Create table with EF Core
-    migrationBuilder.CreateTable(
-        name: "Products",
-        columns: table => new
-        {
-            Id = table.Column<int>(nullable: false),
-            Name = table.Column<string>(nullable: false),
-            Price = table.Column<decimal>(nullable: false),
-            Stock = table.Column<int>(nullable: false)
-        },
-        constraints: table =>
-        {
-            table.PrimaryKey("PK_Products", x => x.Id);
-        });
-
-    // Add CHECK constraints with raw SQL
-    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Price_Positive CHECK (Price > 0)");
-    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Stock_NonNegative CHECK (Stock >= 0)");
-    migrationBuilder.Sql("ALTER TABLE Products ADD CONSTRAINT CK_Products_Value CHECK (Price * Stock < 10000)");
-}
-
-protected override void Down(MigrationBuilder migrationBuilder)
-{
-    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Price_Positive");
-    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Stock_NonNegative");
-    migrationBuilder.Sql("ALTER TABLE Products DROP CONSTRAINT CK_Products_Value");
-    migrationBuilder.DropTable(name: "Products");
-}
-```
-
-**Note**: When EF Core adds CHECK constraint support in future versions, the SharpCoreDB provider will automatically support it through the standard migration operations.
+| Feature | Notes |
+|---------|-------|
+| **Compiled Queries** (`EF.CompileQuery`) | Queries work via relational pipeline; compiled query caching is passthrough |
+| **Value Conversions** | Supported via EF Core's built-in converters |
+| **Spatial Types** | Not supported (no geometry/geography) |
+| **JSON Columns** | Not supported |
+| **Batch UPDATE/DELETE** (`ExecuteUpdate`/`ExecuteDelete`) | Not yet implemented |
 
 ---
 
-## Performance Benchmarks
+## Encryption
 
-### Analytics Performance (EF Core)
+All data is encrypted at rest with **AES-256-GCM** (Galois/Counter Mode):
 
-**Test**: `context.Users.Average(u => u.Salary)` on 10,000 records
+- **Key Derivation**: PBKDF2 with SHA-256
+- **Hardware Acceleration**: Uses AES-NI instructions when available
+- **Authenticated Encryption**: Prevents tampering and ensures data integrity
 
-| Provider | Time | Memory | vs SharpCoreDB |
-|----------|------|--------|----------------|
-| **SharpCoreDB (Columnar)** | **49.5 ?s** | **0 B** | **Baseline** |
-| SQLite | 566.9 ?s | 712 B | 11.5x slower |
-| SQL Server LocalDB | ~2,500 ?s | ~5 KB | 50x slower |
-| PostgreSQL | ~3,000 ?s | ~8 KB | 60x slower |
+```csharp
+// Load password securely from environment
+var password = Environment.GetEnvironmentVariable("DB_PASSWORD")
+    ?? throw new InvalidOperationException("DB_PASSWORD not set");
 
-### Insert Performance
-
-**Test**: `context.Users.AddRange(users); context.SaveChanges()` with 10,000 records
-
-| Provider | Time | Memory | vs SharpCoreDB |
-|----------|------|--------|----------------|
-| **SharpCoreDB** | **70.9 ms** | **54.4 MB** | **Baseline** |
-| SQLite | 29.7 ms | 9.2 MB | 2.4x faster |
-| SQL Server LocalDB | ~500 ms | ~120 MB | 7x slower |
-
-### Query Performance
-
-**Test**: `context.Users.Where(u => u.Age > 30).ToList()` on 10,000 records
-
-| Provider | Time | Memory | vs SharpCoreDB |
-|----------|------|--------|----------------|
-| **SharpCoreDB** | **33.0 ms** | **12.5 MB** | **Baseline** |
-| SQLite | 1.41 ms | 712 B | 23x faster |
-| SQL Server LocalDB | ~50 ms | ~8 MB | 1.5x slower |
-
-**Note**: SharpCoreDB excels at analytics workloads. For OLTP-heavy applications, consider SQLite. For analytics-heavy applications, SharpCoreDB is the clear winner.
-
----
-
-## Performance vs LiteDB (Pure .NET Comparison)
-
-**Note**: LiteDB is the correct comparison - both are pure .NET embedded databases. SQLite is C code with 20 years of optimization.
-
-| Operation | SharpCoreDB | LiteDB | Winner |
-|-----------|-------------|--------|--------|
-| **Analytics (SIMD)** | 26.6 µs | 11,067 µs | ✅ **SharpCoreDB 417x faster** |
-| **SELECT (Full Scan)** | 161 µs | 9,757 µs | ✅ **SharpCoreDB 60x faster** |
-| **UPDATE** | 14.2 ms | 84.6 ms | ✅ **SharpCoreDB 6x faster** |
-| **INSERT** | 17.1 ms | 7.0 ms | ⚠️ LiteDB 2.4x faster |
-
-**SharpCoreDB wins 3 out of 4 categories!**
+optionsBuilder.UseSharpCoreDB($"Data Source=./secure.db;Password={password}");
+```
 
 ---
 
 ## Migrations
 
-### Create Migration
+### Create & Apply Migrations
 
 ```bash
 dotnet ef migrations add InitialCreate --project YourProject.csproj
-```
-
-### Apply Migration
-
-```bash
 dotnet ef database update --project YourProject.csproj
 ```
 
-### Code-Based Migrations
+### Supported Migration Operations
 
-```csharp
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
-
-[DbContext(typeof(AppDbContext))]
-[Migration("20250101000000_InitialCreate")]
-public partial class InitialCreate : Migration
-{
-    protected override void Up(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.CreateTable(
-            name: "Users",
-            columns: table => new
-            {
-                Id = table.Column<int>(nullable: false)
-                    .Annotation("SharpCoreDB:Identity", "1, 1"),
-                Name = table.Column<string>(maxLength: 100, nullable: false),
-                Age = table.Column<int>(nullable: false),
-                Salary = table.Column<decimal>(precision: 18, scale: 2, nullable: false)
-            },
-            constraints: table =>
-            {
-                table.PrimaryKey("PK_Users", x => x.Id);
-            });
-            
-        migrationBuilder.CreateIndex(
-            name: "IX_Users_Age",
-            table: "Users",
-            column: "Age");
-    }
-    
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.DropTable(name: "Users");
-    }
-}
-```
+| Operation | SQL Generated |
+|-----------|---------------|
+| `CreateTable` | `CREATE TABLE ...` |
+| `DropTable` | `DROP TABLE IF EXISTS ...` |
+| `AddColumn` | `ALTER TABLE ... ADD COLUMN ...` |
+| `DropColumn` | `ALTER TABLE ... DROP COLUMN ...` |
+| `RenameTable` | `ALTER TABLE ... RENAME TO ...` |
+| `AlterColumn` | `ALTER TABLE ... ALTER COLUMN ...` |
+| `CreateIndex` | `CREATE [UNIQUE] INDEX ...` |
+| `DropIndex` | `DROP INDEX IF EXISTS ...` |
+| `InsertData` | `INSERT OR REPLACE INTO ...` |
 
 ---
 
-## Advanced Usage
-
-### Custom Index Configuration
+## Complete Example
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.EntityFrameworkCore;
+
+// --- Entities ---
+public class Blog
 {
-    modelBuilder.Entity<User>(entity =>
-    {
-        // B-tree index for range queries
-        entity.HasIndex(u => u.Age)
-              .HasDatabaseName("IX_Users_Age_BTree")
-              .HasAnnotation("SharpCoreDB:IndexType", "BTree");
-        
-        // Hash index for point lookups
-        entity.HasIndex(u => u.Email)
-              .IsUnique()
-              .HasAnnotation("SharpCoreDB:IndexType", "Hash");
-    });
+    public int BlogId { get; set; }
+    public required string Title { get; set; }
+    public string? Url { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public List<Post> Posts { get; set; } = [];
 }
-```
 
-### Batch Operations
-
-```csharp
-using (var context = new AppDbContext())
+public class Post
 {
-    // Batch inserts (significantly faster)
-    var users = Enumerable.Range(1, 10000)
-        .Select(i => new User { Name = $"User{i}", Age = 20 + (i % 50) })
-        .ToList();
-    
-    context.Users.AddRange(users);
-    context.SaveChanges(); // Uses SharpCoreDB's batch API internally
+    public int PostId { get; set; }
+    public required string Title { get; set; }
+    public required string Content { get; set; }
+    public int BlogId { get; set; }
+    public Blog Blog { get; set; } = null!;
 }
-```
 
-### Analytics with Columnar Storage
+// --- DbContext ---
+public class BlogDbContext : DbContext
+{
+    public DbSet<Blog> Blogs => Set<Blog>();
+    public DbSet<Post> Posts => Set<Post>();
 
-```csharp
-// Use Columnar storage engine for analytics workloads
-optionsBuilder.UseSharpCoreDB(
-    "./analytics.db", 
-    "Password", 
-    StorageEngine.Columnar
-);
+    public BlogDbContext(DbContextOptions<BlogDbContext> options) : base(options) { }
 
-// Fast SIMD-accelerated aggregations
-var stats = context.Users
-    .GroupBy(u => u.Department)
-    .Select(g => new 
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        Department = g.Key,
-        AvgSalary = g.Average(u => u.Salary),
-        TotalSalary = g.Sum(u => u.Salary),
-        Count = g.Count()
-    })
-    .ToList();
-```
+        modelBuilder.Entity<Blog>()
+            .HasMany(b => b.Posts)
+            .WithOne(p => p.Blog)
+            .HasForeignKey(p => p.BlogId);
 
-### Async Operations
+        modelBuilder.Entity<Blog>()
+            .HasIndex(b => b.Title);
+    }
+}
 
-```csharp
-// All EF Core async operations are supported
-await context.Users.AddAsync(new User { Name = "Bob", Age = 25 });
+// --- Usage ---
+var services = new ServiceCollection();
+services.AddDbContext<BlogDbContext>(options =>
+    options.UseSharpCoreDB("Data Source=./blog.db;Password=MySecurePassword123;Cache=Shared"));
+
+var provider = services.BuildServiceProvider();
+await using var context = provider.GetRequiredService<BlogDbContext>();
+
+await context.Database.EnsureCreatedAsync();
+
+// Create
+context.Blogs.Add(new Blog
+{
+    Title = "My Tech Blog",
+    Url = "https://myblog.com",
+    CreatedAt = DateTime.UtcNow,
+    Posts =
+    [
+        new Post { Title = "First Post", Content = "Hello World!" },
+        new Post { Title = "EF Core with SharpCoreDB", Content = "It works!" }
+    ]
+});
 await context.SaveChangesAsync();
 
-var users = await context.Users
-    .Where(u => u.Age > 30)
+// Query with LINQ
+var blogs = await context.Blogs
+    .Where(b => b.Title.Contains("Tech"))
+    .OrderByDescending(b => b.CreatedAt)
     .ToListAsync();
 
-var avgAge = await context.Users
-    .AverageAsync(u => u.Age);
+var postCount = await context.Posts.CountAsync();
+Console.WriteLine($"Found {blogs.Count} blogs with {postCount} total posts");
 ```
 
 ---
 
 ## Platform Support
 
-### Supported Platforms
-
 | Platform | Architectures | Status |
 |----------|--------------|--------|
-| Windows | x64, ARM64 | [?] Fully Supported |
-| Linux | x64, ARM64 | [?] Fully Supported |
-| macOS | x64 (Intel), ARM64 (Apple Silicon) | [?] Fully Supported |
-| Android | ARM64, x64 | [?] Fully Supported |
-| iOS | ARM64 | [?] Fully Supported |
-| IoT/Embedded | ARM64, x64 | [?] Fully Supported |
-
-### Runtime Identifiers (RIDs)
-
-The NuGet package includes platform-specific optimizations for:
-- `win-x64`, `win-arm64`
-- `linux-x64`, `linux-arm64`
-- `osx-x64`, `osx-arm64`
-
-NuGet automatically selects the correct runtime assembly for your platform.
-
----
-
-## Security
-
-### Encryption Details
-
-- **Algorithm**: AES-256-GCM (Galois/Counter Mode)
-- **Key Derivation**: PBKDF2 with SHA-256 (100,000 iterations)
-- **Authenticated Encryption**: Prevents tampering and ensures data integrity
-- **Hardware Acceleration**: Uses AES-NI instructions when available
-- **Performance**: 0% overhead (sometimes faster than unencrypted!)
-
-### Best Practices
-
-1. **Strong Passwords**: Use at least 16 characters with mixed case, numbers, and symbols
-2. **Key Management**: Store passwords securely (e.g., Azure Key Vault, environment variables)
-3. **Compliance**: GDPR and HIPAA compliant when properly configured
-4. **Backup**: Encrypted database files can be safely backed up
-
-```csharp
-// Example: Load password from environment variable
-var password = Environment.GetEnvironmentVariable("DB_PASSWORD") 
-    ?? throw new InvalidOperationException("DB_PASSWORD not set");
-
-optionsBuilder.UseSharpCoreDB("./secure.db", password);
-```
-
----
-
-## Comparison with Other Providers
-
-| Feature | SharpCoreDB | SQLite | SQL Server | PostgreSQL |
-|---------|-------------|--------|------------|------------|
-| **Analytics Speed** | 345x faster | Baseline | Slower | Slower |
-| **SIMD Acceleration** | [?] AVX-512/AVX2 | [ ] | [ ] | [ ] |
-| **Native Encryption** | [?] AES-256-GCM | [?] SQLCipher (paid) | [?] TDE (Enterprise) | [?] pgcrypto |
-| **Pure .NET** | [?] | [?] P/Invoke | [?] Network | [?] Network |
-| **Embedded** | [?] | [?] | [?] | [?] |
-| **Zero Config** | [?] | [?] | [?] | [?] |
-| **Multi-Platform** | [?] All | [?] Most | [?] Windows-heavy | [?] Most |
-| **NativeAOT** | [?] Full | [?] Limited | [?] | [?] |
-| **License** | MIT | Public Domain | Proprietary | PostgreSQL |
+| Windows | x64, ARM64 | ✅ Fully Supported |
+| Linux | x64, ARM64 | ✅ Fully Supported |
+| macOS | x64 (Intel), ARM64 (Apple Silicon) | ✅ Fully Supported |
+| Android | ARM64, x64 | ✅ Fully Supported |
+| iOS | ARM64 | ✅ Fully Supported |
+| IoT/Embedded | ARM64, x64 | ✅ Fully Supported |
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### "Connection string must be configured"
 
-#### Issue: "Unable to load SharpCoreDB native library"
-
-**Solution**: Ensure you're using a supported platform (Windows/Linux/macOS x64 or ARM64). The NuGet package should automatically select the correct runtime assembly.
-
-```bash
-# Verify your RID
-dotnet --info
-```
-
-#### Issue: "Encryption password required"
-
-**Solution**: SharpCoreDB requires encryption for all databases. Always provide a strong password:
+Ensure you pass a valid connection string with at least `Data Source`:
 
 ```csharp
-// [?] Wrong - no password
-optionsBuilder.UseSharpCoreDB("./data.db");
+// ❌ Wrong — empty or missing
+optionsBuilder.UseSharpCoreDB("");
 
-// [?] Correct - password provided
-optionsBuilder.UseSharpCoreDB("./data.db", "SecurePassword123!");
+// ✅ Correct
+optionsBuilder.UseSharpCoreDB("Data Source=./data.db;Password=MyPass");
 ```
 
-#### Issue: "Migration not applying"
+### "Database instance is not initialized"
 
-**Solution**: Ensure database file is not locked by another process:
+The connection is not open. EF Core opens connections automatically, but if using raw SQL, ensure the connection is open first.
+
+### Migration not applying
+
+Ensure the database file is not locked by another process. Dispose contexts properly:
 
 ```csharp
-// Dispose context properly
-using (var context = new AppDbContext())
+await using (var context = new AppDbContext())
 {
-    context.Database.Migrate();
-} // Context disposed here
-```
-
----
-
-## Examples
-
-### Complete Console App Example
-
-```csharp
-using Microsoft.EntityFrameworkCore;
-using SharpCoreDB.EntityFrameworkCore;
-
-public class Program
-{
-    public static async Task Main(string[] args)
-    {
-        using var context = new AppDbContext();
-        
-        // Create database
-        await context.Database.EnsureCreatedAsync();
-        
-        // Seed data
-        if (!context.Users.Any())
-        {
-            var users = Enumerable.Range(1, 1000)
-                .Select(i => new User 
-                { 
-                    Name = $"User{i}", 
-                    Age = 20 + (i % 50),
-                    Salary = 30000 + (i * 100)
-                })
-                .ToList();
-            
-            context.Users.AddRange(users);
-            await context.SaveChangesAsync();
-            Console.WriteLine($"Inserted {users.Count} users");
-        }
-        
-        // Query data
-        var avgSalary = await context.Users.AverageAsync(u => u.Salary);
-        Console.WriteLine($"Average Salary: ${avgSalary:N2}");
-        
-        var highEarners = await context.Users
-            .Where(u => u.Salary > 50000)
-            .OrderByDescending(u => u.Salary)
-            .Take(10)
-            .ToListAsync();
-        
-        Console.WriteLine("\nTop 10 Earners:");
-        foreach (var user in highEarners)
-        {
-            Console.WriteLine($"  {user.Name}: ${user.Salary:N2}");
-        }
-    }
-}
-
-public class AppDbContext : DbContext
-{
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        optionsBuilder.UseSharpCoreDB(
-            "./example.db", 
-            "MySecurePassword123!",
-            StorageEngine.PageBased
-        );
-    }
-    
-    public DbSet<User> Users { get; set; }
-}
-
-public class User
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public int Age { get; set; }
-    public decimal Salary { get; set; }
+    await context.Database.MigrateAsync();
 }
 ```
-
----
-
-## Roadmap
-
-### [?] Version 1.0.0 (Current)
-
-- [?] Full EF Core 10 provider implementation
-- [?] LINQ query translation
-- [?] Migrations support
-- [?] Change tracking
-- [?] Relationships and navigation properties
-- [?] AES-256-GCM encryption
-- [?] Multi-platform support (Windows/Linux/macOS/Android/iOS)
-
-### [ ] Version 1.1.0 (Q1 2026)
-
-- [ ] Improved query optimization (2-3x faster SELECT)
-- [ ] SIMD-accelerated deserialization
-- [ ] Connection pooling
-- [ ] Bulk operations API
-- [ ] Advanced indexing strategies
-
-### [ ] Version 1.2.0 (Q2 2026)
-
-- [ ] Distributed queries
-- [ ] Replication support
-- [ ] Advanced analytics functions
-- [ ] Performance monitoring tools
-
----
-
-## Contributing
-
-Contributions are welcome! Areas of interest:
-
-1. Query optimization
-2. Additional EF Core features
-3. Performance benchmarks
-4. Documentation improvements
-5. Platform-specific optimizations
-
-**Repository**: [https://github.com/MPCoreDeveloper/SharpCoreDB](https://github.com/MPCoreDeveloper/SharpCoreDB)
-
----
-
-## License
-
-MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) file for details.
 
 ---
 
@@ -677,21 +372,18 @@ MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/
 
 - **NuGet Package**: [SharpCoreDB.EntityFrameworkCore](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
 - **Core Library**: [SharpCoreDB](https://www.nuget.org/packages/SharpCoreDB)
-- **Documentation**: [GitHub Wiki](https://github.com/MPCoreDeveloper/SharpCoreDB/wiki)
+- **Repository**: [GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
 - **Issues**: [GitHub Issues](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/MPCoreDeveloper/SharpCoreDB/discussions)
 
 ---
 
-## Support
+## License
 
-- **Bug Reports**: [GitHub Issues](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
-- **Questions**: [GitHub Discussions](https://github.com/MPCoreDeveloper/SharpCoreDB/discussions)
-- **Email**: support@sharpcoredb.com (for enterprise support)
+MIT License — see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) for details.
 
 ---
 
-**Version**: 1.0.1  
-**Last Updated**: January 2026  
-**Compatibility**: .NET 10.0+, EF Core 10.0.1+, SharpCoreDB 1.0.4+, C# 14  
+**Version**: 1.0.6  
+**Last Updated**: 2026  
+**Compatibility**: .NET 10.0+, EF Core 10.0.2+, SharpCoreDB 1.0.6, C# 14  
 **Platforms**: Windows, Linux, macOS, Android, iOS, IoT (x64, ARM64)
