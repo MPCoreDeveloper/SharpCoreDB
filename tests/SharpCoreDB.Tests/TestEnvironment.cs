@@ -85,4 +85,22 @@ public static class TestEnvironment
     /// </summary>
     public static string GetEnvironmentDescription() =>
         IsCI ? "CI Environment" : "Local Development";
+
+    /// <summary>
+    /// Asserts that elapsed time is within the given threshold, applying a CI multiplier.
+    /// On slow Ubuntu CI runners, timing thresholds are relaxed by <paramref name="ciMultiplier"/>.
+    /// </summary>
+    /// <param name="elapsedMs">Actual elapsed milliseconds.</param>
+    /// <param name="localMaxMs">Maximum allowed milliseconds for local execution.</param>
+    /// <param name="ciMultiplier">Multiplier for CI (default 10x for slow Ubuntu runners).</param>
+    /// <param name="label">Optional label for the assertion message.</param>
+    public static void AssertPerformance(long elapsedMs, int localMaxMs, int ciMultiplier = 10, string? label = null)
+    {
+        var maxMs = GetTimeout(localMaxMs, ciMultiplier);
+        var env = GetEnvironmentDescription();
+        var prefix = label is not null ? $"{label}: " : "";
+        Assert.True(
+            elapsedMs < maxMs,
+            $"{prefix}Expected < {maxMs}ms ({env}, base={localMaxMs}ms), got {elapsedMs}ms");
+    }
 }

@@ -9,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using SharpCoreDB.Storage.Columnar;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 7: Columnar storage format components.

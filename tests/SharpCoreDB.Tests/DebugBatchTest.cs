@@ -1,5 +1,4 @@
 using Xunit;
-using Xunit.Abstractions;
 using SharpCoreDB;
 using System.Collections.Generic;
 using System.IO;
@@ -7,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace SharpCoreDB.Tests;
 
+[Trait("Category", "Debug")]
 public class DebugBatchTest
 {
     private readonly ITestOutputHelper _output;

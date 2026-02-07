@@ -11,13 +11,14 @@ using System.IO;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Scdb;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Performance benchmarks for FreeSpaceManager and ExtentAllocator (SCDB Phase 2).
 /// Validates O(log n) allocation performance and strategy comparison.
 /// C# 14: Modern test patterns with xUnit.
 /// </summary>
+[Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class FsmBenchmarks : IDisposable
 {
     private readonly ITestOutputHelper _output;
@@ -44,8 +45,7 @@ public class FsmBenchmarks : IDisposable
     public void Benchmark_AllocationStrategies_PerformanceComparison()
     {
         // Skip in CI - GitHub Actions runners have slow I/O and variable performance
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             _output.WriteLine("Skipping performance benchmark in CI environment");
             return;
@@ -115,8 +115,7 @@ public class FsmBenchmarks : IDisposable
     public void Benchmark_CoalescingPerformance_UnderOneSecond()
     {
         // Skip in CI - GitHub Actions runners have variable performance
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             _output.WriteLine("Skipping coalescing benchmark in CI environment");
             return;
@@ -155,8 +154,7 @@ public class FsmBenchmarks : IDisposable
     {
         // Skip in CI - GitHub Actions runners have variable performance
         // This benchmark tests algorithmic complexity which varies by environment
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             _output.WriteLine("Skipping complexity benchmark in CI environment");
             return;
@@ -211,8 +209,7 @@ public class FsmBenchmarks : IDisposable
     public void Benchmark_HighFragmentation_StillPerformant()
     {
         // Skip in CI - GitHub Actions runners have variable performance
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             _output.WriteLine("Skipping fragmentation benchmark in CI environment");
             return;
@@ -257,8 +254,7 @@ public class FsmBenchmarks : IDisposable
     public void Benchmark_PageAllocation_UnderOneMicrosecond()
     {
         // Skip in CI - GitHub Actions runners have variable performance
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             _output.WriteLine("Skipping single allocation benchmark in CI environment");
             return;

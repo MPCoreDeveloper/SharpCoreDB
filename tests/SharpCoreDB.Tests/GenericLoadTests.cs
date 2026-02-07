@@ -440,10 +440,8 @@ public sealed class GenericLoadTests
         
         aggSw.Stop();
 
-        // Assert: All aggregates < 50ms for 100k records (relaxed for CI/different hardware/cold start)
-        // Previous threshold of 20ms was too strict and caused flaky failures
-        Assert.True(aggSw.ElapsedMilliseconds < 50, 
-            $"Expected < 50ms for all aggregates, got {aggSw.ElapsedMilliseconds}ms");
+        // Assert: All aggregates < 50ms for 100k records locally (relaxed for CI/different hardware/cold start)
+        TestEnvironment.AssertPerformance(aggSw.ElapsedMilliseconds, 50, label: "SIMD aggregates 100k");
 
         Console.WriteLine($"   All 5 aggregates: {aggSw.Elapsed.TotalMilliseconds:F3}ms");
         Console.WriteLine($"   SUM(Id): {sum:N0}");

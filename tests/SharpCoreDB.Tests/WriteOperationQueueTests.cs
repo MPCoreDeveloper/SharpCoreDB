@@ -29,8 +29,7 @@ public sealed class WriteOperationQueueTests : IDisposable
     public async System.Threading.Tasks.Task WriteBlockAsync_WithBatching_ShouldImprovePerformance()
     {
         // Skip in CI - GitHub Actions runners have slow I/O
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             return; // Skip performance test in CI
         }
@@ -112,8 +111,7 @@ public sealed class WriteOperationQueueTests : IDisposable
     public async System.Threading.Tasks.Task WriteBlockAsync_MultipleConcurrentWrites_ShouldQueue()
     {
         // Skip in CI - GitHub Actions runners have slow I/O
-        if (Environment.GetEnvironmentVariable("CI") == "true" ||
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        if (TestEnvironment.IsCI)
         {
             return; // Skip performance test in CI
         }

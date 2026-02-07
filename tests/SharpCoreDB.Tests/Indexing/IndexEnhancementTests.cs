@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Linq;
 using SharpCoreDB.Indexing;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 9: Index Enhancements.

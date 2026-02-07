@@ -6,7 +6,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using Xunit.Abstractions;
 using SharpCoreDB;
 using SharpCoreDB.Services;
 
@@ -24,6 +23,7 @@ namespace SharpCoreDB.Tests;
 /// 5. UseOptimizedInsertPath (delayed transpose + buffered encryption)
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public sealed class Complete10KInsertPerformanceTest : IDisposable
 {
     private readonly ITestOutputHelper _output;

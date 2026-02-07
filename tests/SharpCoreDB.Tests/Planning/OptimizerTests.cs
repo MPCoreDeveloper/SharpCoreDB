@@ -9,7 +9,6 @@ using System.Collections.Generic;
 using SharpCoreDB.Planning;
 using SharpCoreDB.Storage.Columnar;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 7.3: Query Plan Optimization.

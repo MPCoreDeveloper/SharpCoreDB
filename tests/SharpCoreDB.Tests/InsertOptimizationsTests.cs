@@ -16,6 +16,7 @@ namespace SharpCoreDB.Tests;
 /// Goal: Achieve 50-55ms for 10K inserts (within 20-30% of SQLite's 42ms).
 /// Modern C# 14 with collection expressions and primary constructors.
 /// </summary>
+[Trait("Category", "Performance")]
 public sealed class InsertOptimizationsTests : IDisposable
 {
     private readonly string _testDbPath;
@@ -111,7 +112,7 @@ public sealed class InsertOptimizationsTests : IDisposable
         Console.WriteLine($"Transpose time (once): {transposeTime} ms");
         Console.WriteLine($"Total: {insertTime + transposeTime} ms");
 
-        Assert.True(insertTime < 100, $"Delayed inserts should be < 100ms, was {insertTime}ms");
+        Assert.True(insertTime < TestEnvironment.GetTimeout(100), $"Delayed inserts should be < {TestEnvironment.GetTimeout(100)}ms, was {insertTime}ms");
     }
 
     /// <summary>
@@ -197,7 +198,7 @@ public sealed class InsertOptimizationsTests : IDisposable
         Console.WriteLine($"Improvement: {(1 - sw.ElapsedMilliseconds / 252.0) * 100:F1}%");
         Console.WriteLine("?".PadRight(60, '?'));
 
-        Assert.True(sw.ElapsedMilliseconds < 100, $"Expected < 100ms, got {sw.ElapsedMilliseconds}ms");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 100, label: "Combined 10K");
 
         if (sw.ElapsedMilliseconds < 60)
         {

@@ -9,7 +9,6 @@ using System;
 using SharpCoreDB.Optimizations;
 using SharpCoreDB.Storage.Columnar;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 7.2: SIMD Integration with Columnar Format.

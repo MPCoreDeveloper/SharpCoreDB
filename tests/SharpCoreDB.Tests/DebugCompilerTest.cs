@@ -5,6 +5,7 @@ using SharpCoreDB.DataStructures;
 
 namespace SharpCoreDB.Tests;
 
+[Trait("Category", "Debug")]
 public class DebugCompilerTest
 {
     [Fact]

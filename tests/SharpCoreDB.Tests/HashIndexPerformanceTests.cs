@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
-using Xunit.Abstractions;
 
 namespace SharpCoreDB.Tests;
 
@@ -8,6 +7,7 @@ namespace SharpCoreDB.Tests;
 /// Performance tests demonstrating HashIndex speedup on WHERE clause queries.
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class HashIndexPerformanceTests
 {
     private readonly string _testDbPath;

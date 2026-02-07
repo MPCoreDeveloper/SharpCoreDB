@@ -14,6 +14,7 @@ namespace SharpCoreDB.Tests;
 /// Simple tests for insert optimizations (no database dependencies).
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public sealed class InsertOptimizationsSimpleTests
 {
     [Fact]
@@ -28,8 +29,8 @@ public sealed class InsertOptimizationsSimpleTests
         foreach (var row in rows) transpose.AddRow(row);
         sw.Stop();
 
-        Console.WriteLine($"? Delayed transpose: {sw.ElapsedMilliseconds} ms for 10K rows");
-        Assert.True(sw.ElapsedMilliseconds < 100, $"Too slow: {sw.ElapsedMilliseconds}ms");
+        Console.WriteLine($"Delayed transpose: {sw.ElapsedMilliseconds} ms for 10K rows");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 100, label: "DelayedTranspose 10K");
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public sealed class InsertOptimizationsSimpleTests
         optimizer.CompleteBulkImport();
         sw.Stop();
 
-        Console.WriteLine($"? Combined optimizer: {sw.ElapsedMilliseconds} ms for 1K rows");
-        Assert.True(sw.ElapsedMilliseconds < 200, $"Too slow: {sw.ElapsedMilliseconds}ms");
+        Console.WriteLine($"Combined optimizer: {sw.ElapsedMilliseconds} ms for 1K rows");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 200, label: "CombinedOptimizer 1K");
     }
 }

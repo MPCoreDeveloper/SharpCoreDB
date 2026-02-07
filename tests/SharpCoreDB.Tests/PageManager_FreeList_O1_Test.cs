@@ -58,9 +58,8 @@ public class PageManager_FreeList_O1_Test : IDisposable
         
         sw.Stop();
         
-        // Assert: Should be fast (<50ms) and reuse freed page IDs
-        Assert.True(sw.ElapsedMilliseconds < 2000, 
-            $"? REALLOCATION SLOW: {sw.ElapsedMilliseconds}ms for 5K reallocations (expected <2000ms)");
+        // Assert: Should be fast (<2s local, relaxed for CI)
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 2000, label: "5K reallocations");
         
         // Verify that reused pages are from the freed set
         var freedPageIds = initialPages.Select(p => p.Value).ToHashSet();

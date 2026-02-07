@@ -9,7 +9,6 @@ using System;
 using System.Linq;
 using SharpCoreDB.TimeSeries;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 8.3: Time Range Queries.

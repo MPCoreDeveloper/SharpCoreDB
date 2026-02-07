@@ -17,6 +17,7 @@ namespace SharpCoreDB.Tests;
 /// Goal: 1000 identical SELECTs in less than 8ms total.
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class CompiledQueryTests
 {
     private readonly string _testDbPath;

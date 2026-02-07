@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Scdb;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for CorruptionDetector.

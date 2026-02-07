@@ -172,7 +172,7 @@ public class IndexTests
         sw.Stop();
 
         // Assert - Rebuild should be fast
-        Assert.True(sw.ElapsedMilliseconds < 2000, $"Rebuild took {sw.ElapsedMilliseconds}ms, should be < 2000ms");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 2000, label: "Index rebuild 100K rows");
 
         var stats = index.GetStatistics();
         Assert.Equal(5000, stats.UniqueKeys);

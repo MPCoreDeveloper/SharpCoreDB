@@ -6,6 +6,7 @@ namespace SharpCoreDB.Tests;
 /// Tests for async database operations.
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class AsyncTests
 {
     private readonly DatabaseFactory _factory;

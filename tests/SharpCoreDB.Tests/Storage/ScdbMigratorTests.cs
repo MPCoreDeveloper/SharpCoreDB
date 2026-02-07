@@ -13,7 +13,6 @@ using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Scdb;
 using MigrationProgress = SharpCoreDB.Storage.Scdb.MigrationProgress;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for ScdbMigrator.

@@ -19,6 +19,7 @@ using Xunit;
 /// Target: Reduce flushes from 500 to &lt;10 for batch updates.
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class BlockRegistryBatchingTests : IDisposable
 {
     private readonly string _testDbPath;

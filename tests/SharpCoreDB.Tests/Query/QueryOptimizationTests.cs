@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using SharpCoreDB.Query;
 using SharpCoreDB.Storage;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Tests for Phase 7: Advanced Query Optimization.

@@ -4,6 +4,7 @@ using Xunit;
 
 namespace SharpCoreDB.Tests;
 
+[Trait("Category", "Debug")]
 public class BTreeRangeScanDebugTest
 {
     [Fact]

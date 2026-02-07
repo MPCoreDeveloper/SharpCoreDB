@@ -19,6 +19,7 @@ namespace SharpCoreDB.Tests;
 /// - Random writes: &lt;2ms for 1K writes (cached)
 /// </summary>
 [Collection("PerformanceTests")]
+[Trait("Category", "Performance")]
 public class PageManager_Cache_Performance_Test : IDisposable
 {
     private readonly string testDir;
@@ -164,8 +165,7 @@ public class PageManager_Cache_Performance_Test : IDisposable
         sw.Stop();
         
         // Assert: Should be very fast (all cached)
-        Assert.True(sw.ElapsedMilliseconds < 500, 
-            $"? CACHED READS TOO SLOW: {sw.ElapsedMilliseconds}ms (expected <500ms)");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 500, label: "1K cached reads");
         
         var (hits, misses, hitRate, _, _) = pm.GetCacheStats();
         Assert.True(hitRate >= 0.8, 
@@ -213,8 +213,7 @@ public class PageManager_Cache_Performance_Test : IDisposable
         sw.Stop();
         
         // Assert: Cached writes should be fast
-        Assert.True(sw.ElapsedMilliseconds < 750, 
-            $"? CACHED WRITES TOO SLOW: {sw.ElapsedMilliseconds}ms (expected <750ms)");
+        TestEnvironment.AssertPerformance(sw.ElapsedMilliseconds, 750, label: "1K cached writes");
         
         var (hits, misses, hitRate, _, _) = pm.GetCacheStats();
         

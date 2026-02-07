@@ -8,7 +8,6 @@ using SharpCoreDB.Services;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Concurrency tests for AesGcmEncryption to verify thread-safety.

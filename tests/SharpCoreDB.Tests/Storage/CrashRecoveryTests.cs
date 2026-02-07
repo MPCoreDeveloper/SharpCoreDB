@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Scdb;
 using Xunit;
-using Xunit.Abstractions;
 
 /// <summary>
 /// Crash recovery tests for Phase 3 WAL implementation.
@@ -214,10 +213,10 @@ public sealed class CrashRecoveryTests : IDisposable
             var recoveryManager = new RecoveryManager(provider, provider.WalManager);
             
             // Should not throw
-            var exception = await Record.ExceptionAsync(async () =>
+            var exception = await Record.ExceptionAsync(new Func<Task>(async () =>
             {
                 await recoveryManager.RecoverAsync();
-            });
+            }));
             
             Assert.Null(exception); // Should handle gracefully
         }

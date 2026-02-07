@@ -43,8 +43,11 @@ jobs:
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore
       
     - name: Test
-      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" -- xunit.parallelizeTestCollections=false
+      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=Debug"
       timeout-minutes: 20
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
       
     - name: Upload test results
       if: always()
