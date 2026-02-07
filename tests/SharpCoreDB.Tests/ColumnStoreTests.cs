@@ -319,8 +319,13 @@ public sealed class ColumnStoreTests
         var columnStore = new ColumnStore<EmployeeRecord>();
         columnStore.Transpose(employees);
 
-        // Warm up
+        // Warm up ALL aggregate code paths to ensure JIT compilation
+        // is complete before the timed section
         _ = columnStore.Sum<int>("Age");
+        _ = columnStore.Average("Age");
+        _ = columnStore.Min<int>("Age");
+        _ = columnStore.Max<int>("Age");
+        _ = columnStore.Count("Age");
 
         // Act: Run ALL aggregates on same column
         var sw = Stopwatch.StartNew();
