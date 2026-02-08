@@ -27,13 +27,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.1.0 (2026-02-15): Major RDBMS improvements - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning across the core engine. Includes refined transaction handling, improved WAL group commits, and optimized single-file and columnar storage paths.
+    <PackageReleaseNotes>v1.1.1 (2026-02: localization bug fixed, Major RDBMS improvements - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning across the core engine. Includes refined transaction handling, improved WAL group commits, and optimized single-file and columnar storage paths.
       New features: Advanced query optimizer, improved index strategies, columnar storage enhancements.
       Fixes: Edge cases in join execution, transaction isolation improvements, memory efficiency gains.
       Breaking changes: None - full backward compatibility maintained.
@@ -43,7 +43,7 @@
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile>README_NUGET.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -112,7 +112,7 @@
     <None Include=".github\FUNDING.yml" />
     <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
-    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="README_NUGET.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Build all RIDs automatically when packing -->
