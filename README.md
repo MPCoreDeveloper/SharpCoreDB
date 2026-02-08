@@ -7,7 +7,7 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.1.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.1.1-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![Tests](https://img.shields.io/badge/Tests-772_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
@@ -16,6 +16,27 @@
 ---
 
 ## 📌 **Current Status (February 2026)**
+
+### ✅ **Version 1.1.1 Released** - Localization Fix + API Cleanup
+
+**Latest Release**: v1.1.1 (February 2026)
+
+#### 🐛 Bug Fixes
+- **Critical**: Fixed localization bug affecting date/time formatting in non-English cultures
+- **Compatibility**: Resolved culture-dependent parsing issues (decimal separators, date formats)
+- **Portability**: Database files now fully portable across different regional settings
+
+#### 🔄 API Improvements
+- **Deprecated Methods**: Added `[Obsolete]` attributes to legacy sync methods
+- **Migration Path**: Clear upgrade guidance to async patterns (see Quickstart below)
+- **Breaking Changes**: None - full backward compatibility maintained
+
+#### 📦 Quick Install
+```bash
+dotnet add package SharpCoreDB --version 1.1.1
+```
+
+---
 
 ### ✅ **All Phases Complete — Phases 1-8 + DDL Extensions**
 
@@ -52,13 +73,17 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 
 ## 🚀 Quickstart
 
-Install:
+Install the latest version:
 
 ```bash
+# Install SharpCoreDB v1.1.1
+dotnet add package SharpCoreDB --version 1.1.1
+
+# Or use wildcard for latest
 dotnet add package SharpCoreDB
 ```
 
-Use:
+Use (Async API - Recommended):
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -72,19 +97,21 @@ var factory = provider.GetRequiredService<DatabaseFactory>();
 using var db = factory.Create("./app_db", "StrongPassword!");
 
 // Create table with B-tree index
-db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");
-db.ExecuteSQL("CREATE INDEX idx_age ON users(age) USING BTREE");
+await db.ExecuteSQLAsync("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");
+await db.ExecuteSQLAsync("CREATE INDEX idx_age ON users(age) USING BTREE");
 
-// Fast inserts
-db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice', 30)");
+// Fast inserts with async API (recommended)
+await db.ExecuteSQLAsync("INSERT INTO users VALUES (1, 'Alice', 30)");
 
-// Fast queries with batch API
-var rows = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
+// Fast queries with async batch API
+var rows = await db.ExecuteQueryAsync("SELECT * FROM users WHERE age > 25");
 
 // Support for large data (>256KB)
 var largeData = new byte[10_000_000]; // 10MB
-db.ExecuteSQL("INSERT INTO files VALUES (1, @data)");
+await db.ExecuteSQLAsync("INSERT INTO files VALUES (1, @data)");
 ```
+
+> ⚠️ **API Migration Notice (v1.1.1)**: Legacy synchronous methods (`ExecuteSQL`, `ExecuteQuery`, `Flush`, `ForceSave`) are marked as `[Obsolete]`. Please migrate to async methods (`ExecuteSQLAsync`, `ExecuteQueryAsync`, `FlushAsync`, `ForceSaveAsync`) for better performance, cancellation support, and culture-independent behavior.
 
 ---
 

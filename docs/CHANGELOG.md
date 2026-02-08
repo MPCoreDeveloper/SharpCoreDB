@@ -5,9 +5,45 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-02-08
 
-### 🎉 **MAJOR ACHIEVEMENT** - Single File Mode Beats SQLite AND LiteDB! (31 januari 2026)
+### 🐛 Fixed
+- **Critical**: Fixed localization bug affecting date/time formatting in non-English locales
+  - Decimal parsing now uses `CultureInfo.InvariantCulture` throughout engine
+  - DateTime serialization now culture-independent using ISO 8601 format
+  - Resolved issues with comma vs. period decimal separators (European vs. US locales)
+  - Fixed floating-point value corruption in non-US regional settings
+- **Compatibility**: Database files now fully portable across different regional settings
+- **Impact**: Prevents data corruption when database is accessed from systems with different locale settings
+
+### 🔄 Changed
+- **API Deprecation**: Added `[Obsolete]` attributes to legacy synchronous methods with migration guidance
+  - `Database.ExecuteSQL()` → Use `Database.ExecuteSQLAsync()` instead
+  - `Database.ExecuteQuery()` → Use `Database.ExecuteQueryAsync()` instead
+  - `Database.Flush()` → Use `Database.FlushAsync()` instead
+  - `Database.ForceSave()` → Use `Database.ForceSaveAsync()` instead
+  - `SingleFileStorageProvider.Flush()` → Use `SingleFileStorageProvider.FlushAsync()` instead
+  - All obsolete methods include clear migration instructions in compiler warnings
+- **Documentation**: Updated README.md and examples to use async patterns as best practice
+- **Performance Note**: Async methods provide better performance, cancellation support, and guaranteed culture-independence
+
+### ✅ No Breaking Changes
+- All deprecated methods remain fully functional in v1.1.1
+- 100% backward compatibility maintained with existing codebases
+- Existing synchronous code continues to work without modifications
+- Deprecation warnings are informational only - upgrade at your convenience
+
+### 📊 Version Info
+- **Package Version**: 1.1.1
+- **Release Date**: February 8, 2026
+- **NuGet**: https://www.nuget.org/packages/SharpCoreDB/1.1.1
+- **GitHub Release**: https://github.com/MPCoreDeveloper/SharpCoreDB/releases/tag/v1.1.1
+
+---
+
+## [1.1.0] - 2026-01-31
+
+### 🎉 **MAJOR ACHIEVEMENT** - Single File Mode Beats SQLite AND LiteDB!
 
 **SharpCoreDB Single File mode is now the fastest embedded database for INSERT operations!** 🏆
 
