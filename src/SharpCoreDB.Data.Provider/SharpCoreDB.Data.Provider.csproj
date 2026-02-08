@@ -16,7 +16,7 @@
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <PackageTags>ado.net;database;data-provider;sharpcoredb</PackageTags>
-    <Version>1.0.6</Version>
+    <Version>1.1.0</Version>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
@@ -24,7 +24,7 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageId>SharpCoreDB.Data.Provider</PackageId>
     <Description>Data provider layer for SharpCoreDB on .NET 10.</Description>
-    <PackageReleaseNotes>v1.0.6: Updated to support SharpCoreDB 1.0.6 with full subquery and JOIN support.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.1.0: Updated to support SharpCoreDB 1.1.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
 
     <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>

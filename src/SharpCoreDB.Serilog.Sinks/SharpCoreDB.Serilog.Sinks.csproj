@@ -7,11 +7,11 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>SharpCoreDB.Serilog.Sinks</PackageId>
-    <Version>1.0.6</Version>
+    <Version>1.1.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Serilog.Sinks</Product>
-    <Description>A Serilog sink for SharpCoreDB - a lightweight, encrypted, file-based database. Features efficient batch logging with AES-256-GCM encryption, AppendOnly storage engine for maximum write speed, and full async support. Compatible with SharpCoreDB 1.0.6+ with DEFAULT values and CHECK constraints.</Description>
+    <Description>A Serilog sink for SharpCoreDB - a lightweight, encrypted, file-based database. Features efficient batch logging with AES-256-GCM encryption, AppendOnly storage engine for maximum write speed, and full async support. Compatible with SharpCoreDB 1.1.0+.</Description>
     <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
@@ -24,7 +24,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.0.6: Updated to support SharpCoreDB 1.0.6 with full subquery and JOIN support.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.1.0: Updated to support SharpCoreDB 1.1.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
