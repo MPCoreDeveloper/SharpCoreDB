@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
@@ -8,7 +8,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.YesSql</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.YesSql</Product>
