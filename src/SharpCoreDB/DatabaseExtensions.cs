@@ -129,6 +129,12 @@ public class DatabaseFactory(IServiceProvider services)
 /// <summary>
 /// Database implementation for single-file (.scdb) storage.
 /// Wraps SingleFileStorageProvider and provides IDatabase interface.
+/// <para>
+/// <b>⚠️ LEGACY:</b> This class uses regex-based SQL parsing with limited support.
+/// It does NOT support ORDER BY, LIMIT, JOIN, subqueries, or aggregate functions.
+/// For full SQL support, use the <see cref="Database"/> class (directory mode) which
+/// routes through <c>SqlParser.ExecuteSelectQuery</c>.
+/// </para>
 /// </summary>
 internal sealed class SingleFileDatabase : IDatabase, IDisposable
 {
@@ -182,6 +188,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public void ExecutePrepared(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters) => throw new NotImplementedException();
     public Task ExecutePreparedAsync(SharpCoreDB.DataStructures.PreparedStatement stmt, Dictionary<string, object?> parameters, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
+    [Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support (no ORDER BY, LIMIT, JOIN, subqueries). For full SQL support, use the Database class which routes through SqlParser.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
         var upperSql = sql.Trim().ToUpperInvariant();
@@ -209,6 +216,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
     }
 
+    [Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support. For full SQL support, use the Database class which routes through SqlParser.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt) 
         => ExecuteQuery(sql, parameters);
 
@@ -282,7 +290,6 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public void ForceSave()
     {
         Flush();
-        _tableDirectoryManager.Flush();
     }
 
     public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default) 
@@ -373,7 +380,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
                 {
                     "INT" or "INTEGER" => DataType.Integer,
                     "TEXT" or "VARCHAR" => DataType.String,
-                    "REAL" or "FLOAT" or "DECIMAL" => DataType.Decimal,
+                    "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
+                    "DECIMAL" or "NUMERIC" => DataType.Decimal,
                     "DATETIME" or "DATE" => DataType.DateTime,
                     _ => DataType.String
                 });
@@ -386,6 +394,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         _tableDirectoryManager.Flush();
     }
 
+    [Obsolete("Regex-based DML parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDMLInternal(string sql, Dictionary<string, object?>? parameters)
     {
         var upperSql = sql.Trim().ToUpperInvariant();
@@ -408,6 +417,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         }
     }
 
+    [Obsolete("Regex-based INSERT parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteInsertInternal(string sql)
     {
         var regex = new Regex(
@@ -455,6 +465,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         table.Insert(row);
     }
 
+    [Obsolete("Regex-based UPDATE parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteUpdateInternal(string sql)
     {
         var regex = new Regex(
@@ -489,6 +500,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         table.Update($"WHERE {whereClause}", updates);
     }
 
+    [Obsolete("Regex-based DELETE parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDeleteInternal(string sql)
     {
         var regex = new Regex(
@@ -512,6 +524,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         table.Delete($"WHERE {whereClause}");
     }
 
+    [Obsolete("Regex-based SELECT with limited SQL support (no ORDER BY, LIMIT, JOIN, subqueries). Migrate to SqlParser-based execution.")]
     private List<Dictionary<string, object>> ExecuteSelectInternal(string sql, Dictionary<string, object?>? parameters)
     {
         var regex = new Regex(

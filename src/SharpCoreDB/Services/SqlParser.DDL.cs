@@ -16,8 +16,8 @@ using SharpCoreDB.Storage.Hybrid;
 public partial class SqlParser
 {
     /// <summary>
-    /// Executes CREATE TABLE statement with optional STORAGE clause.
-    /// Syntax: CREATE TABLE name (columns...) [STORAGE = COLUMNAR|PAGE_BASED]
+    /// Executes CREATE TABLE statement with optional IF NOT EXISTS and STORAGE clause.
+    /// Syntax: CREATE TABLE [IF NOT EXISTS] name (columns...) [STORAGE = COLUMNAR|PAGE_BASED]
     /// Default storage mode is determined by DatabaseConfig.StorageEngineType if present,
     /// otherwise COLUMNAR for backward compatibility.
     /// </summary>
@@ -28,7 +28,28 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot create table in readonly mode");
         }
 
-        var tableName = parts[2];
+        // Detect IF NOT EXISTS clause (same pattern as ExecuteDropTable)
+        bool ifNotExists = false;
+        string tableName;
+
+        if (parts.Length >= 6 && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+                              && parts[3].Equals("NOT", StringComparison.OrdinalIgnoreCase)
+                              && parts[4].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            ifNotExists = true;
+            tableName = parts[5];
+        }
+        else
+        {
+            tableName = parts[2];
+        }
+
+        // IF NOT EXISTS: skip creation when table already exists
+        if (ifNotExists && this.tables.ContainsKey(tableName))
+        {
+            return;
+        }
+
         var colsStart = sql.IndexOf('(');
         var colsEnd = sql.LastIndexOf(')');
         var colsStr = sql.Substring(colsStart + 1, colsEnd - colsStart - 1);

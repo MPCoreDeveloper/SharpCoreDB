@@ -596,6 +596,7 @@ public partial class Database : IDatabase, IDisposable
     /// Performance: avoids Dictionary allocations; 1.5–2x faster on full scans.
     /// Supports simple SELECT * FROM table [WHERE ...] without joins.
     /// </summary>
+    [Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) via Database.Execution instead.")]
     public IEnumerable<DataStructures.StructRow> ExecuteQueryStruct(string sql)
     {
         if (string.IsNullOrWhiteSpace(sql)) throw new ArgumentException("SQL cannot be empty", nameof(sql));
@@ -617,6 +618,7 @@ public partial class Database : IDatabase, IDisposable
     /// <summary>
     /// Backward compatible ExecuteQuery that routes simple SELECT * to StructRow for speed.
     /// </summary>
+    [Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) from Database.Execution which routes through SqlParser for full SQL support.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql)
     {
         var upper = sql.Trim().ToUpperInvariant();

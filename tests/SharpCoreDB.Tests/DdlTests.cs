@@ -355,4 +355,35 @@ public class DdlTests : IDisposable
         Assert.Single(results);
         Assert.Equal(42, results[0]["value"]);
     }
+
+    // ==================== CREATE TABLE IF NOT EXISTS ====================
+
+    [Fact]
+    public void CreateTable_IfNotExists_NewTable_CreatesSuccessfully()
+    {
+        // Act
+        this.db.ExecuteSQL("CREATE TABLE IF NOT EXISTS widgets (id INTEGER PRIMARY KEY, name TEXT)");
+
+        // Assert - table exists and accepts data
+        this.db.ExecuteSQL("INSERT INTO widgets VALUES (1, 'Sprocket')");
+        var results = this.db.ExecuteQuery("SELECT * FROM widgets");
+        Assert.Single(results);
+        Assert.Equal("Sprocket", results[0]["name"]);
+    }
+
+    [Fact]
+    public void CreateTable_IfNotExists_ExistingTable_SkipsWithoutError()
+    {
+        // Arrange - create table and insert data
+        this.db.ExecuteSQL("CREATE TABLE items (id INTEGER PRIMARY KEY, value TEXT)");
+        this.db.ExecuteSQL("INSERT INTO items VALUES (1, 'Original')");
+
+        // Act - should silently skip, NOT drop+recreate
+        this.db.ExecuteSQL("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, value TEXT)");
+
+        // Assert - original data is preserved
+        var results = this.db.ExecuteQuery("SELECT * FROM items");
+        Assert.Single(results);
+        Assert.Equal("Original", results[0]["value"]);
+    }
 }

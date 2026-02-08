@@ -1062,6 +1062,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             await _walManager.CheckpointAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await FlushPendingWritesAsync(cancellationToken, flushToDisk: false).ConfigureAwait(false);
+
         if (flushToDisk)
         {
             _fileStream.Flush(flushToDisk: true);
@@ -1294,10 +1296,16 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             }
         }
 
-        // Initialize block registry at page 1-4 (4 pages)
+        static ulong AlignToPage(ulong value, int pageSize)
+        {
+            var pageSizeUlong = (ulong)pageSize;
+            return (value + pageSizeUlong - 1) / pageSizeUlong * pageSizeUlong;
+        }
+
+        // Initialize block registry at next page boundary
         // ✅ Phase 3: Allocate 4 pages (16KB) to support up to ~250 block entries
         // Calculation: (16384 - 64 header) / 64 per entry = 255 max entries
-        header.BlockRegistryOffset = ScdbFileHeader.HEADER_SIZE;
+        header.BlockRegistryOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, options.PageSize);
         header.BlockRegistryLength = (ulong)options.PageSize * 4;
 
         // Initialize FSM at pages 5-8 (4 pages)
@@ -1324,6 +1332,84 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         }
         
         fs.SetLength((long)totalMetadataSize);
+        
+        // ✅ CRITICAL FIX 1: Write SCDB file header immediately to disk
+        // Without this, Flush() checks HasPendingChanges and returns early (no writes yet),
+        // leaving header bytes uninitialized. On reopen, LoadHeader() reads garbage data.
+        fs.Position = 0;
+        var headerBuffer = new byte[ScdbFileHeader.HEADER_SIZE];
+        header.WriteTo(headerBuffer);
+        fs.Write(headerBuffer);
+        
+        // ✅ CRITICAL FIX 2: Write FSM header marking metadata pages as allocated
+        // Without this, FreeSpaceManager starts with _totalPages=0 and AllocatePages
+        // returns offset 0 (the SCDB header page!). Data block writes then overwrite the
+        // file header with table data (e.g. "SFT1" magic), corrupting the file.
+        var reservedPages = (ulong)(totalMetadataSize / (ulong)options.PageSize);
+        header.AllocatedPages = reservedPages;
+        
+        var fsmHeader = new FreeSpaceMapHeader
+        {
+            Magic = FreeSpaceMapHeader.MAGIC,
+            Version = FreeSpaceMapHeader.CURRENT_VERSION,
+            TotalPages = reservedPages,
+            FreePages = 0,     // All reserved pages are allocated (metadata)
+            LargestExtent = 0,
+            BitmapOffset = (uint)FreeSpaceMapHeader.SIZE,
+            ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + 128)
+        };
+        
+        // Write FSM header at its designated offset
+        fs.Position = (long)header.FsmOffset;
+        Span<byte> fsmHeaderBuffer = stackalloc byte[FreeSpaceMapHeader.SIZE];
+        MemoryMarshal.Write(fsmHeaderBuffer, in fsmHeader);
+        fs.Write(fsmHeaderBuffer);
+        
+        // Write L1 bitmap — mark all reserved pages as allocated (bit = 1)
+        var bitmapSizeBytes = (int)((reservedPages + 7) / 8);
+        if (bitmapSizeBytes <= 256)
+        {
+            Span<byte> bitmapBuffer = stackalloc byte[256];
+            var bitmapSlice = bitmapBuffer[..bitmapSizeBytes];
+            bitmapSlice.Fill(0xFF);
+            var trailingBits = (int)(bitmapSizeBytes * 8 - (int)reservedPages);
+            if (trailingBits > 0 && bitmapSizeBytes > 0)
+            {
+                bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
+            }
+            fs.Write(bitmapSlice);
+        }
+        else
+        {
+            var bitmapBuffer = ArrayPool<byte>.Shared.Rent(bitmapSizeBytes);
+            try
+            {
+                var bitmapSpan = bitmapBuffer.AsSpan(0, bitmapSizeBytes);
+                bitmapSpan.Fill(0xFF);
+                var trailingBits = (int)(bitmapSizeBytes * 8 - (int)reservedPages);
+                if (trailingBits > 0)
+                {
+                    bitmapSpan[^1] = (byte)(0xFF >> trailingBits);
+                }
+                fs.Write(bitmapSpan);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bitmapBuffer);
+            }
+        }
+        
+        // Write L2 extent count (0 extents)
+        Span<byte> extentCountBuffer = stackalloc byte[sizeof(int)];
+        MemoryMarshal.Write(extentCountBuffer, 0);
+        fs.Write(extentCountBuffer);
+        
+        // Re-write header with updated AllocatedPages
+        fs.Position = 0;
+        header.WriteTo(headerBuffer);
+        fs.Write(headerBuffer);
+        
+        fs.Flush(flushToDisk: true);  // Ensure all metadata is durable
 
         return header;
     }

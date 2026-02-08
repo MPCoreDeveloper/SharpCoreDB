@@ -159,13 +159,13 @@ public partial class SqlParser
 
             return type switch
             {
-                DataType.Integer => int.Parse(val),
+                DataType.Integer => int.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.String => val,
-                DataType.Real => double.Parse(val),
+                DataType.Real => double.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Blob => Convert.FromBase64String(val),
-                DataType.DateTime => ParseDateTime(val),  // ✅ FIX: Use custom parser
-                DataType.Long => long.Parse(val),
-                DataType.Decimal => decimal.Parse(val),
+                DataType.DateTime => ParseDateTime(val),
+                DataType.Long => long.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
+                DataType.Decimal => decimal.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Ulid => Ulid.Parse(val),
                 DataType.Guid => Guid.Parse(val),
                 _ => val,
