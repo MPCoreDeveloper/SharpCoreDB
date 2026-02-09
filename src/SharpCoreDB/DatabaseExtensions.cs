@@ -285,7 +285,19 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null) => throw new NotImplementedException();
     public List<Dictionary<string, object>> ExecuteCompiledQuery(DataStructures.PreparedStatement stmt, Dictionary<string, object?>? parameters = null) => throw new NotImplementedException();
 
-    public void Flush() => _storageProvider.FlushAsync().GetAwaiter().GetResult();
+    public void Flush()
+    {
+        // Flush all table row caches to storage before flushing the provider to disk
+        foreach (var table in _tables.Values)
+        {
+            if (table is SingleFileTable sft)
+            {
+                sft.FlushCache();
+            }
+        }
+
+        _storageProvider.FlushAsync().GetAwaiter().GetResult();
+    }
 
     public void ForceSave()
     {
@@ -391,7 +403,35 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         var table = new SingleFileTable(tableName, columns, columnTypes, _storageProvider);
         _tables[tableName] = table;
         
+        // Register table schema with the directory manager so it persists on disk
+        var columnEntries = new List<ColumnDefinitionEntry>(columns.Count);
+        for (int i = 0; i < columns.Count; i++)
+        {
+            var entry = new ColumnDefinitionEntry
+            {
+                DataType = (uint)columnTypes[i],
+                Flags = 0,
+                DefaultValueLength = 0,
+                CheckLength = 0
+            };
+            SetColumnName(ref entry, columns[i]);
+            columnEntries.Add(entry);
+        }
+        
+        _tableDirectoryManager.CreateTable(table, 0, columnEntries, []);
         _tableDirectoryManager.Flush();
+    }
+
+    private static unsafe void SetColumnName(ref ColumnDefinitionEntry entry, string name)
+    {
+        var nameBytes = Encoding.UTF8.GetBytes(name);
+        var length = Math.Min(nameBytes.Length, ColumnDefinitionEntry.MAX_COLUMN_NAME_LENGTH);
+        fixed (byte* ptr = entry.ColumnName)
+        {
+            var span = new Span<byte>(ptr, ColumnDefinitionEntry.MAX_COLUMN_NAME_LENGTH + 1);
+            span.Clear();
+            nameBytes.AsSpan(0, length).CopyTo(span);
+        }
     }
 
     [Obsolete("Regex-based DML parsing. Migrate to SqlParser-based execution for full SQL support.")]

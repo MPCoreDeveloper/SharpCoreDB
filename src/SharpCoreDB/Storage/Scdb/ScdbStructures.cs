@@ -269,7 +269,7 @@ public struct BlockRegistryHeader
 }
 
 /// <summary>
-/// Block entry (64 bytes per entry).
+/// Block entry (96 bytes per entry).
 /// Describes a single data block in the file.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -308,8 +308,8 @@ public struct BlockEntry
     /// <summary>Reserved for future use</summary>
     public ulong Reserved;        // 0x58: Reserved
 
-    /// <summary>Structure size in bytes</summary>
-    public const int SIZE = 64;
+    /// <summary>Structure size in bytes (32 Name + 4 BlockType + 8 Offset + 8 Length + 32 Checksum + 4 Flags + 8 Reserved = 96)</summary>
+    public const int SIZE = 96;
     
     /// <summary>Maximum name length (excluding null terminator)</summary>
     public const int MAX_NAME_LENGTH = 31;
