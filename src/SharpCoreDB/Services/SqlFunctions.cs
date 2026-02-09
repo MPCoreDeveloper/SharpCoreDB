@@ -147,10 +147,13 @@ public static class SqlFunctions
     /// </summary>
     /// <param name="functionName">The function name.</param>
     /// <param name="arguments">The function arguments.</param>
+    /// <param name="customProviders">Optional custom function providers for extensions (e.g., vector search).</param>
     /// <returns>The function result.</returns>
-    public static object? EvaluateFunction(string functionName, List<object?> arguments)
+    public static object? EvaluateFunction(string functionName, List<object?> arguments, IReadOnlyList<ICustomFunctionProvider>? customProviders = null)
     {
-        return functionName.ToUpperInvariant() switch
+        var upperName = functionName.ToUpperInvariant();
+
+        return upperName switch
         {
             "NOW" => Now(),
             "DATE" => arguments.Count > 0 && arguments[0] is DateTime dt ? Date(dt) : null,
@@ -158,7 +161,26 @@ public static class SqlFunctions
                 ? StrFTime(dt2, fmt) : null,
             "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit
                 ? DateAdd(dt3, val, unit) : null,
-            _ => throw new NotSupportedException($"Function {functionName} is not supported"),
+            _ => EvaluateCustomFunction(upperName, arguments, customProviders),
         };
+    }
+
+    /// <summary>
+    /// Tries registered custom function providers before throwing NotSupportedException.
+    /// </summary>
+    private static object? EvaluateCustomFunction(string functionName, List<object?> arguments, IReadOnlyList<ICustomFunctionProvider>? providers)
+    {
+        if (providers is not null)
+        {
+            foreach (var provider in providers)
+            {
+                if (provider.CanHandle(functionName))
+                {
+                    return provider.Evaluate(functionName, arguments);
+                }
+            }
+        }
+
+        throw new NotSupportedException($"Function {functionName} is not supported");
     }
 }

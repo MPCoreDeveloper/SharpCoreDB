@@ -80,6 +80,17 @@ public partial class SqlParser
                 ExecuteDropIndex(parts, sql, wal);
                 break;
             
+            // Phase 5: Vector Index DDL
+            case (SqlConstants.CREATE, "VECTOR") when parts.Length > 2
+                && parts[2].Equals("INDEX", StringComparison.OrdinalIgnoreCase):
+                ExecuteCreateVectorIndex(sql, parts, wal);
+                break;
+            
+            case ("DROP", "VECTOR") when parts.Length > 2
+                && parts[2].Equals("INDEX", StringComparison.OrdinalIgnoreCase):
+                ExecuteDropVectorIndex(sql, parts, wal);
+                break;
+            
             case ("ALTER", SqlConstants.TABLE) when parts.Length > 1:
                 ExecuteAlterTable(parts, sql, wal);
                 break;
@@ -1735,6 +1746,9 @@ public partial class SqlParser
         public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => null;
         public Table? DeduplicateByPrimaryKey(List<Dictionary<string, object>> results) => null;
         public void InitializeStorageEngine() { } // No-op for in-memory tables
+        public void SetMetadata(string key, object value) { }
+        public object? GetMetadata(string key) => null;
+        public bool RemoveMetadata(string key) => false;
 
         /// <summary>
         /// Evaluates a simplified WHERE clause (equality only).

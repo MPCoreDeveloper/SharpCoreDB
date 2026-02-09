@@ -1093,6 +1093,9 @@ internal class SingleFileTable : ITable
     public bool HasBTreeIndex(string columnName) => false;
     public void Flush() { }
     public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+    public void SetMetadata(string key, object value) { }
+    public object? GetMetadata(string key) => null;
+    public bool RemoveMetadata(string key) => false;
 
     private List<Dictionary<string, object?>> ReadAllRowsInternal()
     {

@@ -141,6 +141,21 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     public IIndex<string, long> Index { get; set; } = new BTree<string, long>();
 
+    /// <summary>
+    /// Extensible key-value metadata store for optional features (e.g., vector indexes).
+    /// Persisted alongside table schema. Keys are case-insensitive.
+    /// </summary>
+    public Dictionary<string, object> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Sets a metadata value.</summary>
+    public void SetMetadata(string key, object value) => Metadata[key] = value;
+
+    /// <summary>Gets a metadata value, or null if not found.</summary>
+    public object? GetMetadata(string key) => Metadata.GetValueOrDefault(key);
+
+    /// <summary>Removes a metadata entry.</summary>
+    public bool RemoveMetadata(string key) => Metadata.Remove(key);
+
     // ✅ NEW: Cached row count to avoid expensive full table scans in GetDatabaseStatistics()
     // This is incremented on Insert and decremented on Delete
     private long _cachedRowCount = 0;
@@ -329,7 +344,15 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     private static DataType ParseDataType(string typeStr)
     {
-        return typeStr.ToUpperInvariant() switch
+        var upper = typeStr.ToUpperInvariant();
+
+        // Handle parameterized types like VECTOR(1536)
+        if (upper.StartsWith("VECTOR"))
+        {
+            return DataType.Vector;
+        }
+
+        return upper switch
         {
             "INTEGER" or "INT" => DataType.Integer,
             "TEXT" or "VARCHAR" or "NVARCHAR" => DataType.String,

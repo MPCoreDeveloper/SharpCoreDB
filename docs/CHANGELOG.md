@@ -5,6 +5,39 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - Unreleased
+
+### ✨ Added
+- **Vector Search Extension** (`SharpCoreDB.VectorSearch` NuGet package)
+  - SIMD-accelerated distance metrics: cosine, Euclidean (L2), dot product
+  - `System.Numerics.Vector<float>` auto-selects widest SIMD: AVX-512 → AVX2 → SSE2/NEON → scalar
+  - HNSW approximate nearest neighbor index with configurable M, efConstruction, efSearch
+  - Flat (brute-force) exact search index for small datasets or perfect recall
+  - Binary format for vector serialization with magic bytes, version header, and zero-copy spans
+  - Scalar quantization (float32 → uint8, 4× memory reduction)
+  - Binary quantization (float32 → 1 bit, 32× memory reduction with Hamming distance)
+  - HNSW graph persistence (serialize/deserialize for database restart)
+  - Seven SQL functions: `vec_distance_cosine`, `vec_distance_l2`, `vec_distance_dot`, `vec_from_float32`, `vec_to_json`, `vec_normalize`, `vec_dimensions`
+  - DI registration: `services.AddVectorSupport()` with configuration presets (Embedded, Standard, Enterprise)
+  - Zero overhead when not registered — all vector support is 100% optional
+- **Core: Extension Provider System**
+  - `ICustomFunctionProvider` interface for pluggable SQL functions
+  - `ICustomTypeProvider` interface for pluggable data types
+  - `DataType.Vector` enum value (stored as BLOB internally)
+  - `VECTOR(N)` column type parsing in CREATE TABLE
+  - `ColumnDefinition.Dimensions` for VECTOR(N) metadata
+  - `ITable.Metadata` extensible key-value store for optional features
+- **DDL: Vector Index Management**
+  - `CREATE VECTOR INDEX idx ON table(col) USING FLAT|HNSW`
+  - `DROP VECTOR INDEX idx ON table`
+  - Vector column type validation at index creation time
+
+### 📊 Version Info
+- **Package Version**: 1.2.0
+- **New Package**: SharpCoreDB.VectorSearch 1.2.0
+- **Target Framework**: .NET 10 / C# 14
+- **Breaking Changes**: None — 100% backward compatible
+
 ## [1.1.1] - 2026-02-08
 
 ### 🐛 Fixed

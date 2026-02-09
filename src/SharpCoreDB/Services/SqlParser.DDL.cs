@@ -116,20 +116,32 @@ public partial class SqlParser
             var isUniqueCol = def.Contains("UNIQUE");
             
             columns.Add(colName);
-            columnTypes.Add(typeStr switch
+
+            // Handle parameterized types like VECTOR(1536)
+            DataType colType;
+            if (typeStr.StartsWith("VECTOR"))
             {
-                "INTEGER" => DataType.Integer,
-                "TEXT" => DataType.String,
-                "REAL" => DataType.Real,
-                "BLOB" => DataType.Blob,
-                "BOOLEAN" => DataType.Boolean,
-                "DATETIME" => DataType.DateTime,
-                "LONG" => DataType.Long,
-                "DECIMAL" => DataType.Decimal,
-                "ULID" => DataType.Ulid,
-                "GUID" => DataType.Guid,
-                _ => DataType.String,
-            });
+                colType = DataType.Vector;
+            }
+            else
+            {
+                colType = typeStr switch
+                {
+                    "INTEGER" => DataType.Integer,
+                    "TEXT" => DataType.String,
+                    "REAL" => DataType.Real,
+                    "BLOB" => DataType.Blob,
+                    "BOOLEAN" => DataType.Boolean,
+                    "DATETIME" => DataType.DateTime,
+                    "LONG" => DataType.Long,
+                    "DECIMAL" => DataType.Decimal,
+                    "ULID" => DataType.Ulid,
+                    "GUID" => DataType.Guid,
+                    _ => DataType.String,
+                };
+            }
+
+            columnTypes.Add(colType);
             isAuto.Add(isAutoGen);
             isNotNull.Add(isNotNullCol);
             defaultValues.Add(null); // Default to null, would need more parsing for actual DEFAULT values
@@ -826,5 +838,122 @@ public partial class SqlParser
             OnDelete = onDelete,
             OnUpdate = onUpdate
         };
+    }
+
+    /// <summary>
+    /// Executes CREATE VECTOR INDEX statement.
+    /// Syntax: CREATE VECTOR INDEX idx_name ON table(column) USING FLAT|HNSW[(M=16, ef_construction=200)]
+    /// Stores the index definition in table metadata for the VectorSearch extension module to consume.
+    /// </summary>
+    private void ExecuteCreateVectorIndex(string sql, string[] parts, IWAL? wal)
+    {
+        if (this.isReadOnly)
+            throw new InvalidOperationException("Cannot create vector index in readonly mode");
+
+        // Expected: CREATE VECTOR INDEX idx_name ON table(column) [USING type[(params)]]
+        // parts[0]=CREATE, parts[1]=VECTOR, parts[2]=INDEX, parts[3]=idx_name
+        if (parts.Length < 6)
+            throw new InvalidOperationException("CREATE VECTOR INDEX requires: CREATE VECTOR INDEX name ON table(column) [USING FLAT|HNSW]");
+
+        var indexName = parts[3];
+
+        var onIdx = Array.FindIndex(parts, p => p.Equals("ON", StringComparison.OrdinalIgnoreCase));
+        if (onIdx < 0 || onIdx + 1 >= parts.Length)
+            throw new InvalidOperationException("CREATE VECTOR INDEX requires ON clause");
+
+        // Parse table(column) — handle attached or separated parenthesis
+        var tableColRaw = parts[onIdx + 1];
+        var parenIdx = tableColRaw.IndexOf('(');
+        string tableName;
+        string columnName;
+
+        if (parenIdx >= 0)
+        {
+            tableName = tableColRaw[..parenIdx];
+            var closeParen = sql.IndexOf(')', sql.IndexOf(tableColRaw, StringComparison.Ordinal));
+            var colStart = sql.IndexOf('(', sql.IndexOf(tableColRaw, StringComparison.Ordinal));
+            columnName = sql[(colStart + 1)..closeParen].Trim();
+        }
+        else
+        {
+            tableName = tableColRaw;
+            var colStart = sql.IndexOf('(');
+            var colEnd = sql.IndexOf(')');
+            if (colStart < 0 || colEnd < 0)
+                throw new InvalidOperationException("CREATE VECTOR INDEX requires column name in parentheses");
+            columnName = sql[(colStart + 1)..colEnd].Trim();
+        }
+
+        if (!this.tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table '{tableName}' does not exist");
+
+        // Verify the column exists and is a VECTOR type
+        var colIndex = table.Columns.IndexOf(columnName);
+        if (colIndex < 0)
+            throw new InvalidOperationException($"Column '{columnName}' does not exist in table '{tableName}'");
+        if (table.ColumnTypes[colIndex] != DataType.Vector)
+            throw new InvalidOperationException($"Column '{columnName}' is not a VECTOR type. CREATE VECTOR INDEX requires a VECTOR column.");
+
+        // Parse USING clause for index type
+        var indexType = "FLAT";
+        var upperSql = sql.ToUpperInvariant();
+        var usingIdx = upperSql.IndexOf("USING");
+        if (usingIdx > 0)
+        {
+            var afterUsing = sql[(usingIdx + 5)..].Trim();
+            if (afterUsing.StartsWith("HNSW", StringComparison.OrdinalIgnoreCase))
+                indexType = "HNSW";
+            else if (afterUsing.StartsWith("FLAT", StringComparison.OrdinalIgnoreCase))
+                indexType = "FLAT";
+        }
+
+        // Store vector index metadata on the table for the extension module to consume
+        table.SetMetadata($"vector_index:{columnName}:name", indexName);
+        table.SetMetadata($"vector_index:{columnName}:type", indexType);
+        table.SetMetadata($"vector_index:{columnName}:sql", sql);
+
+        wal?.Log(sql);
+    }
+
+    /// <summary>
+    /// Executes DROP VECTOR INDEX statement.
+    /// Syntax: DROP VECTOR INDEX idx_name ON table
+    /// </summary>
+    private void ExecuteDropVectorIndex(string sql, string[] parts, IWAL? wal)
+    {
+        if (this.isReadOnly)
+            throw new InvalidOperationException("Cannot drop vector index in readonly mode");
+
+        // Expected: DROP VECTOR INDEX idx_name [ON table]
+        if (parts.Length < 4)
+            throw new InvalidOperationException("DROP VECTOR INDEX requires an index name");
+
+        var indexName = parts[3];
+
+        // Find which table owns this vector index
+        bool found = false;
+        foreach (var (tableName, table) in this.tables)
+        {
+            foreach (var colName in table.Columns)
+            {
+                var storedName = table.GetMetadata($"vector_index:{colName}:name");
+                if (storedName is string name && name.Equals(indexName, StringComparison.OrdinalIgnoreCase))
+                {
+                    table.RemoveMetadata($"vector_index:{colName}:name");
+                    table.RemoveMetadata($"vector_index:{colName}:type");
+                    table.RemoveMetadata($"vector_index:{colName}:sql");
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found)
+                break;
+        }
+
+        if (!found)
+            throw new InvalidOperationException($"Vector index '{indexName}' does not exist");
+
+        wal?.Log(sql);
     }
 }

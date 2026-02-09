@@ -168,6 +168,7 @@ public partial class SqlParser
                 DataType.Decimal => decimal.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Ulid => Ulid.Parse(val),
                 DataType.Guid => Guid.Parse(val),
+                DataType.Vector => ParseVectorValue(val),
                 _ => val,
             };
         }
@@ -204,6 +205,26 @@ public partial class SqlParser
         // Fallback to general parse
         var parsed = DateTime.Parse(val, System.Globalization.CultureInfo.InvariantCulture);
         return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// Parses a vector value from a JSON float array string or Base64 bytes.
+    /// Supports: "[0.1, 0.2, 0.3]" JSON format and Base64-encoded binary.
+    /// </summary>
+    private static object ParseVectorValue(string val)
+    {
+        val = val.Trim();
+
+        // JSON array format: [0.1, 0.2, 0.3, ...]
+        if (val.StartsWith('[') && val.EndsWith(']'))
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<float[]>(val)
+                ?? throw new InvalidOperationException("Failed to parse vector JSON array");
+        }
+
+        // Base64-encoded binary format
+        var bytes = Convert.FromBase64String(val);
+        return System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes.AsSpan()).ToArray();
     }
 
     /// <summary>

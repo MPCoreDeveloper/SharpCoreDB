@@ -38,4 +38,7 @@ public enum DataType
 
     /// <summary>Globally unique identifier type.</summary>
     Guid,
+
+    /// <summary>Vector embedding type (fixed-dimension float32 array for similarity search).</summary>
+    Vector,
 }

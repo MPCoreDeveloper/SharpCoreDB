@@ -2,6 +2,7 @@
 
 ## General Guidelines
 - Test programs should be located in the `tests` folder and not in the repository root.
+- All project documentation must be written in English. This includes docs, README files, technical specs, implementation plans, and code comments.
 
 ## Code Style
 - Use specific formatting rules

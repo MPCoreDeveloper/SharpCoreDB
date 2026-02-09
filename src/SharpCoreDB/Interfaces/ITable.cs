@@ -230,4 +230,26 @@ public interface ITable
     /// </summary>
     /// <param name="columnDef">The column definition to add.</param>
     void AddColumn(ColumnDefinition columnDef);
+
+    /// <summary>
+    /// Sets an extensible metadata value on this table.
+    /// Used by optional features such as vector indexes.
+    /// </summary>
+    /// <param name="key">The metadata key (case-insensitive).</param>
+    /// <param name="value">The metadata value.</param>
+    void SetMetadata(string key, object value);
+
+    /// <summary>
+    /// Gets an extensible metadata value, or null if not found.
+    /// </summary>
+    /// <param name="key">The metadata key (case-insensitive).</param>
+    /// <returns>The metadata value, or null.</returns>
+    object? GetMetadata(string key);
+
+    /// <summary>
+    /// Removes an extensible metadata entry.
+    /// </summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>True if the entry was removed.</returns>
+    bool RemoveMetadata(string key);
 }

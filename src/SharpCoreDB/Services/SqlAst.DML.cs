@@ -181,6 +181,12 @@ public class ColumnDefinition
     /// Gets or sets the CHECK constraint expression for this column.
     /// </summary>
     public string? CheckExpression { get; set; }
+
+    /// <summary>
+    /// Gets or sets the vector dimensions for VECTOR(N) columns.
+    /// Null for non-vector columns.
+    /// </summary>
+    public int? Dimensions { get; set; }
 }
 
 /// <summary>
