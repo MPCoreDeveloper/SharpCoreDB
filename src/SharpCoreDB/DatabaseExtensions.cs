@@ -779,6 +779,7 @@ internal class SingleFileTable : ITable
     public List<object?> DefaultValues => new List<object?> { null };
     public List<List<string>> UniqueConstraints => new List<List<string>>();
     public List<ForeignKeyConstraint> ForeignKeys => new List<ForeignKeyConstraint>();
+    public List<CollationType> ColumnCollations => [.. new CollationType[_columns.Count]]; // ✅ COLLATE Phase 1: All Binary by default
     public string DataFile { get => _dataBlockName; set => throw new NotSupportedException(); }
 
     public void Insert(Dictionary<string, object> row)

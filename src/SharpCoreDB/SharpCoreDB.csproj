@@ -57,9 +57,9 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     
-    <!-- Multi-targeting: Build for multiple RIDs when packing -->
-    <!-- Visual Studio will automatically build these when you right-click → Pack -->
-    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <!-- Multi-RID packaging: Use "dotnet publish -r win-x64" or "dotnet pack" with
+         RuntimeIdentifiers passed via CLI. Removed from project file to prevent
+         NU1102 restore failures when preview runtime packs lag behind the SDK. -->
   </PropertyGroup>
 
   <!-- Platform-specific PropertyGroups -->

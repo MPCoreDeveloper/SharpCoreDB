@@ -4,17 +4,23 @@
 // </copyright>
 namespace SharpCoreDB.VectorSearch;
 
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 /// <summary>
-/// SIMD-accelerated vector distance calculations using System.Numerics.Vector&lt;float&gt;.
-/// Automatically uses the widest SIMD available: AVX-512 (16 floats) → AVX2 (8) → SSE2/NEON (4) → scalar.
+/// SIMD-accelerated vector distance calculations using explicit System.Runtime.Intrinsics.
+/// NativeAOT-optimized: zero reflection, zero dynamic dispatch, aggressive inlining.
+/// Multi-tier dispatch: AVX-512 (16 floats) → AVX2 (8) → SSE (4) → scalar.
+/// Uses FMA where available for fused multiply-add (better throughput + precision).
 /// Zero external dependencies — pure BCL.
 /// </summary>
 public static class DistanceMetrics
 {
+    // AVX-512 threshold — amortize AVX-512 transition overhead for small vectors
+    private const int Avx512MinElements = 64;
+
     /// <summary>
     /// Cosine distance: 1 - (a · b) / (‖a‖ × ‖b‖).
     /// Result range: [0, 2] where 0 = identical, 1 = orthogonal, 2 = opposite.
@@ -25,39 +31,8 @@ public static class DistanceMetrics
         if (a.Length != b.Length)
             throw new ArgumentException($"Vector dimensions must match: {a.Length} vs {b.Length}");
 
-        float dot = 0f, normA = 0f, normB = 0f;
-        int i = 0;
-        int simdWidth = Vector<float>.Count;
-
-        if (Vector.IsHardwareAccelerated && a.Length >= simdWidth)
-        {
-            var vDot = Vector<float>.Zero;
-            var vNormA = Vector<float>.Zero;
-            var vNormB = Vector<float>.Zero;
-
-            var spanA = MemoryMarshal.Cast<float, Vector<float>>(a);
-            var spanB = MemoryMarshal.Cast<float, Vector<float>>(b);
-
-            for (int j = 0; j < spanA.Length; j++)
-            {
-                vDot += spanA[j] * spanB[j];
-                vNormA += spanA[j] * spanA[j];
-                vNormB += spanB[j] * spanB[j];
-            }
-
-            dot = Vector.Sum(vDot);
-            normA = Vector.Sum(vNormA);
-            normB = Vector.Sum(vNormB);
-            i = spanA.Length * simdWidth;
-        }
-
-        // Scalar tail for remaining elements
-        for (; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
+        // PERF: Fused single-pass computes dot + normA + normB together for cache efficiency
+        DotAndNorms(a, b, out float dot, out float normA, out float normB);
 
         float denominator = MathF.Sqrt(normA) * MathF.Sqrt(normB);
         if (denominator < float.Epsilon)
@@ -86,25 +61,63 @@ public static class DistanceMetrics
 
         float sum = 0f;
         int i = 0;
-        int simdWidth = Vector<float>.Count;
+        int len = a.Length;
 
-        if (Vector.IsHardwareAccelerated && a.Length >= simdWidth)
+        ref float refA = ref MemoryMarshal.GetReference(a);
+        ref float refB = ref MemoryMarshal.GetReference(b);
+
+        if (Avx512F.IsSupported && len >= Avx512MinElements)
         {
-            var vSum = Vector<float>.Zero;
-            var spanA = MemoryMarshal.Cast<float, Vector<float>>(a);
-            var spanB = MemoryMarshal.Cast<float, Vector<float>>(b);
+            var vSum = Vector512<float>.Zero;
+            int vecLen = len & ~15;
 
-            for (int j = 0; j < spanA.Length; j++)
+            for (; i < vecLen; i += 16)
             {
-                var diff = spanA[j] - spanB[j];
-                vSum += diff * diff;
+                var va = Vector512.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector512.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                var diff = va - vb;
+                vSum = Avx512F.FusedMultiplyAdd(diff, diff, vSum);
             }
 
-            sum = Vector.Sum(vSum);
-            i = spanA.Length * simdWidth;
+            sum = Vector512.Sum(vSum);
+        }
+        else if (Avx2.IsSupported && len >= 8)
+        {
+            var vSum = Vector256<float>.Zero;
+            int vecLen = len & ~7;
+
+            for (; i < vecLen; i += 8)
+            {
+                var va = Vector256.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector256.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                var diff = va - vb;
+                vSum = Fma.IsSupported
+                    ? Fma.MultiplyAdd(diff, diff, vSum)
+                    : vSum + (diff * diff);
+            }
+
+            sum = Vector256.Sum(vSum);
+        }
+        else if (Sse.IsSupported && len >= 4)
+        {
+            var vSum = Vector128<float>.Zero;
+            int vecLen = len & ~3;
+
+            for (; i < vecLen; i += 4)
+            {
+                var va = Vector128.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector128.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                var diff = va - vb;
+                vSum = Fma.IsSupported
+                    ? Fma.MultiplyAdd(diff, diff, vSum)
+                    : vSum + (diff * diff);
+            }
+
+            sum = Vector128.Sum(vSum);
         }
 
-        for (; i < a.Length; i++)
+        // Scalar tail
+        for (; i < len; i++)
         {
             float diff = a[i] - b[i];
             sum += diff * diff;
@@ -124,24 +137,60 @@ public static class DistanceMetrics
 
         float dot = 0f;
         int i = 0;
-        int simdWidth = Vector<float>.Count;
+        int len = a.Length;
 
-        if (Vector.IsHardwareAccelerated && a.Length >= simdWidth)
+        ref float refA = ref MemoryMarshal.GetReference(a);
+        ref float refB = ref MemoryMarshal.GetReference(b);
+
+        if (Avx512F.IsSupported && len >= Avx512MinElements)
         {
-            var vDot = Vector<float>.Zero;
-            var spanA = MemoryMarshal.Cast<float, Vector<float>>(a);
-            var spanB = MemoryMarshal.Cast<float, Vector<float>>(b);
+            var vDot = Vector512<float>.Zero;
+            int vecLen = len & ~15;
 
-            for (int j = 0; j < spanA.Length; j++)
+            for (; i < vecLen; i += 16)
             {
-                vDot += spanA[j] * spanB[j];
+                var va = Vector512.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector512.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                vDot = Avx512F.FusedMultiplyAdd(va, vb, vDot);
             }
 
-            dot = Vector.Sum(vDot);
-            i = spanA.Length * simdWidth;
+            dot = Vector512.Sum(vDot);
+        }
+        else if (Avx2.IsSupported && len >= 8)
+        {
+            var vDot = Vector256<float>.Zero;
+            int vecLen = len & ~7;
+
+            for (; i < vecLen; i += 8)
+            {
+                var va = Vector256.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector256.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                vDot = Fma.IsSupported
+                    ? Fma.MultiplyAdd(va, vb, vDot)
+                    : vDot + (va * vb);
+            }
+
+            dot = Vector256.Sum(vDot);
+        }
+        else if (Sse.IsSupported && len >= 4)
+        {
+            var vDot = Vector128<float>.Zero;
+            int vecLen = len & ~3;
+
+            for (; i < vecLen; i += 4)
+            {
+                var va = Vector128.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector128.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                vDot = Fma.IsSupported
+                    ? Fma.MultiplyAdd(va, vb, vDot)
+                    : vDot + (va * vb);
+            }
+
+            dot = Vector128.Sum(vDot);
         }
 
-        for (; i < a.Length; i++)
+        // Scalar tail
+        for (; i < len; i++)
         {
             dot += a[i] * b[i];
         }
@@ -159,7 +208,7 @@ public static class DistanceMetrics
     }
 
     /// <summary>
-    /// L2-normalizes a vector in-place: v / ‖v‖.
+    /// L2-normalizes a vector: v / ‖v‖. Returns a new array.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static float[] Normalize(ReadOnlySpan<float> vector)
@@ -174,23 +223,47 @@ public static class DistanceMetrics
         }
 
         int i = 0;
-        int simdWidth = Vector<float>.Count;
+        int len = vector.Length;
 
-        if (Vector.IsHardwareAccelerated && vector.Length >= simdWidth)
+        ref float refSrc = ref MemoryMarshal.GetReference(vector);
+        ref float refDst = ref MemoryMarshal.GetReference(result.AsSpan());
+
+        if (Avx512F.IsSupported && len >= Avx512MinElements)
         {
-            var vNorm = new Vector<float>(norm);
-            var spanSrc = MemoryMarshal.Cast<float, Vector<float>>(vector);
-            var spanDst = MemoryMarshal.Cast<float, Vector<float>>(result.AsSpan());
+            var vNorm = Vector512.Create(norm);
+            int vecLen = len & ~15;
 
-            for (int j = 0; j < spanSrc.Length; j++)
+            for (; i < vecLen; i += 16)
             {
-                spanDst[j] = spanSrc[j] / vNorm;
+                var v = Vector512.LoadUnsafe(ref Unsafe.Add(ref refSrc, i));
+                (v / vNorm).StoreUnsafe(ref Unsafe.Add(ref refDst, i));
             }
+        }
+        else if (Avx2.IsSupported && len >= 8)
+        {
+            var vNorm = Vector256.Create(norm);
+            int vecLen = len & ~7;
 
-            i = spanSrc.Length * simdWidth;
+            for (; i < vecLen; i += 8)
+            {
+                var v = Vector256.LoadUnsafe(ref Unsafe.Add(ref refSrc, i));
+                (v / vNorm).StoreUnsafe(ref Unsafe.Add(ref refDst, i));
+            }
+        }
+        else if (Sse.IsSupported && len >= 4)
+        {
+            var vNorm = Vector128.Create(norm);
+            int vecLen = len & ~3;
+
+            for (; i < vecLen; i += 4)
+            {
+                var v = Vector128.LoadUnsafe(ref Unsafe.Add(ref refSrc, i));
+                (v / vNorm).StoreUnsafe(ref Unsafe.Add(ref refDst, i));
+            }
         }
 
-        for (; i < vector.Length; i++)
+        // Scalar tail
+        for (; i < len; i++)
         {
             result[i] = vector[i] / norm;
         }
@@ -211,5 +284,110 @@ public static class DistanceMetrics
             DistanceFunction.DotProduct => NegativeDotProduct(a, b),
             _ => throw new ArgumentException($"Unknown distance function: {function}"),
         };
+    }
+
+    /// <summary>
+    /// PERF: Computes dot product and both norms in a single pass (3 reductions instead of 3 separate passes).
+    /// Fused to maximize cache utilization on large embedding vectors.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void DotAndNorms(ReadOnlySpan<float> a, ReadOnlySpan<float> b,
+        out float dot, out float normA, out float normB)
+    {
+        dot = 0f;
+        normA = 0f;
+        normB = 0f;
+        int i = 0;
+        int len = a.Length;
+
+        ref float refA = ref MemoryMarshal.GetReference(a);
+        ref float refB = ref MemoryMarshal.GetReference(b);
+
+        if (Avx512F.IsSupported && len >= Avx512MinElements)
+        {
+            var vDot = Vector512<float>.Zero;
+            var vNormA = Vector512<float>.Zero;
+            var vNormB = Vector512<float>.Zero;
+            int vecLen = len & ~15;
+
+            for (; i < vecLen; i += 16)
+            {
+                var va = Vector512.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector512.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                vDot = Avx512F.FusedMultiplyAdd(va, vb, vDot);
+                vNormA = Avx512F.FusedMultiplyAdd(va, va, vNormA);
+                vNormB = Avx512F.FusedMultiplyAdd(vb, vb, vNormB);
+            }
+
+            dot = Vector512.Sum(vDot);
+            normA = Vector512.Sum(vNormA);
+            normB = Vector512.Sum(vNormB);
+        }
+        else if (Avx2.IsSupported && len >= 8)
+        {
+            var vDot = Vector256<float>.Zero;
+            var vNormA = Vector256<float>.Zero;
+            var vNormB = Vector256<float>.Zero;
+            int vecLen = len & ~7;
+
+            for (; i < vecLen; i += 8)
+            {
+                var va = Vector256.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector256.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                if (Fma.IsSupported)
+                {
+                    vDot = Fma.MultiplyAdd(va, vb, vDot);
+                    vNormA = Fma.MultiplyAdd(va, va, vNormA);
+                    vNormB = Fma.MultiplyAdd(vb, vb, vNormB);
+                }
+                else
+                {
+                    vDot += va * vb;
+                    vNormA += va * va;
+                    vNormB += vb * vb;
+                }
+            }
+
+            dot = Vector256.Sum(vDot);
+            normA = Vector256.Sum(vNormA);
+            normB = Vector256.Sum(vNormB);
+        }
+        else if (Sse.IsSupported && len >= 4)
+        {
+            var vDot = Vector128<float>.Zero;
+            var vNormA = Vector128<float>.Zero;
+            var vNormB = Vector128<float>.Zero;
+            int vecLen = len & ~3;
+
+            for (; i < vecLen; i += 4)
+            {
+                var va = Vector128.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector128.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                if (Fma.IsSupported)
+                {
+                    vDot = Fma.MultiplyAdd(va, vb, vDot);
+                    vNormA = Fma.MultiplyAdd(va, va, vNormA);
+                    vNormB = Fma.MultiplyAdd(vb, vb, vNormB);
+                }
+                else
+                {
+                    vDot += va * vb;
+                    vNormA += va * va;
+                    vNormB += vb * vb;
+                }
+            }
+
+            dot = Vector128.Sum(vDot);
+            normA = Vector128.Sum(vNormA);
+            normB = Vector128.Sum(vNormB);
+        }
+
+        // Scalar tail
+        for (; i < len; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
     }
 }

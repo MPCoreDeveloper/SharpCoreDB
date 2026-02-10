@@ -167,6 +167,19 @@ public partial class EnhancedSqlParser
                         RecordError("Expected ) after CHECK expression");
                     column.CheckExpression = expr.ToString();
                 }
+                else if (MatchKeyword("COLLATE"))
+                {
+                    // ✅ COLLATE Phase 2: Parse COLLATE <type> in column definition
+                    var collationName = ConsumeIdentifier()?.ToUpperInvariant() ?? "BINARY";
+                    column.Collation = collationName switch
+                    {
+                        "NOCASE" => CollationType.NoCase,
+                        "BINARY" => CollationType.Binary,
+                        "RTRIM" => CollationType.RTrim,
+                        _ => throw new InvalidOperationException(
+                            $"Unknown collation '{collationName}'. Valid: NOCASE, BINARY, RTRIM")
+                    };
+                }
                 else
                 {
                     break;

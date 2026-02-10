@@ -298,6 +298,11 @@ public partial class Database : IDatabase, IDisposable
                 {
                     table.DefaultValues.Add(null);
                 }
+                // ✅ COLLATE Phase 1: Backward compatible — missing collations default to Binary
+                while (table.ColumnCollations.Count < table.Columns.Count)
+                {
+                    table.ColumnCollations.Add(CollationType.Binary);
+                }
                 
 #if DEBUG
                 System.Diagnostics.Debug.WriteLine($"[Load] Table {table.Name} reinitialized - Columns: {table.Columns.Count}, IsAuto: {table.IsAuto.Count}, IsNotNull: {table.IsNotNull.Count}");
@@ -361,6 +366,7 @@ public partial class Database : IDatabase, IDisposable
             t.DefaultValues,
             t.UniqueConstraints,
             t.ForeignKeys,  // Added for Phase 1.2
+            t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };

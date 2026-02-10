@@ -362,9 +362,28 @@ public partial class SqlParser
 
     /// <summary>
     /// ✅ NEW: Generates query execution plan using modern switch expression.
+    /// Phase 5.4: Includes vector index scan detection.
     /// </summary>
     private string GenerateQueryPlan(string[] selectParts, string tableName, int whereIdx)
     {
+        // Phase 5.4: Check for vector index scan opportunity
+        if (VectorQueryOptimizer is not null)
+        {
+            var selectStr = string.Join(" ", selectParts).ToUpperInvariant();
+            foreach (var vecCol in this.tables[tableName].Columns)
+            {
+                if (this.tables[tableName].ColumnTypes[this.tables[tableName].Columns.IndexOf(vecCol)] == DataType.Vector)
+                {
+                    var plan = VectorQueryOptimizer.GetExplainPlan(tableName, vecCol);
+                    if (!plan.Contains("no index", StringComparison.OrdinalIgnoreCase)
+                        && selectStr.Contains("VEC_DISTANCE_", StringComparison.Ordinal))
+                    {
+                        return plan;
+                    }
+                }
+            }
+        }
+
         if (whereIdx <= 0)
             return "Full table scan";
 
@@ -479,7 +498,15 @@ public partial class SqlParser
             throw new InvalidOperationException($"Table {tableName} does not exist");
         
         TrackColumnUsage(tableName, whereStr);
-        
+
+        // Phase 5.4: Detect ORDER BY vec_distance_*(col, query) LIMIT k → route to vector index
+        if (limit.HasValue && limit.Value > 0 && VectorQueryOptimizer is not null)
+        {
+            var vectorResult = TryExecuteVectorOptimized(sql, selectClause, tableName, orderBy, limit.Value, noEncrypt);
+            if (vectorResult is not null)
+                return vectorResult;
+        }
+
         var results = this.tables[tableName].Select(whereStr, orderBy, asc, noEncrypt);
 
         // Apply limit and offset
@@ -587,6 +614,126 @@ public partial class SqlParser
         var usedColumns = SqlParser.ParseWhereColumns(whereStr);
         foreach (var column in usedColumns.Where(c => table.Columns.Contains(c)))
             table.TrackColumnUsage(column);
+    }
+
+    /// <summary>
+    /// Phase 5.4: Detects vec_distance_*(col, query) in SELECT with an alias referenced
+    /// by ORDER BY, combined with LIMIT k. Routes to HNSW/Flat index when available.
+    /// Returns null if the pattern does not match (caller falls back to full table scan).
+    /// </summary>
+    private List<Dictionary<string, object>>? TryExecuteVectorOptimized(
+        string sql, string selectClause, string tableName, string? orderBy, int limit, bool noEncrypt)
+    {
+        if (string.IsNullOrEmpty(orderBy) || VectorQueryOptimizer is null)
+            return null;
+
+        // Detect vec_distance_*(col, ...) AS alias in SELECT clause
+        var upperSelect = selectClause.ToUpperInvariant();
+        string? distanceFunc = null;
+        string? vectorColumn = null;
+        string? distanceAlias = null;
+
+        // Match patterns: vec_distance_cosine(col, ...) AS alias
+        foreach (var funcName in new[] { "VEC_DISTANCE_COSINE", "VEC_DISTANCE_L2", "VEC_DISTANCE_DOT" })
+        {
+            var funcIdx = upperSelect.IndexOf(funcName, StringComparison.Ordinal);
+            if (funcIdx < 0) continue;
+
+            distanceFunc = funcName;
+
+            // Extract column name: first argument inside parentheses
+            var parenStart = selectClause.IndexOf('(', funcIdx);
+            if (parenStart < 0) continue;
+
+            var commaIdx = selectClause.IndexOf(',', parenStart);
+            if (commaIdx < 0) continue;
+
+            vectorColumn = selectClause[(parenStart + 1)..commaIdx].Trim();
+
+            // Extract alias: look for AS keyword after the closing paren
+            var depth = 1;
+            var pos = parenStart + 1;
+            while (pos < selectClause.Length && depth > 0)
+            {
+                if (selectClause[pos] == '(') depth++;
+                else if (selectClause[pos] == ')') depth--;
+                pos++;
+            }
+
+            var afterFunc = selectClause[pos..].TrimStart();
+            if (afterFunc.StartsWith("AS ", StringComparison.OrdinalIgnoreCase))
+            {
+                distanceAlias = afterFunc[3..].Trim().Split([' ', ',', '\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            }
+
+            break;
+        }
+
+        if (distanceFunc is null || vectorColumn is null)
+            return null;
+
+        // Check: ORDER BY references the distance alias or the function itself
+        var orderByUpper = orderBy.ToUpperInvariant();
+        bool orderByMatchesAlias = distanceAlias is not null &&
+            orderByUpper.Equals(distanceAlias.ToUpperInvariant(), StringComparison.Ordinal);
+        bool orderByMatchesFunc = orderByUpper.StartsWith("VEC_DISTANCE_", StringComparison.Ordinal);
+
+        if (!orderByMatchesAlias && !orderByMatchesFunc)
+            return null;
+
+        // Check if the optimizer can handle this query
+        if (!VectorQueryOptimizer.CanOptimize(tableName, vectorColumn, distanceFunc, limit))
+            return null;
+
+        // Extract the query vector from the SQL (second argument of the distance function)
+        var queryVectorStr = ExtractSecondArgument(sql, distanceFunc);
+        if (queryVectorStr is null)
+            return null;
+
+        // Route to vector index — skips full table scan entirely
+        return VectorQueryOptimizer.ExecuteOptimized(
+            this.tables[tableName],
+            tableName,
+            vectorColumn,
+            distanceFunc,
+            queryVectorStr,
+            limit,
+            noEncrypt);
+    }
+
+    /// <summary>
+    /// Extracts the second argument of a vec_distance_* function call from the SQL string.
+    /// Handles nested parentheses (e.g., <c>vec_distance_cosine(col, '[0.1,0.2]')</c>).
+    /// </summary>
+    private static string? ExtractSecondArgument(string sql, string functionName)
+    {
+        var idx = sql.IndexOf(functionName, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+
+        var parenStart = sql.IndexOf('(', idx);
+        if (parenStart < 0) return null;
+
+        // Find comma separating first and second argument
+        var depth = 1;
+        var pos = parenStart + 1;
+        var commaPos = -1;
+        while (pos < sql.Length && depth > 0)
+        {
+            if (sql[pos] == '(') depth++;
+            else if (sql[pos] == ')') depth--;
+            else if (sql[pos] == ',' && depth == 1 && commaPos < 0)
+            {
+                commaPos = pos;
+            }
+
+            if (depth == 0) break;
+            pos++;
+        }
+
+        if (commaPos < 0 || pos >= sql.Length)
+            return null;
+
+        return sql[(commaPos + 1)..pos].Trim().Trim('\'', '"');
     }
 
     /// <summary>
@@ -1652,6 +1799,7 @@ public partial class SqlParser
         public List<object?> DefaultValues => [.. new object?[Columns.Count]];
         public List<List<string>> UniqueConstraints => [];
         public List<ForeignKeyConstraint> ForeignKeys => [];
+        public List<CollationType> ColumnCollations => [.. new CollationType[Columns.Count]]; // ✅ COLLATE Phase 1: All Binary by default
 
         public void Insert(Dictionary<string, object> row)
         {

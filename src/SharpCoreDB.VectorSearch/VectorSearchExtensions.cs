@@ -14,7 +14,8 @@ public static class VectorSearchExtensions
 {
     /// <summary>
     /// Adds vector search support to SharpCoreDB.
-    /// Registers VECTOR(N) type handling and vec_* SQL functions.
+    /// Registers VECTOR(N) type handling, vec_* SQL functions, index management,
+    /// and the query optimizer for <c>ORDER BY vec_distance_*() LIMIT k</c> acceleration.
     /// </summary>
     /// <param name="services">The service collection (typically after <c>AddSharpCoreDB()</c>).</param>
     /// <param name="configure">Optional configuration callback for vector search options.</param>
@@ -32,6 +33,10 @@ public static class VectorSearchExtensions
         services.AddSingleton<ICustomFunctionProvider, VectorFunctionProvider>();
         services.AddSingleton<ICustomTypeProvider>(sp =>
             new VectorTypeProvider(sp.GetRequiredService<VectorSearchOptions>()));
+
+        // Phase 5.4: Vector index management + query planner optimization
+        services.AddSingleton<VectorIndexManager>();
+        services.AddSingleton<IVectorQueryOptimizer, VectorQueryOptimizer>();
 
         return services;
     }

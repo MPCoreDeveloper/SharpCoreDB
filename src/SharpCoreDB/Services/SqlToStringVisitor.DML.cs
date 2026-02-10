@@ -80,6 +80,7 @@ public sealed partial class SqlToStringVisitor
             if (c.IsAutoIncrement) def += " AUTO";
             if (c.IsNotNull) def += " NOT NULL";
             if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 14: is not null
+            if (c.Collation != CollationType.Binary) def += $" COLLATE {c.Collation.ToString().ToUpperInvariant()}"; // ✅ COLLATE Phase 2
             return def;
         });
 

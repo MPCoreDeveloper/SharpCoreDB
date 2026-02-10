@@ -187,6 +187,13 @@ public class ColumnDefinition
     /// Null for non-vector columns.
     /// </summary>
     public int? Dimensions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the collation type for this column.
+    /// Defaults to <see cref="CollationType.Binary"/> (case-sensitive).
+    /// Set via COLLATE clause in DDL: <c>Name TEXT COLLATE NOCASE</c>.
+    /// </summary>
+    public CollationType Collation { get; set; } = CollationType.Binary;
 }
 
 /// <summary>

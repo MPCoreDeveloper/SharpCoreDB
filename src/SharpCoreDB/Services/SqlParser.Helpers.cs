@@ -333,10 +333,65 @@ public partial class SqlParser
     }
 
     /// <summary>
+    /// Compares two string values using the specified collation.
+    /// ✅ COLLATE Phase 3: Hot path — uses Span-based comparison for NOCASE to avoid allocations.
+    /// </summary>
+    /// <param name="left">Left string to compare.</param>
+    /// <param name="right">Right string to compare.</param>
+    /// <param name="collation">Collation type to use.</param>
+    /// <returns>
+    /// &lt; 0 if left is less than right,
+    /// 0 if equal,
+    /// &gt; 0 if left is greater than right.
+    /// </returns>
+    private static int CompareWithCollation(ReadOnlySpan<char> left, ReadOnlySpan<char> right, CollationType collation)
+    {
+        return collation switch
+        {
+            CollationType.Binary => left.SequenceCompareTo(right),
+            CollationType.NoCase => left.CompareTo(right, StringComparison.OrdinalIgnoreCase),
+            CollationType.RTrim => left.TrimEnd().SequenceCompareTo(right.TrimEnd()),
+            CollationType.UnicodeCaseInsensitive 
+                => left.CompareTo(right, StringComparison.CurrentCultureIgnoreCase),
+            _ => left.SequenceCompareTo(right),
+        };
+    }
+
+    /// <summary>
+    /// Equality comparison using collation rules.
+    /// ✅ COLLATE Phase 3: Used by WHERE clause evaluation.
+    /// </summary>
+    /// <param name="left">Left string.</param>
+    /// <param name="right">Right string.</param>
+    /// <param name="collation">Collation type.</param>
+    /// <returns>True if equal according to collation rules.</returns>
+    private static bool EqualsWithCollation(string? left, string? right, CollationType collation)
+    {
+        if (left is null || right is null)
+            return left == right;
+
+        return collation switch
+        {
+            CollationType.Binary => left.Equals(right, StringComparison.Ordinal),
+            CollationType.NoCase => left.Equals(right, StringComparison.OrdinalIgnoreCase),
+            CollationType.RTrim => left.TrimEnd().Equals(right.TrimEnd(), StringComparison.Ordinal),
+            CollationType.UnicodeCaseInsensitive 
+                => left.Equals(right, StringComparison.CurrentCultureIgnoreCase),
+            _ => left.Equals(right, StringComparison.Ordinal),
+        };
+    }
+
+    /// <summary>
     /// Evaluates an operator comparison.
+    /// ✅ COLLATE Phase 3: Now supports collation-aware string comparisons.
     /// OPTIMIZED: Cache ToString() result to avoid repeated conversions.
     /// </summary>
-    private static bool EvaluateOperator(object? rowValue, string op, string? value)
+    /// <param name="rowValue">The row value to compare.</param>
+    /// <param name="op">The comparison operator (=, !=, &lt;, &lt;=, &gt;, &gt;=, LIKE, IN, etc.).</param>
+    /// <param name="value">The value to compare against.</param>
+    /// <param name="collation">Optional collation type for string comparisons. Defaults to Binary (case-sensitive).</param>
+    /// <returns>True if the comparison evaluates to true, false otherwise.</returns>
+    private static bool EvaluateOperator(object? rowValue, string op, string? value, CollationType collation = CollationType.Binary)
     {
         // Convert types for accurate numeric/date comparisons
         object? rhs = value;
@@ -359,22 +414,29 @@ public partial class SqlParser
             }
         }
         
+        // ✅ COLLATE Phase 3: Collation-aware comparison function
         int Compare(object? a, object? b)
         {
             if (a is IComparable ca && b is not null && a.GetType() == b.GetType())
                 return ca.CompareTo(b);
-            // Fallback to string comparison
+            
+            // Fallback to string comparison with collation
             var sa = a?.ToString();
             var sb = b?.ToString();
-            return string.Compare(sa, sb, StringComparison.Ordinal);
+            
+            if (sa is null || sb is null)
+                return string.Compare(sa, sb, StringComparison.Ordinal);
+            
+            return CompareWithCollation(sa.AsSpan(), sb.AsSpan(), collation);
         }
         
         string? rowValueStr = rowValue?.ToString();
         
         return op switch
         {
-            "=" => rowValueStr == value,
-            "!=" => rowValueStr != value,
+            // ✅ COLLATE Phase 3: Use collation-aware equality
+            "=" => EqualsWithCollation(rowValueStr, value, collation),
+            "!=" => !EqualsWithCollation(rowValueStr, value, collation),
             "<" => Compare(rowValue, rhs) < 0,
             "<=" => Compare(rowValue, rhs) <= 0,
             ">" => Compare(rowValue, rhs) > 0,

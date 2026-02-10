@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ✨ Added
 - **Vector Search Extension** (`SharpCoreDB.VectorSearch` NuGet package)
   - SIMD-accelerated distance metrics: cosine, Euclidean (L2), dot product
-  - `System.Numerics.Vector<float>` auto-selects widest SIMD: AVX-512 → AVX2 → SSE2/NEON → scalar
+  - Multi-tier dispatch: AVX-512 → AVX2 → SSE → scalar with FMA when available
   - HNSW approximate nearest neighbor index with configurable M, efConstruction, efSearch
   - Flat (brute-force) exact search index for small datasets or perfect recall
   - Binary format for vector serialization with magic bytes, version header, and zero-copy spans
@@ -20,9 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Seven SQL functions: `vec_distance_cosine`, `vec_distance_l2`, `vec_distance_dot`, `vec_from_float32`, `vec_to_json`, `vec_normalize`, `vec_dimensions`
   - DI registration: `services.AddVectorSupport()` with configuration presets (Embedded, Standard, Enterprise)
   - Zero overhead when not registered — all vector support is 100% optional
+- **Query Planner: Vector Index Acceleration** (Phase 5.4)
+  - Detects `ORDER BY vec_distance_*(col, query) LIMIT k` patterns automatically
+  - Routes to HNSW/Flat index instead of full table scan + sort
+  - `VectorIndexManager` manages live in-memory index instances per table/column
+  - `VectorQueryOptimizer` implements `IVectorQueryOptimizer` for pluggable optimization
+  - `CREATE VECTOR INDEX` now builds live in-memory index immediately
+  - `DROP VECTOR INDEX` cleans up live index from registry
+  - `EXPLAIN` shows "Vector Index Scan (HNSW)" or "Vector Index Scan (Flat/Exact)"
+  - Fallback to full scan when no index exists — zero behavioral change for existing queries
 - **Core: Extension Provider System**
   - `ICustomFunctionProvider` interface for pluggable SQL functions
   - `ICustomTypeProvider` interface for pluggable data types
+  - `IVectorQueryOptimizer` interface for vector query acceleration
   - `DataType.Vector` enum value (stored as BLOB internally)
   - `VECTOR(N)` column type parsing in CREATE TABLE
   - `ColumnDefinition.Dimensions` for VECTOR(N) metadata
@@ -31,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `CREATE VECTOR INDEX idx ON table(col) USING FLAT|HNSW`
   - `DROP VECTOR INDEX idx ON table`
   - Vector column type validation at index creation time
+- **SIMD Standards** (`.github/SIMD_STANDARDS.md`)
+  - Mandatory `System.Runtime.Intrinsics` API for all SIMD code
+  - Multi-tier dispatch pattern (AVX-512 → AVX2 → SSE → scalar)
+  - FMA support for fused multiply-add
+  - Banned `System.Numerics.Vector<T>` (old portable SIMD)
 
 ### 📊 Version Info
 - **Package Version**: 1.2.0

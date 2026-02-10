@@ -51,20 +51,44 @@ public partial class Database : IMetadataProvider
 
         var columns = table.Columns;
         var types = table.ColumnTypes;
+        var collations = table.ColumnCollations;
         List<ColumnInfo> list = new(columns.Count);  // ✅ C# 14: target-typed new
 
         for (int i = 0; i < columns.Count; i++)
         {
+            // ✅ COLLATE Phase 1: Resolve collation, default to Binary if list is short
+            var collation = i < collations.Count ? collations[i] : CollationType.Binary;
+
             list.Add(new ColumnInfo
             {
                 Table = tableName,
                 Name = columns[i],
                 DataType = types[i].ToString(),
                 Ordinal = i,
-                IsNullable = true
+                IsNullable = true,
+                Collation = collation == CollationType.Binary ? null : collation.ToString().ToUpperInvariant()
             });
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Gets the collation type for a specific column in a table.
+    /// ✅ COLLATE Phase 3: Helper method for query execution collation resolution.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>The collation type for the column, or Binary if not found.</returns>
+    public CollationType GetColumnCollation(string tableName, string columnName)
+    {
+        if (!tables.TryGetValue(tableName, out var table))
+            return CollationType.Binary;
+
+        var columnIndex = table.Columns.IndexOf(columnName);
+        if (columnIndex < 0 || columnIndex >= table.ColumnCollations.Count)
+            return CollationType.Binary;
+
+        return table.ColumnCollations[columnIndex];
     }
 }

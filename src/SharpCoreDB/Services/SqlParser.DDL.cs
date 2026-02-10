@@ -70,6 +70,9 @@ public partial class SqlParser
         var columnCheckExpressions = new List<string?>();
         var tableCheckConstraints = new List<string>();
         
+        // ✅ COLLATE Phase 2: Per-column collation types
+        var columnCollations = new List<CollationType>();
+        
         // ✅ FIX: Determine default storage mode from DatabaseConfig if present
         // This ensures encrypted PageBased databases create tables with PageBased mode
         var storageMode = this.config?.StorageEngineType switch
@@ -115,6 +118,22 @@ public partial class SqlParser
             var isNotNullCol = def.Contains("NOT NULL");
             var isUniqueCol = def.Contains("UNIQUE");
             
+            // ✅ COLLATE Phase 2: Parse COLLATE clause from column definition
+            var collation = CollationType.Binary; // default
+            var collateIdx = def.IndexOf("COLLATE", StringComparison.OrdinalIgnoreCase);
+            if (collateIdx >= 0)
+            {
+                var collateType = def[(collateIdx + 7)..].Trim().Split(' ')[0].ToUpperInvariant();
+                collation = collateType switch
+                {
+                    "NOCASE" => CollationType.NoCase,
+                    "BINARY" => CollationType.Binary,
+                    "RTRIM" => CollationType.RTrim,
+                    _ => throw new InvalidOperationException(
+                        $"Unknown collation '{collateType}'. Valid: NOCASE, BINARY, RTRIM")
+                };
+            }
+            
             columns.Add(colName);
 
             // Handle parameterized types like VECTOR(1536)
@@ -147,6 +166,7 @@ public partial class SqlParser
             defaultValues.Add(null); // Default to null, would need more parsing for actual DEFAULT values
             defaultExpressions.Add(null); // Phase 2: Default expressions
             columnCheckExpressions.Add(null); // Phase 2: Column CHECK constraints
+            columnCollations.Add(collation); // ✅ COLLATE Phase 2
             
             if (isPrimary)
             {
@@ -267,7 +287,8 @@ public partial class SqlParser
             ForeignKeys = foreignKeys,  // Added for Phase 1.2
             DefaultExpressions = defaultExpressions,
             ColumnCheckExpressions = columnCheckExpressions,
-            TableCheckConstraints = tableCheckConstraints
+            TableCheckConstraints = tableCheckConstraints,
+            ColumnCollations = columnCollations  // ✅ COLLATE Phase 2
         };
         
         this.tables[tableName] = table;
@@ -714,6 +735,26 @@ public partial class SqlParser
                         i++;
                     }
                     break;
+                case "COLLATE":
+                    // ✅ COLLATE Phase 2: Parse COLLATE <type> for ALTER TABLE ADD COLUMN
+                    if (i + 1 < parts.Length)
+                    {
+                        var collateName = parts[i + 1].ToUpperInvariant();
+                        column.Collation = collateName switch
+                        {
+                            "NOCASE" => CollationType.NoCase,
+                            "BINARY" => CollationType.Binary,
+                            "RTRIM" => CollationType.RTrim,
+                            _ => throw new InvalidOperationException(
+                                $"Unknown collation '{collateName}'. Valid: NOCASE, BINARY, RTRIM")
+                        };
+                        i += 2; // Skip COLLATE value
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                    break;
                 default:
                     i++;
                     break;
@@ -912,6 +953,9 @@ public partial class SqlParser
         table.SetMetadata($"vector_index:{columnName}:type", indexType);
         table.SetMetadata($"vector_index:{columnName}:sql", sql);
 
+        // Phase 5.4: Build live in-memory index if optimizer is registered
+        SqlParser.VectorQueryOptimizer?.BuildIndex(table, tableName, columnName, indexType);
+
         wal?.Log(sql);
     }
 
@@ -942,6 +986,10 @@ public partial class SqlParser
                     table.RemoveMetadata($"vector_index:{colName}:name");
                     table.RemoveMetadata($"vector_index:{colName}:type");
                     table.RemoveMetadata($"vector_index:{colName}:sql");
+
+                    // Phase 5.4: Drop live in-memory index if optimizer is registered
+                    SqlParser.VectorQueryOptimizer?.DropIndex(tableName, colName);
+
                     found = true;
                     break;
                 }

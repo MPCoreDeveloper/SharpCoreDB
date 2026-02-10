@@ -45,6 +45,14 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private readonly QueryCache? queryCache = queryCache;
     private readonly DatabaseConfig? config = config;
 
+    /// <summary>
+    /// Optional vector query optimizer registered by the VectorSearch module.
+    /// When set, the query planner detects ORDER BY vec_distance_*() + LIMIT patterns
+    /// and routes them to a vector index instead of a full table scan.
+    /// Thread-safe: set once during Database initialization, read from any thread.
+    /// </summary>
+    internal static IVectorQueryOptimizer? VectorQueryOptimizer { get; set; }
+
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)
     {

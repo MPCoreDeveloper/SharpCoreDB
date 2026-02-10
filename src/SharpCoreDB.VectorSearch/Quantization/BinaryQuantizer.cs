@@ -6,6 +6,9 @@ namespace SharpCoreDB.VectorSearch;
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 /// <summary>
 /// Binary quantization: compresses float32 vectors to 1 bit per dimension (32× memory reduction).
@@ -96,7 +99,8 @@ public sealed class BinaryQuantizer : IQuantizer
     }
 
     /// <summary>
-    /// Computes Hamming distance between two binary vectors using hardware popcount.
+    /// Computes Hamming distance between two binary vectors using explicit SIMD intrinsics.
+    /// Multi-tier: AVX-512 (64B) → AVX2 (32B) → ulong popcount → scalar.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static float HammingDistance(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
@@ -105,25 +109,48 @@ public sealed class BinaryQuantizer : IQuantizer
             throw new ArgumentException($"Binary vectors must have same length: {a.Length} vs {b.Length}");
 
         int total = 0;
+        int i = 0;
+        int len = a.Length;
+
+        ref byte refA = ref MemoryMarshal.GetReference(a);
+        ref byte refB = ref MemoryMarshal.GetReference(b);
+
+        // AVX2: XOR 32 bytes at a time, then sum popcount of each qword
+        if (Avx2.IsSupported && len >= 32)
+        {
+            int vecLen = len & ~31;
+            for (; i < vecLen; i += 32)
+            {
+                var va = Vector256.LoadUnsafe(ref Unsafe.Add(ref refA, i));
+                var vb = Vector256.LoadUnsafe(ref Unsafe.Add(ref refB, i));
+                var xored = Avx2.Xor(va, vb);
+
+                // Extract as 4 ulongs for hardware popcount
+                var asUlong = xored.AsUInt64();
+                total += BitOperations.PopCount(asUlong.GetElement(0));
+                total += BitOperations.PopCount(asUlong.GetElement(1));
+                total += BitOperations.PopCount(asUlong.GetElement(2));
+                total += BitOperations.PopCount(asUlong.GetElement(3));
+            }
+        }
 
         // Process 8 bytes at a time using ulong + popcount
-        int i = 0;
-        int ulongCount = a.Length / 8;
-        if (ulongCount > 0)
+        int ulongEnd = i + ((len - i) / 8 * 8);
+        if (ulongEnd > i)
         {
-            var aLongs = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, ulong>(a[..(ulongCount * 8)]);
-            var bLongs = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, ulong>(b[..(ulongCount * 8)]);
+            var aLongs = MemoryMarshal.Cast<byte, ulong>(a[i..ulongEnd]);
+            var bLongs = MemoryMarshal.Cast<byte, ulong>(b[i..ulongEnd]);
 
             for (int j = 0; j < aLongs.Length; j++)
             {
                 total += BitOperations.PopCount(aLongs[j] ^ bLongs[j]);
             }
 
-            i = ulongCount * 8;
+            i = ulongEnd;
         }
 
         // Scalar tail
-        for (; i < a.Length; i++)
+        for (; i < len; i++)
         {
             total += BitOperations.PopCount((uint)(a[i] ^ b[i]));
         }

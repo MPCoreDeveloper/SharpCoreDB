@@ -29,4 +29,11 @@ public sealed record ColumnInfo
     /// Whether the column can contain null values.
     /// </summary>
     public bool IsNullable { get; init; } = true;
+
+    /// <summary>
+    /// Collation name for the column (e.g., "NOCASE", "RTRIM").
+    /// Null means the default collation (Binary) applies.
+    /// ✅ COLLATE Phase 1: Exposed via metadata discovery for ADO.NET/EF Core providers.
+    /// </summary>
+    public string? Collation { get; init; }
 }

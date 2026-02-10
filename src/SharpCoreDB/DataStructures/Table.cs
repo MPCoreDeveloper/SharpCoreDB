@@ -121,6 +121,14 @@ public partial class Table : ITable, IDisposable
     public List<List<string>> UniqueConstraints { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the per-column collation types.
+    /// Follows the same per-column list pattern as <see cref="IsAuto"/>, <see cref="IsNotNull"/>, etc.
+    /// Defaults to <see cref="CollationType.Binary"/> for all columns.
+    /// ✅ COLLATE Phase 1: Backward compatible — missing entries default to Binary.
+    /// </summary>
+    public List<CollationType> ColumnCollations { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the foreign key constraints.
     /// </summary>
     public List<ForeignKeyConstraint> ForeignKeys { get; set; } = [];
@@ -328,6 +336,7 @@ public partial class Table : ITable, IDisposable
         DefaultValues.Add(columnDef.DefaultValue);
         DefaultExpressions.Add(columnDef.DefaultExpression);
         ColumnCheckExpressions.Add(columnDef.CheckExpression);
+        ColumnCollations.Add(columnDef.Collation); // ✅ COLLATE Phase 1
 
         // Handle UNIQUE constraint
         if (columnDef.IsUnique)

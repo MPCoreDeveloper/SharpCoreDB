@@ -96,16 +96,18 @@ public partial class SqlParser
 
     /// <summary>
     /// Compares two values for equality, handling type conversions and nulls.
+    /// ✅ COLLATE Phase 3: Now supports collation-aware string comparisons.
     /// ✅ C# 14: Uses pattern matching and modern null checks.
     /// Supports SQL-style comparisons:
     /// - NULL comparisons
     /// - Numeric type conversions (int vs decimal, etc.)
-    /// - Case-insensitive string comparisons
+    /// - Collation-aware string comparisons
     /// </summary>
     /// <param name="left">The left value to compare.</param>
     /// <param name="right">The right value to compare.</param>
+    /// <param name="collation">Optional collation for string comparisons. Defaults to NoCase for backward compatibility with existing SQL logic.</param>
     /// <returns>True if values are equal, false otherwise.</returns>
-    internal static bool AreValuesEqual(object? left, object? right)
+    internal static bool AreValuesEqual(object? left, object? right, CollationType collation = CollationType.NoCase)
     {
         // Handle null cases
         if (left is null && right is null) return true;
@@ -133,11 +135,8 @@ public partial class SqlParser
             // Fall through to string comparison
         }
         
-        // String comparison as fallback (case-insensitive for SQL compatibility)
-        return string.Equals(
-            left.ToString(), 
-            right.ToString(), 
-            StringComparison.OrdinalIgnoreCase);
+        // ✅ COLLATE Phase 3: Collation-aware string comparison
+        return EqualsWithCollation(left.ToString(), right.ToString(), collation);
     }
 
     /// <summary>

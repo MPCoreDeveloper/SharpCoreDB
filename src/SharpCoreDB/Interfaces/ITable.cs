@@ -60,6 +60,13 @@ public interface ITable
     List<List<string>> UniqueConstraints { get; }
 
     /// <summary>
+    /// Gets the per-column collation types.
+    /// Follows the same per-column list pattern as <see cref="IsAuto"/>, <see cref="IsNotNull"/>, etc.
+    /// Defaults to <see cref="CollationType.Binary"/> for all columns.
+    /// </summary>
+    List<CollationType> ColumnCollations { get; }
+
+    /// <summary>
     /// Inserts a row into the table.
     /// </summary>
     /// <param name="row">The row data.</param>
