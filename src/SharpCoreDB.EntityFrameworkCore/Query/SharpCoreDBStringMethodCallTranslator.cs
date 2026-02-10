@@ -9,6 +9,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Query;
 /// <summary>
 /// Translates common <see cref="string"/> LINQ methods to SharpCoreDB SQL expressions.
 /// Supports Contains, StartsWith, EndsWith, ToUpper, ToLower, Trim, Replace, Substring, and EF.Functions.Like.
+/// ✅ EF Core COLLATE Phase 4: Added string.Equals(StringComparison) translation.
 /// </summary>
 public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpressionFactory) : IMethodCallTranslator
 {
@@ -43,6 +44,10 @@ public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpr
         typeof(DbFunctionsExtensions).GetRuntimeMethod(
             nameof(DbFunctionsExtensions.Like), [typeof(DbFunctions), typeof(string), typeof(string)])!;
 
+    // ✅ EF Core COLLATE Phase 4: string.Equals(string, StringComparison)
+    private static readonly MethodInfo _equalsWithComparisonMethod =
+        typeof(string).GetRuntimeMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)])!;
+
     private readonly ISqlExpressionFactory _sqlExpressionFactory = sqlExpressionFactory
         ?? throw new ArgumentNullException(nameof(sqlExpressionFactory));
 
@@ -53,6 +58,39 @@ public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpr
         IReadOnlyList<SqlExpression> arguments,
         IDiagnosticsLogger<DbLoggerCategory.Query> logger)
     {
+        // ✅ EF Core COLLATE Phase 4: Translate string.Equals(string, StringComparison)
+        if (method == _equalsWithComparisonMethod && instance is not null && arguments.Count == 2)
+        {
+            var comparisonExpression = arguments[1];
+            
+            // Extract StringComparison value from constant
+            if (comparisonExpression is SqlConstantExpression { Value: StringComparison comparison })
+            {
+                var leftOperand = instance;
+                var rightOperand = arguments[0];
+                
+                // Map StringComparison to COLLATE clause
+                return comparison switch
+                {
+                    StringComparison.OrdinalIgnoreCase or 
+                    StringComparison.CurrentCultureIgnoreCase or 
+                    StringComparison.InvariantCultureIgnoreCase =>
+                        // Apply NOCASE collation using CollateExpression
+                        _sqlExpressionFactory.Equal(
+                            new CollateExpression(leftOperand, "NOCASE"),
+                            new CollateExpression(rightOperand, "NOCASE")),
+                    
+                    StringComparison.Ordinal or 
+                    StringComparison.CurrentCulture or 
+                    StringComparison.InvariantCulture =>
+                        // Use binary comparison (default)
+                        _sqlExpressionFactory.Equal(leftOperand, rightOperand),
+                    
+                    _ => _sqlExpressionFactory.Equal(leftOperand, rightOperand)
+                };
+            }
+        }
+
         if (method == _containsMethod && instance is not null)
         {
             // LIKE '%' || @p || '%'

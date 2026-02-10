@@ -19,6 +19,15 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
     }
 
     /// <inheritdoc />
+    protected override Expression VisitCollate(CollateExpression collateExpression)
+    {
+        Visit(collateExpression.Operand);
+        Sql.Append(" COLLATE ");
+        Sql.Append(collateExpression.Collation);
+        return collateExpression;
+    }
+
+    /// <inheritdoc />
     protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
     {
         // Handle custom function translations

@@ -75,8 +75,14 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Finds type mapping for a property.
+    /// ✅ EF Core COLLATE: Collation is handled automatically by EF Core via UseCollation() - no custom mapping needed.
+    /// </summary>
     public override CoreTypeMapping? FindMapping(IProperty property)
     {
+        // EF Core automatically applies collation from property metadata
+        // No need to manually clone the mapping here
         return FindMapping(property.ClrType);
     }
 

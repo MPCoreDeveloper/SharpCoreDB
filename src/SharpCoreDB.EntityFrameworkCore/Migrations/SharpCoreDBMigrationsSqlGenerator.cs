@@ -184,12 +184,24 @@ public class SharpCoreDBMigrationsSqlGenerator : MigrationsSqlGenerator
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Generates column definition SQL with support for COLLATE clause.
+    /// ✅ EF Core COLLATE Phase 1: Emits COLLATE clause in migrations.
+    /// </summary>
     protected override void ColumnDefinition(AddColumnOperation operation, IModel? model, MigrationCommandListBuilder builder)
     {
         builder
             .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
             .Append(" ")
             .Append(operation.ColumnType ?? GetColumnType(operation.Schema, operation.Table, operation.Name, operation, model));
+
+        // ✅ EF Core COLLATE Phase 1: Emit COLLATE clause if specified
+        if (!string.IsNullOrWhiteSpace(operation.Collation))
+        {
+            builder
+                .Append(" COLLATE ")
+                .Append(operation.Collation);
+        }
 
         if (!operation.IsNullable)
         {
