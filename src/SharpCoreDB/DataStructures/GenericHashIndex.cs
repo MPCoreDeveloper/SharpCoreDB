@@ -10,18 +10,32 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// High-performance generic hash index with type-safe keys.
 /// Uses Dictionary for O(1) lookups, optimized for .NET 10 with modern C# 14.
+/// ✅ COLLATE Phase 4: Now supports custom equality comparers for collation-aware indexing.
 /// Target: &lt; 0.05ms for lookups on 10k records.
 /// </summary>
 /// <typeparam name="TKey">The type of the index key.</typeparam>
-/// <param name="columnName">The column name this index is for.</param>
-public sealed partial class GenericHashIndex<TKey>(string columnName) : IGenericIndex<TKey>
+public sealed partial class GenericHashIndex<TKey> : IGenericIndex<TKey>
     where TKey : notnull, IComparable<TKey>, IEquatable<TKey>
 {
-    private readonly Dictionary<TKey, List<long>> _index = new(capacity: 10000); // Pre-size for 10k
+    private readonly Dictionary<TKey, List<long>> _index;
     private int _totalEntries;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GenericHashIndex{TKey}"/> class.
+    /// ✅ COLLATE Phase 4: Now accepts optional equality comparer for collation support.
+    /// </summary>
+    /// <param name="columnName">The column name this index is for.</param>
+    /// <param name="comparer">Optional equality comparer for custom key comparison (e.g., collation).</param>
+    public GenericHashIndex(string columnName, IEqualityComparer<TKey>? comparer = null)
+    {
+        ColumnName = columnName;
+        _index = comparer is not null 
+            ? new Dictionary<TKey, List<long>>(capacity: 10000, comparer) 
+            : new Dictionary<TKey, List<long>>(capacity: 10000); // Pre-size for 10k
+    }
+
     /// <inheritdoc/>
-    public string ColumnName { get; } = columnName;
+    public string ColumnName { get; }
 
     /// <inheritdoc/>
     public IndexType Type => IndexType.Hash;

@@ -259,4 +259,126 @@ public sealed class CollationTests : IDisposable
         Assert.NotNull(nameColumn);
         Assert.Equal("NOCASE", nameColumn.Collation);
     }
+
+    [Fact]
+    public void HashIndex_WithNoCaseCollation_ShouldFindCaseInsensitive()
+    {
+        // Arrange
+        db.ExecuteSQL("CREATE TABLE Users (Id INTEGER PRIMARY KEY AUTO, Name TEXT COLLATE NOCASE)");
+        db.ExecuteSQL("CREATE INDEX idx_users_name ON Users(Name)");
+
+        // Insert data
+        db.ExecuteSQL("INSERT INTO Users (Name) VALUES ('Alice')");
+        db.ExecuteSQL("INSERT INTO Users (Name) VALUES ('Bob')");
+        db.ExecuteSQL("INSERT INTO Users (Name) VALUES ('CHARLIE')");
+        db.Flush();
+
+        // Act - Query with different cases (should use index)
+        var results1 = db.ExecuteQuery("SELECT * FROM Users WHERE Name = 'alice'");
+        var results2 = db.ExecuteQuery("SELECT * FROM Users WHERE Name = 'ALICE'");
+        var results3 = db.ExecuteQuery("SELECT * FROM Users WHERE Name = 'Alice'");
+
+        // Assert - All should return the same row via index
+        Assert.Single(results1);
+        Assert.Single(results2);
+        Assert.Single(results3);
+        Assert.Equal("Alice", results1[0]["Name"]);
+    }
+
+    [Fact]
+    public void HashIndex_WithBinaryCollation_ShouldFindCaseSensitive()
+    {
+        // Arrange
+        db.ExecuteSQL("CREATE TABLE Products (Id INTEGER PRIMARY KEY AUTO, Sku TEXT COLLATE BINARY)");
+        db.ExecuteSQL("CREATE INDEX idx_products_sku ON Products(Sku)");
+
+        // Insert data
+        db.ExecuteSQL("INSERT INTO Products (Sku) VALUES ('ABC123')");
+        db.ExecuteSQL("INSERT INTO Products (Sku) VALUES ('abc123')");
+        db.Flush();
+
+        // Act - Query with different cases (should use index)
+        var results1 = db.ExecuteQuery("SELECT * FROM Products WHERE Sku = 'ABC123'");
+        var results2 = db.ExecuteQuery("SELECT * FROM Products WHERE Sku = 'abc123'");
+
+        // Assert - Should return different rows
+        Assert.Single(results1);
+        Assert.Single(results2);
+        Assert.Equal("ABC123", results1[0]["Sku"]);
+        Assert.Equal("abc123", results2[0]["Sku"]);
+    }
+
+    [Fact]
+    public void PrimaryKeyIndex_WithNoCaseCollation_ShouldBeCaseInsensitive()
+    {
+        // Arrange
+        db.ExecuteSQL("CREATE TABLE Users (Username TEXT PRIMARY KEY COLLATE NOCASE, Email TEXT)");
+
+        // Insert data
+        db.ExecuteSQL("INSERT INTO Users (Username, Email) VALUES ('alice', 'alice@example.com')");
+        db.ExecuteSQL("INSERT INTO Users (Username, Email) VALUES ('Bob', 'bob@example.com')");
+        db.Flush();
+        db.ForceSave();
+
+        // Act - Query with different cases (should use primary key index)
+        var results1 = db.ExecuteQuery("SELECT * FROM Users WHERE Username = 'ALICE'");
+        var results2 = db.ExecuteQuery("SELECT * FROM Users WHERE Username = 'alice'");
+        var results3 = db.ExecuteQuery("SELECT * FROM Users WHERE Username = 'Alice'");
+
+        // Assert - All should return the same row via PK index
+        Assert.Single(results1);
+        Assert.Single(results2);
+        Assert.Single(results3);
+        Assert.Equal("alice", results1[0]["Username"]);
+    }
+
+    [Fact]
+    public void PrimaryKeyIndex_WithNoCaseCollation_ShouldPreventDuplicates()
+    {
+        // Arrange
+        db.ExecuteSQL("CREATE TABLE Users (Username TEXT PRIMARY KEY COLLATE NOCASE, Email TEXT)");
+        db.ExecuteSQL("INSERT INTO Users (Username, Email) VALUES ('alice', 'alice@example.com')");
+
+        // Act & Assert - Try to insert duplicate with different case
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+        {
+            db.ExecuteSQL("INSERT INTO Users (Username, Email) VALUES ('ALICE', 'alice2@example.com')");
+        });
+
+        Assert.Contains("Primary key", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IndexRebuild_WithCollation_ShouldPreserveCollationBehavior()
+    {
+        // Arrange
+        db.ExecuteSQL("CREATE TABLE Users (Id INTEGER PRIMARY KEY AUTO, Name TEXT COLLATE NOCASE)");
+        db.ExecuteSQL("INSERT INTO Users (Name) VALUES ('Alice')");
+        db.ExecuteSQL("INSERT INTO Users (Name) VALUES ('Bob')");
+        db.Flush();
+        db.ForceSave();
+
+        // Dispose and reload to trigger index rebuild
+        db.Dispose();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        var db2 = new Database(
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions
+                .BuildServiceProvider(new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddSharpCoreDB()),
+            testDbPath,
+            "test_password",
+            isReadOnly: false,
+            config: DatabaseConfig.Benchmark);
+
+        // Act - Query with different case after rebuild
+        var results = db2.ExecuteQuery("SELECT * FROM Users WHERE Name = 'ALICE'");
+
+        // Assert - Should still find the row with case-insensitive match
+        Assert.Single(results);
+        Assert.Equal("Alice", results[0]["Name"]);
+
+        db2.Dispose();
+    }
 }

@@ -24,6 +24,7 @@ public partial class Table
     /// <summary>
     /// Creates a hash index on the specified column for fast WHERE clause lookups.
     /// Uses lazy loading: index is registered but not built until first query.
+    /// ✅ COLLATE Phase 4: Index automatically inherits column collation.
     /// </summary>
     /// <param name="columnName">The column name to index.</param>
     /// <exception cref="InvalidOperationException">Thrown when column doesn't exist.</exception>
@@ -54,6 +55,7 @@ public partial class Table
     /// Creates a named hash index on the specified column for fast WHERE clause lookups.
     /// This overload supports SQL syntax: CREATE INDEX idx_name ON table(column).
     /// Uses lazy loading: index is registered but not built until first query.
+    /// ✅ COLLATE Phase 4: Index automatically inherits column collation.
     /// </summary>
     /// <param name="indexName">The index name (e.g., "idx_email").</param>
     /// <param name="columnName">The column name to index (e.g., "email").</param>
@@ -93,6 +95,7 @@ public partial class Table
     /// If index is already loaded, returns immediately (O(1)).
     /// If index needs building, scans table and builds index (O(n)).
     /// Thread-safe with double-check locking pattern.
+    /// ✅ COLLATE Phase 4: Creates index with column collation.
     /// OPTIMIZED: Builds index outside write lock to reduce lock contention (30-50% improvement).
     /// </summary>
     /// <param name="columnName">The column name.</param>
@@ -133,8 +136,15 @@ public partial class Table
             throw new InvalidOperationException($"Index for column {columnName} is not registered");
         }
         
+        // ✅ COLLATE Phase 4: Get column collation
+        var colIdx = this.Columns.IndexOf(columnName);
+        var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count 
+            ? this.ColumnCollations[colIdx] 
+            : CollationType.Binary;
+        
         // Build index WITHOUT holding write lock (parallel work allowed)
-        var index = new HashIndex(this.Name, columnName);
+        // ✅ COLLATE Phase 4: Pass collation to HashIndex constructor
+        var index = new HashIndex(this.Name, columnName, collation);
         
         // FIXED: Use the same reading logic as ReadRowAtPosition to ensure compatibility
         // Read all rows using ReadBytesFrom (which handles length prefixes correctly)

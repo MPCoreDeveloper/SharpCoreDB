@@ -378,10 +378,9 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
-    /// Rebuilds the Primary Key B-Tree index by scanning the data file.
-    /// ✅ CRITICAL: This must be called after deserialization because the B-Tree index
-    /// is NOT persisted to disk (it's rebuild from data on load).
-    /// Without this, SELECT queries return 0 rows after restart!
+    /// Rebuilds the Primary Key B-Tree index from disk by scanning all rows in the data file.
+    /// ✅ CRITICAL FIX: Properly handles multi-version rows by keeping the latest position (highest offset).
+    /// ✅ COLLATE Phase 4: Initializes BTree with primary key column collation.
     /// </summary>
     public void RebuildPrimaryKeyIndexFromDisk()
     {
@@ -401,8 +400,13 @@ public partial class Table : ITable, IDisposable
         System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] PK column: {Columns[PrimaryKeyIndex]}");
 #endif
 
-        // Clear existing index
-        Index = new BTree<string, long>();
+        // ✅ COLLATE Phase 4: Get primary key column collation
+        var pkCollation = PrimaryKeyIndex < ColumnCollations.Count 
+            ? ColumnCollations[PrimaryKeyIndex] 
+            : CollationType.Binary;
+
+        // Clear existing index and initialize with collation
+        Index = new BTree<string, long>(pkCollation);
 
         // Read entire data file
         var data = storage.ReadBytes(DataFile, noEncrypt: false);

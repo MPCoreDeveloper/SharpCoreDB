@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 /// B-tree implementation for indexing.
 /// ✅ OPTIMIZED: Uses ordinal string comparison (10-100x faster) instead of culture-aware.
 /// ✅ OPTIMIZED: Uses binary search in nodes instead of linear scan.
+/// ✅ COLLATE Phase 4: Now supports collation-aware string comparisons.
 /// ENHANCED: Added RangeScan and InOrderTraversal for B-tree index support.
 /// </summary>
 public class BTree<TKey, TValue> : IIndex<TKey, TValue>
@@ -41,27 +42,39 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     private Node? root;
     private readonly int degree = 3;
     private readonly int nodeCapacity;
+    private readonly CollationType _collation;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BTree{TKey, TValue}"/> class.
+    /// ✅ COLLATE Phase 4: Now accepts collation type for string key comparisons.
     /// </summary>
-    public BTree()
+    /// <param name="collation">The collation type for string keys. Defaults to Binary (case-sensitive).</param>
+    public BTree(CollationType collation = CollationType.Binary)
     {
         nodeCapacity = 2 * degree;
+        _collation = collation;
     }
 
     /// <summary>
     /// ✅ CRITICAL OPTIMIZATION: Fast ordinal string comparison for primary keys.
+    /// ✅ COLLATE Phase 4: Now supports collation-aware string comparisons.
     /// Culture-aware comparison (default CompareTo) is 10-100x slower for primary key lookups.
-    /// This method uses ordinal comparison for string keys and generic comparison for others.
+    /// This method uses collation-aware comparison for string keys and generic comparison for others.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CompareKeys(TKey key1, TKey key2)
+    private int CompareKeys(TKey key1, TKey key2)
     {
-        // Fast path: string keys use ordinal comparison (10-100x faster than culture-aware)
+        // ✅ COLLATE Phase 4: Collation-aware string comparison
         if (typeof(TKey) == typeof(string) && key1 is string str1 && key2 is string str2)
         {
-            return string.CompareOrdinal(str1, str2);
+            return _collation switch
+            {
+                CollationType.Binary => string.CompareOrdinal(str1, str2),
+                CollationType.NoCase => string.Compare(str1, str2, StringComparison.OrdinalIgnoreCase),
+                CollationType.RTrim => string.CompareOrdinal(str1.TrimEnd(), str2.TrimEnd()),
+                CollationType.UnicodeCaseInsensitive => string.Compare(str1, str2, StringComparison.CurrentCultureIgnoreCase),
+                _ => string.CompareOrdinal(str1, str2)
+            };
         }
         
         // Generic fallback for other types
@@ -117,12 +130,13 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     }
 
     /// <summary>
-    /// ✅ OPTIMIZED: Uses binary search with ordinal string comparison.
+    /// ✅ OPTIMIZED: Uses binary search with collation-aware comparison.
+    /// ✅ COLLATE Phase 4: Now instance method to access _collation field.
     /// Before: Linear scan with culture-aware comparison - O(n) with 10-100x overhead
-    /// After: Binary search with ordinal comparison - O(log n) with minimal overhead
+    /// After: Binary search with collation-aware comparison - O(log n) with minimal overhead
     /// </summary>
-    private static int FindInsertIndex(Node node, TKey key
-    ) {
+    private int FindInsertIndex(Node node, TKey key)
+    {
         int low = 0;
         int high = node.keysCount;
         
@@ -212,12 +226,14 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     }
 
     /// <summary>
-    /// ✅ OPTIMIZED: Uses ordinal comparison + binary search instead of culture-aware + linear scan.
+    /// Searches for a key in the B-tree and returns the value if found.
+    /// ✅ OPTIMIZED: Uses binary search in each node (O(log n) per node vs O(n) per node).
+    /// ✅ COLLATE Phase 4: Now instance method to support collation-aware comparison.
     /// This is called for EVERY primary key lookup, so this optimization is critical.
     /// Performance improvement: 50-200x faster lookups for string keys.
     /// ⚠️ B+ tree: Values exist only in leaf nodes. Internal nodes have separator keys only.
     /// </summary>
-    private static (bool Found, TValue? Value) Search(Node? node, TKey key)
+    private (bool Found, TValue? Value) Search(Node? node, TKey key)
     {
         if (node == null)
         {
@@ -519,10 +535,11 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
     /// <summary>
     /// ✅ NEW: Binary search to find first index where key >= target (lower bound).
+    /// ✅ COLLATE Phase 4: Now instance method to support collation-aware comparison.
     /// Returns index in range [0, keysCount] where key should be inserted/found.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int FindLowerBound(Node node, TKey target)
+    private int FindLowerBound(Node node, TKey target)
     {
         int low = 0;
         int high = node.keysCount;
@@ -545,12 +562,13 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
     /// <summary>
     /// ✅ NEW: Binary search to find first child that might contain keys >= target.
+    /// ✅ COLLATE Phase 4: Now instance method to support collation-aware comparison.
     /// For internal nodes, determines which child to descend into for range start.
     /// Note: Implementation intentionally matches FindLowerBound as both find lower bound,
     /// but FindLowerBoundChild operates on childrenCount context for clarity.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int FindLowerBoundChild(Node node, TKey target)
+    private int FindLowerBoundChild(Node node, TKey target)
     {
         // Same algorithm as FindLowerBound, but semantically for child indices
         return FindLowerBound(node, target);
