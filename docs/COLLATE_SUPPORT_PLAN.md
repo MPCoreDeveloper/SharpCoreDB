@@ -9,6 +9,7 @@
 
 ---
 
+
 ## 1. Executive Summary
 
 Add SQL-standard `COLLATE` support to SharpCoreDB, enabling case-insensitive and
@@ -372,13 +373,22 @@ CREATE INDEX idx_name_de ON users (name COLLATE "de_DE");
 
 ## 5. EF Core Integration (Separate Deliverable)
 
+**Goal:** Full collation support in the EF Core provider — DDL generation, query translation,
+`EF.Functions.Collate()`, and `string.Equals(x, StringComparison)` translation.
+
+See also **Section 12** for the ORM-vs-DB collation mismatch problem this solves.
+
 #### Modified Files
 | File | Change |
 |---|---|
 | `src/SharpCoreDB.EntityFrameworkCore/Migrations/SharpCoreDBMigrationsSqlGenerator.cs` → `ColumnDefinition()` | Emit `COLLATE <name>` after type and NOT NULL |
 | `src/SharpCoreDB.EntityFrameworkCore/Storage/SharpCoreDBTypeMappingSource.cs` | Map `UseCollation()` to `CollationType` |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBStringMethodCallTranslator.cs` | Translate `string.Equals(string, StringComparison)` → `COLLATE` SQL |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBQuerySqlGenerator.cs` | Emit `COLLATE <name>` expression in SQL visitor |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBMethodCallTranslatorPlugin.cs` | Register collate translator |
+| New: `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBCollateTranslator.cs` | Translate `EF.Functions.Collate()` calls to SQL |
 
-#### EF Core Fluent API
+#### 5.1 EF Core Fluent API — DDL Generation
 
 ```csharp
 modelBuilder.Entity<User>()
@@ -387,6 +397,78 @@ modelBuilder.Entity<User>()
 
 // Generates:
 // Name TEXT COLLATE NOCASE
+```
+
+#### 5.2 EF.Functions.Collate() — Query-Level Override
+
+```csharp
+// Explicit collation override (standard EF Core pattern)
+var users = await context.Users
+    .Where(u => EF.Functions.Collate(u.Name, "NOCASE") == "john")
+    .ToListAsync();
+
+// Generated SQL:
+// SELECT * FROM Users WHERE Name COLLATE NOCASE = 'john'
+```
+
+#### 5.3 string.Equals(string, StringComparison) Translation (SharpCoreDB-Specific)
+
+Other EF Core providers silently drop the `StringComparison` parameter.
+SharpCoreDB can do better because we control both sides:
+
+```csharp
+// C# idiomatic case-insensitive comparison
+var users = db.Users
+    .Where(u => u.Name.Equals("john", StringComparison.OrdinalIgnoreCase))
+    .ToList();
+
+// SharpCoreDB generates:
+// SELECT * FROM Users WHERE Name COLLATE NOCASE = 'john'
+//
+// Other EF providers would generate:
+// SELECT * FROM Users WHERE Name = 'john'  ← WRONG if column is CS!
+```
+
+**StringComparison → SQL mapping:**
+| C# `StringComparison` | Generated SQL |
+|---|---|
+| `Ordinal` | `WHERE Name = 'value'` (no COLLATE — uses column default) |
+| `OrdinalIgnoreCase` | `WHERE Name COLLATE NOCASE = 'value'` |
+| `CurrentCultureIgnoreCase` | `WHERE Name COLLATE UNICODE_CI = 'value'` (Phase 6) |
+| `InvariantCultureIgnoreCase` | `WHERE Name COLLATE NOCASE = 'value'` |
+
+**Implementation in `SharpCoreDBStringMethodCallTranslator.cs`:**
+```csharp
+private static readonly MethodInfo _equalsWithComparisonMethod =
+    typeof(string).GetRuntimeMethod(nameof(string.Equals),
+        [typeof(string), typeof(StringComparison)])!;
+
+// In Translate():
+if (method == _equalsWithComparisonMethod && instance is not null)
+{
+    var comparisonArg = arguments[1];
+    if (comparisonArg is SqlConstantExpression { Value: StringComparison comparison })
+    {
+        var collation = comparison switch
+        {
+            StringComparison.OrdinalIgnoreCase => "NOCASE",
+            StringComparison.InvariantCultureIgnoreCase => "NOCASE",
+            StringComparison.CurrentCultureIgnoreCase => "UNICODE_CI",
+            _ => null // No COLLATE for case-sensitive comparisons
+        };
+
+        if (collation is not null)
+        {
+            // Emit: column COLLATE NOCASE = @value
+            return _sqlExpressionFactory.Equal(
+                _sqlExpressionFactory.Collate(instance, collation),
+                arguments[0]);
+        }
+
+        // Case-sensitive: standard equality
+        return _sqlExpressionFactory.Equal(instance, arguments[0]);
+    }
+}
 ```
 
 ---
@@ -409,6 +491,11 @@ modelBuilder.Entity<User>()
 | `LowerFunction_ShouldReturnLowercase` | 5 | `CollationQueryTests.cs` |
 | `SaveMetadata_WithCollation_ShouldPersistAndReload` | 1 | `CollationPersistenceTests.cs` |
 | `EFCore_UseCollation_ShouldEmitCollateDDL` | EF | `CollationEFCoreTests.cs` |
+| `EFCore_StringEqualsIgnoreCase_ShouldEmitCollateNoCase` | EF | `CollationEFCoreTests.cs` |
+| `EFCore_StringEqualsOrdinal_ShouldNotEmitCollate` | EF | `CollationEFCoreTests.cs` |
+| `EFCore_EFFunctionsCollate_ShouldEmitCollateClause` | EF | `CollationEFCoreTests.cs` |
+| `EFCore_NoCaseColumn_SimpleEquals_ShouldReturnBothCases` | EF | `CollationEFCoreTests.cs` |
+| `EFCore_CSColumn_IgnoreCase_ShouldLogDiagnosticWarning` | EF | `CollationEFCoreTests.cs` |
 
 ### Integration Tests
 
@@ -417,6 +504,8 @@ modelBuilder.Entity<User>()
 | Create table with NOCASE → insert mixed-case → SELECT with exact case → should match | 3 |
 | Create table with NOCASE → create index → lookup with different case → should find via index | 4 |
 | Roundtrip: create table → save metadata → reload → verify collation preserved | 1 |
+| **ORM mismatch scenario:** CS column + `Equals(x, OrdinalIgnoreCase)` → returns both rows | EF |
+| **ORM mismatch scenario:** NOCASE column + simple `== "john"` → returns both rows | EF |
 
 ---
 
@@ -498,6 +587,154 @@ modelBuilder.Entity<User>()
 | `src/SharpCoreDB/Services/EnhancedSqlParser.*.cs` | 5 |
 | `src/SharpCoreDB.EntityFrameworkCore/Migrations/SharpCoreDBMigrationsSqlGenerator.cs` | EF |
 | `src/SharpCoreDB.EntityFrameworkCore/Storage/SharpCoreDBTypeMappingSource.cs` | EF |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBStringMethodCallTranslator.cs` | EF |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBQuerySqlGenerator.cs` | EF |
+| `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBMethodCallTranslatorPlugin.cs` | EF |
+| New: `src/SharpCoreDB.EntityFrameworkCore/Query/SharpCoreDBCollateTranslator.cs` | EF |
+
+---
+
+## 12. Critical Use Case: ORM-vs-Database Collation Mismatch
+
+> **Source:** LinkedIn discussion (Dave Callan / Dmitry Maslov / Shay Rojansky — EF Core team)
+
+### The Problem
+
+There is a **fundamental semantic contradiction** between how C# LINQ and SQL handle
+string comparisons when collation is involved:
+
+```csharp
+// Developer writes this C# LINQ query:
+var users = db.Users
+    .Where(u => u.Name.Equals("john", StringComparison.OrdinalIgnoreCase))
+    .ToList();
+
+// Developer EXPECTS: 2 records ("John" and "john")
+// EF Core DEFAULT behavior: generates  WHERE Name = 'john'
+// If column is COLLATE CS (case-sensitive): returns ONLY "john" → 1 record!
+```
+
+The database was created with a case-sensitive collation:
+```sql
+CREATE TABLE Users (
+    Id  INT IDENTITY PRIMARY KEY,
+    Name NVARCHAR(50) COLLATE Latin1_General_CS_AS   -- case-sensitive!
+);
+
+INSERT INTO Users (Name) VALUES ('John'), ('john');
+```
+
+The C# code says "compare case-insensitively" but the database has a case-sensitive
+collation on the column. **The ORM cannot resolve this contradiction silently** because:
+
+1. EF Core translates `.Equals("john", OrdinalIgnoreCase)` to `WHERE Name = 'john'`
+   by default — it drops the `StringComparison` parameter entirely
+2. The SQL engine then applies the column's collation (`CS_AS`) → case-sensitive match
+3. Result: only 1 record instead of the expected 2
+
+### Why This Is Hard (Industry-Wide)
+
+As the EF Core team (Shay Rojansky) has noted, this is an unsolvable problem from
+the ORM side alone:
+- The ORM doesn't know the column's collation at query translation time
+- `StringComparison` in C# doesn't map 1:1 to SQL collations
+- Different databases have different collation systems
+- Silently adding `COLLATE` to every string comparison would break indexes
+
+### SharpCoreDB Advantage: We Control Both Sides
+
+Unlike generic EF Core providers, **we own both the ORM provider AND the SQL engine**.
+This gives us three strategies that other databases can't offer:
+
+#### Strategy A: `EF.Functions.Collate()` — Explicit Query-Level Override (Recommended)
+
+The standard EF Core approach. Developer explicitly requests collation in the query:
+
+```csharp
+// ✅ EXPLICIT: Developer knows what they want
+var users = await context.Users
+    .Where(u => EF.Functions.Collate(u.Name, "NOCASE") == "john")
+    .ToListAsync();
+
+// Generated SQL:
+// SELECT * FROM Users WHERE Name COLLATE NOCASE = 'john'
+```
+
+**Implementation:** Add `EF.Functions.Collate()` translation to the
+`SharpCoreDBStringMethodCallTranslator`.
+
+#### Strategy B: `string.Equals(x, StringComparison)` → COLLATE Translation
+
+SharpCoreDB-specific: we can translate the `StringComparison` overload since we
+know our collation system:
+
+```csharp
+// ✅ C# idiomatic — SharpCoreDB translates the StringComparison
+var users = db.Users
+    .Where(u => u.Name.Equals("john", StringComparison.OrdinalIgnoreCase))
+    .ToList();
+
+// Generated SQL (SharpCoreDB-specific):
+// SELECT * FROM Users WHERE Name COLLATE NOCASE = 'john'
+```
+
+Mapping table:
+| `StringComparison` | SharpCoreDB SQL |
+|---|---|
+| `Ordinal` | `= 'value'` (no COLLATE, uses column default) |
+| `OrdinalIgnoreCase` | `COLLATE NOCASE = 'value'` |
+| `CurrentCultureIgnoreCase` | `COLLATE UNICODE_CI = 'value'` (Phase 6) |
+| `InvariantCultureIgnoreCase` | `COLLATE NOCASE = 'value'` |
+
+**Implementation:** Add `string.Equals(string, StringComparison)` overload to
+`SharpCoreDBStringMethodCallTranslator.cs`.
+
+#### Strategy C: Column Collation Awareness at Translation Time
+
+Since we control the provider, we can read column metadata during query translation
+and emit a **warning** when the C# comparison semantics conflict with the column collation:
+
+```
+⚠️ SharpCoreDB Warning: Column 'Users.Name' has COLLATE BINARY (case-sensitive),
+but query uses StringComparison.OrdinalIgnoreCase. Consider using
+EF.Functions.Collate() or setting .UseCollation("NOCASE") on the property.
+```
+
+### SharpCoreDB Resolution: The "No Surprise" Approach
+
+For SharpCoreDB, we recommend the following behavior:
+
+1. **Column defined with `COLLATE NOCASE`** → All comparisons on that column are
+   case-insensitive by default. `WHERE Name = 'john'` matches both `'John'` and `'john'`.
+   No mismatch possible.
+
+2. **Column defined with `COLLATE BINARY` (default)** + C# `OrdinalIgnoreCase` →
+   The EF Core provider emits `COLLATE NOCASE` in the generated SQL to honor the
+   developer's intent. This is safe because SharpCoreDB's query engine evaluates
+   `COLLATE` per-expression (Phase 5).
+
+3. **`EF.Functions.Collate()`** → Always available as the explicit escape hatch,
+   matching EF Core conventions.
+
+### Test Cases for This Scenario
+
+| Test | Expected Behavior |
+|---|---|
+| `CS_Column_EqualsIgnoreCase_ShouldEmitCollateNoCase` | `Name.Equals("john", OrdinalIgnoreCase)` → SQL contains `COLLATE NOCASE` |
+| `NOCASE_Column_SimpleEquals_ShouldMatchBothCases` | Column is NOCASE → `WHERE Name = 'john'` returns both 'John' and 'john' |
+| `EFCollateFunction_ShouldEmitCollateClause` | `EF.Functions.Collate(u.Name, "NOCASE")` → SQL contains `Name COLLATE NOCASE` |
+| `CS_Column_OrdinalEquals_ShouldNotAddCollate` | `Name.Equals("john", Ordinal)` → no COLLATE in SQL (honor DB collation) |
+| `MismatchWarning_CS_Column_IgnoreCase_ShouldLogWarning` | CS column + IgnoreCase → diagnostic warning logged |
+
+### Files Impacted (Additional to existing plan)
+
+| File | Change | Phase |
+|---|---|---|
+| `SharpCoreDBStringMethodCallTranslator.cs` | Add `string.Equals(string, StringComparison)` overload + `EF.Functions.Collate()` | EF Core |
+| `SharpCoreDBQuerySqlGenerator.cs` | Emit `COLLATE <name>` expression in SQL output | EF Core |
+| `SharpCoreDBMethodCallTranslatorPlugin.cs` | Register collate translator | EF Core |
+| New: `SharpCoreDBCollateTranslator.cs` | Translate `EF.Functions.Collate()` calls | EF Core |
+| `SqlAst.Nodes.cs` → `CollateExpressionNode` | Already in Phase 5 | 5 |
 
 ---
 
