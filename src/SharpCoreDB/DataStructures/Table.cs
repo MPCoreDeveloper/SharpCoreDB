@@ -268,6 +268,24 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
+    /// Gets the collation type for a specific column.
+    /// Returns null if column not found.
+    /// </summary>
+    /// <param name="columnName">The column name.</param>
+    /// <returns>The collation type, or null if column doesn't exist.</returns>
+    public CollationType? GetColumnCollation(string columnName)
+    {
+        int colIdx = this.Columns.IndexOf(columnName);
+        if (colIdx < 0)
+            return null;
+
+        if (colIdx < this.ColumnCollations.Count)
+            return this.ColumnCollations[colIdx];
+
+        return CollationType.Binary;
+    }
+
+    /// <summary>
     /// Gets the cached row count (O(1) operation).
     /// Returns -1 if cache is not initialized (call RefreshRowCount() first).
     /// ✅ PERFORMANCE: Avoids expensive full table scan in GetDatabaseStatistics()
