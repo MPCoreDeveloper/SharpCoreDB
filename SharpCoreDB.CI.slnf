@@ -3,13 +3,16 @@
     "path": "SharpCoreDB.sln",
     "projects": [
       "src\\SharpCoreDB\\SharpCoreDB.csproj",
+      "src\\SharpCoreDB.VectorSearch\\SharpCoreDB.VectorSearch.csproj",
       "src\\SharpCoreDB.Data.Provider\\SharpCoreDB.Data.Provider.csproj",
       "src\\SharpCoreDB.EntityFrameworkCore\\SharpCoreDB.EntityFrameworkCore.csproj",
       "src\\SharpCoreDB.Extensions\\SharpCoreDB.Extensions.csproj",
       "src\\SharpCoreDB.Provider.YesSql\\SharpCoreDB.Provider.YesSql.csproj",
       "src\\SharpCoreDB.Serilog.Sinks\\SharpCoreDB.Serilog.Sinks.csproj",
       "tests\\SharpCoreDB.Tests\\SharpCoreDB.Tests.csproj",
+      "tests\\SharpCoreDB.VectorSearch.Tests\\SharpCoreDB.VectorSearch.Tests.csproj",
       "tools\\SharpCoreDB.Demo\\SharpCoreDB.Demo.csproj"
     ]
   }
 }
+
