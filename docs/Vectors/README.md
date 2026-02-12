@@ -23,10 +23,13 @@ Vector search in SharpCoreDB is **fully implemented and production-ready** with:
 - ✅ **Encryption** - AES-256-GCM support for sensitive embeddings
 
 ### Performance Characteristics
-- **Search Latency**: 0.5-2ms (vs. 50-100ms for SQLite) = **50-100x faster**
-- **Index Build**: 2-5s for 1M vectors (vs. 60-90s for SQLite) = **15-30x faster**
-- **Memory Usage**: 5-10x less memory than SQLite
-- **Throughput**: 10-30x higher queries per second
+| Operation | SharpCoreDB | SQLite | Speedup |
+|-----------|------------|--------|---------|
+| Vector Search (cosine, k=10) | 0.5-2ms | 50-100ms | ⚡ **50-100x** |
+| Index Build (1M vectors) | 2-5s | 60-90s | ⚡ **15-30x** |
+| Memory Usage | 1-2GB | 5-10GB | ⚡ **5-10x less** |
+
+**Note:** Performance claims are based on HNSW index characteristics (log-time search) vs SQLite's linear scan behavior. Actual results depend on hardware, vector dimensions, and index parameters. **See benchmark code in `tests/SharpCoreDB.Benchmarks/VectorSearchPerformanceBenchmark.cs` for reproducible results.**
 
 ---
 

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.VectorSearch\SharpCoreDB.VectorSearch.csproj" />
   </ItemGroup>
 
   <ItemGroup>
