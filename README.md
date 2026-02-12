@@ -7,34 +7,35 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.1.1-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.2.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
-  [![Tests](https://img.shields.io/badge/Tests-772_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
+  [![Tests](https://img.shields.io/badge/Tests-790+_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
 </div>
 
 ---
 
-## 📌 **Current Status (January 2025)**
+## 📌 **Current Status (January 28, 2025)**
 
-### ✅ **Version 1.1.2 Released** - Phase 7 JOINs + Vector Search + Collations
+### ✅ **Version 1.2.0 Released** - Production-Ready Vector Search + Phase 7 + Complete Collation Support
 
-**Latest Release**: v1.1.2 (January 2025)
+**Latest Release**: v1.2.0 (January 28, 2025)
 
-#### ✨ New Features
-- **Phase 7 Complete**: JOIN operations with collation support (INNER, LEFT, RIGHT, FULL, CROSS)
-- **Vector Search Complete**: Native HNSW indexes, quantization, distance metrics
-- **Production-Ready Vector Database**: 50-100x faster than SQLite for vector search
-- **Migration Guides**: SQLite vectors → SharpCoreDB migration (9 steps)
+#### ✨ New & Verified Features
+- **Vector Search (HNSW)**: Production-ready with benchmarks, 50-100x faster than SQLite
+- **Phase 7 Complete**: All JOIN types with collation support
+- **Complete Collation Support (Phases 1-7)**: Binary, NoCase, RTrim, Unicode
+- **Verified Performance**: Benchmark code included, fully reproducible
+- **Comprehensive Guides**: Vector migration, collation options, ADO.NET provider
 
-#### 🐛 Previous (1.1.1) Bug Fixes
-- Fixed localization bug affecting date/time formatting in non-English cultures
-- Resolved culture-dependent parsing issues
+#### 🐛 Previous (1.1.2) Bug Fixes
+- Fixed vector payload corruption issue for large objects
+- Resolved intermittent deadlock in multi-threaded inserts
 
 #### 📦 Quick Install
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.1.2
+dotnet add package SharpCoreDB --version 1.2.0
 
 # Vector search extension (optional)
 dotnet add package SharpCoreDB.VectorSearch
@@ -53,7 +54,7 @@ dotnet add package SharpCoreDB.VectorSearch
 | **Phase 7** (JOIN Collations: INNER, LEFT, RIGHT, FULL, CROSS) | ✅ Complete |
 | **Vector Search** (HNSW indexes, quantization, distance metrics) | ✅ Complete |
 | **Build** | ✅ 0 errors |
-| **Tests** | ✅ 781 passing, 0 failures |
+| **Tests** | ✅ 790+ passing, 0 failures |
 | **Production LOC** | ~85,000 |
 
 See: [Project Status](docs/PROJECT_STATUS.md) • [Documentation Summary](docs/DOCUMENTATION_SUMMARY.md)
@@ -82,8 +83,8 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 Install the latest version:
 
 ```bash
-# Install SharpCoreDB v1.1.2
-dotnet add package SharpCoreDB --version 1.1.2
+# Install SharpCoreDB v1.2.0
+dotnet add package SharpCoreDB --version 1.2.0
 
 # Or use wildcard for latest
 dotnet add package SharpCoreDB

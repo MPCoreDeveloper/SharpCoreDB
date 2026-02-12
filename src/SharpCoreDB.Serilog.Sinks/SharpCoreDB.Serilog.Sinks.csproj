@@ -7,7 +7,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>SharpCoreDB.Serilog.Sinks</PackageId>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Serilog.Sinks</Product>
@@ -24,7 +24,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.1.1: Updated to support SharpCoreDB 1.1.1 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.2.0: Updated to support SharpCoreDB 1.2.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
