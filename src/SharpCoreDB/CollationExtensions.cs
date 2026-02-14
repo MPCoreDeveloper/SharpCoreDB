@@ -36,8 +36,25 @@ public static class CollationExtensions
             CollationType.NoCase => value.ToUpperInvariant(), // Canonical uppercase form
             CollationType.RTrim => value.TrimEnd(), // Remove trailing spaces
             CollationType.UnicodeCaseInsensitive => value.ToUpper(), // Culture-aware uppercase
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale => value.ToUpper(), // Culture-aware uppercase
             _ => value // Default to no normalization
         };
+    }
+
+    /// <summary>
+    /// Normalizes an index key string using a specific locale.
+    /// ✅ Phase 9: Used for locale-specific index key normalization.
+    /// </summary>
+    /// <param name="value">The original key value.</param>
+    /// <param name="localeName">The locale name (e.g., "tr_TR").</param>
+    /// <returns>The normalized key suitable for indexing.</returns>
+    public static string NormalizeIndexKey(string value, string localeName)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localeName);
+
+        return CultureInfoCollation.Instance.NormalizeForComparison(value, localeName);
     }
 
     /// <summary>
@@ -59,6 +76,8 @@ public static class CollationExtensions
             CollationType.NoCase => left.Equals(right, StringComparison.OrdinalIgnoreCase),
             CollationType.RTrim => left.TrimEnd().Equals(right.TrimEnd(), StringComparison.Ordinal),
             CollationType.UnicodeCaseInsensitive => left.Equals(right, StringComparison.CurrentCultureIgnoreCase),
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale => left.Equals(right, StringComparison.CurrentCultureIgnoreCase),
             _ => left.Equals(right, StringComparison.Ordinal)
         };
     }
@@ -81,6 +100,8 @@ public static class CollationExtensions
             CollationType.NoCase => value.GetHashCode(StringComparison.OrdinalIgnoreCase),
             CollationType.RTrim => value.TrimEnd().GetHashCode(StringComparison.Ordinal),
             CollationType.UnicodeCaseInsensitive => value.GetHashCode(StringComparison.CurrentCultureIgnoreCase),
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale => value.GetHashCode(StringComparison.CurrentCultureIgnoreCase),
             _ => value.GetHashCode(StringComparison.Ordinal)
         };
     }

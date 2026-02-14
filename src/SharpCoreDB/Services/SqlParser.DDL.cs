@@ -72,6 +72,9 @@ public partial class SqlParser
         
         // ✅ COLLATE Phase 2: Per-column collation types
         var columnCollations = new List<CollationType>();
+
+        // ✅ Phase 9: Per-column locale names (null for non-Locale collations)
+        var columnLocaleNames = new List<string?>();
         
         // ✅ FIX: Determine default storage mode from DatabaseConfig if present
         // This ensures encrypted PageBased databases create tables with PageBased mode
@@ -118,20 +121,15 @@ public partial class SqlParser
             var isNotNullCol = def.Contains("NOT NULL");
             var isUniqueCol = def.Contains("UNIQUE");
             
-            // ✅ COLLATE Phase 2: Parse COLLATE clause from column definition
+            // ✅ COLLATE Phase 2 + Phase 9: Parse COLLATE clause from column definition
             var collation = CollationType.Binary; // default
+            string? localeName = null;
             var collateIdx = def.IndexOf("COLLATE", StringComparison.OrdinalIgnoreCase);
             if (collateIdx >= 0)
             {
-                var collateType = def[(collateIdx + 7)..].Trim().Split(' ')[0].ToUpperInvariant();
-                collation = collateType switch
-                {
-                    "NOCASE" => CollationType.NoCase,
-                    "BINARY" => CollationType.Binary,
-                    "RTRIM" => CollationType.RTrim,
-                    _ => throw new InvalidOperationException(
-                        $"Unknown collation '{collateType}'. Valid: NOCASE, BINARY, RTRIM")
-                };
+                var collateRemainder = def[(collateIdx + 7)..].Trim();
+                var collateSpec = ExtractCollationSpec(collateRemainder);
+                (collation, localeName) = ParseCollationSpec(collateSpec);
             }
             
             columns.Add(colName);
@@ -147,6 +145,7 @@ public partial class SqlParser
                 colType = typeStr switch
                 {
                     "INTEGER" => DataType.Integer,
+                    "BIGINT" => DataType.Long,
                     "TEXT" => DataType.String,
                     "REAL" => DataType.Real,
                     "BLOB" => DataType.Blob,
@@ -167,6 +166,7 @@ public partial class SqlParser
             defaultExpressions.Add(null); // Phase 2: Default expressions
             columnCheckExpressions.Add(null); // Phase 2: Column CHECK constraints
             columnCollations.Add(collation); // ✅ COLLATE Phase 2
+            columnLocaleNames.Add(localeName); // ✅ Phase 9
             
             if (isPrimary)
             {
@@ -288,15 +288,25 @@ public partial class SqlParser
             DefaultExpressions = defaultExpressions,
             ColumnCheckExpressions = columnCheckExpressions,
             TableCheckConstraints = tableCheckConstraints,
-            ColumnCollations = columnCollations  // ✅ COLLATE Phase 2
+            ColumnCollations = columnCollations,  // ✅ COLLATE Phase 2
+            ColumnLocaleNames = columnLocaleNames   // ✅ Phase 9
         };
-        
+
+        // ✅ COLLATE Phase 4: Initialize Primary Key BTree Index with correct collation
+        if (primaryKeyIndex >= 0)
+        {
+            var pkCollation = primaryKeyIndex < columnCollations.Count 
+                ? columnCollations[primaryKeyIndex] 
+                : CollationType.Binary;
+            table.Index = new BTree<string, long>(pkCollation);
+        }
+
         this.tables[tableName] = table;
-        
+
         // ✅ CRITICAL: Initialize storage engine IMMEDIATELY after creating table
         // This ensures the engine is ready before any INSERT/SELECT operations
         table.InitializeStorageEngine();
-        
+
         wal?.Log(sql);
         
         // ✅ NEW: Only create indexes for columnar mode (page-based uses B-trees)
@@ -320,8 +330,8 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes CREATE INDEX statement.
-    /// ENHANCED: Supports BTREE and HASH index types, and UNIQUE indexes.
-    /// Syntax: CREATE [UNIQUE] INDEX idx_name ON table(column) [USING BTREE|HASH]
+    /// ENHANCED: Supports BTREE and HASH index types, UNIQUE indexes, and IF NOT EXISTS clause.
+    /// Syntax: CREATE [UNIQUE] INDEX [IF NOT EXISTS] idx_name ON table(column) [USING BTREE|HASH]
     /// </summary>
     private void ExecuteCreateIndex(string sql, string[] parts, IWAL? wal)
     {
@@ -330,19 +340,49 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot create index in readonly mode");
         }
 
-        // Parse: CREATE INDEX idx_name ON table_name (column_name) [USING BTREE|HASH]
-        // or CREATE UNIQUE INDEX idx_name ON table_name (column_name) [USING BTREE|HASH]
+        // Parse: CREATE [UNIQUE] INDEX [IF NOT EXISTS] idx_name ON table_name (column_name) [USING BTREE|HASH]
         var onIdx = Array.FindIndex(parts, p => p.Equals("ON", StringComparison.OrdinalIgnoreCase));
         if (onIdx < 0)
         {
             throw new InvalidOperationException("CREATE INDEX requires ON clause");
         }
 
-        // Determine if this is CREATE UNIQUE INDEX (parts[1] == "UNIQUE") or CREATE INDEX
-        // For CREATE INDEX: parts[2] is the index name
-        // For CREATE UNIQUE INDEX: parts[3] is the index name
+        // Determine UNIQUE and IF NOT EXISTS flags
         var isUnique = parts.Length > 1 && parts[1].Equals("UNIQUE", StringComparison.OrdinalIgnoreCase);
-        var indexNamePosition = isUnique ? 3 : 2;
+        bool ifNotExists = false;
+        int indexNamePosition;
+        
+        // Determine index name position based on UNIQUE and IF NOT EXISTS
+        if (isUnique)
+        {
+            // CREATE UNIQUE INDEX [IF NOT EXISTS] idx_name
+            if (parts.Length >= 7 && parts[3].Equals("IF", StringComparison.OrdinalIgnoreCase)
+                && parts[4].Equals("NOT", StringComparison.OrdinalIgnoreCase)
+                && parts[5].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+            {
+                ifNotExists = true;
+                indexNamePosition = 6;
+            }
+            else
+            {
+                indexNamePosition = 3;
+            }
+        }
+        else
+        {
+            // CREATE INDEX [IF NOT EXISTS] idx_name
+            if (parts.Length >= 6 && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+                && parts[3].Equals("NOT", StringComparison.OrdinalIgnoreCase)
+                && parts[4].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+            {
+                ifNotExists = true;
+                indexNamePosition = 5;
+            }
+            else
+            {
+                indexNamePosition = 2;
+            }
+        }
         
         if (indexNamePosition >= parts.Length)
         {
@@ -370,8 +410,17 @@ public partial class SqlParser
         }
 
         var columnName = sql.Substring(columnStart + 1, columnEnd - columnStart - 1).Trim();
+        
+        // ✅ IF NOT EXISTS: Skip creation if index already exists
+        // Check both index name and column name using the new HasIndex method
+        var table = this.tables[tableName];
+        
+        if (ifNotExists && (table is Table concreteTable) && concreteTable.HasIndex(indexName))
+        {
+            return; // Silently skip - index already exists
+        }
 
-        // ✅ NEW: Determine index type (BTREE or HASH)
+        // ✅ Determine index type (BTREE or HASH)
         // Default to HASH for backward compatibility, use BTREE if specified
         var indexType = IndexType.Hash; // Default
         
@@ -401,11 +450,11 @@ public partial class SqlParser
         // Create the appropriate index type with uniqueness constraint
         if (indexType == IndexType.BTree)
         {
-            this.tables[tableName].CreateBTreeIndex(indexName, columnName, isUnique);
+            table.CreateBTreeIndex(indexName, columnName, isUnique);
         }
         else
         {
-            this.tables[tableName].CreateHashIndex(indexName, columnName, isUnique);
+            table.CreateHashIndex(indexName, columnName, isUnique);
         }
         
         wal?.Log(sql);
@@ -736,18 +785,19 @@ public partial class SqlParser
                     }
                     break;
                 case "COLLATE":
-                    // ✅ COLLATE Phase 2: Parse COLLATE <type> for ALTER TABLE ADD COLUMN
+                    // ✅ COLLATE Phase 2 + Phase 9: Parse COLLATE <type> for ALTER TABLE ADD COLUMN
                     if (i + 1 < parts.Length)
                     {
-                        var collateName = parts[i + 1].ToUpperInvariant();
-                        column.Collation = collateName switch
+                        var collateSpec = parts[i + 1];
+                        if (collateSpec.Equals("LOCALE", StringComparison.OrdinalIgnoreCase) && i + 2 < parts.Length)
                         {
-                            "NOCASE" => CollationType.NoCase,
-                            "BINARY" => CollationType.Binary,
-                            "RTRIM" => CollationType.RTrim,
-                            _ => throw new InvalidOperationException(
-                                $"Unknown collation '{collateName}'. Valid: NOCASE, BINARY, RTRIM")
-                        };
+                            collateSpec = $"{collateSpec}{parts[i + 2]}";
+                            i++;
+                        }
+
+                        var (collation, localeName) = ParseCollationSpec(collateSpec);
+                        column.Collation = collation;
+                        column.LocaleName = localeName;
                         i += 2; // Skip COLLATE value
                     }
                     else
@@ -1003,5 +1053,28 @@ public partial class SqlParser
             throw new InvalidOperationException($"Vector index '{indexName}' does not exist");
 
         wal?.Log(sql);
+    }
+
+    private static string ExtractCollationSpec(string collateRemainder)
+    {
+        if (string.IsNullOrWhiteSpace(collateRemainder))
+        {
+            return collateRemainder;
+        }
+
+        if (collateRemainder.StartsWith("LOCALE", StringComparison.OrdinalIgnoreCase))
+        {
+            var openParenIdx = collateRemainder.IndexOf('(');
+            var closeParenIdx = openParenIdx >= 0
+                ? collateRemainder.IndexOf(')', openParenIdx + 1)
+                : -1;
+
+            if (openParenIdx >= 0 && closeParenIdx > openParenIdx)
+            {
+                return collateRemainder[..(closeParenIdx + 1)];
+            }
+        }
+
+        return collateRemainder.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
     }
 }

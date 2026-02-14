@@ -54,11 +54,14 @@ public class SharpCoreDBCollateTranslator : IMethodCallTranslator
         var stringExpression = arguments[1];
         var collationExpression = arguments[2];
 
+        var mappedOperand = _sqlExpressionFactory.ApplyDefaultTypeMapping(stringExpression);
+
         // Extract collation name from constant expression
         if (collationExpression is SqlConstantExpression { Value: string collationName })
         {
-            // Create a CollateExpression manually
-            return new CollateExpression(stringExpression, collationName);
+            // Create a CollateExpression with proper type mapping
+            var collate = new CollateExpression(mappedOperand, collationName);
+            return _sqlExpressionFactory.ApplyTypeMapping(collate, mappedOperand.TypeMapping);
         }
 
         // If collation is not a constant, we can't translate it

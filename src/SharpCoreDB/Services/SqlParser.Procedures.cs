@@ -58,22 +58,40 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Executes DROP PROCEDURE statement.
+    /// Executes DROP PROCEDURE statement with optional IF EXISTS clause.
+    /// Syntax: DROP PROCEDURE [IF EXISTS] procedure_name
     /// </summary>
     private void ExecuteDropProcedure(string sql, string[] parts, IWAL? wal)
     {
         if (isReadOnly)
             throw new InvalidOperationException("Cannot drop procedure in readonly mode");
 
-        if (parts.Length < 3)
+        // ✅ Detect IF EXISTS clause
+        bool ifExists = false;
+        int nameIndex = 2;
+        
+        if (parts.Length >= 5 && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            ifExists = true;
+            nameIndex = 4;
+        }
+
+        if (nameIndex >= parts.Length)
             throw new ArgumentException("Procedure name is required");
 
-        var name = parts[2];
+        var name = parts[nameIndex];
         lock (_procedureLock)
         {
             if (!_procedures.Remove(name))
-                throw new InvalidOperationException($"Procedure '{name}' does not exist");
+            {
+                if (!ifExists)
+                    throw new InvalidOperationException($"Procedure '{name}' does not exist");
+                // IF EXISTS: silently skip if procedure doesn't exist
+            }
         }
+        
+        wal?.Log(sql);
     }
 
     /// <summary>
@@ -223,3 +241,4 @@ public sealed record ProcedureParameter(string Name, string TypeName, ParameterM
 /// <param name="Parameters">Parameter definitions.</param>
 /// <param name="Body">SQL body between BEGIN...END.</param>
 public sealed record StoredProcedureDefinition(string Name, List<ProcedureParameter> Parameters, string Body);
+

@@ -490,6 +490,11 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             // Scan forward from startIdx until we exceed end
             for (int i = startIdx; i < node.keysCount; i++)
             {
+                if (CompareKeys(node.keysArray[i], start) < 0)
+                {
+                    continue;
+                }
+
                 int cmpEnd = CompareKeys(node.keysArray[i], end);
                 if (cmpEnd > 0)
                     yield break; // Exceeded end, stop
@@ -501,9 +506,10 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         else
         {
             // Internal node: mirror the InOrderTraversal pattern
-            // Visit child[i] for each i in [0, keysCount), then visit child[keysCount]
+            // Visit child[i] for each i in [startChild, keysCount), then visit child[keysCount]
+            var startChild = FindLowerBoundChild(node, start);
             
-            for (int i = 0; i < node.keysCount; i++)
+            for (int i = startChild; i < node.keysCount; i++)
             {
                 // Visit child[i] - it contains keys that come before keys[i]
                 if (i < node.childrenCount)
@@ -523,7 +529,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             }
             
             // Visit the rightmost child[keysCount]
-            if (node.keysCount < node.childrenCount)
+            if (node.keysCount < node.childrenCount && startChild <= node.keysCount)
             {
                 foreach (var value in RangeScanOptimized(node.childrenArray[node.keysCount], start, end))
                 {

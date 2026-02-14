@@ -335,7 +335,10 @@ public partial class Database : IDatabase, IDisposable
                         _ = ex;
                     }
                 }
-                
+
+                // ✅ AUTO INCREMENT: Initialize counters from existing data if not in metadata
+                table.InitializeAutoIncrementCountersFromData();
+
                 tables[table.Name] = table;
 #if DEBUG
                 System.Diagnostics.Debug.WriteLine($"[Load] Loaded table: {table.Name}");
@@ -354,7 +357,7 @@ public partial class Database : IDatabase, IDisposable
     /// </summary>
     private void SaveMetadata()
     {
-        var tablesList = tables.Values.Select(t => new
+        var tablesList = tables.Values.OfType<Table>().Select(t => new
         {
             t.Name,
             t.Columns,
@@ -367,6 +370,7 @@ public partial class Database : IDatabase, IDisposable
             t.UniqueConstraints,
             t.ForeignKeys,  // Added for Phase 1.2
             t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
+            t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
@@ -627,30 +631,6 @@ public partial class Database : IDatabase, IDisposable
     [Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) from Database.Execution which routes through SqlParser for full SQL support.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql)
     {
-        var upper = sql.Trim().ToUpperInvariant();
-        bool isSimpleSelect = upper.StartsWith("SELECT ") && upper.Contains(" FROM ") && !upper.Contains("JOIN") && !upper.Contains("GROUP BY") && !upper.Contains("HAVING") && !upper.Contains("UNION");
-        if (isSimpleSelect)
-        {
-            var rows = ExecuteQueryStruct(sql);
-            var results = new List<Dictionary<string, object>>();
-            foreach (var r in rows)
-            {
-                var dict = new Dictionary<string, object>();
-                var names = r.GetColumnNames();
-                for (int i = 0; i < names.Length; i++)
-                    dict[names[i]] = r.GetValueBoxed(i);
-                results.Add(dict);
-            }
-            return results;
-        }
-
-        // Fallback legacy: table.Select()
-        // Extract table and perform base select
-        var fromIdx = upper.IndexOf(" FROM ");
-        var afterFrom = sql.Substring(fromIdx + 6).Trim();
-        var tableName = afterFrom.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)[0];
-        if (!tables.TryGetValue(tableName, out var tbl))
-            throw new InvalidOperationException($"Table '{tableName}' does not exist");
-        return tbl.Select();
+        return ExecuteQuery(sql, parameters: null, noEncrypt: false);
     }
 }

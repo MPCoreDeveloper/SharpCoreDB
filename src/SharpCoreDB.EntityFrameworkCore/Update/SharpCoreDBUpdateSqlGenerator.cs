@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore.Update;
+using System.Linq;
+using System.Text;
 
 namespace SharpCoreDB.EntityFrameworkCore.Update;
 
@@ -13,5 +15,26 @@ public class SharpCoreDBUpdateSqlGenerator : UpdateSqlGenerator
     public SharpCoreDBUpdateSqlGenerator(UpdateSqlGeneratorDependencies dependencies)
         : base(dependencies)
     {
+    }
+
+    /// <inheritdoc />
+    public override ResultSetMapping AppendInsertOperation(
+        StringBuilder commandStringBuilder,
+        IReadOnlyModificationCommand command,
+        int commandPosition,
+        out bool requiresTransaction)
+    {
+        requiresTransaction = false;
+        var writeOperations = command.ColumnModifications.Where(c => c.IsWrite).ToList();
+        var readOperations = command.ColumnModifications.Where(c => c.IsRead).ToList();
+
+        AppendInsertCommand(
+            commandStringBuilder,
+            command.TableName,
+            command.Schema,
+            writeOperations,
+            readOperations);
+
+        return ResultSetMapping.NoResults;
     }
 }

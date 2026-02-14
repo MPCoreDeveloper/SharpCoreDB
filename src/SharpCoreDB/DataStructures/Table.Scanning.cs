@@ -146,21 +146,49 @@ public partial class Table
     /// Evaluates a WHERE clause against a row.
     /// Supports operators: equals, not equals, greater than, less than, greater or equal, less or equal
     /// </summary>
-    private static bool EvaluateWhere(Dictionary<string, object> row, string? where)
+    private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;
         
         var parts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3) return true;
         
-        var columnName = parts[0];
+        var columnName = parts[0].Trim('"', '[', ']', '`');
+
+        // ✅ FIX: Strip table alias prefix from column names (e.g., "u"."Username" → Username)
+        // EF Core generates SQL with aliased column references like "u"."ColumnName".
+        // After splitting on spaces and trimming quotes, the column reference becomes u"."ColumnName
+        // We need to extract just the column name after the last dot-quote separator.
+        var dotIdx = columnName.LastIndexOf('.');
+        if (dotIdx >= 0 && dotIdx < columnName.Length - 1)
+        {
+            columnName = columnName[(dotIdx + 1)..].Trim('"', '[', ']', '`');
+        }
         var op = parts[1];
-        var value = parts[2].Trim('\'');
+        var value = parts[2].Trim('"').Trim((char)39);
         
         if (!row.TryGetValue(columnName, out var rowValue) || rowValue == null)
             return false;
+
+        if (rowValue is string)
+        {
+            var colIdx = this.Columns.IndexOf(columnName);
+            var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count
+                ? this.ColumnCollations[colIdx]
+                : CollationType.Binary;
+            var localeName = colIdx >= 0 && colIdx < this.ColumnLocaleNames.Count
+                ? this.ColumnLocaleNames[colIdx]
+                : null;
+
+            if (collation == CollationType.Locale && !string.IsNullOrWhiteSpace(localeName))
+            {
+                return EvaluateConditionWithLocale(row, columnName, op, value, localeName);
+            }
+
+            return EvaluateConditionWithCollation(row, columnName, op, value);
+        }
         
-        // Handle different operators
+        // Handle different operators for non-string values
         switch (op)
         {
             case "=":

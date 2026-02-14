@@ -67,6 +67,13 @@ public interface ITable
     List<CollationType> ColumnCollations { get; }
 
     /// <summary>
+    /// Gets the per-column locale names for <see cref="CollationType.Locale"/> columns.
+    /// Null entries indicate no locale (non-Locale collation types).
+    /// ✅ Phase 9: Parallel list to <see cref="ColumnCollations"/>.
+    /// </summary>
+    List<string?> ColumnLocaleNames { get; }
+
+    /// <summary>
     /// Inserts a row into the table.
     /// </summary>
     /// <param name="row">The row data.</param>

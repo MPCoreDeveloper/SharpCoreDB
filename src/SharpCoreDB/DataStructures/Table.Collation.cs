@@ -303,4 +303,130 @@ public partial class Table
 
         return sorted;
     }
+
+    /// <summary>
+    /// Evaluates a WHERE condition with locale-aware comparison.
+    /// ✅ Phase 9.1: Extends collation-aware evaluation to handle COLLATE LOCALE("xx_XX") syntax.
+    /// 
+    /// Example: WHERE name = 'istanbul' COLLATE LOCALE("tr_TR")
+    /// </summary>
+    /// <param name="row">The row to evaluate.</param>
+    /// <param name="columnName">The column name to check.</param>
+    /// <param name="operatorStr">The comparison operator (=, <>, >, <, >=, <=, LIKE, etc.)</param>
+    /// <param name="value">The value to compare against.</param>
+    /// <param name="localeName">Optional: locale name for locale-aware comparison.</param>
+    /// <returns>True if the condition is satisfied.</returns>
+    public bool EvaluateConditionWithLocale(
+        Dictionary<string, object> row,
+        string columnName,
+        string operatorStr,
+        object value,
+        string? localeName = null)
+    {
+        // If no locale specified, fall back to standard evaluation
+        if (string.IsNullOrEmpty(localeName))
+        {
+            return EvaluateConditionWithCollation(row, columnName, operatorStr, value);
+        }
+
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(columnName);
+        ArgumentNullException.ThrowIfNull(operatorStr);
+
+        if (!row.TryGetValue(columnName, out var rowValue))
+            return false;
+
+        string? rowValueStr = rowValue?.ToString();
+        string? valueStr = value?.ToString();
+
+        var op = operatorStr.ToUpperInvariant().Trim();
+
+        return op switch
+        {
+            "=" => CollationComparator.Equals(rowValueStr, valueStr, localeName),
+            "<>" or "!=" => !CollationComparator.Equals(rowValueStr, valueStr, localeName),
+
+            ">" => CollationComparator.Compare(rowValueStr, valueStr, localeName) > 0,
+            "<" => CollationComparator.Compare(rowValueStr, valueStr, localeName) < 0,
+            ">=" => CollationComparator.Compare(rowValueStr, valueStr, localeName) >= 0,
+            "<=" => CollationComparator.Compare(rowValueStr, valueStr, localeName) <= 0,
+
+            "LIKE" => CollationComparator.Like(rowValueStr, valueStr, localeName),
+            "NOT LIKE" => !CollationComparator.Like(rowValueStr, valueStr, localeName),
+
+            "IN" => EvaluateInOperatorWithLocale(rowValueStr, valueStr, localeName),
+            "NOT IN" => !EvaluateInOperatorWithLocale(rowValueStr, valueStr, localeName),
+
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Evaluates the IN operator with locale-aware comparison.
+    /// </summary>
+    private bool EvaluateInOperatorWithLocale(string? rowValue, string? listStr, string localeName)
+    {
+        if (string.IsNullOrEmpty(listStr))
+            return false;
+
+        var list = listStr
+            .Trim('(', ')')
+            .Split(',')
+            .Select(s => s.Trim().Trim('\'', '"'))
+            .ToList();
+
+        foreach (var item in list)
+        {
+            if (CollationComparator.Equals(rowValue, item, localeName))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Performs locale-aware ORDER BY (sorting) with named locale.
+    /// ✅ Phase 9.1: Sorts using locale-specific comparison rules.
+    /// Example: ORDER BY city COLLATE LOCALE("de_DE") ASC
+    /// </summary>
+    /// <param name="rows">The rows to sort.</param>
+    /// <param name="columnName">The column to sort by.</param>
+    /// <param name="localeName">The locale name for locale-aware sorting (e.g., "tr_TR").</param>
+    /// <param name="ascending">True for ascending, false for descending.</param>
+    /// <returns>Sorted result set.</returns>
+    public List<Dictionary<string, object>> OrderByWithLocale(
+        List<Dictionary<string, object>> rows,
+        string columnName,
+        string localeName,
+        bool ascending = true)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(columnName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localeName);
+
+        if (rows.Count <= 1)
+            return rows;
+
+        int colIdx = this.Columns.IndexOf(columnName);
+        if (colIdx < 0)
+            throw new InvalidOperationException($"Column '{columnName}' not found");
+
+        // Use locale-aware comparison
+        var sorted = rows.ToList();
+        var comparer = CollationComparator.GetComparer(localeName);
+
+        sorted.Sort((row1, row2) =>
+        {
+            row1.TryGetValue(columnName, out var val1);
+            row2.TryGetValue(columnName, out var val2);
+
+            string? str1 = val1?.ToString();
+            string? str2 = val2?.ToString();
+
+            int comparison = comparer.Compare(str1, str2);
+            return ascending ? comparison : -comparison;
+        });
+
+        return sorted;
+    }
 }

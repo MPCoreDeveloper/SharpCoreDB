@@ -81,22 +81,40 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Executes DROP TRIGGER statement.
+    /// Executes DROP TRIGGER statement with optional IF EXISTS clause.
+    /// Syntax: DROP TRIGGER [IF EXISTS] trigger_name
     /// </summary>
     private void ExecuteDropTrigger(string sql, string[] parts, IWAL? wal)
     {
         if (isReadOnly)
             throw new InvalidOperationException("Cannot drop trigger in readonly mode");
 
-        if (parts.Length < 3)
+        // ✅ Detect IF EXISTS clause
+        bool ifExists = false;
+        int nameIndex = 2;
+        
+        if (parts.Length >= 5 && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            ifExists = true;
+            nameIndex = 4;
+        }
+
+        if (nameIndex >= parts.Length)
             throw new ArgumentException("Trigger name is required");
 
-        var name = parts[2].TrimEnd(';');
+        var name = parts[nameIndex].TrimEnd(';');
         lock (_triggerLock)
         {
             if (!_triggers.Remove(name))
-                throw new InvalidOperationException($"Trigger '{name}' does not exist");
+            {
+                if (!ifExists)
+                    throw new InvalidOperationException($"Trigger '{name}' does not exist");
+                // IF EXISTS: silently skip if trigger doesn't exist
+            }
         }
+        
+        wal?.Log(sql);
     }
 
     /// <summary>

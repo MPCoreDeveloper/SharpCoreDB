@@ -72,7 +72,20 @@ public class SharpCoreDBCommand : DbCommand
 
         var parameters = BuildParameterDictionary();
         _connection.DbInstance.ExecuteSQL(_commandText, parameters);
-        return 1; // Simplified: return 1 for success
+
+        // ✅ CRITICAL FIX: Flush data after non-query commands to ensure persistence!
+        // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
+        // When EF Core closes and reopens the connection (creating a new Database instance),
+        // unflushed in-memory data is lost.
+        var commandUpper = _commandText.Trim().ToUpperInvariant();
+        if (commandUpper.StartsWith("INSERT") ||
+            commandUpper.StartsWith("UPDATE") ||
+            commandUpper.StartsWith("DELETE"))
+        {
+            _connection.DbInstance.Flush();
+        }
+
+        return 1;
     }
 
     /// <inheritdoc />
@@ -123,6 +136,17 @@ public class SharpCoreDBCommand : DbCommand
 
         var parameters = BuildParameterDictionary();
         await _connection.DbInstance.ExecuteSQLAsync(_commandText, parameters, cancellationToken).ConfigureAwait(false);
+
+        // ✅ CRITICAL FIX: Flush data after non-query commands to ensure persistence!
+        // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
+        var commandUpper = _commandText.Trim().ToUpperInvariant();
+        if (commandUpper.StartsWith("INSERT") ||
+            commandUpper.StartsWith("UPDATE") ||
+            commandUpper.StartsWith("DELETE"))
+        {
+            _connection.DbInstance.Flush();
+        }
+
         return 1;
     }
 

@@ -93,8 +93,8 @@ public class CollationPhase5Tests
         var result = rows.Where(r => table.EvaluateConditionWithCollation(
             r, "email", "LIKE", "%example%")).ToList();
 
-        // Assert - should find both alice@example.com variants
-        Assert.Equal(2, result.Count);
+        // Assert - should find all three emails (all contain "example" case-insensitive)
+        Assert.Equal(3, result.Count);
     }
 
     [Fact]
@@ -310,7 +310,7 @@ public class CollationPhase5Tests
         var rows = new List<Dictionary<string, object>>
         {
             new() { { "id", 1 }, { "email", "alice@example.com" }, { "name", "Alice" }, { "status", "active" } },
-            new() { { "id", 2 }, { "email", "ALICE@EXAMPLE.COM" }, { "name", "Alice" }, { "status", "inactive" } },
+            new() { { "id", 2 }, { "email", "ALICE@EXAMPLE.COM" }, { "name", "Alice" }, { "status", "ACTIVE" } },
             new() { { "id", 3 }, { "email", "alice@other.com" }, { "name", "Alice" }, { "status", "active" } },
             new() { { "id", 4 }, { "email", "bob@example.com" }, { "name", "Bob" }, { "status", "active" } }
         };

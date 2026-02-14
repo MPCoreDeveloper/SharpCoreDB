@@ -74,11 +74,18 @@ public partial class Table
                 throw new InvalidOperationException($"Index {indexName} already exists");
             
             // Register the column-based index if not already registered
-            if (!this.registeredIndexes.ContainsKey(columnName))
+            if (!this.registeredIndexes.TryGetValue(columnName, out var metadata))
             {
                 var colIdx = this.Columns.IndexOf(columnName);
-                var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], isUnique);
+                metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], isUnique);
                 this.registeredIndexes[columnName] = metadata;
+            }
+            else if (isUnique && !metadata.IsUnique)
+            {
+                this.registeredIndexes[columnName] = metadata with { IsUnique = true };
+                this.hashIndexes.Remove(columnName);
+                this.loadedIndexes.Remove(columnName);
+                this.staleIndexes.Remove(columnName);
             }
             
             // Map index name to column name
@@ -121,19 +128,17 @@ public partial class Table
         // ✅ OPTIMIZED: Build index OUTSIDE write lock
         // Check if index is registered
         this.rwLock.EnterReadLock();
-        bool isRegistered;
+        IndexMetadata? metadata;
         try
         {
-            isRegistered = this.registeredIndexes.ContainsKey(columnName);
+            if (!this.registeredIndexes.TryGetValue(columnName, out metadata))
+            {
+                throw new InvalidOperationException($"Index for column {columnName} is not registered");
+            }
         }
         finally
         {
             this.rwLock.ExitReadLock();
-        }
-        
-        if (!isRegistered)
-        {
-            throw new InvalidOperationException($"Index for column {columnName} is not registered");
         }
         
         // ✅ COLLATE Phase 4: Get column collation
@@ -144,7 +149,7 @@ public partial class Table
         
         // Build index WITHOUT holding write lock (parallel work allowed)
         // ✅ COLLATE Phase 4: Pass collation to HashIndex constructor
-        var index = new HashIndex(this.Name, columnName, collation);
+        var index = new HashIndex(this.Name, columnName, collation, metadata.IsUnique);
         
         // FIXED: Use the same reading logic as ReadRowAtPosition to ensure compatibility
         // Read all rows using ReadBytesFrom (which handles length prefixes correctly)
@@ -225,6 +230,29 @@ public partial class Table
     /// <param name="columnName">The column name to check.</param>
     /// <returns>True if hash index exists.</returns>
     public bool HasHashIndex(string columnName) => this.hashIndexes.ContainsKey(columnName);
+    
+    /// <summary>
+    /// Checks if an index with the specified name exists (by name or column).
+    /// ✅ Phase 1.5: Added for IF NOT EXISTS support in CREATE INDEX.
+    /// </summary>
+    /// <param name="nameOrColumn">Index name (e.g., "idx_email") or column name (e.g., "email").</param>
+    /// <returns>True if index exists.</returns>
+    public bool HasIndex(string nameOrColumn)
+    {
+        // Check index name first
+        if (this.indexNameToColumn.ContainsKey(nameOrColumn))
+            return true;
+        
+        // Check column-based hash index
+        if (this.hashIndexes.ContainsKey(nameOrColumn))
+            return true;
+        
+        // Check B-tree indexes via manager
+        if (this._btreeManager != null && this._btreeManager.HasIndex(nameOrColumn))
+            return true;
+        
+        return false;
+    }
 
     /// <summary>
     /// Removes a hash index for the specified column or index name.

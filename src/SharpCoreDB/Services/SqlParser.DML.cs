@@ -10,6 +10,7 @@ using SharpCoreDB.Execution;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Storage.Hybrid;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 /// <summary>
@@ -169,7 +170,7 @@ public partial class SqlParser
         if (tableEnd == -1)
             tableEnd = insertSql.IndexOf('(', tableStart);
 
-        var tableName = insertSql[tableStart..tableEnd].Trim();
+        var tableName = insertSql[tableStart..tableEnd].Trim().Trim('"', '[', ']', '`');
         
         if (!this.tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
@@ -181,7 +182,7 @@ public partial class SqlParser
             var colStart = rest.IndexOf('(') + 1;
             var colEnd = rest.IndexOf(')', colStart);
             var colStr = rest[colStart..colEnd];
-            insertColumns = [.. colStr.Split(',').Select(c => c.Trim())]; // ✅ C# 14: Collection expression
+            insertColumns = [.. colStr.Split(',').Select(c => c.Trim().Trim('"', '[', ']', '`'))];
             rest = rest[(colEnd + 1)..];
         }
 
@@ -357,7 +358,7 @@ public partial class SqlParser
         if (fromIdx < 0 || fromIdx + 1 >= selectParts.Length)
             throw new InvalidOperationException("Invalid SELECT query for EXPLAIN");
         
-        return selectParts[fromIdx + 1].TrimEnd(')', ',', ';');
+        return selectParts[fromIdx + 1].TrimEnd(')', ',', ';').Trim('"', '[', ']', '`');
     }
 
     /// <summary>
@@ -467,8 +468,13 @@ public partial class SqlParser
                  selectUpper.Contains("AVG(") || selectUpper.Contains("MAX(") ||
                  selectUpper.Contains("MIN("))
             return ExecuteAggregateQuery(selectClause, parts);
-        
+
         var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
+        if (fromIdx < 0)
+        {
+            return ExecuteSelectLiteralQuery(selectClause);
+        }
+
         var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
         var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
@@ -492,7 +498,7 @@ public partial class SqlParser
         if (fromParts.Length > 0 && fromParts[0].StartsWith('('))
             return HandleDerivedTable(sql, noEncrypt);
 
-        var tableName = fromParts[0].TrimEnd(')', ',', ';');
+        var tableName = fromParts[0].TrimEnd(')', ',', ';').Trim('"', '[', ']', '`');
         
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
@@ -520,6 +526,69 @@ public partial class SqlParser
         results = ((this.tables[tableName] as Table)?.DeduplicateByPrimaryKey(results)) ?? results;
 
         return results;
+    }
+
+    private static List<Dictionary<string, object>> ExecuteSelectLiteralQuery(string selectClause)
+    {
+        var row = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var expressions = selectClause.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var expression in expressions)
+        {
+            var trimmed = expression.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            row[trimmed] = ParseSelectLiteralValue(trimmed) ?? DBNull.Value;
+        }
+
+        return [row];
+    }
+
+    private static object? ParseSelectLiteralValue(string literal)
+    {
+        if (literal.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (literal.Length >= 2)
+        {
+            if ((literal[0] == '\'' && literal[^1] == '\'') ||
+                (literal[0] == '"' && literal[^1] == '"'))
+            {
+                return literal[1..^1];
+            }
+        }
+
+        if (int.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
+        {
+            return intValue;
+        }
+
+        if (long.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
+        {
+            return longValue;
+        }
+
+        if (decimal.TryParse(literal, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
+        {
+            return decimalValue;
+        }
+
+        if (double.TryParse(literal, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var doubleValue))
+        {
+            return doubleValue;
+        }
+
+        if (bool.TryParse(literal, out var boolValue))
+        {
+            return boolValue;
+        }
+
+        return literal;
     }
 
     /// <summary>
@@ -834,7 +903,7 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot update in readonly mode");
 
         var parts = sql.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        var tableName = parts[1];
+        var tableName = parts[1].Trim('"', '[', ']', '`');
 
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
@@ -1020,7 +1089,7 @@ public partial class SqlParser
         if (parts.Length < 3 || !parts[1].Equals("FROM", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("DELETE requires FROM clause");
 
-        var tableName = parts[2];
+        var tableName = parts[2].Trim('"', '[', ']', '`');
 
         if (!this.tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
@@ -1152,7 +1221,7 @@ public partial class SqlParser
             }
             
             // ✅ NEW: Apply WHERE clause filtering after JOINs (supports IN expressions and complex conditions)
-            // This filtering happens BEFORE creating temp table, allowing proper AST evaluation
+            // This filtering happens BEFORE creating temp table, allowing for proper AST evaluation
             if (selectNode.Where?.Condition is not null && ContainsInExpression(selectNode.Where.Condition))
             {
                 results = [.. results.Where(row => EvaluateWhereWithInSupport(selectNode.Where.Condition, row))];
@@ -1521,7 +1590,7 @@ public partial class SqlParser
                 if (row.TryGetValue(columnName, out var value))
                     return value;
                 
-                // Try with table alias prefix if available
+                // Try case-insensitive qualified match
                 if (!string.IsNullOrEmpty(colRef.TableAlias) && 
                     row.TryGetValue($"{colRef.TableAlias}.{columnName}", out value))
                     return value;
@@ -1800,6 +1869,7 @@ public partial class SqlParser
         public List<List<string>> UniqueConstraints => [];
         public List<ForeignKeyConstraint> ForeignKeys => [];
         public List<CollationType> ColumnCollations => [.. new CollationType[Columns.Count]]; // ✅ COLLATE Phase 1: All Binary by default
+        public List<string?> ColumnLocaleNames => [.. new string?[Columns.Count]]; // ✅ PHASE 9: Locale support
 
         public void Insert(Dictionary<string, object> row)
         {
@@ -1877,6 +1947,7 @@ public partial class SqlParser
         public void CreateHashIndex(string columnName) { }
         public void CreateHashIndex(string indexName, string columnName) { }
         public void CreateHashIndex(string indexName, string columnName, bool unique) { }
+
         public bool HasBTreeIndex(string columnName) => false;
         public void CreateBTreeIndex(string columnName) { }
         public void CreateBTreeIndex(string indexName, string columnName) { }

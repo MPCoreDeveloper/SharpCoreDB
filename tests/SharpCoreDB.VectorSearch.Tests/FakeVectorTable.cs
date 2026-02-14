@@ -57,6 +57,7 @@ internal sealed class FakeVectorTable : ITable
     public List<ForeignKeyConstraint> ForeignKeys { get; } = [];
     public List<List<string>> UniqueConstraints { get; } = [];
     public List<CollationType> ColumnCollations { get; } = [CollationType.Binary, CollationType.Binary];
+    public List<string?> ColumnLocaleNames { get; } = [null, null];
 
     // ── Data access ──
     public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true)

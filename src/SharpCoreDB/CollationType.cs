@@ -12,7 +12,7 @@ namespace SharpCoreDB;
 /// <remarks>
 /// Default is <see cref="Binary"/> (case-sensitive, byte-by-byte).
 /// Use <see cref="NoCase"/> for case-insensitive ordinal comparisons.
-/// Phase 6 will add locale-aware collations via <see cref="UnicodeCaseInsensitive"/>.
+/// Use <see cref="Locale"/> for culture-specific comparisons (Phase 9).
 /// </remarks>
 public enum CollationType
 {
@@ -25,6 +25,12 @@ public enum CollationType
     /// <summary>Like Binary but ignores trailing whitespace.</summary>
     RTrim = 2,
 
-    /// <summary>Culture-aware case-insensitive (future: locale-specific, Phase 6).</summary>
+    /// <summary>Culture-aware case-insensitive using CurrentCulture.</summary>
     UnicodeCaseInsensitive = 3,
+
+    /// <summary>
+    /// Locale-specific collation using a named <see cref="System.Globalization.CultureInfo"/>.
+    /// ✅ Phase 9: Requires a locale name (e.g., "tr_TR", "de_DE") stored via <see cref="CultureInfoCollation"/>.
+    /// </summary>
+    Locale = 4,
 }

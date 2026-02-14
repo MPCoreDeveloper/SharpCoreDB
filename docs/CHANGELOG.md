@@ -5,7 +5,45 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - Unreleased
+## [1.3.0] - 2026-02-14
+
+### ✨ Added
+- **Enhanced Locale Validation** (`CultureInfoCollation`)
+  - Strict validation rejects placeholder/invalid locales (xx-YY, zz-ZZ, iv)
+  - Checks for "Unknown" in DisplayName to catch invalid region codes
+  - Validates TwoLetterISOLanguageName against known placeholder codes
+  - Clear error messages guide users to valid IETF locale names (en-US, de-DE, tr-TR)
+  - Prevents silent acceptance of non-functional locale codes
+
+### 🚀 Performance
+- **ExtentAllocator Optimization** (`Storage.Scdb.ExtentAllocator`)
+  - **28.6x performance improvement** (ratio: 309.11x → 10.81x)
+  - Replaced `List<FreeExtent>` with `SortedSet<FreeExtent>` for O(log n) insert/delete
+  - Eliminated O(n log n) sorting on every Free() and Allocate() operation
+  - Added `FreeExtentComparer` for efficient sorted set ordering
+  - Fixed `CoalesceInternal` for proper chain-merging in single pass
+  - Benchmark test now consistently passes under 200x threshold
+  - Memory allocation efficiency improved for high-fragmentation scenarios
+
+### 🔧 Fixed
+- **EF Core Collation Support** (`EntityFrameworkCore`)
+  - CREATE TABLE now correctly emits COLLATE clauses for columns with UseCollation()
+  - Direct SQL queries (`ExecuteQuery`) properly respect column collations
+  - Case-insensitive WHERE clauses work correctly with COLLATE NOCASE
+  - `Migration_WithUseCollation_ShouldEmitCollateClause` test now passes
+  - Note: Full EF Core LINQ query provider support pending (tracked separately)
+  
+- **Locale Collation Error Handling** (`Phase9_LocaleCollationsTests`)
+  - Non-existent locale names (e.g., "xx_YY") now throw `InvalidOperationException`
+  - Test `LocaleCollation_NonExistentLocale_ShouldThrowClear_Error` now passes
+  - Error messages include helpful guidance for valid locale identifiers
+
+### 📋 Known Limitations
+- **EF Core LINQ Queries**: The `IDatabase.CompileQuery` implementation is incomplete, causing EF Core LINQ queries to return null. Direct SQL queries via `FromSqlRaw` or `ExecuteQuery` work correctly. This is tracked as a separate infrastructure task and does not affect the core COLLATE feature functionality.
+
+---
+
+## [1.2.0] - 2025-01-28
 
 ### ✨ Added
 - **Vector Search Extension** (`SharpCoreDB.VectorSearch` NuGet package)

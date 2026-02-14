@@ -177,6 +177,7 @@ public class Phase7_JoinCollationBenchmark
         public string Name { get; set; } = name;
         public List<string> Columns { get; } = columns;
         public List<CollationType> ColumnCollations { get; } = collations;
+        public List<string?> ColumnLocaleNames { get; } = [.. new string?[columns.Count]]; // ✅ Phase 9: Locale support
         public List<DataType> ColumnTypes { get; } = Enumerable.Repeat(DataType.String, columns.Count).ToList();
         public string DataFile { get; set; } = ":memory:";
         public int PrimaryKeyIndex => -1;

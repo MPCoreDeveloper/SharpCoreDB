@@ -49,9 +49,31 @@ public static class CollationComparator
             CollationType.UnicodeCaseInsensitive => 
                 string.Compare(left, right, StringComparison.CurrentCultureIgnoreCase),
 
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale =>
+                string.Compare(left, right, StringComparison.CurrentCultureIgnoreCase),
+
             // Default to binary for unknown collations
             _ => string.CompareOrdinal(left, right)
         };
+    }
+
+    /// <summary>
+    /// Performs locale-specific string comparison using a named locale.
+    /// ✅ Phase 9: Use this overload when <see cref="CollationType.Locale"/> is specified with a locale name.
+    /// </summary>
+    /// <param name="left">First string to compare (can be null).</param>
+    /// <param name="right">Second string to compare (can be null).</param>
+    /// <param name="localeName">The locale name (e.g., "tr_TR", "de_DE").</param>
+    /// <returns>Comparison result: negative, 0, or positive.</returns>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public static int Compare(string? left, string? right, string localeName)
+    {
+        if (left is null && right is null) return 0;
+        if (left is null) return -1;
+        if (right is null) return 1;
+
+        return CultureInfoCollation.Instance.Compare(left, right, localeName);
     }
 
     /// <summary>
@@ -74,8 +96,24 @@ public static class CollationComparator
             CollationType.RTrim => EqualsRTrim(left, right),
             CollationType.UnicodeCaseInsensitive => 
                 string.Equals(left, right, StringComparison.CurrentCultureIgnoreCase),
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale =>
+                string.Equals(left, right, StringComparison.CurrentCultureIgnoreCase),
             _ => string.Equals(left, right, StringComparison.Ordinal)
         };
+    }
+
+    /// <summary>
+    /// Performs locale-specific string equality check.
+    /// ✅ Phase 9: Use when <see cref="CollationType.Locale"/> is specified with a locale name.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public static bool Equals(string? left, string? right, string localeName)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null) return false;
+
+        return CultureInfoCollation.Instance.Equals(left, right, localeName);
     }
 
     /// <summary>
@@ -105,10 +143,40 @@ public static class CollationComparator
             CollationType.UnicodeCaseInsensitive => 
                 (value.ToUpper(CultureInfo.CurrentCulture), 
                  pattern.ToUpper(CultureInfo.CurrentCulture)),
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale =>
+                (value.ToUpper(CultureInfo.CurrentCulture),
+                 pattern.ToUpper(CultureInfo.CurrentCulture)),
             _ => (value, pattern)
         };
 
         // Simple wildcard matching (recursive implementation)
+        return LikeRecursive(normalizedValue, normalizedPattern, 0, 0);
+    }
+    
+    /// <summary>
+    /// Locale-specific LIKE pattern matching using named locale.
+    /// ✅ Phase 9: Use when locale-aware LIKE filtering is needed.
+    /// </summary>
+    /// <param name="value">The string value to match.</param>
+    /// <param name="pattern">The LIKE pattern (with % and _ wildcards).</param>
+    /// <param name="localeName">The locale name for case handling (e.g., "tr_TR").</param>
+    /// <returns>True if value matches pattern under the locale rules.</returns>
+    public static bool Like(string? value, string? pattern, string localeName)
+    {
+        if (value is null || pattern is null) return value == pattern;
+
+        // If pattern has no wildcards, use simple equality
+        if (!pattern.Contains('%') && !pattern.Contains('_'))
+        {
+            return Equals(value, pattern, localeName);
+        }
+
+        // Normalize using locale-aware rules
+        var culture = CultureInfoCollation.Instance.GetCulture(localeName);
+        var normalizedValue = value.ToUpper(culture);
+        var normalizedPattern = pattern.ToUpper(culture);
+
         return LikeRecursive(normalizedValue, normalizedPattern, 0, 0);
     }
 
@@ -137,8 +205,22 @@ public static class CollationComparator
             CollationType.UnicodeCaseInsensitive => 
                 StringComparer.CurrentCultureIgnoreCase.GetHashCode(value),
 
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale =>
+                StringComparer.CurrentCultureIgnoreCase.GetHashCode(value),
+
             _ => value.GetHashCode()
         };
+    }
+
+    /// <summary>
+    /// Gets the locale-specific hash code for a string.
+    /// ✅ Phase 9: Use when <see cref="CollationType.Locale"/> has a locale name.
+    /// </summary>
+    public static int GetHashCode(string? value, string localeName)
+    {
+        if (value is null) return 0;
+        return CultureInfoCollation.Instance.GetHashCode(value, localeName);
     }
 
     /// <summary>
@@ -155,8 +237,20 @@ public static class CollationComparator
             CollationType.NoCase => value.ToUpperInvariant(),
             CollationType.RTrim => value.TrimEnd(),
             CollationType.UnicodeCaseInsensitive => value.ToUpper(CultureInfo.CurrentCulture),
+            // ✅ Phase 9: Locale without explicit name falls back to CurrentCulture
+            CollationType.Locale => value.ToUpper(CultureInfo.CurrentCulture),
             _ => value
         };
+    }
+
+    /// <summary>
+    /// Normalizes a string for comparison using a specific locale.
+    /// ✅ Phase 9: Locale-specific normalization for index keys and GROUP BY.
+    /// </summary>
+    public static string NormalizeForComparison(string? value, string localeName)
+    {
+        if (value is null) return string.Empty;
+        return CultureInfoCollation.Instance.NormalizeForComparison(value, localeName);
     }
 
     /// <summary>
@@ -204,6 +298,28 @@ public static class CollationComparator
     public static IComparer<string> GetComparer(CollationType collation)
     {
         return new CollationAwareComparer(collation);
+    }
+
+    /// <summary>
+    /// Gets an IComparer&lt;string&gt; for a locale-specific collation.
+    /// ✅ Phase 9: Used for sorting with named locale.
+    /// </summary>
+    /// <param name="localeName">The locale name (e.g., "tr_TR").</param>
+    /// <returns>A comparer that uses the specified locale.</returns>
+    public static IComparer<string> GetComparer(string localeName)
+    {
+        return new LocaleAwareComparer(localeName);
+    }
+
+    /// <summary>
+    /// Gets an IEqualityComparer&lt;string&gt; for a locale-specific collation.
+    /// ✅ Phase 9: Used for DISTINCT, GROUP BY with locale-aware equality.
+    /// </summary>
+    /// <param name="localeName">The locale name (e.g., "tr_TR").</param>
+    /// <returns>An equality comparer that uses the specified locale.</returns>
+    public static IEqualityComparer<string> GetEqualityComparer(string localeName)
+    {
+        return new LocaleAwareEqualityComparer(localeName);
     }
 
     // ==================== PRIVATE HELPERS ====================
@@ -332,4 +448,37 @@ public sealed class CollationAwareComparer : IComparer<string>
     /// Returns: -1 (x &lt; y), 0 (equal), 1 (x &gt; y)
     /// </summary>
     public int Compare(string? x, string? y) => CollationComparator.Compare(x, y, _collation);
+}
+
+/// <summary>
+/// Locale-aware comparer for use in LINQ OrderBy, Array.Sort, and MERGE JOIN operations.
+/// ✅ Phase 9: Enables locale-specific sorting for named locales.
+/// </summary>
+public sealed class LocaleAwareComparer(string localeName) : IComparer<string>
+{
+    private readonly string _localeName = localeName;
+
+    /// <summary>
+    /// Compares two strings using the specified locale.
+    /// </summary>
+    public int Compare(string? x, string? y) => CollationComparator.Compare(x, y, _localeName);
+}
+
+/// <summary>
+/// Locale-aware equality comparer for use in HashSet and Dictionary operations.
+/// ✅ Phase 9: Enables locale-specific equality for DISTINCT and GROUP BY.
+/// </summary>
+public sealed class LocaleAwareEqualityComparer(string localeName) : IEqualityComparer<string>
+{
+    private readonly string _localeName = localeName;
+
+    /// <summary>
+    /// Determines if two strings are equal under this locale.
+    /// </summary>
+    public bool Equals(string? x, string? y) => CollationComparator.Equals(x, y, _localeName);
+
+    /// <summary>
+    /// Gets the hash code for a string under this locale.
+    /// </summary>
+    public int GetHashCode(string obj) => CollationComparator.GetHashCode(obj, _localeName);
 }

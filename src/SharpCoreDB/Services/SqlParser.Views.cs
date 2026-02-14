@@ -69,22 +69,40 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Executes DROP VIEW statement.
+    /// Executes DROP VIEW statement with optional IF EXISTS clause.
+    /// Syntax: DROP VIEW [IF EXISTS] view_name
     /// </summary>
     private void ExecuteDropView(string sql, string[] parts, IWAL? wal)
     {
         if (isReadOnly)
             throw new InvalidOperationException("Cannot drop view in readonly mode");
 
-        if (parts.Length < 3)
+        // ✅ Detect IF EXISTS clause
+        bool ifExists = false;
+        int nameIndex = 2;
+        
+        if (parts.Length >= 5 && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            ifExists = true;
+            nameIndex = 4;
+        }
+
+        if (nameIndex >= parts.Length)
             throw new ArgumentException("View name is required");
 
-        var name = parts[2].TrimEnd(';');
+        var name = parts[nameIndex].TrimEnd(';');
         lock (_viewLock)
         {
             if (!_views.Remove(name))
-                throw new InvalidOperationException($"View '{name}' does not exist");
+            {
+                if (!ifExists)
+                    throw new InvalidOperationException($"View '{name}' does not exist");
+                // IF EXISTS: silently skip if view doesn't exist
+            }
         }
+        
+        wal?.Log(sql);
     }
 
     /// <summary>

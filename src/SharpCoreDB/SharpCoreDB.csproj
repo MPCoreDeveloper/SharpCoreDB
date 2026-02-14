@@ -27,15 +27,15 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.2.0 (2026-02: localization bug fixed, Major RDBMS improvements - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning across the core engine. Includes refined transaction handling, improved WAL group commits, and optimized single-file and columnar storage paths.
-      New features: Advanced query optimizer, improved index strategies, columnar storage enhancements.
-      Fixes: Edge cases in join execution, transaction isolation improvements, memory efficiency gains.
+    <PackageReleaseNotes>v1.3.0 (2026-MM: Enhanced performance - optimized query execution, improved index handling, streamlined transaction processing, faster WAL commits, and superior single-file and columnar storage speed.
+      New features: Real-time collaboration support, automated index tuning, advanced query insights.
+      Fixes: Stability improvements, memory usage optimizations, bug fixes in query processing.
       Breaking changes: None - full backward compatibility maintained.
     </PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64</PackageTags>

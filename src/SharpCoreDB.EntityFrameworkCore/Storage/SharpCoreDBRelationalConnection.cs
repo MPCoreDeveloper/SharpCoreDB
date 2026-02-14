@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
@@ -57,7 +58,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     [AllowNull]
     public DbConnection DbConnection
     {
-        get => _connection!;
+        get => EnsureConnectionInitialized();
 
         set => _connection = value;
     }
@@ -90,9 +91,8 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     /// <inheritdoc />
     public IRelationalCommand RentCommand()
     {
-        // EF Core 10 expects this to return a command for execution
-        // For now, we return null to indicate no pooling - EF Core will create commands as needed
-        return null!;
+        var dependencies = _serviceProvider.GetRequiredService<RelationalCommandBuilderDependencies>();
+        return new RelationalCommand(dependencies, string.Empty, string.Empty, []);
     }
 
     /// <inheritdoc />
@@ -310,5 +310,22 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
             await _connection.DisposeAsync().ConfigureAwait(false);
         }
         _semaphore.Dispose();
+    }
+
+    private DbConnection EnsureConnectionInitialized()
+    {
+        if (_connection is not null)
+        {
+            return _connection;
+        }
+
+        var extension = _options.FindExtension<SharpCoreDBOptionsExtension>();
+        if (extension == null)
+        {
+            throw new InvalidOperationException("SharpCoreDB options not configured");
+        }
+
+        _connection = new SharpCoreDBConnection(_serviceProvider, extension.ConnectionString ?? string.Empty);
+        return _connection;
     }
 }

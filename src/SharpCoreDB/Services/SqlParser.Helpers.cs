@@ -562,4 +562,80 @@ public partial class SqlParser
             _ => $"'{value.ToString()?.Replace("'", "''")}'",
         };
     }
+
+    /// <summary>
+    /// Parses a COLLATE clause and returns (CollationType, localeName) tuple.
+    /// ✅ Phase 9: Supports LOCALE("xx_XX") syntax for culture-specific collations.
+    /// Examples:
+    /// - "BINARY" → (Binary, null)
+    /// - "NOCASE" → (NoCase, null)
+    /// - "LOCALE(\"tr_TR\")" → (Locale, "tr_TR")
+    /// </summary>
+    /// <param name="collateSpec">The remainder after COLLATE keyword.</param>
+    /// <returns>Tuple of (CollationType, localeName). localeName is non-null only for Locale type.</returns>
+    /// <exception cref="InvalidOperationException">If collation syntax is invalid.</exception>
+    private static (CollationType, string?) ParseCollationSpec(string collateSpec)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(collateSpec);
+
+        var spec = collateSpec.Trim();
+
+        // Check for LOCALE("xx_XX") syntax
+        if (spec.StartsWith("LOCALE", StringComparison.OrdinalIgnoreCase))
+        {
+            // Extract locale name from LOCALE("xx_XX")
+            var localeStart = spec.IndexOf('(');
+            var localeEnd = spec.IndexOf(')');
+
+            if (localeStart < 0 || localeEnd < 0 || localeEnd <= localeStart)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid LOCALE syntax. Expected: LOCALE(\"locale_name\"), got: {spec}");
+            }
+
+            var localeContent = spec.Substring(localeStart + 1, localeEnd - localeStart - 1).Trim();
+            var isQuoted = localeContent.Length >= 2 &&
+                ((localeContent[0] == '"' && localeContent[^1] == '"') ||
+                 (localeContent[0] == '\'' && localeContent[^1] == '\''));
+
+            if (!isQuoted)
+            {
+                throw new InvalidOperationException(
+                    $"LOCALE collation requires a quoted locale name. Expected: LOCALE(\"locale_name\"), got: {spec}");
+            }
+
+            // Remove quotes around locale name
+            var localeName = localeContent[1..^1].Trim();
+
+            if (string.IsNullOrWhiteSpace(localeName))
+            {
+                throw new InvalidOperationException(
+                    $"LOCALE collation requires a non-empty locale name. Got: {spec}");
+            }
+
+            // Validate locale name by attempting to create a CultureInfo
+            try
+            {
+                _ = CultureInfoCollation.Instance.GetCulture(localeName);
+                return (CollationType.Locale, localeName);
+            }
+            catch (Exception ex) when (ex is ArgumentException or System.Globalization.CultureNotFoundException)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid locale name '{localeName}' in COLLATE clause. Ensure it's a valid culture identifier (e.g., 'en_US', 'de_DE', 'tr_TR'). " +
+                    $"Error: {ex.Message}", ex);
+            }
+        }
+
+        // Built-in collations (no locale name)
+        return spec.ToUpperInvariant() switch
+        {
+            "BINARY" => (CollationType.Binary, null),
+            "NOCASE" => (CollationType.NoCase, null),
+            "RTRIM" => (CollationType.RTrim, null),
+            "UNICODE_CI" => (CollationType.UnicodeCaseInsensitive, null),
+            _ => throw new InvalidOperationException(
+                $"Unknown collation type: {spec}. Supported: BINARY, NOCASE, RTRIM, UNICODE_CI, LOCALE(\"locale_name\")")
+        };
+    }
 }

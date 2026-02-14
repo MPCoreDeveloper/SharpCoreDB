@@ -36,7 +36,7 @@ public partial class Table
             var parts = where.Split('=', 2);
             if (parts.Length == 2)
             {
-                column = parts[0].Trim();
+                column = parts[0].Trim().Trim('"', '[', ']', '`');
                 value = parts[1].Trim().Trim('\'', '"');
                 return true;
             }

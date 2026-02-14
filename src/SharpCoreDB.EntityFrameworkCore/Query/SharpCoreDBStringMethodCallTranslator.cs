@@ -66,8 +66,8 @@ public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpr
             // Extract StringComparison value from constant
             if (comparisonExpression is SqlConstantExpression { Value: StringComparison comparison })
             {
-                var leftOperand = instance;
-                var rightOperand = arguments[0];
+                var leftOperand = _sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
+                var rightOperand = _sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
                 
                 // Map StringComparison to COLLATE clause
                 return comparison switch
@@ -77,8 +77,10 @@ public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpr
                     StringComparison.InvariantCultureIgnoreCase =>
                         // Apply NOCASE collation using CollateExpression
                         _sqlExpressionFactory.Equal(
-                            new CollateExpression(leftOperand, "NOCASE"),
-                            new CollateExpression(rightOperand, "NOCASE")),
+                            _sqlExpressionFactory.ApplyTypeMapping(
+                                new CollateExpression(leftOperand, "NOCASE"), leftOperand.TypeMapping),
+                            _sqlExpressionFactory.ApplyTypeMapping(
+                                new CollateExpression(rightOperand, "NOCASE"), rightOperand.TypeMapping)),
                     
                     StringComparison.Ordinal or 
                     StringComparison.CurrentCulture or 

@@ -129,9 +129,29 @@ public partial class Table : ITable, IDisposable
     public List<CollationType> ColumnCollations { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the per-column locale names for <see cref="CollationType.Locale"/> columns.
+    /// Null entries indicate no locale (non-Locale collation types).
+    /// ✅ Phase 9: Parallel list to <see cref="ColumnCollations"/>.
+    /// </summary>
+    public List<string?> ColumnLocaleNames { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the foreign key constraints.
     /// </summary>
     public List<ForeignKeyConstraint> ForeignKeys { get; set; } = [];
+
+    /// <summary>
+    /// Auto-increment counters for INTEGER columns with AUTO keyword.
+    /// Dictionary maps column index to current counter value.
+    /// Uses ConcurrentDictionary for thread-safe atomic increments.
+    /// </summary>
+    private readonly ConcurrentDictionary<int, long> _autoIncrementCounters = new();
+
+    /// <summary>
+    /// Gets or sets the persisted auto-increment counter values.
+    /// This is used for metadata serialization/deserialization.
+    /// </summary>
+    public Dictionary<int, long> AutoIncrementCounters { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the data file path.
@@ -355,6 +375,7 @@ public partial class Table : ITable, IDisposable
         DefaultExpressions.Add(columnDef.DefaultExpression);
         ColumnCheckExpressions.Add(columnDef.CheckExpression);
         ColumnCollations.Add(columnDef.Collation); // ✅ COLLATE Phase 1
+        ColumnLocaleNames.Add(columnDef.LocaleName); // ✅ Phase 9: Add locale name for LOCALE collations
 
         // Handle UNIQUE constraint
         if (columnDef.IsUnique)

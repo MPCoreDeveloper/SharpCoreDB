@@ -42,7 +42,7 @@ public partial class Table
             {
                 if (this.IsAuto[i])
                 {
-                    row[col] = GenerateAutoValue(this.ColumnTypes[i]);
+                    row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
                 }
                 else if (this.DefaultExpressions[i] is not null)
                 {
@@ -158,6 +158,48 @@ public partial class Table
                         throw new InvalidOperationException("Primary key violation");
                 }
 
+                List<string>? unloadedIndexes = null;
+                if (StorageMode == StorageMode.Columnar)
+                {
+                    unloadedIndexes = [];
+                    // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                    foreach (var col in this.registeredIndexes.Keys)
+                    {
+                        if (!this.loadedIndexes.Contains(col))
+                        {
+                            unloadedIndexes.Add(col);
+                        }
+                    }
+                    foreach (var registeredCol in unloadedIndexes)
+                    {
+                        EnsureIndexLoaded(registeredCol);
+                    }
+
+                    foreach (var (registeredCol, metadata) in this.registeredIndexes)
+                    {
+                        if (!metadata.IsUnique)
+                        {
+                            continue;
+                        }
+
+                        if (!this.hashIndexes.TryGetValue(registeredCol, out var hashIndex))
+                        {
+                            continue;
+                        }
+
+                        if (!row.TryGetValue(registeredCol, out var value) || value is null)
+                        {
+                            continue;
+                        }
+
+                        if (hashIndex.ContainsKey(value))
+                        {
+                            throw new InvalidOperationException(
+                                $"Duplicate key value '{value}' violates unique constraint on index '{registeredCol}'");
+                        }
+                    }
+                }
+
                 // ✅ NEW: Route through storage engine
                 var engine = GetOrCreateStorageEngine();
                 long position = engine.Insert(Name, rowData);
@@ -175,20 +217,7 @@ public partial class Table
                 // Hash indexes (only for columnar mode)
                 if (StorageMode == StorageMode.Columnar)
                 {
-                    var unloadedIndexes = new List<string>();
-                    // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
-                    foreach (var col in this.registeredIndexes.Keys)
-                    {
-                        if (!this.loadedIndexes.Contains(col))
-                        {
-                            unloadedIndexes.Add(col);
-                        }
-                    }
-                    foreach (var registeredCol in unloadedIndexes)
-                    {
-                        EnsureIndexLoaded(registeredCol);
-                    }
-
+                    unloadedIndexes ??= [];
                     foreach (var hashIndex in this.hashIndexes.Values)
                     {
                         hashIndex.Add(row, position);
@@ -276,7 +305,7 @@ public partial class Table
                 {
                     if (this.IsAuto[i])
                     {
-                        row[col] = GenerateAutoValue(this.ColumnTypes[i]);
+                        row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
                     }
                     else if (this.DefaultExpressions[i] is not null)
                     {
@@ -550,7 +579,7 @@ public partial class Table
                     {
                         if (this.IsAuto[i])
                         {
-                            row[col] = GenerateAutoValue(this.ColumnTypes[i]);
+                            row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
                         }
                         else if (this.DefaultExpressions[i] is not null)
                         {
@@ -859,7 +888,32 @@ public partial class Table
 
         // 🔥 NEW: Try B-tree range scan FIRST (before hash index)
         // B-tree is optimal for range queries: age > 25, age BETWEEN 20 AND 30, etc.
-        if (!string.IsNullOrEmpty(where))
+        bool hasSimpleWhere = false;
+        string? simpleWhereColumn = null;
+        object? simpleWhereValue = null;
+        bool canUseIndex = true;
+
+        if (!string.IsNullOrEmpty(where) && TryParseSimpleWhereClause(where, out var whereColumn, out var whereValueObj))
+        {
+            hasSimpleWhere = true;
+            simpleWhereColumn = whereColumn;
+            simpleWhereValue = whereValueObj;
+
+            var colIdx = this.Columns.IndexOf(whereColumn);
+            if (colIdx >= 0 && this.ColumnTypes[colIdx] == DataType.String)
+            {
+                var collation = colIdx < this.ColumnCollations.Count
+                    ? this.ColumnCollations[colIdx]
+                    : CollationType.Binary;
+
+                if (collation != CollationType.Binary)
+                {
+                    canUseIndex = false;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(where) && canUseIndex)
         {
             var btreeResults = TryBTreeRangeScan(where, orderBy, asc);
             if (btreeResults != null)
@@ -872,17 +926,20 @@ public partial class Table
         // 1. HashIndex lookup (O(1)) - only for columnar storage
         if (StorageMode == StorageMode.Columnar &&
             !string.IsNullOrEmpty(where) &&
-            TryParseSimpleWhereClause(where, out var col, out var valObj) &&
-            this.registeredIndexes.ContainsKey(col))
+            hasSimpleWhere &&
+            canUseIndex &&
+            simpleWhereColumn != null &&
+            simpleWhereValue != null &&
+            this.registeredIndexes.ContainsKey(simpleWhereColumn))
         {
-            EnsureIndexLoaded(col);
+            EnsureIndexLoaded(simpleWhereColumn);
 
-            if (this.hashIndexes.TryGetValue(col, out var hashIndex))
+            if (this.hashIndexes.TryGetValue(simpleWhereColumn, out var hashIndex))
             {
-                var colIdx = this.Columns.IndexOf(col);
+                var colIdx = this.Columns.IndexOf(simpleWhereColumn);
                 if (colIdx >= 0)
                 {
-                    var key = ParseValueForHashLookup(valObj.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+                    var key = ParseValueForHashLookup(simpleWhereValue.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
                     if (key is not null)
                     {
                         var positions = hashIndex.LookupPositions(key);
@@ -902,23 +959,21 @@ public partial class Table
         }
 
         // 2. Primary key lookup (works for both storage modes)
-        if (results.Count == 0 && where != null && this.PrimaryKeyIndex >= 0)
+        if (results.Count == 0 && where != null && this.PrimaryKeyIndex >= 0 && canUseIndex)
         {
             var pkCol = this.Columns[this.PrimaryKeyIndex];
-            if (TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) && whereCol == pkCol)
+            if (hasSimpleWhere && simpleWhereColumn == pkCol && simpleWhereValue != null)
             {
-                var pkVal = whereVal.ToString() ?? string.Empty;
+                var pkVal = simpleWhereValue.ToString() ?? string.Empty;
                 var searchResult = this.Index.Search(pkVal);
                 if (searchResult.Found)
                 {
-                    long position = searchResult.Value;
-                    var data = engine.Read(Name, position);
+                    var data = engine.Read(Name, searchResult.Value);
                     if (data != null)
                     {
                         var row = DeserializeRow(data);
-                        if (row != null) results.Add(row);
+                        if (row != null) return [row];
                     }
-                    return ApplyOrdering(results, orderBy, asc);
                 }
             }
         }

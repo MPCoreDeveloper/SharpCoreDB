@@ -773,12 +773,110 @@ public partial class Table
         };
     }
 
-    private static object GenerateAutoValue(DataType type) => type switch
+    private object GenerateAutoValue(DataType type, int columnIndex)
     {
-        DataType.Ulid => Ulid.NewUlid(),
-        DataType.Guid => Guid.NewGuid(),
-        _ => throw new InvalidOperationException($"Auto generation not supported for type {type}"),
-    };
+        return type switch
+        {
+            DataType.Ulid => Ulid.NewUlid(),
+            DataType.Guid => Guid.NewGuid(),
+            DataType.Integer => GenerateAutoIncrementInteger(columnIndex),
+            DataType.Long => GenerateAutoIncrementLong(columnIndex),
+            _ => throw new InvalidOperationException($"Auto generation not supported for type {type}"),
+        };
+    }
+
+    /// <summary>
+    /// Generates the next auto-increment INTEGER value for the specified column.
+    /// Thread-safe atomic increment.
+    /// </summary>
+    private int GenerateAutoIncrementInteger(int columnIndex)
+    {
+        // Initialize counter from persisted value if not already initialized
+        if (!_autoIncrementCounters.ContainsKey(columnIndex))
+        {
+            var initialValue = AutoIncrementCounters.TryGetValue(columnIndex, out var persisted) ? persisted : 0;
+            _autoIncrementCounters.TryAdd(columnIndex, initialValue);
+        }
+
+        // Atomic increment and return
+        var nextValue = _autoIncrementCounters.AddOrUpdate(columnIndex, 1, (_, current) => current + 1);
+
+        // Update persisted value for next metadata save
+        AutoIncrementCounters[columnIndex] = nextValue;
+
+        return (int)nextValue;
+    }
+
+    /// <summary>
+    /// Generates the next auto-increment LONG value for the specified column.
+    /// Thread-safe atomic increment.
+    /// </summary>
+    private long GenerateAutoIncrementLong(int columnIndex)
+    {
+        // Initialize counter from persisted value if not already initialized
+        if (!_autoIncrementCounters.ContainsKey(columnIndex))
+        {
+        var initialValue = AutoIncrementCounters.TryGetValue(columnIndex, out var persisted) ? persisted : 0;
+            _autoIncrementCounters.TryAdd(columnIndex, initialValue);
+        }
+
+        // Atomic increment and return
+        var nextValue = _autoIncrementCounters.AddOrUpdate(columnIndex, 1, (_, current) => current + 1);
+
+        // Update persisted value for next metadata save
+        AutoIncrementCounters[columnIndex] = nextValue;
+
+        return nextValue;
+    }
+
+    /// <summary>
+    /// Initializes auto-increment counters from existing table data.
+    /// This is called when loading a table to ensure counters start above the max existing value.
+    /// Only needed for backward compatibility with tables created before AUTO INCREMENT support.
+    /// </summary>
+    public void InitializeAutoIncrementCountersFromData()
+    {
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            if (IsAuto[i] && (ColumnTypes[i] == DataType.Integer || ColumnTypes[i] == DataType.Long))
+            {
+                // If counter already exists in metadata, skip (already initialized)
+                if (AutoIncrementCounters.ContainsKey(i))
+                    continue;
+
+                // Find max value in existing data
+                long maxValue = 0;
+                try
+                {
+                    var allRows = Select();  // Read all rows
+                    foreach (var row in allRows)
+                    {
+                        if (row.TryGetValue(Columns[i], out var val) && val != DBNull.Value && val is not null)
+                        {
+                            long currentValue = val switch
+                            {
+                                int intVal => intVal,
+                                long longVal => longVal,
+                                _ => 0
+                            };
+
+                            if (currentValue > maxValue)
+                                maxValue = currentValue;
+                        }
+                    }
+                }
+                catch
+                {
+                    // If we can't read data, start from 0
+                    maxValue = 0;
+                }
+
+                // Initialize counter to max + 1 (so next insert gets max+1)
+                AutoIncrementCounters[i] = maxValue;
+                _autoIncrementCounters.TryAdd(i, maxValue);
+            }
+        }
+    }
 
     private static object? GetDefaultValue(DataType type) => type switch
     {

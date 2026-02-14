@@ -194,6 +194,13 @@ public class ColumnDefinition
     /// Set via COLLATE clause in DDL: <c>Name TEXT COLLATE NOCASE</c>.
     /// </summary>
     public CollationType Collation { get; set; } = CollationType.Binary;
+
+    /// <summary>
+    /// Gets or sets the locale name for <see cref="CollationType.Locale"/> collations.
+    /// ✅ Phase 9: Set via COLLATE LOCALE("locale_name") in DDL.
+    /// Only meaningful when Collation is <see cref="CollationType.Locale"/>.
+    /// </summary>
+    public string? LocaleName { get; set; }
 }
 
 /// <summary>

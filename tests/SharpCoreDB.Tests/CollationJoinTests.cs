@@ -359,6 +359,7 @@ public sealed class CollationJoinTests
         public required List<List<string>> UniqueConstraints { get; init; }
         public required List<ForeignKeyConstraint> ForeignKeys { get; init; }
         public required List<CollationType> ColumnCollations { get; init; }
+        public List<string?> ColumnLocaleNames { get; init; } = []; // ✅ Phase 9: Locale support
         
         // Stub implementations - not used in JOIN collation tests
         public void Insert(Dictionary<string, object> row) => throw new NotImplementedException();

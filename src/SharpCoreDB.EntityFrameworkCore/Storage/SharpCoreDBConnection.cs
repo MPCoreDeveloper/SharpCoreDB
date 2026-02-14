@@ -83,6 +83,16 @@ public class SharpCoreDBConnection : DbConnection
 
         ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
 
+        // ✅ CRITICAL FIX: Reuse existing database instance if available.
+        // EF Core opens/closes the connection multiple times during a single DbContext lifecycle
+        // (e.g., EnsureCreated, SaveChanges, queries). Creating a new Database instance on each
+        // Open() discards in-memory state (inserted rows, table definitions), causing data loss.
+        if (_database is not null)
+        {
+            _state = ConnectionState.Open;
+            return;
+        }
+
         // Check if pooling is enabled
         var usePooling = _connectionStringBuilder.Cache?.Equals("Shared", StringComparison.OrdinalIgnoreCase) == true;
 
@@ -112,6 +122,13 @@ public class SharpCoreDBConnection : DbConnection
             return;
 
         ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
+
+        // ✅ CRITICAL FIX: Reuse existing database instance if available.
+        if (_database is not null)
+        {
+            _state = ConnectionState.Open;
+            return;
+        }
 
         // Check if pooling is enabled
         var usePooling = _connectionStringBuilder.Cache?.Equals("Shared", StringComparison.OrdinalIgnoreCase) == true;

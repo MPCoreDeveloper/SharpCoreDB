@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using SharpCoreDB.EntityFrameworkCore.Storage;
@@ -14,6 +15,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
 {
     private readonly IRelationalConnection _connection;
     private readonly IModel _model;
+    private readonly IModel? _designTimeModel;
 
     /// <summary>
     /// Initializes a new instance of the SharpCoreDBDatabaseCreator class.
@@ -21,11 +23,13 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
     public SharpCoreDBDatabaseCreator(
         RelationalDatabaseCreatorDependencies dependencies,
         IRelationalConnection connection,
-        IModel model)
+        IModel model,
+        IDesignTimeModel designTimeModel)
         : base(dependencies)
     {
         _connection = connection;
         _model = model;
+        _designTimeModel = designTimeModel.Model;
     }
 
     /// <inheritdoc />
@@ -224,11 +228,44 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
             var columnType = GetColumnType(property);
             var nullable = property.IsNullable ? "" : " NOT NULL";
             var primaryKey = property.IsPrimaryKey() ? " PRIMARY KEY" : "";
+            var collation = GetPropertyCollation(entityType, property);
+            var collationClause = string.IsNullOrWhiteSpace(collation) ? "" : $" COLLATE {collation}";
 
-            columns.Add($"{columnName} {columnType}{nullable}{primaryKey}");
+            // ✅ FIX: Add AUTOINCREMENT for integer primary keys with ValueGeneratedOnAdd.
+            // Without this, EF Core sends Id=0 for all inserts, causing duplicate key conflicts.
+            var autoIncrement = "";
+            if (property.IsPrimaryKey() && property.ValueGenerated == ValueGenerated.OnAdd &&
+                (property.ClrType == typeof(int) || property.ClrType == typeof(long)))
+            {
+                autoIncrement = " AUTO";
+            }
+
+            columns.Add($"{columnName} {columnType}{collationClause}{nullable}{primaryKey}{autoIncrement}");
         }
 
         return $"CREATE TABLE {tableName} ({string.Join(", ", columns)})";
+    }
+
+    private string? GetPropertyCollation(IEntityType entityType, IProperty property)
+    {
+        // ✅ FIX: Get collation from design-time model first (runtime model doesn't contain this)
+        // Design-time model has full metadata including collation settings
+        var designEntityType = entityType.ClrType != null
+            ? _designTimeModel?.FindEntityType(entityType.ClrType)
+            : _designTimeModel?.FindEntityType(entityType.Name);
+        var designProperty = designEntityType?.FindProperty(property.Name);
+
+        if (designProperty != null)
+        {
+            var designCollation = designProperty.GetCollation();
+            if (!string.IsNullOrWhiteSpace(designCollation))
+            {
+                return designCollation;
+            }
+        }
+
+        // Fallback: Try annotation directly (works for both runtime and design-time models)
+        return property.FindAnnotation(RelationalAnnotationNames.Collation)?.Value as string;
     }
 
     private static string GetColumnType(IProperty property)

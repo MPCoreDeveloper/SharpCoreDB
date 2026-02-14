@@ -23,6 +23,7 @@ public class HashIndex : IDisposable
     private readonly Dictionary<object, List<long>> _index;
     private readonly string _columnName;
     private readonly CollationType _collation;
+    private readonly bool _isUnique;
     private readonly SimdHashEqualityComparer _comparer;
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
     private bool _disposed;
@@ -34,10 +35,12 @@ public class HashIndex : IDisposable
     /// <param name="tableName">The table name.</param>
     /// <param name="columnName">The column name to index.</param>
     /// <param name="collation">The collation type for string keys. Defaults to Binary (case-sensitive).</param>
-    public HashIndex(string tableName, string columnName, CollationType collation = CollationType.Binary) 
+    /// <param name="isUnique">Whether the index enforces unique key constraints.</param>
+    public HashIndex(string tableName, string columnName, CollationType collation = CollationType.Binary, bool isUnique = false) 
     {
         _columnName = columnName;
         _collation = collation;
+        _isUnique = isUnique;
         // Use SIMD-accelerated comparer with collation support
         _comparer = new SimdHashEqualityComparer(collation);
         _index = new Dictionary<object, List<long>>(_comparer);
@@ -66,6 +69,11 @@ public class HashIndex : IDisposable
             {
                 list = [];
                 _index[normalizedKey] = list;
+            }
+            else if (_isUnique && list.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
             }
             list.Add(position);
         }

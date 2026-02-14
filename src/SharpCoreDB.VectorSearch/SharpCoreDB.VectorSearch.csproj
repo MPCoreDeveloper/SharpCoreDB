@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.VectorSearch</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>

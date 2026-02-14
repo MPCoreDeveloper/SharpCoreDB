@@ -6,6 +6,7 @@
 namespace SharpCoreDB.DataStructures;
 
 using SharpCoreDB.Services;
+using SharpCoreDB.Storage.Hybrid;
 using System;
 using System.Collections.Generic;
 
@@ -54,6 +55,7 @@ public partial class Table
 
         var manager = GetOrCreateBTreeManager();
         manager.CreateIndex(columnName);
+        BuildBTreeIndexesFromExistingRows();
 
 #if DEBUG
         Console.WriteLine($"[BTREE] ✅ B-tree index created on '{columnName}' (count: {manager.Count})");
@@ -300,7 +302,36 @@ public partial class Table
                     var row = DeserializeRow(data);
                     if (row != null && IsCurrentVersion(row, pos))
                     {
-                        results.Add(row);
+                        if (row.TryGetValue(col, out var rowValue) && rowValue != null)
+                        {
+                            var normalizedValue = ConvertValueForBTreeKey(rowValue, colType) ?? rowValue;
+                            var valueStr = normalizedValue.ToString() ?? string.Empty;
+                            var startStr = startKey.ToString() ?? string.Empty;
+                            var endStr = endKey.ToString() ?? string.Empty;
+
+                            if (normalizedValue is IComparable comparableValue
+                                && startKey is IComparable comparableStart
+                                && endKey is IComparable comparableEnd
+                                && normalizedValue.GetType() == startKey.GetType()
+                                && normalizedValue.GetType() == endKey.GetType())
+                            {
+                                if (comparableValue.CompareTo(comparableStart) < 0 ||
+                                    comparableValue.CompareTo(comparableEnd) > 0)
+                                {
+                                    continue;
+                                }
+                            }
+                            else if (string.CompareOrdinal(valueStr, startStr) < 0 ||
+                                     string.CompareOrdinal(valueStr, endStr) > 0)
+                            {
+                                continue;
+                            }
+                        }
+
+                        if (EvaluateWhere(row, where))
+                        {
+                            results.Add(row);
+                        }
                     }
                 }
             }
@@ -425,7 +456,7 @@ public partial class Table
                     continue;
 
                 // Insert via reflection (dynamic type)
-                var insertMethod = index.GetType().GetMethod("Insert");
+                var insertMethod = index.GetType().GetMethod("Add");
                 if (insertMethod != null)
                 {
                     // Convert value to correct type
@@ -474,6 +505,26 @@ public partial class Table
 #if DEBUG
         Console.WriteLine($"[BTREE] Bulk indexed {rows.Count} rows across {_btreeManager.Count} B-tree indexes");
 #endif
+    }
+
+    private void BuildBTreeIndexesFromExistingRows()
+    {
+        if (_btreeManager == null)
+            return;
+
+        var engine = GetOrCreateStorageEngine();
+
+        foreach (var (position, data) in engine.GetAllRecords(Name))
+        {
+            Dictionary<string, object>? row = StorageMode == StorageMode.Columnar
+                ? DeserializeRow(data)
+                : DeserializeRowFromSpan(data);
+
+            if (row != null)
+            {
+                IndexRowInBTree(row, position);
+            }
+        }
     }
 
     /// <summary>

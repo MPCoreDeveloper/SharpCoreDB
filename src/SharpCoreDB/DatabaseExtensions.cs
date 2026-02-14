@@ -780,6 +780,7 @@ internal class SingleFileTable : ITable
     public List<List<string>> UniqueConstraints => new List<List<string>>();
     public List<ForeignKeyConstraint> ForeignKeys => new List<ForeignKeyConstraint>();
     public List<CollationType> ColumnCollations => [.. new CollationType[_columns.Count]]; // ✅ COLLATE Phase 1: All Binary by default
+    public List<string?> ColumnLocaleNames => [.. new string?[_columns.Count]]; // ✅ PHASE 9: Locale support
     public string DataFile { get => _dataBlockName; set => throw new NotSupportedException(); }
 
     public void Insert(Dictionary<string, object> row)
