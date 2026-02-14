@@ -26,7 +26,23 @@
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Package icon -->
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Link="SharpCoreDB.jpg">
+      <PackagePath>/</PackagePath>
+      <Pack>true</Pack>
+    </None>
+    
+    <!-- Package README -->
+    <None Include="README.md">
+      <PackagePath>/</PackagePath>
+      <Pack>true</Pack>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
