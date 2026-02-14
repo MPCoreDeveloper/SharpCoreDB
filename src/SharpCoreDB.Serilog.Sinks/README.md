@@ -7,7 +7,7 @@
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.7-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Serilog.Sinks)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Serilog.Sinks)
   [![Serilog](https://img.shields.io/badge/Serilog-4.x-purple.svg)](https://serilog.net/)
 
 </div>

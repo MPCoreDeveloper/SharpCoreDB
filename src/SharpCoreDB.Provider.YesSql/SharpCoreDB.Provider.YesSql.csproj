@@ -8,13 +8,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.YesSql</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.YesSql</Product>
     <Description>YesSql provider for SharpCoreDB encrypted database engine. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.2.0: Updated to support SharpCoreDB 1.2.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.0: Updated to support SharpCoreDB 1.3.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;yessql;database;orm;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

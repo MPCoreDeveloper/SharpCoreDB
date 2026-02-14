@@ -7,13 +7,15 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.1.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/mpcoredeveloper)
 </div>
 
 ---
 
 A high-performance, encrypted, embedded database engine for .NET 10 with **B-tree indexes**, **SIMD-accelerated analytics**, and **420x analytics speedup**. Pure .NET implementation with enterprise-grade encryption and world-class analytics performance. **Beats LiteDB in ALL 4 categories!** 🏆
+
+**Latest (v1.3.0):** 28.6x extent allocator speedup, enhanced locale validation, EF Core collation support ✅
 
 - **License**: MIT
 - **Platform**: .NET 10, C# 14
@@ -46,7 +48,7 @@ services.AddSharpCoreDB();
 var provider = services.BuildServiceProvider();
 var factory = provider.GetRequiredService<DatabaseFactory>();
 
-using var db = factory.Create("./app_db", "StrongPassword!");
+using var db = factory.Create("./app_db", "StrongPassword!!!");
 
 // Create table with B-tree index
 db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");

@@ -9,6 +9,7 @@
   [![NuGet Downloads](https://img.shields.io/nuget/dt/SharpCoreDB.Data.Provider)](https://www.nuget.org/packages/SharpCoreDB.Data.Provider)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
+  [![Version](https://img.shields.io/badge/Version-1.3.0-green.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/releases)
   [![GitHub Stars](https://img.shields.io/github/stars/MPCoreDeveloper/SharpCoreDB)](https://github.com/MPCoreDeveloper/SharpCoreDB/stargazers)
 
 </div>

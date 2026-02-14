@@ -1,9 +1,10 @@
-# SharpCoreDB.Provider.YesSql
+# SharpCoreDB.Provider.YesSql v1.3.0
 
 **YesSql Provider for SharpCoreDB** - Enables OrchardCore CMS and other YesSql-based applications to use SharpCoreDB as the underlying database.
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-1.3.0-green.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/releases)
 
 ---
 

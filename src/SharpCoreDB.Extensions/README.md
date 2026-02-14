@@ -1,14 +1,14 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="200"/>
 
-  # SharpCoreDB.Extensions v1.0.6
+  # SharpCoreDB.Extensions v1.3.0
 
   **Dapper Integration · Health Checks · Repository Pattern · Bulk Operations · Performance Monitoring**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![C#](https://img.shields.io/badge/C%23-14-blueviolet.svg)](https://learn.microsoft.com/dotnet/csharp/)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.6-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
 
 </div>
 
@@ -43,7 +43,7 @@ dotnet add package SharpCoreDB.Extensions
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| SharpCoreDB | 1.0.6 | Core database engine |
+| SharpCoreDB | 1.3.0 | Core database engine |
 | Dapper | 2.1.66 | Micro-ORM for typed queries |
 | Microsoft.Extensions.Diagnostics.HealthChecks | 10.0.2 | ASP.NET Core health checks |
 
@@ -470,6 +470,7 @@ builder.Services.AddHealthChecks()
         dbPath: "./app_db",
         password: "StrongPassword!");
 
+
 // Advanced health check with options
 builder.Services.AddHealthChecks()
     .AddSharpCoreDB(
@@ -505,7 +506,6 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 
 app.Run();
 ```
-
 ### Custom Health Check Logic
 
 ```csharp
@@ -564,7 +564,7 @@ if (result.Exception != null)
    - Returns detailed health status
 
 2. **HealthCheckBuilderExtensions**
-   - Extension method: `AddSharpCoreDB()`
+   - Extension method: `AddSharpCoreDB()
    - Registers health check in DI container
    - Configurable name, tags, timeout, failure status
 
@@ -678,7 +678,7 @@ db.ExecuteSQL("CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message 
 using var connection = db.GetDapperConnection();
 
 // Insert logs
-var logs = new[]
+var logs = new []
 {
     new { Id = 1, Message = "Application started", Timestamp = DateTime.UtcNow.ToString("O") },
     new { Id = 2, Message = "Processing data", Timestamp = DateTime.UtcNow.ToString("O") }

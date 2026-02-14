@@ -7,7 +7,7 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.0.6-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
   [![EF Core](https://img.shields.io/badge/EF%20Core-10.0.2-purple.svg)](https://docs.microsoft.com/ef/core/)
   
 </div>
@@ -18,18 +18,20 @@
 
 Entity Framework Core 10 database provider for **SharpCoreDB** — a high-performance encrypted embedded database engine. Use familiar EF Core APIs with SharpCoreDB's AES-256-GCM encryption, SIMD acceleration, and zero-config deployment.
 
+**Latest (v1.3.0):** Fixed CREATE TABLE COLLATE clause emission for UseCollation() ✅
+
 ---
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.3.0
 ```
 
 **Requirements:**
 - .NET 10.0 or later
 - Entity Framework Core 10.0.2 or later
-- SharpCoreDB 1.0.6 or later (installed automatically)
+- SharpCoreDB 1.3.0 or later (installed automatically)
 
 ---
 
@@ -196,6 +198,73 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 | **Spatial Types** | Not supported (no geometry/geography) |
 | **JSON Columns** | Not supported |
 | **Batch UPDATE/DELETE** (`ExecuteUpdate`/`ExecuteDelete`) | Not yet implemented |
+| **COLLATE Support** | ✅ Fixed in v1.3.0 - CREATE TABLE now emits COLLATE clauses |
+
+---
+
+## Collation Support (v1.3.0+)
+
+SharpCoreDB supports column-level collations including `NOCASE` for case-insensitive comparisons and `LOCALE()` for culture-specific sorting.
+
+### Basic Collation Configuration
+
+```csharp
+public class User
+{
+    public int Id { get; set; }
+    public required string Username { get; set; }
+    public required string Email { get; set; }
+}
+
+public class AppDbContext : DbContext
+{
+    public DbSet<User> Users => Set<User>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>(entity =>
+        {
+            // Case-insensitive username
+            entity.Property(e => e.Username)
+                .HasMaxLength(50)
+                .UseCollation("NOCASE");  // ✅ Fixed in v1.3.0
+                
+            // Locale-specific email sorting
+            entity.Property(e => e.Email)
+                .HasMaxLength(100)
+                .UseCollation("LOCALE(\"en-US\")");
+        });
+    }
+}
+```
+
+### Generated SQL (v1.3.0+)
+
+```sql
+CREATE TABLE User (
+    Id INTEGER PRIMARY KEY AUTO,
+    Username TEXT COLLATE NOCASE NOT NULL,
+    Email TEXT COLLATE LOCALE("en-US") NOT NULL
+)
+```
+
+### Direct SQL Queries with Collations
+
+```csharp
+// Case-insensitive WHERE clause (uses NOCASE from column definition)
+var users = await db.Users
+    .FromSqlRaw("SELECT * FROM User WHERE Username = 'ALICE'")
+    .ToListAsync();
+
+// Will match 'alice', 'Alice', 'ALICE', etc.
+```
+
+### Known Limitations
+
+- **EF Core LINQ Query Provider**: Full LINQ query translation for collations is pending infrastructure work
+- **Workaround**: Use `FromSqlRaw` for complex collation queries or call direct SQL via `ExecuteQuery()`
+- **What Works**: CREATE TABLE emission, direct SQL queries, case-insensitive WHERE clauses
+- **What's Pending**: Full LINQ expression translation (e.g., `db.Users.Where(u => u.Username == "ALICE")`)
 
 ---
 
@@ -383,7 +452,7 @@ MIT License — see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blo
 
 ---
 
-**Version**: 1.0.6  
+**Version**: 1.3.0  
 **Last Updated**: 2026  
-**Compatibility**: .NET 10.0+, EF Core 10.0.2+, SharpCoreDB 1.0.6, C# 14  
+**Compatibility**: .NET 10.0+, EF Core 10.0.2+, SharpCoreDB 1.3.0, C# 14  
 **Platforms**: Windows, Linux, macOS, Android, iOS, IoT (x64, ARM64)

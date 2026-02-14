@@ -9,6 +9,10 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     
+    <!-- Runtime Identifiers for NuGet packaging -->
+    <!-- Comment out if you get NU1102 errors with preview SDKs -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    
     <!-- Best Practice: Enable warnings as errors for production code -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningLevel>5</WarningLevel>
@@ -116,10 +120,11 @@
   </ItemGroup>
 
   <!-- Build all RIDs automatically when packing -->
+  <!-- DISABLED: Enable this if RuntimeIdentifiers are properly supported in your SDK version -->
+  <!--
   <Target Name="BuildAllRuntimesForPack" BeforeTargets="Pack">
     <Message Text="Building platform-specific assemblies for NuGet package..." Importance="high" />
     
-    <!-- Build for each runtime identifier -->
     <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=win-x64;Configuration=$(Configuration)" />
     <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=win-arm64;Configuration=$(Configuration)" />
     <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=linux-x64;Configuration=$(Configuration)" />
@@ -127,6 +132,7 @@
     <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=osx-x64;Configuration=$(Configuration)" />
     <MSBuild Projects="$(MSBuildProjectFile)" Targets="Build" Properties="RuntimeIdentifier=osx-arm64;Configuration=$(Configuration)" />
   </Target>
+  -->
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>

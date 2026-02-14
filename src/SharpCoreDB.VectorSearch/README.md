@@ -6,6 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/download)
 [![C#](https://img.shields.io/badge/C%23-14.0-blue.svg)](https://docs.microsoft.com/en-us/dotnet/csharp/)
+[![Version](https://img.shields.io/badge/Version-1.3.0-green.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB/releases)
 
 ---
 

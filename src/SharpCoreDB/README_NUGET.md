@@ -2,29 +2,34 @@
 
 **High-Performance Embedded Database for .NET 10**
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg) ![NuGet](https://img.shields.io/badge/NuGet-1.1.1-blue.svg) ![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg) ![Tests](https://img.shields.io/badge/Tests-772_Passing-brightgreen.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg) ![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg) ![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg) ![Tests](https://img.shields.io/badge/Tests-800+_Passing-brightgreen.svg)
 
 ---
 
 ## 📌 Current Status (February 2026)
 
-### ✅ Version 1.1.1 Released - Localization Fix + API Cleanup
+### ✅ Version 1.3.0 Released - Performance & Quality Improvements
 
-**Latest Release**: v1.1.1 (February 2026)
+**Latest Release**: v1.3.0 (February 14, 2026)
 
-#### 🐛 Bug Fixes
-- **Critical**: Fixed localization bug affecting date/time formatting in non-English cultures
-- **Compatibility**: Resolved culture-dependent parsing issues (decimal separators, date formats)
-- **Portability**: Database files now fully portable across different regional settings
+#### 🚀 Performance Improvements
+- **28.6x faster extent allocator**: Replaced O(n log n) sorting with O(log n) SortedSet operations
+- **Fragmentation handling**: Time ratio reduced from 309x to 10.81x (10,000 vs 100 extents)
+- **Memory efficiency**: Improved allocation patterns for high-fragmentation scenarios
 
-#### 🔄 API Improvements
-- **Deprecated Methods**: Added `[Obsolete]` attributes to legacy sync methods
-- **Migration Path**: Clear upgrade guidance to async patterns (see Quickstart below)
-- **Breaking Changes**: None - full backward compatibility maintained
+#### ✨ Enhanced Internationalization
+- **Strict locale validation**: Rejects placeholder locales (xx-YY, zz-ZZ, iv)
+- **Clear error messages**: Guides users to valid IETF locale names (en-US, de-DE, tr-TR)
+- **Better collation support**: Validates culture DisplayName and TwoLetterISOLanguageName
+
+#### 🔧 Bug Fixes
+- **EF Core Collation**: CREATE TABLE now properly emits COLLATE clauses for UseCollation()
+- **Locale Validation**: Non-existent locale names throw InvalidOperationException with helpful messages
+- **Storage Engine**: Fixed ExtentAllocator CoalesceInternal for proper chain-merging
 
 #### 📦 Quick Install
 ```bash
-dotnet add package SharpCoreDB --version 1.1.1
+dotnet add package SharpCoreDB --version 1.3.0
 ```
 
 ---
@@ -38,14 +43,16 @@ dotnet add package SharpCoreDB --version 1.1.1
 | **Phase 1.3** (Stored Procedures, Views) | ✅ Complete |
 | **Phase 1.4** (Triggers) | ✅ Complete |
 | **Build** | ✅ 0 errors |
-| **Tests** | ✅ 772 passing, 0 failures |
-| **Production LOC** | ~77,700 |
+| **Tests** | ✅ 800+ passing, 0 failures |
+| **Production LOC** | ~78,000+ |
 
 **Full documentation**: [https://github.com/MPCoreDeveloper/SharpCoreDB](https://github.com/MPCoreDeveloper/SharpCoreDB)
 
 ---
 
 A high-performance, encrypted, embedded database engine for .NET 10 with **B-tree indexes**, **SIMD-accelerated analytics**, and **unlimited row storage**. Pure .NET implementation with enterprise-grade encryption and world-class analytics performance. **Beats SQLite AND LiteDB on INSERT!** 🏆
+
+**Latest (v1.3.0):** 28.6x extent allocator speedup, enhanced locale validation, EF Core collation support ✅
 
 - **License**: MIT
 - **Platform**: .NET 10, C# 14
@@ -65,8 +72,8 @@ A high-performance, encrypted, embedded database engine for .NET 10 with **B-tre
 Install the latest version:
 
 ```bash
-# Install SharpCoreDB v1.1.1
-dotnet add package SharpCoreDB --version 1.1.1
+# Install SharpCoreDB v1.3.0
+dotnet add package SharpCoreDB --version 1.3.0
 
 # Or use wildcard for latest
 dotnet add package SharpCoreDB
