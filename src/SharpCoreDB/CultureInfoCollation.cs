@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// ✅ Phase 9: Singleton registry and comparison engine for locale-specific collations.
-/// Maps locale names (e.g., "tr_TR", "de_DE") to <see cref="CultureInfo"/> instances
+/// Maps locale names (e.g., "tr-TR", "de-DE", "nl-NL") to <see cref="CultureInfo"/> instances
 /// and provides culture-aware string comparison, equality, and hash code operations.
 ///
 /// Thread-safe via <see cref="Lock"/> (C# 14). Caches <see cref="CompareInfo"/> for hot-path performance.
@@ -20,8 +20,8 @@ using System.Runtime.CompilerServices;
 /// <remarks>
 /// Locale-aware comparison is 10-100x slower than ordinal. Use only when needed.
 /// <para>
-/// Supported locale formats: "en_US", "en-US", "de_DE", "tr_TR", etc.
-/// Underscores are normalized to hyphens for .NET <see cref="CultureInfo"/> compatibility.
+/// Supported locale formats: IETF BCP 47 tags such as "en-US", "de-DE", "tr-TR", "nl-NL".
+/// POSIX-style underscores (e.g., "en_US") are also accepted and normalized to hyphens.
 /// </para>
 /// </remarks>
 public sealed class CultureInfoCollation
@@ -39,7 +39,7 @@ public sealed class CultureInfoCollation
     /// Gets or creates a <see cref="CultureInfo"/> for the given locale name.
     /// Caches the result for subsequent calls.
     /// </summary>
-    /// <param name="localeName">The locale name (e.g., "tr_TR", "de-DE").</param>
+    /// <param name="localeName">The locale name in IETF BCP 47 format (e.g., "nl-NL", "de-DE", "tr-TR").</param>
     /// <returns>The resolved <see cref="CultureInfo"/>.</returns>
     /// <exception cref="ArgumentException">If <paramref name="localeName"/> is null, empty, or invalid.</exception>
     public CultureInfo GetCulture(string localeName)
@@ -74,7 +74,7 @@ public sealed class CultureInfoCollation
     /// Gets the <see cref="CompareInfo"/> for the given locale name.
     /// More efficient than <c>GetCulture(name).CompareInfo</c> due to caching.
     /// </summary>
-    /// <param name="localeName">The locale name (e.g., "tr_TR", "de-DE").</param>
+    /// <param name="localeName">The locale name in IETF BCP 47 format (e.g., "nl-NL", "de-DE", "tr-TR").</param>
     /// <returns>The resolved <see cref="CompareInfo"/>.</returns>
     public CompareInfo GetCompareInfo(string localeName)
     {
@@ -258,8 +258,8 @@ public sealed class CultureInfoCollation
     }
 
     /// <summary>
-    /// Normalizes locale name format: converts underscores to hyphens for .NET compatibility.
-    /// "tr_TR" → "tr-TR", "de_DE" → "de-DE"
+    /// Normalizes locale name format: converts POSIX-style underscores to IETF BCP 47 hyphens.
+    /// "tr_TR" → "tr-TR", "nl_NL" → "nl-NL"
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string NormalizeLocaleName(string localeName) =>
@@ -272,6 +272,15 @@ public sealed class CultureInfoCollation
     /// </summary>
     private static CultureInfo CreateCulture(string normalizedName)
     {
+        // First, validate the format is reasonable before even trying CultureInfo.GetCultureInfo
+        if (!IsValidLocaleFormat(normalizedName))
+        {
+            throw new ArgumentException(
+                $"Invalid locale format '{normalizedName}'. " +
+                $"Use a valid IETF locale name (e.g., 'en-US', 'de-DE', 'tr-TR').",
+                nameof(normalizedName));
+        }
+
         try
         {
             var culture = CultureInfo.GetCultureInfo(normalizedName);
@@ -299,11 +308,8 @@ public sealed class CultureInfoCollation
             // This allows cross-platform tests to pass while still preserving the locale identifier
             // in database metadata for when the database is moved to a system with that locale.
             
-            // Check if it's a placeholder locale (xx, zz, iv) - those are always invalid
-            if (normalizedName.StartsWith("xx", StringComparison.OrdinalIgnoreCase) ||
-                normalizedName.StartsWith("zz", StringComparison.OrdinalIgnoreCase) ||
-                normalizedName.StartsWith("iv", StringComparison.OrdinalIgnoreCase) ||
-                normalizedName == "invalid")
+            // Check if it's obviously invalid (placeholder locale or malformed)
+            if (IsInvalidLocaleIndicator(normalizedName))
             {
                 throw new ArgumentException(
                     $"Unknown locale '{normalizedName}'. Use a valid IETF locale name (e.g., 'en-US', 'de-DE', 'tr-TR').",
@@ -315,5 +321,93 @@ public sealed class CultureInfoCollation
             // at query time, so the CultureInfo is mostly for metadata.
             return CultureInfo.InvariantCulture;
         }
+    }
+
+    /// <summary>
+    /// Validates that a locale name has a reasonable format before attempting CultureInfo lookup.
+    /// Rejects names that contain obviously invalid components.
+    /// </summary>
+    /// <param name="normalizedName">The normalized locale name (hyphens, lowercase).</param>
+    /// <returns>True if the name format is potentially valid (may not exist on this system).</returns>
+    private static bool IsValidLocaleFormat(string normalizedName)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedName))
+            return false;
+
+        // Split by hyphen to check language and region codes
+        var parts = normalizedName.Split('-');
+        if (parts.Length > 2)
+            return false; // Too many parts (valid: "en" or "en-US", invalid: "en-US-x-something")
+
+        // Check language code (first part): should be 2-3 letters, all alphabetic
+        var languageCode = parts[0].ToLowerInvariant();
+        if (languageCode.Length < 2 || languageCode.Length > 3)
+            return false;
+
+        if (!languageCode.All(char.IsAsciiLetter))
+            return false;
+
+        // Reject obviously invalid language codes
+        if (languageCode.Contains("invalid") || 
+            languageCode == "xx" || 
+            languageCode == "zz" || 
+            languageCode == "iv")
+            return false;
+
+        // Check region code (second part) if present
+        if (parts.Length == 2)
+        {
+            var regionCode = parts[1].ToLowerInvariant();
+            
+            // Region codes should be 2 letters (ISO 3166-1 alpha-2) or 3 digits (UN M.49)
+            if (regionCode.Length != 2 && regionCode.Length != 3)
+                return false;
+
+            if (regionCode.Length == 2)
+            {
+                // Two-letter codes must be alphabetic
+                if (!regionCode.All(char.IsAsciiLetter))
+                    return false;
+                    
+                // Reject obviously invalid region codes
+                if (regionCode.Contains("invalid") || 
+                    regionCode == "xx" || 
+                    regionCode == "zz" || 
+                    regionCode == "iv")
+                    return false;
+            }
+            else if (regionCode.Length == 3)
+            {
+                // Three-digit codes must be numeric
+                if (!regionCode.All(char.IsAsciiDigit))
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if a locale name is obviously invalid after a CultureNotFoundException.
+    /// Used as fallback validation when the system doesn't recognize the locale.
+    /// </summary>
+    /// <param name="normalizedName">The normalized locale name.</param>
+    /// <returns>True if the locale is definitely invalid, false if it might be a system-dependent unavailable locale.</returns>
+    private static bool IsInvalidLocaleIndicator(string normalizedName)
+    {
+        // Check for placeholder/test locales
+        if (normalizedName == "invalid" || 
+            normalizedName.StartsWith("invalid-", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (normalizedName.StartsWith("xx-", StringComparison.OrdinalIgnoreCase) ||
+            normalizedName.StartsWith("zz-", StringComparison.OrdinalIgnoreCase) ||
+            normalizedName.StartsWith("iv-", StringComparison.OrdinalIgnoreCase) ||
+            normalizedName == "xx" ||
+            normalizedName == "zz" ||
+            normalizedName == "iv")
+            return true;
+
+        return false;
     }
 }
