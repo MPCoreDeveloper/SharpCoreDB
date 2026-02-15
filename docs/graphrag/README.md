@@ -70,6 +70,42 @@ SELECT GRAPH_TRAVERSE(1, 'nextId', 5, 1)  -- DFS from node 1
 
 ---
 
+## Bulk Edge Ingestion
+
+GraphRAG ingestion workloads (LLM extraction) should batch edges to avoid per-edge WAL/BTREE overhead.
+Use the existing batch insert APIs on the edge table so the storage engine performs a single transaction
+and index update sequence.
+
+### Recommended API
+
+```csharp
+// Edge table schema: (SourceId, TargetId, Relationship)
+var edges = new List<Dictionary<string, object>>
+{
+    new()
+    {
+        ["SourceId"] = 1L,
+        ["TargetId"] = 2L,
+        ["Relationship"] = "calls"
+    },
+    new()
+    {
+        ["SourceId"] = 1L,
+        ["TargetId"] = 3L,
+        ["Relationship"] = "uses"
+    }
+};
+
+database.InsertBatch("GraphEdges", edges);
+```
+
+### Notes
+- `InsertBatch` and `InsertBatchAsync` execute a single engine transaction.
+- For SQL pipelines, prefer `ExecuteBatchSQL` with batched INSERT statements.
+- Follow bulk inserts with `Flush()` and `ForceSave()` when persistence is required.
+
+---
+
 ## Features
 
 ### ✅ Traversal Algorithms

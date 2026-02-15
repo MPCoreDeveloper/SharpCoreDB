@@ -221,6 +221,19 @@ if (column.Type == DataType.RowRef)
 
 ---
 
+### L1 Storage: Bulk Edge Insert
+
+LLM-based ingestion can generate large bursts of edges. To avoid per-edge WAL/B-Tree overhead,
+use the existing batch insert APIs on the edge table:
+
+- `Database.InsertBatch` / `InsertBatchAsync` for SQL-free batch ingestion.
+- `ExecuteBatchSQL` for batched INSERT statements.
+
+These paths execute a single storage transaction and bulk index updates, making edge ingestion
+throughput bounded by serialization rather than transaction overhead.
+
+---
+
 ### Phase 2: Graph Traversal Executor (3-4 weeks)
 
 **Goal:** Execute queries like: `SELECT * FROM articles WHERE article_id IN (graph_traverse(start_id, 'references', 2))`
