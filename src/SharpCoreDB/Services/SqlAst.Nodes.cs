@@ -380,3 +380,39 @@ public class FunctionCallNode : ExpressionNode
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitFunctionCall(this);
 }
+
+/// <summary>
+/// Represents a GRAPH_TRAVERSE expression for index-free graph traversal.
+/// ✅ GraphRAG Phase 1: Core graph traversal support via ROWREF adjacency.
+/// </summary>
+public class GraphTraverseNode : ExpressionNode
+{
+    /// <summary>
+    /// Gets or sets the table name or expression to traverse.
+    /// </summary>
+    public string TableName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the starting node ID expression.
+    /// </summary>
+    public ExpressionNode? StartNode { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ROWREF relationship column name.
+    /// </summary>
+    public string RelationshipColumn { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the maximum traversal depth expression.
+    /// </summary>
+    public ExpressionNode? MaxDepth { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional traversal strategy (BFS/DFS).
+    /// Default is BFS if not specified.
+    /// </summary>
+    public string Strategy { get; set; } = "BFS";
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitGraphTraverse(this);
+}

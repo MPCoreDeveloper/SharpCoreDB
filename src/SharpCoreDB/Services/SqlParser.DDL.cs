@@ -155,6 +155,7 @@ public partial class SqlParser
                     "DECIMAL" => DataType.Decimal,
                     "ULID" => DataType.Ulid,
                     "GUID" => DataType.Guid,
+                    "ROWREF" => DataType.RowRef,
                     _ => DataType.String,
                 };
             }
@@ -185,6 +186,19 @@ public partial class SqlParser
             .Where(def => def.Trim().ToUpper().StartsWith("FOREIGN KEY"))
             .Select(def => ParseForeignKeyFromString(def.Trim()))
             .Where(fk => fk is not null)!);
+
+        var rowRefColumns = columns
+            .Where((_, index) => columnTypes[index] == DataType.RowRef)
+            .ToList();
+
+        foreach (var rowRefColumn in rowRefColumns)
+        {
+            if (!foreignKeys.Any(fk => fk.ColumnName.Equals(rowRefColumn, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    $"ROWREF column '{rowRefColumn}' requires a FOREIGN KEY constraint.");
+            }
+        }
 
         // ✅ NEW: Choose file extension based on storage mode
         var fileExtension = storageMode == StorageMode.PageBased 

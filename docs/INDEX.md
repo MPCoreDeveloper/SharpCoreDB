@@ -23,12 +23,13 @@ This is your central guide to all SharpCoreDB features, guides, and resources.
 ## 📋 Table of Contents
 
 1. [Vector Search](#vector-search)
-2. [Collation Support](#collations)
-3. [Features & Phases](#features--phases)
-4. [Migration Guides](#migration-guides)
-5. [API & Configuration](#api--configuration)
-6. [Performance & Tuning](#performance--tuning)
-7. [Support & Community](#support--community)
+2. [GraphRAG — Lightweight Graph Capabilities](#graphrag--lightweight-graph-capabilities)
+3. [Collation Support](#collations)
+4. [Features & Phases](#features--phases)
+5. [Migration Guides](#migration-guides)
+6. [API & Configuration](#api--configuration)
+7. [Performance & Tuning](#performance--tuning)
+8. [Support & Community](#support--community)
 
 ---
 
@@ -74,6 +75,47 @@ var results = await db.ExecuteQueryAsync(@"
     WHERE vec_distance('cosine', embedding, @query) > 0.8
     LIMIT 10
 ");
+```
+
+---
+
+## GraphRAG — Lightweight Graph Capabilities
+
+Planned graph traversal capabilities enabling hybrid **Vector + Graph** queries for AI Agents, code analysis, and knowledge graphs.
+
+### Documentation
+
+| Document | Purpose | Read Time |
+|----------|---------|-----------|
+| [GraphRAG Overview](./graphrag/README.md) | Overview, architecture, and doc index | 10 min |
+| [Proposal Analysis](./graphrag/GRAPHRAG_PROPOSAL_ANALYSIS.md) | Feasibility analysis and competitive landscape | 25 min |
+| [Implementation Plan](./graphrag/GRAPHRAG_IMPLEMENTATION_PLAN.md) | Comprehensive 5-phase implementation plan | 30 min |
+| [Implementation Startpoint](./graphrag/GRAPHRAG_IMPLEMENTATION_STARTPOINT.md) | Engineering startpoint and architecture decision record | 15 min |
+| [v2 Roadmap](./graphrag/ROADMAP_V2_GRAPHRAG_SYNC.md) | Integrated product roadmap (GraphRAG + Sync) | 20 min |
+| [Strategic Recommendations](./graphrag/STRATEGIC_RECOMMENDATIONS.md) | Executive decision document | 15 min |
+
+### Key Features (Planned)
+
+- **ROWREF Column Type:** O(1) index-free adjacency via direct row pointers
+- **BFS/DFS Traversal Engine:** 1M nodes in <100ms
+- **GRAPH_TRAVERSE() SQL Function:** Graph queries in standard SQL
+- **Hybrid Vector + Graph Queries:** Combine HNSW similarity with structural constraints
+- **Status:** 📋 Planned for v1.4.0 (Q3 2026)
+
+### Quick Example (Target API)
+
+```sql
+-- Find code chunks semantically similar to query,
+-- but only if connected to DataRepository within 3 hops
+SELECT chunk_id, content
+FROM code_chunks
+WHERE
+    vector_distance(embedding, @query) < 0.3
+    AND chunk_id IN (
+        GRAPH_TRAVERSE('code_chunks', @start_id, 'belongs_to', 3)
+    )
+ORDER BY vector_distance(embedding, @query)
+LIMIT 10;
 ```
 
 ---

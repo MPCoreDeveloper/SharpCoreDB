@@ -119,6 +119,20 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
             return sqlFunctionExpression;
         }
 
+        // Handle GRAPH_TRAVERSE
+        if (sqlFunctionExpression.Name.Equals("GRAPH_TRAVERSE", StringComparison.OrdinalIgnoreCase))
+        {
+            Sql.Append("GRAPH_TRAVERSE(");
+            for (var i = 0; i < sqlFunctionExpression.Arguments.Count; i++)
+            {
+                if (i > 0)
+                    Sql.Append(", ");
+                Visit(sqlFunctionExpression.Arguments[i]!);
+            }
+            Sql.Append(")");
+            return sqlFunctionExpression;
+        }
+
         return base.VisitSqlFunction(sqlFunctionExpression);
     }
 

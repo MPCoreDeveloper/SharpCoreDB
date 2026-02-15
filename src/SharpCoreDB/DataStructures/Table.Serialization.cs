@@ -417,6 +417,14 @@ public partial class Table
                 bytesWritten += 8;
                 break;
                 
+            case DataType.RowRef:
+                if (buffer.Length < 9) // 1 byte null flag + 8 bytes long
+                    throw new InvalidOperationException(
+                        $"Buffer too small for RowRef write: need 9 bytes, have {buffer.Length}");
+                System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(bytesWritten), (long)value);
+                bytesWritten += 8;
+                break;
+
             case DataType.Real:
                 if (buffer.Length < 9) // 1 byte null flag + 8 bytes double
                     throw new InvalidOperationException(
@@ -572,6 +580,13 @@ public partial class Table
                 bytesRead += 8;
                 return System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(1));
                 
+            case DataType.RowRef:
+                if (buffer.Length < 9) // 1 byte null flag + 8 bytes long
+                    throw new InvalidOperationException(
+                        $"Buffer too small for RowRef: need 9 bytes, have {buffer.Length}");
+                bytesRead += 8;
+                return System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(1));
+
             case DataType.Real:
                 if (buffer.Length < 9) // 1 byte null flag + 8 bytes double
                     throw new InvalidOperationException(
@@ -889,6 +904,7 @@ public partial class Table
         DataType.Decimal => 0m,
         DataType.Ulid => Ulid.NewUlid(),
         DataType.Guid => Guid.NewGuid(),
+        DataType.RowRef => 0L,
         _ => null,
     };
 
@@ -906,23 +922,16 @@ public partial class Table
             DataType.Decimal => value is decimal,
             DataType.Ulid => value is Ulid,
             DataType.Guid => value is Guid,
+            DataType.RowRef => value is long,
             DataType.Blob => value is byte[],
             _ => true,
         };
     }
 
-    /// <summary>
-    /// Attempts to coerce a value to the expected data type.
-    /// Handles common type conversions for better compatibility with JSON deserialization and API inputs.
-    /// </summary>
-    /// <param name="value">The value to coerce.</param>
-    /// <param name="targetType">The target data type.</param>
-    /// <param name="coercedValue">The coerced value if successful.</param>
-    /// <returns>True if coercion succeeded, false otherwise.</returns>
     private static bool TryCoerceValue(object value, DataType targetType, out object coercedValue)
     {
         coercedValue = value;
-        
+
         try
         {
             switch (targetType)
@@ -957,7 +966,25 @@ public partial class Table
                         return true;
                     }
                     break;
-                    
+
+                case DataType.RowRef:
+                    if (value is string strRowRef && long.TryParse(strRowRef, out var rowRefVal))
+                    {
+                        coercedValue = rowRefVal;
+                        return true;
+                    }
+                    if (value is int intRowRef)
+                    {
+                        coercedValue = (long)intRowRef;
+                        return true;
+                    }
+                    if (value is long longRowRef)
+                    {
+                        coercedValue = longRowRef;
+                        return true;
+                    }
+                    break;
+
                 case DataType.Real:
                     if (value is string strReal && double.TryParse(strReal, out var doubleVal))
                     {

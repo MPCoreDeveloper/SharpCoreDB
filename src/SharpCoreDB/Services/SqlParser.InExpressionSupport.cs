@@ -21,13 +21,14 @@ public partial class SqlParser
 {
     /// <summary>
     /// Evaluates an IN expression (e.g., column IN (1, 2, 3) or column NOT IN (1, 2, 3)).
-    /// Supports value lists. Subqueries are not yet supported.
+    /// Supports value lists and GRAPH_TRAVERSE expressions.
     /// ✅ C# 14: Uses collection expressions and modern patterns.
+    /// ✅ GraphRAG Phase 1: Supports IN (GRAPH_TRAVERSE(...)) for graph filtering.
     /// </summary>
     /// <param name="inExpr">The IN expression node to evaluate.</param>
     /// <param name="row">The data row to evaluate against.</param>
     /// <returns>True if the expression matches, false otherwise.</returns>
-    internal static bool EvaluateInExpression(InExpressionNode inExpr, Dictionary<string, object> row)
+    internal bool EvaluateInExpression(InExpressionNode inExpr, Dictionary<string, object> row)
     {
         // Get the test value
         if (inExpr.Expression is null)
@@ -37,11 +38,17 @@ public partial class SqlParser
         
         bool matchFound;
         
-        // Check if using subquery or value list
+        // ✅ GRAPHRAG Phase 1: Check if using GRAPH_TRAVERSE or value list
         if (inExpr.Subquery is not null)
         {
             // Handle IN (SELECT ...) - would need subquery execution
             throw new NotSupportedException("IN with subquery is not yet supported in AstExecutor. Use value lists for now.");
+        }
+        else if (inExpr.Expression is InExpressionNode { Expression: GraphTraverseNode })
+        {
+            // Handle IN (GRAPH_TRAVERSE(...))
+            // This is handled by the parent expression evaluation, not here
+            return false;
         }
         else
         {

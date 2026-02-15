@@ -128,6 +128,15 @@ public abstract partial class SqlVisitorBase<TResult>
     protected abstract TResult VisitFunctionCallCore(FunctionCallNode node);
 
     /// <inheritdoc/>
+    public virtual TResult VisitGraphTraverse(GraphTraverseNode node) =>
+        SafeVisit(() => VisitGraphTraverseCore(node), "GRAPH_TRAVERSE", node);
+
+    /// <summary>
+    /// Core implementation of GRAPH_TRAVERSE visit.
+    /// </summary>
+    protected abstract TResult VisitGraphTraverseCore(GraphTraverseNode node);
+
+    /// <inheritdoc/>
     public virtual TResult VisitInsert(InsertNode node) =>
         SafeVisit(() => VisitInsertCore(node), "INSERT", node);
 

@@ -64,6 +64,9 @@ public interface ISqlVisitor<out TResult>
     /// <summary>Visits a function call node.</summary>
     TResult VisitFunctionCall(FunctionCallNode node);
 
+    /// <summary>Visits a GRAPH_TRAVERSE node.</summary>
+    TResult VisitGraphTraverse(GraphTraverseNode node);
+
     /// <summary>Visits an INSERT node.</summary>
     TResult VisitInsert(InsertNode node);
 

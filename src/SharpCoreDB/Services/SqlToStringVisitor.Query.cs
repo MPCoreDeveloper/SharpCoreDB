@@ -174,4 +174,13 @@ public sealed partial class SqlToStringVisitor
         var args = node.Arguments.Select(a => a.Accept(this));
         return $"{funcName}({distinct}{string.Join(", ", args)})";
     }
+
+    /// <inheritdoc/>
+    protected override string VisitGraphTraverseCore(GraphTraverseNode node)
+    {
+        var startNode = node.StartNode?.Accept(this) ?? "?";
+        var maxDepth = node.MaxDepth?.Accept(this) ?? "?";
+        var strategy = node.Strategy == "DFS" ? ", 'DFS'" : "";
+        return $"GRAPH_TRAVERSE({node.TableName}, {startNode}, '{node.RelationshipColumn}', {maxDepth}{strategy})";
+    }
 }

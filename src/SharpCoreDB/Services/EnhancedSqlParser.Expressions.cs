@@ -200,6 +200,12 @@ public partial class EnhancedSqlParser
         var funcMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)\s*\(", RegexOptions.IgnoreCase);
         if (funcMatch.Success)
         {
+            // Check for GRAPH_TRAVERSE specifically
+            var identifierMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase);
+            if (identifierMatch.Success && identifierMatch.Groups[1].Value.Equals("GRAPH_TRAVERSE", StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseGraphTraverse();
+            }
             return ParseFunctionCall();
         }
 
@@ -296,6 +302,88 @@ public partial class EnhancedSqlParser
         catch (Exception ex)
         {
             RecordError($"Error parsing function call: {ex.Message}");
+        }
+
+        return node;
+    }
+
+    /// <summary>
+    /// Parses GRAPH_TRAVERSE(table, start_node, relationship_column, max_depth [, strategy])
+    /// </summary>
+    private GraphTraverseNode ParseGraphTraverse()
+    {
+        var node = new GraphTraverseNode { Position = _position };
+
+        try
+        {
+            if (!MatchKeyword("GRAPH_TRAVERSE"))
+            {
+                RecordError("Expected GRAPH_TRAVERSE keyword");
+                return node;
+            }
+
+            if (!MatchToken("("))
+            {
+                RecordError("Expected ( after GRAPH_TRAVERSE");
+                return node;
+            }
+
+            // Parse table name
+            node.TableName = ConsumeIdentifier() ?? "";
+            if (string.IsNullOrWhiteSpace(node.TableName))
+            {
+                RecordError("Expected table name in GRAPH_TRAVERSE");
+            }
+
+            if (!MatchToken(","))
+            {
+                RecordError("Expected , after table name");
+                return node;
+            }
+
+            // Parse start node expression
+            node.StartNode = ParseExpression();
+
+            if (!MatchToken(","))
+            {
+                RecordError("Expected , after start node");
+                return node;
+            }
+
+            // Parse relationship column name
+            node.RelationshipColumn = ConsumeIdentifier() ?? "";
+            if (string.IsNullOrWhiteSpace(node.RelationshipColumn))
+            {
+                RecordError("Expected relationship column name");
+            }
+
+            if (!MatchToken(","))
+            {
+                RecordError("Expected , after relationship column");
+                return node;
+            }
+
+            // Parse max depth expression
+            node.MaxDepth = ParseExpression();
+
+            // Optional strategy parameter
+            if (MatchToken(","))
+            {
+                var strategyToken = ConsumeIdentifier();
+                if (strategyToken is not null)
+                {
+                    node.Strategy = strategyToken.Equals("DFS", StringComparison.OrdinalIgnoreCase) ? "DFS" : "BFS";
+                }
+            }
+
+            if (!MatchToken(")"))
+            {
+                RecordError("Expected ) after GRAPH_TRAVERSE arguments");
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordError($"Error parsing GRAPH_TRAVERSE: {ex.Message}");
         }
 
         return node;

@@ -1,6 +1,6 @@
 # SharpCoreDB Strategic Documentation Index
 
-**Date:** 2026-02-14  
+**Date:** 2026-02-15  
 **Status:** Complete - Ready for Executive Review  
 **Access:** All documents in `/docs` folder
 
@@ -10,7 +10,7 @@
 
 ### Core Strategic Documents
 
-#### 1. **GRAPHRAG_PROPOSAL_ANALYSIS.md** ⭐
+#### 1. **[graphrag/GRAPHRAG_PROPOSAL_ANALYSIS.md](graphrag/GRAPHRAG_PROPOSAL_ANALYSIS.md)** ⭐
 - **Purpose:** Feasibility analysis for graph RAG implementation
 - **Audience:** Technical architects, product managers
 - **Key Sections:**
@@ -21,6 +21,26 @@
   - Risk assessment & mitigation
 - **Key Finding:** SharpCoreDB can uniquely combine vectors + graphs in one .NET DLL
 - **Recommendation:** ✅ Proceed with Phase 1 (v1.4.0, Q3 2026)
+
+#### 1b. **[graphrag/GRAPHRAG_IMPLEMENTATION_PLAN.md](graphrag/GRAPHRAG_IMPLEMENTATION_PLAN.md)** ⭐⭐ *NEW*
+- **Purpose:** Comprehensive phased implementation plan with file-level detail
+- **Audience:** Engineers, tech leads
+- **Key Sections:**
+  - 5-phase implementation plan (ROWREF → Traversal → SQL → Hybrid → EF Core)
+  - File inventory (14 new files, 9 modified files)
+  - Testing strategy (230+ tests across 9 topologies)
+  - Performance targets and benchmarks
+  - Risk register with 8 tracked risks
+  - 12-week schedule mapped to v1.4.0–v2.0.0 releases
+
+#### 1c. **[graphrag/GRAPHRAG_IMPLEMENTATION_STARTPOINT.md](graphrag/GRAPHRAG_IMPLEMENTATION_STARTPOINT.md)** ⭐ *NEW*
+- **Purpose:** Engineering startpoint and architecture decision record for GraphRAG
+- **Audience:** Engineers, tech leads
+- **Key Sections:**
+  - Two-layer architecture decision (core + extension)
+  - Minimal core changes for ROWREF plumbing
+  - Graph extension project scaffolding
+  - Initial work items and rollout guidance
 
 #### 2. **DOTMIM_SYNC_PROVIDER_ANALYSIS.md** ⭐
 - **Purpose:** Feasibility analysis for Dotmim.Sync provider implementation
@@ -34,7 +54,7 @@
 - **Key Finding:** Enables "offline-first, privacy-preserving" SaaS architecture
 - **Recommendation:** ✅ Proceed with Phase 1 (v1.4.0, Q3 2026)
 
-#### 3. **ROADMAP_V2_GRAPHRAG_SYNC.md** ⭐⭐
+#### 3. **[graphrag/ROADMAP_V2_GRAPHRAG_SYNC.md](graphrag/ROADMAP_V2_GRAPHRAG_SYNC.md)** ⭐⭐
 - **Purpose:** Integrated product roadmap for v1.4.0 → v2.0.0
 - **Audience:** Executive team, product managers, engineers
 - **Key Sections:**
@@ -51,7 +71,7 @@
   - **v2.0.0** (Q2 2027): Production platform
 - **Recommendation:** ✅ Approve entire roadmap, start Phase 1 immediately
 
-#### 4. **STRATEGIC_RECOMMENDATIONS.md** ⭐⭐⭐
+#### 4. **[graphrag/STRATEGIC_RECOMMENDATIONS.md](graphrag/STRATEGIC_RECOMMENDATIONS.md)** ⭐⭐⭐
 - **Purpose:** Executive decision document for v2 roadmap approval
 - **Audience:** C-level executives, board members
 - **Key Sections:**

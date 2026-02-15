@@ -366,9 +366,16 @@ public partial class Table : ITable, IDisposable
             throw new ArgumentException($"Column '{columnDef.Name}' already exists in table '{Name}'");
         }
 
+        var columnType = ParseDataType(columnDef.DataType);
+        if (columnType == DataType.RowRef && !ForeignKeys.Any(fk => fk.ColumnName == columnDef.Name))
+        {
+            throw new InvalidOperationException(
+                $"ROWREF column '{columnDef.Name}' requires a FOREIGN KEY constraint.");
+        }
+
         // Add to schema lists
         Columns.Add(columnDef.Name);
-        ColumnTypes.Add(ParseDataType(columnDef.DataType));
+        ColumnTypes.Add(columnType);
         IsAuto.Add(columnDef.IsAutoIncrement);
         IsNotNull.Add(columnDef.IsNotNull);
         DefaultValues.Add(columnDef.DefaultValue);
@@ -412,6 +419,7 @@ public partial class Table : ITable, IDisposable
             "DECIMAL" => DataType.Decimal,
             "ULID" => DataType.Ulid,
             "GUID" => DataType.Guid,
+            "ROWREF" => DataType.RowRef,
             _ => DataType.String,
         };
     }

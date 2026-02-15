@@ -168,6 +168,7 @@ public partial class SqlParser
                 DataType.Decimal => decimal.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Ulid => Ulid.Parse(val),
                 DataType.Guid => Guid.Parse(val),
+                DataType.RowRef => long.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Vector => ParseVectorValue(val),
                 _ => val,
             };
