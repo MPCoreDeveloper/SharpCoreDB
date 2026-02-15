@@ -85,7 +85,8 @@ public class HybridGraphVectorQueryTests
         var inExpr = new InExpressionNode
         {
             Expression = new ColumnReferenceNode { ColumnName = "id" },
-            IsNot = false
+            IsNot = false,
+            Values = [graphTraverse]
         };
 
         var whereCondition = new BinaryExpressionNode
@@ -120,7 +121,8 @@ public class HybridGraphVectorQueryTests
 
         var inExpr = new InExpressionNode
         {
-            Expression = new ColumnReferenceNode { ColumnName = "id" }
+            Expression = new ColumnReferenceNode { ColumnName = "id" },
+            Values = [graphTraverse]
         };
 
         return new SelectNode

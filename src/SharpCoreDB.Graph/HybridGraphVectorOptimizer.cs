@@ -5,6 +5,7 @@
 namespace SharpCoreDB.Graph;
 
 using SharpCoreDB.Services;
+using System.Linq;
 
 /// <summary>
 /// Hybrid Graph-Vector Query Optimizer.
@@ -66,11 +67,25 @@ public sealed class HybridGraphVectorOptimizer
         return expression switch
         {
             GraphTraverseNode => true,
-            InExpressionNode inExpr when inExpr.Expression is GraphTraverseNode => true,
+            InExpressionNode inExpr => DetectGraphTraversalInExpression(inExpr),
             BinaryExpressionNode binary => 
                 DetectGraphTraversal(binary.Left) || DetectGraphTraversal(binary.Right),
             _ => false
         };
+    }
+
+    private static bool DetectGraphTraversalInExpression(InExpressionNode inExpr)
+    {
+        if (inExpr.Expression is not null && DetectGraphTraversal(inExpr.Expression))
+            return true;
+
+        if (inExpr.Values.Count > 0 && inExpr.Values.Any(DetectGraphTraversal))
+            return true;
+
+        if (inExpr.Subquery?.Where?.Condition is null)
+            return false;
+
+        return DetectGraphTraversal(inExpr.Subquery.Where.Condition);
     }
 
     private static bool DetectVectorSearch(ExpressionNode expression)
@@ -78,10 +93,25 @@ public sealed class HybridGraphVectorOptimizer
         return expression switch
         {
             FunctionCallNode func when func.FunctionName.StartsWith("VEC_", StringComparison.OrdinalIgnoreCase) => true,
+            InExpressionNode inExpr => DetectVectorSearchInExpression(inExpr),
             BinaryExpressionNode binary => 
                 DetectVectorSearch(binary.Left) || DetectVectorSearch(binary.Right),
             _ => false
         };
+    }
+
+    private static bool DetectVectorSearchInExpression(InExpressionNode inExpr)
+    {
+        if (inExpr.Expression is not null && DetectVectorSearch(inExpr.Expression))
+            return true;
+
+        if (inExpr.Values.Count > 0 && inExpr.Values.Any(DetectVectorSearch))
+            return true;
+
+        if (inExpr.Subquery?.Where?.Condition is null)
+            return false;
+
+        return DetectVectorSearch(inExpr.Subquery.Where.Condition);
     }
 }
 

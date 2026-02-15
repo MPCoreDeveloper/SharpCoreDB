@@ -245,11 +245,15 @@ public sealed class CultureInfoCollation
         if (string.IsNullOrWhiteSpace(localeName))
             return false;
 
+        var normalized = NormalizeLocaleName(localeName);
+        if (!IsValidLocaleFormat(normalized))
+            return false;
+
         try
         {
-            var normalized = NormalizeLocaleName(localeName);
-            _ = CultureInfo.GetCultureInfo(normalized);
-            return true;
+            var culture = CultureInfo.GetCultureInfo(normalized);
+            var isoCode = culture.TwoLetterISOLanguageName;
+            return isoCode != "iv" && isoCode != "xx" && isoCode != "zz";
         }
         catch (CultureNotFoundException)
         {
