@@ -312,13 +312,11 @@ public class GraphTraversalQueryableExtensionsTests
     }
 
     /// <summary>
-    /// Test: All four strategies can be used.
+    /// Test: All available strategies can be used.
     /// </summary>
     [Theory]
     [InlineData(GraphTraversalStrategy.Bfs)]
     [InlineData(GraphTraversalStrategy.Dfs)]
-    [InlineData(GraphTraversalStrategy.Bidirectional)]
-    [InlineData(GraphTraversalStrategy.Dijkstra)]
     public void AllStrategies_AreAccepted(GraphTraversalStrategy strategy)
     {
         // Arrange

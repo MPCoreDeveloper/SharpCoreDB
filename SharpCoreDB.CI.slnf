@@ -6,6 +6,7 @@
       "src\\SharpCoreDB.VectorSearch\\SharpCoreDB.VectorSearch.csproj",
       "src\\SharpCoreDB.Data.Provider\\SharpCoreDB.Data.Provider.csproj",
       "src\\SharpCoreDB.EntityFrameworkCore\\SharpCoreDB.EntityFrameworkCore.csproj",
+      "src\\SharpCoreDB.Graph\\SharpCoreDB.Graph.csproj",
       "src\\SharpCoreDB.Extensions\\SharpCoreDB.Extensions.csproj",
       "src\\SharpCoreDB.Provider.YesSql\\SharpCoreDB.Provider.YesSql.csproj",
       "src\\SharpCoreDB.Serilog.Sinks\\SharpCoreDB.Serilog.Sinks.csproj",
