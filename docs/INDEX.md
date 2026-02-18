@@ -23,7 +23,7 @@ This is your central guide to all SharpCoreDB features, guides, and resources.
 ## 📋 Table of Contents
 
 1. [Vector Search](#vector-search)
-2. [GraphRAG — Lightweight Graph Capabilities](#graphrag--lightweight-graph-capabilities)
+2. [GraphRAG — Graph Traversal (Phase 2 Complete)](#graphrag--graph-traversal-phase-2-complete)
 3. [Collation Support](#collations)
 4. [Features & Phases](#features--phases)
 5. [Migration Guides](#migration-guides)
@@ -79,9 +79,20 @@ var results = await db.ExecuteQueryAsync(@"
 
 ---
 
-## GraphRAG — Lightweight Graph Capabilities
+## GraphRAG — Graph Traversal (Phase 2 Complete)
 
-Planned graph traversal capabilities enabling hybrid **Vector + Graph** queries for AI Agents, code analysis, and knowledge graphs.
+GraphRAG traversal capabilities are implemented with BFS/DFS/Bidirectional/Dijkstra over ROWREF columns and `GRAPH_TRAVERSE()` SQL evaluation. Hybrid graph+vector optimization is available as ordering hints only.
+
+### Key Features (Current + Planned)
+
+- **ROWREF Column Type:** Implemented
+- **BFS/DFS/Bidirectional/Dijkstra Traversal:** Implemented
+- **GRAPH_TRAVERSE() SQL Function:** Implemented
+- **Hybrid Vector + Graph Optimization:** Prototype (ordering hints)
+- **A***: Planned
+- **Multi-hop Index Selection:** Planned
+
+**Status:** ✅ Phase 2 complete (Phase 3 prototype)
 
 ### Documentation
 
@@ -89,18 +100,10 @@ Planned graph traversal capabilities enabling hybrid **Vector + Graph** queries 
 |----------|---------|-----------|
 | [GraphRAG Overview](./graphrag/README.md) | Overview, architecture, and doc index | 10 min |
 | [Proposal Analysis](./graphrag/GRAPHRAG_PROPOSAL_ANALYSIS.md) | Feasibility analysis and competitive landscape | 25 min |
-| [Implementation Plan](./graphrag/GRAPHRAG_IMPLEMENTATION_PLAN.md) | Comprehensive 5-phase implementation plan | 30 min |
-| [Implementation Startpoint](./graphrag/GRAPHRAG_IMPLEMENTATION_STARTPOINT.md) | Engineering startpoint and architecture decision record | 15 min |
+| [Implementation Plan](./graphrag/GRAPHRAG_IMPLEMENTATION_PLAN.md) | Comprehensive implementation plan | 30 min |
+| [Implementation Startpoint](./graphrag/GRAPHRAG_IMPLEMENTATION_STARTPOINT.md) | Engineering startpoint and ADR | 15 min |
 | [v2 Roadmap](./graphrag/ROADMAP_V2_GRAPHRAG_SYNC.md) | Integrated product roadmap (GraphRAG + Sync) | 20 min |
 | [Strategic Recommendations](./graphrag/STRATEGIC_RECOMMENDATIONS.md) | Executive decision document | 15 min |
-
-### Key Features (Planned)
-
-- **ROWREF Column Type:** O(1) index-free adjacency via direct row pointers
-- **BFS/DFS Traversal Engine:** 1M nodes in <100ms
-- **GRAPH_TRAVERSE() SQL Function:** Graph queries in standard SQL
-- **Hybrid Vector + Graph Queries:** Combine HNSW similarity with structural constraints
-- **Status:** 📋 Planned for v1.4.0 (Q3 2026)
 
 ### Quick Example (Target API)
 

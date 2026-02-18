@@ -4,6 +4,7 @@
 // </copyright>
 namespace SharpCoreDB.EntityFrameworkCore.Tests.Query;
 
+using SharpCoreDB.EntityFrameworkCore.Query;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Collections.Generic;

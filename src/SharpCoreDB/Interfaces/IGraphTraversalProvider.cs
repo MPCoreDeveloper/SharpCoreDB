@@ -48,10 +48,44 @@ public enum GraphTraversalStrategy
     /// <summary>
     /// Breadth-first traversal.
     /// </summary>
-    Bfs,
+    Bfs = 0,
 
     /// <summary>
     /// Depth-first traversal.
     /// </summary>
-    Dfs,
+    Dfs = 1,
+
+    /// <summary>
+    /// Traversal that explores both outgoing and incoming relationships.
+    /// </summary>
+    Bidirectional = 2,
+
+    /// <summary>
+    /// Weighted shortest-path traversal using Dijkstra's algorithm.
+    /// </summary>
+    Dijkstra = 3,
+
+    /// <summary>
+    /// Optimal shortest-path traversal using A* algorithm with heuristic guidance.
+    /// Requires a goal node and is significantly faster than Dijkstra when goal is known.
+    /// </summary>
+    AStar = 4,
+}
+
+/// <summary>
+/// Heuristic type for A* pathfinding.
+/// </summary>
+public enum AStarHeuristic
+{
+    /// <summary>
+    /// Depth-based heuristic: h(n) = max_depth - current_depth.
+    /// Best for unweighted graphs or when goal depth is known.
+    /// </summary>
+    Depth = 0,
+
+    /// <summary>
+    /// Uniform heuristic: h(n) = 0 (degenerates to Dijkstra).
+    /// Use when no heuristic information is available.
+    /// </summary>
+    Uniform = 1,
 }

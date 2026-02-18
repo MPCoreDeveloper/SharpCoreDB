@@ -92,9 +92,19 @@ public sealed class GraphFunctionProvider : ICustomFunctionProvider
         return value switch
         {
             GraphTraversalStrategy strategy => strategy,
-            string stringValue when stringValue.Equals("BFS", StringComparison.OrdinalIgnoreCase) => GraphTraversalStrategy.Bfs,
-            string stringValue when stringValue.Equals("DFS", StringComparison.OrdinalIgnoreCase) => GraphTraversalStrategy.Dfs,
-            _ => throw new ArgumentException("GRAPH_TRAVERSE strategy must be BFS or DFS")
+            int intValue when Enum.IsDefined(typeof(GraphTraversalStrategy), intValue)
+                => (GraphTraversalStrategy)intValue,
+            short shortValue when Enum.IsDefined(typeof(GraphTraversalStrategy), (int)shortValue)
+                => (GraphTraversalStrategy)shortValue,
+            string stringValue when stringValue.Equals("BFS", StringComparison.OrdinalIgnoreCase)
+                => GraphTraversalStrategy.Bfs,
+            string stringValue when stringValue.Equals("DFS", StringComparison.OrdinalIgnoreCase)
+                => GraphTraversalStrategy.Dfs,
+            string stringValue when stringValue.Equals("BIDIRECTIONAL", StringComparison.OrdinalIgnoreCase)
+                => GraphTraversalStrategy.Bidirectional,
+            string stringValue when stringValue.Equals("DIJKSTRA", StringComparison.OrdinalIgnoreCase)
+                => GraphTraversalStrategy.Dijkstra,
+            _ => throw new ArgumentException("GRAPH_TRAVERSE strategy must be BFS, DFS, BIDIRECTIONAL, or DIJKSTRA")
         };
     }
 }

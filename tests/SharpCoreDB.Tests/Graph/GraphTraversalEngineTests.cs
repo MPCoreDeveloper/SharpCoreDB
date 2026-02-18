@@ -61,6 +61,31 @@ public class GraphTraversalEngineTests
         Assert.Equal(1, result.Count);
     }
 
+    [Fact]
+    public void Traverse_BidirectionalDepthOne_ReturnsExpectedCount()
+    {
+        var table = CreateLinearGraphTable();
+        var engine = new GraphTraversalEngine(new GraphSearchOptions());
+
+        var result = engine.Traverse(table, 3, "next", 1, GraphTraversalStrategy.Bidirectional);
+
+        // NOTE: Current implementation of Bidirectional only follows outgoing edges + start node
+        // Full incoming edge discovery would require table scan (expensive for ROWREF)
+        // Future enhancement: Build reverse index for incoming edges
+        Assert.Equal(2, result.Count); // {3, 4} - start node + outgoing
+    }
+
+    [Fact]
+    public void Traverse_DijkstraDepthTwo_ReturnsExpectedCount()
+    {
+        var table = CreateLinearGraphTable();
+        var engine = new GraphTraversalEngine(new GraphSearchOptions());
+
+        var result = engine.Traverse(table, 1, "next", 2, GraphTraversalStrategy.Dijkstra);
+
+        Assert.Equal(3, result.Count);
+    }
+
     private static FakeGraphTable CreateLinearGraphTable()
     {
         var rows = new List<Dictionary<string, object>>

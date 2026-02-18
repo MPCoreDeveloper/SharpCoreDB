@@ -199,21 +199,43 @@ public static class GraphTraversalQueryableExtensions
     }
 
     /// <summary>
-    /// Limits traversal results to a maximum count.
+    /// Creates a fluent graph traversal configuration for advanced scenarios.
+    /// ✅ GraphRAG Phase 5: Fluent API with strategy selection and A* configuration.
     /// </summary>
     /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <param name="source">The traversal queryable.</param>
-    /// <param name="count">Maximum number of results.</param>
-    /// <returns>Limited traversal results.</returns>
-    public static IQueryable<long> Take<TEntity>(
+    /// <param name="source">The queryable source.</param>
+    /// <param name="startNodeId">Starting node ID.</param>
+    /// <param name="relationshipColumn">ROWREF column name.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <returns>Fluent traversal configuration.</returns>
+    /// <example>
+    /// <code>
+    /// // Explicit A* with depth heuristic
+    /// var results = await context.Documents
+    ///     .GraphTraverse(startId, "References", 5)
+    ///     .WithStrategy(GraphTraversalStrategy.AStar)
+    ///     .WithHeuristic(AStarHeuristic.Depth)
+    ///     .ToListAsync();
+    ///
+    /// // Auto-select optimal strategy
+    /// var results = await context.Documents
+    ///     .GraphTraverse(startId, "References", 5)
+    ///     .WithAutoStrategy()
+    ///     .ToListAsync();
+    /// </code>
+    /// </example>
+    public static GraphTraversalQueryable<TEntity> GraphTraverse<TEntity>(
         this IQueryable<TEntity> source,
-        int count) where TEntity : class
+        long startNodeId,
+        string relationshipColumn,
+        int maxDepth) where TEntity : class
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (count < 0)
-            throw new ArgumentOutOfRangeException(nameof(count), "Take count must be non-negative");
+        ArgumentException.ThrowIfNullOrWhiteSpace(relationshipColumn);
 
-        var castToLong = source.Cast<long>();
-        return castToLong.Take(count);
+        if (maxDepth < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
+
+        return new GraphTraversalQueryable<TEntity>(source, startNodeId, relationshipColumn, maxDepth);
     }
 }

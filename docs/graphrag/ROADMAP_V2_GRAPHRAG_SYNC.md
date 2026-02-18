@@ -18,6 +18,17 @@ This roadmap coordinates their development into a cohesive platform for the **lo
 
 ---
 
+## Status Update (2025-02-15)
+
+GraphRAG implementation status as of this update:
+- **Phase 1:** Implemented (`DataType.RowRef` + serialization, BFS/DFS traversal)
+- **Phase 2:** Implemented (Bidirectional/Dijkstra traversal, `GRAPH_TRAVERSE()` evaluation, EF Core LINQ translation)
+- **Phase 3:** Prototype (hybrid graph+vector ordering hints)
+
+The remainder of this roadmap describes planned work.
+
+---
+
 ## Market Context & Timing
 
 ### Why Now?

@@ -4,8 +4,8 @@
 
 This document provides comprehensive guidance on using GraphRAG with Entity Framework Core in SharpCoreDB. It covers the LINQ query extensions, SQL translation, usage patterns, and best practices.
 
-**Status:** ✅ **COMPLETE** - Phase 1-3 Implementation  
-**Last Updated:** 2025-02-15
+**Status:** ✅ Phase 5.1 complete  
+**Last Updated:** 2025-02-16
 
 ---
 
@@ -56,7 +56,7 @@ var products = await context.Products
 
 ## API Reference
 
-### Extension Methods
+### Core Extension Methods
 
 #### `IQueryable<T>.Traverse<T>()`
 
@@ -85,6 +85,92 @@ var nodeIds = await context.Nodes
     .Traverse(1, "nextId", 5, GraphTraversalStrategy.Bfs)
     .ToListAsync();
 // Returns: [1, 2, 3, 4, 5, 6] (all reachable from node 1)
+```
+
+---
+
+### ✨ NEW: Fluent API (Phase 5)
+
+#### `IQueryable<T>.GraphTraverse<T>()`
+
+Creates a fluent graph traversal configuration with advanced strategy selection.
+
+```csharp
+public static GraphTraversalQueryable<TEntity> GraphTraverse<TEntity>(
+    this IQueryable<TEntity> source,
+    long startNodeId,
+    string relationshipColumn,
+    int maxDepth)
+```
+
+**Returns:** `GraphTraversalQueryable<TEntity>` for method chaining
+
+**Fluent Methods:**
+
+##### `.WithStrategy(GraphTraversalStrategy)`
+Explicitly sets the traversal strategy.
+
+```csharp
+var results = await context.Documents
+    .GraphTraverse(startId, "References", 5)
+    .WithStrategy(GraphTraversalStrategy.AStar)
+    .ToListAsync();
+```
+
+**Available Strategies:**
+- `GraphTraversalStrategy.Bfs` - Breadth-first (default)
+- `GraphTraversalStrategy.Dfs` - Depth-first
+- `GraphTraversalStrategy.Bidirectional` - Both directions
+- `GraphTraversalStrategy.Dijkstra` - Weighted shortest path
+- `GraphTraversalStrategy.AStar` - Heuristic-guided shortest path
+
+##### `.WithHeuristic(AStarHeuristic)`
+Sets the A* heuristic function (only applies when using AStar strategy).
+
+```csharp
+var results = await context.Documents
+    .GraphTraverse(startId, "References", 5)
+    .WithStrategy(GraphTraversalStrategy.AStar)
+    .WithHeuristic(AStarHeuristic.Depth)
+    .ToListAsync();
+```
+
+**Available Heuristics:**
+- `AStarHeuristic.Depth` - Depth-based heuristic (default, fastest)
+- `AStarHeuristic.Uniform` - No heuristic (equivalent to Dijkstra)
+
+##### `.WithAutoStrategy(GraphStatistics?)`
+Automatically selects the optimal strategy based on graph characteristics.
+
+```csharp
+// Auto-select with default statistics
+var results = await context.Documents
+    .GraphTraverse(startId, "References", 5)
+    .WithAutoStrategy()
+    .ToListAsync();
+
+// Auto-select with custom statistics
+var stats = new GraphStatistics(
+    totalNodes: 10000,
+    totalEdges: 15000,
+    estimatedDegree: 1.5);
+
+var results = await context.Documents
+    .GraphTraverse(startId, "References", 5)
+    .WithAutoStrategy(stats)
+    .ToListAsync();
+```
+
+**Example: Complete Fluent Chain**
+```csharp
+// Find related documents using A* with depth heuristic
+var relatedDocs = await context.Documents
+    .GraphTraverse(sourceDocId, "References", maxDepth: 3)
+    .WithStrategy(GraphTraversalStrategy.AStar)
+    .WithHeuristic(AStarHeuristic.Depth)
+    .ToListAsync();
+
+// Results: [1, 5, 12, 18, 23] (node IDs)
 ```
 
 ---
@@ -194,7 +280,7 @@ enum GraphTraversalStrategy : int
 {
     Bfs = 0,           // Breadth-first
     Dfs = 1,           // Depth-first
-    Bidirectional = 2, // Bidirectional
+    Bidirectional = 2, // Outgoing + incoming traversal
     Dijkstra = 3       // Weighted shortest path
 }
 ```

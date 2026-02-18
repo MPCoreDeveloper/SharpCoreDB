@@ -11,14 +11,23 @@ using SharpCoreDB.Services;
 /// <summary>
 /// Minimal <see cref="ITable"/> fake for graph traversal tests.
 /// </summary>
-internal sealed class FakeGraphTable(List<Dictionary<string, object>> rows, string relationshipColumn) : ITable
+internal sealed class FakeGraphTable : ITable
 {
-    private readonly List<Dictionary<string, object>> _rows = rows ?? throw new ArgumentNullException(nameof(rows));
-    private readonly string _relationshipColumn = relationshipColumn ?? throw new ArgumentNullException(nameof(relationshipColumn));
+    private readonly List<Dictionary<string, object>> _rows;
+    private readonly string _relationshipColumn;
 
-    public string Name { get; set; } = "graph_table";
-    public List<string> Columns { get; } = ["id", relationshipColumn];
-    public List<DataType> ColumnTypes { get; } = [DataType.Long, DataType.RowRef];
+    public FakeGraphTable(List<Dictionary<string, object>> rows, string relationshipColumn, string? tableName = null)
+    {
+        _rows = rows ?? throw new ArgumentNullException(nameof(rows));
+        _relationshipColumn = relationshipColumn ?? throw new ArgumentNullException(nameof(relationshipColumn));
+        Name = tableName ?? "graph_table";
+        Columns = ["id", _relationshipColumn];
+        ColumnTypes = [DataType.Long, DataType.RowRef];
+    }
+
+    public string Name { get; set; }
+    public List<string> Columns { get; }
+    public List<DataType> ColumnTypes { get; }
     public string DataFile { get; set; } = string.Empty;
     public int PrimaryKeyIndex => 0;
     public List<bool> IsAuto { get; } = [false, false];

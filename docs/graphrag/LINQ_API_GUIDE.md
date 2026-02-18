@@ -4,7 +4,7 @@
 
 This guide demonstrates how to use the **GraphRAG LINQ extensions** with Entity Framework Core to query graph relationships with a fluent, type-safe API.
 
-> **Phase Status**: ✅ Complete - GraphRAG Phase 2 EF Core Integration
+> **Phase Status**: ✅ Phase 2 complete (Phase 3 prototype)
 
 ## Key Features
 
@@ -12,7 +12,7 @@ This guide demonstrates how to use the **GraphRAG LINQ extensions** with Entity 
 - **Strategy Support**: BFS, DFS, Bidirectional, and Dijkstra traversal
 - **Depth Control**: Set maximum traversal depth
 - **Filtering**: Combine graph traversal with WHERE predicates  
-- **Performance**: Translates to native `GRAPH_TRAVERSE()` SQL functions (zero overhead)
+- **Performance**: Translates to `GRAPH_TRAVERSE()` SQL functions
 - **Type-Safe**: Full IntelliSense support in Visual Studio
 
 ## Quick Start
@@ -89,13 +89,6 @@ public static IQueryable<long> Traverse<TEntity>(
 - `strategy`: `GraphTraversalStrategy.Bfs`, `Dfs`, `Bidirectional`, or `Dijkstra`
 
 **Returns:** `IQueryable<long>` - Database-evaluated traversal results
-
-**Example:**
-```csharp
-var reachable = db.Nodes
-    .Traverse(1, "nextId", 3, GraphTraversalStrategy.Bfs)
-    .ToListAsync();
-```
 
 ---
 
@@ -203,29 +196,26 @@ Explores as far as possible along each branch before backtracking.
 - Hierarchical data
 
 ### Bidirectional
-Searches from both start and end nodes simultaneously.
+Explores outgoing and incoming relationships.
 
 ```csharp
-.Traverse(startId: 1, relationshipColumn: "related", maxDepth: 3,
-         strategy: GraphTraversalStrategy.Bidirectional)
+.Traverse(1, "related", 3, GraphTraversalStrategy.Bidirectional)
 ```
 
 **Best for:**
-- Finding connections between two specific nodes
-- Reducing search space for long-distance queries
-- Social network recommendations
+- Undirected graphs modeled with ROWREF
+- Finding neighbors across incoming edges
 
 ### Dijkstra
-Weighted shortest path traversal (requires edge weights).
+Weighted shortest paths (uses edge-table `weight` when present).
 
 ```csharp
 .Traverse(1, "weightedNext", 10, GraphTraversalStrategy.Dijkstra)
 ```
 
 **Best for:**
-- Cost-optimized paths
 - Weighted graph analysis
-- Network routing
+- Routing with edge weights
 
 ---
 

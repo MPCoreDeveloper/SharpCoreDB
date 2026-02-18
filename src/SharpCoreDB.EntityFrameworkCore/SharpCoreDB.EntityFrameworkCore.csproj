@@ -50,6 +50,7 @@
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
     <!-- Reference SharpCoreDB project for development -->
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Graph\SharpCoreDB.Graph.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,6 +5,8 @@
 **Scope:** Architecture decision record + initial implementation direction  
 **Audience:** Core engine engineers, extension developers
 
+**Status Update (2025-02-15):** ROWREF data type + serialization are implemented. `GraphTraversalEngine` provides BFS/DFS traversal (including edge-table traversal). `GRAPH_TRAVERSE()` SQL evaluation and EF Core LINQ translation are implemented. Adjacency caching, path finding, and traversal optimization remain planned.
+
 ---
 
 ## 1. Decision Summary
@@ -14,12 +16,12 @@ GraphRAG is implemented as a **two-layer design** to avoid breaking existing use
 1. **Core Engine (`SharpCoreDB`) — minimal plumbing**
    - Adds `DataType.RowRef` for index-free adjacency.
    - Adds type parsing + serialization for `ROWREF`.
-   - Adds extension points for graph traversal (interfaces only).
+   - Adds extension points for graph traversal.
 
-2. **Graph Extension (`SharpCoreDB.Graph`) — full graph engine**
-   - Contains traversal algorithms (BFS/DFS), adjacency caching, and path finding.
+2. **Graph Extension (`SharpCoreDB.Graph`) — graph engine**
+   - Contains traversal algorithms (BFS/DFS).
    - Registers SQL functions such as `GRAPH_TRAVERSE()` via `ICustomFunctionProvider`.
-   - Registers graph optimizers via a new `IGraphTraversalProvider` interface.
+   - Registers traversal services via `IGraphTraversalProvider`.
 
 This matches the existing extension pattern used by `SharpCoreDB.VectorSearch` and guarantees **zero impact** for users who do not opt in.
 
@@ -56,17 +58,17 @@ This matches the existing extension pattern used by `SharpCoreDB.VectorSearch` a
 - Use C# 14 and zero-allocation patterns (ArrayPool, Span, Lock).
 - Integrate with SQL through `ICustomFunctionProvider`.
 
-### Initial Class Layout
+### Current Class Layout
 
-| File | Role |
-|---|---|
-| `GraphSearchExtensions.cs` | `AddGraphSupport()` DI registration |
-| `GraphSearchOptions.cs` | Configuration: default max depth, cache options |
-| `GraphFunctionProvider.cs` | Exposes `GRAPH_TRAVERSE()` and related SQL functions |
-| `GraphTraversalEngine.cs` | BFS/DFS traversal implementation |
-| `AdjacencyListIndex.cs` | Optional in-memory adjacency cache |
-| `PathFinder.cs` | Shortest path and reachability |
-| `GraphTraversalOptimizer.cs` | Cost estimation for traversal predicates |
+| File | Role | Status |
+|---|---|---|
+| `GraphSearchExtensions.cs` | `AddGraphSupport()` DI registration | Implemented |
+| `GraphSearchOptions.cs` | Configuration: default max depth, cache options | Implemented |
+| `GraphFunctionProvider.cs` | Exposes `GRAPH_TRAVERSE()` | Implemented |
+| `GraphTraversalEngine.cs` | BFS/DFS traversal implementation | Implemented |
+| `AdjacencyListIndex.cs` | Optional in-memory adjacency cache | Planned |
+| `PathFinder.cs` | Shortest path and reachability | Planned |
+| `GraphTraversalOptimizer.cs` | Cost estimation for traversal predicates | Planned |
 
 ---
 

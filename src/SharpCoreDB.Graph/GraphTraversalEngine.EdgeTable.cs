@@ -54,6 +54,8 @@ public partial class GraphTraversalEngine
         {
             GraphTraversalStrategy.Bfs => TraverseBfsEdgeTable(nodeTable, edgeTable, startNodeId, maxDepth, cancellationToken),
             GraphTraversalStrategy.Dfs => TraverseDfsEdgeTable(nodeTable, edgeTable, startNodeId, maxDepth, cancellationToken),
+            GraphTraversalStrategy.Bidirectional => TraverseBidirectionalEdgeTable(nodeTable, edgeTable, startNodeId, maxDepth, cancellationToken),
+            GraphTraversalStrategy.Dijkstra => TraverseDijkstraEdgeTable(nodeTable, edgeTable, startNodeId, maxDepth, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(strategy))
         };
     }
@@ -220,6 +222,139 @@ public partial class GraphTraversalEngine
         }
     }
 
+    private IReadOnlyCollection<long> TraverseBidirectionalEdgeTable(
+        ITable nodeTable,
+        ITable edgeTable,
+        long startNodeId,
+        int maxDepth,
+        CancellationToken cancellationToken)
+    {
+        var visited = new HashSet<long>();
+        int capacity = DefaultQueueCapacity;
+        long[] nodes = NodePool.Rent(capacity);
+        int[] depths = DepthPool.Rent(capacity);
+        int head = 0;
+        int tail = 0;
+        int count = 0;
+
+        try
+        {
+            Enqueue(startNodeId, 0);
+            visited.Add(startNodeId);
+
+            while (count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var nodeId = nodes[head];
+                var depth = depths[head];
+                head = (head + 1) % capacity;
+                count--;
+
+                if (depth >= maxDepth)
+                {
+                    continue;
+                }
+
+                var neighbors = GetBidirectionalNeighborsFromEdgeTable(edgeTable, nodeId);
+                foreach (var neighbor in neighbors)
+                {
+                    if (visited.Add(neighbor))
+                    {
+                        Enqueue(neighbor, depth + 1);
+                    }
+                }
+            }
+
+            return visited;
+        }
+        finally
+        {
+            NodePool.Return(nodes, clearArray: true);
+            DepthPool.Return(depths, clearArray: true);
+        }
+
+        void Enqueue(long nodeId, int depth)
+        {
+            if (count == capacity)
+            {
+                var newCapacity = capacity * 2;
+                var newNodes = NodePool.Rent(newCapacity);
+                var newDepths = DepthPool.Rent(newCapacity);
+
+                for (int i = 0; i < count; i++)
+                {
+                    var index = (head + i) % capacity;
+                    newNodes[i] = nodes[index];
+                    newDepths[i] = depths[index];
+                }
+
+                NodePool.Return(nodes, clearArray: true);
+                DepthPool.Return(depths, clearArray: true);
+
+                nodes = newNodes;
+                depths = newDepths;
+                capacity = newCapacity;
+                head = 0;
+                tail = count;
+            }
+
+            nodes[tail] = nodeId;
+            depths[tail] = depth;
+            tail = (tail + 1) % capacity;
+            count++;
+        }
+    }
+
+    private IReadOnlyCollection<long> TraverseDijkstraEdgeTable(
+        ITable nodeTable,
+        ITable edgeTable,
+        long startNodeId,
+        int maxDepth,
+        CancellationToken cancellationToken)
+    {
+        var results = new HashSet<long>();
+        var distances = new Dictionary<long, int>();
+        var queue = new PriorityQueue<long, int>();
+        distances[startNodeId] = 0;
+        queue.Enqueue(startNodeId, 0);
+
+        while (queue.TryDequeue(out var nodeId, out var distance))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (distance > maxDepth)
+            {
+                break;
+            }
+
+            if (!results.Add(nodeId))
+            {
+                continue;
+            }
+
+            var neighbors = GetWeightedNeighborsFromEdgeTable(edgeTable, nodeId);
+            foreach (var neighbor in neighbors)
+            {
+                var nextDistance = distance + neighbor.Weight;
+                if (nextDistance > maxDepth)
+                {
+                    continue;
+                }
+
+                if (distances.TryGetValue(neighbor.NodeId, out var existing) && existing <= nextDistance)
+                {
+                    continue;
+                }
+
+                distances[neighbor.NodeId] = nextDistance;
+                queue.Enqueue(neighbor.NodeId, nextDistance);
+            }
+        }
+
+        return results;
+    }
+
     private static List<long> GetNeighborsFromEdgeTable(ITable edgeTable, long sourceNodeId)
     {
         var neighbors = new List<long>();
@@ -237,4 +372,65 @@ public partial class GraphTraversalEngine
 
         return neighbors;
     }
+
+    private static List<long> GetBidirectionalNeighborsFromEdgeTable(ITable edgeTable, long nodeId)
+    {
+        var neighbors = new List<long>();
+        var literal = FormatLiteral(DataType.Long, nodeId);
+
+        var outgoingEdges = edgeTable.Select($"source = {literal}", null, true);
+        foreach (var edge in outgoingEdges)
+        {
+            if (TryGetNumericValue(edge, "target", out var targetId))
+            {
+                neighbors.Add(targetId);
+            }
+        }
+
+        var incomingEdges = edgeTable.Select($"target = {literal}", null, true);
+        foreach (var edge in incomingEdges)
+        {
+            if (TryGetNumericValue(edge, "source", out var sourceId))
+            {
+                neighbors.Add(sourceId);
+            }
+        }
+
+        return neighbors;
+    }
+
+    private static List<EdgeNeighbor> GetWeightedNeighborsFromEdgeTable(ITable edgeTable, long sourceNodeId)
+    {
+        var neighbors = new List<EdgeNeighbor>();
+        var literal = FormatLiteral(DataType.Long, sourceNodeId);
+        var edges = edgeTable.Select($"source = {literal}", null, true);
+
+        foreach (var edge in edges)
+        {
+            if (!TryGetNumericValue(edge, "target", out var targetId))
+            {
+                continue;
+            }
+
+            var weight = GetEdgeWeight(edge);
+            neighbors.Add(new EdgeNeighbor(targetId, weight));
+        }
+
+        return neighbors;
+    }
+
+    private static int GetEdgeWeight(Dictionary<string, object> edge)
+    {
+        if (TryGetNumericValue(edge, "weight", out var weightValue))
+        {
+            if (weightValue > 0 && weightValue <= int.MaxValue)
+            {
+                return (int)weightValue;
+            }
+        }
+
+        return 1;
+    }
+
+    private readonly record struct EdgeNeighbor(long NodeId, int Weight);
 }

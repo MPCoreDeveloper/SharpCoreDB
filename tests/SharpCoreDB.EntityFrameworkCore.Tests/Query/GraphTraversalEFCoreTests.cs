@@ -5,6 +5,7 @@
 namespace SharpCoreDB.EntityFrameworkCore.Tests.Query;
 
 using Microsoft.EntityFrameworkCore;
+using SharpCoreDB.EntityFrameworkCore.Query;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Collections.Generic;
@@ -108,6 +109,7 @@ public class GraphTraversalEFCoreTests
             var query = context.Nodes.Traverse(1, "NextId", 3, strategy);
             var sql = query.ToQueryString();
             Assert.Contains("GRAPH_TRAVERSE", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedValue, sql);
         }
     }
 

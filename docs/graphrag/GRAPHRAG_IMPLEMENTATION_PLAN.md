@@ -6,6 +6,8 @@
 **Status:** Draft — Ready for Technical Review  
 **Prerequisites:** SharpCoreDB v1.3.0 (current)
 
+**Status Update (2025-02-15):** Phase 1 is implemented (ROWREF data type + serialization). Phase 2 is partial (BFS/DFS traversal, `GRAPH_TRAVERSE()` function, EF Core LINQ translation). Phase 3 is a prototype (hybrid graph+vector optimization hints). Remaining sections describe planned work.
+
 ---
 
 ## Table of Contents
