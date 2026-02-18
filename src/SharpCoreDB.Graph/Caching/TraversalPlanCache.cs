@@ -7,12 +7,15 @@ namespace SharpCoreDB.Graph.Caching;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Thread-safe cache for traversal query plans with TTL and LRU eviction.
 /// ✅ GraphRAG Phase 5.2: 10x speedup for repeated traversal queries.
+/// ✅ GraphRAG Phase 6.3: Integrated metrics collection.
 /// </summary>
 public sealed class TraversalPlanCache
 {
@@ -23,13 +26,17 @@ public sealed class TraversalPlanCache
     private long _hits;
     private long _misses;
     private long _evictions;
+    private long _totalLookupTicks;
+    private long _lookupCount;
+    private readonly GraphMetricsCollector? _metricsCollector;
 
     /// <summary>
     /// Initializes a new traversal plan cache.
     /// </summary>
     /// <param name="maxSize">Maximum number of cached plans (default: 1000).</param>
     /// <param name="ttlSeconds">Time-to-live for cached plans in seconds (default: 3600 = 1 hour).</param>
-    public TraversalPlanCache(int maxSize = 1000, double ttlSeconds = 3600)
+    /// <param name="metricsCollector">Optional metrics collector for observability.</param>
+    public TraversalPlanCache(int maxSize = 1000, double ttlSeconds = 3600, GraphMetricsCollector? metricsCollector = null)
     {
         if (maxSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxSize), "Max size must be positive");
@@ -39,6 +46,7 @@ public sealed class TraversalPlanCache
 
         _maxSize = maxSize;
         _ttlSeconds = ttlSeconds;
+        _metricsCollector = metricsCollector;
     }
 
     /// <summary>
@@ -75,12 +83,15 @@ public sealed class TraversalPlanCache
 
     /// <summary>
     /// Tries to get a cached plan.
+    /// ✅ Phase 6.3: Records lookup time for metrics.
     /// </summary>
     /// <param name="key">The cache key.</param>
     /// <param name="plan">The cached plan if found.</param>
     /// <returns>True if the plan was found and not stale.</returns>
     public bool TryGet(TraversalPlanCacheKey key, out CachedTraversalPlan? plan)
     {
+        var stopwatch = _metricsCollector != null ? Stopwatch.StartNew() : null;
+        
         if (_cache.TryGetValue(key, out plan))
         {
             // Check if stale
@@ -89,18 +100,27 @@ public sealed class TraversalPlanCache
                 // Remove stale entry
                 _cache.TryRemove(key, out _);
                 Interlocked.Increment(ref _misses);
+                _metricsCollector?.RecordCacheMiss();
                 plan = null;
+                
+                RecordLookupTime(stopwatch);
                 return false;
             }
 
             // Record access and update statistics
             plan.RecordAccess();
             Interlocked.Increment(ref _hits);
+            _metricsCollector?.RecordCacheHit();
+            
+            RecordLookupTime(stopwatch);
             return true;
         }
 
         Interlocked.Increment(ref _misses);
+        _metricsCollector?.RecordCacheMiss();
         plan = null;
+        
+        RecordLookupTime(stopwatch);
         return false;
     }
 
@@ -140,6 +160,8 @@ public sealed class TraversalPlanCache
         Interlocked.Exchange(ref _hits, 0);
         Interlocked.Exchange(ref _misses, 0);
         Interlocked.Exchange(ref _evictions, 0);
+        Interlocked.Exchange(ref _totalLookupTicks, 0);
+        Interlocked.Exchange(ref _lookupCount, 0);
     }
 
     /// <summary>
@@ -158,6 +180,7 @@ public sealed class TraversalPlanCache
                 {
                     removed++;
                     Interlocked.Increment(ref _evictions);
+                    _metricsCollector?.RecordCacheEviction();
                 }
             }
         }
@@ -180,6 +203,36 @@ public sealed class TraversalPlanCache
             HitRatio = HitRatio,
             MaxSize = _maxSize,
             TtlSeconds = _ttlSeconds
+        };
+    }
+    
+    /// <summary>
+    /// Gets cache metrics snapshot.
+    /// ✅ Phase 6.3: Returns standardized CacheMetrics structure.
+    /// </summary>
+    /// <returns>Cache metrics snapshot.</returns>
+    public CacheMetrics GetMetrics()
+    {
+        var lookupCount = Interlocked.Read(ref _lookupCount);
+        var avgLookupTime = lookupCount > 0
+            ? TimeSpan.FromTicks(Interlocked.Read(ref _totalLookupTicks) / lookupCount)
+            : TimeSpan.Zero;
+        
+        // Estimate memory usage (rough approximation)
+        const int avgPlanSizeBytes = 256; // Key + plan metadata
+        var estimatedMemory = Count * avgPlanSizeBytes;
+        
+        return new CacheMetrics
+        {
+            Hits = Hits,
+            Misses = Misses,
+            AverageLookupTime = avgLookupTime,
+            CacheConstructionTime = TimeSpan.Zero, // Not tracked yet
+            CurrentSize = Count,
+            MaxSize = _maxSize,
+            Evictions = Evictions,
+            EstimatedMemoryBytes = estimatedMemory,
+            Timestamp = DateTimeOffset.UtcNow
         };
     }
 
@@ -205,8 +258,23 @@ public sealed class TraversalPlanCache
                 if (_cache.TryRemove(lruEntry.Key, out _))
                 {
                     Interlocked.Increment(ref _evictions);
+                    _metricsCollector?.RecordCacheEviction();
                 }
             }
+        }
+    }
+    
+    /// <summary>
+    /// Records lookup time for metrics.
+    /// </summary>
+    private void RecordLookupTime(Stopwatch? stopwatch)
+    {
+        if (stopwatch != null)
+        {
+            stopwatch.Stop();
+            Interlocked.Add(ref _totalLookupTicks, stopwatch.Elapsed.Ticks);
+            Interlocked.Increment(ref _lookupCount);
+            _metricsCollector?.RecordCacheLookupTime(stopwatch.Elapsed);
         }
     }
 }

@@ -5,10 +5,12 @@
 namespace SharpCoreDB.Graph;
 
 using SharpCoreDB.Graph.Caching;
+using SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Configuration options for graph traversal features.
 /// ✅ GraphRAG Phase 5.3: Added query plan caching support.
+/// ✅ GraphRAG Phase 6.3: Added metrics collection support.
 /// </summary>
 public sealed class GraphSearchOptions
 {
@@ -38,4 +40,23 @@ public sealed class GraphSearchOptions
     /// Gets a value indicating whether plan caching is enabled.
     /// </summary>
     public bool IsPlanCachingEnabled => PlanCache != null;
+    
+    /// <summary>
+    /// Gets a value indicating whether metrics collection is enabled.
+    /// ✅ Phase 6.3: When true, traversal operations collect performance metrics.
+    /// </summary>
+    public bool EnableMetrics { get; init; }
+    
+    /// <summary>
+    /// Gets the metrics collector instance.
+    /// If null and EnableMetrics is true, uses GraphMetricsCollector.Global.
+    /// ✅ Phase 6.3: Allows custom metrics collectors for isolated testing.
+    /// </summary>
+    public GraphMetricsCollector? MetricsCollector { get; init; }
+    
+    /// <summary>
+    /// Gets a value indicating whether OpenTelemetry tracing is enabled.
+    /// ✅ Phase 6.3: Enables distributed tracing for graph operations.
+    /// </summary>
+    public bool EnableTracing { get; init; }
 }

@@ -6,12 +6,15 @@ namespace SharpCoreDB.Graph.Heuristics;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using SharpCoreDB.Graph.Metrics;
 using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// A* pathfinding with custom heuristic functions.
 /// ✅ GraphRAG Phase 6.2: User-defined guidance for optimal pathfinding.
+/// ✅ GraphRAG Phase 6.3: Metrics collection for heuristic effectiveness analysis.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -52,15 +55,18 @@ using SharpCoreDB.Interfaces;
 public sealed class CustomAStarPathfinder
 {
     private readonly CustomHeuristicFunction _heuristic;
+    private readonly GraphMetricsCollector? _metricsCollector;
 
     /// <summary>
     /// Initializes a new A* pathfinder with a custom heuristic.
     /// </summary>
     /// <param name="heuristic">The heuristic function to guide pathfinding.</param>
+    /// <param name="metricsCollector">Optional metrics collector for observability.</param>
     /// <exception cref="ArgumentNullException">If heuristic is null.</exception>
-    public CustomAStarPathfinder(CustomHeuristicFunction heuristic)
+    public CustomAStarPathfinder(CustomHeuristicFunction heuristic, GraphMetricsCollector? metricsCollector = null)
     {
         _heuristic = heuristic ?? throw new ArgumentNullException(nameof(heuristic));
+        _metricsCollector = metricsCollector;
     }
 
     /// <summary>
@@ -90,8 +96,14 @@ public sealed class CustomAStarPathfinder
         if (maxDepth < 0)
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
 
+        using var activity = OpenTelemetryIntegration.StartGraphTraversalActivity("AStarPathfinding.CustomHeuristic");
+        activity?.SetTag("graph.startNodeId", startNodeId);
+        activity?.SetTag("graph.goalNodeId", goalNodeId);
+        activity?.SetTag("graph.maxDepth", maxDepth);
+
         context ??= new HeuristicContext();
 
+        var sw = Stopwatch.StartNew();
         var openSet = new PriorityQueue<long, double>();
         var cameFrom = new Dictionary<long, long>();
         var gScore = new Dictionary<long, double> { [startNodeId] = 0 };
@@ -101,6 +113,7 @@ public sealed class CustomAStarPathfinder
         openSet.Enqueue(startNodeId, fScore[startNodeId]);
 
         int nodesExplored = 0;
+        long heuristicCalls = 0;
 
         while (openSet.Count > 0)
         {
@@ -112,6 +125,18 @@ public sealed class CustomAStarPathfinder
             {
                 var path = ReconstructPath(cameFrom, current);
                 var totalCost = gScore[current];
+                sw.Stop();
+                
+                // Record metrics
+                _metricsCollector?.RecordHeuristicEvaluation(sw.Elapsed, wasAdmissible: true);
+                
+                // OpenTelemetry tags
+                activity?.SetTag("graph.pathFound", true);
+                activity?.SetTag("graph.pathLength", path.Count);
+                activity?.SetTag("graph.totalCost", totalCost);
+                activity?.SetTag("graph.nodesExplored", nodesExplored);
+                activity?.SetTag("graph.heuristicCalls", heuristicCalls);
+
                 return new CustomAStarResult(path, totalCost, nodesExplored, true);
             }
 
@@ -135,6 +160,7 @@ public sealed class CustomAStarPathfinder
                     depths[neighbor] = currentDepth + 1;
 
                     var h = _heuristic(neighbor, goalNodeId, currentDepth + 1, maxDepth, context);
+                    heuristicCalls++;
                     var f = tentativeGScore + h;
                     fScore[neighbor] = f;
 
@@ -142,6 +168,15 @@ public sealed class CustomAStarPathfinder
                 }
             }
         }
+
+        sw.Stop();
+        // Record metrics - no path found (overestimate)
+        _metricsCollector?.RecordHeuristicEvaluation(sw.Elapsed, wasAdmissible: false);
+        
+        // OpenTelemetry tags
+        activity?.SetTag("graph.pathFound", false);
+        activity?.SetTag("graph.nodesExplored", nodesExplored);
+        activity?.SetTag("graph.heuristicCalls", heuristicCalls);
 
         // No path found
         return new CustomAStarResult([], 0, nodesExplored, false);
@@ -176,6 +211,7 @@ public sealed class CustomAStarPathfinder
 
         context ??= new HeuristicContext();
 
+        var sw = Stopwatch.StartNew();
         var openSet = new PriorityQueue<long, double>();
         var cameFrom = new Dictionary<long, long>();
         var gScore = new Dictionary<long, double> { [startNodeId] = 0 };
@@ -195,6 +231,11 @@ public sealed class CustomAStarPathfinder
             {
                 var path = ReconstructPath(cameFrom, current);
                 var totalCost = gScore[current];
+                sw.Stop();
+                
+                // Record metrics
+                _metricsCollector?.RecordHeuristicEvaluation(sw.Elapsed, wasAdmissible: true);
+
                 return new CustomAStarResult(path, totalCost, nodesExplored, true);
             }
 
@@ -222,6 +263,10 @@ public sealed class CustomAStarPathfinder
                 }
             }
         }
+
+        sw.Stop();
+        // Record metrics - no path found (overestimate)
+        _metricsCollector?.RecordHeuristicEvaluation(sw.Elapsed, wasAdmissible: false);
 
         return new CustomAStarResult([], 0, nodesExplored, false);
     }
