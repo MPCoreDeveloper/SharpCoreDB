@@ -21,21 +21,16 @@ public sealed class RowNumberFunction : IWindowFunction
 /// </summary>
 public sealed class RankFunction : IWindowFunction
 {
-    private int _rank = 1;
-    private int _rowCount = 0;
+    private int _currentRank = 0;
     
     public string FunctionName => "RANK";
     
-    public void ProcessValue(object? value) 
-    { 
-        _rowCount++;
-    }
+    public void ProcessValue(object? value) { /* No state needed for simple ranking */ }
     
     public object? GetResult()
     {
-        var result = _rank;
-        _rank = _rowCount + 1;
-        return result;
+        _currentRank++;
+        return _currentRank;
     }
 }
 

@@ -194,4 +194,90 @@ public class AggregateFactoryTests
         Assert.Throws<ArgumentException>(() => 
             AggregateFactory.CreateAggregate("INVALID"));
     }
+    
+    // Phase 9.2: Advanced Aggregate Factory Tests
+    
+    [Fact]
+    public void Factory_StatisticalAggregates_CreatesCorrectly()
+    {
+        // Act
+        var stddevSamp = AggregateFactory.CreateAggregate("STDDEV_SAMP");
+        var stddevPop = AggregateFactory.CreateAggregate("STDDEV_POP");
+        var varSamp = AggregateFactory.CreateAggregate("VAR_SAMP");
+        var varPop = AggregateFactory.CreateAggregate("VAR_POP");
+        
+        // Assert
+        Assert.NotNull(stddevSamp);
+        Assert.NotNull(stddevPop);
+        Assert.NotNull(varSamp);
+        Assert.NotNull(varPop);
+        Assert.Equal("STDDEV_SAMP", stddevSamp.FunctionName);
+        Assert.Equal("STDDEV_POP", stddevPop.FunctionName);
+        Assert.Equal("VAR_SAMP", varSamp.FunctionName);
+        Assert.Equal("VAR_POP", varPop.FunctionName);
+    }
+    
+    [Fact]
+    public void Factory_PercentileAggregates_CreatesCorrectly()
+    {
+        // Act
+        var median = AggregateFactory.CreateAggregate("MEDIAN");
+        var p95 = AggregateFactory.CreateAggregate("PERCENTILE_95");
+        var p99 = AggregateFactory.CreateAggregate("PERCENTILE_99");
+        var customPercentile = AggregateFactory.CreateAggregate("PERCENTILE", 0.75);
+        
+        // Assert
+        Assert.NotNull(median);
+        Assert.NotNull(p95);
+        Assert.NotNull(p99);
+        Assert.NotNull(customPercentile);
+        Assert.Equal("MEDIAN", median.FunctionName);
+        Assert.Equal("PERCENTILE_95", p95.FunctionName);
+        Assert.Equal("PERCENTILE_99", p99.FunctionName);
+        Assert.Equal("PERCENTILE_75", customPercentile.FunctionName);
+    }
+    
+    [Fact]
+    public void Factory_FrequencyAggregates_CreatesCorrectly()
+    {
+        // Act
+        var mode = AggregateFactory.CreateAggregate("MODE");
+        
+        // Assert
+        Assert.NotNull(mode);
+        Assert.Equal("MODE", mode.FunctionName);
+    }
+    
+    [Fact]
+    public void Factory_BivariateAggregates_CreatesCorrectly()
+    {
+        // Act
+        var corr = AggregateFactory.CreateAggregate("CORR");
+        var covarSamp = AggregateFactory.CreateAggregate("COVAR_SAMP");
+        var covarPop = AggregateFactory.CreateAggregate("COVAR_POP");
+        
+        // Assert
+        Assert.NotNull(corr);
+        Assert.NotNull(covarSamp);
+        Assert.NotNull(covarPop);
+        Assert.Equal("CORR", corr.FunctionName);
+        Assert.Equal("COVAR_SAMP", covarSamp.FunctionName);
+        Assert.Equal("COVAR_POP", covarPop.FunctionName);
+    }
+    
+    [Fact]
+    public void Factory_WithAliases_CreatesCorrectly()
+    {
+        // Act - test common aliases
+        var avg = AggregateFactory.CreateAggregate("AVG");
+        var stddev = AggregateFactory.CreateAggregate("STDDEV");
+        var variance = AggregateFactory.CreateAggregate("VARIANCE");
+        var correlation = AggregateFactory.CreateAggregate("CORRELATION");
+        
+        // Assert
+        Assert.NotNull(avg);
+        Assert.NotNull(stddev);
+        Assert.NotNull(variance);
+        Assert.NotNull(correlation);
+    }
 }

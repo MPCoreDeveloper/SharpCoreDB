@@ -150,20 +150,73 @@ public sealed class MaxAggregate : IAggregateFunction
 
 /// <summary>
 /// Factory for creating aggregate function instances.
+/// Supports both basic and advanced aggregates.
+/// C# 14: Uses switch expressions for clean factory pattern.
 /// </summary>
 public static class AggregateFactory
 {
     /// <summary>
     /// Creates an aggregate function by name.
     /// </summary>
-    public static IAggregateFunction CreateAggregate(string functionName) =>
-        functionName.ToUpperInvariant() switch
+    /// <param name="functionName">
+    /// Name of the aggregate function (case-insensitive).
+    /// Supported functions:
+    /// - Basic: SUM, COUNT, AVG/AVERAGE, MIN, MAX
+    /// - Statistical: STDDEV_SAMP, STDDEV_POP, VAR_SAMP, VAR_POP
+    /// - Percentile: MEDIAN, PERCENTILE_* (e.g., PERCENTILE_95)
+    /// - Frequency: MODE
+    /// - Bivariate: CORR, COVAR_SAMP, COVAR_POP
+    /// </param>
+    /// <param name="parameters">
+    /// Optional parameters for specific functions:
+    /// - Percentile functions: percentile value (0.0 - 1.0)
+    /// </param>
+    /// <returns>Aggregate function instance.</returns>
+    /// <exception cref="ArgumentException">If function name is unknown.</exception>
+    public static IAggregateFunction CreateAggregate(string functionName, params object[] parameters)
+    {
+        var upperName = functionName.ToUpperInvariant();
+        
+        // Handle parameterized percentile functions (e.g., PERCENTILE_95)
+        if (upperName.StartsWith("PERCENTILE_"))
         {
+            var percentileStr = upperName["PERCENTILE_".Length..];
+            if (double.TryParse(percentileStr, out var percentileValue))
+            {
+                return new PercentileAggregate(percentileValue / 100.0);
+            }
+        }
+        
+        return upperName switch
+        {
+            // Basic aggregates (Phase 9.1)
             "SUM" => new SumAggregate(),
             "COUNT" => new CountAggregate(),
             "AVG" or "AVERAGE" => new AverageAggregate(),
             "MIN" => new MinAggregate(),
             "MAX" => new MaxAggregate(),
+            
+            // Statistical aggregates (Phase 9.2)
+            "STDDEV" or "STDDEV_SAMP" => new StandardDeviationAggregate(isSample: true),
+            "STDDEV_POP" => new StandardDeviationAggregate(isSample: false),
+            "VAR" or "VAR_SAMP" or "VARIANCE" => new VarianceAggregate(isSample: true),
+            "VAR_POP" => new VarianceAggregate(isSample: false),
+            
+            // Percentile aggregates (Phase 9.2)
+            "MEDIAN" => new MedianAggregate(),
+            "PERCENTILE" => parameters.Length > 0 && parameters[0] is double p
+                ? new PercentileAggregate(p)
+                : throw new ArgumentException("PERCENTILE requires a percentile value (0.0-1.0)"),
+            
+            // Frequency aggregates (Phase 9.2)
+            "MODE" => new ModeAggregate(),
+            
+            // Bivariate aggregates (Phase 9.2)
+            "CORR" or "CORRELATION" => new CorrelationAggregate(),
+            "COVAR" or "COVAR_SAMP" or "COVARIANCE" => new CovarianceAggregate(isSample: true),
+            "COVAR_POP" => new CovarianceAggregate(isSample: false),
+            
             _ => throw new ArgumentException($"Unknown aggregate function: {functionName}")
         };
+    }
 }
