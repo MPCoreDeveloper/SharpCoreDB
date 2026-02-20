@@ -103,6 +103,11 @@ public class ColumnNode : SqlNode
     /// </summary>
     public string? AggregateFunction { get; set; }
 
+    /// <summary>
+    /// Gets or sets the aggregate argument value (e.g., percentile).
+    /// </summary>
+    public double? AggregateArgument { get; set; }
+
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitColumn(this);
 }

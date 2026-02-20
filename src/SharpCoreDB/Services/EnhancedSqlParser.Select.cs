@@ -112,7 +112,10 @@ public partial class EnhancedSqlParser
             }
 
             // Check for aggregate function
-            var funcMatch = Regex.Match(_sql.Substring(_position), @"^\s*(COUNT|SUM|AVG|MIN|MAX)\s*\(", RegexOptions.IgnoreCase);
+            var funcMatch = Regex.Match(
+                _sql.Substring(_position),
+                @"^\s*(COUNT|SUM|AVG|MIN|MAX|STDDEV|STDDEV_SAMP|STDDEV_POP|VAR|VARIANCE|VAR_SAMP|VAR_POP|MEDIAN|PERCENTILE|MODE|CORR|CORRELATION|COVAR|COVARIANCE|COVAR_SAMP|COVAR_POP)\s*\(",
+                RegexOptions.IgnoreCase);
             if (funcMatch.Success)
             {
                 column.AggregateFunction = funcMatch.Groups[1].Value.ToUpperInvariant();
@@ -146,6 +149,23 @@ public partial class EnhancedSqlParser
                     else
                     {
                         column.Name = tableAlias ?? "";
+                    }
+                }
+
+                if (MatchToken(","))
+                {
+                    var literal = ParseLiteral();
+                    if (literal?.Value is double doubleValue)
+                    {
+                        column.AggregateArgument = doubleValue;
+                    }
+                    else if (literal?.Value is int intValue)
+                    {
+                        column.AggregateArgument = intValue;
+                    }
+                    else
+                    {
+                        RecordError("Expected numeric literal for aggregate argument");
                     }
                 }
 
