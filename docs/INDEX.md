@@ -60,7 +60,6 @@ Start here if you're new to SharpCoreDB:
 | Document | Topics |
 |----------|--------|
 | [BLOB Storage Guide](storage/BLOB_STORAGE.md) | 3-tier storage (inline/overflow/filestream) |
-| [BLOB_STORAGE_OPERATIONAL_REPORT.md](BLOB_STORAGE_OPERATIONAL_REPORT.md) | Detailed architecture |
 
 ### ⏰ Time-Series
 | Document | Topics |
@@ -88,19 +87,16 @@ Start here if you're new to SharpCoreDB:
 1. Start: [Vector Search Overview](vectors/README.md)
 2. Setup: [Vector Search Guide](vectors/IMPLEMENTATION.md)
 3. Integrate: [Vector package docs](../src/SharpCoreDB.VectorSearch/README.md)
-4. Optimize: [Performance Guide](PERFORMANCE.md)
 
 ### Real-Time Analytics Dashboard
 1. Setup: [Analytics Overview](analytics/README.md)
 2. Tutorial: [Analytics Complete Guide](analytics/TUTORIAL.md)
-3. Advanced: [Statistical Analysis](analytics/ADVANCED_STATISTICS.md)
-4. Examples: [Analytics package docs](../src/SharpCoreDB.Analytics/README.md)
+3. Examples: [Analytics package docs](../src/SharpCoreDB.Analytics/README.md)
 
 ### High-Volume Data Processing
 1. Foundation: [Storage Architecture](storage/README.md)
-2. BLOB Storage: [BLOB_STORAGE_OPERATIONAL_REPORT.md](BLOB_STORAGE_OPERATIONAL_REPORT.md)
-3. Batch Operations: [User Manual](USER_MANUAL.md#batch-operations)
-4. Performance: [PERFORMANCE.md](PERFORMANCE.md)
+2. BLOB Storage: [BLOB Storage Guide](storage/BLOB_STORAGE.md)
+3. Batch Operations: [User Manual - Batch Operations](USER_MANUAL.md#batch-operations)
 
 ### Multi-Language Application
 1. Collation: [Collation Guide](collation/README.md)
