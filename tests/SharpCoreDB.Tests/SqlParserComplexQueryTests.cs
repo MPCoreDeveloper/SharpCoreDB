@@ -31,6 +31,34 @@ public class SqlParserComplexQueryTests
     }
 
     [Fact]
+    public void Parser_PercentileAggregate_ParsesFunctionName()
+    {
+        // Arrange
+        var parser = new EnhancedSqlParser();
+        var sql = "SELECT PERCENTILE(score, 0.95) AS p95 FROM metrics";
+
+        // Act
+        var ast = parser.Parse(sql) as SelectNode;
+
+        // Assert
+        Assert.Equal("PERCENTILE", ast?.Columns[0].AggregateFunction);
+    }
+
+    [Fact]
+    public void Parser_PercentileAggregate_ParsesArgumentValue()
+    {
+        // Arrange
+        var parser = new EnhancedSqlParser();
+        var sql = "SELECT PERCENTILE(score, 0.95) AS p95 FROM metrics";
+
+        // Act
+        var ast = parser.Parse(sql) as SelectNode;
+
+        // Assert
+        Assert.Equal(0.95, ast?.Columns[0].AggregateArgument);
+    }
+
+    [Fact]
     public void Parser_RightJoin_Parses()
     {
         // Arrange

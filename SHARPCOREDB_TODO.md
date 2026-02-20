@@ -1,7 +1,0 @@
-# SharpCoreDB TODO
-
-- ~~Add support for `CREATE TABLE IF NOT EXISTS` in the SQL parser/executor to avoid invalid syntax errors when initializing tables.~~ **Fixed**: `SqlParser.ExecuteCreateTable` now detects `IF NOT EXISTS`, extracts the correct table name, and silently skips creation when the table already exists.
-- ~~`SqlParser.ParseValue` used culture-dependent `decimal.Parse`/`double.Parse` — broke on non-US locales (e.g. Dutch: `.` as group separator).~~ **Fixed**: now uses `CultureInfo.InvariantCulture` for all numeric types.
-- ~~`ExecuteCreateTableInternal` mapped `REAL` to `DataType.Decimal` instead of `DataType.Real`.~~ **Fixed**: `REAL`/`FLOAT`/`DOUBLE` → `DataType.Real`, `DECIMAL`/`NUMERIC` → `DataType.Decimal`.
-- ~~`SingleFileDatabase.ExecuteSelectInternal` does not support `ORDER BY` or `LIMIT` clauses — queries must be simple `SELECT ... FROM ... [WHERE ...]`.~~ **Clarified**: The main execution path (`SqlParser.ExecuteSelectQuery` in `SqlParser.DML.cs`) fully supports `ORDER BY`, `LIMIT`, and `OFFSET`. This limitation only applies to the legacy `DatabaseExtensions.ExecuteSelectInternal` (regex-based) and the backward-compat `Database.Core.ExecuteQuery(string)` (StructRow) paths, which are not the primary query route. **Marked `[Obsolete]`** on all affected methods to prevent accidental use.
-- Migrate `SingleFileDatabase` SQL execution from regex-based parsing to `SqlParser`-based execution for full SQL support (ORDER BY, LIMIT, JOIN, subqueries, aggregates). Currently marked `[Obsolete]` — see `DatabaseExtensions.cs`.
