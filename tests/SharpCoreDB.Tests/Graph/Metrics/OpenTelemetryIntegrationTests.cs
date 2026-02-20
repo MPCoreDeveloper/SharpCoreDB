@@ -15,6 +15,22 @@ using Xunit;
 /// </summary>
 public class OpenTelemetryIntegrationTests
 {
+    /// <summary>
+    /// Static constructor to register ActivityListener for test execution.
+    /// Required for ActivitySource.StartActivity() to return non-null activities.
+    /// </summary>
+    static OpenTelemetryIntegrationTests()
+    {
+        // Register ActivityListener to enable activity creation during tests
+        ActivitySource.AddActivityListener(new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == OpenTelemetryIntegration.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStarted = activity => { },
+            ActivityStopped = activity => { }
+        });
+    }
+
     [Fact]
     public void OpenTelemetryIntegration_ActivitySourceCreated()
     {
