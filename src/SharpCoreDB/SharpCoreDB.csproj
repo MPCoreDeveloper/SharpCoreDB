@@ -31,23 +31,19 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.3.0 (2026-MM: Enhanced performance - optimized query execution, improved index handling, streamlined transaction processing, faster WAL commits, and superior single-file and columnar storage speed.
-      New features: Real-time collaboration support, automated index tuning, advanced query insights.
-      Fixes: Stability improvements, memory usage optimizations, bug fixes in query processing.
-      Breaking changes: None - full backward compatibility maintained.
-    </PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReadmeFile>README_NUGET.md</PackageReadmeFile>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -97,9 +93,9 @@
   -->
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -114,10 +110,11 @@
   
   <ItemGroup>
     <None Include=".github\FUNDING.yml" />
-    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
     <None Include="build\*.props" Pack="true" PackagePath="build\" />
-    <None Include="README_NUGET.md" Pack="true" PackagePath="/" />
+    <None Include="NuGet.README.md" Pack="true" PackagePath="/" />
+    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
   </ItemGroup>
+  
 
   <!-- Build all RIDs automatically when packing -->
   <!-- DISABLED: Enable this if RuntimeIdentifiers are properly supported in your SDK version -->

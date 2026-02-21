@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
@@ -8,19 +8,19 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.YesSql</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.YesSql</Product>
     <Description>YesSql provider for SharpCoreDB encrypted database engine. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.3.0: Updated to support SharpCoreDB 1.3.0 - Enhanced query execution, optimized join operations, improved subquery handling, better index utilization, and performance tuning.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;yessql;database;orm;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -46,11 +46,16 @@
     <PackageReference Include="YesSql.Provider.Sqlite" Version="5.4.7" />
     
     <!-- DI for OrchardCore integration -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" Condition="'$(TargetFramework)' == 'net8.0'" />
+
+    <!-- SharpCoreDB dependencies -->
+    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Extensions" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
     <!-- Reference to SharpCoreDB core (for IDatabase) -->
     <ProjectReference Include="..\SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
@@ -60,12 +65,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Link="SharpCoreDB.jpg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="NuGet.README.md" Pack="true" PackagePath="/" />
+    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Build all RIDs automatically when packing -->

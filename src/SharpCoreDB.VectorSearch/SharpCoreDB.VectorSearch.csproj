@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.VectorSearch</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>
@@ -27,7 +27,8 @@
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
+    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,14 +39,23 @@
     </None>
     
     <!-- Package README -->
-    <None Include="README.md">
+    <None Include="NuGet.README.md">
       <PackagePath>/</PackagePath>
       <Pack>true</Pack>
     </None>
+    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <!-- Development: use project reference -->
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
+    
+    <!-- Packaging: use NuGet package reference -->
+    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 
 </Project>
