@@ -45,6 +45,11 @@ public sealed class GraphTraversalMethodCallTranslator(ISqlExpressionFactory sql
         typeof(GraphTraversalQueryableExtensions)
             .GetMethod(nameof(GraphTraversalQueryableExtensions.TraverseWhere))!;
 
+    private static readonly MethodInfo _graphTraverseFunction =
+        typeof(SharpCoreDBDbFunctionsExtensions)
+            .GetMethod(nameof(SharpCoreDBDbFunctionsExtensions.GraphTraverse),
+                [typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy)])!;
+
     /// <inheritdoc />
     public SqlExpression? Translate(
         SqlExpression? instance,
@@ -55,23 +60,40 @@ public sealed class GraphTraversalMethodCallTranslator(ISqlExpressionFactory sql
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(arguments);
 
+        // Handle DbFunctions.GraphTraverse(startId, relationshipColumn, maxDepth, strategy)
+        if (method == _graphTraverseFunction && arguments.Count == 4)
+        {
+            var startNodeId = arguments[0];
+            var relationshipColumn = arguments[1];
+            var maxDepth = arguments[2];
+            var strategyArg = arguments[3];
+
+            if (strategyArg is not SqlConstantExpression { Value: GraphTraversalStrategy strategy })
+            {
+                return null;
+            }
+
+            return _sqlExpressionFactory.Function(
+                "GRAPH_TRAVERSE",
+                arguments: [startNodeId, relationshipColumn, maxDepth, new SqlConstantExpression(System.Linq.Expressions.Expression.Constant((int)strategy), null)],
+                nullable: false,
+                argumentsPropagateNullability: [false, false, false, false],
+                returnType: typeof(long));
+        }
+
         // Handle: .Traverse(startId, relationshipColumn, maxDepth, strategy)
         if (IsGenericMethodMatch(method, _traverseMethod) && arguments.Count == 5)
         {
-            // arguments[0] is the IQueryable source (skip it)
             var startNodeId = arguments[1];
             var relationshipColumn = arguments[2];
             var maxDepth = arguments[3];
             var strategyArg = arguments[4];
 
-            // Extract strategy value
             if (strategyArg is not SqlConstantExpression { Value: GraphTraversalStrategy strategy })
             {
-                // Log and skip translation if strategy is not constant
                 return null;
             }
 
-            // Create GRAPH_TRAVERSE(startId, relationshipColumn, maxDepth, strategy) SQL function call
             return _sqlExpressionFactory.Function(
                 "GRAPH_TRAVERSE",
                 arguments: [startNodeId, relationshipColumn, maxDepth, new SqlConstantExpression(System.Linq.Expressions.Expression.Constant((int)strategy), null)],
@@ -83,15 +105,12 @@ public sealed class GraphTraversalMethodCallTranslator(ISqlExpressionFactory sql
         // Handle: .WhereIn(traversalIds)
         if (IsGenericMethodMatch(method, _whereInMethod) && arguments.Count == 2)
         {
-            // This is translated by EF Core's standard IN handling
-            // Just pass through for now
             return null;
         }
 
         // Handle: .TraverseWhere(...)
         if (IsGenericMethodMatch(method, _traverseWhereMethod) && arguments.Count == 6)
         {
-            // arguments[0] = source, [1] = startId, [2] = column, [3] = depth, [4] = strategy, [5] = predicate
             var startNodeId = arguments[1];
             var relationshipColumn = arguments[2];
             var maxDepth = arguments[3];
@@ -99,7 +118,6 @@ public sealed class GraphTraversalMethodCallTranslator(ISqlExpressionFactory sql
 
             if (strategyArg is not SqlConstantExpression { Value: GraphTraversalStrategy strategy })
             {
-                // Log and skip translation if strategy is not constant
                 return null;
             }
 

@@ -49,7 +49,7 @@ public class GraphTraversalQueryableExtensionsTests
         var source = Enumerable.Empty<TestEntity>().AsQueryable();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() =>
+        Assert.Throws<ArgumentNullException>(() =>
             source.Traverse(1, null!, 3, GraphTraversalStrategy.Bfs));
     }
 
@@ -193,9 +193,14 @@ public class GraphTraversalQueryableExtensionsTests
                 1, "col", 3, GraphTraversalStrategy.Bfs, _ => true));
 
         // null column
-        Assert.Throws<ArgumentException>(() =>
+        Assert.Throws<ArgumentNullException>(() =>
             source.TraverseWhere(
                 1, null!, 3, GraphTraversalStrategy.Bfs, _ => true));
+
+        // whitespace column
+        Assert.Throws<ArgumentException>(() =>
+            source.TraverseWhere(
+                1, "  ", 3, GraphTraversalStrategy.Bfs, _ => true));
 
         // negative depth
         Assert.Throws<ArgumentOutOfRangeException>(() =>

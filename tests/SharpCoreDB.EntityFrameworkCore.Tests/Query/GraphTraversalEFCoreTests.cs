@@ -43,7 +43,7 @@ public class GraphTraversalEFCoreTests
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSharpCoreDB("test_traverse.db");
+            optionsBuilder.UseSharpCoreDB("Data Source=test_traverse.db;Password=TestPassword123");
         }
     }
 
@@ -228,16 +228,16 @@ public class GraphTraversalEFCoreTests
     }
 
     /// <summary>
-    /// Test: Traverse with null relationship column throws ArgumentException.
+    /// Test: Traverse with null relationship column throws ArgumentNullException.
     /// </summary>
     [Fact]
-    public void Traverse_WithNullRelationshipColumn_ThrowsArgumentException()
+    public void Traverse_WithNullRelationshipColumn_ThrowsArgumentNullException()
     {
         // Arrange
         using var context = new TestDbContext();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() =>
+        Assert.Throws<ArgumentNullException>(() =>
             context.Nodes.Traverse(1, null!, 3, GraphTraversalStrategy.Bfs));
     }
 
@@ -366,10 +366,14 @@ public class GraphTraversalEFCoreTests
 
         // Act
         var query = context.Orders.WhereIn(new List<long> { 1, 2, 3 });
-        var countQuery = query.Count();
+        var countQuery = query
+            .Select(_ => 1)
+            .GroupBy(_ => 1)
+            .Select(g => g.Count());
+        var sql = countQuery.ToQueryString();
 
-        // Assert - Just verify it doesn't throw
-        Assert.True(countQuery >= 0);
+        // Assert
+        Assert.Contains("COUNT", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

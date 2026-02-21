@@ -6,6 +6,7 @@ namespace SharpCoreDB.Services;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 /// <summary>
@@ -252,8 +253,8 @@ public partial class EnhancedSqlParser
             _position += numMatch.Length;
             var value = numMatch.Groups[1].Value;
             if (value.Contains('.'))
-                return new LiteralNode { Position = _position, Value = double.Parse(value) };
-            return new LiteralNode { Position = _position, Value = int.Parse(value) };
+                return new LiteralNode { Position = _position, Value = double.Parse(value, CultureInfo.InvariantCulture) };
+            return new LiteralNode { Position = _position, Value = int.Parse(value, CultureInfo.InvariantCulture) };
         }
 
         // NULL

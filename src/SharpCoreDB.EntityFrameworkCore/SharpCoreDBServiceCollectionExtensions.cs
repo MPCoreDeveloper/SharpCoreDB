@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -37,7 +38,6 @@ public static class SharpCoreDBServiceCollectionExtensions
         var builder = new EntityFrameworkRelationalServicesBuilder(serviceCollection)
             .TryAdd<LoggingDefinitions, SharpCoreDBLoggingDefinitions>()
             .TryAdd<IDatabaseProvider, SharpCoreDBDatabaseProviderService>()
-            .TryAdd<IDatabase, SharpCoreDBDatabaseProvider>()
             .TryAdd<IDatabaseCreator, SharpCoreDBDatabaseCreator>()
             .TryAdd<IRelationalConnection, SharpCoreDBRelationalConnection>()
             .TryAdd<IRelationalTypeMappingSource, SharpCoreDBTypeMappingSource>()
@@ -47,7 +47,11 @@ public static class SharpCoreDBServiceCollectionExtensions
             .TryAdd<IMigrationsSqlGenerator, SharpCoreDBMigrationsSqlGenerator>()
             .TryAdd<IUpdateSqlGenerator, SharpCoreDBUpdateSqlGenerator>()
             .TryAdd<IMethodCallTranslatorPlugin, SharpCoreDBMethodCallTranslatorPlugin>()
-            .TryAdd<IMemberTranslatorPlugin, SharpCoreDBMemberTranslatorPlugin>();
+            .TryAdd<IMemberTranslatorPlugin, SharpCoreDBMemberTranslatorPlugin>()
+            .TryAdd<IProviderConventionSetBuilder, SharpCoreDBConventionSetBuilder>()
+            .TryAdd<IEvaluatableExpressionFilterPlugin, SharpCoreDBEvaluatableExpressionFilterPlugin>()
+            .TryAdd<IModelCustomizer, SharpCoreDBModelCustomizer>()
+            .TryAdd<IQueryTranslationPreprocessorFactory, SharpCoreDBQueryTranslationPreprocessorFactory>();
 
         builder.TryAddCoreServices();
 

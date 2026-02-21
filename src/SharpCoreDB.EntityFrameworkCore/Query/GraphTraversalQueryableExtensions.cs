@@ -59,21 +59,7 @@ public static class GraphTraversalQueryableExtensions
         if (maxDepth < 0)
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
 
-        var methodInfo = typeof(GraphTraversalQueryableExtensions)
-            .GetMethod(nameof(Traverse), 
-                [typeof(IQueryable<>).MakeGenericType(typeof(TEntity)), 
-                 typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy)])!
-            .MakeGenericMethod(typeof(TEntity));
-
-        var methodCall = Expression.Call(
-            methodInfo,
-            source.Expression,
-            Expression.Constant(startNodeId),
-            Expression.Constant(relationshipColumn),
-            Expression.Constant(maxDepth),
-            Expression.Constant(strategy));
-
-        return source.Provider.CreateQuery<long>(methodCall);
+        return source.Select(_ => SharpCoreDBDbFunctionsExtensions.GraphTraverse(startNodeId, relationshipColumn, maxDepth, strategy));
     }
 
     /// <summary>
@@ -163,23 +149,21 @@ public static class GraphTraversalQueryableExtensions
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
 
-        // First get traversal results
         var traversalIds = source.Traverse(startNodeId, relationshipColumn, maxDepth, strategy);
 
-        // Then apply additional filter
         var parameter = predicate.Parameters[0];
         var idProperty = typeof(TEntity).GetProperty("Id")
             ?? throw new InvalidOperationException($"Entity {typeof(TEntity).Name} must have an 'Id' property");
 
         var propertyAccess = Expression.Property(parameter, idProperty);
-        var idList = Expression.Constant(traversalIds.ToList());
-        var containsMethod = typeof(List<long>).GetMethod("Contains", [typeof(long)])!;
-        var inClause = Expression.Call(idList, containsMethod, propertyAccess);
+        var containsMethod = typeof(Queryable)
+            .GetMethods()
+            .First(m => m.Name == nameof(Queryable.Contains) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(long));
+        var inClause = Expression.Call(null, containsMethod, traversalIds.Expression, propertyAccess);
 
-        // Combine: WHERE (...traversal...) AND (user predicate)
-        var combined = Expression.Lambda<Func<TEntity, bool>>(
-            Expression.AndAlso(inClause, predicate.Body),
-            parameter);
+        var combinedBody = Expression.AndAlso(inClause, predicate.Body);
+        var combined = Expression.Lambda<Func<TEntity, bool>>(combinedBody, parameter);
 
         return source.Where(combined);
     }
@@ -237,5 +221,24 @@ public static class GraphTraversalQueryableExtensions
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
 
         return new GraphTraversalQueryable<TEntity>(source, startNodeId, relationshipColumn, maxDepth);
+    }
+
+    /// <summary>
+    /// Limits the number of results from a graph traversal query.
+    /// Validates that count is non-negative before applying the Take operation.
+    /// </summary>
+    /// <param name="source">The traversal query source.</param>
+    /// <param name="count">The maximum number of elements to return.</param>
+    /// <returns>A queryable with at most count elements.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when count is negative.</exception>
+    public static IQueryable<long> Take(this IQueryable<long> source, int count)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count), "Count must be non-negative");
+
+        return Queryable.Take(source, count);
     }
 }

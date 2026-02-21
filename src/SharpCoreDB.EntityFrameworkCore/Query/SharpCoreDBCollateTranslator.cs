@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using SharpCoreDB.Interfaces;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -101,5 +102,24 @@ public static class SharpCoreDBDbFunctionsExtensions
         // This method is never executed - it's translated to SQL by SharpCoreDBCollateTranslator
         throw new InvalidOperationException(
             $"{nameof(Collate)} is a database function and can only be used in LINQ to Entities queries.");
+    }
+
+    /// <summary>
+    /// Translates to GRAPH_TRAVERSE(startNodeId, relationshipColumn, maxDepth, strategy).
+    /// </summary>
+    /// <param name="startNodeId">Starting node ID.</param>
+    /// <param name="relationshipColumn">ROWREF column name.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <param name="strategy">Traversal strategy.</param>
+    /// <returns>Traversal result row ID.</returns>
+    [DbFunction("GRAPH_TRAVERSE", IsBuiltIn = true)]
+    public static long GraphTraverse(
+        long startNodeId,
+        string relationshipColumn,
+        int maxDepth,
+        GraphTraversalStrategy strategy)
+    {
+        throw new InvalidOperationException(
+            $"{nameof(GraphTraverse)} is a database function and can only be used in LINQ to Entities queries.");
     }
 }

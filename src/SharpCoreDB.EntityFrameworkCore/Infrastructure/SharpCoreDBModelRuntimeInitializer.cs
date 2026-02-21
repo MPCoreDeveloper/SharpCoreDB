@@ -7,11 +7,8 @@ namespace SharpCoreDB.EntityFrameworkCore.Infrastructure;
 
 /// <summary>
 /// Model runtime initializer for SharpCoreDB.
-/// Forces eager relational model creation during initialization to ensure
-/// column-property mappings reference the RuntimeEntityType instances
-/// from the RuntimeModel (not the design-time EntityType instances).
-/// Without this, lazy creation via GetRelationalModel() may use the
-/// design-time model, causing entity type reference mismatches in queries.
+/// Ensures the relational model is properly created from RuntimeEntityType instances
+/// so that table mappings reference the correct entity type objects during query compilation.
 /// </summary>
 public class SharpCoreDBModelRuntimeInitializer(
     ModelRuntimeInitializerDependencies dependencies,
@@ -24,16 +21,9 @@ public class SharpCoreDBModelRuntimeInitializer(
         bool designTime = true,
         IDiagnosticsLogger<DbLoggerCategory.Model.Validation>? validationLogger = null)
     {
-        // Pass designTime=false to the base to prevent it from creating the relational
-        // model using the design-time model's entity types (which causes reference mismatches
-        // with the RuntimeModel's RuntimeEntityType instances during query compilation).
-        model = base.Initialize(model, designTime: false, validationLogger);
-
-        // Now force relational model creation on the RuntimeModel.
-        // GetRelationalModel() will use GetOrAddRuntimeAnnotationValue to lazily create
-        // the relational model from the RuntimeModel's entity types.
-        model.GetRelationalModel();
-
-        return model;
+        // Let the base handle model finalization and relational model creation.
+        // Pass designTime=true so that RelationalModelRuntimeInitializer eagerly
+        // creates the relational model with correct entity type references.
+        return base.Initialize(model, designTime: true, validationLogger);
     }
 }

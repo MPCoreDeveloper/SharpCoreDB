@@ -27,7 +27,7 @@ public sealed class EFCoreCollationTests : IDisposable
         Directory.CreateDirectory(testDbPath);
 
         var connectionString = $"Data Source={testDbPath};Password=test_password";
-        
+
         var options = new DbContextOptionsBuilder<TestDbContext>()
             .UseSharpCoreDB(connectionString)
             .Options;
@@ -69,21 +69,22 @@ public sealed class EFCoreCollationTests : IDisposable
         var dbInstance = conn.DbInstance!;
 
         // Insert data directly to verify COLLATE NOCASE behavior
-        dbInstance.ExecuteSQL("INSERT INTO User (Id, Username, Email) VALUES (1, 'Alice', 'alice@example.com')");
-        dbInstance.ExecuteSQL("INSERT INTO User (Id, Username, Email) VALUES (2, 'Bob', 'bob@example.com')");
+        // NOTE: EF Core uses the DbSet property name "Users" as the table name
+        dbInstance.ExecuteSQL("INSERT INTO Users (Id, Username, Email) VALUES (1, 'Alice', 'alice@example.com')");
+        dbInstance.ExecuteSQL("INSERT INTO Users (Id, Username, Email) VALUES (2, 'Bob', 'bob@example.com')");
 
         // Assert - Case-insensitive query should work due to NOCASE collation on column
-        var results = dbInstance.ExecuteQuery("SELECT * FROM User WHERE Username = 'ALICE'");
+        var results = dbInstance.ExecuteQuery("SELECT * FROM Users WHERE Username = 'ALICE'");
         Assert.NotEmpty(results);
         Assert.Equal("Alice", results[0]["Username"]?.ToString());
 
         // Additional test: Case-insensitive query with different casing
-        var results2 = dbInstance.ExecuteQuery("SELECT * FROM User WHERE Username = 'alice'");
+        var results2 = dbInstance.ExecuteQuery("SELECT * FROM Users WHERE Username = 'alice'");
         Assert.Single(results2);
         Assert.Equal("Alice", results2[0]["Username"]?.ToString());
-        
+
         // Test case-sensitive comparison with Email column (also has NOCASE)
-        var results3 = dbInstance.ExecuteQuery("SELECT * FROM User WHERE Email = 'ALICE@EXAMPLE.COM'");
+        var results3 = dbInstance.ExecuteQuery("SELECT * FROM Users WHERE Email = 'ALICE@EXAMPLE.COM'");
         Assert.Single(results3);
         Assert.Equal("alice@example.com", results3[0]["Email"]?.ToString());
         
