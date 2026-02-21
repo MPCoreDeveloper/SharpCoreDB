@@ -12,6 +12,7 @@ using Xunit;
 /// Tests for columnar storage with SIMD-optimized aggregates.
 /// Target: Aggregates on 10k records in &lt; 2ms.
 /// </summary>
+[Trait("Category", "Performance")]
 public sealed class ColumnStoreTests
 {
     #region Test Data Models
