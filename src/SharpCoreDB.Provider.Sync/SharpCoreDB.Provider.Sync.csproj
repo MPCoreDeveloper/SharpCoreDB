@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- NuGet Package Properties -->
+    <PackageId>SharpCoreDB.Provider.Sync</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Provider.Sync</Product>
+    <Description>Dotmim.Sync provider for SharpCoreDB — enables bidirectional synchronization between SharpCoreDB and any Dotmim.Sync-supported database (PostgreSQL, SQL Server, SQLite, MySQL). Supports multi-tenant filtering for local-first AI agent architectures. Built for .NET 10 with C# 14.</Description>
+    <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <PackageTags>sharpcoredb;dotmim.sync;sync;database;net10;csharp14;orm;provider;bidirectional-sync;multi-tenant</PackageTags>
+    <PackageReleaseNotes>v1.0.0: Initial release. Dotmim.Sync provider for SharpCoreDB with shadow table change tracking, multi-tenant filtering, and DI integration.</PackageReleaseNotes>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <!-- Performance & Build -->
+    <Optimize>true</Optimize>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>5</WarningLevel>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309;S3267;S1135;S1144;S1172;S2325;S1186;S927;S1006;S4144</NoWarn>
+
+    <!-- Multi-RID support -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+
+    <!-- Dynamic PGO Optimization -->
+    <TieredPGO>true</TieredPGO>
+    <TieredPGOOptimize>true</TieredPGOOptimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dotmim.Sync core provider abstraction -->
+    <PackageReference Include="Dotmim.Sync.Core" Version="1.1.6" />
+
+    <!-- SharpCoreDB -->
+    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+
+    <!-- Dependency Injection -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+  </ItemGroup>
+
+  <!-- Reference local SharpCoreDB when not using NuGet packages -->
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+  </ItemGroup>
+
+</Project>

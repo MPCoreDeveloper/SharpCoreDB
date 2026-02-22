@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- Test Configuration -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Testing frameworks -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.8.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Assertions & Mocking -->
+    <PackageReference Include="FluentAssertions" Version="6.12.1" />
+    <PackageReference Include="Moq" Version="4.20.71" />
+
+    <!-- Dependencies -->
+    <PackageReference Include="Dotmim.Sync.Core" Version="1.1.6" />
+    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <!-- Reference local SharpCoreDB when not using NuGet packages -->
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
+  </ItemGroup>
+
+  <!-- Reference provider project -->
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' == 'true'">
+    <ProjectReference Include="..\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
+  </ItemGroup>
+
+</Project>
