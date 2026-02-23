@@ -12,3 +12,4 @@
 ## Project-Specific Rules
 - Custom requirement A
 - Custom requirement B
+- Require full SQLite compatibility: SharpCoreDB sync and provider must support all SQLite syntax/features users could use, never less; extra capabilities are fine.

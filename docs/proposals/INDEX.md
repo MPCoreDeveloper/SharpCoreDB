@@ -19,6 +19,7 @@
 - Technical decisions
 - Success criteria
 - Future roadmap
+- **SQLite compatibility requirement**
 
 **Read this first** to understand the overall vision.
 
@@ -33,6 +34,7 @@
 - 3-step architecture explanation
 - Timeline (week-by-week)
 - Key features
+- **SQLite compatibility requirement**
 - **The encryption insight** (why no bridge is needed)
 - DI registration template
 - Usage example
@@ -42,7 +44,19 @@
 
 ---
 
-### 3. **DOTMIM_SYNC_PROVIDER_PROPOSAL.md** (23.5 KB) — TECHNICAL DEEP DIVE
+### 3. **SQLITE_COMPATIBILITY.md** (NEW) — REQUIREMENTS MATRIX
+**Purpose:** Track SQLite syntax/behavior parity (must not be less than SQLite)  
+**Audience:** Architects, developers, reviewers  
+**Contains:**
+- DDL compatibility (CREATE TABLE/TRIGGER/INDEX)
+- DML compatibility (INSERT/UPDATE/DELETE/UPSERT)
+- SELECT/JOIN compatibility
+- Function compatibility (CURRENT_TIMESTAMP, last_insert_rowid, etc.)
+- Trigger semantics (NEW/OLD references)
+
+---
+
+### 4. **DOTMIM_SYNC_PROVIDER_PROPOSAL.md** (23.5 KB) — TECHNICAL DEEP DIVE
 **Purpose:** Complete architecture and design  
 **Audience:** Architects, senior developers, reviewers  
 **Sections:**
@@ -64,7 +78,7 @@
 
 ---
 
-### 4. **DOTMIM_SYNC_IMPLEMENTATION_PLAN.md** (23.5 KB) — EXECUTION ROADMAP
+### 5. **DOTMIM_SYNC_IMPLEMENTATION_PLAN.md** (23.5 KB) — EXECUTION ROADMAP
 **Purpose:** Phased implementation breakdown  
 **Audience:** Project managers, developers, leads  
 **Sections:**
@@ -75,6 +89,7 @@
    - Schema introspection API
    - JOIN performance verification
    - Timestamp function
+   - **SQLite compatibility matrix (new)**
 3. **Phase 1** (Week 2): Core provider skeleton
    - Project structure (Add-In Pattern)
    - SharpCoreDBSyncProvider
@@ -116,7 +131,7 @@
 
 ---
 
-### 5. **ADD_IN_PATTERN_SUMMARY.md** (5.7 KB) — PATTERN ALIGNMENT
+### 6. **ADD_IN_PATTERN_SUMMARY.md** (5.7 KB) — PATTERN ALIGNMENT
 **Purpose:** Justify and explain the add-in pattern choice  
 **Audience:** Architects, ecosystem stakeholders  
 **Contains:**
@@ -164,6 +179,7 @@
 |---|---|---|---|
 | **README.md** | Navigation hub | 9.3 KB | 8 min |
 | **QUICK_REFERENCE.md** | Developer cheat sheet | 7.3 KB | 5 min |
+| **SQLITE_COMPATIBILITY.md** | Requirements matrix | N/A | N/A |
 | **DOTMIM_SYNC_PROVIDER_PROPOSAL.md** | Technical design | 23.5 KB | 25 min |
 | **DOTMIM_SYNC_IMPLEMENTATION_PLAN.md** | Execution roadmap | 23.5 KB | 30 min |
 | **ADD_IN_PATTERN_SUMMARY.md** | Pattern justification | 5.7 KB | 5 min |

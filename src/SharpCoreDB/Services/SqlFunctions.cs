@@ -143,6 +143,30 @@ public static class SqlFunctions
     }
 
     /// <summary>
+    /// Returns the current UTC timestamp ticks for sync change tracking.
+    /// </summary>
+    /// <returns>UTC ticks as a long.</returns>
+    public static long SyncTimestamp() => DateTimeOffset.UtcNow.Ticks;
+
+    /// <summary>
+    /// Returns the current UTC timestamp (SQLite-compatible CURRENT_TIMESTAMP).
+    /// </summary>
+    /// <returns>Current DateTime in UTC.</returns>
+    public static DateTime CurrentTimestamp() => DateTime.UtcNow;
+
+    /// <summary>
+    /// Returns the current UTC date (SQLite-compatible CURRENT_DATE).
+    /// </summary>
+    /// <returns>Current date in UTC.</returns>
+    public static DateTime CurrentDate() => DateTime.UtcNow.Date;
+
+    /// <summary>
+    /// Returns the current UTC time of day (SQLite-compatible CURRENT_TIME).
+    /// </summary>
+    /// <returns>Current time of day in UTC.</returns>
+    public static TimeSpan CurrentTime() => DateTime.UtcNow.TimeOfDay;
+
+    /// <summary>
     /// Evaluates a SQL function call.
     /// </summary>
     /// <param name="functionName">The function name.</param>
@@ -156,6 +180,10 @@ public static class SqlFunctions
         return upperName switch
         {
             "NOW" => Now(),
+            "CURRENT_TIMESTAMP" => CurrentTimestamp(),
+            "CURRENT_DATE" => CurrentDate(),
+            "CURRENT_TIME" => CurrentTime(),
+            "SYNC_TIMESTAMP" => SyncTimestamp(),
             "DATE" => arguments.Count > 0 && arguments[0] is DateTime dt ? Date(dt) : null,
             "STRFTIME" => arguments.Count >= 2 && arguments[0] is DateTime dt2 && arguments[1] is string fmt
                 ? StrFTime(dt2, fmt) : null,

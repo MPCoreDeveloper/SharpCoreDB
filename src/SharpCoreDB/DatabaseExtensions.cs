@@ -168,6 +168,63 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public long GetLastInsertRowId() => _lastInsertRowId;
     internal void SetLastInsertRowId(long rowId) => _lastInsertRowId = rowId;
 
+    /// <inheritdoc />
+    public bool TryGetTable(string tableName, out ITable table)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        return _tables.TryGetValue(tableName, out table!);
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<TableInfo> GetTables()
+    {
+        if (_tables.Count == 0)
+            return [];
+
+        List<TableInfo> list = new(_tables.Count);
+        foreach (var kvp in _tables)
+        {
+            list.Add(new TableInfo
+            {
+                Name = kvp.Key,
+                Type = "TABLE"
+            });
+        }
+
+        return list;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ColumnInfo> GetColumns(string tableName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
+        if (!_tables.TryGetValue(tableName, out var table))
+            return [];
+
+        var columns = table.Columns;
+        var types = table.ColumnTypes;
+        var collations = table.ColumnCollations;
+        List<ColumnInfo> list = new(columns.Count);
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            var collation = i < collations.Count ? collations[i] : CollationType.Binary;
+
+            list.Add(new ColumnInfo
+            {
+                Table = tableName,
+                Name = columns[i],
+                DataType = types[i].ToString(),
+                Ordinal = i,
+                IsNullable = true,
+                Collation = collation == CollationType.Binary ? null : collation.ToString().ToUpperInvariant()
+            });
+        }
+
+        return list;
+    }
+
     public IDatabase Initialize(string dbPath, string masterPassword) => this;
 
     public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
@@ -345,6 +402,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         if (upperSql.StartsWith("CREATE TABLE"))
         {
             ExecuteCreateTableInternal(sql);
+            return;
+        }
+
+        if (upperSql.StartsWith("DROP TABLE"))
+        {
+            ExecuteDropTableInternal(sql);
             return;
         }
         
@@ -538,6 +601,29 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
         }
         
         table.Update($"WHERE {whereClause}", updates);
+    }
+
+    [Obsolete("Regex-based DROP TABLE parsing. Migrate to SqlParser-based execution for full SQL support.")]
+    private void ExecuteDropTableInternal(string sql)
+    {
+        var regex = new Regex(
+            @"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)",
+            RegexOptions.IgnoreCase);
+        
+        var match = regex.Match(sql);
+        if (!match.Success)
+        {
+            throw new InvalidOperationException($"Invalid DROP TABLE syntax: {sql}");
+        }
+
+        var tableName = match.Groups[1].Value.Trim();
+        
+        if (_tables.TryGetValue(tableName, out var table))
+        {
+            _tables.Remove(tableName);
+            _tableDirectoryManager.DeleteTable(tableName);
+            _tableDirectoryManager.Flush();
+        }
     }
 
     [Obsolete("Regex-based DELETE parsing. Migrate to SqlParser-based execution for full SQL support.")]

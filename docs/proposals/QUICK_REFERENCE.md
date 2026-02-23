@@ -6,6 +6,8 @@
 
 **Primary use case:** Local-first AI agents — sync a tenant's subset of data locally, run vector search + graph queries with zero latency and full privacy on an encrypted local database.
 
+**Compatibility requirement:** SharpCoreDB must remain **100% compatible with SQLite syntax and behavior** for all operations users could perform in SQLite. We may extend beyond SQLite, but **must never support less than SQLite**.
+
 **Key insight:** Encryption is at-rest only; by the time the sync provider reads data, it's already decrypted. No special encryption bridge needed — the provider is just another consumer of the SharpCoreDB API.
 
 ---

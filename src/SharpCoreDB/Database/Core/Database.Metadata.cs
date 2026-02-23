@@ -10,6 +10,8 @@
 
 namespace SharpCoreDB;
 
+using SharpCoreDB.Interfaces;
+
 /// <summary>
 /// Database metadata implementation for schema discovery (IMetadataProvider).
 /// 
@@ -19,6 +21,13 @@ namespace SharpCoreDB;
 /// </summary>
 public partial class Database : IMetadataProvider
 {
+    /// <inheritdoc />
+    public bool TryGetTable(string tableName, out ITable table)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        return tables.TryGetValue(tableName, out table!);
+    }
+
     /// <inheritdoc />
     public IReadOnlyList<TableInfo> GetTables()
     {

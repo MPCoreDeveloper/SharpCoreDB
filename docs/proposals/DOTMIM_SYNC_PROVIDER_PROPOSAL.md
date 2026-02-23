@@ -11,6 +11,8 @@
 
 This proposal outlines the design and implementation of a **Dotmim.Sync `CoreProvider`** for SharpCoreDB, enabling **bidirectional data synchronization** between SharpCoreDB instances and any other Dotmim.Sync-supported database (PostgreSQL, SQL Server, SQLite, MySQL, MariaDB).
 
+**Compatibility Requirement:** SharpCoreDB must remain **100% compatible with SQLite syntax and behavior** for all operations users could perform in SQLite. We may extend beyond SQLite, but **must never support less than SQLite**. This constraint applies to the provider, change tracking, and all sync-related SQL generation.
+
 The primary use case is **Local-First AI Agents** — a hybrid architecture where:
 
 - **Server** (PostgreSQL/SQL Server): Holds multi-tenant global knowledge
@@ -118,7 +120,7 @@ The `SharpCoreDBSyncProvider` will implement `CoreProvider` and act primarily as
 | Change Enumeration | Medium | Efficient query: "give me all rows changed since timestamp X" |
 | Timestamp Column | Low | Auto-maintained `last_modified_at` (BIGINT) column via triggers |
 | Bulk Update/Delete | Low | Batch UPDATE/DELETE by primary key list |
-| UUID/GUID Generation | Low | Scope identifiers need GUID columns |
+| GUID/ULID Mapping Validation | Low | `Guid` and `Ulid` types already exist; verify SQLite-compatible storage and DbType mappings |
 | Schema Introspection | Low | Programmatic access to table schema (already available via ITable) |
 
 ---
@@ -456,6 +458,7 @@ tests/
 | Schema migration during sync setup alters user tables | Medium | Use separate tracking tables only; never modify user table schema |
 | Change enumeration performance on large tables | High | Hash index on tracking PK; B-tree on timestamp; periodic tombstone cleanup |
 | Dotmim.Sync API changes between versions | Low | Pin to stable 1.1.x release; integration tests catch breaks |
+| SQLite compatibility gaps discovered | High | Maintain compatibility matrix; prioritize parity for all SQLite syntax used by sync |
 | DI container misconfiguration in consuming apps | Low | Comprehensive examples; XML documentation; sample project demonstrates proper setup |
 
 ---

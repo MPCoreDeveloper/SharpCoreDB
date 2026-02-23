@@ -1,0 +1,36 @@
+    private void ExecuteDropTableInternal(string sql)
+    {
+        var regex = new Regex(
+            @"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)",
+            RegexOptions.IgnoreCase);
+
+        var match = regex.Match(sql);
+        if (!match.Success)
+        {
+            throw new InvalidOperationException($"Invalid DROP TABLE syntax: {sql}");
+        }
+
+        var tableName = match.Groups[1].Value.Trim();
+
+        if (!_tables.TryGetValue(tableName, out var table))
+        {
+            // If IF EXISTS, silently ignore
+            if (sql.ToUpperInvariant().Contains("IF EXISTS"))
+                return;
+
+            throw new InvalidOperationException($"Table '{tableName}' not found");
+        }
+
+        // Remove from tables dictionary
+        _tables.Remove(tableName);
+
+        // Remove from storage provider metadata
+        _tableDirectoryManager.RemoveTable(tableName);
+        _tableDirectoryManager.Flush();
+
+        // Dispose table if needed
+        if (table is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }

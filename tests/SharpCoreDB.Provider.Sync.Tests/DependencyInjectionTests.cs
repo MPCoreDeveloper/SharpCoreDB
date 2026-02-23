@@ -1,6 +1,7 @@
 #nullable enable
 
 using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.Provider.Sync.Extensions;
 using Xunit;
 
 namespace SharpCoreDB.Provider.Sync.Tests;

@@ -31,7 +31,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Executes CREATE TRIGGER statement.
-    /// Syntax: CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table BEGIN ... END
+    /// Syntax: CREATE TRIGGER [IF NOT EXISTS] name BEFORE|AFTER INSERT|UPDATE|DELETE ON table BEGIN ... END
     /// </summary>
     private void ExecuteCreateTrigger(string sql, string[] parts, IWAL? wal)
     {
@@ -42,28 +42,43 @@ public partial class SqlParser
         if (parts.Length < 7)
             throw new ArgumentException("Invalid CREATE TRIGGER syntax");
 
-        var triggerName = parts[2];
+        bool ifNotExists = false;
+        int nameIndex = 2;
 
-        var timing = parts[3].ToUpperInvariant() switch
+        if (parts.Length >= 6
+            && parts[2].Equals("IF", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals("NOT", StringComparison.OrdinalIgnoreCase)
+            && parts[4].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            ifNotExists = true;
+            nameIndex = 5;
+        }
+
+        if (nameIndex >= parts.Length)
+            throw new ArgumentException("Trigger name is required");
+
+        var triggerName = parts[nameIndex];
+
+        var timing = parts[nameIndex + 1].ToUpperInvariant() switch
         {
             "BEFORE" => TriggerTiming.Before,
             "AFTER" => TriggerTiming.After,
-            _ => throw new ArgumentException($"Expected BEFORE or AFTER, got: {parts[3]}")
+            _ => throw new ArgumentException($"Expected BEFORE or AFTER, got: {parts[nameIndex + 1]}")
         };
 
-        var triggerEvent = parts[4].ToUpperInvariant() switch
+        var triggerEvent = parts[nameIndex + 2].ToUpperInvariant() switch
         {
             "INSERT" => TriggerEvent.Insert,
             "UPDATE" => TriggerEvent.Update,
             "DELETE" => TriggerEvent.Delete,
-            _ => throw new ArgumentException($"Expected INSERT, UPDATE, or DELETE, got: {parts[4]}")
+            _ => throw new ArgumentException($"Expected INSERT, UPDATE, or DELETE, got: {parts[nameIndex + 2]}")
         };
 
-        // parts[5] should be "ON"
-        if (!parts[5].Equals("ON", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"Expected ON keyword, got: {parts[5]}");
+        // parts[nameIndex + 3] should be "ON"
+        if (!parts[nameIndex + 3].Equals("ON", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Expected ON keyword, got: {parts[nameIndex + 3]}");
 
-        var tableName = parts[6];
+        var tableName = parts[nameIndex + 4];
 
         // Extract BEGIN...END body
         var beginIdx = sql.IndexOf("BEGIN", StringComparison.OrdinalIgnoreCase);
@@ -76,6 +91,11 @@ public partial class SqlParser
         var trigger = new TriggerDefinition(triggerName, tableName, timing, triggerEvent, body);
         lock (_triggerLock)
         {
+            if (ifNotExists && _triggers.ContainsKey(triggerName))
+            {
+                return;
+            }
+
             _triggers[triggerName] = trigger;
         }
     }

@@ -1,6 +1,10 @@
 #nullable enable
 
+using System.Data.Common;
 using Dotmim.Sync;
+using Dotmim.Sync.Builders;
+using Dotmim.Sync.Enumerations;
+using Dotmim.Sync.Manager;
 using SharpCoreDB.Data.Provider;
 
 namespace SharpCoreDB.Provider.Sync;
@@ -19,47 +23,43 @@ namespace SharpCoreDB.Provider.Sync;
 /// reads data through ITable.Select() or ExecuteQuery(), the CryptoService has already decrypted it.
 /// The provider operates on plaintext rows in memory, with no special encryption handling needed.
 /// </remarks>
-public sealed class SharpCoreDBSyncProvider : CoreProvider
+public sealed class SharpCoreDBSyncProvider(string connectionString, SyncProviderOptions options) : CoreProvider
 {
-    private readonly string _connectionString;
-    private readonly SyncProviderOptions _options;
-    private SharpCoreDBConnection? _connection;
+    private string _connectionString = string.IsNullOrWhiteSpace(connectionString)
+        ? throw new ArgumentException("Connection string cannot be null or whitespace.", nameof(connectionString))
+        : connectionString;
 
-    /// <summary>
-    /// Gets the connection string for the SharpCoreDB database.
-    /// </summary>
-    public string ConnectionString => _connectionString;
+    private readonly SyncProviderOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
     /// <summary>
     /// Gets the sync provider options for this instance.
     /// </summary>
     public SyncProviderOptions Options => _options;
 
-    /// <summary>
-    /// Initializes a new instance of the SharpCoreDBSyncProvider.
-    /// </summary>
-    /// <param name="connectionString">SharpCoreDB connection string (e.g., "Path=C:\data\local.scdb;Password=secret")</param>
-    /// <param name="options">Configuration options for sync behavior</param>
-    /// <exception cref="ArgumentNullException">If connectionString or options is null</exception>
-    public SharpCoreDBSyncProvider(string connectionString, SyncProviderOptions options)
+    /// <inheritdoc />
+    public override string ConnectionString
     {
-        ArgumentNullException.ThrowIfNull(connectionString);
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(connectionString);
-        ArgumentNullException.ThrowIfNull(options);
+        get => _connectionString;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Connection string cannot be null or whitespace.", nameof(value));
 
-        _connectionString = connectionString;
-        _options = options;
+            _connectionString = value;
+        }
     }
+
+    /// <inheritdoc />
+    public override bool CanBeServerProvider => true;
+
+    /// <inheritdoc />
+    public override ConstraintsLevelAction ConstraintsLevelAction => ConstraintsLevelAction.OnDatabaseLevel;
 
     /// <summary>
     /// Creates a new DbConnection for communicating with the SharpCoreDB database.
     /// </summary>
     /// <returns>A new SharpCoreDBConnection instance</returns>
-    public override DbConnection CreateConnection()
-    {
-        _connection = new SharpCoreDBConnection(_connectionString);
-        return _connection;
-    }
+    public override DbConnection CreateConnection() => new SharpCoreDBConnection(_connectionString);
 
     /// <summary>
     /// Gets the database name from the connection string.
@@ -68,11 +68,9 @@ public sealed class SharpCoreDBSyncProvider : CoreProvider
     /// <returns>Database name/path</returns>
     public override string GetDatabaseName()
     {
-        // Extract the Path value from connection string
-        // Format: "Path=C:\data\local.scdb;Password=secret"
         var parts = _connectionString.Split(';');
         var pathPart = parts.FirstOrDefault(p => p.StartsWith("Path=", StringComparison.OrdinalIgnoreCase));
-        
+
         if (pathPart == null)
             return "SharpCoreDB";
 
@@ -80,23 +78,25 @@ public sealed class SharpCoreDBSyncProvider : CoreProvider
         return Path.GetFileNameWithoutExtension(path);
     }
 
-    /// <summary>
-    /// Gets the builder for database-level operations.
-    /// </summary>
-    public override DbConnectionStringBuilder GetConnectionStringBuilder()
-    {
-        var builder = new DbConnectionStringBuilder();
-        // SharpCoreDB connection strings are custom format; just store as-is
-        builder.Add("ConnectionString", _connectionString);
-        return builder;
-    }
+    /// <inheritdoc />
+    public override DbDatabaseBuilder GetDatabaseBuilder() =>
+        throw new NotImplementedException("Phase 2.5: SharpCoreDBDatabaseBuilder implementation pending");
 
-    /// <summary>
-    /// Clears the provider's internal state.
-    /// </summary>
-    public override void Dispose()
-    {
-        _connection?.Dispose();
-        base.Dispose();
-    }
+    /// <inheritdoc />
+    public override DbScopeBuilder GetScopeBuilder(string scopeName) =>
+        throw new NotImplementedException("Phase 2.3: SharpCoreDBScopeInfoBuilder implementation pending");
+
+    /// <inheritdoc />
+    public override DbSyncAdapter GetSyncAdapter(SyncTable table, ScopeInfo scopeInfo) =>
+        throw new NotImplementedException("Phase 3.2: SharpCoreDBSyncAdapter implementation pending");
+
+    /// <inheritdoc />
+    public override DbMetadata GetMetadata() =>
+        throw new NotImplementedException("Phase 1.3: SharpCoreDBDbMetadata implementation pending");
+
+    /// <inheritdoc />
+    public override string GetProviderTypeName() => "SharpCoreDB.Provider.Sync";
+
+    /// <inheritdoc />
+    public override string GetShortProviderTypeName() => "SharpCoreDB";
 }

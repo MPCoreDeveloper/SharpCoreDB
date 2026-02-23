@@ -73,9 +73,8 @@ public partial class Database
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                SaveMetadata();
+                ForceSave();
                 ApplyColumnarCompactionThresholdToTables();
-                _metadataDirty = true;
             }
             else if (!isReadOnly)
             {
@@ -139,9 +138,8 @@ public partial class Database
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                SaveMetadata();
+                ForceSave();
                 ApplyColumnarCompactionThresholdToTables();
-                _metadataDirty = true;
             }
             else if (!isReadOnly)
             {
@@ -208,9 +206,8 @@ public partial class Database
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                SaveMetadata();
+                ForceSave();
                 ApplyColumnarCompactionThresholdToTables();
-                _metadataDirty = true;
             }
             else if (!isReadOnly)
             {
@@ -262,9 +259,8 @@ public partial class Database
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
-                SaveMetadata();
+                ForceSave();
                 ApplyColumnarCompactionThresholdToTables();
-                _metadataDirty = true;
             }
             else if (!isReadOnly)
             {

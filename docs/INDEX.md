@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Version:** 1.3.5 (Phase 9.2 Complete)  
+**Version:** 1.4.0 (Phase 10 Complete)  
 **Status:** Production Ready ✅
 
 Welcome to SharpCoreDB documentation! This page helps you find the right documentation for your use case.
@@ -79,6 +79,17 @@ Start here if you're new to SharpCoreDB:
 | [Query Plan Cache](QUERY_PLAN_CACHE.md) | Optimization details |
 | [Index Implementation](architecture/INDEXING.md) | B-tree and hash indexes |
 
+### 🔄 Distributed Features (NEW - Phase 10)
+| Document | Topics |
+|----------|--------|
+| [Distributed Overview](distributed/README.md) | Multi-master replication, sharding, conflict resolution |
+| [Dotmim.Sync Integration](sync/README.md) | Bidirectional sync with SQL Server/PostgreSQL |
+| [src/SharpCoreDB.Distributed/README.md](../src/SharpCoreDB.Distributed/README.md) | Distributed package documentation |
+| [src/SharpCoreDB.Provider.Sync/README.md](../src/SharpCoreDB.Provider.Sync/README.md) | Sync provider documentation |
+| **New in Phase 10.3:** | Distributed transactions, 2PC protocol |
+| **New in Phase 10.2:** | Multi-master replication, vector clocks |
+| **New in Phase 10.1:** | Dotmim.Sync integration, enterprise sync |
+
 ---
 
 ## 🔧 By Use Case
@@ -115,12 +126,12 @@ Start here if you're new to SharpCoreDB:
 ### Quick Install
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.3.5
+dotnet add package SharpCoreDB --version 1.4.0
 
 # Add features as needed
-dotnet add package SharpCoreDB.Analytics --version 1.3.5
-dotnet add package SharpCoreDB.VectorSearch --version 1.3.5
-dotnet add package SharpCoreDB.Graph --version 1.3.5
+dotnet add package SharpCoreDB.Analytics --version 1.4.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.4.0
+dotnet add package SharpCoreDB.Graph --version 1.4.0
 ```
 
 ### Full Setup Guide
@@ -205,6 +216,14 @@ var path = await graphEngine.FindPathAsync(
 | SharpCoreDB.Graph | [src/SharpCoreDB.Graph/README.md](../src/SharpCoreDB.Graph/README.md) |
 | SharpCoreDB.Extensions | [src/SharpCoreDB.Extensions/README.md](../src/SharpCoreDB.Extensions/README.md) |
 | SharpCoreDB.EntityFrameworkCore | [src/SharpCoreDB.EntityFrameworkCore/README.md](../src/SharpCoreDB.EntityFrameworkCore/README.md) |
+
+### Project-Specific READMEs
+- [src/SharpCoreDB/README.md](src/SharpCoreDB/README.md) - Core database
+- [src/SharpCoreDB.Analytics/README.md](src/SharpCoreDB.Analytics/README.md) - Analytics engine
+- [src/SharpCoreDB.VectorSearch/README.md](src/SharpCoreDB.VectorSearch/README.md) - Vector search
+- [src/SharpCoreDB.Graph/README.md](src/SharpCoreDB.Graph/README.md) - Graph algorithms
+- [src/SharpCoreDB.EntityFrameworkCore/README.md](src/SharpCoreDB.EntityFrameworkCore/README.md) - EF Core provider
+- [examples/README.md](examples/README.md) - Complete examples collection
 
 ---
 
@@ -312,6 +331,6 @@ docs/
 
 ---
 
-**Last Updated:** February 19, 2026 | Version: 1.3.5 (Phase 9.2)
+**Last Updated:** February 19, 2026 | Version: 1.4.0 (Phase 10)
 
 For questions or issues, please open an issue on [GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB/issues).

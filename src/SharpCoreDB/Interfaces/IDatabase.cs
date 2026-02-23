@@ -211,6 +211,27 @@ public interface IDatabase
     long GetLastInsertRowId();
 
     /// <summary>
+    /// Attempts to get a table by name.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="table">The table instance if found.</param>
+    /// <returns>True if the table exists.</returns>
+    bool TryGetTable(string tableName, out ITable table);
+
+    /// <summary>
+    /// Gets table metadata for schema discovery (SQLite compatibility).
+    /// </summary>
+    /// <returns>List of tables in the database.</returns>
+    IReadOnlyList<TableInfo> GetTables();
+
+    /// <summary>
+    /// Gets column metadata for a table (SQLite compatibility).
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <returns>List of columns for the table.</returns>
+    IReadOnlyList<ColumnInfo> GetColumns(string tableName);
+
+    /// <summary>
     /// Gets storage statistics (file size, fragmentation, block count, etc.).
     /// </summary>
     /// <returns>Storage statistics</returns>

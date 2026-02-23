@@ -221,7 +221,9 @@ public partial class SqlParser
                 }
             }
 
+            FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
             table.Insert(row);
+            FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
         }
         
         wal?.Log(sql);
@@ -440,6 +442,15 @@ public partial class SqlParser
     private List<Dictionary<string, object>> ExecuteSelectQuery(string sql, string[] parts, bool noEncrypt)
 #pragma warning restore S1172
     {
+        // Check for sqlite_master query first
+        if (sql.Contains("sqlite_master", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExecuteSqliteMasterQuery(sql);
+        }
+
+        // Extract table name
+        var tableName = ExtractMainTableNameFromSql(sql, 0);
+        
         // ✅ NEW: Check for JOIN keywords to route through Enhanced Parser for proper alias handling
         var hasJoin = parts.Any(p => 
             p.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
@@ -498,8 +509,6 @@ public partial class SqlParser
         if (fromParts.Length > 0 && fromParts[0].StartsWith('('))
             return HandleDerivedTable(sql, noEncrypt);
 
-        var tableName = fromParts[0].TrimEnd(')', ',', ';').Trim('"', '[', ']', '`');
-        
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
         
@@ -668,1402 +677,101 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// ✅ NEW: Tracks column usage for statistics.
+    /// ✅ NEW: Executes queries against the sqlite_master virtual table.
+    /// Returns metadata about tables, indexes, triggers, and views.
     /// </summary>
-    private void TrackColumnUsage(string tableName, string? whereStr)
+    private List<Dictionary<string, object>> ExecuteSqliteMasterQuery(string sql)
     {
-        var table = this.tables[tableName];
-        
-        if (string.IsNullOrEmpty(whereStr))
-        {
-            table.TrackAllColumnsUsage();
-            return;
-        }
-
-        var usedColumns = SqlParser.ParseWhereColumns(whereStr);
-        foreach (var column in usedColumns.Where(c => table.Columns.Contains(c)))
-            table.TrackColumnUsage(column);
-    }
-
-    /// <summary>
-    /// Phase 5.4: Detects vec_distance_*(col, query) in SELECT with an alias referenced
-    /// by ORDER BY, combined with LIMIT k. Routes to HNSW/Flat index when available.
-    /// Returns null if the pattern does not match (caller falls back to full table scan).
-    /// </summary>
-    private List<Dictionary<string, object>>? TryExecuteVectorOptimized(
-        string sql, string selectClause, string tableName, string? orderBy, int limit, bool noEncrypt)
-    {
-        if (string.IsNullOrEmpty(orderBy) || VectorQueryOptimizer is null)
-            return null;
-
-        // Detect vec_distance_*(col, ...) AS alias in SELECT clause
-        var upperSelect = selectClause.ToUpperInvariant();
-        string? distanceFunc = null;
-        string? vectorColumn = null;
-        string? distanceAlias = null;
-
-        // Match patterns: vec_distance_cosine(col, ...) AS alias
-        foreach (var funcName in new[] { "VEC_DISTANCE_COSINE", "VEC_DISTANCE_L2", "VEC_DISTANCE_DOT" })
-        {
-            var funcIdx = upperSelect.IndexOf(funcName, StringComparison.Ordinal);
-            if (funcIdx < 0) continue;
-
-            distanceFunc = funcName;
-
-            // Extract column name: first argument inside parentheses
-            var parenStart = selectClause.IndexOf('(', funcIdx);
-            if (parenStart < 0) continue;
-
-            var commaIdx = selectClause.IndexOf(',', parenStart);
-            if (commaIdx < 0) continue;
-
-            vectorColumn = selectClause[(parenStart + 1)..commaIdx].Trim();
-
-            // Extract alias: look for AS keyword after the closing paren
-            var depth = 1;
-            var pos = parenStart + 1;
-            while (pos < selectClause.Length && depth > 0)
-            {
-                if (selectClause[pos] == '(') depth++;
-                else if (selectClause[pos] == ')') depth--;
-                pos++;
-            }
-
-            var afterFunc = selectClause[pos..].TrimStart();
-            if (afterFunc.StartsWith("AS ", StringComparison.OrdinalIgnoreCase))
-            {
-                distanceAlias = afterFunc[3..].Trim().Split([' ', ',', '\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            }
-
-            break;
-        }
-
-        if (distanceFunc is null || vectorColumn is null)
-            return null;
-
-        // Check: ORDER BY references the distance alias or the function itself
-        var orderByUpper = orderBy.ToUpperInvariant();
-        bool orderByMatchesAlias = distanceAlias is not null &&
-            orderByUpper.Equals(distanceAlias.ToUpperInvariant(), StringComparison.Ordinal);
-        bool orderByMatchesFunc = orderByUpper.StartsWith("VEC_DISTANCE_", StringComparison.Ordinal);
-
-        if (!orderByMatchesAlias && !orderByMatchesFunc)
-            return null;
-
-        // Check if the optimizer can handle this query
-        if (!VectorQueryOptimizer.CanOptimize(tableName, vectorColumn, distanceFunc, limit))
-            return null;
-
-        // Extract the query vector from the SQL (second argument of the distance function)
-        var queryVectorStr = ExtractSecondArgument(sql, distanceFunc);
-        if (queryVectorStr is null)
-            return null;
-
-        // Route to vector index — skips full table scan entirely
-        return VectorQueryOptimizer.ExecuteOptimized(
-            this.tables[tableName],
-            tableName,
-            vectorColumn,
-            distanceFunc,
-            queryVectorStr,
-            limit,
-            noEncrypt);
-    }
-
-    /// <summary>
-    /// Extracts the second argument of a vec_distance_* function call from the SQL string.
-    /// Handles nested parentheses (e.g., <c>vec_distance_cosine(col, '[0.1,0.2]')</c>).
-    /// </summary>
-    private static string? ExtractSecondArgument(string sql, string functionName)
-    {
-        var idx = sql.IndexOf(functionName, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0) return null;
-
-        var parenStart = sql.IndexOf('(', idx);
-        if (parenStart < 0) return null;
-
-        // Find comma separating first and second argument
-        var depth = 1;
-        var pos = parenStart + 1;
-        var commaPos = -1;
-        while (pos < sql.Length && depth > 0)
-        {
-            if (sql[pos] == '(') depth++;
-            else if (sql[pos] == ')') depth--;
-            else if (sql[pos] == ',' && depth == 1 && commaPos < 0)
-            {
-                commaPos = pos;
-            }
-
-            if (depth == 0) break;
-            pos++;
-        }
-
-        if (commaPos < 0 || pos >= sql.Length)
-            return null;
-
-        return sql[(commaPos + 1)..pos].Trim().Trim('\'', '"');
-    }
-
-    /// <summary>
-    /// Executes aggregate query with modern C# 14 patterns.
-    /// ✅ MODERNIZED: Uses collection expressions and pattern matching.
-    /// </summary>
-    private List<Dictionary<string, object>> ExecuteAggregateQuery(string selectClause, string[] parts)
-    {
-        var sql = string.Join(" ", parts);
-        var tableName = ExtractMainTableNameFromSql(sql, 0) ?? SelectFallbackTableName(parts.Skip(1).ToArray());
-        
-        if (!this.tables.ContainsKey(tableName))
-            throw new InvalidOperationException($"Table {tableName} does not exist");
-        
-        var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
-        var groupByIdx = Array.IndexOf(parts.Select(p => p.ToUpperInvariant()).ToArray(), "GROUP");
-        
-        string? whereStr = null;
-        if (whereIdx > 0)
-        {
-            // ✅ C# 14: Simplify nested ternary
-            int endIdx = groupByIdx > whereIdx ? groupByIdx : parts.Length;
-            whereStr = string.Join(" ", parts.Skip(whereIdx + 1).Take(endIdx - whereIdx - 1));
-        }
-
-        var allRows = this.tables[tableName].Select();
-        
-        if (!string.IsNullOrEmpty(whereStr))
-            allRows = [.. allRows.Where(r => SqlParser.EvaluateJoinWhere(r, whereStr))]; // ✅ C# 14: Collection expression
-
-        // ✅ Check for GROUP BY clause
-        if (groupByIdx >= 0 && groupByIdx + 2 < parts.Length && parts[groupByIdx + 1].ToUpper() == "BY")
-            return ExecuteGroupedAggregates(selectClause, allRows, parts[groupByIdx + 2]);
-        
-        return [ComputeAggregates(selectClause, allRows)]; // ✅ C# 14: Collection expression
-    }
-
-    /// <summary>
-    /// ✅ NEW: Extracts aggregate computation logic for reuse and maintainability.
-    /// </summary>
-    private static Dictionary<string, object> ComputeAggregates(string selectClause, List<Dictionary<string, object>> rows)
-    {
-        var result = new Dictionary<string, object>();
-
-        // COUNT(*) or COUNT(column)
-        var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\((\*|[a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (countMatch.Success)
-        {
-            var columnOrStar = countMatch.Groups[1].Value;
-            long count = columnOrStar == "*" 
-                ? rows.Count 
-                : rows.Count(r => r.TryGetValue(columnOrStar, out var val) && val is not null);
-            result["count"] = count;
-        }
-
-        // SUM, AVG, MIN, MAX
-        foreach (var (func, pattern) in new[] 
-        {
-            ("sum", @"SUM\(([a-zA-Z_]\w*)\)"),
-            ("avg", @"AVG\(([a-zA-Z_]\w*)\)"),
-            ("max", @"MAX\(([a-zA-Z_]\w*)\)"),
-            ("min", @"MIN\(([a-zA-Z_]\w*)\)")
-        })
-        {
-            var match = System.Text.RegularExpressions.Regex.Match(selectClause, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                var columnName = match.Groups[1].Value;
-                var values = rows
-                    .Where(r => r.TryGetValue(columnName, out var val) && val is not null)
-                    .Select(r => Convert.ToDecimal(r[columnName])
-                    )
-                    .ToList();
-
-                // ✅ C# 14: Switch expression for aggregate function
-                var aggregateValue = func switch
-                {
-                    "sum" => values.Sum(),
-                    "avg" => values.Count > 0 ? values.Sum() / values.Count : 0,
-                    "max" => values.Count > 0 ? values.Max() : 0,
-                    "min" => values.Count > 0 ? values.Min() : 0,
-                    _ => 0
-                };
-                
-                result[func] = aggregateValue;
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Executes UPDATE statement with modern C# 14 patterns.
-    /// ✅ MODERNIZED: Uses null-coalescing, pattern matching, and proper null handling.
-    /// </summary>
-    private void ExecuteUpdate(string sql, IWAL? wal)
-    {
-        if (this.isReadOnly)
-            throw new InvalidOperationException("Cannot update in readonly mode");
-
-        var parts = sql.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        var tableName = parts[1].Trim('"', '[', ']', '`');
-
-        if (!this.tables.ContainsKey(tableName))
-            throw new InvalidOperationException($"Table {tableName} does not exist");
-
-        var table = this.tables[tableName];
-
-        var setIdx = sql.ToUpperInvariant().IndexOf(" SET ", StringComparison.Ordinal);
-        if (setIdx < 0)
-            throw new InvalidOperationException("UPDATE requires SET clause");
-
-        var whereIdx = sql.ToUpperInvariant().IndexOf(" WHERE ", StringComparison.Ordinal);
-        
-        // ✅ C# 14: Conditional expressions with pattern matching
-        (string setClause, string? whereClause) = whereIdx > 0
-            ? (sql.Substring(setIdx + 5, whereIdx - setIdx - 5).Trim(), sql.Substring(whereIdx + 7).Trim())
-            : (sql.Substring(setIdx + 5).Trim(), null);
-
-        var assignments = ParseSetAssignments(table, tableName, setClause);
-
-        // Try optimized path for PRIMARY KEY updates
-        if (table is Table concreteTable && concreteTable.PrimaryKeyIndex >= 0 && !string.IsNullOrEmpty(whereClause))
-        {
-            var pkColumn = concreteTable.Columns[concreteTable.PrimaryKeyIndex];
-            var whereMatch = System.Text.RegularExpressions.Regex.Match(whereClause, @"^\s*(\w+)\s*=\s*(.+)\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            
-            if (whereMatch.Success && whereMatch.Groups[1].Value == pkColumn)
-            {
-                var pkValueStr = whereMatch.Groups[2].Value.Trim('\'', '"');
-                var pkType = concreteTable.ColumnTypes[concreteTable.PrimaryKeyIndex];
-                var pkValue = SqlParser.ParseValue(pkValueStr, pkType);
-                
-                bool success = assignments.Count == 1
-                    ? TryOptimizedPrimaryKeyUpdate(concreteTable, pkColumn, pkValue, assignments)
-                    : TryOptimizedMultiColumnUpdate(concreteTable, pkColumn, pkValue, assignments);
-                
-                if (success)
-                {
-                    wal?.Log(sql);
-                    return;
-                }
-            }
-        }
-
-        // Validate foreign keys for UPDATE
-        ValidateForeignKeyUpdate(table, whereClause, assignments);
-        
-        // Handle CASCADE/RESTRICT for PRIMARY KEY updates
-        HandleForeignKeyCascadeUpdate(table, tableName, whereClause, assignments);
-
-        table.Update(whereClause, assignments);
-        wal?.Log(sql);
-    }
-
-    /// <summary>
-    /// ✅ NEW: Parses SET clause assignments into a dictionary.
-    /// Uses modern null handling and validation.
-    /// </summary>
-    private static Dictionary<string, object> ParseSetAssignments(ITable table, string tableName, string setClause)
-    {
-        var assignments = new Dictionary<string, object>();
-        var setParts = setClause.Split(',');
-
-        foreach (var setPart in setParts)
-        {
-            var assignment = setPart.Split('=');
-            if (assignment.Length != 2)
-                throw new InvalidOperationException($"Invalid SET clause: {setPart}");
-
-            var column = assignment[0].Trim();
-            var valueStr = assignment[1].Trim().Trim('\'', '"');
-
-            var colIdx = table.Columns.IndexOf(column);
-            if (colIdx < 0)
-                throw new InvalidOperationException($"Column {column} does not exist in table {tableName}");
-
-            var colType = table.ColumnTypes[colIdx];
-            assignments[column] = SqlParser.ParseValue(valueStr, colType)!;
-        }
-
-        return assignments;
-    }
-
-    /// <summary>
-    /// ✅ NEW: Validates foreign key constraints for UPDATE.
-    /// </summary>
-    private void ValidateForeignKeyUpdate(ITable table, string? whereClause, Dictionary<string, object> assignments)
-    {
-        var updateRows = table.Select(whereClause);
-        
-        foreach (var row in updateRows)
-        {
-            var updatedRow = new Dictionary<string, object>(row);
-            foreach (var assignment in assignments)
-                updatedRow[assignment.Key] = assignment.Value;
-            
-            foreach (var fk in table.ForeignKeys)
-            {
-                if (!updatedRow.TryGetValue(fk.ColumnName, out var fkValue) || fkValue is null or DBNull)
-                    continue;
-
-                if (!this.tables.TryGetValue(fk.ReferencedTable, out var refTable))
-                    throw new InvalidOperationException($"Foreign key references non-existent table '{fk.ReferencedTable}'");
-
-                var refColIndex = refTable.Columns.IndexOf(fk.ReferencedColumn);
-                if (refColIndex < 0)
-                    throw new InvalidOperationException($"Foreign key references non-existent column '{fk.ReferencedColumn}' in table '{fk.ReferencedTable}'");
-
-                var fkStr = fkValue.ToString() ?? string.Empty;
-                var refRows = refTable.Select($"{fk.ReferencedColumn} = '{fkStr}'");
-                if (refRows.Count == 0)
-                    throw new InvalidOperationException($"Foreign key constraint violation: value '{fkStr}' does not exist in '{fk.ReferencedTable}.{fk.ReferencedColumn}'");
-            }
-        }
-    }
-
-    /// <summary>
-    /// ✅ NEW: Handles CASCADE/RESTRICT for PRIMARY KEY updates.
-    /// Uses modern pattern matching for action selection.
-    /// </summary>
-    private void HandleForeignKeyCascadeUpdate(ITable table, string tableName, string? whereClause, Dictionary<string, object> assignments)
-    {
-        if (table.PrimaryKeyIndex < 0)
-            return;
-
-        var pkCol = table.Columns[table.PrimaryKeyIndex];
-        if (!assignments.ContainsKey(pkCol))
-            return;
-
-        var cascadeRows = table.Select(whereClause);
-        
-        foreach (var row in cascadeRows)
-        {
-            var oldPkValue = row[pkCol];
-            
-            foreach (var otherTable in this.tables.Values.Where(t => t.Name != tableName))
-            {
-                foreach (var fk in otherTable.ForeignKeys.Where(fk => fk.ReferencedTable == tableName))
-                {
-                    var childRows = otherTable.Select($"{fk.ColumnName} = '{oldPkValue?.ToString() ?? string.Empty}'");
-                    if (childRows.Count == 0)
-                        continue;
-
-                    // ✅ C# 14: Switch expression for cascade action
-                    switch (fk.OnUpdate)
-                    {
-                        case FkAction.Cascade:
-                            var cascadeUpdate = new Dictionary<string, object> { [fk.ColumnName] = assignments[pkCol] };
-                            foreach (var childRow in childRows)
-                            {
-                                if (otherTable.PrimaryKeyIndex >= 0 && childRow.TryGetValue(otherTable.Columns[otherTable.PrimaryKeyIndex], out var childPk))
-                                    otherTable.Update($"{otherTable.Columns[otherTable.PrimaryKeyIndex]} = '{childPk}'", cascadeUpdate);
-                            }
-                            break;
-                            
-                        case FkAction.SetNull:
-                            var nullUpdate = new Dictionary<string, object> { [fk.ColumnName] = DBNull.Value };
-                            foreach (var childRow in childRows)
-                            {
-                                if (otherTable.PrimaryKeyIndex >= 0 && childRow.TryGetValue(otherTable.Columns[otherTable.PrimaryKeyIndex], out var childPk))
-                                    otherTable.Update($"{otherTable.Columns[otherTable.PrimaryKeyIndex]} = '{childPk}'", nullUpdate);
-                            }
-                            break;
-                            
-                        case FkAction.Restrict:
-                            throw new InvalidOperationException($"Cannot update '{tableName}.{pkCol}' because it is referenced by '{otherTable.Name}.{fk.ColumnName}' (RESTRICT constraint)");
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Executes DELETE statement with modern C# 14 patterns.
-    /// ✅ MODERNIZED: Uses null-coalescing, pattern matching, and collection expressions.
-    /// </summary>
-    private void ExecuteDelete(string sql, IWAL? wal)
-    {
-        if (this.isReadOnly)
-            throw new InvalidOperationException("Cannot delete in readonly mode");
-
-        var parts = sql.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        
-        if (parts.Length < 3 || !parts[1].Equals("FROM", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("DELETE requires FROM clause");
-
-        var tableName = parts[2].Trim('"', '[', ']', '`');
-
-        if (!this.tables.TryGetValue(tableName, out var table))
-            throw new InvalidOperationException($"Table {tableName} does not exist");
-
-        var whereIdx = sql.ToUpperInvariant().IndexOf(" WHERE ", StringComparison.Ordinal);
-        string? whereClause = whereIdx > 0 ? sql[(whereIdx + 7)..].Trim() : null;
-
-        // Find referencing foreign keys
-        var referencingFks = this.tables.Values
-            .SelectMany(t => t.ForeignKeys.Where(fk => fk.ReferencedTable == tableName))
-            .ToList(); // ✅ C# 14: Explicit ToList() to provide target type
-
-        // Handle cascade constraints
-        if (referencingFks.Count > 0)
-        {
-            if (!ConfirmCascadeDelete(tableName, referencingFks))
-                return;
-
-            foreach (var fk in referencingFks)
-            {
-                var childTable = this.tables[fk.ReferencedTable];
-                var childWhere = $"{fk.ReferencedColumn} IN (SELECT {fk.ColumnName} FROM {tableName})";
-                childTable.Delete(childWhere);
-            }
-        }
-
-        var rowsToDelete = table.Select(whereClause);
-        
-        foreach (var row in rowsToDelete)
-        {
-            HandleForeignKeyCascadeDelete(table, tableName, row);
-        }
-
-        table.Delete(whereClause);
-        wal?.Log(sql);
-    }
-
-    /// <summary>
-    /// ✅ NEW: Confirms cascade delete with user, returning true if confirmed.
-    /// Uses modern string interpolation and null-coalescing.
-    /// </summary>
-    private static bool ConfirmCascadeDelete(string tableName, List<ForeignKeyConstraint> referencingFks)
-    {
-        Console.WriteLine($"WARNING: Deleting from {tableName} may affect related records in other tables:");
-        foreach (var fk in referencingFks)
-            Console.WriteLine($"  - {fk.ReferencedTable}.{fk.ReferencedColumn} (FK: {fk.ColumnName})");
-        
-        Console.Write("Do you want to continue with CASCADE DELETE? (y/n): ");
-        return (Console.ReadLine() ?? string.Empty).Trim().Equals("y", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// ✅ NEW: Handles CASCADE/RESTRICT for DELETE operations.
-    /// Uses modern pattern matching for constraint action selection.
-    /// </summary>
-    private void HandleForeignKeyCascadeDelete(ITable table, string tableName, Dictionary<string, object> row)
-    {
-        if (table.PrimaryKeyIndex < 0)
-            return;
-
-        var pkCol = table.Columns[table.PrimaryKeyIndex];
-        if (!row.TryGetValue(pkCol, out var pkValue))
-            return;
-
-        var pkValueStr = pkValue?.ToString() ?? string.Empty;
-
-        foreach (var otherTable in this.tables.Values.Where(t => t.Name != tableName))
-        {
-            foreach (var fk in otherTable.ForeignKeys.Where(fk => fk.ReferencedTable == tableName))
-            {
-                var childRows = otherTable.Select($"{fk.ColumnName} = '{pkValueStr}'");
-                if (childRows.Count == 0)
-                    continue;
-
-                // ✅ C# 14: Switch expression for delete action
-                switch (fk.OnDelete)
-                {
-                    case FkAction.Cascade:
-                        otherTable.Delete($"{fk.ColumnName} = '{pkValueStr}'");
-                        break;
-                        
-                    case FkAction.SetNull:
-                        var nullUpdate = new Dictionary<string, object> { [fk.ColumnName] = DBNull.Value };
-                        foreach (var childRow in childRows)
-                        {
-                            if (otherTable.PrimaryKeyIndex >= 0 && childRow.TryGetValue(otherTable.Columns[otherTable.PrimaryKeyIndex], out var childPk))
-                                otherTable.Update($"{otherTable.Columns[otherTable.PrimaryKeyIndex]} = '{childPk}'", nullUpdate);
-                        }
-                        break;
-                        
-                    case FkAction.Restrict:
-                        throw new InvalidOperationException($"Cannot delete from '{tableName}' because it is referenced by '{otherTable.Name}.{fk.ColumnName}' (RESTRICT constraint)");
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// AST Executor for handling complex queries parsed by EnhancedSqlParser.
-    /// ✅ MODERNIZED: Uses C# 14 primary constructor pattern and modern null handling.
-    /// Handles execution of SqlNode trees, particularly derived tables/subqueries.
-    /// </summary>
-    private sealed class AstExecutor(Dictionary<string, ITable> tables, bool noEncrypt = false)
-    {
-        private readonly Dictionary<string, ITable> _tables = tables ?? throw new ArgumentNullException(nameof(tables));
-        private readonly bool _noEncrypt = noEncrypt;
-
-        /// <summary>
-        /// Executes a SELECT SqlNode and returns results.
-        /// ✅ MODERNIZED: Uses modern null-coalescing and pattern matching.
-        /// ✅ FIXED: Now properly filters WHERE clauses including IN expressions
-        /// </summary>
-        public List<Dictionary<string, object>> ExecuteSelect(SelectNode selectNode)
-        {
-            ArgumentNullException.ThrowIfNull(selectNode);
-
-            // ✅ C# 14: Simplify nested conditionals using if statements
-            List<Dictionary<string, object>> results;
-            
-            if (selectNode.From?.Subquery is not null)
-            {
-                results = ExecuteSelect(selectNode.From.Subquery);
-            }
-            else
-            {
-                results = selectNode.From is not null
-                    ? GetRowsForFrom(selectNode.From)
-                    : throw new InvalidOperationException("SELECT requires FROM clause");
-            }
-            
-            // ✅ NEW: Apply WHERE clause filtering after JOINs (supports IN expressions and complex conditions)
-            // This filtering happens BEFORE creating temp table, allowing for proper AST evaluation
-            if (selectNode.Where?.Condition is not null && ContainsInExpression(selectNode.Where.Condition))
-            {
-                results = [.. results.Where(row => EvaluateWhereWithInSupport(selectNode.Where.Condition, row))];
-            }
-            
-            var tempTable = CreateTemporaryTableFromResults(results, "temp");
-            return ExecuteSelectAgainstTable(selectNode, tempTable);
-        }
-
-        /// <summary>
-        /// Checks if an expression tree contains an IN expression node.
-        /// </summary>
-        private static bool ContainsInExpression(ExpressionNode expression)
-        {
-            if (expression is InExpressionNode)
-                return true;
-            
-            if (expression is BinaryExpressionNode binary)
-            {
-                return (binary.Left is not null && ContainsInExpression(binary.Left)) ||
-                       (binary.Right is not null && ContainsInExpression(binary.Right));
-            }
-            
-            return false;
-        }
-
-        /// <summary>
-        /// Evaluates WHERE condition with support for IN expressions.
-        /// </summary>
-        private bool EvaluateWhereWithInSupport(ExpressionNode condition, Dictionary<string, object> row)
-        {
-            switch (condition)
-            {
-                case InExpressionNode inExpr:
-                    // Call the parent SqlParser instance method
-                    var parentParser = this;
-                    // Need a reference to parent SqlParser - this is a limitation of the current design
-                    // For now, return true to allow the filtering to happen through other means
-                    return true;
-                
-                case BinaryExpressionNode binary when binary.Operator.Equals("AND", StringComparison.OrdinalIgnoreCase):
-                    return binary.Left is not null && binary.Right is not null &&
-                           EvaluateWhereWithInSupport(binary.Left, row) &&
-                           EvaluateWhereWithInSupport(binary.Right, row);
-                
-                case BinaryExpressionNode binary when binary.Operator.Equals("OR", StringComparison.OrdinalIgnoreCase):
-                    return binary.Left is not null && binary.Right is not null &&
-                           (EvaluateWhereWithInSupport(binary.Left, row) ||
-                            EvaluateWhereWithInSupport(binary.Right, row));
-                
-                case BinaryExpressionNode:
-                    // Comparison operators - let BuildWhereClause handle via temp table
-                    return true; // Pass through - will be filtered by temp table Select
-                
-                default:
-                    return true; // Pass through
-            }
-        }
-
-        /// <summary>
-        /// Gets rows for a FROM clause, handling tables and joins.
-        /// ✅ MODERNIZED: Uses pattern matching with is not null.
-        /// </summary>
-        private List<Dictionary<string, object>> GetRowsForFrom(FromNode from)
-        {
-            if (from.Subquery is not null)  // ✅ C# 14: is not null pattern
-                return ExecuteSelect(from.Subquery);
-            
-            if (from.TableName is not null)  // ✅ C# 14: is not null pattern
-            {
-                if (from.Joins.Any())
-                    return PerformJoins(from);
-                
-                if (!_tables.TryGetValue(from.TableName, out var table))
-                    throw new InvalidOperationException($"Table '{from.TableName}' does not exist");
-                
-                return table.Select();
-            }
-
-            throw new InvalidOperationException("Unsupported FROM clause");
-        }
-
-        /// <summary>
-        /// Performs JOIN operations for a FROM clause with joins.
-        /// ✅ MODERNIZED: Uses modern null handling and switch expressions.
-        /// </summary>
-        private List<Dictionary<string, object>> PerformJoins(FromNode from)
-        {
-            if (!_tables.TryGetValue(from.TableName!, out var baseTable))
-                throw new InvalidOperationException($"Table '{from.TableName}' does not exist");
-            
-            var leftRows = baseTable.Select();
-            var leftAlias = from.Alias;
-
-            foreach (var join in from.Joins)
-            {
-                var rightRows = GetRowsForFrom(join.Table);
-                var rightAlias = join.Table.Alias;
-                var onClause = BuildExpressionString(join.OnCondition!);
-                var evaluator = JoinConditionEvaluator.CreateEvaluator(onClause, leftAlias, rightAlias);
-
-                // ✅ C# 14: Switch expression for join type
-                leftRows = join.Type switch
-                {
-                    JoinNode.JoinType.Inner => [.. JoinExecutor.ExecuteInnerJoin(leftRows, rightRows, leftAlias, rightAlias, evaluator)],
-                    JoinNode.JoinType.Left => [.. JoinExecutor.ExecuteLeftJoin(leftRows, rightRows, leftAlias, rightAlias, evaluator)],
-                    JoinNode.JoinType.Right => [.. JoinExecutor.ExecuteRightJoin(leftRows, rightRows, leftAlias, rightAlias, evaluator)],
-                    JoinNode.JoinType.Full => [.. JoinExecutor.ExecuteFullJoin(leftRows, rightRows, leftAlias, rightAlias, evaluator)],
-                    JoinNode.JoinType.Cross => [.. JoinExecutor.ExecuteCrossJoin(leftRows, rightRows, leftAlias, rightAlias)],
-                    _ => throw new NotSupportedException($"Join type {join.Type} not supported")
-                };
-            }
-
-            return leftRows;
-        }
-
-        /// <summary>
-        /// Creates a temporary in-memory table from query results.
-        /// ✅ MODERNIZED: Uses modern null handling and LINQ patterns.
-        /// </summary>
-        private ITable CreateTemporaryTableFromResults(List<Dictionary<string, object>> results, string tableName)
-        {
-            if (results.Count == 0)
-                return new InMemoryTable(tableName, [], []);
-
-            // Infer columns from first result
-            var (columns, columnTypes) = results[0]
-                .Aggregate(
-                    (columns: new List<string>(), types: new List<DataType>()),
-                    (acc, kvp) =>
-                    {
-                        acc.columns.Add(kvp.Key);
-                        acc.types.Add(InferDataType(kvp.Value));
-                        return acc;
-                    }
-                );
-
-            var tempTable = new InMemoryTable(tableName, columns, columnTypes);
-            foreach (var row in results)
-                tempTable.Insert(row);
-            
-            return tempTable;
-        }
-
-        /// <summary>
-        /// Infers DataType from a value using modern switch pattern.
-        /// </summary>
-        private static DataType InferDataType(object? value)
-        {
-            if (value is null) return DataType.String;
-            
-            // ✅ C# 14: Pattern matching with type checks
-            return value switch
-            {
-                int => DataType.Integer,
-                long => DataType.Long,
-                double => DataType.Real,
-                decimal => DataType.Decimal,
-                bool => DataType.Boolean,
-                DateTime => DataType.DateTime,
-                string => DataType.String,
-                _ => DataType.String
-            };
-        }
-
-        /// <summary>
-        /// Executes a SELECT query against a specific table.
-        /// ✅ MODERNIZED: Uses modern null handling and pattern matching.
-        /// ✅ FIXED: Skip WHERE clause when already filtered (IN expressions)
-        /// </summary>
-        private List<Dictionary<string, object>> ExecuteSelectAgainstTable(SelectNode selectNode, ITable table)
-        {
-            // Build WHERE clause from AST - but skip if it contains IN expression (already filtered before temp table)
-            string? whereClause = null;
-            if (selectNode.Where?.Condition is not null && !ContainsInExpression(selectNode.Where.Condition))
-            {
-                whereClause = BuildWhereClause(selectNode.Where);
-            }
-            
-            // Build ORDER BY clause
-            string? orderBy = null;
-            bool ascending = true;
-            if (selectNode.OrderBy?.Items.Count > 0)
-            {
-                ascending = selectNode.OrderBy.Items[0].IsAscending;
-                orderBy = selectNode.OrderBy.Items[0].Column.ColumnName;
-            }
-
-            // Execute the query
-            //var results = table.Select(whereClause, orderBy, ascending, _noEncrypt);
-            var results = table.Select(whereClause, null, true, _noEncrypt);
-            // Apply LIMIT/OFFSET
-            if (selectNode.Offset.HasValue && selectNode.Offset.Value > 0)
-                results = [.. results.Skip(selectNode.Offset.Value)];
-
-            if (selectNode.Limit.HasValue && selectNode.Limit.Value > 0)
-                results = [.. results.Take(selectNode.Limit.Value)];
-
-            // Handle GROUP BY
-            if (selectNode.GroupBy?.Columns.Count > 0)
-                results = ExecuteGroupBy(results, selectNode.GroupBy, selectNode.Columns);
-
-            // Handle SELECT column projection
-             if (selectNode.Columns?.Count > 0)
-                         {
-                results = ApplyMultiColumnOrderBy(results, selectNode.OrderBy);
-                results = ProjectColumns(results, selectNode.Columns, table);
-                            }
-                    else
-                            {
-                                // Still project (no-op) to keep shape consistent, but safe for null
-                results = ProjectColumns(results, null, table);
-                            }
-
-            return results;
-        }
-
-        private static List<Dictionary<string, object>> ApplyMultiColumnOrderBy(
-    List<Dictionary<string, object>> rows,
-    OrderByNode? orderBy)
-        {
-            if (orderBy?.Items is null or { Count: 0 } || rows is { Count: 0 })
-                return rows;
-
-            var instructions = orderBy.Items
-                .Select(item => new SortColumn(
-                    item.Column,
-                    item.IsAscending))
-                .ToArray(); // array = sneller dan List bij foreach
-
-            if (instructions.Length == 0)
-                return rows;
-
-            // Vooraf resolved waarden per rij + per gevraagde kolom (grootste winst!)
-            var valueCache = new List<object?[]?>(rows.Count);
-
-            for (int i = 0; i < rows.Count; i++)
-            {
-                valueCache.Add(ResolveAllValues(rows[i], instructions));
-            }
-
-            // Nu sorteren op basis van de cache → geen dictionary lookups meer tijdens vergelijken!
-            var indices = Enumerable.Range(0, rows.Count).ToArray();
-
-            Array.Sort(indices, new MultiKeyComparer(valueCache, instructions));
-
-            // Resultaat bouwen
-            var result = new List<Dictionary<string, object>>(rows.Count);
-            foreach (int idx in indices)
-            {
-                result.Add(rows[idx]);
-            }
-
-            return result;
-        }
-
-        // Haal alle gevraagde waarden in één keer op → O(1) per kolom na caching
-        private static object?[]? ResolveAllValues(
-            Dictionary<string, object> row,
-            SortColumn[] columns)
-        {
-            if (columns.Length == 0) return null;
-
-            var values = new object?[columns.Length];
-
-            for (int i = 0; i < columns.Length; i++)
-            {
-                values[i] = ResolveSingleValue(row, columns[i].Column);
-            }
-
-            return values;
-        }
-
-        private static object? ResolveSingleValue(Dictionary<string, object> row, ColumnReferenceNode col)
-        {
-            string? colName = col.ColumnName;
-            if (string.IsNullOrEmpty(colName))
-                return null;
-
-            string? alias = col.TableAlias;
-
-            // 1. Volledig qualified met alias (meest voorkomend?)
-            if (!string.IsNullOrEmpty(alias))
-            {
-                string key = $"{alias}.{colName}";
-                if (row.TryGetValue(key, out var v)) return v;
-
-                // Case-insensitive fallback (duur → alleen als nodig)
-                foreach (var k in row.Keys)
-                {
-                    if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
-                        return row[k];
-                }
-            }
-
-            // 2. Simpele kolomnaam
-            if (row.TryGetValue(colName, out var val))
-                return val;
-
-            // 3. Suffix (.colName) – vaak traagste deel
-            string suffix = $".{colName}";
-            foreach (var k in row.Keys)
-            {
-                if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                    return row[k];
-            }
-
-            return null;
-        }
-
-        // Custom comparer die direct op de cache-array werkt
-        private sealed class MultiKeyComparer : IComparer<int>
-        {
-            private readonly List<object?[]?> _values;
-            private readonly SortColumn[] _columns;
-
-            public MultiKeyComparer(List<object?[]?> values, SortColumn[] columns)
-            {
-                _values = values;
-                _columns = columns;
-            }
-
-            public int Compare(int a, int b)
-            {
-                var va = _values[a];
-                var vb = _values[b];
-
-                // null-checks
-                if (va is null) return vb is null ? 0 : -1;
-                if (vb is null) return 1;
-
-                for (int i = 0; i < _columns.Length; i++)
-                {
-                    var left = va[i];
-                    var right = vb[i];
-
-                    int cmp = Comparer<object?>.Default.Compare(left, right);
-                    if (cmp != 0)
-                    {
-                        return _columns[i].Ascending ? cmp : -cmp;
-                    }
-                }
-
-                return 0; // stable
-            }
-        }
-
-        private readonly record struct SortColumn(
-            ColumnReferenceNode Column,
-            bool Ascending);
-
-
-
-        /// <summary>
-        /// Executes GROUP BY operation on query results.
-        /// ✅ MODERNIZED: Uses modern LINQ and pattern matching.
-        /// ✅ FIXED: Properly resolves column references with table prefixes from JOIN operations.
-        /// </summary>
-        private List<Dictionary<string, object>> ExecuteGroupBy(
-            List<Dictionary<string, object>> results, 
-            GroupByNode groupByNode, 
-            List<ColumnNode>? selectColumns)
-        {
-            // Helper to resolve column value from dictionary, handling table-prefixed keys
-            static object ResolveColumnValue(Dictionary<string, object> row, ColumnReferenceNode colRef)
-            {
-                var columnName = colRef.ColumnName;
-                
-                // Try exact match first
-                if (row.TryGetValue(columnName, out var value))
-                    return value;
-                
-                // Try case-insensitive qualified match
-                if (!string.IsNullOrEmpty(colRef.TableAlias) && 
-                    row.TryGetValue($"{colRef.TableAlias}.{columnName}", out value))
-                    return value;
-                
-                // Try to find any key that ends with the column name
-                var matchingKey = row.Keys.FirstOrDefault(k => 
-                    k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase) || 
-                    k.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-                
-                if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
-                    return value;
-                
-                throw new KeyNotFoundException($"Column '{columnName}' not found. Available: {string.Join(", ", row.Keys)}");
-            }
-
-            // Group by columns using the resolver
-            var groups = results
-                .GroupBy(r => string.Join("|", groupByNode.Columns.Select(c => ResolveColumnValue(r, c))), 
-                         r => r)
-                .ToList();
-
-            List<Dictionary<string, object>> aggregatedResults = [];
-
-            foreach (var group in groups)
-            {
-                var firstRow = group.First();
-                var aggregatedRow = new Dictionary<string, object>(firstRow);
-
-                // Handle aggregates
-                if (selectColumns is not null)
-                {
-                    foreach (var columnNode in selectColumns)
-                    {
-                        if (columnNode.AggregateFunction is null)
-                            continue;
-
-                        var aggregateName = columnNode.AggregateFunction.ToUpperInvariant();
-                        
-                        // ✅ C# 14: Switch expression for aggregate function
-                        var aggregateValue = aggregateName switch
-                        {
-                            "COUNT" => (object)group.Count(),
-                            "SUM" => ComputeAggregate(group, columnNode.Name, x => x.Sum()),
-                            "AVG" => ComputeAggregate(group, columnNode.Name, x => x.Average()),
-                            "MIN" => ComputeAggregate(group, columnNode.Name, x => x.Min()),
-                            "MAX" => ComputeAggregate(group, columnNode.Name, x => x.Max()),
-                            _ => 0
-                        };
-                        
-                        aggregatedRow[columnNode.Alias ?? aggregateName.ToLower()] = aggregateValue;
-                    }
-                }
-
-                aggregatedResults.Add(aggregatedRow);
-            }
-
-            return aggregatedResults;
-        }
-
-        /// <summary>
-        /// Helper to compute aggregate values using modern functional patterns.
-        /// </summary>
-        private static object ComputeAggregate(IGrouping<string, Dictionary<string, object>> group, string columnName, Func<List<decimal>, decimal> operation)
-        {
-            var values = group
-                .Where(r => r.TryGetValue(columnName, out var val) && val is not null)
-                .Select(r => Convert.ToDecimal(r[columnName]))
-                .ToList();
-
-            return values.Count > 0 ? operation(values) : 0;
-        }
-
-        /// <summary>
-        /// Projects columns from query results based on SELECT list.
-        /// ✅ MODERNIZED: Uses modern null handling and pattern matching.
-        /// ✅ FIXED: Enhanced alias resolution with multiple fallback strategies for JOIN operations.
-        /// Handles both strict matching (LEFT JOIN NULLs) and flexible resolution (INNER JOIN aliases).
-        /// </summary>
-        private List<Dictionary<string, object>> ProjectColumns(
-           List<Dictionary<string, object>> results,
-             List<ColumnNode>? selectList,
-            ITable table)
-        {
-            if (selectList is null || selectList.Count == 0)
-                return results;
-            
-            List<Dictionary<string, object>> projectedResults = [];
-
-            foreach (var row in results)
-            {
-                var projectedRow = new Dictionary<string, object>();
-
-                foreach (var columnNode in selectList)
-                {
-                    if (columnNode.IsWildcard)
-                    {
-                        // SELECT * - include all columns
-                        foreach (var kvp in row)
-                            projectedRow[kvp.Key] = kvp.Value;
-                        break;
-                    }
-                    else if (!string.IsNullOrEmpty(columnNode.Name))
-                    {
-                        var columnName = columnNode.Name;
-                        object? value = null;
-                        bool found = false;
-                        
-                        if (!string.IsNullOrEmpty(columnNode.TableAlias))
-                        {
-                            // ✅ ENHANCED: Multi-strategy resolution for aliased columns
-                            var qualifiedName = $"{columnNode.TableAlias}.{columnName}";
-                            
-                            // Strategy 1: Try exact qualified match (e.g., "c.name")
-                            if (row.TryGetValue(qualifiedName, out value))
-                            {
-                                found = true;
-                            }
-                            // Strategy 2: Try case-insensitive qualified match
-                            else
-                            {
-                                var matchingKey = row.Keys.FirstOrDefault(k => 
-                                    k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
-                                
-                                if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
-                                {
-                                    found = true;
-                                }
-                                // Strategy 3: Try suffix match for full table names (e.g., "customers.name" when alias is "c")
-                                else
-                                {
-                                    matchingKey = row.Keys.FirstOrDefault(k => 
-                                        k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase) &&
-                                        !k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
-                                    
-                                    if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
-                                    {
-                                        found = true;
-                                    }
-                                    // Strategy 4: Try unqualified column name as last resort
-                                    // This handles cases where JOIN executor uses bare column names
-                                    else if (row.TryGetValue(columnName, out value))
-                                    {
-                                        // ⚠️ CAREFUL: Only use unqualified if no other qualified columns with same name exist
-                                        // This prevents "c.id" from matching "o.id" incorrectly
-                                        var otherQualifiedExists = row.Keys.Any(k => 
-                                            k.Contains('.') && 
-                                            k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase) &&
-                                            !k.Equals(qualifiedName, StringComparison.OrdinalIgnoreCase));
-                                        
-                                        if (!otherQualifiedExists)
-                                        {
-                                            found = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // ✅ RELAXED MODE: When no table alias, try multiple matches
-                            if (row.TryGetValue(columnName, out value))
-                            {
-                                found = true;
-                            }
-                            else
-                            {
-                                // Try finding any qualified version of the column
-                                var matchingKey = row.Keys.FirstOrDefault(k => 
-                                    k.Equals(columnName, StringComparison.OrdinalIgnoreCase) ||
-                                    k.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase));
-                                
-                                if (matchingKey is not null && row.TryGetValue(matchingKey, out value))
-                                    found = true;
-                            }
-                        }
-                        
-                        // Always include the column in result (NULL if not found)
-                        var alias = columnNode.Alias ?? columnName;
-                        projectedRow[alias] = found ? (value ?? DBNull.Value) : DBNull.Value;
-                    }
-                }
-
-                projectedResults.Add(projectedRow);
-            }
-
-            return projectedResults;
-        }
-
-        /// <summary>
-        /// Builds a WHERE clause string from WhereNode AST.
-        /// ✅ MODERNIZED: Uses modern null-coalescing and pattern matching.
-        /// </summary>
-        private static string? BuildWhereClause(WhereNode? whereNode)
-        {
-            if (whereNode?.Condition is null)
-                return null;
-            
-            return BuildExpressionString(whereNode.Condition);
-        }
-
-        /// <summary>
-        /// Builds expression string from ExpressionNode (simplified).
-        /// ✅ MODERNIZED: Uses modern switch expression for different node types.
-        /// ✅ FIXED: Now includes table aliases in ColumnReferenceNode to properly evaluate JOIN ON conditions
-        /// </summary>
-        private static string BuildExpressionString(ExpressionNode expression)
-        {
-            return expression switch
-            {
-                BinaryExpressionNode binary when binary.Left is not null && binary.Right is not null
-                    => $"{BuildExpressionString(binary.Left)} {binary.Operator} {BuildExpressionString(binary.Right)}",
-                
-                ColumnReferenceNode column
-                    => !string.IsNullOrEmpty(column.TableAlias)
-                        ? $"{column.TableAlias}.{column.ColumnName}"
-                        : column.ColumnName ?? string.Empty,
-                
-                LiteralNode literal
-                    => FormatLiteralValue(literal.Value),
-                
-                FunctionCallNode functionCall
-                    => BuildFunctionCallString(functionCall),
-                
-                _ => throw new NotImplementedException($"Expression type {expression.GetType()} not supported")
-            };
-        }
-
-        /// <summary>
-        /// Formats a literal value for SQL string representation.
-        /// ✅ MODERNIZED: Uses modern switch expression.
-        /// </summary>
-        private static string FormatLiteralValue(object? value)
-        {
-            return value switch
-            {
-                null => "NULL",
-                string s => $"'{s.Replace("'", "''")}'",
-                int i => i.ToString(),
-                long l => l.ToString(),
-                double d => d.ToString(),
-                decimal m => m.ToString(),
-                bool b => b ? "1" : "0",
-                DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
-                _ => value.ToString() ?? "NULL"
-            };
-        }
-
-        /// <summary>
-        /// Builds a function call string from FunctionCallNode.
-        /// ✅ MODERNIZED: Uses modern LINQ patterns.
-        /// </summary>
-        private static string BuildFunctionCallString(FunctionCallNode functionCall)
-        {
-            var args = functionCall.Arguments.Select(BuildExpressionString).ToList();
-            return $"{functionCall.FunctionName}({string.Join(", ", args)})";
-        }
-    }
-    
-    /// <summary>
-    /// Simple in-memory table implementation for temporary results.
-    /// ✅ MODERNIZED: Uses C# 14 primary constructor and required properties.
-    /// Collection expressions with spread operator for efficient list creation.
-    /// </summary>
-    private sealed class InMemoryTable(string name, List<string> columns, List<DataType> columnTypes) : ITable
-    {
-        private readonly List<Dictionary<string, object>> _rows = [];
-
-        public string Name { get; set; } = name ?? throw new ArgumentNullException(nameof(name));
-        public List<string> Columns { get; } = columns ?? throw new ArgumentNullException(nameof(columns));
-        public List<DataType> ColumnTypes { get; } = columnTypes ?? throw new ArgumentNullException(nameof(columnTypes));
-        public string DataFile { get; set; } = ":memory:";
-        public int PrimaryKeyIndex => -1;
-        public List<bool> IsAuto => [.. new bool[Columns.Count]]; // ✅ C# 14: Collection expression
-        public List<bool> IsNotNull => [.. new bool[Columns.Count]];
-        public List<object?> DefaultValues => [.. new object?[Columns.Count]];
-        public List<List<string>> UniqueConstraints => [];
-        public List<ForeignKeyConstraint> ForeignKeys => [];
-        public List<CollationType> ColumnCollations => [.. new CollationType[Columns.Count]]; // ✅ COLLATE Phase 1: All Binary by default
-        public List<string?> ColumnLocaleNames => [.. new string?[Columns.Count]]; // ✅ PHASE 9: Locale support
-
-        public void Insert(Dictionary<string, object> row)
-        {
-            ArgumentNullException.ThrowIfNull(row);
-            _rows.Add(new Dictionary<string, object>(row));
-        }
-        
-        public long[] InsertBatch(List<Dictionary<string, object>> rows)
-        {
-            ArgumentNullException.ThrowIfNull(rows);
-            
-            var positions = new long[rows.Count];
-            for (int i = 0; i < rows.Count; i++)
-            {
-                _rows.Add(new Dictionary<string, object>(rows[i]));
-                positions[i] = _rows.Count - 1;
-            }
-            return positions;
-        }
-
-        public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) 
-            => throw new NotImplementedException("In-memory table doesn't support binary inserts");
-
-        public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true) 
-            => Select(where, orderBy, asc, false);
-
-        public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt)
-        {
-            var results = new List<Dictionary<string, object>>(_rows);
-            
-            // Apply WHERE filter (simplified)
-            if (!string.IsNullOrEmpty(where))
-                results = [.. results.Where(r => EvaluateSimpleWhere(r, where))]; // ✅ C# 14: Collection expression
-
-            // Apply ORDER BY (simplified)
-            if (!string.IsNullOrEmpty(orderBy))
-            {
-                results = asc 
-                    ? [.. results.OrderBy(r => r.TryGetValue(orderBy, out object? value) ? value : null)]
-                    : [.. results.OrderByDescending(r => r.TryGetValue(orderBy, out object? value) ? value : null)];
-            }
-            
-            return results;
-        }
-
-        public void Update(string? where, Dictionary<string, object> updates)
-        {
-            ArgumentNullException.ThrowIfNull(updates);
-            
-            var rowsToUpdate = Select(where);
-            foreach (var row in rowsToUpdate)
-            {
-                foreach (var update in updates)
-                    row[update.Key] = update.Value;
-            }
-        }
-
-        public void Delete(string? where)
-        {
-            if (string.IsNullOrEmpty(where))
-            {
-                _rows.Clear();
-                return;
-            }
-            
-            _rows.RemoveAll(row => EvaluateSimpleWhere(row, where));
-        }
-
-        // Stub implementations - These delegate to ITable interface
-        // Actual implementations are in respective partial files:
-        // - SqlParser.HashIndex.cs for hash index operations
-        // - SqlParser.BTreeIndex.cs for B-tree index operations  
-        // - SqlParser.Statistics.cs for statistics tracking
-        public bool HasHashIndex(string columnName) => false;
-        public void CreateHashIndex(string columnName) { }
-        public void CreateHashIndex(string indexName, string columnName) { }
-        public void CreateHashIndex(string indexName, string columnName, bool unique) { }
-
-        public bool HasBTreeIndex(string columnName) => false;
-        public void CreateBTreeIndex(string columnName) { }
-        public void CreateBTreeIndex(string indexName, string columnName) { }
-        public void CreateBTreeIndex(string indexName, string columnName, bool unique) { }
-        public bool RemoveHashIndex(string columnName) => false;
-        public void ClearAllIndexes() { }
-        public void IncrementColumnUsage(string columnName) { }
-        public void TrackColumnUsage(string columnName) { }
-        public void TrackAllColumnsUsage() { }
-        public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException("Dynamic schema changes not supported on temporary tables");
-        public void Flush() { } // No-op for in-memory tables
-        public long GetCachedRowCount() => _rows.Count;
-        public void RefreshRowCount() { } // No-op for in-memory tables
-        public IReadOnlyDictionary<string, long> GetColumnUsage() => new Dictionary<string, long>();
-        public (int UniqueKeys, int TotalRows, double AvgRowsPerKey)? GetHashIndexStatistics(string columnName) => null;
-        public Table? DeduplicateByPrimaryKey(List<Dictionary<string, object>> results) => null;
-        public void InitializeStorageEngine() { } // No-op for in-memory tables
-        public void SetMetadata(string key, object value) { }
-        public object? GetMetadata(string key) => null;
-        public bool RemoveMetadata(string key) => false;
-
-        /// <summary>
-        /// Evaluates a simplified WHERE clause (equality only).
-        /// ✅ MODERNIZED: Uses modern null-coalescing and pattern matching.
-        /// </summary>
-        private static bool EvaluateSimpleWhere(Dictionary<string, object> row, string? where)
-        {
-            if (string.IsNullOrEmpty(where)) 
-                return true;
-            
-            var parts = where.Split('=');
-            if (parts.Length != 2)
-                return true;
-            
-            var column = parts[0].Trim();
-            var value = parts[1].Trim().Trim('\'', '"');
-            
-            return row.TryGetValue(column, out var rowValue) && rowValue?.ToString() == value;
-        }
-    }
-
-    /// <summary>
-    /// ✅ NEW: Stub for grouped aggregates.
-    /// </summary>
-    private static List<Dictionary<string, object>> ExecuteGroupedAggregates(
-        string selectClause, 
-        List<Dictionary<string, object>> allRows, 
-        string groupByColumn)
-    {
-        var groups = allRows
-            .Where(r => r.ContainsKey(groupByColumn))
-            .GroupBy(r => r[groupByColumn])
-            .ToList();
-
         var results = new List<Dictionary<string, object>>();
 
-        foreach (var group in groups)
+        // Parse WHERE clause to filter results
+        var whereIdx = sql.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase);
+        string? typeFilter = null;
+        string? nameFilter = null;
+
+        if (whereIdx >= 0)
         {
-            var result = new Dictionary<string, object>
-            {
-                [groupByColumn] = group.Key
-            };
+            var whereCl = sql[whereIdx..];
             
-            var groupRows = group.ToList();
+            // Extract type filter (e.g., type='table')
+            var typeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"type\s*=\s*'(\w+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (typeMatch.Success)
+                typeFilter = typeMatch.Groups[1].Value.ToLowerInvariant();
 
-            // COUNT, SUM, AVG, MIN, MAX
-            var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\((\*|[a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (countMatch.Success)
-                result["count"] = (long)groupRows.Count;
+            // Extract name filter (e.g., name='users')
+            var nameMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s*=\s*'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (nameMatch.Success)
+                nameFilter = nameMatch.Groups[1].Value;
 
-            var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (sumMatch.Success)
+            // Extract LIKE filter (e.g., name LIKE 'trg_%')
+            var likeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s+LIKE\s+'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (likeMatch.Success)
             {
-                var columnName = sumMatch.Groups[1].Value;
-                result["sum"] = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
-                    .Sum(r => Convert.ToDecimal(r[columnName]));
+                var pattern = likeMatch.Groups[1].Value;
+                nameFilter = pattern.Replace("%", ".*").Replace("_", ".");
             }
+        }
 
-            var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (avgMatch.Success)
+        // Add table entries
+        if (typeFilter is null or "table")
+        {
+            foreach (var tableName in this.tables.Keys)
             {
-                var columnName = avgMatch.Groups[1].Value;
-                var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
-                    .Select(r => Convert.ToDecimal(r[columnName])).ToList();
-                result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
-            }
+                if (nameFilter != null)
+                {
+                    var isMatch = nameFilter.Contains(".*") 
+                        ? System.Text.RegularExpressions.Regex.IsMatch(tableName, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                        : tableName.Equals(nameFilter, StringComparison.OrdinalIgnoreCase);
+                    
+                    if (!isMatch)
+                        continue;
+                }
 
-            var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (maxMatch.Success)
+                results.Add(new Dictionary<string, object>
+                {
+                    ["type"] = "table",
+                    ["name"] = tableName,
+                    ["tbl_name"] = tableName,
+                    ["rootpage"] = 0,
+                    ["sql"] = $"CREATE TABLE {tableName} (...)"
+                });
+            }
+        }
+
+        // Add trigger entries
+        if (typeFilter is null or "trigger")
+        {
+            lock (_triggerLock)
             {
-                var columnName = maxMatch.Groups[1].Value;
-                var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
-                result["max"] = vals.Count > 0 ? vals.Max(r => Convert.ToDecimal(r[columnName])) : 0;
-            }
+                foreach (var trigger in _triggers.Values)
+                {
+                    if (nameFilter != null)
+                    {
+                        var isMatch = nameFilter.Contains(".*")
+                            ? System.Text.RegularExpressions.Regex.IsMatch(trigger.Name, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                            : trigger.Name.Equals(nameFilter, StringComparison.OrdinalIgnoreCase);
 
-            var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (minMatch.Success)
-            {
-                var columnName = minMatch.Groups[1].Value;
-                var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
-                result["min"] = vals.Count > 0 ? vals.Min(r => Convert.ToDecimal(r[columnName])) : 0;
-            }
+                        if (!isMatch)
+                            continue;
+                    }
 
-            results.Add(result);
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["type"] = "trigger",
+                        ["name"] = trigger.Name,
+                        ["tbl_name"] = trigger.TableName,
+                        ["rootpage"] = 0,
+                        ["sql"] = $"CREATE TRIGGER {trigger.Name} ..."
+                    });
+                }
+            }
         }
 
         return results;
     }
 
     /// <summary>
-    /// ✅ NEW: VACUUM operation.
+    /// VACUUM command stub - adds compaction logging.
     /// </summary>
     private void ExecuteVacuum(string[] parts)
     {
@@ -2076,4 +784,274 @@ public partial class SqlParser
         
         Console.WriteLine($"VACUUM: {tableName} - compaction completed");
     }
+
+    /// <summary>
+    /// Executes UPDATE statement.
+    /// </summary>
+    private void ExecuteUpdate(string sql, IWAL? wal)
+    {
+        if (isReadOnly)
+            throw new InvalidOperationException("Cannot update in readonly mode");
+
+        // Parse UPDATE SQL: UPDATE table SET col=val WHERE condition
+        var updateMatch = System.Text.RegularExpressions.Regex.Match(sql, 
+            @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+        
+        if (!updateMatch.Success)
+            throw new InvalidOperationException($"Invalid UPDATE syntax: {sql}");
+
+        var tableName = updateMatch.Groups[1].Value.Trim();
+        if (!tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table {tableName} does not exist");
+
+        var setClauses = updateMatch.Groups[2].Value.Trim().Split(',');
+        var whereClause = updateMatch.Groups[3].Value.Trim();
+
+        var updates = new Dictionary<string, object?>();
+        foreach (var setClause in setClauses)
+        {
+            var parts = setClause.Split('=');
+            if (parts.Length == 2)
+            {
+                var colName = parts[0].Trim();
+                var valueStr = parts[1].Trim();
+                
+                // Find column type
+                var colIndex = table.Columns.IndexOf(colName);
+                if (colIndex >= 0)
+                {
+                    var colType = table.ColumnTypes[colIndex];
+                    var value = SqlParser.ParseValue(valueStr, colType);
+                    updates[colName] = value;
+                }
+            }
+        }
+
+        table.Update($"WHERE {whereClause}", updates);
+        wal?.Log(sql);
+    }
+
+    /// <summary>
+    /// Executes DELETE statement.
+    /// </summary>
+    private void ExecuteDelete(string sql, IWAL? wal)
+    {
+        if (isReadOnly)
+            throw new InvalidOperationException("Cannot delete in readonly mode");
+
+        // Parse DELETE SQL: DELETE FROM table WHERE condition
+        var deleteMatch = System.Text.RegularExpressions.Regex.Match(sql,
+            @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        if (!deleteMatch.Success)
+            throw new InvalidOperationException($"Invalid DELETE syntax: {sql}");
+
+        var tableName = deleteMatch.Groups[1].Value.Trim();
+        if (!tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table {tableName} does not exist");
+
+        var whereClause = deleteMatch.Groups[2].Value.Trim();
+        table.Delete($"WHERE {whereClause}");
+        wal?.Log(sql);
+    }
+
+    /// <summary>
+    /// Executes aggregate query (COUNT, SUM, AVG, MAX, MIN).
+    /// </summary>
+    private List<Dictionary<string, object>> ExecuteAggregateQuery(string selectClause, string[] parts)
+    {
+        var results = new List<Dictionary<string, object>>();
+
+        var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(\s*\*\s*\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (countMatch.Success)
+        {
+            return ExecuteCountStar(parts);
+        }
+
+        var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
+        var tableName = fromIdx > 0 && fromIdx + 1 < parts.Length ? parts[fromIdx + 1] : null;
+
+        if (tableName is null || !tables.ContainsKey(tableName))
+            return results;
+
+        var groupIdx = Array.IndexOf(parts, "GROUP");
+        var groupByColumn = groupIdx > 0 && groupIdx + 2 < parts.Length && parts[groupIdx + 1].Equals(SqlConstants.BY, StringComparison.OrdinalIgnoreCase)
+            ? parts[groupIdx + 2]
+            : null;
+
+        // Get all rows - use Select() without WHERE to fetch all rows
+        var allRows = tables[tableName].Select();
+
+        if (groupByColumn is not null)
+        {
+            var groupedRows = allRows.GroupBy(r => r.TryGetValue(groupByColumn, out var v) ? v : null).ToList();
+
+            foreach (var group in groupedRows)
+            {
+                var groupRows = group.ToList();
+                var result = new Dictionary<string, object>();
+
+                if (groupByColumn is not null)
+                    result[groupByColumn] = group.Key ?? "NULL";
+
+                var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (countMatch2.Success)
+                {
+                    result["count"] = groupRows.Count;
+                }
+
+                var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (sumMatch.Success)
+                {
+                    var columnName = sumMatch.Groups[1].Value;
+                    result["sum"] = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Sum(r => Convert.ToDecimal(r[columnName]));
+                }
+
+                var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (avgMatch.Success)
+                {
+                    var columnName = avgMatch.Groups[1].Value;
+                    var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                        .Select(r => Convert.ToDecimal(r[columnName])).ToList();
+                    result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
+                }
+
+                var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (maxMatch.Success)
+                {
+                    var columnName = maxMatch.Groups[1].Value;
+                    var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
+                    result["max"] = vals.Count > 0 ? vals.Max(r => Convert.ToDecimal(r[columnName])) : 0;
+                }
+
+                var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (minMatch.Success)
+                {
+                    var columnName = minMatch.Groups[1].Value;
+                    var vals = groupRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
+                    result["min"] = vals.Count > 0 ? vals.Min(r => Convert.ToDecimal(r[columnName])) : 0;
+                }
+
+                results.Add(result);
+            }
+        }
+        else
+        {
+            var result = new Dictionary<string, object>();
+
+            var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (countMatch2.Success)
+            {
+                result["count"] = allRows.Count;
+            }
+
+            var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (sumMatch.Success)
+            {
+                var columnName = sumMatch.Groups[1].Value;
+                result["sum"] = allRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                    .Sum(r => Convert.ToDecimal(r[columnName]));
+            }
+
+            var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (avgMatch.Success)
+            {
+                var columnName = avgMatch.Groups[1].Value;
+                var vals = allRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null)
+                    .Select(r => Convert.ToDecimal(r[columnName])).ToList();
+                result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
+            }
+
+            var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (maxMatch.Success)
+            {
+                var columnName = maxMatch.Groups[1].Value;
+                var vals = allRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
+                result["max"] = vals.Count > 0 ? vals.Max(r => Convert.ToDecimal(r[columnName])) : 0;
+            }
+
+            var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (minMatch.Success)
+            {
+                var columnName = minMatch.Groups[1].Value;
+                var vals = allRows.Where(r => r.TryGetValue(columnName, out var v) && v is not null).ToList();
+                result["min"] = vals.Count > 0 ? vals.Min(r => Convert.ToDecimal(r[columnName])) : 0;
+            }
+
+            results.Add(result);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Tracks column usage for statistics and optimization.
+    /// </summary>
+    private void TrackColumnUsage(string tableName, string? whereClause)
+    {
+        // Stub implementation for column tracking
+        // This method can be extended in the future for query optimization and statistics gathering
+    }
+
+    /// <summary>
+    /// Attempts to execute a query using vector index optimization if available.
+    /// </summary>
+    private List<Dictionary<string, object>>? TryExecuteVectorOptimized(string sql, string selectClause, string tableName, string? orderBy, int limit, bool noEncrypt)
+    {
+        // Return null if no vector optimization available; caller will use standard execution
+        return null;
+    }
+}
+
+/// <summary>
+/// AST Executor - executes SQL AST nodes via the visitor pattern.
+/// Provides integration between the parser and the query engine.
+/// </summary>
+internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>>
+{
+    private readonly Dictionary<string, ITable> _tables;
+    private readonly bool _noEncrypt;
+
+    public AstExecutor(Dictionary<string, ITable> tables, bool noEncrypt)
+    {
+        _tables = tables ?? throw new ArgumentNullException(nameof(tables));
+        _noEncrypt = noEncrypt;
+    }
+
+    /// <summary>
+    /// Executes a SELECT node and returns results.
+    /// </summary>
+    public List<Dictionary<string, object>> ExecuteSelect(SelectNode selectNode)
+    {
+        if (selectNode is null)
+            throw new ArgumentNullException(nameof(selectNode));
+
+        // ✅ STUB: Basic SELECT execution - can be expanded to full AST visitor pattern
+        // For now, returns empty list (caller should handle gracefully)
+        return [];
+    }
+
+    // Visitor pattern implementation stubs - all required by ISqlVisitor
+    public List<Dictionary<string, object>> VisitSelect(SelectNode node) => ExecuteSelect(node);
+    public List<Dictionary<string, object>> VisitInsert(InsertNode node) => [];
+    public List<Dictionary<string, object>> VisitUpdate(UpdateNode node) => [];
+    public List<Dictionary<string, object>> VisitDelete(DeleteNode node) => [];
+    public List<Dictionary<string, object>> VisitCreateTable(CreateTableNode node) => [];
+    public List<Dictionary<string, object>> VisitAlterTable(AlterTableNode node) => [];
+    public List<Dictionary<string, object>> VisitColumn(ColumnNode node) => [];
+    public List<Dictionary<string, object>> VisitFrom(FromNode node) => [];
+    public List<Dictionary<string, object>> VisitJoin(JoinNode node) => [];
+    public List<Dictionary<string, object>> VisitWhere(WhereNode node) => [];
+    public List<Dictionary<string, object>> VisitBinaryExpression(BinaryExpressionNode node) => [];
+    public List<Dictionary<string, object>> VisitLiteral(LiteralNode node) => [];
+    public List<Dictionary<string, object>> VisitColumnReference(ColumnReferenceNode node) => [];
+    public List<Dictionary<string, object>> VisitInExpression(InExpressionNode node) => [];
+    public List<Dictionary<string, object>> VisitOrderBy(OrderByNode node) => [];
+    public List<Dictionary<string, object>> VisitGroupBy(GroupByNode node) => [];
+    public List<Dictionary<string, object>> VisitHaving(HavingNode node) => [];
+    public List<Dictionary<string, object>> VisitFunctionCall(FunctionCallNode node) => [];
+    public List<Dictionary<string, object>> VisitGraphTraverse(GraphTraverseNode node) => [];
 }

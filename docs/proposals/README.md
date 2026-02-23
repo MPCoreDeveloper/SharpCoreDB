@@ -13,10 +13,11 @@
 ### What is it?
 
 A **Dotmim.Sync provider for SharpCoreDB** that enables:
-- 🔄 **Bidirectional data sync** between SharpCoreDB and any Dotmim.Sync-supported database (PostgreSQL, SQL Server, SQLite, MySQL)
-- 🎯 **Multi-tenant sync** with filtered subsets (sync only tenant A's data to device A)
-- 🚀 **Local-first AI agents** — high-performance vector search + graph queries on encrypted local databases
-- 🔒 **Full transparency** with encryption-at-rest (automatic, no special handling)
+
+- ✅ **Bidirectional sync** between SharpCoreDB and any Dotmim.Sync provider (PostgreSQL, SQL Server, SQLite, MySQL)
+- ✅ **Multi-tenant filtering** for local-first AI agent architectures
+- ✅ **Encryption transparency** — at-rest encryption is invisible to the provider
+- ✅ **Full SQLite compatibility** — SharpCoreDB must support all SQLite syntax/behavior users rely on (never less)
 
 ### Why?
 

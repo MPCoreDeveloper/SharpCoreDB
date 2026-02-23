@@ -25,12 +25,15 @@
 ### Goal
 Add minimal primitives to the SharpCoreDB core engine that the sync provider needs.
 
+### Compatibility Constraint
+SharpCoreDB must be **100% compatible with SQLite syntax and behavior** for all operations users could perform in SQLite. We may extend beyond SQLite, but **must never support less than SQLite**. This requirement applies to all sync-related SQL generation, tracking triggers, and schema provisioning.
+
 ### Tasks
 
-#### 0.1 Add GUID DataType Support
+#### 0.1 Verify GUID/ULID DataType Support
 - **File:** `src/SharpCoreDB/DataTypes.cs`
-- **Change:** Add `GUID` to the `DataType` enum (or verify TEXT storage is sufficient for sync scope IDs)
-- **Validation:** Existing `ULID` type proves the pattern; GUID may be stored as TEXT internally
+- **Change:** Validate existing `Guid` and `Ulid` DataType support (already present) and confirm provider type mapping covers both.
+- **Validation:** Ensure `SharpCoreDBDbMetadata` maps `Guid`/`Ulid` to SQLite-compatible storage (TEXT/BLOB as needed) and Dotmim.Sync `DbType`.
 
 #### 0.2 Extend Trigger System for Sync Tracking
 - **File:** `src/SharpCoreDB/Services/SqlParser.Triggers.cs`
@@ -53,9 +56,16 @@ Add minimal primitives to the SharpCoreDB core engine that the sync provider nee
 - **Change:** Add `SYNC_TIMESTAMP()` SQL function returning `DateTimeOffset.UtcNow.Ticks` (monotonic long)
 - **Rationale:** Dotmim.Sync uses long tick timestamps for ordering changes
 
+#### 0.6 SQLite Compatibility Matrix (New)
+- **File:** `docs/proposals/SQLITE_COMPATIBILITY.md`
+- **Change:** Create a matrix of SQLite features/syntax and ensure SharpCoreDB parity for sync-related DDL/DML.
+- **Scope:** DDL (CREATE TABLE/TRIGGER/INDEX), DML (INSERT/UPDATE/DELETE), SELECT (JOIN/WHERE/ORDER/GROUP), functions used by sync.
+- **Goal:** Document gaps and track them as explicit prerequisites.
+
 ### Deliverable
 - All prerequisites pass unit tests
 - No breaking changes to existing APIs
+- SQLite compatibility matrix completed and reviewed
 
 ---
 
@@ -504,19 +514,4 @@ var result = await agent.SynchronizeAsync(setup, parameters);
 | JOIN performance degrades with large tracking tables | Medium | High | Hash index on tracking PK; benchmark in Phase 0, task 0.4; tombstone cleanup | Dev |
 | Concurrent sync and local writes cause deadlocks | Low | High | Use MVCC for sync reads; batch update transactions for writes | Dev |
 | SharpCoreDB parameterized query syntax incompatible | Low | Medium | Validate all query templates in Phase 1; adapt SqlParser if needed | Dev |
-| DI container misconfiguration in consuming apps | Low | Medium | Comprehensive examples; XML docs; sample project | Dev |
-
----
-
-## Future Roadmap (Post v1.0)
-
-| Feature | Priority | Description |
-|---|---|---|
-| Zero-Knowledge Sync | High | E2E encrypted sync where server never sees plaintext |
-| Server-Side Provider | Medium | Use SharpCoreDB as sync server (SharpCoreDB ↔ SharpCoreDB) |
-| WebSocket Transport | Medium | Real-time sync instead of poll-based |
-| Selective Sync | Medium | Column-level filtering (sync only specific columns) |
-| Compression | Low | gzip/brotli batch compression for metered connections |
-| Offline Queue | Low | Queue changes while offline; auto-sync on reconnect |
-| Vector Data Sync | Low | Sync vector embeddings for local AI inference |
-| Graph Data Sync | Low | Sync graph edges/nodes for local graph queries |
+| SQLite compatibility gaps discovered | Medium | High | Maintain compatibility matrix; prioritize parity for all SQLite syntax used by sync | Dev |

@@ -5,6 +5,70 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-20
+
+### ✨ Added - Phase 10: Enterprise Distributed Features
+
+- **Dotmim.Sync Integration (Phase 10.1)**
+  - `SharpCoreDB.Provider.Sync` package - Complete Dotmim.Sync provider
+  - Bidirectional synchronization with SQL Server, PostgreSQL, MySQL, SQLite
+  - Multi-tenant filtering for local-first AI agent architectures
+  - Enterprise-grade conflict resolution and retry logic
+  - Shadow table change tracking for incremental sync
+  - Compression and bulk operations for performance
+
+- **Multi-Master Replication (Phase 10.2)**
+  - Vector clock-based causality tracking
+  - Automatic conflict resolution strategies (Last-Write-Wins, Merge, Custom)
+  - Real-time replication monitoring and health metrics
+  - Concurrent writes across multiple master nodes
+  - Replication failover and recovery mechanisms
+
+- **Distributed Transactions (Phase 10.3)**
+  - Two-phase commit protocol across database shards
+  - Transaction recovery from network failures
+  - Cross-shard consistency guarantees
+  - Configurable transaction timeouts and isolation levels
+
+- **SharpCoreDB.Distributed Package**
+  - Complete distributed database management
+  - Horizontal sharding with automatic data distribution
+  - Replication topology management
+  - Distributed query routing and optimization
+
+### 🔄 Synchronization Capabilities
+
+- **Cross-Platform Sync**: SharpCoreDB ↔ SQL Server/PostgreSQL/MySQL/SQLite
+- **Real-Time Replication**: Sub-second latency for data consistency
+- **Enterprise Features**: Monitoring, logging, security, scalability
+- **AI Agent Support**: Local-first architectures with cloud synchronization
+
+### 📚 Documentation Updates
+
+- **New Distributed Documentation**
+  - `docs/distributed/README.md` - Complete distributed features guide
+  - `docs/sync/README.md` - Dotmim.Sync integration tutorial
+  - Distributed examples in main README.md
+
+- **Updated Project Documentation**
+  - Root `README.md` - v1.4.0 with Phase 10 features
+  - `docs/INDEX.md` - Added distributed documentation navigation
+  - `docs/PROJECT_STATUS.md` - Complete project status overview
+
+### 🧪 Testing & Quality
+
+- **120+ New Tests** for distributed features and sync integration
+- **950+ Total Tests** across all components
+- **Production Validation** of distributed sync scenarios
+- **Performance Benchmarks** for replication and synchronization
+
+### 📦 Package Ecosystem Updates
+
+- `SharpCoreDB` v1.4.0 - Core engine with distributed support
+- `SharpCoreDB.Distributed` v1.4.0 - Distributed features package
+- `SharpCoreDB.Provider.Sync` v1.0.0 - Dotmim.Sync provider package
+- All packages updated to .NET 10 and C# 14
+
 ## [1.3.5] - 2026-02-19
 
 ### ✨ Added - Phase 9.2: Advanced Analytics
@@ -166,5 +230,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ✅ **Phase 8**: Vector search with HNSW indexing (50-100x faster)  
 ✅ **Phase 9.1**: Analytics foundation (aggregates + window functions)  
 ✅ **Phase 9.2**: Advanced analytics (STDDEV, PERCENTILE, CORRELATION)  
+✅ **Phase 10**: Enterprise distributed features (sync, replication, transactions)
 
-All phases production-ready with 850+ passing tests.
+All phases production-ready with 950+ passing tests.
