@@ -462,7 +462,6 @@ public partial class SqlParser
 
         if (hasJoin)
         {
-            Console.WriteLine("ℹ️  JOIN detected. Routing to EnhancedSqlParser for proper column alias handling...");
             return HandleDerivedTable(sql, noEncrypt);
         }
 
@@ -645,25 +644,31 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// ✅ NEW: Handles derived table (subquery) detection and routing.
+    /// Handles derived tables and JOINs.
+    /// For JOINs, executes directly via JoinExecutor instead of AST stub.
     /// </summary>
     private List<Dictionary<string, object>> HandleDerivedTable(string sql, bool noEncrypt)
     {
-        Console.WriteLine("ℹ️  Derived table detected. Routing to EnhancedSqlParser...");
-        
+        // Route JOIN queries to direct execution
+        if (sql.Contains("JOIN", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExecuteJoinQueryDirect(sql);
+        }
+
+        // Fallback: EnhancedSqlParser for subqueries in FROM
         try
         {
             var ast = ParseWithEnhancedParser(sql);
-            
+
             if (ast is null)
                 throw new InvalidOperationException("Failed to parse query with EnhancedSqlParser");
-            
+
             if (ast is SelectNode selectNode)
             {
                 var executor = new AstExecutor(this.tables, noEncrypt);
                 return executor.ExecuteSelect(selectNode);
             }
-            
+
             throw new InvalidOperationException($"Parsed AST is not a SELECT node. Got: {ast.GetType().Name}");
         }
         catch (NotImplementedException)
@@ -673,6 +678,334 @@ public partial class SqlParser
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to process derived table: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Executes JOIN queries by parsing SQL and delegating to JoinExecutor.
+    /// Supports INNER, LEFT, RIGHT, FULL OUTER, and CROSS JOIN.
+    /// </summary>
+    private List<Dictionary<string, object>> ExecuteJoinQueryDirect(string sql)
+    {
+        // 1. Parse first table from FROM
+        var fromMatch = System.Text.RegularExpressions.Regex.Match(
+            sql, @"\bFROM\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (!fromMatch.Success)
+            throw new InvalidOperationException("Cannot parse FROM clause in JOIN query");
+
+        var firstTableName = fromMatch.Groups[1].Value;
+        var firstAlias = fromMatch.Groups[2].Success && fromMatch.Groups[2].Value.Length > 0
+            ? fromMatch.Groups[2].Value
+            : firstTableName;
+
+        // Ensure the alias word is not a SQL keyword
+        if (IsJoinKeyword(firstAlias))
+            firstAlias = firstTableName;
+
+        if (!this.tables.TryGetValue(firstTableName, out var firstTable))
+            throw new InvalidOperationException($"Table '{firstTableName}' does not exist");
+
+        var currentRows = firstTable.Select(null, null, true, false);
+        var currentAlias = firstAlias;
+
+        // 2. Parse each JOIN clause
+        var joinPattern = @"(LEFT|RIGHT|INNER|FULL\s+OUTER|CROSS)?\s*JOIN\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?\s+ON\s+(.*?)(?=(?:LEFT|RIGHT|INNER|FULL|CROSS)?\s*JOIN\b|WHERE\b|ORDER\b|LIMIT\b|GROUP\b|$)";
+        var joinMatches = System.Text.RegularExpressions.Regex.Matches(
+            sql, joinPattern,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        foreach (System.Text.RegularExpressions.Match jm in joinMatches)
+        {
+            var joinTypeStr = jm.Groups[1].Value.Trim().ToUpperInvariant();
+            var joinTableName = jm.Groups[2].Value.Trim();
+            var joinAlias = jm.Groups[3].Success && jm.Groups[3].Value.Length > 0
+                ? jm.Groups[3].Value.Trim()
+                : joinTableName;
+
+            if (IsJoinKeyword(joinAlias))
+                joinAlias = joinTableName;
+
+            var onClause = jm.Groups[4].Value.Trim();
+
+            if (!this.tables.TryGetValue(joinTableName, out var joinTable))
+                throw new InvalidOperationException($"Table '{joinTableName}' does not exist");
+
+            var rightRows = joinTable.Select(null, null, true, false);
+
+            // Build condition from ON clause (e.g. "p.order_id = o.id")
+            var condition = BuildOnCondition(onClause);
+
+            // Execute the join
+            IEnumerable<Dictionary<string, object>> joined = joinTypeStr switch
+            {
+                "LEFT" => JoinExecutor.ExecuteLeftJoin(currentRows, rightRows, currentAlias, joinAlias, condition),
+                "RIGHT" => JoinExecutor.ExecuteRightJoin(currentRows, rightRows, currentAlias, joinAlias, condition),
+                var s when s.StartsWith("FULL") => JoinExecutor.ExecuteFullJoin(currentRows, rightRows, currentAlias, joinAlias, condition),
+                "CROSS" => JoinExecutor.ExecuteCrossJoin(currentRows, rightRows, currentAlias, joinAlias),
+                _ => JoinExecutor.ExecuteInnerJoin(currentRows, rightRows, currentAlias, joinAlias, condition),
+            };
+
+            currentRows = joined.ToList();
+            // Keep currentAlias as the left alias for chained joins
+            // Keep currentAlias as the left alias for chained joins
+        }
+
+        // 3. Apply WHERE filter (on aliased column names)
+        var sqlUpper = sql.ToUpperInvariant();
+        var wherePos = FindKeywordPosition(sqlUpper, "WHERE");
+        if (wherePos >= 0)
+        {
+            var orderPos = FindKeywordPosition(sqlUpper, "ORDER", wherePos + 5);
+            var limitPos = FindKeywordPosition(sqlUpper, "LIMIT", wherePos + 5);
+            int end = MinPositive(orderPos, limitPos, sql.Length);
+            var whereClause = sql.Substring(wherePos + 5, end - wherePos - 5).Trim();
+            currentRows = [.. currentRows.Where(r => EvaluateJoinRowWhere(r, whereClause))];
+        }
+
+        // 4. Apply ORDER BY
+        var orderPos2 = FindKeywordPosition(sqlUpper, "ORDER BY");
+        if (orderPos2 >= 0)
+        {
+            var limitPos = FindKeywordPosition(sqlUpper, "LIMIT", orderPos2 + 8);
+            int end = limitPos >= 0 ? limitPos : sql.Length;
+            var orderClause = sql.Substring(orderPos2 + 8, end - orderPos2 - 8).Trim();
+            currentRows = ApplyJoinOrderBy(currentRows, orderClause);
+        }
+
+        // 5. Apply LIMIT
+        var limitPos2 = FindKeywordPosition(sqlUpper, "LIMIT");
+        if (limitPos2 >= 0)
+        {
+            var limitStr = sql[(limitPos2 + 5)..].Trim().Split(' ', ',')[0];
+            if (int.TryParse(limitStr, out var lim) && lim > 0)
+                currentRows = [.. currentRows.Take(lim)];
+        }
+
+        // 6. Apply SELECT column projection and aliases
+        var selectMatch = System.Text.RegularExpressions.Regex.Match(
+            sql, @"SELECT\s+(.*?)\s+FROM\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        if (selectMatch.Success)
+        {
+            var selectClause = selectMatch.Groups[1].Value.Trim();
+            if (selectClause != "*")
+            {
+                currentRows = ProjectColumns(currentRows, selectClause);
+            }
+        }
+
+        return currentRows;
+    }
+
+    /// <summary>
+    /// Projects joined rows to match SELECT column aliases.
+    /// Handles: "o.id as order_id", "p.method", "c.name", "*".
+    /// </summary>
+    private static List<Dictionary<string, object>> ProjectColumns(
+        List<Dictionary<string, object>> rows, string selectClause)
+    {
+        // Parse column expressions
+        var columns = selectClause.Split(',');
+        var projections = new List<(string sourceExpr, string outputName)>();
+
+        foreach (var col in columns)
+        {
+            var trimmed = col.Trim();
+
+            // Check for "expr AS alias" pattern
+            var asMatch = System.Text.RegularExpressions.Regex.Match(
+                trimmed, @"^(.+?)\s+(?:AS\s+)?(\w+)$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (asMatch.Success)
+            {
+                var expr = asMatch.Groups[1].Value.Trim();
+                var alias = asMatch.Groups[2].Value.Trim();
+                projections.Add((expr, alias));
+            }
+            else
+            {
+                // No alias - use bare column name as output
+                var bare = ExtractBareColumn(trimmed);
+                projections.Add((trimmed, bare));
+            }
+        }
+
+        var result = new List<Dictionary<string, object>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var projected = new Dictionary<string, object>(projections.Count);
+            foreach (var (sourceExpr, outputName) in projections)
+            {
+                var val = FindValue(row, sourceExpr);
+                projected[outputName] = val ?? DBNull.Value;
+            }
+            result.Add(projected);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds a condition evaluator from an ON clause like "p.order_id = o.id".
+    /// Orientation-agnostic: tries both column mappings since SQL allows either side.
+    /// </summary>
+    private static Func<Dictionary<string, object>, Dictionary<string, object>, bool> BuildOnCondition(string onClause)
+    {
+        var eqParts = onClause.Split('=');
+        if (eqParts.Length != 2)
+            throw new InvalidOperationException($"Invalid ON clause: {onClause}");
+
+        var exprA = eqParts[0].Trim();
+        var exprB = eqParts[1].Trim();
+
+        string colA = ExtractBareColumn(exprA);
+        string colB = ExtractBareColumn(exprB);
+
+        return (leftRow, rightRow) =>
+        {
+            // Try orientation 1: colA from left, colB from right
+            var lVal = FindValue(leftRow, colA);
+            var rVal = FindValue(rightRow, colB);
+
+            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
+                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
+
+            // Try orientation 2: colB from left, colA from right
+            lVal = FindValue(leftRow, colB);
+            rVal = FindValue(rightRow, colA);
+
+            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
+                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
+
+            // No match found in either orientation
+            return false;
+        };
+    }
+
+    private static string ExtractBareColumn(string expr)
+    {
+        var dot = expr.LastIndexOf('.');
+        var col = dot >= 0 ? expr[(dot + 1)..] : expr;
+        return col.Trim('`', '"', '[', ']');
+    }
+
+    private static object? FindValue(Dictionary<string, object> row, string key)
+    {
+        if (row.TryGetValue(key, out var v)) return v;
+        // Try bare column name
+        var bare = ExtractBareColumn(key);
+        if (row.TryGetValue(bare, out v)) return v;
+        // Try all keys ending with .col
+        foreach (var kvp in row)
+        {
+            if (kvp.Key.EndsWith("." + bare, StringComparison.OrdinalIgnoreCase))
+                return kvp.Value;
+        }
+        return null;
+    }
+
+    private static bool IsJoinKeyword(string word) =>
+        word.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("INNER", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("CROSS", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("WHERE", StringComparison.OrdinalIgnoreCase) ||
+        word.Equals("ORDER", StringComparison.OrdinalIgnoreCase);
+
+    private static int FindKeywordPosition(string upperSql, string keyword, int startFrom = 0)
+    {
+        // Find keyword as a whole word
+        int pos = startFrom;
+        while (pos < upperSql.Length)
+        {
+            pos = upperSql.IndexOf(keyword, pos, StringComparison.Ordinal);
+            if (pos < 0) return -1;
+            // Check word boundary
+            bool leftOk = pos == 0 || !char.IsLetterOrDigit(upperSql[pos - 1]);
+            bool rightOk = pos + keyword.Length >= upperSql.Length || !char.IsLetterOrDigit(upperSql[pos + keyword.Length]);
+            if (leftOk && rightOk) return pos;
+            pos++;
+        }
+        return -1;
+    }
+
+    private static int MinPositive(params int[] values)
+    {
+        int min = int.MaxValue;
+        foreach (var v in values)
+        {
+            if (v >= 0 && v < min) min = v;
+        }
+        return min == int.MaxValue ? -1 : min;
+    }
+
+    /// <summary>
+    /// Evaluates WHERE clause against a joined row that has aliased columns.
+    /// </summary>
+    private static bool EvaluateJoinRowWhere(Dictionary<string, object> row, string where)
+    {
+        if (string.IsNullOrEmpty(where)) return true;
+
+        // Handle AND conditions
+        var andParts = System.Text.RegularExpressions.Regex.Split(where, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (var part in andParts)
+        {
+            if (!EvaluateSingleJoinCondition(row, part.Trim()))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool EvaluateSingleJoinCondition(Dictionary<string, object> row, string condition)
+    {
+        if (string.IsNullOrEmpty(condition)) return true;
+
+        var eqParts = condition.Split('=', 2);
+        if (eqParts.Length != 2) return true; // Can't parse -> include
+
+        var colName = eqParts[0].Trim();
+        var valueStr = eqParts[1].Trim().Trim('\'', '"');
+
+        var val = FindValue(row, colName);
+        return val?.ToString() == valueStr;
+    }
+
+    private static List<Dictionary<string, object>> ApplyJoinOrderBy(
+        List<Dictionary<string, object>> rows, string orderClause)
+    {
+        var parts = orderClause.Split(',');
+        // For simplicity, handle single ORDER BY column
+        var firstOrder = parts[0].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (firstOrder.Length < 1) return rows;
+
+        var colExpr = firstOrder[0];
+        bool asc = firstOrder.Length < 2 || !firstOrder[1].Equals("DESC", StringComparison.OrdinalIgnoreCase);
+
+        return asc
+            ? [.. rows.OrderBy(r => FindValue(r, colExpr), NullSafeComparer.Instance)]
+            : [.. rows.OrderByDescending(r => FindValue(r, colExpr), NullSafeComparer.Instance)];
+    }
+
+    /// <summary>
+    /// Comparer that handles nulls and DBNull for ORDER BY on join results.
+    /// </summary>
+    private sealed class NullSafeComparer : IComparer<object?>
+    {
+        public static readonly NullSafeComparer Instance = new();
+        public int Compare(object? x, object? y)
+        {
+            if (x is null or DBNull && y is null or DBNull) return 0;
+            if (x is null or DBNull) return -1;
+            if (y is null or DBNull) return 1;
+            if (x is IComparable cx) return cx.CompareTo(y);
+            return string.Compare(x.ToString(), y.ToString(), StringComparison.Ordinal);
         }
     }
 
@@ -828,7 +1161,7 @@ public partial class SqlParser
             }
         }
 
-        table.Update($"WHERE {whereClause}", updates);
+        table.Update(whereClause, updates);
         wal?.Log(sql);
     }
 
@@ -853,7 +1186,7 @@ public partial class SqlParser
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
         var whereClause = deleteMatch.Groups[2].Value.Trim();
-        table.Delete($"WHERE {whereClause}");
+        table.Delete(whereClause);
         wal?.Log(sql);
     }
 

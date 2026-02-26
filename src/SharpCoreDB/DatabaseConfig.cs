@@ -232,6 +232,13 @@ public class DatabaseConfig
     public bool EnableBTreeSelection { get; init; } = true;
 
     /// <summary>
+    /// Enables delta-update support (Phase 3.3).
+    /// When enabled, UPDATE operations store only changed fields instead of full records.
+    /// Improves performance for workloads with frequent small updates.
+    /// </summary>
+    public bool EnableDeltaUpdates { get; init; } = false;
+
+    /// <summary>
     /// Gets default configuration with encryption enabled.
     /// </summary>
     public static DatabaseConfig Default => new();

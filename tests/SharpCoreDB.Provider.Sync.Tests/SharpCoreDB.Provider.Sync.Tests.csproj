@@ -14,20 +14,20 @@
 
   <ItemGroup>
     <!-- Testing frameworks -->
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="xunit" Version="2.8.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="6.0.0">
+    <PackageReference Include="coverlet.collector" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
 
     <!-- Assertions & Mocking -->
-    <PackageReference Include="FluentAssertions" Version="6.12.1" />
-    <PackageReference Include="Moq" Version="4.20.71" />
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
 
     <!-- Dependencies -->
     <PackageReference Include="Dotmim.Sync.Core" Version="1.3.0" />
@@ -45,6 +45,9 @@
   <!-- Reference provider project -->
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' == 'true'">
     <ProjectReference Include="..\..\src\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 
 </Project>

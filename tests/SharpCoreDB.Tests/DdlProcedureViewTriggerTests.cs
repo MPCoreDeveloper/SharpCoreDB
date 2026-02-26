@@ -19,6 +19,9 @@ public class DdlProcedureViewTriggerTests : IDisposable
 
     public DdlProcedureViewTriggerTests()
     {
+        // Clear any leftover triggers from previous tests
+        SharpCoreDB.Services.SqlParser.ClearAllTriggersForTesting();
+
         testDbPath = Path.Combine(Path.GetTempPath(), $"ddl_pvt_{Guid.NewGuid()}");
         Directory.CreateDirectory(testDbPath);
 
@@ -30,15 +33,47 @@ public class DdlProcedureViewTriggerTests : IDisposable
             isReadOnly: false,
             config: config);
 
-        // Seed a table used by most tests
+        // Clean up any leftover triggers/procedures/views from previous tests
+        CleanupDatabaseObjects();
+
+        // Seed tables used by most tests
         db.ExecuteSQL("CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT, salary INTEGER)");
+        db.ExecuteSQL("CREATE TABLE audit_log (id INTEGER PRIMARY KEY, msg TEXT)");
         db.ExecuteSQL("INSERT INTO employees VALUES (1, 'Alice', 80000)");
         db.ExecuteSQL("INSERT INTO employees VALUES (2, 'Bob', 90000)");
         db.ExecuteSQL("INSERT INTO employees VALUES (3, 'Carol', 70000)");
     }
 
+    private void CleanupDatabaseObjects()
+    {
+        try
+        {
+            // Drop all triggers
+            var triggers = db.ExecuteQuery("SELECT name FROM sqlite_master WHERE type='trigger'");
+            foreach (var trigger in triggers)
+            {
+                db.ExecuteSQL($"DROP TRIGGER IF EXISTS {trigger["name"]}");
+            }
+
+            // Drop all views
+            var views = db.ExecuteQuery("SELECT name FROM sqlite_master WHERE type='view'");
+            foreach (var view in views)
+            {
+                db.ExecuteSQL($"DROP VIEW IF EXISTS {view["name"]}");
+            }
+
+            // Note: Procedures are not stored in sqlite_master, they're handled differently
+            // For now, we'll rely on the database being recreated for each test
+        }
+        catch
+        {
+            // Ignore cleanup errors - database might be in inconsistent state
+        }
+    }
+
     public void Dispose()
     {
+        try { SharpCoreDB.Services.SqlParser.ClearAllTriggersForTesting(); } catch { }
         try { db.Dispose(); } catch { }
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -48,6 +83,7 @@ public class DdlProcedureViewTriggerTests : IDisposable
         if (Directory.Exists(testDbPath))
         {
             try
+
             {
                 for (int i = 0; i < 5; i++)
                 {
@@ -58,7 +94,7 @@ public class DdlProcedureViewTriggerTests : IDisposable
             catch { }
         }
 
-        GC.SuppressFinalize(this);
+
     }
 
     // ──────────────────────────────────────────────
@@ -77,6 +113,8 @@ public class DdlProcedureViewTriggerTests : IDisposable
     [Fact]
     public void ExecProcedure_WithParams_ShouldExecuteBody()
     {
+        db.ExecuteSQL("CREATE TABLE audit_log (id INTEGER PRIMARY KEY, msg TEXT)");
+
         db.ExecuteSQL(
             "CREATE PROCEDURE set_salary @emp_id INTEGER, @new_sal INTEGER BEGIN UPDATE employees SET salary = @new_sal WHERE id = @emp_id END");
 
@@ -194,10 +232,10 @@ public class DdlProcedureViewTriggerTests : IDisposable
     [Fact]
     public void CreateTrigger_BeforeDelete_ShouldRegister()
     {
-        db.ExecuteSQL("CREATE TABLE audit_log2 (id INTEGER PRIMARY KEY, msg TEXT)");
+        db.ExecuteSQL("CREATE TABLE audit_log (id INTEGER PRIMARY KEY, msg TEXT)");
 
         db.ExecuteSQL(
-            "CREATE TRIGGER log_delete BEFORE DELETE ON employees BEGIN INSERT INTO audit_log2 VALUES (99, 'deleting') END");
+            "CREATE TRIGGER log_delete BEFORE DELETE ON employees BEGIN INSERT INTO audit_log VALUES (99, 'deleting') END");
     }
 
     [Fact]

@@ -205,6 +205,18 @@ public partial class SqlParser
     }
 
     /// <summary>
+    /// Clears all triggers from the static registry.
+    /// Used for testing to prevent cross-test contamination.
+    /// </summary>
+    internal static void ClearAllTriggersForTesting()
+    {
+        lock (_triggerLock)
+        {
+            _triggers.Clear();
+        }
+    }
+
+    /// <summary>
     /// Gets all triggers for a specific table.
     /// </summary>
     public IReadOnlyList<TriggerDefinition> GetTriggersForTable(string tableName)

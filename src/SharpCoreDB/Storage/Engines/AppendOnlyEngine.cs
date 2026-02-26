@@ -231,6 +231,9 @@ public class AppendOnlyEngine : IStorageEngine
     }
 
     /// <inheritdoc />
+    public bool SupportsDeltaUpdates => false; // Append-only doesn't support in-place delta updates
+
+    /// <inheritdoc />
     public StorageEngineMetrics GetMetrics()
     {
         var totalOps = totalInserts + totalUpdates + totalDeletes + totalReads;

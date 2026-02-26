@@ -606,6 +606,9 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
     private static (uint pageId, ushort slotIndex) DecodeStorageReference(long reference)
         => ((uint)(reference >> 16), (ushort)(reference & 0xFFFF));
 
+    /// <inheritdoc />
+    public bool SupportsDeltaUpdates => _storageProvider.SupportsDeltaUpdates;
+
     // ========================================
     // Internal Types
     // ========================================

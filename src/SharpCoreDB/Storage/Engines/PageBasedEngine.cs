@@ -311,6 +311,9 @@ public partial class PageBasedEngine : IStorageEngine
     }
 
     /// <inheritdoc />
+    public bool SupportsDeltaUpdates => config?.EnableDeltaUpdates ?? false;
+
+    /// <inheritdoc />
     public StorageEngineMetrics GetMetrics()
     {
         var totalOps = totalInserts + totalUpdates + totalDeletes + totalReads;

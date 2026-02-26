@@ -143,11 +143,18 @@ public partial class SqlParser
             return null;
         }
 
+        while (val.Length >= 2 &&
+               ((val.StartsWith('\'') && val.EndsWith('\'')) ||
+                (val.StartsWith('"') && val.EndsWith('"'))))
+        {
+            val = val[1..^1];
+        }
+
         try
         {
             if (type == DataType.Boolean)
             {
-                var lower = val.ToLower();
+                var lower = val.ToLowerInvariant();
                 if (lower == "1" || lower == "true") return true;
                 if (lower == "0" || lower == "false") return false;
                 if (int.TryParse(val, out var intBool))

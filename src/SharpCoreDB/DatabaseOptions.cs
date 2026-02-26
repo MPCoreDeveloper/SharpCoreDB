@@ -149,6 +149,13 @@ public sealed class DatabaseOptions
     public DatabaseConfig? DatabaseConfig { get; set; }
 
     /// <summary>
+    /// Gets or sets whether to enable delta-update support (Phase 3.3).
+    /// Default: false (full record updates).
+    /// When enabled, UPDATE operations store only changed fields for better performance.
+    /// </summary>
+    public bool EnableDeltaUpdates { get; set; } = false;
+
+    /// <summary>
     /// Validates the options and throws if invalid.
     /// </summary>
     public void Validate()

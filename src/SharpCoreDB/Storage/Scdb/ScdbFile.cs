@@ -256,20 +256,24 @@ public sealed class ScdbFile : IDisposable
     // ==================== PRIVATE HELPER METHODS ====================
 
     /// <summary>
-    /// Initializes a new SCDB file with default header and structures.
+    /// Initializes a new SCDB file with default structures.
+    /// Creates: File header, block registry, FSM, WAL, table directory.
     /// </summary>
-    /// <param name="path">Path to the new file</param>
+    /// <param name="path">Path where file will be created</param>
     private static void InitializeNewFile(string path)
     {
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
 
         // Create default header
         var header = ScdbFileHeader.CreateDefault();
-
-        // Reserve space for header
-        Span<byte> headerBuffer = stackalloc byte[(int)ScdbFileHeader.HEADER_SIZE];
-        header.WriteTo(headerBuffer);
-        fs.Write(headerBuffer);
+        
+        // ✅ Phase 3.3: Enable delta-update feature flag
+        header.FeatureFlags |= ScdbFileHeader.FEATURE_DELTA_UPDATES;
+        
+        // Write header
+        Span<byte> buffer = stackalloc byte[(int)ScdbFileHeader.HEADER_SIZE];
+        header.WriteTo(buffer);
+        fs.Write(buffer);
 
         // Initialize block registry (empty)
         var registryHeader = new BlockRegistryHeader

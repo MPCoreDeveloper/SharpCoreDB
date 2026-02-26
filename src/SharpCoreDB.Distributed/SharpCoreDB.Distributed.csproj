@@ -55,4 +55,8 @@
     <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(Configuration)' == 'Release'" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+  </ItemGroup>
+
 </Project>

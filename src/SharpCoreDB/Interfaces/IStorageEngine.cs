@@ -91,6 +91,11 @@ public interface IStorageEngine : IDisposable
     void Flush();
 
     /// <summary>
+    /// Gets whether the storage engine supports delta-updates (Phase 3.3).
+    /// </summary>
+    bool SupportsDeltaUpdates { get; }
+
+    /// <summary>
     /// Gets performance metrics for this storage engine.
     /// </summary>
     /// <returns>Performance metrics.</returns>
@@ -163,7 +168,16 @@ public record StorageEngineMetrics
 
     /// <summary>Gets or initializes average read time in microseconds.</summary>
     public double AvgReadTimeMicros { get; init; }
+    
+    /// <summary>Gets or initializes total delta updates (Phase 3.3).</summary>
+    public long TotalDeltaUpdates { get; init; }
+    
+    /// <summary>Gets or initializes total bytes saved by delta encoding.</summary>
+    public long BytesSavedByDeltas { get; init; }
+    
+    /// <summary>Gets or initializes average delta compression ratio (0-1).</summary>
+    public double AvgDeltaCompressionRatio { get; init; }
 
-    /// <summary>Gets or initializes engine-specific metrics.</summary>
-    public Dictionary<string, object> CustomMetrics { get; init; } = new();
+    /// <summary>Gets or initializes custom engine-specific metrics.</summary>
+    public Dictionary<string, object>? CustomMetrics { get; init; }
 }

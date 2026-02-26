@@ -203,6 +203,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         return new SingleFileStorageProvider(filePath, options, fileStream, mmf, header);
     }
 
+    /// <summary>
+    /// Gets whether delta-updates are supported and enabled (Phase 3.3).
+    /// </summary>
+    internal bool SupportsDeltaUpdates => _header.SupportsDeltaUpdates && _options.EnableDeltaUpdates;
+
     /// <inheritdoc/>
     public StorageMode Mode => StorageMode.SingleFile;
 

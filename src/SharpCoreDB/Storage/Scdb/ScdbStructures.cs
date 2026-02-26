@@ -684,7 +684,10 @@ public enum WalOperation : ushort
     PageAllocate = 8,
     
     /// <summary>Page free</summary>
-    PageFree = 9
+    PageFree = 9,
+    
+    /// <summary>Delta update operation (Phase 3.3)</summary>
+    DeltaUpdate = 10
 }
 
 /// <summary>
