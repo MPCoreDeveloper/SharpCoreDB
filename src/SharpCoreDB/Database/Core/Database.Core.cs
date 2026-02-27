@@ -30,7 +30,7 @@ public partial class Database : IDatabase, IDisposable
 {
     private readonly IStorage storage;
     private readonly IUserService userService;
-    private readonly Dictionary<string, ITable> tables = [];  // ✅ C# 14: Collection expression
+    private readonly Dictionary<string, ITable> tables = new(StringComparer.OrdinalIgnoreCase);  // Case-insensitive for SQL compatibility
     private readonly string _dbPath;
     
     /// <summary>
@@ -66,7 +66,7 @@ public partial class Database : IDatabase, IDisposable
     // Batch UPDATE transaction state
     private bool _batchUpdateActive;
     
-    // Track if metadata needs to be flushed
+    // Track if metadata needs to be flush
     private bool _metadataDirty;
 
     // ✅ NEW: Thread-safe last insert rowid tracking (SQLite compatibility)

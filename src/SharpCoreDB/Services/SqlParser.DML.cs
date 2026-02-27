@@ -496,10 +496,37 @@ public partial class SqlParser
 
         string? orderBy = null;
         bool asc = true;
-        if (orderIdx > 0 && parts.Length > orderIdx + 3 && parts[orderIdx + 1].ToUpper() == SqlConstants.BY)
+        if (orderIdx > 0 && parts.Length > orderIdx + 2 && parts[orderIdx + 1].Equals(SqlConstants.BY, StringComparison.OrdinalIgnoreCase))
         {
             orderBy = parts[orderIdx + 2];
-            asc = !parts[orderIdx + 3].Equals(SqlConstants.DESC, StringComparison.OrdinalIgnoreCase);
+            asc = parts.Length <= orderIdx + 3 || !parts[orderIdx + 3].Equals(SqlConstants.DESC, StringComparison.OrdinalIgnoreCase);
+
+            // Resolve column position (1-based) to column name: ORDER BY 2 → ORDER BY name
+            if (int.TryParse(orderBy, out var ordinalPosition) && ordinalPosition >= 1)
+            {
+                var selectColumns = selectClause
+                    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Select(c =>
+                    {
+                        // Handle aliases: "col AS alias" → use alias
+                        var aliasIdx = c.IndexOf(" AS ", StringComparison.OrdinalIgnoreCase);
+                        if (aliasIdx >= 0)
+                            return c[(aliasIdx + 4)..].Trim();
+
+                        // Handle table.column → use column
+                        var dotIdx = c.LastIndexOf('.');
+                        if (dotIdx >= 0)
+                            return c[(dotIdx + 1)..].Trim();
+
+                        return c.Trim();
+                    })
+                    .ToArray();
+
+                if (ordinalPosition <= selectColumns.Length)
+                {
+                    orderBy = selectColumns[ordinalPosition - 1];
+                }
+            }
         }
 
         (int? limit, int? offset) = ParseLimitClause(parts, limitIdx);

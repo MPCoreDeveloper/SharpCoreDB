@@ -2,6 +2,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Provider.Sync.ChangeTracking;
+using SharpCoreDB.Services;
 
 namespace SharpCoreDB.Provider.Sync.Extensions;
 
@@ -59,6 +60,8 @@ public static class SyncServiceCollectionExtensions
         });
 
         // Register change tracking services
+        services.AddSingleton<SqliteDialect>();
+        services.AddSingleton<TrackingTableBuilder>();
         services.AddSingleton<IChangeTrackingManager, ChangeTrackingManager>();
         services.AddSingleton<ITombstoneManager, TombstoneManager>();
 

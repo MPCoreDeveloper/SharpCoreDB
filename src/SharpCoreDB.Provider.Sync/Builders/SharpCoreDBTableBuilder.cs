@@ -5,6 +5,7 @@ using System.Data.Common;
 using Dotmim.Sync;
 using Dotmim.Sync.Builders;
 using Dotmim.Sync.Manager;
+using SharpCoreDB.Provider.Sync.Metadata;
 
 namespace SharpCoreDB.Provider.Sync.Builders;
 
@@ -296,17 +297,6 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     private static string MapDbTypeToSqlType(int dbType)
     {
         var type = (DbType)dbType;
-        return type switch
-        {
-            DbType.Int32 or DbType.Int16 or DbType.Byte or DbType.SByte or DbType.UInt16 or DbType.Boolean => "INTEGER",
-            DbType.Int64 or DbType.UInt32 or DbType.UInt64 => "BIGINT",
-            DbType.String or DbType.StringFixedLength or DbType.AnsiString or DbType.AnsiStringFixedLength => "TEXT",
-            DbType.Double or DbType.Single => "REAL",
-            DbType.Decimal or DbType.Currency or DbType.VarNumeric => "DECIMAL",
-            DbType.DateTime or DbType.DateTime2 or DbType.DateTimeOffset or DbType.Date or DbType.Time => "DATETIME",
-            DbType.Guid => "GUID",
-            DbType.Binary or DbType.Object => "BLOB",
-            _ => "TEXT"
-        };
+        return SharpCoreDBDbMetadata.ToSqlTypeString(SharpCoreDBDbMetadata.MapDbType(type));
     }
 }

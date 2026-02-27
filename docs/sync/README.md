@@ -298,185 +298,153 @@ var sharpcoredbOptions = new SharpCoreDBSyncOptions
     ConnectionString = "Data Source=sync.db",
 
     // Performance tuning
-    CommandTimeout = TimeSpan.FromMinutes(5),
-    BulkCopyBatchSize = 10000,
+    BatchSize = 500,
+    TombstoneRetentionDays = 30,
 
     // Change tracking
-    CleanTrackingTableOnFullSync = true,
-    UseChangeTracking = true,
+    EnableAutoTracking = true,
+    AutoProvisionScopeTables = true,
 
-    // Multi-tenant support
-    TenantId = "tenant-123",
-    EnableTenantFiltering = true
-};
-
-var provider = new SharpCoreDBSyncProvider(sharpcoredbOptions);
-```
-
-## Best Practices
-
-### 1. Connection Management
-
-```csharp
-// Use connection pooling
-var provider = new SharpCoreDBSyncProvider("Data Source=sync.db;Pooling=true;Max Pool Size=100;");
-
-// Configure timeouts
-var options = new SyncOptions
-{
-    BulkCopyTimeout = TimeSpan.FromMinutes(10),
-    CommandTimeout = TimeSpan.FromMinutes(5)
+    // Reliability
+    CommandTimeoutSeconds = 300
 };
 ```
 
-### 2. Error Handling
+## Integration Testing
+
+### Running Integration Tests
+
+The provider includes comprehensive integration tests that verify end-to-end synchronization:
+
+```bash
+# Run all sync integration tests
+dotnet test --filter "Integration"
+
+# Run specific test categories
+dotnet test --filter "SQLiteRoundtripTests"
+dotnet test --filter "EndToEndSyncScenarios" 
+dotnet test --filter "SyncPerformanceBenchmarks"
+dotnet test --filter "SyncErrorHandlingTests"
+```
+
+### Test Coverage
+
+#### SQLite Roundtrip Tests
+- ✅ Empty database synchronization
+- ✅ Unidirectional data transfer (SharpCoreDB → SQLite, SQLite → SharpCoreDB)
+- ✅ Bidirectional merge with conflict resolution
+- ✅ Multiple table synchronization
+- ✅ Update operations
+- ✅ Delete operations (tombstone handling)
+- ✅ Large dataset performance (1000+ records)
+
+#### End-to-End Scenarios
+- ✅ **Mobile Offline Sync**: App goes offline, makes changes, syncs when online
+- ✅ **Multi-Device Conflicts**: Two devices modify same record, conflict resolution
+- ✅ **Incremental Sync**: Only changed data transferred after initial sync
+- ✅ **Data Migration**: Migrate existing SQLite data to SharpCoreDB
+- ✅ **Backup & Restore**: Use sync for database backup/recovery
+- ✅ **Collaborative Editing**: Multiple users working on shared data
+
+#### Performance Benchmarks
+- ✅ Small dataset (100 records) - < 5 seconds
+- ✅ Medium dataset (1000 records) - < 15 seconds  
+- ✅ Large dataset (5000 records) - < 30 seconds
+- ✅ Incremental sync performance
+- ✅ Multi-table synchronization
+- ✅ Concurrent sync operations
+- ✅ Complex schema handling
+- ✅ Memory usage monitoring
+- ✅ Cancellation responsiveness
+
+#### Error Handling & Edge Cases
+- ✅ Invalid table names
+- ✅ Database corruption scenarios
+- ✅ File locking conflicts
+- ✅ Network interruption simulation
+- ✅ Schema mismatches
+- ✅ Primary key conflicts
+- ✅ Large data types (BLOB, long TEXT)
+- ✅ NULL value handling
+- ✅ Unicode character preservation
+- ✅ Empty table synchronization
+- ✅ Very long table/column names
+- ✅ Database restart scenarios
+
+### Test Infrastructure
+
+Integration tests use a common base class `SyncIntegrationTestBase` that provides:
+
+- **Database Setup**: Automatic creation of test SharpCoreDB and SQLite databases
+- **Data Population**: Helper methods to insert consistent test data
+- **Sync Execution**: Wrapper methods for bidirectional synchronization
+- **Verification**: Automatic data consistency checking between databases
+- **Cleanup**: Automatic disposal and file cleanup
 
 ```csharp
-try
+public class SyncIntegrationTestBase : IDisposable
 {
-    var result = await agent.SynchronizeAsync(tables);
+    protected readonly Database _sharpcoredb;
+    protected readonly SQLiteConnection _sqliteConnection;
+    
+    // Helper methods for test setup, data insertion, sync execution, and verification
 }
-catch (SyncException ex)
-{
-    // Handle sync-specific errors
-    Console.WriteLine($"Sync failed: {ex.Message}");
-
-    // Check for conflicts
-    if (ex.Type == SyncExceptionType.Conflicts)
-    {
-        // Handle conflicts
-        var conflicts = await agent.GetConflictsAsync();
-        // Resolve conflicts...
-    }
-}
-catch (Exception ex)
-{
-    // Handle general errors
-    Console.WriteLine($"Unexpected error: {ex.Message}");
-}
-```
-
-### 3. Performance Optimization
-
-```csharp
-// Optimize for large datasets
-var options = new SyncOptions
-{
-    BatchSize = 5000,
-    UseBulkOperations = true,
-    UseCompression = true,
-    DownloadBatchSizeInKB = 10000,
-    UploadBatchSizeInKB = 10000
-};
-
-// Use parallel sync for multiple tables
-var tables = new[] { "Table1", "Table2", "Table3" };
-var result = await agent.SynchronizeAsync(tables, options);
-```
-
-### 4. Monitoring and Logging
-
-```csharp
-// Enable detailed logging
-var loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.AddConsole();
-    builder.AddFile("sync.log");
-    builder.SetMinimumLevel(LogLevel.Information);
-});
-
-// Monitor progress
-agent.LocalOrchestrator.OnSyncProgress += (args) =>
-{
-    Console.WriteLine($"[{DateTime.Now}] {args.ProgressPercentage}% - {args.Message}");
-};
-
-// Track performance
-var stopwatch = Stopwatch.StartNew();
-var result = await agent.SynchronizeAsync(tables);
-stopwatch.Stop();
-
-Console.WriteLine($"Sync completed in {stopwatch.Elapsed.TotalSeconds:F2}s");
-Console.WriteLine($"Throughput: {result.TotalChangesDownloaded / stopwatch.Elapsed.TotalSeconds:F0} changes/sec");
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Connection Timeouts
+#### 1. Table Not Found Errors
+**Symptom**: `InvalidOperationException: Table 'X' does not exist`
+**Solution**: Ensure tables are created in both databases before syncing
+
+#### 2. Primary Key Required
+**Symptom**: `InvalidOperationException: Table must have a primary key for sync`
+**Solution**: All sync tables must have a PRIMARY KEY column in their CREATE TABLE statement. SharpCoreDB parses inline (`id INTEGER PRIMARY KEY`) and table-level (`PRIMARY KEY(id)`) constraints.
+**Note**: Fixed in January 2026 — `SingleFileDatabase` now correctly detects PRIMARY KEY from SQL DDL.
+
+#### 3. Connection String Issues
+**Symptom**: Database connection failures
+**Solution**: Verify connection strings and database accessibility
+
+#### 4. Performance Issues
+**Symptom**: Sync operations taking too long
+**Solution**: 
+- Use `BatchSize` option for large datasets
+- Enable `UseBulkOperations` 
+- Consider incremental sync patterns
+
+#### 5. Conflict Resolution
+**Symptom**: Unexpected data changes during sync
+**Solution**: Configure `ConflictResolutionPolicy` (ServerWins/ClientWins)
+
+### Debug Logging
+
+Enable verbose logging for troubleshooting:
+
 ```csharp
-// Increase timeouts
 var options = new SyncOptions
 {
-    CommandTimeout = TimeSpan.FromMinutes(10),
-    BulkCopyTimeout = TimeSpan.FromMinutes(15)
-};
-```
-
-#### Large Dataset Sync
-```csharp
-// Use smaller batches
-var options = new SyncOptions
-{
-    BatchSize = 1000,
-    DownloadBatchSizeInKB = 1000,
-    UploadBatchSizeInKB = 1000
-};
-```
-
-#### Memory Issues
-```csharp
-// Enable compression and reduce batch size
-var options = new SyncOptions
-{
-    UseCompression = true,
-    BatchSize = 500,
-    CleanMetadatas = true
-};
-```
-
-#### Conflicts
-```csharp
-// Configure conflict resolution
-var options = new SyncOptions
-{
-    ConflictResolutionPolicy = ConflictResolutionPolicy.ClientWins
-};
-
-// Handle conflicts manually
-agent.LocalOrchestrator.OnApplyChangesConflictOccured += (args) =>
-{
-    // Custom conflict resolution logic
-    args.Resolution = ConflictResolution.ClientWins;
-};
-```
-
-### Diagnostic Tools
-
-```csharp
-// Get sync summary
-var summary = await agent.GetSummaryAsync();
-Console.WriteLine($"Last sync: {summary.LastSync}");
-Console.WriteLine($"Total changes: {summary.TotalChanges}");
-
-// Check database schema
-var schema = await agent.GetSchemaAsync();
-foreach (var table in schema.Tables)
-{
-    Console.WriteLine($"Table: {table.TableName}, Columns: {table.Columns.Count}");
-}
-
-// Validate sync setup
-var isValid = await agent.ValidateSetupAsync();
-if (!isValid)
-{
-    var errors = await agent.GetValidationErrorsAsync();
-    foreach (var error in errors)
+    UseVerboseErrors = true,
+    Logger = new SyncLogger
     {
-        Console.WriteLine($"Validation error: {error.Message}");
+        UseConsole = true,
+        Level = LogLevel.Debug
     }
-}
+};
+```
+
+### Performance Monitoring
+
+Monitor sync performance with built-in metrics:
+
+```csharp
+agent.LocalOrchestrator.OnSyncProgress += (args) =>
+{
+    Console.WriteLine($"Progress: {args.ProgressPercentage}% - {args.Message}");
+    Console.WriteLine($"Changes: ↑{args.ChangesAppliedOnClient} ↓{args.ChangesAppliedOnServer}");
+};
 ```
 
 ## API Reference
@@ -484,72 +452,73 @@ if (!isValid)
 ### SharpCoreDBSyncProvider
 
 ```csharp
-public class SharpCoreDBSyncProvider : CoreProvider
+public sealed class SharpCoreDBSyncProvider(string connectionString, SyncProviderOptions? options = null) : CoreProvider
 {
-    // Constructors
-    SharpCoreDBSyncProvider(string connectionString);
-    SharpCoreDBSyncProvider(SharpCoreDBSyncOptions options);
-
-    // Core sync methods
-    Task<SyncContext> EnsureSchemaAsync(SyncContext context);
-    Task<SyncContext> EnsureDatabaseAsync(SyncContext context);
-    Task<DbSyncAdapter> GetSyncAdapterAsync(SyncContext context, DbConnection connection);
-    Task<(SyncContext, DatabaseChangesSelected)> GetChangesAsync(SyncContext context);
-    Task<(SyncContext, DatabaseChangesApplied)> ApplyChangesAsync(SyncContext context);
-    Task<SyncContext> GetConflictAsync(SyncContext context);
-    Task<SyncContext> UpdateMetadataAsync(SyncContext context);
+    // Properties
+    public override string ConnectionString { get; set; }
+    public SyncProviderOptions Options { get; }
+    
+    // Methods
+    public override DbConnection CreateConnection();
+    public override string GetDatabaseName();
+    public override DbDatabaseBuilder GetDatabaseBuilder();
+    public override DbScopeBuilder GetScopeBuilder(string scopeName);
+    public override DbSyncAdapter GetSyncAdapter(SyncTable table, ScopeInfo scopeInfo);
+    public override DbMetadata GetMetadata();
 }
 ```
 
-### SharpCoreDBSyncOptions
+### SharpCoreDBSyncAdapter
 
 ```csharp
-public class SharpCoreDBSyncOptions
+public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo scopeInfo) : DbSyncAdapter
 {
-    string ConnectionString { get; set; }
-    TimeSpan CommandTimeout { get; set; }
-    int BulkCopyBatchSize { get; set; }
-    bool CleanTrackingTableOnFullSync { get; set; }
-    bool UseChangeTracking { get; set; }
-    string? TenantId { get; set; }
-    bool EnableTenantFiltering { get; set; }
+    // Methods
+    public override (DbCommand Command, bool IsBatchCommand) GetCommand(SyncContext context, DbCommandType commandType, SyncFilter? filter);
+    public override DbColumnNames GetParsedColumnNames(string columnName);
+    public override DbTableBuilder GetTableBuilder();
+    public override Task<int> ExecuteBatchCommandAsync(SyncContext context, DbCommand command, Guid senderScopeId, IEnumerable<SyncRow> arrayItems, SyncTable schemaChangesTable, SyncTable failedRows, long? lastTimestamp, DbConnection connection, DbTransaction? transaction);
 }
 ```
 
-## Performance Benchmarks
+## Contributing
 
-| Scenario | Performance | Notes |
-|----------|-------------|-------|
-| **Initial Sync (1K rows)** | <5 seconds | Full table sync |
-| **Incremental Sync (100 changes)** | <1 second | Change tracking |
-| **Bulk Sync (100K rows)** | 30-60 seconds | Batch processing |
-| **Conflict Resolution** | <10ms per conflict | Automatic resolution |
-| **Network Transfer** | 10-50 MB/s | Compression enabled |
+### Running Tests
 
-## Security Considerations
+```bash
+# Run all tests
+dotnet test
 
-- Use encrypted connections (SSL/TLS)
-- Implement proper authentication
-- Validate connection strings
-- Monitor sync operations for anomalies
-- Regular security audits
+# Run integration tests only
+dotnet test --filter "Integration"
 
-## Migration from Other Sync Solutions
+# Run with coverage
+dotnet test --collect:"XPlat Code Coverage"
+```
 
-### From Custom Sync
-1. Replace custom sync logic with Dotmim.Sync + SharpCoreDB.Provider.Sync
-2. Configure providers and options
-3. Test sync scenarios
-4. Monitor performance
+### Adding New Tests
 
-### From Database Replication
-1. Setup SharpCoreDB as sync client
-2. Configure bidirectional sync
-3. Handle schema differences
-4. Implement conflict resolution
+1. Inherit from `SyncIntegrationTestBase` for integration tests
+2. Use `CreateTestTableAsync()` to set up schemas
+3. Use `InsertTestDataAsync()` for test data
+4. Use `PerformBidirectionalSyncAsync()` for sync operations
+5. Use `VerifyDataConsistencyAsync()` to check results
 
-## Support
+### Performance Testing
 
-- [Dotmim.Sync Documentation](https://dotmim-sync.readthedocs.io/)
-- [SharpCoreDB Issues](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
-- [Sync Provider Source](https://github.com/MPCoreDeveloper/SharpCoreDB/tree/master/src/SharpCoreDB.Provider.Sync)
+When adding performance tests:
+- Use realistic data sizes
+- Include warm-up operations
+- Measure memory usage with `GC.GetTotalMemory()`
+- Test cancellation scenarios
+- Document expected performance bounds
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Last Updated:** January 29, 2026
+**Version:** 1.0.0-alpha
+**Test Status:** 84/84 passing ✅

@@ -66,6 +66,37 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         InitializeColumnMetadata();
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SingleFileTable"/> class with full schema definition
+    /// including primary key, NOT NULL, and AUTOINCREMENT constraints.
+    /// </summary>
+    /// <param name="tableName">Table name.</param>
+    /// <param name="columns">Column names.</param>
+    /// <param name="columnTypes">Column data types.</param>
+    /// <param name="primaryKeyIndex">Index of the primary key column (-1 if none).</param>
+    /// <param name="isNotNull">NOT NULL constraint per column.</param>
+    /// <param name="isAuto">AUTOINCREMENT flag per column.</param>
+    /// <param name="storageProvider">Storage provider.</param>
+    public SingleFileTable(string tableName, List<string> columns, List<DataType> columnTypes,
+        int primaryKeyIndex, List<bool> isNotNull, List<bool> isAuto, IStorageProvider storageProvider)
+        : this(tableName, storageProvider)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(columnTypes);
+
+        Columns = columns;
+        ColumnTypes = columnTypes;
+        PrimaryKeyIndex = primaryKeyIndex;
+
+        // Copy constraint lists
+        IsNotNull.Clear();
+        IsNotNull.AddRange(isNotNull);
+        IsAuto.Clear();
+        IsAuto.AddRange(isAuto);
+
+        InitializeColumnMetadata();
+    }
+
     /// <inheritdoc />
     public string Name { get; set; } = tableName;
 
@@ -177,15 +208,22 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         EnsureCacheLoaded();
 
+        // Strip leading WHERE keyword if present
+        var condition = where?.Trim();
+        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition[6..].Trim();
+        }
+
         List<Dictionary<string, object>> results;
         lock (_tableLock)
         {
             results = _rowCache.Select(row => new Dictionary<string, object>(row)).ToList();
         }
 
-        if (!string.IsNullOrWhiteSpace(where))
+        if (!string.IsNullOrWhiteSpace(condition))
         {
-            results = results.Where(row => EvaluateCondition(row, where)).ToList();
+            results = results.Where(row => EvaluateCondition(row, condition)).ToList();
         }
 
         if (!string.IsNullOrWhiteSpace(orderBy))
@@ -204,11 +242,18 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         ArgumentNullException.ThrowIfNull(updates);
         EnsureCacheLoaded();
 
+        // Strip leading WHERE keyword if present
+        var condition = where?.Trim();
+        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition[6..].Trim();
+        }
+
         lock (_tableLock)
         {
             foreach (var row in _rowCache)
             {
-                if (string.IsNullOrWhiteSpace(where) || EvaluateCondition(row, where))
+                if (string.IsNullOrWhiteSpace(condition) || EvaluateCondition(row, condition))
                 {
                     foreach (var update in updates)
                     {
@@ -273,15 +318,22 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         EnsureCacheLoaded();
 
+        // Strip leading WHERE keyword if present
+        var condition = where?.Trim();
+        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition[6..].Trim();
+        }
+
         lock (_tableLock)
         {
-            if (string.IsNullOrWhiteSpace(where))
+            if (string.IsNullOrWhiteSpace(condition))
             {
                 _rowCache.Clear();
             }
             else
             {
-                _rowCache.RemoveAll(row => EvaluateCondition(row, where));
+                _rowCache.RemoveAll(row => EvaluateCondition(row, condition));
             }
 
             _isDirty = true;

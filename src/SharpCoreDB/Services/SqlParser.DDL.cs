@@ -109,18 +109,21 @@ public partial class SqlParser
                 }
             }
         }
-        
+
         for (int i = 0; i < colDefs.Count; i++)
         {
             var def = colDefs[i];
+
             var partsDef = def.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var colName = partsDef[0];
             var typeStr = partsDef[1].ToUpper();
-            var isPrimary = def.Contains(SqlConstants.PRIMARYKEY);
-            var isAutoGen = def.Contains("AUTO");
-            var isNotNullCol = def.Contains("NOT NULL");
-            var isUniqueCol = def.Contains("UNIQUE");
-            
+
+            var defUpper = def.ToUpperInvariant();
+            var isPrimary = defUpper.Contains("PRIMARY") && defUpper.Contains("KEY");
+            var isAutoGen = defUpper.Contains("AUTO");
+            var isNotNullCol = defUpper.Contains("NOT NULL");
+            var isUniqueCol = defUpper.Contains("UNIQUE");
+
             // ✅ COLLATE Phase 2 + Phase 9: Parse COLLATE clause from column definition
             var collation = CollationType.Binary; // default
             string? localeName = null;

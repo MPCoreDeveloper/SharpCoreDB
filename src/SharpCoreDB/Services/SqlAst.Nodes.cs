@@ -326,6 +326,12 @@ public class OrderByItem
     /// Gets or sets whether this is ascending (default true).
     /// </summary>
     public bool IsAscending { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the 1-based ordinal column position (e.g., ORDER BY 2).
+    /// Null when ordering by column name.
+    /// </summary>
+    public int? OrdinalPosition { get; set; }
 }
 
 /// <summary>

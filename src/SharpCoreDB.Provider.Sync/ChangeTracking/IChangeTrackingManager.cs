@@ -33,4 +33,15 @@ public interface IChangeTrackingManager
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if tracking is provisioned.</returns>
     Task<bool> IsProvisionedAsync(IDatabase database, string tableName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records a row change in the tracking table.
+    /// Used when the database engine does not support triggers (e.g., SingleFileDatabase).
+    /// </summary>
+    /// <param name="database">Database instance.</param>
+    /// <param name="tableName">Name of the source table.</param>
+    /// <param name="primaryKeyValue">Value of the primary key for the changed row.</param>
+    /// <param name="isDelete">True if the row was deleted (tombstone).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task RecordChangeAsync(IDatabase database, string tableName, string primaryKeyValue, bool isDelete, CancellationToken cancellationToken = default);
 }

@@ -6,6 +6,9 @@ using Dotmim.Sync.Builders;
 using Dotmim.Sync.Enumerations;
 using Dotmim.Sync.Manager;
 using SharpCoreDB.Data.Provider;
+using SharpCoreDB.Provider.Sync.Adapters;
+using SharpCoreDB.Provider.Sync.Builders;
+using SharpCoreDB.Provider.Sync.Metadata;
 
 namespace SharpCoreDB.Provider.Sync;
 
@@ -79,20 +82,17 @@ public sealed class SharpCoreDBSyncProvider(string connectionString, SyncProvide
     }
 
     /// <inheritdoc />
-    public override DbDatabaseBuilder GetDatabaseBuilder() =>
-        throw new NotImplementedException("Phase 2.5: SharpCoreDBDatabaseBuilder implementation pending");
+    public override DbDatabaseBuilder GetDatabaseBuilder() => new SharpCoreDBDatabaseBuilder();
 
     /// <inheritdoc />
-    public override DbScopeBuilder GetScopeBuilder(string scopeName) =>
-        throw new NotImplementedException("Phase 2.3: SharpCoreDBScopeInfoBuilder implementation pending");
+    public override DbScopeBuilder GetScopeBuilder(string scopeName) => new SharpCoreDBScopeInfoBuilder();
 
     /// <inheritdoc />
     public override DbSyncAdapter GetSyncAdapter(SyncTable table, ScopeInfo scopeInfo) =>
-        throw new NotImplementedException("Phase 3.2: SharpCoreDBSyncAdapter implementation pending");
+        new SharpCoreDBSyncAdapter(table, scopeInfo);
 
     /// <inheritdoc />
-    public override DbMetadata GetMetadata() =>
-        throw new NotImplementedException("Phase 1.3: SharpCoreDBDbMetadata implementation pending");
+    public override DbMetadata GetMetadata() => throw new NotImplementedException("Phase 2: Metadata implementation pending - use SharpCoreDBDbMetadata static methods");
 
     /// <inheritdoc />
     public override string GetProviderTypeName() => "SharpCoreDB.Provider.Sync";

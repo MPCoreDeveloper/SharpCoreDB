@@ -398,7 +398,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     public void ExecuteSQL(string sql, Dictionary<string, object?> parameters)
     {
         var upperSql = sql.Trim().ToUpperInvariant();
-        
+
         if (upperSql.StartsWith("CREATE TABLE"))
         {
             ExecuteCreateTableInternal(sql);
@@ -410,7 +410,19 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
             ExecuteDropTableInternal(sql);
             return;
         }
-        
+
+        // SharpCoreDB does not support triggers — silently ignore CREATE/DROP TRIGGER
+        if (upperSql.StartsWith("CREATE TRIGGER") || upperSql.StartsWith("DROP TRIGGER"))
+        {
+            return;
+        }
+
+        // CREATE INDEX / DROP INDEX are handled at the storage level
+        if (upperSql.StartsWith("CREATE INDEX") || upperSql.StartsWith("DROP INDEX"))
+        {
+            return;
+        }
+
         ExecuteDMLInternal(sql, parameters);
     }
 
@@ -428,59 +440,126 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
 
     private void ExecuteCreateTableInternal(string sql)
     {
-        var regex = new Regex(
-            @"CREATE\s+TABLE\s+(\w+)\s*\((.*)\)", 
+        // ✅ Support IF NOT EXISTS
+        var ifNotExistsRegex = new Regex(
+            @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.*)\)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        
-        var match = regex.Match(sql);
+
+        var match = ifNotExistsRegex.Match(sql);
         if (!match.Success)
         {
             throw new InvalidOperationException($"Invalid CREATE TABLE syntax: {sql}");
         }
 
         var tableName = match.Groups[1].Value.Trim();
+
+        // IF NOT EXISTS: skip when table already exists
+        if (sql.Contains("IF NOT EXISTS", StringComparison.OrdinalIgnoreCase) && _tables.ContainsKey(tableName))
+        {
+            return;
+        }
+
         var columnDefs = match.Groups[2].Value.Trim();
-        
+
         var columns = new List<string>();
         var columnTypes = new List<DataType>();
-        
+        var isAuto = new List<bool>();
+        var isNotNull = new List<bool>();
+        var isUnique = new List<bool>();
+        var primaryKeyIndex = -1;
+
+        var colIndex = 0;
         foreach (var colDef in columnDefs.Split(','))
         {
-            var parts = colDef.Trim().Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2)
+            var trimmed = colDef.Trim();
+            var upper = trimmed.ToUpperInvariant();
+
+            // Skip table-level constraints (FOREIGN KEY, CHECK, PRIMARY KEY as table constraint)
+            if (upper.StartsWith("FOREIGN KEY") || upper.StartsWith("CHECK"))
             {
-                columns.Add(parts[0]);
-                var typeStr = parts[1].ToUpperInvariant();
-                columnTypes.Add(typeStr switch
-                {
-                    "INT" or "INTEGER" => DataType.Integer,
-                    "TEXT" or "VARCHAR" => DataType.String,
-                    "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-                    "DECIMAL" or "NUMERIC" => DataType.Decimal,
-                    "DATETIME" or "DATE" => DataType.DateTime,
-                    _ => DataType.String
-                });
+                continue;
             }
+
+            // Handle table-level PRIMARY KEY(col) — extract column name and mark it
+            if (upper.StartsWith("PRIMARY KEY"))
+            {
+                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*(\w+)\s*\)", RegexOptions.IgnoreCase);
+                if (pkMatch.Success)
+                {
+                    var pkColName = pkMatch.Groups[1].Value;
+                    var idx = columns.FindIndex(c => c.Equals(pkColName, StringComparison.OrdinalIgnoreCase));
+                    if (idx >= 0)
+                    {
+                        primaryKeyIndex = idx;
+                    }
+                }
+                continue;
+            }
+
+            var parts = trimmed.Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                continue;
+
+            var colName = parts[0];
+            var typeStr = parts[1].ToUpperInvariant();
+
+            columns.Add(colName);
+            columnTypes.Add(typeStr switch
+            {
+                "INT" or "INTEGER" or "BIGINT" => DataType.Integer,
+                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
+                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
+                "DECIMAL" or "NUMERIC" => DataType.Decimal,
+                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
+                "BLOB" => DataType.Blob,
+                "BOOLEAN" or "BOOL" => DataType.Boolean,
+                "LONG" => DataType.Long,
+                "GUID" or "UUID" => DataType.Guid,
+                _ => DataType.String
+            });
+
+            // Parse column constraints from the full definition string
+            var isPrimary = upper.Contains("PRIMARY") && upper.Contains("KEY");
+            var autoInc = upper.Contains("AUTOINCREMENT") || upper.Contains("AUTO_INCREMENT") || upper.Contains("AUTO ");
+            var notNull = upper.Contains("NOT NULL") || isPrimary; // PRIMARY KEY implies NOT NULL
+            var unique = upper.Contains("UNIQUE") || isPrimary; // PRIMARY KEY implies UNIQUE
+
+            isAuto.Add(autoInc);
+            isNotNull.Add(notNull);
+            isUnique.Add(unique);
+
+            if (isPrimary)
+            {
+                primaryKeyIndex = colIndex;
+            }
+
+            colIndex++;
         }
-        
-        var table = new SingleFileTable(tableName, columns, columnTypes, _storageProvider);
+
+        var table = new SingleFileTable(tableName, columns, columnTypes, primaryKeyIndex, isNotNull, isAuto, _storageProvider);
         _tables[tableName] = table;
-        
+
         // Register table schema with the directory manager so it persists on disk
         var columnEntries = new List<ColumnDefinitionEntry>(columns.Count);
         for (int i = 0; i < columns.Count; i++)
         {
+            var flags = ColumnFlags.None;
+            if (i == primaryKeyIndex) flags |= ColumnFlags.PrimaryKey;
+            if (i < isAuto.Count && isAuto[i]) flags |= ColumnFlags.AutoIncrement;
+            if (i < isNotNull.Count && isNotNull[i]) flags |= ColumnFlags.NotNull;
+            if (i < isUnique.Count && isUnique[i]) flags |= ColumnFlags.Unique;
+
             var entry = new ColumnDefinitionEntry
             {
                 DataType = (uint)columnTypes[i],
-                Flags = 0,
+                Flags = (uint)flags,
                 DefaultValueLength = 0,
                 CheckLength = 0
             };
             SetColumnName(ref entry, columns[i]);
             columnEntries.Add(entry);
         }
-        
+
         _tableDirectoryManager.CreateTable(table, 0, columnEntries, []);
         _tableDirectoryManager.Flush();
     }
@@ -606,20 +685,28 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
     [Obsolete("Regex-based DROP TABLE parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDropTableInternal(string sql)
     {
+        // Support both quoted and unquoted table names: DROP TABLE IF EXISTS "users_tracking"
         var regex = new Regex(
-            @"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)",
+            @"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[""'`\[\]]?(\w+)[""'`\[\]]?",
             RegexOptions.IgnoreCase);
-        
+
         var match = regex.Match(sql);
         if (!match.Success)
         {
+            // IF EXISTS means we should not throw
+            if (sql.Contains("IF EXISTS", StringComparison.OrdinalIgnoreCase))
+                return;
             throw new InvalidOperationException($"Invalid DROP TABLE syntax: {sql}");
         }
 
         var tableName = match.Groups[1].Value.Trim();
-        
+
         if (_tables.TryGetValue(tableName, out var table))
         {
+            if (table is SingleFileTable sft)
+            {
+                sft.FlushCache(); // Ensure pending data is flushed before removal
+            }
             _tables.Remove(tableName);
             _tableDirectoryManager.DeleteTable(tableName);
             _tableDirectoryManager.Flush();

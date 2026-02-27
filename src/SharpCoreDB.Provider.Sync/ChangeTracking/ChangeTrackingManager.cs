@@ -48,12 +48,16 @@ public sealed class ChangeTrackingManager(TrackingTableBuilder trackingTableBuil
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
 
         var trackingTableName = TrackingTableBuilder.GetTrackingTableName(tableName);
-        var statements = new List<string>();
 
-        statements.AddRange(BuildDropTriggerSql(tableName));
-        statements.Add(_trackingTableBuilder.BuildDropTrackingTableSql(tableName));
+        // Drop triggers (silently ignored if not supported)
+        foreach (var triggerSql in BuildDropTriggerSql(tableName))
+        {
+            await database.ExecuteSQLAsync(triggerSql, cancellationToken).ConfigureAwait(false);
+        }
 
-        await database.ExecuteBatchSQLAsync(statements, cancellationToken).ConfigureAwait(false);
+        // Drop tracking table
+        var dropTableSql = $"DROP TABLE IF EXISTS {trackingTableName}";
+        await database.ExecuteSQLAsync(dropTableSql, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -65,6 +69,45 @@ public sealed class ChangeTrackingManager(TrackingTableBuilder trackingTableBuil
         var trackingTableName = TrackingTableBuilder.GetTrackingTableName(tableName);
         var exists = database.GetTables().Any(t => t.Name.Equals(trackingTableName, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(exists);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordChangeAsync(IDatabase database, string tableName, string primaryKeyValue, bool isDelete, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(primaryKeyValue);
+
+        if (!database.TryGetTable(tableName, out var table))
+            throw new InvalidOperationException($"Table '{tableName}' does not exist.");
+
+        var trackingTableName = TrackingTableBuilder.GetTrackingTableName(tableName);
+        var pkColumn = table.Columns[table.PrimaryKeyIndex];
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var tombstone = isDelete ? 1 : 0;
+        var now = DateTime.UtcNow.ToString("o");
+
+        // Check if tracking record already exists
+        var existing = database.ExecuteQuery(
+            $"SELECT {pkColumn} FROM {trackingTableName} WHERE {pkColumn} = {primaryKeyValue}");
+
+        if (existing.Count > 0)
+        {
+            // Update existing tracking record
+            database.ExecuteSQL(
+                $"UPDATE {trackingTableName} SET timestamp = {timestamp}, sync_row_is_tombstone = {tombstone}, last_change_datetime = '{now}' WHERE {pkColumn} = {primaryKeyValue}");
+        }
+        else
+        {
+            // Insert new tracking record
+            database.ExecuteSQL(
+                $"INSERT INTO {trackingTableName} ({pkColumn}, timestamp, sync_row_is_tombstone, last_change_datetime) VALUES ({primaryKeyValue}, {timestamp}, {tombstone}, '{now}')");
+        }
+
+        // Flush to ensure data is persisted and visible to subsequent queries
+        database.Flush();
+
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private IReadOnlyList<string> BuildCreateTriggerSql(string tableName, string pkColumn)

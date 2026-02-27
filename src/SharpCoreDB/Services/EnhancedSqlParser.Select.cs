@@ -403,29 +403,46 @@ public partial class EnhancedSqlParser
         {
             do
             {
-                var tableAlias = ConsumeIdentifier();
-                if (tableAlias is null)
-                    break;
-
-                string columnName;
-                if (MatchToken("."))
+                // Peek ahead to check if it's a numeric column position
+                var numMatch = Regex.Match(_sql[_position..], @"^\s*(\d+)", RegexOptions.None);
+                if (numMatch.Success && int.TryParse(numMatch.Groups[1].Value, out var ordinal))
                 {
-                    columnName = ConsumeIdentifier() ?? "";
+                    _position += numMatch.Length;
+                    var item = new OrderByItem
+                    {
+                        Column = new ColumnReferenceNode { ColumnName = ordinal.ToString() },
+                        OrdinalPosition = ordinal,
+                        IsAscending = !MatchKeyword("DESC")
+                    };
+                    MatchKeyword("ASC");
+                    node.Items.Add(item);
                 }
                 else
                 {
-                    columnName = tableAlias;
-                    tableAlias = null;
+                    var tableAlias = ConsumeIdentifier();
+                    if (tableAlias is null)
+                        break;
+
+                    string columnName;
+                    if (MatchToken("."))
+                    {
+                        columnName = ConsumeIdentifier() ?? "";
+                    }
+                    else
+                    {
+                        columnName = tableAlias;
+                        tableAlias = null;
+                    }
+
+                    var item = new OrderByItem
+                    {
+                        Column = new ColumnReferenceNode { TableAlias = tableAlias, ColumnName = columnName },
+                        IsAscending = !MatchKeyword("DESC")
+                    };
+
+                    MatchKeyword("ASC");
+                    node.Items.Add(item);
                 }
-
-                var item = new OrderByItem
-                {
-                    Column = new ColumnReferenceNode { TableAlias = tableAlias, ColumnName = columnName },
-                    IsAscending = !MatchKeyword("DESC")
-                };
-
-                MatchKeyword("ASC"); // Optional
-                node.Items.Add(item);
             } while (MatchToken(","));
         }
         catch (Exception ex)
