@@ -74,6 +74,9 @@ public sealed class ParallelGraphTraversalEngine
         if (maxDepth < 0)
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
 
+        // ✅ Check cancellation at entry
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var activity = OpenTelemetryIntegration.StartGraphTraversalActivity("ParallelGraphTraversal.BFS");
         activity?.SetTag("graph.startNodeId", startNodeId);
         activity?.SetTag("graph.maxDepth", maxDepth);
@@ -111,6 +114,9 @@ public sealed class ParallelGraphTraversalEngine
                 },
                 async (nodeId, ct) =>
                 {
+                    // ✅ Check cancellation in hot path
+                    ct.ThrowIfCancellationRequested();
+                    
                     var neighbors = await GetNeighborsAsync(table, nodeId, relationshipColumn, ct);
 
                     foreach (var neighbor in neighbors)
@@ -165,6 +171,9 @@ public sealed class ParallelGraphTraversalEngine
 
         if (maxDepth < 0)
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "Max depth must be non-negative");
+
+        // ✅ Check cancellation at entry
+        cancellationToken.ThrowIfCancellationRequested();
 
         var sw = Stopwatch.StartNew();
         var visited = new ConcurrentDictionary<long, int>(); // value = depth
@@ -259,7 +268,8 @@ public sealed class ParallelGraphTraversalEngine
         }
         catch (OperationCanceledException)
         {
-            // Expected during cancellation
+            // ✅ Rethrow cancellation - the caller expects it
+            throw;
         }
     }
 
@@ -309,12 +319,18 @@ public sealed class ParallelGraphTraversalEngine
         string relationshipColumn,
         CancellationToken cancellationToken)
     {
+        // ✅ Check cancellation before doing work
+        cancellationToken.ThrowIfCancellationRequested();
+        
         await Task.CompletedTask; // Placeholder for async table operations
 
         var neighbors = new List<long>();
 
         try
         {
+            // ✅ Check cancellation before potentially expensive table operation
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var rows = table.Select($"id={nodeId}");
             if (rows.Count == 0)
                 return neighbors;
@@ -335,6 +351,11 @@ public sealed class ParallelGraphTraversalEngine
                     }
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // ✅ Rethrow cancellation - don't swallow it
+            throw;
         }
         catch
         {
