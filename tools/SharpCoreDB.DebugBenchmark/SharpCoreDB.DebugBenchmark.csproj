@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>14.0</LangVersion>
+    <IsPackable>false</IsPackable>
     <Version>1.0.5</Version>
     <PackageId>SharpCoreDB.DebugBenchmark</PackageId>
     <Authors>MPCoreDeveloper</Authors>

@@ -7,6 +7,10 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <LangVersion>14</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+    
+    <!-- This is a GUI viewer tool, not a NuGet package -->
+    <IsPackable>false</IsPackable>
+    
     <Version>1.0.5</Version>
     <PackageId>SharpCoreDB.Viewer</PackageId>
     <Authors>MPCoreDeveloper</Authors>

@@ -7,6 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <StartupObject>SingleFileDemo</StartupObject>
+    
+    <!-- This is a demo app, not a NuGet package -->
+    <IsPackable>false</IsPackable>
+    
     <Version>1.0.5</Version>
     <PackageId>SharpCoreDB.Demo</PackageId>
     <Authors>MPCoreDeveloper</Authors>
