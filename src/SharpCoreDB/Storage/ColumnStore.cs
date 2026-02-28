@@ -65,20 +65,22 @@ public sealed partial class ColumnStore<T> : IDisposable where T : class
     /// <summary>
     /// Transposes row-oriented data to columnar format.
     /// This is the key operation for converting row-store to column-store.
-    /// OPTIMIZED: Uses compiled expression trees instead of reflection for 10-50x speedup.
+    /// OPTIMIZED: Uses compiled expression trees + array indexing to avoid enumerator overhead.
     /// </summary>
     /// <param name="rows">The rows to transpose.</param>
     public void Transpose(IEnumerable<T> rows)
     {
-        var rowList = rows.ToList();
-        _rowCount = rowList.Count;
+        // Convert to array for fastest access (avoids List<T> bounds checking overhead)
+        var rowArray = rows as T[] ?? rows.ToArray();
+        _rowCount = rowArray.Length;
 
         if (_rowCount == 0)
             return;
 
-        // Get properties (metadata only, no reflection in inner loop)
+        // Get properties (cached metadata, not used in inner loop)
         var properties = typeof(T).GetProperties();
 
+        // Column-first iteration (best for sequential writes to buffers)
         foreach (var prop in properties)
         {
             var propType = prop.PropertyType;
@@ -96,13 +98,13 @@ public sealed partial class ColumnStore<T> : IDisposable where T : class
                 _ => new ObjectColumnBuffer(_rowCount)
             };
 
-            // Get the cached compiled accessor for this property
+            // Get cached compiled accessor
             var accessor = _propertyAccessors[prop.Name];
 
-            // Fill column with values from rows using compiled accessor (FAST!)
+            // Fill column sequentially (optimal for cache + memory writes)
             for (int i = 0; i < _rowCount; i++)
             {
-                var value = accessor(rowList[i]);
+                var value = accessor(rowArray[i]);
                 buffer.SetValue(i, value);
             }
 

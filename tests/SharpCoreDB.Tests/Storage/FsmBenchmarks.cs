@@ -190,18 +190,18 @@ public class FsmBenchmarks : IDisposable
         }
 
         // Verify complexity
-        // Current implementation uses List<T> with O(n log n) sorting per Free()
-        // Expected: 100x size → ~6-7x time for O(n log n) behavior
-        // Real-world measurement accounts for GC, lock contention, etc.
+        // ✅ OPTIMIZED: Now uses incremental coalescing (only merges with immediate neighbors)
+        // Expected: 100x size → logarithmic time increase for O(log n) behavior
+        // Real-world measurement accounts for GC, lock contention, JIT warmup, etc.
         var ratio = times[2] / times[0];
         _output.WriteLine($"Time ratio (10000 vs 100): {ratio:F2}x");
-        
-        // Current threshold accounts for List-based implementation
-        // TODO: Optimize with SortedSet or balanced tree for true O(log n) behavior
+
+        // Threshold allows for environmental variance and JIT warmup effects
+        // The first iteration (size=100) may be slower due to JIT compilation
         Assert.True(ratio < 200, 
             $"Allocation complexity appears excessive (ratio: {ratio:F2}x). " +
-            $"Current implementation uses List<T> with O(n log n) sorting. " +
-            $"Consider SortedSet or balanced tree for O(log n) allocation.");
+            $"Current implementation uses SortedSet with incremental coalescing. " +
+            $"Expected logarithmic complexity O(log n).");
     }
 
     [Fact]

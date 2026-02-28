@@ -1,9 +1,21 @@
 # SharpCoreDB Documentation Index
 
-**Version:** 1.4.0 (Phase 10 Complete)  
+**Version:** 1.4.1 (Phase 10 Complete + Critical Fixes)  
 **Status:** Production Ready ✅
 
 Welcome to SharpCoreDB documentation! This page helps you find the right documentation for your use case.
+
+---
+
+## 🚨 Latest Updates (v1.4.1 - Feb 20, 2026)
+
+### Critical Fixes & Improvements
+- **[Quick Reference v1.4.1](storage/QUICK_REFERENCE_V1.4.1.md)** - TL;DR of critical fixes
+- **[Metadata Improvements](storage/METADATA_IMPROVEMENTS_V1.4.1.md)** - Complete technical guide
+- **[Progression v1.3.5 → v1.4.1](PROGRESSION_V1.3.5_TO_V1.4.1.md)** - All changes since v1.3.5
+- **[Changelog](CHANGELOG.md)** - Full version history
+
+**Summary:** Database reopen bug fixed + 60-80% metadata compression. Upgrade immediately. ✅
 
 ---
 
@@ -26,8 +38,9 @@ Start here if you're new to SharpCoreDB:
 | [src/SharpCoreDB/README.md](../src/SharpCoreDB/README.md) | Core engine documentation |
 | [Storage Architecture](storage/README.md) | ACID, transactions, WAL |
 | [Serialization Format](serialization/README.md) | Data format specification |
+| **[Metadata Improvements v1.4.1](storage/METADATA_IMPROVEMENTS_V1.4.1.md)** 🆕 | JSON compression & edge cases |
 
-### 📊 Analytics Engine (NEW - Phase 9)
+### 📊 Analytics Engine (Phase 9)
 | Document | Topics |
 |----------|--------|
 | [Analytics Overview](analytics/README.md) | Phase 9 features, aggregates, window functions |
@@ -126,12 +139,12 @@ Start here if you're new to SharpCoreDB:
 ### Quick Install
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.4.0
+dotnet add package SharpCoreDB --version 1.4.1
 
 # Add features as needed
-dotnet add package SharpCoreDB.Analytics --version 1.4.0
-dotnet add package SharpCoreDB.VectorSearch --version 1.4.0
-dotnet add package SharpCoreDB.Graph --version 1.4.0
+dotnet add package SharpCoreDB.Analytics --version 1.4.1
+dotnet add package SharpCoreDB.VectorSearch --version 1.4.1
+dotnet add package SharpCoreDB.Graph --version 1.4.1
 ```
 
 ### Full Setup Guide

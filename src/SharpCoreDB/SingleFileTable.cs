@@ -362,8 +362,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             _isDirty = false;
         }
 
-        using var stream = _storageProvider.GetWriteStream(_dataBlockName, append: false);
-        JsonSerializer.Serialize(stream, serializableRows);
+        // Serialize to byte array to get exact length
+        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows);
+
+        // Write using WriteBlockAsync to properly track data length
+        _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
     }
 
     /// <inheritdoc />
@@ -741,9 +744,58 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         var result = new Dictionary<string, object>(row.Count);
         foreach (var (key, value) in row)
         {
-            result[key] = value ?? DBNull.Value;
+            if (value is null)
+            {
+                result[key] = DBNull.Value;
+            }
+            else if (value is JsonElement element)
+            {
+                // Convert JsonElement to the appropriate CLR type
+                result[key] = element.ValueKind switch
+                {
+                    JsonValueKind.Number => ConvertJsonNumber(element),
+                    JsonValueKind.String => element.GetString() ?? string.Empty,
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Null => DBNull.Value,
+                    _ => value
+                };
+            }
+            else
+            {
+                result[key] = value;
+            }
         }
 
         return result;
+    }
+
+    private static object ConvertJsonNumber(JsonElement element)
+    {
+        if (element.TryGetInt32(out var intValue))
+        {
+            return intValue;
+        }
+
+        if (element.TryGetInt64(out var longValue))
+        {
+            return longValue;
+        }
+
+        // Get as double, but if it's a whole number, convert to long or int
+        var doubleValue = element.GetDouble();
+
+        // Check if it's a whole number
+        if (Math.Abs(doubleValue % 1) < double.Epsilon)
+        {
+            var longVal = (long)doubleValue;
+            if (longVal >= int.MinValue && longVal <= int.MaxValue)
+            {
+                return (int)longVal;
+            }
+            return longVal;
+        }
+
+        return doubleValue;
     }
 }

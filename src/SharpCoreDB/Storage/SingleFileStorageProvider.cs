@@ -220,6 +220,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// <inheritdoc/>
     public int PageSize => _header.PageSize;
 
+    /// <summary>
+    /// Gets the database options used to create this provider.
+    /// </summary>
+    public DatabaseOptions Options => _options;
+
     internal bool HasPendingChanges => Volatile.Read(ref _hasPendingWrites) != 0
         || _blockRegistry.HasDirtyEntries
         || _freeSpaceManager.IsDirty
@@ -1752,11 +1757,11 @@ internal sealed class BlockStream : Stream
     {
         var remaining = _length - _position;
         var toRead = (int)Math.Min(count, remaining);
-        
+
         _baseStream.Position = _startOffset + _position;
         var bytesRead = _baseStream.Read(buffer, offset, toRead);
         _position += bytesRead;
-        
+
         return bytesRead;
     }
 

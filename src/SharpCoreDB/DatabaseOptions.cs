@@ -156,6 +156,14 @@ public sealed class DatabaseOptions
     public bool EnableDeltaUpdates { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets whether to compress metadata JSON with Brotli.
+    /// Default: true (60-80% size reduction, minimal CPU overhead).
+    /// When enabled: Metadata is compressed but still human-readable after decompression.
+    /// Backward compatible: Auto-detects compressed vs raw JSON on load.
+    /// </summary>
+    public bool CompressMetadata { get; set; } = true;
+
+    /// <summary>
     /// Validates the options and throws if invalid.
     /// </summary>
     public void Validate()

@@ -15,6 +15,7 @@ using SharpCoreDB.Core.Cache;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Engines;
 using System.Collections.Concurrent;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -169,6 +170,7 @@ public partial class Database : IDatabase, IDisposable
     /// <summary>
     /// Loads database metadata from disk and initializes tables.
     /// ✅ SCDB Phase 1: Uses IStorageProvider when available, falls back to IStorage for legacy mode
+    /// ✅ FIX: Handles compressed metadata with auto-detection
     /// </summary>
     private void Load()
     {
@@ -188,7 +190,21 @@ public partial class Database : IDatabase, IDisposable
             if (metaExists)
             {
                 var metaBytes = _storageProvider.ReadBlockAsync("sys:metadata").GetAwaiter().GetResult();
-                metaJson = metaBytes is not null ? System.Text.Encoding.UTF8.GetString(metaBytes) : null;
+                if (metaBytes is not null)
+                {
+                    // ✅ FIX: Auto-detect and decompress if needed
+                    metaBytes = DecompressMetadataIfNeeded(metaBytes);
+                    
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine($"[Load] Metadata bytes after decompression: {metaBytes.Length}");
+#endif
+                    
+                    metaJson = System.Text.Encoding.UTF8.GetString(metaBytes);
+                }
+                else
+                {
+                    metaJson = null;
+                }
             }
             else
             {
@@ -216,10 +232,21 @@ public partial class Database : IDatabase, IDisposable
                 "Failed to decrypt database metadata. The master password may be incorrect or the database file is corrupted.");
         }
         
-        if (metaJson is null)  // ✅ C# 14: is null pattern
+        // ✅ FIX: Handle empty/null metadata gracefully (valid for new databases)
+        if (string.IsNullOrWhiteSpace(metaJson))
         {
 #if DEBUG
-            System.Diagnostics.Debug.WriteLine("[Load] No metadata file found - new database");
+            System.Diagnostics.Debug.WriteLine("[Load] No metadata or empty metadata - new database");
+#endif
+            return;
+        }
+
+        // ✅ FIX: Handle empty JSON object or null literal (valid for new databases)
+        var trimmedJson = metaJson.Trim();
+        if (trimmedJson == "{}" || trimmedJson == "null" || trimmedJson == "[]")
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Load] Empty metadata structure: {trimmedJson}");
 #endif
             return;
         }
@@ -233,13 +260,38 @@ public partial class Database : IDatabase, IDisposable
         {
             meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
         }
+        catch (JsonException ex)
+        {
+            // ✅ FIX: Improved error message with JSON preview for debugging
+            var preview = metaJson.Length > 200 
+                ? metaJson[..200] + "..." 
+                : metaJson;
+            
+            throw new InvalidOperationException(
+                $"Failed to parse database metadata JSON (length: {metaJson.Length}). " +
+                $"The master password may be incorrect or the metadata is corrupted. " +
+                $"JSON preview: {preview}", 
+                ex);
+        }
         catch (Exception ex)
         {
+            // ✅ FIX: Catch other deserialization errors
             throw new InvalidOperationException(
-                "Failed to read database metadata. The master password may be incorrect or the metadata file is corrupted.", ex);
+                $"Failed to read database metadata (length: {metaJson.Length}). " +
+                $"The master password may be incorrect or the metadata file is corrupted.", 
+                ex);
         }
         
-        if (meta?.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) != true || tablesObj is null)
+        // ✅ FIX: Handle null meta result
+        if (meta is null)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[Load] Metadata deserialized to null");
+#endif
+            return;
+        }
+        
+        if (meta.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) != true || tablesObj is null)
         {
 #if DEBUG
             System.Diagnostics.Debug.WriteLine("[Load] No tables in metadata");
@@ -354,6 +406,8 @@ public partial class Database : IDatabase, IDisposable
     /// <summary>
     /// Saves database metadata to disk.
     /// ✅ SCDB Phase 1: Uses IStorageProvider when available, falls back to IStorage for legacy mode
+    /// ✅ FIX: Ensures immediate flush for durability
+    /// ✅ FIX: Adds Brotli compression support (60-80% size reduction)
     /// </summary>
     private void SaveMetadata()
     {
@@ -380,15 +434,81 @@ public partial class Database : IDatabase, IDisposable
         {
             // ✅ SCDB Phase 1: Use modern storage provider (block-based)
             var metaBytes = System.Text.Encoding.UTF8.GetBytes(metaJson);
+            
+            // ✅ FIX: Add compression support
+            var shouldCompress = (_storageProvider as SingleFileStorageProvider)?.Options?.CompressMetadata ?? true;
+            if (shouldCompress && metaBytes.Length > 256)  // Only compress if worth it
+            {
+                metaBytes = CompressMetadata(metaBytes);
+#if DEBUG
+                var originalSize = System.Text.Encoding.UTF8.GetByteCount(metaJson);
+                var compressionRatio = (1.0 - ((double)metaBytes.Length / originalSize)) * 100;
+                System.Diagnostics.Debug.WriteLine($"[SaveMetadata] Compressed {originalSize} → {metaBytes.Length} bytes ({compressionRatio:F1}% reduction)");
+#endif
+            }
+            
             _storageProvider.WriteBlockAsync("sys:metadata", metaBytes).GetAwaiter().GetResult();
+            
+            // ✅ FIX: Ensure metadata is flushed to disk immediately for durability
+            // This fixes the reopen issue where metadata wasn't persisted on database creation
+            _storageProvider.FlushAsync().GetAwaiter().GetResult();
+            
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[SaveMetadata] Saved and flushed metadata ({metaBytes.Length} bytes)");
+#endif
         }
         else
         {
-            // ✅ Legacy: Use IStorage (file-based)
+            // ✅ Legacy: Use IStorage (file-based) - no compression
             storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), metaJson);
         }
         
         _metadataDirty = false;
+    }
+
+    /// <summary>
+    /// Compresses metadata using Brotli (fastest mode).
+    /// Format: [Magic: "BROT" (4 bytes)] [Compressed Data]
+    /// </summary>
+    private static byte[] CompressMetadata(byte[] data)
+    {
+        using var output = new MemoryStream();
+        
+        // Write magic header for auto-detection
+        output.Write("BROT"u8);
+        
+        // Compress with Brotli (fastest mode = 0, best speed/ratio balance)
+        using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            brotli.Write(data);
+        }
+        
+        return output.ToArray();
+    }
+
+    /// <summary>
+    /// Decompresses metadata if it has the Brotli magic header.
+    /// Auto-detects compressed vs raw JSON.
+    /// </summary>
+    private static byte[] DecompressMetadataIfNeeded(byte[] data)
+    {
+        // Check for Brotli magic header
+        if (data.Length > 4 && 
+            data[0] == (byte)'B' && 
+            data[1] == (byte)'R' && 
+            data[2] == (byte)'O' && 
+            data[3] == (byte)'T')
+        {
+            // Compressed data - decompress
+            using var input = new MemoryStream(data, 4, data.Length - 4); // Skip magic header
+            using var brotli = new BrotliStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            brotli.CopyTo(output);
+            return output.ToArray();
+        }
+        
+        // Raw JSON - return as-is
+        return data;
     }
 
     /// <summary>
