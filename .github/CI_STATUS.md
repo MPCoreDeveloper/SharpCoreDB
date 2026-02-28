@@ -128,6 +128,6 @@ Then create release on GitHub with:
 
 ---
 
-**Last Updated:** 2026-02-20  
+**Last Updated:** 2026-02-28  
 **Version:** 1.4.1  
 **Status:** ✅ Fully Operational with .NET 10 SDK

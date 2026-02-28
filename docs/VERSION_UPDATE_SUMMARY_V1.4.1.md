@@ -190,5 +190,7 @@ dotnet pack --configuration Release
 ---
 
 **Created:** 2026-02-20  
+**Updated:** 2026-02-28  
+**Version:** 1.4.1  
 **Status:** ✅ All versions updated  
 **Next:** Ready for NuGet publish

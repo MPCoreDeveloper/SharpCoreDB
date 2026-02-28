@@ -215,7 +215,7 @@ All aspects of v1.4.1 improvements are now thoroughly documented:
 
 ---
 
-**Created:** 2026-02-20  
+**Created:** 2026-02-28  
 **Version:** 1.4.1  
 **Documents:** 5 (3 new, 2 updated)  
 **Total Size:** ~36KB
