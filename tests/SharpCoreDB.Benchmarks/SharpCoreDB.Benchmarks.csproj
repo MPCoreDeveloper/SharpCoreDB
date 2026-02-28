@@ -43,6 +43,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <PackageReleaseNotes>v1.0.5: Benchmarks updated: age index creation, grouped inserts/updates, fixed LiteDB transaction usage.</PackageReleaseNotes>
+    
+    <!-- Benchmark project, not a NuGet package -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
 </Project>

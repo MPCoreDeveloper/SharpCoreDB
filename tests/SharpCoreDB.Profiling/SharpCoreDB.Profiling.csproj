@@ -14,6 +14,9 @@
     <Company>SharpCoreDB</Company>
     <Description>Profiling harness for SharpCoreDB.</Description>
     <PackageReleaseNotes>v1.0.5: Added profiling scenarios for single-file WAL and page cache; updated to .NET 10.</PackageReleaseNotes>
+    
+    <!-- Profiling tool, not a NuGet package -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
