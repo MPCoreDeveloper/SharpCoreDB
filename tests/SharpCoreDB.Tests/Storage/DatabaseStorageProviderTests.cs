@@ -70,7 +70,7 @@ public sealed class DatabaseStorageProviderTests : IDisposable
         Assert.True(mockProvider.WrittenBlocks.ContainsKey("sys:metadata"));
         
         var metadataBytes = mockProvider.WrittenBlocks["sys:metadata"];
-        var metadataJson = System.Text.Encoding.UTF8.GetString(metadataBytes);
+        var metadataJson = DecompressMetadataIfNeeded(metadataBytes);
         
         Assert.Contains("\"tables\"", metadataJson);
         Assert.Contains("\"users\"", metadataJson);
@@ -128,6 +128,30 @@ public sealed class DatabaseStorageProviderTests : IDisposable
         // Assert - Metadata should be saved to file (not storage provider)
         var metadataPath = Path.Combine(_testDbPath, "meta.dat");  // ← Fixed: Use meta.dat not metadata.json
         Assert.True(File.Exists(metadataPath), $"Expected metadata file at {metadataPath} but it doesn't exist");
+    }
+
+    /// <summary>
+    /// Decompresses metadata if it has Brotli header, otherwise returns raw JSON.
+    /// </summary>
+    private static string DecompressMetadataIfNeeded(byte[] data)
+    {
+        // Check for Brotli magic header "BROT"
+        if (data.Length > 4 && 
+            data[0] == (byte)'B' && 
+            data[1] == (byte)'R' && 
+            data[2] == (byte)'O' && 
+            data[3] == (byte)'T')
+        {
+            // Compressed - decompress
+            using var input = new MemoryStream(data, 4, data.Length - 4);
+            using var brotli = new System.IO.Compression.BrotliStream(input, System.IO.Compression.CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            brotli.CopyTo(output);
+            return System.Text.Encoding.UTF8.GetString(output.ToArray());
+        }
+        
+        // Raw JSON
+        return System.Text.Encoding.UTF8.GetString(data);
     }
 
     /// <summary>

@@ -436,7 +436,8 @@ public partial class Database : IDatabase, IDisposable
             var metaBytes = System.Text.Encoding.UTF8.GetBytes(metaJson);
             
             // ✅ FIX: Add compression support
-            var shouldCompress = (_storageProvider as SingleFileStorageProvider)?.Options?.CompressMetadata ?? true;
+            // Only compress for SingleFileStorageProvider (not for mock providers in tests)
+            var shouldCompress = (_storageProvider as SingleFileStorageProvider)?.Options?.CompressMetadata ?? false;
             if (shouldCompress && metaBytes.Length > 256)  // Only compress if worth it
             {
                 metaBytes = CompressMetadata(metaBytes);
