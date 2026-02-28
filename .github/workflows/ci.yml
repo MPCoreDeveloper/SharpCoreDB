@@ -31,19 +31,22 @@ jobs:
       with:
         fetch-depth: 0
         
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+    - name: Setup .NET 10
+      uses: actions/setup-dotNET@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: '10.0.x'
+        
+    - name: Display .NET info
+      run: dotNET --info
         
     - name: Restore dependencies
-      run: dotnet restore SharpCoreDB.CI.slnf
+      run: dotNET restore SharpCoreDB.CI.slnf
       
     - name: Build
-      run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore
+      run: dotNET build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
       
     - name: Test
-      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=Debug"
+      run: dotNET test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=Debug&Category!=Manual"
       timeout-minutes: 20
       env:
         CI: "true"
@@ -65,3 +68,31 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  pack:
+    name: Pack NuGet Packages
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup .NET 10
+      uses: actions/setup-dotNET@v4
+      with:
+        dotnet-version: '10.0.x'
+        
+    - name: Pack NuGet packages
+      run: dotNET pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true
+      
+    - name: Upload NuGet artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: ./artifacts/*.nupkg
+        if-no-files-found: error
