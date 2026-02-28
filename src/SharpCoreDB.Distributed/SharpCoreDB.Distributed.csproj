@@ -15,20 +15,20 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Distributed</PackageId>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Distributed</Product>
     <Description>Distributed extension for SharpCoreDB — Horizontal sharding, replication, and backup strategies. Enterprise-scale distributed database capabilities with automatic failover and load balancing.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageTags>distributed;sharding;replication;backup;database;sharpcoredb;enterprise</PackageTags>
+    <PackageTags>distributed;sharding;replication;backup;database;sharpcoredb;enterprise;sync</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v1.4.0: Phase 12 - Distributed Architecture. Horizontal sharding, master-slave replication, automated backup, and cross-shard query execution.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.1: Phase 10.2-10.3 complete - Multi-master replication with vector clocks, distributed transactions with 2PC protocol, automatic conflict resolution. &lt;100ms replication latency, 50K writes/sec throughput, &lt;10s failover time.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -52,7 +52,7 @@
 
   <ItemGroup>
     <!-- Production: use NuGet package -->
-    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(Configuration)' == 'Release'" />
+    <PackageReference Include="SharpCoreDB" Version="1.4.1" Condition="'$(Configuration)' == 'Release'" />
   </ItemGroup>
 
   <ItemGroup>

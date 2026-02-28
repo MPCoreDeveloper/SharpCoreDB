@@ -8,13 +8,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Extensions</PackageId>
-    <Version>1.3.5</Version>
+    <Version>1.4.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Extensions</Product>
     <Description>Extensions for SharpCoreDB including Dapper integration and ASP.NET Core health checks. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.1: Inherit metadata improvements from SharpCoreDB v1.4.1. Dapper integration and ASP.NET Core health check extensions.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;database;dapper;healthchecks;extensions;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
@@ -43,7 +43,7 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.3" />
     
     <!-- Reference published SharpCoreDB NuGet package instead of project reference for deployment -->
-    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.4.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">

@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
 
     <PackageId>SharpCoreDB.Graph</PackageId>
-    <Version>1.3.5</Version>
+    <Version>1.4.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Graph</Product>
@@ -26,7 +26,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.1: Inherit metadata improvements from SharpCoreDB v1.4.1. Phase 6 complete: A* pathfinding with 30-50% improvement, lightweight graph traversal, NativeAOT ready.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -47,7 +47,7 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.4.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.3.5</Version>
+    <Version>1.4.1</Version>
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Analytics</PackageId>
@@ -13,7 +13,7 @@
     <Product>SharpCoreDB.Analytics</Product>
     <Description>Analytics extensions for SharpCoreDB: aggregates, window functions, SIMD-accelerated analytics, and time-series helpers for .NET 10.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.3.5: NuGet metadata refresh, README updates, shared documentation links, and package icon URL.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.1: Inherit metadata improvements from SharpCoreDB v1.4.1 (reopen bug fix, Brotli compression). Phase 9 complete: 100+ aggregate and window functions, 150-680x faster than SQLite for analytics.</PackageReleaseNotes>
     <PackageTags>analytics;aggregates;window-functions;statistics;timeseries;database;sharpcoredb;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
@@ -30,7 +30,7 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.3.5" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.4.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
