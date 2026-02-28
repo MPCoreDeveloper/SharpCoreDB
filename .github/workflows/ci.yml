@@ -32,21 +32,21 @@ jobs:
         fetch-depth: 0
         
     - name: Setup .NET 10
-      uses: actions/setup-dotNET@v4
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
         
     - name: Display .NET info
-      run: dotNET --info
+      run: dotnet --info
         
     - name: Restore dependencies
-      run: dotNET restore SharpCoreDB.CI.slnf
+      run: dotnet restore SharpCoreDB.CI.slnf
       
     - name: Build
-      run: dotNET build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+      run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
       
     - name: Test
-      run: dotNET test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=Debug&Category!=Manual"
+      run: dotnet test SharpCoreDB.CI.slnf --configuration Release --no-build --verbosity normal --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=Debug&Category!=Manual"
       timeout-minutes: 20
       env:
         CI: "true"
@@ -83,12 +83,12 @@ jobs:
         fetch-depth: 0
         
     - name: Setup .NET 10
-      uses: actions/setup-dotNET@v4
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
         
     - name: Pack NuGet packages
-      run: dotNET pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true
+      run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true
       
     - name: Upload NuGet artifacts
       uses: actions/upload-artifact@v4
