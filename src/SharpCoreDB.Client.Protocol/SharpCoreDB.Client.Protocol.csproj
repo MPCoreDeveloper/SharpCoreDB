@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Assembly info -->
+    <AssemblyName>SharpCoreDB.Client.Protocol</AssemblyName>
+    <Version>1.5.0</Version>
+    <Description>Client-side protocol implementation for SharpCoreDB (gRPC, binary)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- gRPC & Protobuf (latest stable) -->
+    <PackageReference Include="Grpc.Net.Client" Version="2.70.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    <PackageReference Include="Grpc.Tools" Version="2.70.0" PrivateAssets="All" />
+    
+    <!-- Include .proto files (shared with server) -->
+    <Protobuf Include="..\SharpCoreDB.Server.Protocol\Protos\*.proto" GrpcServices="Client" Link="Protos\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

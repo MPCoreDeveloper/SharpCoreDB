@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Assembly info -->
+    <AssemblyName>SharpCoreDB.Client</AssemblyName>
+    <Version>1.5.0</Version>
+    <Description>.NET client library for SharpCoreDB network server (ADO.NET-like API)</Description>
+    
+    <!-- NuGet packaging -->
+    <PackageId>SharpCoreDB.Client</PackageId>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Client</Product>
+    <PackageTags>database;client;grpc;adonet;sharpcoredb</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- gRPC Client (latest stable) -->
+    <PackageReference Include="Grpc.Net.Client" Version="2.70.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    
+    <!-- Connection pooling -->
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project references -->
+    <ProjectReference Include="..\SharpCoreDB.Client.Protocol\SharpCoreDB.Client.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

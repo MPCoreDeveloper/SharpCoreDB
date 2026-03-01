@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Assembly info -->
+    <AssemblyName>SharpCoreDB.Server.Core</AssemblyName>
+    <Version>1.5.0</Version>
+    <Description>Core server infrastructure for SharpCoreDB network server</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core dependencies (.NET 10 - latest stable) -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3" />
+    
+    <!-- Async utilities -->
+    <PackageReference Include="System.Threading.Channels" Version="10.0.3" />
+    
+    <!-- Security (latest stable for .NET 10 - updated to non-deprecated) -->
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.4.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project references -->
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Server.Protocol\SharpCoreDB.Server.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+  </ItemGroup>
+
+</Project>

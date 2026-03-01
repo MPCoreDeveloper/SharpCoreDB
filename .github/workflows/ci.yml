@@ -42,6 +42,44 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore SharpCoreDB.CI.slnf
       
+    - name: Fail on deprecated NuGet packages
+      shell: pwsh
+      run: |
+        $output = dotnet list SharpCoreDB.CI.slnf package --deprecated
+        $outputText = $output | Out-String
+        Write-Host $outputText
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to evaluate deprecated packages."
+          exit $LASTEXITCODE
+        }
+
+        if ($outputText -match "has the following deprecated packages") {
+          Write-Error "Deprecated NuGet packages detected. CI is configured to fail."
+          exit 1
+        }
+
+        Write-Host "No deprecated NuGet packages detected."
+      
+    - name: Fail on vulnerable NuGet packages
+      shell: pwsh
+      run: |
+        $output = dotnet list SharpCoreDB.CI.slnf package --vulnerable
+        $outputText = $output | Out-String
+        Write-Host $outputText
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to evaluate vulnerable packages."
+          exit $LASTEXITCODE
+        }
+
+        if ($outputText -match "has the following vulnerable packages") {
+          Write-Error "Vulnerable NuGet packages detected. CI is configured to fail."
+          exit 1
+        }
+
+        Write-Host "No vulnerable NuGet packages detected."
+      
     - name: Build
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
       

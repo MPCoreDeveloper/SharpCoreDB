@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Assembly info -->
+    <AssemblyName>SharpCoreDB.Server.Protocol</AssemblyName>
+    <Version>1.5.0</Version>
+    <Description>Network protocol definitions for SharpCoreDB server (gRPC, binary, HTTP)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- gRPC & Protobuf (latest stable for .NET 10) -->
+    <PackageReference Include="Grpc.Core.Api" Version="2.70.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.70.0" PrivateAssets="All" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    
+    <!-- Include .proto files -->
+    <Protobuf Include="Protos\*.proto" GrpcServices="Both" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Folder for proto files -->
+    <None Remove="Protos\**\*.proto" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    
+    <!-- Server optimizations (C# 14 / .NET 10) -->
+    <TieredPGO>true</TieredPGO>
+    <TieredCompilation>true</TieredCompilation>
+    <PublishTrimmed>false</PublishTrimmed>
+    
+    <!-- Assembly info -->
+    <AssemblyName>sharpcoredb-server</AssemblyName>
+    <Product>SharpCoreDB Network Server</Product>
+    <Description>SharpCoreDB network database server with gRPC and HTTP support</Description>
+    <Version>1.5.0</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- gRPC Server (latest stable for .NET 10) -->
+    <PackageReference Include="Grpc.AspNetCore" Version="2.70.0" />
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.70.0" />
+    
+    <!-- Configuration (.NET 10 - latest stable) -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.3" />
+    
+    <!-- Logging with Serilog (trusted by user, latest stable) -->
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project references -->
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Server.Core\SharpCoreDB.Server.Core.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Server.Protocol\SharpCoreDB.Server.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

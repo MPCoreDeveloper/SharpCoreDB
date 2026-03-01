@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 20
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      dotnet-microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+          - "Aspire.*"
+          - "Grpc.*"
+          - "OpenTelemetry.*"
+      serilog:
+        patterns:
+          - "Serilog*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    labels:
+      - "dependencies"
+      - "github-actions"
