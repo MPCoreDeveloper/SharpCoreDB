@@ -18,7 +18,7 @@
     
     <!-- Charting and Visualization -->
     <PackageReference Include="ScottPlot" Version="5.1.57" />
-    <PackageReference Include="Markdig" Version="1.0.0" />
+    <PackageReference Include="Markdig" Version="1.0.1" />
   </ItemGroup>
 
   <ItemGroup>
