@@ -14,7 +14,7 @@
     
     <!-- Comparative Database Engines -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
-    <PackageReference Include="LiteDB" Version="6.0.0-prerelease.75" />
+    <PackageReference Include="LiteDB" Version="6.0.0-prerelease.77" />
     
     <!-- Charting and Visualization -->
     <PackageReference Include="ScottPlot" Version="5.1.57" />
