@@ -40,10 +40,10 @@
 
   <ItemGroup>
     <!-- YesSql Core for abstractions -->
-    <PackageReference Include="YesSql.Core" Version="5.4.7" />
+    <PackageReference Include="YesSql.Core" Version="1758646704.0.0" />
     
     <!-- Use Sqlite provider as base (most compatible with SharpCoreDB) -->
-    <PackageReference Include="YesSql.Provider.Sqlite" Version="5.4.7" />
+    <PackageReference Include="YesSql.Provider.Sqlite" Version="1758646704.0.0" />
     
     <!-- DI for OrchardCore integration -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" Condition="'$(TargetFramework)' == 'net10.0'" />
