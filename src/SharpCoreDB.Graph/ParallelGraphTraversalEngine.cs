@@ -129,6 +129,9 @@ public sealed class ParallelGraphTraversalEngine
                     }
                 });
 
+            // ✅ Check cancellation after parallel work completes
+            cancellationToken.ThrowIfCancellationRequested();
+
             currentLevel = nextLevel;
         }
 
