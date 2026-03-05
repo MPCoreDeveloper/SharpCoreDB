@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.1.11312.151
@@ -101,9 +101,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Benchmarks", "t
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EventSourcing", "EventSourcing", "{7203E46C-8DA4-FAC9-E59A-991D88538166}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagement", "examples\EventSourcing\OrderManagement\OrderManagement.csproj", "{5FF09D0D-10A3-4297-8BAC-D35EF71AB9F2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagement", "Examples\EventSourcing\OrderManagement\OrderManagement.csproj", "{5FF09D0D-10A3-4297-8BAC-D35EF71AB9F2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagement.Tests", "examples\EventSourcing\OrderManagement.Tests\OrderManagement.Tests.csproj", "{39A7A1C0-D389-4064-834E-13A534B3AA06}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagement.Tests", "Examples\EventSourcing\OrderManagement.Tests\OrderManagement.Tests.csproj", "{39A7A1C0-D389-4064-834E-13A534B3AA06}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderManagement.PersistentDemo", "Examples\EventSourcing\OrderManagement.PersistentDemo\OrderManagement.PersistentDemo.csproj", "{4C852113-C946-BDFF-CD82-4FA389C66C2D}"
 EndProject
