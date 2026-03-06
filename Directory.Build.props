@@ -29,7 +29,7 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>MPCoreDeveloper</Company>
     <Product>SharpCoreDB</Product>
-    <Copyright>Copyright © 2025-2026 MPCoreDeveloper</Copyright>
+    <Copyright>Copyright ï¿½ 2025-2026 MPCoreDeveloper</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB.git</RepositoryUrl>
@@ -42,6 +42,6 @@
 
   <!-- Source Link for debugging -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
   </ItemGroup>
 </Project>

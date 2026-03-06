@@ -26,8 +26,8 @@
 
   <ItemGroup>
     <!-- gRPC Server (latest stable for .NET 10) -->
-    <PackageReference Include="Grpc.AspNetCore" Version="2.70.0" />
-    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.70.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.76.0" />
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.76.0" />
 
     <!-- Logging with Serilog (trusted by user, latest stable) -->
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <!-- Project references -->
+    <PackageReference Include="Grpc.Tools" Version="2.78.0" />
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
     <ProjectReference Include="..\SharpCoreDB.Server.Core\SharpCoreDB.Server.Core.csproj" />
     <ProjectReference Include="..\SharpCoreDB.Server.Protocol\SharpCoreDB.Server.Protocol.csproj" />
