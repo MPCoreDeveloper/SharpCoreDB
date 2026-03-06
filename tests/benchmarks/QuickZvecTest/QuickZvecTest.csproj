@@ -8,8 +8,7 @@
     <Nullable>enable</Nullable>
     <Version>1.5.0</Version>
     <IsPackable>false</IsPackable>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <AssemblyTitle>SharpCoreDB.Benchmarks</AssemblyTitle>
+    <AssemblyTitle>QuickZvecTest</AssemblyTitle>
     <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
     <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
     <AssemblyVersion>1.5.0.0</AssemblyVersion>
@@ -17,14 +16,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.2" />
     <PackageReference Include="System.Text.Json" Version="10.0.0" />
-    <PackageReference Include="BLite" Version="0.9.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
-    <ProjectReference Include="..\..\..\src\SharpCoreDB.EventSourcing\SharpCoreDB.EventSourcing.csproj" />
     <ProjectReference Include="..\..\..\src\SharpCoreDB.VectorSearch\SharpCoreDB.VectorSearch.csproj" />
   </ItemGroup>
 

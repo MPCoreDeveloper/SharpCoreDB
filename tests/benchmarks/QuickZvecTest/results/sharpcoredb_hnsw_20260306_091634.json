@@ -1,0 +1,73 @@
+{
+  "Z1_IndexBuild": [
+    {
+      "Vectors": 1000,
+      "Dimensions": 128,
+      "BuildTimeSec": 0.341,
+      "ThroughputVecPerSec": 2933,
+      "MemoryMB": 0.9
+    },
+    {
+      "Vectors": 10000,
+      "Dimensions": 128,
+      "BuildTimeSec": 5.966,
+      "ThroughputVecPerSec": 1676,
+      "MemoryMB": 0
+    },
+    {
+      "Vectors": 100000,
+      "Dimensions": 128,
+      "BuildTimeSec": 174.642,
+      "ThroughputVecPerSec": 572,
+      "MemoryMB": 0
+    }
+  ],
+  "Z2_SearchLatency": [
+    {
+      "K": 10,
+      "IndexSize": 100000,
+      "Queries": 1000,
+      "P50ms": 0.53,
+      "P95ms": 0.758,
+      "P99ms": 0.964,
+      "AvgMs": 0.566
+    },
+    {
+      "K": 100,
+      "IndexSize": 100000,
+      "Queries": 1000,
+      "P50ms": 0.963,
+      "P95ms": 1.329,
+      "P99ms": 1.608,
+      "AvgMs": 1.005
+    }
+  ],
+  "Z3_Throughput": [
+    {
+      "Threads": 1,
+      "DurationSec": 10,
+      "TotalQueries": 18147,
+      "QPS": 1814
+    },
+    {
+      "Threads": 4,
+      "DurationSec": 10,
+      "TotalQueries": 62302,
+      "QPS": 6230
+    },
+    {
+      "Threads": 8,
+      "DurationSec": 10,
+      "TotalQueries": 92308,
+      "QPS": 9230
+    }
+  ],
+  "Z4_Recall": [
+    {
+      "K": 10,
+      "IndexSize": 10000,
+      "Queries": 100,
+      "RecallPercent": 65.5
+    }
+  ]
+}

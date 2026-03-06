@@ -124,7 +124,7 @@ public class BliteCrudBenchmark : BenchmarkContext
 
         for (int i = 0; i < TotalInserts; i++)
         {
-            var doc = DataGenerator.GenerateDocument();
+            var doc = DataGenerator.GenerateDocument(i + 1); // Unique ID starting from 1
             var opStart = Stopwatch.GetTimestamp();
             
             insertStatements.Add(doc.ToInsertSQL(TableName));

@@ -4,6 +4,7 @@
 - Test programs should be located in the `tests` folder and not in the repository root.
 - All project documentation must be written in English. This includes docs, README files, technical specs, implementation plans, and code comments.
 - Provide periodic progress updates while work is ongoing to ensure the assistant is not stuck.
+- When benchmarking competitor databases (like BLite), document the developer experience (DX) honestly. If a library's API is hard to use, poorly documented, or has mismatches between docs and actual API, note that as a real finding in the benchmark report. User-friendliness and ease of integration matter as much as raw performance numbers.
 
 ## Code Style
 - Use specific formatting rules.

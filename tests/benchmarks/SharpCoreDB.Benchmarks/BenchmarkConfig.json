@@ -70,6 +70,6 @@
   "output": {
     "format": "json",
     "csv_export": true,
-    "percentiles": [50, 90, 95, 99, 99.9]
+    "percentiles": [50, 90, 95, 99, 999]
   }
 }

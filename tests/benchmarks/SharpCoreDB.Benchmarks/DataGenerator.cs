@@ -127,9 +127,10 @@ public class Document
     /// </summary>
     public string ToInsertSQL(string tableName = "documents")
     {
+        var idValue = Id.HasValue ? Id.Value.ToString() : "NULL";
         var tagsJson = JsonSerializer.Serialize(Tags);
-        return $"INSERT INTO {tableName} (name, email, age, score, tags, created_at, updated_at, is_active, metadata) " +
-               $"VALUES ('{Name}', '{Email}', {Age}, {Score}, '{tagsJson}', '{CreatedAt:yyyy-MM-dd HH:mm:ss}', " +
+        return $"INSERT INTO {tableName} (id, name, email, age, score, tags, created_at, updated_at, is_active, metadata) " +
+               $"VALUES ({idValue}, '{Name}', '{Email}', {Age}, {Score}, '{tagsJson}', '{CreatedAt:yyyy-MM-dd HH:mm:ss}', " +
                $"'{UpdatedAt:yyyy-MM-dd HH:mm:ss}', {(IsActive ? 1 : 0)}, '{Metadata}')";
     }
 

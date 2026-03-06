@@ -88,14 +88,48 @@ class Program
             b4.Teardown();
             Console.WriteLine();
 
-            // TODO: Execute Zvec scenarios (Z1-Z5)
+            // Execute Zvec scenarios (Z1-Z5)
             Console.WriteLine("=== Zvec Scenarios ===");
-            Console.WriteLine("[Week 5] Zvec scenarios not yet implemented");
-            Console.WriteLine("  - Z1: Index Build (1M vectors)");
-            Console.WriteLine("  - Z2: Top-K Latency");
-            Console.WriteLine("  - Z3: Throughput Under Load");
-            Console.WriteLine("  - Z4: Recall vs Latency");
-            Console.WriteLine("  - Z5: Insert Performance");
+            Console.WriteLine();
+
+            // Z1: Index Build
+            Console.WriteLine("[Main] Starting Z1: Index Build");
+            var z1 = new Zvec.ZvecIndexBuildBenchmark();
+            z1.Setup();
+            await z1.Run();
+            z1.Teardown();
+            Console.WriteLine();
+
+            // Z2: Top-K Query Latency
+            Console.WriteLine("[Main] Starting Z2: Top-K Query Latency");
+            var z2 = new Zvec.ZvecTopKLatencyBenchmark();
+            z2.Setup();
+            await z2.Run();
+            z2.Teardown();
+            Console.WriteLine();
+
+            // Z3: Throughput Under Load
+            Console.WriteLine("[Main] Starting Z3: Throughput Under Load");
+            var z3 = new Zvec.ZvecThroughputBenchmark();
+            z3.Setup();
+            await z3.Run();
+            z3.Teardown();
+            Console.WriteLine();
+
+            // Z4: Recall vs Latency
+            Console.WriteLine("[Main] Starting Z4: Recall vs Latency");
+            var z4 = new Zvec.ZvecRecallLatencyBenchmark();
+            z4.Setup();
+            await z4.Run();
+            z4.Teardown();
+            Console.WriteLine();
+
+            // Z5: Incremental Insert
+            Console.WriteLine("[Main] Starting Z5: Incremental Insert");
+            var z5 = new Zvec.ZvecIncrementalInsertBenchmark();
+            z5.Setup();
+            await z5.Run();
+            z5.Teardown();
             Console.WriteLine();
         }
         catch (Exception ex)
@@ -359,7 +393,7 @@ public class OutputConfig
     public bool CsvExport { get; set; } = true;
 
     [JsonPropertyName("percentiles")]
-    public int[] Percentiles { get; set; } = [50, 90, 95, 99, 99_9];
+    public int[] Percentiles { get; set; } = [50, 90, 95, 99, 999];
 }
 
 public class EnvironmentSnapshot
