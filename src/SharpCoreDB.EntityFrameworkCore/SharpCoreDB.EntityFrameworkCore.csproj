@@ -64,7 +64,7 @@
        The same DLL works on all platforms. Per-RID runtimes/ folders are only
        needed for native code. The standard lib/net10.0/ layout is correct. -->
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.200" />
   </ItemGroup>
 
 </Project>
