@@ -89,7 +89,7 @@
     <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll')" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.200" />
   </ItemGroup>
 
 </Project>
