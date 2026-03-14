@@ -216,8 +216,7 @@ public class SingleFileTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Sync-over-async deadlock in SingleFileStorageProvider.Dispose() — requires async disposal rewrite.")]
-    [Trait("Category", "Debug")]
+    [Fact]
     public void SingleFileDatabase_ExecuteCompiled_WithParameterizedPlan_ReturnsRows()
     {
         // Arrange

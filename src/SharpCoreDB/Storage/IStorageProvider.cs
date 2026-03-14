@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 /// Provides unified interface for different storage backends.
 /// C# 14: Uses modern async patterns and ReadOnlySpan for zero-copy.
 /// </summary>
-public interface IStorageProvider : IDisposable
+public interface IStorageProvider : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets the storage mode of this provider.

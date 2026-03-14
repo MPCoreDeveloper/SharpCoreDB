@@ -27,13 +27,16 @@ This document tracks test-related runtime issues that can affect reliability, pe
 5. **LINQ translator enum-convert expressions**
    - `ExpressionType.Convert` / `ConvertChecked` are now translated in unary visitor flow.
 
-### ⚠️ Deferred (Known Limitation)
+### ⚠️ Deferred (Known Limitation) — ✅ NOW RESOLVED
 
-1. **Single-file disposal deadlock path with parameterized `ExecuteCompiled`**
-   - Scenario: `SingleFileDatabase.ExecuteCompiled` using parameterized plans can still hang during disposal in specific shutdown flows.
-   - Current mitigation: safer disposal ordering and queue shutdown safeguards.
-   - Remaining work: async lifecycle refactor to `IAsyncDisposable` in single-file storage provider internals (remove sync-over-async shutdown path).
-   - Test status: affected test remains explicitly skipped with clear reason to avoid suite-wide hangs.
+1. **Single-file parameterized `ExecuteCompiled` hang**
+   - **Root cause found:** `FastSqlLexer.NextToken()` had an infinite loop — the `?` parameter placeholder character did not match any case in the switch expression, and the default case returned an `Unknown` token without advancing `position`. Since `Tokenize()` discards `Unknown` tokens and re-reads, this caused an infinite loop.
+   - **Fix applied (3 files):**
+     - `FastSqlLexer.cs`: Added `Parameter` token type for `?`, added `AdvanceUnknown()` safety method for default case.
+     - `EnhancedSqlParser.Expressions.cs`: Added `?` placeholder handling in `ParseLiteral()`.
+     - `QueryCompiler.cs`: Allow null `whereFilter` when parameter placeholders are present (parameterized queries use `BindPreparedSql` at execution time).
+   - Additionally, `IAsyncDisposable` was implemented across all storage providers with proper disposal ordering.
+   - Test `SingleFileDatabase_ExecuteCompiled_WithParameterizedPlan_ReturnsRows` now passes in ~1 second.
 
 ## Validation Snapshot
 
@@ -43,6 +46,6 @@ This document tracks test-related runtime issues that can affect reliability, pe
 
 ## Follow-up Work
 
-- Implement async disposal lifecycle for single-file provider.
-- Re-enable and stabilize the previously skipped parameterized `ExecuteCompiled` single-file test.
+- ✅ ~~Implement async disposal lifecycle for single-file provider.~~ Done — `IAsyncDisposable` implemented across all storage providers.
+- ✅ ~~Re-enable and stabilize the previously skipped parameterized `ExecuteCompiled` single-file test.~~ Done — test passes in ~1 second.
 - Keep this document synchronized with `docs/PROJECT_STATUS.md` after each remediation pass.

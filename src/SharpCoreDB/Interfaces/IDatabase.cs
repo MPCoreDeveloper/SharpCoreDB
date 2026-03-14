@@ -13,7 +13,7 @@ using SharpCoreDB.Storage;
 /// ✅ NEW: VACUUM support for single-file storage defragmentation.
 /// ✅ NEW: last_insert_rowid() support for SQLite compatibility.
 /// </summary>
-public interface IDatabase
+public interface IDatabase : IAsyncDisposable
 {
     /// <summary>
     /// Initializes the database with a master password.

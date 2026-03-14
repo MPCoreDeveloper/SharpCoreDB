@@ -22,7 +22,7 @@ using Xunit;
 /// 3. EnhancedSqlParser error recovery (trailing tokens)
 /// 4. LINQ enum Convert expressions
 /// </summary>
-public sealed class EngineLimitationFixTests : IDisposable
+public sealed class EngineLimitationFixTests : IAsyncLifetime
 {
     private readonly string _testDbPath;
     private readonly Database _db;
@@ -44,9 +44,11 @@ public sealed class EngineLimitationFixTests : IDisposable
             config: DatabaseConfig.Benchmark);
     }
 
-    public void Dispose()
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
     {
-        try { _db?.Dispose(); } catch { }
+        try { await _db.DisposeAsync().ConfigureAwait(false); } catch { }
 
         GC.Collect();
         GC.WaitForPendingFinalizers();

@@ -27,7 +27,7 @@ using System.Text.Json;
 /// Purpose: Core initialization, field declarations, Load/Save metadata, Dispose pattern
 /// Dependencies: IStorage, IUserService, tables dictionary, caches
 /// </summary>
-public partial class Database : IDatabase, IDisposable
+public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 {
     private readonly IStorage storage;
     private readonly IUserService userService;
@@ -679,6 +679,48 @@ public partial class Database : IDatabase, IDisposable
     public void Dispose()
     {
         Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the database asynchronously, properly awaiting storage provider shutdown.
+    /// Use <c>await using</c> to avoid the sync-over-async hang in single-file disposal paths.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+
+        if (!isReadOnly)
+        {
+            try
+            {
+                SaveMetadata();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[SharpCoreDB] Failed to save metadata during DisposeAsync: {ex.Message}");
+#endif
+                _ = ex;
+            }
+        }
+
+        if (_storageProvider is IAsyncDisposable asyncProvider)
+        {
+            await asyncProvider.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            _storageProvider?.Dispose();
+        }
+
+        storageEngine?.Dispose();
+        groupCommitWal?.Dispose();
+        pageCache?.Clear(false, null);
+        queryCache?.Clear();
+        ClearPlanCache();
+
+        _disposed = true;
         GC.SuppressFinalize(this);
     }
 

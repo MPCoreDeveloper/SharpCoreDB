@@ -238,5 +238,11 @@ public sealed class DatabaseStorageProviderTests : IDisposable
         };
 
         public void Dispose() { }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
     }
 }

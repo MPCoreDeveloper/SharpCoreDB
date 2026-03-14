@@ -253,6 +253,14 @@ public partial class EnhancedSqlParser
 
     private LiteralNode? ParseLiteral()
     {
+        // Positional parameter placeholder (?)
+        var paramMatch = Regex.Match(_sql.Substring(_position), @"^\s*\?", RegexOptions.IgnoreCase);
+        if (paramMatch.Success)
+        {
+            _position += paramMatch.Length;
+            return new LiteralNode { Position = _position, Value = "?" };
+        }
+
         // String literal
         var stringMatch = Regex.Match(_sql.Substring(_position), @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase);
         if (stringMatch.Success)

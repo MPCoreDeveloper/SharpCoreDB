@@ -43,6 +43,8 @@ public sealed class FastSqlLexer
         Star = 9,
         /// <summary>End of file marker.</summary>
         EOF = 10,
+        /// <summary>Parameter placeholder (? for positional parameters).</summary>
+        Parameter = 11,
     }
 
     /// <summary>
@@ -139,12 +141,13 @@ public sealed class FastSqlLexer
             '(' => Advance(TokenType.LeftParen),
             ')' => Advance(TokenType.RightParen),
             '*' => Advance(TokenType.Star),
+            '?' => Advance(TokenType.Parameter),
             '\'' => ReadString('\''),
             '"' => ReadString('"'),
             '=' or '!' or '<' or '>' => ReadOperator(),
             _ when IsLetter(ch) => ReadKeywordOrIdentifier(sourceSpan),
             _ when IsDigit(ch) => ReadNumber(),
-            _ => new Token { Type = TokenType.Unknown, Start = start, Length = 1 }
+            _ => AdvanceUnknown(start)
         };
     }
 
@@ -272,6 +275,22 @@ public sealed class FastSqlLexer
         return new Token
         {
             Type = type,
+            Start = start,
+            Length = 1
+        };
+    }
+
+    /// <summary>
+    /// Advances position past an unrecognized character and returns an Unknown token.
+    /// Prevents infinite loops when the lexer encounters unsupported characters.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Token AdvanceUnknown(int start)
+    {
+        position++;
+        return new Token
+        {
+            Type = TokenType.Unknown,
             Start = start,
             Length = 1
         };

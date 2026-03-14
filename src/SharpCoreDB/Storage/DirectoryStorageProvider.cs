@@ -411,6 +411,13 @@ public sealed class DirectoryStorageProvider : IStorageProvider
         }
     }
 
+    /// <inheritdoc/>
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+
     private string GetBlockPath(string blockName)
     {
         // Sanitize block name for file system and add .dat extension

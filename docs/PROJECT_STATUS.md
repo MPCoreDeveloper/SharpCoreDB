@@ -1,12 +1,12 @@
 # SharpCoreDB Project Status
 
 **Version:** 1.5.0  
-**Status:** ⚠️ Production Ready with One Deferred Engine Limitation  
+**Status:** ✅ Production Ready — All Known Limitations Resolved  
 **Last Updated:** March 14, 2026
 
 ## 🎯 Current Status
 
-> **Implementation audit (March 14, 2026):** Engine limitation remediation pass completed for parser/runtime behavior. Five previously documented gaps are now implemented and validated. One disposal deadlock scenario remains deferred (see below).
+> **Implementation audit (March 14, 2026):** Engine limitation remediation pass completed for parser/runtime behavior. All previously documented gaps are now implemented and validated, including the parameterized `ExecuteCompiled` hang (root cause: infinite loop in `FastSqlLexer` on `?` placeholders).
 
 SharpCoreDB is a **production-ready, high-performance embedded AND networked database** for .NET 10 with enterprise-scale distributed capabilities, server mode, and advanced GraphRAG analytics.
 
@@ -18,10 +18,10 @@ SharpCoreDB is a **production-ready, high-performance embedded AND networked dat
 - Enhanced SQL parser trailing-token validation to reliably set `HasErrors` on malformed trailing content.
 - LINQ translator support for `ExpressionType.Convert`/`ConvertChecked` in enum-related comparisons.
 
-### ⚠️ Deferred Limitation (Tracked)
+### ✅ Previously Deferred Limitation — Resolved
 
-- `SingleFileDatabase.ExecuteCompiled` with parameterized plans can still hang in specific disposal/shutdown paths.
-- Mitigations were applied (safer disposal ordering), but a full fix requires async disposal lifecycle refactoring (`IAsyncDisposable`) in single-file storage provider internals.
+- `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in `FastSqlLexer.NextToken()` — the `?` character was not recognized, and the default case did not advance the read position.
+- **Fixed:** `FastSqlLexer` (parameter token + safety advance), `EnhancedSqlParser` (`?` placeholder parsing), `QueryCompiler` (parameterized plan compilation). `IAsyncDisposable` lifecycle also implemented across all storage providers.
 
 ### 🧪 Validation Baseline
 

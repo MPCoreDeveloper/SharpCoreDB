@@ -749,9 +749,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                     // ✅ Phase 3 Fix: Wait for first write OR flush signal
                     var waitTask = _writeQueue.Reader.WaitToReadAsync(_writeCts.Token).AsTask();
                     var flushTask = _flushSignal.WaitAsync(WRITE_BATCH_TIMEOUT_MS, _writeCts.Token);
-                    
+
                     var completedTask = await Task.WhenAny(waitTask, flushTask).ConfigureAwait(false);
-                    
+
                     if (completedTask == flushTask && await flushTask)
                     {
                         // ✅ Flush signal received - process immediately
@@ -761,8 +761,16 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                             if (batch.Count >= WRITE_BATCH_SIZE) break;
                         }
                     }
-                    else if (await waitTask)
+                    else
                     {
+                        var canRead = await waitTask.ConfigureAwait(false);
+                        if (!canRead)
+                        {
+                            // Channel completed — no more data will arrive. Exit gracefully
+                            // to prevent tight-loop spinning while awaiting CTS cancellation.
+                            break;
+                        }
+
                         // Normal batch collection
                         while (batch.Count < WRITE_BATCH_SIZE && _writeQueue.Reader.TryRead(out var op))
                         {
@@ -1241,6 +1249,15 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     public void Dispose()
     {
         if (_disposed) return;
+        // Delegate to DisposeAsync via Task.Run to escape any SynchronizationContext
+        // and prevent sync-over-async deadlocks in ASP.NET / UI thread shutdown paths.
+        Task.Run(() => DisposeAsync().AsTask()).GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
 
         try
         {
@@ -1249,28 +1266,38 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 RollbackTransaction();
             }
 
-            // Complete the write queue first so the worker can drain remaining items
+            // Cancel the write worker FIRST to prevent tight-loop spinning.
+            // If TryComplete() is called before CancelAsync(), the worker enters a
+            // hot loop because WaitToReadAsync returns false immediately on a completed
+            // channel but the CTS is not yet canceled, creating thousands of pending
+            // semaphore wait tasks that overwhelm CancelAsync callback processing.
+            await _writeCts.CancelAsync().ConfigureAwait(false);
+
+            // Signal queue completion so the worker's finally block drains remaining items
             _writeQueue.Writer.TryComplete();
 
-            // Cancel the write worker and wait for it to finish draining
-            _writeCts.Cancel();
             try
             {
-                _writeWorkerTask.GetAwaiter().GetResult();
+                // Safety timeout prevents indefinite hang if the worker is stuck
+                await _writeWorkerTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // Expected
+                // Expected on shutdown
+            }
+            catch (TimeoutException)
+            {
+                // Worker didn't exit in time — proceed with best-effort disposal
             }
             catch
             {
                 // Worker may fail during shutdown — best effort
             }
 
-            // Force flush any remaining pending changes (guard against disposed subsystems)
+            // Force flush any remaining pending changes
             try
             {
-                ForceFlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+                await ForceFlushAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch
             {
@@ -1284,7 +1311,6 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             _memoryMappedFile?.Dispose();
             _fileStream?.Dispose();
 
-            // Cleanup write queue resources
             _writeCts?.Dispose();
             _flushSignal?.Dispose();
         }
@@ -1296,6 +1322,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         {
             _disposed = true;
         }
+
+        GC.SuppressFinalize(this);
     }
 
     // ==================== PRIVATE HELPER METHODS ====================

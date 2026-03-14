@@ -104,10 +104,11 @@ public static class QueryCompiler
                     whereFilterIndexed = CompileWhereClauseIndexed(selectNode.Where.Condition, columnIndices);
                 }
 
-                if (whereFilter == null)
+                if (whereFilter == null && parameterNames.Count == 0)
                 {
-                    // Refuse compilation when WHERE cannot be compiled.
-                    // This prevents accidental unfiltered execution from compiled plans.
+                    // Refuse compilation when WHERE cannot be compiled and there are no
+                    // parameter placeholders. Parameterized queries use BindPreparedSql
+                    // at execution time, so a compiled WHERE filter is not required.
                     return null;
                 }
             }

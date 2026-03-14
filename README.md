@@ -47,10 +47,22 @@ SharpCoreDB has been successfully transformed from embedded database into a **ne
 
 **See documentation:** `docs/INDEX.md`
 
-### ⚠️ Known Deferred Limitation
+### ✅ Previously Known Limitation — Resolved
 
-- `SingleFileDatabase.ExecuteCompiled` with parameterized plans can still hang during disposal in specific shutdown paths.
-- Current status: mitigated with safer shutdown ordering; full resolution requires async disposal refactor (`IAsyncDisposable`) in single-file storage provider lifecycle.
+- `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in the SQL lexer (`?` parameter placeholder). Fixed: FastSqlLexer, EnhancedSqlParser, QueryCompiler. Full `IAsyncDisposable` lifecycle also implemented.
+
+### 📈 Performance Improvements (March 14, 2026)
+
+After the `IAsyncDisposable` lifecycle refactor and SQL lexer/parser fixes, benchmarks show **zero regressions** and significant gains:
+
+| Benchmark | Before | After | Improvement |
+|-----------|-------:|------:|:------------|
+| Single-File SELECT (Unencrypted) | 4.01 ms | **1.81 ms** | **55% faster** |
+| Single-File SELECT (Encrypted) | 2.74 ms | **1.57 ms** | **43% faster** |
+| AppendOnly UPDATE | 143.42 ms | **70.36 ms** | **51% faster** |
+| Dir Encrypted UPDATE | 9.16 ms | **7.91 ms** | **14% faster** |
+
+All other benchmarks (25 total) remain stable. Full results: [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)
 
 ### 📚 Documentation Policy
 

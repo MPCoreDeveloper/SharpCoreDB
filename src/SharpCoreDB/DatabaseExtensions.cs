@@ -136,7 +136,7 @@ public class DatabaseFactory(IServiceProvider services)
 /// routes through <c>SqlParser.ExecuteSelectQuery</c>.
 /// </para>
 /// </summary>
-internal sealed class SingleFileDatabase : IDatabase, IDisposable
+internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposable
 {
     private readonly IStorageProvider _storageProvider;
     private readonly string _dbPath;
@@ -452,7 +452,24 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable
 
     public void Dispose()
     {
-        if (_storageProvider is IDisposable disposable)
+        if (_storageProvider is IAsyncDisposable)
+        {
+            // Delegate to DisposeAsync to ensure storage provider is properly awaited
+            Task.Run(() => DisposeAsync().AsTask()).GetAwaiter().GetResult();
+        }
+        else if (_storageProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_storageProvider is IAsyncDisposable asyncProvider)
+        {
+            await asyncProvider.DisposeAsync().ConfigureAwait(false);
+        }
+        else if (_storageProvider is IDisposable disposable)
         {
             disposable.Dispose();
         }

@@ -21,10 +21,13 @@
 
 ---
 
-## ⚠️ Known Deferred Limitation
+## ✅ Previously Deferred Limitation — Resolved
 
-- `SingleFileDatabase.ExecuteCompiled` with parameterized plans can still hang in specific disposal/shutdown paths.
-- Mitigation is in place (safer disposal ordering), but full resolution requires async disposal refactoring (`IAsyncDisposable`) in single-file storage internals.
+- `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in the SQL lexer when encountering `?` parameter placeholders.
+- **Root cause:** `FastSqlLexer.NextToken()` did not advance the position on unrecognized characters, causing `Tokenize()` to loop forever.
+- **Fixed in:** FastSqlLexer (parameter token support + safety advance), EnhancedSqlParser (? placeholder parsing), QueryCompiler (parameterized plan compilation). Full `IAsyncDisposable` lifecycle also implemented across all storage providers.
+- **Test coverage:** `SingleFileDatabase_ExecuteCompiled_WithParameterizedPlan_ReturnsRows` passes in ~1 second.
+- **Performance impact:** Single-File SELECT **43-55% faster**, AppendOnly UPDATE **51% faster**, zero regressions across all 25 benchmarks (March 14, 2026). See [`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md).
 
 ---
 
