@@ -406,7 +406,8 @@ public sealed class GenericLoadTests
         Console.WriteLine($"   AVG(Id): {avgId:F2}");
     }
 
-    [Fact(Skip = "Heavy column store aggregate scenario is disabled in CI for stability.")]
+    [Fact]
+    [Trait("Category", "Performance")]
     public void ColumnStore_WithMetrics_SIMD_Aggregates_100k()
     {
         // Arrange: Generate 100k metrics
@@ -450,69 +451,6 @@ public sealed class GenericLoadTests
         Console.WriteLine($"   MAX(Value): {max:F2}");
         Console.WriteLine($"   COUNT: {count:N0}");
         Console.WriteLine($"   Throughput: {500_000.0 / aggSw.Elapsed.TotalMilliseconds:F0}k ops/ms");
-    }
-
-    #endregion
-
-    #region LINQ with Struct/Enum Load Tests
-
-    [Fact(Skip = "LINQ translator doesn't support Convert expressions (enum comparisons) yet - known limitation")]
-    public void LINQ_WithEnumFilters_Load5k()
-    {
-        // Arrange
-        var mvcc = new MvccManager<int, Product>("products_linq");
-        
-        // Populate
-        using (var tx = mvcc.BeginTransaction())
-        {
-            for (int i = 0; i < 5_000; i++)
-            {
-                var product = new Product(
-                    i,
-                    Name: $"Product{i}",
-                    Category: (ProductCategory)((i % 6) + 1),
-                    Price: new Money((i % 500) + 19.99m, "USD"),
-                    Status: new OrderStatus { State = (OrderState)(i % 5), LastUpdated = DateTime.Now },
-                    CreatedAt: DateTime.Now
-                );
-
-                mvcc.Insert(i, product, tx);
-            }
-
-            mvcc.CommitTransaction(tx);
-        }
-
-        // Act: LINQ queries with enum filters
-        using var readTx = mvcc.BeginTransaction(isReadOnly: true);
-        var queryable = new MvccQueryable<int, Product>(mvcc, readTx);
-
-        var sw = Stopwatch.StartNew();
-        
-        // Query 1: Filter by enum
-        var electronics = queryable
-            .Where(p => p.Category == ProductCategory.Electronics)
-            .ToList();
-        
-        // Query 2: Multiple enum values
-        var categories = queryable
-            .Where(p => p.Category == ProductCategory.Electronics || 
-                       p.Category == ProductCategory.Books)
-            .ToList();
-        
-        // Query 3: Group by enum
-        var byCategory = queryable
-            .GroupBy(p => p.Category)
-            .ToList();
-        
-        sw.Stop();
-
-        // Assert
-        Console.WriteLine($"? LINQ with enum filters (5k products)");
-        Console.WriteLine($"   Query time: {sw.ElapsedMilliseconds}ms");
-        Console.WriteLine($"   Electronics: {electronics.Count}");
-        Console.WriteLine($"   Electronics + Books: {categories.Count}");
-        Console.WriteLine($"   Categories: {byCategory.Count}");
-        Console.WriteLine($"   Throughput: {15_000.0 / sw.Elapsed.TotalSeconds:N0} ops/sec");
     }
 
     #endregion

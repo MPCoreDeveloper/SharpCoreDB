@@ -216,7 +216,8 @@ public class SingleFileTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Crashes test host process (exit code -1) during disposal, blocking all subsequent tests. Root cause: SingleFileDatabase.ExecuteCompiled with parameters triggers native crash in storage provider cleanup. TODO: Fix disposal in SingleFileStorageProvider.")]
+    [Fact(Skip = "Crashes test host process (exit code -1) during disposal, blocking all subsequent tests.")]
+    [Trait("Category", "Debug")]
     public void SingleFileDatabase_ExecuteCompiled_WithParameterizedPlan_ReturnsRows()
     {
         // Arrange

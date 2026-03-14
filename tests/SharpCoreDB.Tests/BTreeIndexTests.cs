@@ -269,7 +269,7 @@ public class BTreeIndexTests
         Assert.Equal("email", index.ColumnName);
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    [Fact]
     public void BTreeIndex_LargeDataSet_PerformsWell()
     {
         // Arrange
@@ -296,7 +296,7 @@ public class BTreeIndexTests
         Assert.Equal(recordCount, stats.TotalEntries);
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    [Fact]
     public void BTreeIndex_DuplicateKeys_HandledCorrectly()
     {
         // Arrange
@@ -321,7 +321,7 @@ public class BTreeIndexTests
         Assert.Equal(100, stats.TotalEntries);
     }
 
-    [Fact(Skip = "Range scan currently unstable on CI; pending engine fix.")]
+    [Fact]
     public void BTreeIndex_DecimalKeys_WorkCorrectly()
     {
         // Arrange

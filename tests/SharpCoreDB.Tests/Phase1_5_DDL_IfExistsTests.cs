@@ -374,7 +374,7 @@ public sealed class Phase1_5_DDL_IfExistsTests : IDisposable
             _db.ExecuteSQL("CREATE INDEX IF NOT EXISTS idx_test ON nonexistent_table(col)"));
     }
 
-    [Fact(Skip = "Multiple IF EXISTS clauses need further investigation - Phase 1.5.1")]
+    [Fact]
     public void MultipleIfExistsClauses_InSingleTransaction_ShouldWork()
     {
         // Arrange

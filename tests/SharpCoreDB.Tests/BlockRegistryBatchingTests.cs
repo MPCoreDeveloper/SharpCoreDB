@@ -271,14 +271,9 @@ public class BlockRegistryBatchingTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Direct storage provider tests are implementation-specific - covered by integration tests")]
-    public async Task ReadBlockAsync_ValidatesChecksum_OnRead()
-    {
-        // This functionality is covered by integration tests through Database API
-        await Task.CompletedTask;
-    }
+    // Removed: ReadBlockAsync_ValidatesChecksum_OnRead was an empty stub covered by integration tests
 
-    [Fact(Skip = "File persistence edge case - needs investigation of registry loading")]
+    [Fact]
     public async Task BlockRegistry_Dispose_FlushesRemainingDirty()
     {
         // Arrange

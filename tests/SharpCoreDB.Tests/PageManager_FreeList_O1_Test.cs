@@ -29,7 +29,8 @@ public class PageManager_FreeList_O1_Test : IDisposable
         Directory.CreateDirectory(testDir);
     }
 
-    [Fact(Skip = "Free list reallocation timing is flaky in CI; pending tuning.")]
+    [Fact]
+    [Trait("Category", "Performance")]
     public void ReallocatePage_Should_Reuse_Freed_Pages_O1()
     {
         // Arrange

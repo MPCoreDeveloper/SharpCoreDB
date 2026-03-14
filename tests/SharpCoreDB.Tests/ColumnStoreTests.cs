@@ -353,7 +353,7 @@ public sealed class ColumnStoreTests
         columnStore.Dispose();
     }
 
-    [Fact(Skip = "Column store aggregate micro-benchmark skipped in CI environment.")]
+    [Fact]
     public void ColumnStore_AggregatesOnMultipleColumns_Under2ms()
     {
         // Arrange
@@ -388,7 +388,7 @@ public sealed class ColumnStoreTests
 
     #region Performance Comparison Tests
 
-    [Fact(Skip = "Performance test: timing varies due to JIT warmup, CPU throttling, and GC pauses. Use BenchmarkDotNet for accurate measurements.")]
+    [Fact]
     public void ColumnStore_VsLinq_PerformanceComparison()
     {
         // Arrange
