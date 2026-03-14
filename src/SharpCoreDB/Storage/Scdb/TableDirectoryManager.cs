@@ -365,9 +365,14 @@ internal sealed class TableDirectoryManager : IDisposable
             // Store in block
             var blockName = $"table:{tableName}:columns";
             _provider.WriteBlockAsync(blockName, span.ToArray()).GetAwaiter().GetResult();
-            
-            // Return offset (simplified - in real implementation would return actual offset)
-            return 1; // Placeholder
+
+            var metadata = _provider.GetBlockMetadata(blockName);
+            if (metadata is null || metadata.Offset < 0)
+            {
+                throw new InvalidOperationException($"Failed to resolve persisted block offset for '{blockName}'.");
+            }
+
+            return checked((ulong)metadata.Offset);
         }
         finally
         {
@@ -378,8 +383,9 @@ internal sealed class TableDirectoryManager : IDisposable
     private ulong StoreIndexDefinitions(string tableName, List<IndexDefinitionEntry> indexes)
     {
         if (indexes.Count == 0) return 0;
-        
-        var totalSize = indexes.Count * IndexDefinitionEntry.SIZE;
+
+        var indexEntrySize = Marshal.SizeOf<IndexDefinitionEntry>();
+        var totalSize = indexes.Count * indexEntrySize;
         var buffer = ArrayPool<byte>.Shared.Rent(totalSize);
         
         try
@@ -389,16 +395,21 @@ internal sealed class TableDirectoryManager : IDisposable
             
             foreach (var index in indexes)
             {
-                MemoryMarshal.Write(span.Slice(offset, IndexDefinitionEntry.SIZE), in index);
-                offset += IndexDefinitionEntry.SIZE;
+                MemoryMarshal.Write(span.Slice(offset, indexEntrySize), in index);
+                offset += indexEntrySize;
             }
             
             // Store in block
             var blockName = $"table:{tableName}:indexes";
             _provider.WriteBlockAsync(blockName, span.ToArray()).GetAwaiter().GetResult();
-            
-            // Return offset (simplified)
-            return 1; // Placeholder
+
+            var metadata = _provider.GetBlockMetadata(blockName);
+            if (metadata is null || metadata.Offset < 0)
+            {
+                throw new InvalidOperationException($"Failed to resolve persisted block offset for '{blockName}'.");
+            }
+
+            return checked((ulong)metadata.Offset);
         }
         finally
         {
@@ -471,7 +482,8 @@ internal sealed class TableDirectoryManager : IDisposable
             {
                 return new List<IndexDefinitionEntry>();
             }
-            
+
+            var indexEntrySize = Marshal.SizeOf<IndexDefinitionEntry>();
             var indexes = new List<IndexDefinitionEntry>(count);
             var span = blockData.AsSpan();
             var offset = 0;
@@ -479,14 +491,14 @@ internal sealed class TableDirectoryManager : IDisposable
             // Read index definition entries
             for (int i = 0; i < count; i++)
             {
-                if (offset + IndexDefinitionEntry.SIZE > span.Length)
+                if (offset + indexEntrySize > span.Length)
                 {
                     break; // Corrupted or incomplete data
                 }
                 
-                var index = MemoryMarshal.Read<IndexDefinitionEntry>(span.Slice(offset, IndexDefinitionEntry.SIZE));
+                var index = MemoryMarshal.Read<IndexDefinitionEntry>(span.Slice(offset, indexEntrySize));
                 indexes.Add(index);
-                offset += IndexDefinitionEntry.SIZE;
+                offset += indexEntrySize;
             }
             
             return indexes;

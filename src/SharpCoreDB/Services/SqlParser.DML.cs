@@ -812,7 +812,7 @@ public partial class SqlParser
 
         // 6. Apply SELECT column projection and aliases
         var selectMatch = System.Text.RegularExpressions.Regex.Match(
-            sql, @"SELECT\s+(.*?)\s+FROM\b",
+            sql, @"SELECT\s+(\w+(?:\s+AS\s+\w+)?(,\s*\w+(?:\s+AS\s+\w+)?)*)\s+FROM\b",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
 
         if (selectMatch.Success)
@@ -1636,22 +1636,25 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
     // Visitor pattern implementation stubs - all required by ISqlVisitor
     public List<Dictionary<string, object>> VisitSelect(SelectNode node) => ExecuteSelect(node);
-    public List<Dictionary<string, object>> VisitInsert(InsertNode node) => [];
-    public List<Dictionary<string, object>> VisitUpdate(UpdateNode node) => [];
-    public List<Dictionary<string, object>> VisitDelete(DeleteNode node) => [];
-    public List<Dictionary<string, object>> VisitCreateTable(CreateTableNode node) => [];
-    public List<Dictionary<string, object>> VisitAlterTable(AlterTableNode node) => [];
-    public List<Dictionary<string, object>> VisitColumn(ColumnNode node) => [];
-    public List<Dictionary<string, object>> VisitFrom(FromNode node) => [];
-    public List<Dictionary<string, object>> VisitJoin(JoinNode node) => [];
-    public List<Dictionary<string, object>> VisitWhere(WhereNode node) => [];
-    public List<Dictionary<string, object>> VisitBinaryExpression(BinaryExpressionNode node) => [];
-    public List<Dictionary<string, object>> VisitLiteral(LiteralNode node) => [];
-    public List<Dictionary<string, object>> VisitColumnReference(ColumnReferenceNode node) => [];
-    public List<Dictionary<string, object>> VisitInExpression(InExpressionNode node) => [];
-    public List<Dictionary<string, object>> VisitOrderBy(OrderByNode node) => [];
-    public List<Dictionary<string, object>> VisitGroupBy(GroupByNode node) => [];
-    public List<Dictionary<string, object>> VisitHaving(HavingNode node) => [];
-    public List<Dictionary<string, object>> VisitFunctionCall(FunctionCallNode node) => [];
-    public List<Dictionary<string, object>> VisitGraphTraverse(GraphTraverseNode node) => [];
+    public List<Dictionary<string, object>> VisitInsert(InsertNode node) => ThrowUnsupportedAstVisitor(nameof(InsertNode));
+    public List<Dictionary<string, object>> VisitUpdate(UpdateNode node) => ThrowUnsupportedAstVisitor(nameof(UpdateNode));
+    public List<Dictionary<string, object>> VisitDelete(DeleteNode node) => ThrowUnsupportedAstVisitor(nameof(DeleteNode));
+    public List<Dictionary<string, object>> VisitCreateTable(CreateTableNode node) => ThrowUnsupportedAstVisitor(nameof(CreateTableNode));
+    public List<Dictionary<string, object>> VisitAlterTable(AlterTableNode node) => ThrowUnsupportedAstVisitor(nameof(AlterTableNode));
+    public List<Dictionary<string, object>> VisitColumn(ColumnNode node) => ThrowUnsupportedAstVisitor(nameof(ColumnNode));
+    public List<Dictionary<string, object>> VisitFrom(FromNode node) => ThrowUnsupportedAstVisitor(nameof(FromNode));
+    public List<Dictionary<string, object>> VisitJoin(JoinNode node) => ThrowUnsupportedAstVisitor(nameof(JoinNode));
+    public List<Dictionary<string, object>> VisitWhere(WhereNode node) => ThrowUnsupportedAstVisitor(nameof(WhereNode));
+    public List<Dictionary<string, object>> VisitBinaryExpression(BinaryExpressionNode node) => ThrowUnsupportedAstVisitor(nameof(BinaryExpressionNode));
+    public List<Dictionary<string, object>> VisitLiteral(LiteralNode node) => ThrowUnsupportedAstVisitor(nameof(LiteralNode));
+    public List<Dictionary<string, object>> VisitColumnReference(ColumnReferenceNode node) => ThrowUnsupportedAstVisitor(nameof(ColumnReferenceNode));
+    public List<Dictionary<string, object>> VisitInExpression(InExpressionNode node) => ThrowUnsupportedAstVisitor(nameof(InExpressionNode));
+    public List<Dictionary<string, object>> VisitOrderBy(OrderByNode node) => ThrowUnsupportedAstVisitor(nameof(OrderByNode));
+    public List<Dictionary<string, object>> VisitGroupBy(GroupByNode node) => ThrowUnsupportedAstVisitor(nameof(GroupByNode));
+    public List<Dictionary<string, object>> VisitHaving(HavingNode node) => ThrowUnsupportedAstVisitor(nameof(HavingNode));
+    public List<Dictionary<string, object>> VisitFunctionCall(FunctionCallNode node) => ThrowUnsupportedAstVisitor(nameof(FunctionCallNode));
+    public List<Dictionary<string, object>> VisitGraphTraverse(GraphTraverseNode node) => ThrowUnsupportedAstVisitor(nameof(GraphTraverseNode));
+
+    private static List<Dictionary<string, object>> ThrowUnsupportedAstVisitor(string nodeType) =>
+        throw new NotSupportedException($"AST visitor for '{nodeType}' is not implemented in AstExecutor.");
 }

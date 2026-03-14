@@ -4,8 +4,10 @@
 // </copyright>
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace SharpCoreDB.DataStructures;
 
@@ -47,8 +49,13 @@ public class RowMaterializer : IDisposable
     /// </summary>
     public RowMaterializer(IReadOnlyList<string> columns, IReadOnlyList<Type> types)
     {
-        if (columns == null) throw new ArgumentNullException(nameof(columns));
-        if (types == null) throw new ArgumentNullException(nameof(types));
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(types);
+
+        if (columns.Count != types.Count)
+        {
+            throw new ArgumentException($"Column/type count mismatch: {columns.Count} columns vs {types.Count} types.");
+        }
 
         for (int i = 0; i < columns.Count; i++)
         {
@@ -112,37 +119,142 @@ public class RowMaterializer : IDisposable
 
     /// <summary>
     /// Parses raw byte data into a dictionary.
-    /// This is a simplified parser - real implementation would use actual serialization format.
+    /// Supports page-based row format: [optional columnCount:1][per-column nullFlag:1][typed payload].
     /// </summary>
     private void ParseRowData(ReadOnlySpan<byte> data, int offset, Dictionary<string, object> result)
     {
-        // Simplified example - actual implementation would properly deserialize
-        // For now, we just populate with placeholder data to demonstrate the pattern
-        
+        if ((uint)offset > (uint)data.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), $"Offset {offset} is outside row buffer length {data.Length}.");
+        }
+
+        var rowSpan = data[offset..];
+        var cursor = 0;
+
+        // PageBasedDataWriter writes a leading column-count byte; tolerate both with/without prefix.
+        if (rowSpan.Length > 0 && rowSpan[0] == (byte)columnNames.Count)
+        {
+            cursor++;
+        }
+
         for (int i = 0; i < columnNames.Count; i++)
         {
-            // In real implementation, this would parse actual binary data
-            // according to the column type
-            result[columnNames[i]] = GetDefaultValue(columnTypes[i]);
+            if (cursor >= rowSpan.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Unexpected end of row while reading column '{columnNames[i]}' at index {i}.");
+            }
+
+            var nullFlag = rowSpan[cursor++];
+            if (nullFlag == 0)
+            {
+                result[columnNames[i]] = DBNull.Value;
+                continue;
+            }
+
+            var (value, bytesRead) = ReadTypedValue(rowSpan[cursor..], columnTypes[i]);
+            result[columnNames[i]] = value;
+            cursor += bytesRead;
         }
     }
 
-    private object GetDefaultValue(Type type)
+    private static (object value, int bytesRead) ReadTypedValue(ReadOnlySpan<byte> buffer, Type type)
     {
-        if (type == typeof(string))
-            return string.Empty;
         if (type == typeof(int))
-            return 0;
+        {
+            EnsureAvailable(buffer, sizeof(int), nameof(Int32));
+            return (BinaryPrimitives.ReadInt32LittleEndian(buffer), sizeof(int));
+        }
+
         if (type == typeof(long))
-            return 0L;
+        {
+            EnsureAvailable(buffer, sizeof(long), nameof(Int64));
+            return (BinaryPrimitives.ReadInt64LittleEndian(buffer), sizeof(long));
+        }
+
         if (type == typeof(double))
-            return 0.0;
+        {
+            EnsureAvailable(buffer, sizeof(double), nameof(Double));
+            return (BinaryPrimitives.ReadDoubleLittleEndian(buffer), sizeof(double));
+        }
+
         if (type == typeof(bool))
-            return false;
+        {
+            EnsureAvailable(buffer, sizeof(byte), nameof(Boolean));
+            return (buffer[0] != 0, sizeof(byte));
+        }
+
         if (type == typeof(DateTime))
-            return DateTime.MinValue;
-        
-        return null!;
+        {
+            EnsureAvailable(buffer, sizeof(long), nameof(DateTime));
+            var binary = BinaryPrimitives.ReadInt64LittleEndian(buffer);
+            return (DateTime.FromBinary(binary), sizeof(long));
+        }
+
+        if (type == typeof(decimal))
+        {
+            const int decimalBytes = sizeof(int) * 4;
+            EnsureAvailable(buffer, decimalBytes, nameof(Decimal));
+
+            Span<int> bits = stackalloc int[4];
+            for (int i = 0; i < 4; i++)
+            {
+                bits[i] = BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(i * sizeof(int), sizeof(int)));
+            }
+
+            return (new decimal(bits), decimalBytes);
+        }
+
+        if (type == typeof(Guid))
+        {
+            const int guidBytes = 16;
+            EnsureAvailable(buffer, guidBytes, nameof(Guid));
+            return (new Guid(buffer.Slice(0, guidBytes)), guidBytes);
+        }
+
+        if (type == typeof(string))
+        {
+            var length = ReadLengthPrefix(buffer, nameof(String));
+            EnsureAvailable(buffer.Slice(sizeof(int)), length, nameof(String));
+            var value = Encoding.UTF8.GetString(buffer.Slice(sizeof(int), length));
+            return (value, sizeof(int) + length);
+        }
+
+        if (type == typeof(byte[]))
+        {
+            var length = ReadLengthPrefix(buffer, "byte[]");
+            EnsureAvailable(buffer.Slice(sizeof(int)), length, "byte[]");
+            return (buffer.Slice(sizeof(int), length).ToArray(), sizeof(int) + length);
+        }
+
+        // Fallback: read as length-prefixed UTF8 text and keep as string.
+        var fallbackLength = ReadLengthPrefix(buffer, type.Name);
+        EnsureAvailable(buffer.Slice(sizeof(int)), fallbackLength, type.Name);
+        var fallback = Encoding.UTF8.GetString(buffer.Slice(sizeof(int), fallbackLength));
+        return (fallback, sizeof(int) + fallbackLength);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ReadLengthPrefix(ReadOnlySpan<byte> buffer, string typeName)
+    {
+        EnsureAvailable(buffer, sizeof(int), typeName);
+        var length = BinaryPrimitives.ReadInt32LittleEndian(buffer);
+        if (length < 0)
+        {
+            throw new InvalidOperationException($"Invalid {typeName} length prefix: {length}.");
+        }
+
+        return length;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void EnsureAvailable(ReadOnlySpan<byte> buffer, int needed, string typeName)
+    {
+        if (buffer.Length < needed)
+        {
+            throw new InvalidOperationException(
+                $"Insufficient bytes for {typeName}: need {needed}, have {buffer.Length}.");
+        }
     }
 
     /// <summary>
@@ -195,7 +307,7 @@ public class RowMaterializerStatistics
 public class ThreadSafeRowMaterializer : IDisposable
 {
     private readonly RowMaterializer materializer;
-    private readonly object lockObj = new();
+    private readonly Lock lockObj = new();
     private bool disposed = false;
 
     public ThreadSafeRowMaterializer(IReadOnlyList<string> columns, IReadOnlyList<Type> types)

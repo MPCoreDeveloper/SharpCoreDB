@@ -46,42 +46,48 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Encrypt(byte[] data)
     {
-        if (disableEncrypt) 
+        return Encrypt(data, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Encrypts data using AES-256-GCM with associated authenticated data (AAD).
+    /// </summary>
+    /// <param name="data">The plaintext data to encrypt.</param>
+    /// <param name="associatedData">Authenticated context bytes bound to ciphertext integrity.</param>
+    /// <returns>Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public byte[] Encrypt(byte[] data, ReadOnlySpan<byte> associatedData)
+    {
+        if (disableEncrypt)
             return data;
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: Use stackalloc for small buffers (nonce, tag)
+
         Span<byte> nonce = stackalloc byte[NonceSize];
         Span<byte> tag = stackalloc byte[TagSize];
-        
+
         RandomNumberGenerator.Fill(nonce);
-        
+
         byte[]? cipherArray = null;
         try
         {
-            // OPTIMIZED: Rent from pool for cipher data
             cipherArray = _pool.Rent(data.Length);
             Span<byte> cipher = cipherArray.AsSpan(0, data.Length);
-            
-            // Encrypt: plaintext → ciphertext + tag
-            aes.Encrypt(nonce, data, cipher, tag);
-            
-            // Build result: [nonce][cipher][tag]
+
+            aes.Encrypt(nonce, data, cipher, tag, associatedData);
+
             var result = new byte[NonceSize + data.Length + TagSize];
             nonce.CopyTo(result.AsSpan(0, NonceSize));
             cipher.CopyTo(result.AsSpan(NonceSize, data.Length));
             tag.CopyTo(result.AsSpan(NonceSize + data.Length, TagSize));
-            
+
             return result;
         }
         finally
         {
-            // SECURITY: Clear sensitive cipher data
             if (cipherArray != null)
                 _pool.Return(cipherArray, clearArray: true);
-            
-            // SECURITY: Clear stack-allocated buffers
+
             nonce.Clear();
             tag.Clear();
         }
@@ -95,7 +101,19 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Decrypt(byte[] encryptedData)
     {
-        if (disableEncrypt) 
+        return Decrypt(encryptedData, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Decrypts data using AES-256-GCM with associated authenticated data (AAD).
+    /// </summary>
+    /// <param name="encryptedData">Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</param>
+    /// <param name="associatedData">Authenticated context bytes bound during encryption.</param>
+    /// <returns>The decrypted plaintext.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public byte[] Decrypt(byte[] encryptedData, ReadOnlySpan<byte> associatedData)
+    {
+        if (disableEncrypt)
             return encryptedData;
 
         var cipherLength = encryptedData.Length - NonceSize - TagSize;
@@ -103,16 +121,14 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
             throw new ArgumentException("Invalid encrypted data length", nameof(encryptedData));
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: Use Span slicing to avoid allocations
+
         ReadOnlySpan<byte> nonce = encryptedData.AsSpan(0, NonceSize);
         ReadOnlySpan<byte> cipher = encryptedData.AsSpan(NonceSize, cipherLength);
         ReadOnlySpan<byte> tag = encryptedData.AsSpan(NonceSize + cipherLength, TagSize);
-        
-        // Decrypt directly to result array
+
         var plaintext = new byte[cipherLength];
-        aes.Decrypt(nonce, cipher, tag, plaintext);
-        
+        aes.Decrypt(nonce, cipher, tag, plaintext, associatedData);
+
         return plaintext;
     }
 
@@ -125,6 +141,19 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public int Encrypt(ReadOnlySpan<byte> data, Span<byte> output)
     {
+        return Encrypt(data, output, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Encrypts data using AES-256-GCM with Span input/output and AAD (zero-allocation).
+    /// </summary>
+    /// <param name="data">The plaintext data to encrypt.</param>
+    /// <param name="output">The output buffer (must be at least data.Length + 28 bytes).</param>
+    /// <param name="associatedData">Authenticated context bytes bound to ciphertext integrity.</param>
+    /// <returns>Number of bytes written to output.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int Encrypt(ReadOnlySpan<byte> data, Span<byte> output, ReadOnlySpan<byte> associatedData)
+    {
         if (disableEncrypt)
         {
             data.CopyTo(output);
@@ -136,57 +165,46 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
             throw new ArgumentException("Output buffer too small", nameof(output));
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: stackalloc for nonce and tag
+
         Span<byte> nonce = stackalloc byte[NonceSize];
         Span<byte> tag = stackalloc byte[TagSize];
-        
+
         RandomNumberGenerator.Fill(nonce);
-        
+
         byte[]? cipherArray = null;
         try
         {
-            // For small data, use stackalloc; for large data, use ArrayPool
             if (data.Length <= StackAllocThreshold)
             {
-                // OPTIMIZED: stackalloc for small cipher data
                 Span<byte> cipher = stackalloc byte[data.Length];
-                
-                // Encrypt
-                aes.Encrypt(nonce, data, cipher, tag);
-                
-                // Write to output: [nonce][cipher][tag]
+
+                aes.Encrypt(nonce, data, cipher, tag, associatedData);
+
                 nonce.CopyTo(output);
                 cipher.CopyTo(output[NonceSize..]);
                 tag.CopyTo(output[(NonceSize + data.Length)..]);
-                
-                // SECURITY: Clear stack buffers
+
                 cipher.Clear();
             }
             else
             {
-                // OPTIMIZED: ArrayPool for large cipher data
                 cipherArray = _pool.Rent(data.Length);
                 Span<byte> cipher = cipherArray.AsSpan(0, data.Length);
-                
-                // Encrypt
-                aes.Encrypt(nonce, data, cipher, tag);
-                
-                // Write to output: [nonce][cipher][tag]
+
+                aes.Encrypt(nonce, data, cipher, tag, associatedData);
+
                 nonce.CopyTo(output);
                 cipher.CopyTo(output[NonceSize..]);
                 tag.CopyTo(output[(NonceSize + data.Length)..]);
             }
-            
+
             return totalSize;
         }
         finally
         {
-            // SECURITY: Clear pooled buffer
             if (cipherArray != null)
                 _pool.Return(cipherArray, clearArray: true);
-            
-            // SECURITY: Clear stack-allocated buffers
+
             nonce.Clear();
             tag.Clear();
         }
@@ -201,6 +219,19 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public int Decrypt(ReadOnlySpan<byte> encryptedData, Span<byte> output)
     {
+        return Decrypt(encryptedData, output, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Decrypts data using AES-256-GCM with Span input/output and AAD (zero-allocation).
+    /// </summary>
+    /// <param name="encryptedData">Encrypted data in format: [nonce(12)][ciphertext][tag(16)].</param>
+    /// <param name="output">The output buffer for decrypted data.</param>
+    /// <param name="associatedData">Authenticated context bytes bound during encryption.</param>
+    /// <returns>Number of bytes written to output.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public int Decrypt(ReadOnlySpan<byte> encryptedData, Span<byte> output, ReadOnlySpan<byte> associatedData)
+    {
         if (disableEncrypt)
         {
             encryptedData.CopyTo(output);
@@ -210,20 +241,18 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
         var cipherLength = encryptedData.Length - NonceSize - TagSize;
         if (cipherLength < 0)
             throw new ArgumentException("Invalid encrypted data length", nameof(encryptedData));
-        
+
         if (output.Length < cipherLength)
             throw new ArgumentException("Output buffer too small", nameof(output));
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: Use Span slicing (zero allocation)
+
         var nonce = encryptedData[..NonceSize];
         var cipher = encryptedData.Slice(NonceSize, cipherLength);
         var tag = encryptedData[(NonceSize + cipherLength)..];
-        
-        // Decrypt directly to output
-        aes.Decrypt(nonce, cipher, tag, output[..cipherLength]);
-        
+
+        aes.Decrypt(nonce, cipher, tag, output[..cipherLength], associatedData);
+
         return cipherLength;
     }
 
@@ -235,7 +264,18 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void EncryptPage(Span<byte> page)
     {
-        if (disableEncrypt) 
+        EncryptPage(page, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Encrypts a page in-place using AES-256-GCM with AAD binding.
+    /// </summary>
+    /// <param name="page">The page buffer (must have space for nonce + tag overhead).</param>
+    /// <param name="associatedData">Authenticated context bytes bound to page ciphertext integrity.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void EncryptPage(Span<byte> page, ReadOnlySpan<byte> associatedData)
+    {
+        if (disableEncrypt)
             return;
 
         var dataSize = page.Length - NonceSize - TagSize;
@@ -243,37 +283,31 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
             throw new ArgumentException("Page buffer too small for encryption overhead", nameof(page));
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: stackalloc for nonce and tag
+
         Span<byte> nonce = stackalloc byte[NonceSize];
         Span<byte> tag = stackalloc byte[TagSize];
-        
+
         RandomNumberGenerator.Fill(nonce);
-        
+
         byte[]? tempArray = null;
         try
         {
-            // OPTIMIZED: Rent temp buffer for in-place encryption
             tempArray = _pool.Rent(dataSize);
             Span<byte> temp = tempArray.AsSpan(0, dataSize);
-            
-            // Copy plaintext to temp
+
             page[..dataSize].CopyTo(temp);
-            
-            // Encrypt: temp → temp (in-place in temp buffer)
-            aes.Encrypt(nonce, temp, temp, tag);
-            
-            // Write back: [nonce][ciphertext][tag]
+
+            aes.Encrypt(nonce, temp, temp, tag, associatedData);
+
             nonce.CopyTo(page);
             temp.CopyTo(page[NonceSize..]);
             tag.CopyTo(page[(NonceSize + dataSize)..]);
         }
         finally
         {
-            // SECURITY: Clear sensitive data
             if (tempArray != null)
                 _pool.Return(tempArray, clearArray: true);
-            
+
             nonce.Clear();
             tag.Clear();
         }
@@ -287,7 +321,18 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void DecryptPage(Span<byte> page)
     {
-        if (disableEncrypt) 
+        DecryptPage(page, ReadOnlySpan<byte>.Empty);
+    }
+
+    /// <summary>
+    /// Decrypts a page in-place using AES-256-GCM with AAD binding.
+    /// </summary>
+    /// <param name="page">The encrypted page buffer.</param>
+    /// <param name="associatedData">Authenticated context bytes bound during encryption.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public void DecryptPage(Span<byte> page, ReadOnlySpan<byte> associatedData)
+    {
+        if (disableEncrypt)
             return;
 
         var cipherLength = page.Length - NonceSize - TagSize;
@@ -295,28 +340,23 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
             throw new ArgumentException("Page buffer too small for decryption", nameof(page));
 
         using var aes = new AesGcm(_key, TagSize);
-        
-        // OPTIMIZED: Extract components via Span slicing
+
         var nonce = page[..NonceSize];
         var cipher = page.Slice(NonceSize, cipherLength);
         var tag = page[(NonceSize + cipherLength)..];
-        
+
         byte[]? tempArray = null;
         try
         {
-            // OPTIMIZED: Rent temp buffer for decryption
             tempArray = _pool.Rent(cipherLength);
             Span<byte> temp = tempArray.AsSpan(0, cipherLength);
-            
-            // Decrypt to temp
-            aes.Decrypt(nonce, cipher, tag, temp);
-            
-            // Copy decrypted data back to start of page
+
+            aes.Decrypt(nonce, cipher, tag, temp, associatedData);
+
             temp.CopyTo(page);
         }
         finally
         {
-            // SECURITY: Clear sensitive data
             if (tempArray != null)
                 _pool.Return(tempArray, clearArray: true);
         }

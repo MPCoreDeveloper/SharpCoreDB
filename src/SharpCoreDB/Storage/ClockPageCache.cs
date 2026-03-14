@@ -22,7 +22,8 @@ public sealed class ClockPageCache
     private readonly CacheEntry[] clockArray;
     private int clockHand;
     private int count;
-    
+    private readonly Lock cacheMutationLock = new();
+
     // Performance metrics
     private long cacheHits;
     private long cacheMisses;
@@ -58,7 +59,14 @@ public sealed class ClockPageCache
     /// </summary>
     public PageManager.Page? Get(ulong pageId)
     {
-        // STUB - ClockPageCache needs PageManager restoration
+        if (cache.TryGetValue(pageId, out var entry) && entry.Page.HasValue)
+        {
+            Interlocked.Exchange(ref entry.ReferenceBit, 1);
+            Interlocked.Increment(ref cacheHits);
+            return entry.Page;
+        }
+
+        Interlocked.Increment(ref cacheMisses);
         return null;
     }
 
@@ -67,7 +75,52 @@ public sealed class ClockPageCache
     /// </summary>
     public void Put(ulong pageId, PageManager.Page page)
     {
-        // STUB - ClockPageCache needs PageManager restoration
+        lock (cacheMutationLock)
+        {
+            // Update existing entry in-place.
+            if (cache.TryGetValue(pageId, out var existing))
+            {
+                existing.Page = page;
+                Interlocked.Exchange(ref existing.ReferenceBit, 1);
+                return;
+            }
+
+            // Cache full: use CLOCK eviction path.
+            if (Volatile.Read(ref count) >= maxCapacity)
+            {
+                EvictAndAdd(pageId, page);
+                return;
+            }
+
+            // Fast append path while capacity remains.
+            int index = Volatile.Read(ref count);
+            if (index < 0 || index >= maxCapacity)
+            {
+                EvictAndAdd(pageId, page);
+                return;
+            }
+
+            var entry = new CacheEntry
+            {
+                Page = page,
+                ReferenceBit = 1,
+                ArrayIndex = index
+            };
+
+            if (cache.TryAdd(pageId, entry))
+            {
+                clockArray[index] = entry;
+                Volatile.Write(ref count, index + 1);
+                return;
+            }
+
+            // Lost race to another writer for same key; update winner.
+            if (cache.TryGetValue(pageId, out var winner))
+            {
+                winner.Page = page;
+                Interlocked.Exchange(ref winner.ReferenceBit, 1);
+            }
+        }
     }
 
     /// <summary>
@@ -142,19 +195,22 @@ public sealed class ClockPageCache
     /// </summary>
     public bool Remove(ulong pageId)
     {
-        if (cache.TryRemove(pageId, out var entry))
+        lock (cacheMutationLock)
         {
-            // Clear array slot
-            int index = entry.ArrayIndex;
-            if (index >= 0 && index < maxCapacity)
+            if (cache.TryRemove(pageId, out var entry))
             {
-                clockArray[index] = null!;
+                // Clear array slot
+                int index = entry.ArrayIndex;
+                if (index >= 0 && index < maxCapacity)
+                {
+                    clockArray[index] = null!;
+                }
+
+                Interlocked.Decrement(ref count);
+                return true;
             }
-            
-            Interlocked.Decrement(ref count);
-            return true;
+            return false;
         }
-        return false;
     }
 
     /// <summary>
@@ -162,8 +218,13 @@ public sealed class ClockPageCache
     /// </summary>
     public IEnumerable<PageManager.Page> GetDirtyPages()
     {
-        // STUB - needs PageManager restoration
-        return [];
+        foreach (var entry in cache.Values)
+        {
+            if (entry.Page.HasValue && entry.Page.Value.IsDirty)
+            {
+                yield return entry.Page.Value;
+            }
+        }
     }
 
     /// <summary>
@@ -171,8 +232,13 @@ public sealed class ClockPageCache
     /// </summary>
     public IEnumerable<PageManager.Page> GetAllPages()
     {
-        // STUB - needs PageManager restoration
-        return [];
+        foreach (var entry in cache.Values)
+        {
+            if (entry.Page.HasValue)
+            {
+                yield return entry.Page.Value;
+            }
+        }
     }
 
     /// <summary>
@@ -180,10 +246,13 @@ public sealed class ClockPageCache
     /// </summary>
     public void Clear()
     {
-        cache.Clear();
-        Array.Clear(clockArray, 0, maxCapacity);
-        Volatile.Write(ref count, 0);
-        Volatile.Write(ref clockHand, 0);
+        lock (cacheMutationLock)
+        {
+            cache.Clear();
+            Array.Clear(clockArray, 0, maxCapacity);
+            Volatile.Write(ref count, 0);
+            Volatile.Write(ref clockHand, 0);
+        }
     }
 
     /// <summary>
@@ -191,8 +260,42 @@ public sealed class ClockPageCache
     /// </summary>
     public int FlushOldestDirtyPages(Action<PageManager.Page> flushAction, int maxToFlush = 10)
     {
-        // STUB - needs PageManager restoration
-        return 0;
+        ArgumentNullException.ThrowIfNull(flushAction);
+        if (maxToFlush <= 0)
+        {
+            return 0;
+        }
+
+        var flushed = 0;
+
+        lock (cacheMutationLock)
+        {
+            var start = Math.Max(0, Volatile.Read(ref clockHand));
+            for (int scan = 0; scan < maxCapacity && flushed < maxToFlush; scan++)
+            {
+                int idx = (start + scan) % maxCapacity;
+                var entry = clockArray[idx];
+                if (entry == null || !entry.Page.HasValue)
+                {
+                    continue;
+                }
+
+                var page = entry.Page.Value;
+                if (!page.IsDirty)
+                {
+                    continue;
+                }
+
+                flushAction(page);
+
+                page.IsDirty = false;
+                entry.Page = page;
+                Interlocked.Exchange(ref entry.ReferenceBit, 1);
+                flushed++;
+            }
+        }
+
+        return flushed;
     }
 
     /// <summary>

@@ -162,6 +162,9 @@ internal sealed class WalManager : IDisposable
     {
         lock (_walLock)
         {
+            var payloadLength = Math.Min(data.Length, WalEntry.MAX_DATA_LENGTH);
+            var payload = payloadLength > 0 ? data.Span[..payloadLength].ToArray() : [];
+
             _pendingEntries.Enqueue(new WalLogEntry
             {
                 Lsn = ++_currentLsn,
@@ -169,7 +172,8 @@ internal sealed class WalManager : IDisposable
                 Operation = WalOperation.Update,
                 BlockName = blockName,
                 Offset = offset,
-                DataLength = data.Length,
+                DataLength = payloadLength,
+                Data = payload,
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
 
@@ -295,7 +299,7 @@ internal sealed class WalManager : IDisposable
         
         // Serialize to buffer
         var entryBuffer = new byte[WalEntry.SIZE];
-        SerializeWalEntry(entryBuffer, walEntry);
+        SerializeWalEntry(entryBuffer, walEntry, logEntry.Data);
         
         // Write to file
         fileStream.Position = filePosition;
@@ -328,7 +332,7 @@ internal sealed class WalManager : IDisposable
             Timestamp = (ulong)logEntry.Timestamp,
             Operation = (ushort)logEntry.Operation,
             BlockIndex = GetOrAddBlockIndex(logEntry.BlockName),
-            PageId = logEntry.Offset / 4096, // Assume 4KB pages
+            PageId = logEntry.Offset, // Stores absolute byte offset for precise redo replay
             DataLength = (ushort)Math.Min(logEntry.DataLength, WalEntry.MAX_DATA_LENGTH),
             // Checksum and Data will be set in SerializeWalEntry
         };
@@ -365,7 +369,7 @@ internal sealed class WalManager : IDisposable
     /// C# 14: Uses modern unsafe code patterns.
     /// Format: Lsn(8) + TxId(8) + Timestamp(8) + Op(2) + BlockIdx(2) + PageId(8) + DataLen(2) + Checksum(32) + Data(4000)
     /// </summary>
-    private static unsafe void SerializeWalEntry(Span<byte> buffer, WalEntry entry)
+    private static unsafe void SerializeWalEntry(Span<byte> buffer, WalEntry entry, ReadOnlySpan<byte> payload)
     {
         if (buffer.Length < WalEntry.SIZE)
         {
@@ -394,8 +398,10 @@ internal sealed class WalManager : IDisposable
         
         BinaryPrimitives.WriteUInt64LittleEndian(buffer[offset..], entry.PageId);
         offset += 8;
-        
-        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], entry.DataLength);
+
+        var effectivePayloadLength = Math.Min(payload.Length, WalEntry.MAX_DATA_LENGTH);
+        var effectiveDataLength = Math.Min((int)entry.DataLength, effectivePayloadLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer[offset..], (ushort)effectiveDataLength);
         offset += 2;
         
         // Mark checksum offset (will write after computing hash)
@@ -405,12 +411,10 @@ internal sealed class WalManager : IDisposable
         // Data payload comes after checksum (offset now at Data field)
         var dataOffset = offset;
         
-        // Write data payload (if any)
-        if (entry.DataLength > 0 && entry.DataLength <= WalEntry.MAX_DATA_LENGTH)
+        // Persist WAL payload bytes for recovery replay.
+        if (effectiveDataLength > 0)
         {
-            // In real implementation: copy from entry.Data
-            // For Phase 3: zero-filled (data writing is stub)
-            // Data will be populated when actual operations are logged
+            payload[..effectiveDataLength].CopyTo(buffer.Slice(dataOffset, effectiveDataLength));
         }
         
         // Calculate and write SHA-256 checksum
@@ -418,9 +422,9 @@ internal sealed class WalManager : IDisposable
         using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         sha256.AppendData(buffer[..checksumOffset]); // Header fields
         
-        if (entry.DataLength > 0 && entry.DataLength <= WalEntry.MAX_DATA_LENGTH)
+        if (effectiveDataLength > 0)
         {
-            sha256.AppendData(buffer.Slice(dataOffset, entry.DataLength)); // Data payload
+            sha256.AppendData(buffer.Slice(dataOffset, effectiveDataLength)); // Data payload
         }
         
         var checksum = sha256.GetHashAndReset();
@@ -534,11 +538,12 @@ internal sealed class WalManager : IDisposable
         var entries = new List<Scdb.WalEntry>();
         var fileStream = GetFileStream();
 
-        ulong startOffset, endOffset;
+        ulong startOffset, endOffset, lastCheckpointLsn;
         lock (_walLock)
         {
             startOffset = _headOffset;
             endOffset = _tailOffset;
+            lastCheckpointLsn = _lastCheckpointLsn;
         }
 
         // Read entries from circular buffer
@@ -556,7 +561,10 @@ internal sealed class WalManager : IDisposable
             // Validate checksum
             if (ValidateWalEntryChecksum(entryBuffer, entry))
             {
-                entries.Add(entry);
+                if (entry.Lsn > lastCheckpointLsn && (WalOperation)entry.Operation != WalOperation.Checkpoint)
+                {
+                    entries.Add(entry);
+                }
             }
             else
             {
@@ -571,7 +579,7 @@ internal sealed class WalManager : IDisposable
     /// <summary>
     /// Deserializes WalEntry from byte buffer.
     /// </summary>
-    private static Scdb.WalEntry DeserializeWalEntry(ReadOnlySpan<byte> buffer)
+    private static unsafe Scdb.WalEntry DeserializeWalEntry(ReadOnlySpan<byte> buffer)
     {
         int offset = 0;
 
@@ -597,7 +605,23 @@ internal sealed class WalManager : IDisposable
         offset += 8;
         
         entry.DataLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer[offset..]);
-        
+        offset += 2;
+
+        const int checksumLength = 32;
+        var checksumSpan = buffer.Slice(offset, checksumLength);
+        offset += checksumLength;
+
+        var dataLength = Math.Min((int)entry.DataLength, WalEntry.MAX_DATA_LENGTH);
+        var payloadSpan = buffer.Slice(offset, dataLength);
+
+        var entryPtr = &entry;
+        checksumSpan.CopyTo(new Span<byte>(entryPtr->Checksum, checksumLength));
+
+        if (dataLength > 0)
+        {
+            payloadSpan.CopyTo(new Span<byte>(entryPtr->Data, dataLength));
+        }
+
         return entry;
     }
 
@@ -606,12 +630,21 @@ internal sealed class WalManager : IDisposable
     /// </summary>
     private static bool ValidateWalEntryChecksum(ReadOnlySpan<byte> buffer, Scdb.WalEntry entry)
     {
-        const int checksumOffset = 30; // After header fields
+        const int checksumOffset = 38; // After LSN, transaction id, timestamp, operation, block index, page id, and data length.
         const int dataOffset = checksumOffset + 32;
+
+        var dataLength = Math.Min((int)entry.DataLength, WalEntry.MAX_DATA_LENGTH);
+        if (dataLength < 0 || dataOffset + dataLength > buffer.Length)
+        {
+            return false;
+        }
         
         using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         sha256.AppendData(buffer[..checksumOffset]);
-        sha256.AppendData(buffer.Slice(dataOffset, entry.DataLength));
+        if (dataLength > 0)
+        {
+            sha256.AppendData(buffer.Slice(dataOffset, dataLength));
+        }
         var computedHash = sha256.GetHashAndReset();
         
         var storedHash = buffer.Slice(checksumOffset, 32);
@@ -680,6 +713,7 @@ internal sealed class WalLogEntry
     public string BlockName { get; init; } = string.Empty;
     public ulong Offset { get; init; }
     public int DataLength { get; init; }
+    public byte[] Data { get; init; } = [];
     public long Timestamp { get; init; }
 }
 

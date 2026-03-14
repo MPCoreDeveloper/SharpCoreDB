@@ -21,6 +21,22 @@ public partial class Table
     // ✅ OPTIMIZED: Use ConcurrentDictionary for lock-free operations
     private readonly ConcurrentDictionary<string, long> columnUsageConcurrent = new();
 
+    // Resolve dynamically so performance tests and benchmarks can compare both backends in-process.
+    private static bool UseUnsafeEqualityIndex => ResolveUnsafeEqualityIndexFlag();
+
+    private static bool ResolveUnsafeEqualityIndexFlag()
+    {
+        if (AppContext.TryGetSwitch("SharpCoreDB.Indexing.UseUnsafeEqualityIndex", out var enabled))
+        {
+            return enabled;
+        }
+
+        var env = Environment.GetEnvironmentVariable("SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX");
+        return string.Equals(env, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "yes", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Creates a hash index on the specified column for fast WHERE clause lookups.
     /// Uses lazy loading: index is registered but not built until first query.
@@ -149,7 +165,7 @@ public partial class Table
         
         // Build index WITHOUT holding write lock (parallel work allowed)
         // ✅ COLLATE Phase 4: Pass collation to HashIndex constructor
-        var index = new HashIndex(this.Name, columnName, collation, metadata.IsUnique);
+        var index = new HashIndex(this.Name, columnName, collation, metadata.IsUnique, UseUnsafeEqualityIndex);
         
         // FIXED: Use the same reading logic as ReadRowAtPosition to ensure compatibility
         // Read all rows using ReadBytesFrom (which handles length prefixes correctly)

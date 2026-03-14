@@ -64,6 +64,7 @@ Console.WriteLine("  3) UPDATE performance - Priority 1 validation (UpdatePerfor
 Console.WriteLine("  4) SELECT optimization - Phase-by-phase speedup (SelectOptimizationTest)");
 Console.WriteLine("  5) StructRow API - Zero-copy performance (StructRowBenchmark)");
 Console.WriteLine("  6) Phase 2A Optimizations - WHERE/SELECT*/Type conversion/Batch (Phase2AOptimizationBenchmark)");
+Console.WriteLine("  7) Hash index backend comparison (HashIndexBackendBenchmark)");
 Console.WriteLine("  0) Exit");
 Console.WriteLine();
 Console.Write("Enter choice: ");
@@ -76,7 +77,7 @@ if (string.IsNullOrWhiteSpace(input))
     try
     {
         var cmdArgs = Environment.GetCommandLineArgs();
-        var choiceArg = cmdArgs.FirstOrDefault(a => a == "1" || a == "2" || a == "3" || a == "4" || a == "5" || a == "6" || a == "0" || a?.Equals("q", StringComparison.OrdinalIgnoreCase) == true);
+        var choiceArg = cmdArgs.FirstOrDefault(a => a == "1" || a == "2" || a == "3" || a == "4" || a == "5" || a == "6" || a == "7" || a == "0" || a?.Equals("q", StringComparison.OrdinalIgnoreCase) == true);
         input = string.IsNullOrWhiteSpace(choiceArg) ? "2" : choiceArg; // Default to 2 when no explicit choice
     }
     catch
@@ -139,6 +140,13 @@ try
             summary = BenchmarkRunner.Run<Phase2AOptimizationBenchmark>(config);
             Console.WriteLine("\nPhase2AOptimizationBenchmark completed.");
             logWriter.WriteLine("Phase2AOptimizationBenchmark completed.");
+            break;
+        case "7":
+            Console.WriteLine("Running HashIndexBackendBenchmark (classic vs unsafe backend)...");
+            logWriter.WriteLine("Running HashIndexBackendBenchmark...");
+            summary = BenchmarkRunner.Run<HashIndexBackendBenchmark>(config);
+            Console.WriteLine("\nHashIndexBackendBenchmark completed.");
+            logWriter.WriteLine("HashIndexBackendBenchmark completed.");
             break;
         case "0":
         case "q":

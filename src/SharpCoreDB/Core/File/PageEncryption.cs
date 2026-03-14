@@ -7,7 +7,9 @@ namespace SharpCoreDB.Core.File;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// Page-level encryption wrapper that encrypts/decrypts data at page granularity.
@@ -22,6 +24,7 @@ using System.Runtime.CompilerServices;
 public class PageEncryption : IDisposable
 {
     private readonly ICryptoService crypto;
+    private readonly AesGcmEncryption aes;
     private readonly byte[] key;
     private readonly int pageSize;
     
@@ -38,6 +41,7 @@ public class PageEncryption : IDisposable
         this.crypto = crypto ?? throw new ArgumentNullException(nameof(crypto));
         this.key = key ?? throw new ArgumentNullException(nameof(key));
         this.pageSize = pageSize;
+        this.aes = crypto.GetAesGcmEncryption(key);
     }
 
     /// <summary>
@@ -48,12 +52,24 @@ public class PageEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[] EncryptPage(ReadOnlySpan<byte> plaintext)
     {
+        return EncryptPage(plaintext, pageId: 0);
+    }
+
+    /// <summary>
+    /// Encrypts a single page of data with page-context AAD binding.
+    /// </summary>
+    /// <param name="plaintext">The plaintext data to encrypt.</param>
+    /// <param name="pageId">Logical page identifier used for AAD binding.</param>
+    /// <returns>Encrypted page data.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public byte[] EncryptPage(ReadOnlySpan<byte> plaintext, ulong pageId)
+    {
         if (disposed)
             throw new ObjectDisposedException(nameof(PageEncryption));
-        
-        // Convert span to array for crypto service
+
         var data = plaintext.ToArray();
-        return this.crypto.Encrypt(this.key, data);
+        var aad = BuildPageAad(pageId);
+        return aes.Encrypt(data, aad);
     }
 
     /// <summary>
@@ -64,17 +80,29 @@ public class PageEncryption : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[]? DecryptPage(ReadOnlySpan<byte> ciphertext)
     {
+        return DecryptPage(ciphertext, pageId: 0);
+    }
+
+    /// <summary>
+    /// Decrypts a single page of data with page-context AAD verification.
+    /// </summary>
+    /// <param name="ciphertext">The encrypted page data.</param>
+    /// <param name="pageId">Logical page identifier used for AAD binding.</param>
+    /// <returns>Decrypted plaintext.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public byte[]? DecryptPage(ReadOnlySpan<byte> ciphertext, ulong pageId)
+    {
         if (disposed)
             throw new ObjectDisposedException(nameof(PageEncryption));
-        
+
         try
         {
             var data = ciphertext.ToArray();
-            return this.crypto.Decrypt(this.key, data);
+            var aad = BuildPageAad(pageId);
+            return aes.Decrypt(data, aad);
         }
-        catch
+        catch (System.Security.Cryptography.CryptographicException)
         {
-            // Return null on decryption failure (corrupted or wrong key)
             return null;
         }
     }
@@ -100,7 +128,7 @@ public class PageEncryption : IDisposable
             int length = Math.Min(pageSize, plaintext.Length - offset);
             
             var page = plaintext.Slice(offset, length);
-            pages[i] = EncryptPage(page);
+            pages[i] = EncryptPage(page, (ulong)i);
         }
         
         return pages;
@@ -123,7 +151,7 @@ public class PageEncryption : IDisposable
         // Decrypt all pages first
         for (int i = 0; i < encryptedPages.Length; i++)
         {
-            var decrypted = DecryptPage(encryptedPages[i]);
+            var decrypted = DecryptPage(encryptedPages[i], (ulong)i);
             if (decrypted == null)
                 return null;  // Decryption failed
             
@@ -166,7 +194,22 @@ public class PageEncryption : IDisposable
     {
         if (disposed)
             return;
+
+        if (disposing)
+        {
+            aes.Dispose();
+        }
         
         disposed = true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private byte[] BuildPageAad(ulong pageId)
+    {
+        var aad = new byte[sizeof(int) + sizeof(ulong) + sizeof(ulong)];
+        BinaryPrimitives.WriteInt32LittleEndian(aad.AsSpan(0, sizeof(int)), pageSize);
+        BinaryPrimitives.WriteUInt64LittleEndian(aad.AsSpan(sizeof(int), sizeof(ulong)), pageId);
+        BinaryPrimitives.WriteUInt64LittleEndian(aad.AsSpan(sizeof(int) + sizeof(ulong), sizeof(ulong)), (ulong)key.Length);
+        return aad;
     }
 }

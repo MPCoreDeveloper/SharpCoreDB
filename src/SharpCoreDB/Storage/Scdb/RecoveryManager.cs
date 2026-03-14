@@ -185,6 +185,7 @@ internal sealed class RecoveryManager : IDisposable
                 break;
 
             case WalOperation.Update:
+            case WalOperation.DeltaUpdate:
                 await ReplayUpdateAsync(entry, cancellationToken);
                 break;
 
@@ -203,13 +204,15 @@ internal sealed class RecoveryManager : IDisposable
     /// </summary>
     private async Task ReplayInsertAsync(WalEntry entry, CancellationToken cancellationToken)
     {
-        // In a real implementation:
-        // 1. Read data from WAL entry
-        // 2. Write to block at specified offset
-        // 3. Update block registry
+        cancellationToken.ThrowIfCancellationRequested();
 
-        // For now, stub implementation
-        await Task.CompletedTask;
+        var payload = ExtractPayload(entry);
+        if (payload.Length == 0)
+        {
+            return;
+        }
+
+        await WritePayloadAtOffsetAsync(entry.PageId, payload, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -217,12 +220,15 @@ internal sealed class RecoveryManager : IDisposable
     /// </summary>
     private async Task ReplayUpdateAsync(WalEntry entry, CancellationToken cancellationToken)
     {
-        // In a real implementation:
-        // 1. Read new data from WAL entry
-        // 2. Overwrite block at specified offset
-        // 3. Update metadata
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await Task.CompletedTask;
+        var payload = ExtractPayload(entry);
+        if (payload.Length == 0)
+        {
+            return;
+        }
+
+        await WritePayloadAtOffsetAsync(entry.PageId, payload, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -230,12 +236,42 @@ internal sealed class RecoveryManager : IDisposable
     /// </summary>
     private async Task ReplayDeleteAsync(WalEntry entry, CancellationToken cancellationToken)
     {
-        // In a real implementation:
-        // 1. Mark block as deleted in registry
-        // 2. Free pages in FSM
-        // 3. Update metadata
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await Task.CompletedTask;
+        var dataLength = Math.Min((int)entry.DataLength, WalEntry.MAX_DATA_LENGTH);
+        if (dataLength <= 0)
+        {
+            return;
+        }
+
+        var tombstone = new byte[dataLength];
+        await WritePayloadAtOffsetAsync(entry.PageId, tombstone, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task WritePayloadAtOffsetAsync(ulong absoluteOffset, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        if (payload.Length == 0)
+        {
+            return;
+        }
+
+        var stream = _provider.GetInternalFileStream();
+        stream.Position = (long)absoluteOffset;
+        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static unsafe byte[] ExtractPayload(WalEntry entry)
+    {
+        var dataLength = Math.Min((int)entry.DataLength, WalEntry.MAX_DATA_LENGTH);
+        if (dataLength <= 0)
+        {
+            return [];
+        }
+
+        var payload = new byte[dataLength];
+        var entryPtr = &entry;
+        new ReadOnlySpan<byte>(entryPtr->Data, dataLength).CopyTo(payload);
+        return payload;
     }
 
     /// <inheritdoc/>
