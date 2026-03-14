@@ -117,6 +117,7 @@
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll')" />
     
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll')" />
