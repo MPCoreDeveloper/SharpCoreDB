@@ -1,4 +1,4 @@
-# SharpCoreDB.Client v1.4.1 - .NET Client Library
+# SharpCoreDB.Client v1.5.0 - .NET Client Library
 
 **ADO.NET-Style Client for SharpCoreDB Network Server**
 
@@ -202,4 +202,4 @@ MIT License - See https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LIC
 
 ---
 
-**Version:** 1.4.1 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready
+**Version:** 1.5.0 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready

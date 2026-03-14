@@ -3,23 +3,23 @@
   
   # SharpCoreDB
   
-  **High-Performance Embedded Database for .NET 10**
+  **High-Performance Embedded & Network Database for .NET 10**
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.4.1-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.5.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
-  [![Tests](https://img.shields.io/badge/Tests-1468+_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
+  [![Tests](https://img.shields.io/badge/Tests-1490+_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![C#](https://img.shields.io/badge/C%23-14-purple.svg)](https://learn.microsoft.com/en-us/dotnet/csharp/)
 </div>
 
 ---
 
-## 📌 **Current Status — v1.4.1 (March 8, 2026)**
+## 📌 **Current Status — v1.5.0 (March 8, 2026)**
 
 ### ✅ **Production-Ready: ALL Phase 1-11 Features Complete (100%)**
 
-**SharpCoreDB v1.4.1 delivers critical bug fixes, 60-80% metadata compression, enterprise-scale distributed features, and a fully functional network database server.**
+**SharpCoreDB v1.5.0 delivers critical bug fixes, 60-80% metadata compression, enterprise-scale distributed features, and a fully functional network database server.**
 
 #### 🎉 **Major Milestone: All Core Features + Server Complete**
 
@@ -47,6 +47,11 @@ SharpCoreDB has been successfully transformed from embedded database into a **ne
 
 **See documentation:** `docs/INDEX.md`
 
+### ⚠️ Known Deferred Limitation
+
+- `SingleFileDatabase.ExecuteCompiled` with parameterized plans can still hang during disposal in specific shutdown paths.
+- Current status: mitigated with safer shutdown ordering; full resolution requires async disposal refactor (`IAsyncDisposable`) in single-file storage provider lifecycle.
+
 ### 📚 Documentation Policy
 
 - Canonical documentation entry points are `docs/INDEX.md` and `docs/README.md`.
@@ -59,7 +64,7 @@ SharpCoreDB has been successfully transformed from embedded database into a **ne
 
 ---
 
-#### 🎯 Latest Release (v1.4.0 → v1.4.1)
+#### 🎯 Latest Release (v1.4.0 → v1.5.0)
 
 - **🐛 Critical Bug Fixes**
   - Database reopen edge case fixed (graceful empty JSON handling)
@@ -72,7 +77,7 @@ SharpCoreDB has been successfully transformed from embedded database into a **ne
   - Zero breaking changes
   
 - **📊 Quality Metrics**
-  - **1,468+ tests** (was 850+ in v1.3.5)
+  - **1,490+ tests** (was 850+ in v1.3.5)
   - **100% backward compatible**
   - **All 11 phases production-ready**
 
@@ -129,29 +134,89 @@ SharpCoreDB has been successfully transformed from embedded database into a **ne
 #### 📦 Installation
 
 ```bash
-# Core database (v1.4.1 - NOW WITH METADATA COMPRESSION!)
-dotnet add package SharpCoreDB --version 1.4.1
+# Core database
+dotnet add package SharpCoreDB --version 1.5.0
 
-# Server mode (network database server with gRPC/HTTP/WebSocket)
-dotnet add package SharpCoreDB.Server --version 1.4.1
-dotnet add package SharpCoreDB.Client --version 1.4.1
+# Server mode (network database server)
+dotnet add package SharpCoreDB.Server --version 1.5.0
+dotnet add package SharpCoreDB.Client --version 1.5.0
 
-# Distributed features (multi-master replication, 2PC transactions)
-dotnet add package SharpCoreDB.Distributed --version 1.4.1
+# Distributed features
+dotnet add package SharpCoreDB.Distributed --version 1.5.0
 
-# Analytics engine (100+ aggregate & window functions)
-dotnet add package SharpCoreDB.Analytics --version 1.4.1
+# Analytics engine
+dotnet add package SharpCoreDB.Analytics --version 1.5.0
 
-# Vector search (HNSW indexing, semantic search)
-dotnet add package SharpCoreDB.VectorSearch --version 1.4.1
+# Vector search
+dotnet add package SharpCoreDB.VectorSearch --version 1.5.0
 
-# Sync integration (bidirectional sync with SQL Server/PostgreSQL/MySQL/SQLite)
-dotnet add package SharpCoreDB.Provider.Sync --version 1.4.1
+# Sync integration
+dotnet add package SharpCoreDB.Provider.Sync --version 1.5.0
 
-# Graph algorithms (A* pathfinding)
-dotnet add package SharpCoreDB.Graph --version 1.4.1
+# Graph algorithms
+dotnet add package SharpCoreDB.Graph --version 1.5.0
 
 # Optional integrations
-dotten
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.5.0
+dotnet add package SharpCoreDB.Extensions --version 1.5.0
+```
+
+---
+
+## 🌐 Server Mode: Run SharpCoreDB as a Real Network Database Server
+
+SharpCoreDB is no longer only an embedded database. In `Server` mode it can run as a **real multi-database network server** with secure remote access over your LAN, datacenter, or cloud network.
+
+### What you get in Server mode
+
+- **Primary protocol: gRPC (HTTPS, HTTP/2 + HTTP/3)** for high-throughput and streaming scenarios
+- **Secondary protocols:** HTTPS REST API and WebSocket streaming
+- **Strict security defaults:** TLS 1.2+, JWT auth, optional mTLS, RBAC
+- **Multi-database hosting:** system databases + user databases in one server process
+- **Production operations:** health checks, metrics, connection pooling, graceful shutdown
+
+### Quick network setup
+
+1. Install packages:
+   - `SharpCoreDB.Server`
+   - `SharpCoreDB.Client`
+2. Configure TLS certificate and server settings in `appsettings.json`.
+3. Start the server:
+
+```bash
+dotnet run --project src/SharpCoreDB.Server -c Release
+```
+
+4. Verify endpoints:
+   - Health: `https://localhost:8443/health`
+   - gRPC endpoint: `https://localhost:5001`
+
+### Installers and deployment options
+
+- **Windows Service installer:** `installers/windows/install-service.ps1`
+- **Linux systemd installer:** `installers/linux/install.sh`
+- **macOS launchd installer:** `installers/macos/install.sh`
+- **Docker / Docker Compose:** `src/SharpCoreDB.Server/docker-compose.yml`
+
+### Server documentation
+
+- Quick start: `docs/server/QUICKSTART.md`
+- Installation and installers: `docs/server/INSTALLATION.md`
+- Configuration reference: `docs/server/CONFIGURATION_SCHEMA.md`
+- Security hardening: `docs/server/SECURITY.md`
+- Client usage: `docs/server/CLIENT_GUIDE.md`
+
+---
+
+## 📖 Documentation
+
+Start here:
+- `docs/INDEX.md`
+- `docs/README.md`
+
+Server-specific:
+- `docs/server/README.md`
+- `docs/server/QUICKSTART.md`
+- `docs/server/INSTALLATION.md`
 
 

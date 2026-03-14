@@ -1,7 +1,7 @@
-# JSON Metadata Improvements - SharpCoreDB v1.4.1
+# JSON Metadata Improvements - SharpCoreDB v1.5.0
 
 **Date:** 2026-02-20  
-**Version:** 1.4.1  
+**Version:** 1.5.0  
 **Status:** ✅ Production Ready  
 **Impact:** Critical - Fixes reopen issues and reduces metadata size by 60-80%
 
@@ -9,7 +9,7 @@
 
 ## 📋 Executive Summary
 
-SharpCoreDB v1.4.1 introduces critical improvements to JSON metadata handling in single-file databases (`.scdb` format), addressing reopen failures and significantly reducing metadata storage overhead through Brotli compression.
+SharpCoreDB v1.5.0 introduces critical improvements to JSON metadata handling in single-file databases (`.scdb` format), addressing reopen failures and significantly reducing metadata storage overhead through Brotli compression.
 
 ### Key Improvements
 
@@ -476,14 +476,14 @@ For 1000 databases: **18 MB saved**
 Day 0: Database created with v1.3.5
        sys:metadata = Raw JSON (2.4 KB)
 
-Day 1: Open with v1.4.1
+Day 1: Open with v1.5.0
        ✅ Auto-detected as raw JSON
        ✅ Loads successfully
        
        User performs schema change
        SaveMetadata() → Compressed (896 bytes)
        
-Day 2: Open with v1.4.1
+Day 2: Open with v1.5.0
        ✅ Auto-detected as compressed
        ✅ Decompresses automatically
 ```
@@ -493,9 +493,9 @@ Day 2: Open with v1.4.1
 | SharpCoreDB Version | Can Read Raw JSON | Can Read Compressed | Writes |
 |---------------------|-------------------|---------------------|--------|
 | v1.3.5 and earlier | ✅ Yes | ❌ No | Raw JSON only |
-| v1.4.1+ | ✅ Yes | ✅ Yes | Compressed (if enabled) |
+| v1.5.0+ | ✅ Yes | ✅ Yes | Compressed (if enabled) |
 
-**Recommendation:** Upgrade all instances to v1.4.1+ for full compatibility.
+**Recommendation:** Upgrade all instances to v1.5.0+ for full compatibility.
 
 ---
 
@@ -541,7 +541,7 @@ else
 
 **Cause:** Background flush not completed before dispose.
 
-**Fix (v1.4.1):** Call `ForceSave()` before dispose:
+**Fix (v1.5.0):** Call `ForceSave()` before dispose:
 ```csharp
 var db = factory.Create("mydb.scdb", "password");
 db.ExecuteSQL("CREATE TABLE users (id INT, name TEXT)");
@@ -630,18 +630,18 @@ public partial class Database
 - **Implementation:** `src/SharpCoreDB/Database/Core/Database.Core.cs` (lines 170-485)
 - **Configuration:** `src/SharpCoreDB/DatabaseOptions.cs` (line 157)
 - **Tests:** `tests/SharpCoreDB.Tests/Storage/SingleFileReopenCriticalTests.cs`
-- **Changelog:** `docs/CHANGELOG.md` (v1.4.1 section)
+- **Changelog:** `docs/CHANGELOG.md` (v1.5.0 section)
 - **Main README:** Updated with compression notes
 
 ---
 
 ## 🎯 Migration Guide
 
-### From v1.3.5 to v1.4.1
+### From v1.3.5 to v1.5.0
 
 **Step 1: Update NuGet Package**
 ```bash
-dotnet add package SharpCoreDB --version 1.4.1
+dotnet add package SharpCoreDB --version 1.5.0
 ```
 
 **Step 2: No Code Changes Required**
@@ -660,7 +660,7 @@ options.CompressMetadata = true; // Default, explicit for clarity
 
 **Step 4: Verify Compression**
 ```csharp
-// After opening database with v1.4.1
+// After opening database with v1.5.0
 using var provider = SingleFileStorageProvider.Open("mydb.scdb", options);
 var metadata = await provider.ReadBlockAsync("sys:metadata");
 
@@ -680,7 +680,7 @@ if (metadata is not null && metadata.Length >= 4)
 
 ## ✅ Summary
 
-SharpCoreDB v1.4.1 delivers critical reliability improvements and significant metadata optimization:
+SharpCoreDB v1.5.0 delivers critical reliability improvements and significant metadata optimization:
 
 ### **Reliability** ✅
 - Empty database reopen edge cases handled
@@ -708,4 +708,4 @@ SharpCoreDB v1.4.1 delivers critical reliability improvements and significant me
 
 **Last Updated:** 2026-02-20  
 **Author:** SharpCoreDB Development Team  
-**Version:** 1.4.1
+**Version:** 1.5.0

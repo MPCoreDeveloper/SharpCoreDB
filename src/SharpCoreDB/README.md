@@ -3,7 +3,7 @@
   
   # SharpCoreDB
   
-  **High-Performance Embedded Database for .NET 10**
+  **High-Performance Embedded & Network Database for .NET 10**
   
   **Version:** 1.3.5 (Phase 9.2)  
   **Status:** Production Ready ✅

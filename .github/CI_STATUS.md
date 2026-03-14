@@ -75,42 +75,42 @@ After CI passes on master:
 
 ### 2. Publish to NuGet.org
 ```bash
-# Use the correct order (see docs/RELEASE_CHECKLIST_V1.4.1.md)
+# Use the correct order (see docs/RELEASE_CHECKLIST_v1.5.0.md)
 
 # Wave 1: Core
-dotnet nuget push "SharpCoreDB.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
 
 # Wave 2: Direct dependencies (wait 60 seconds after Wave 1)
-dotnet nuget push "SharpCoreDB.Analytics.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Data.Provider.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Extensions.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Graph.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Distributed.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.VectorSearch.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Serilog.Sinks.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Analytics.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Data.Provider.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Extensions.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Graph.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Distributed.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.VectorSearch.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Serilog.Sinks.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
 
 # Wave 3: Multi-dependencies (wait 60 seconds after Wave 2)
-dotnet nuget push "SharpCoreDB.Provider.Sync.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.Provider.YesSql.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
-dotnet nuget push "SharpCoreDB.EntityFrameworkCore.1.4.1.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Provider.Sync.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.Provider.YesSql.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
+dotnet nuget push "SharpCoreDB.EntityFrameworkCore.1.5.0.nupkg" -k <api-key> -s https://api.nuget.org/v3/index.json
 ```
 
 ### 3. Create GitHub Release
 ```bash
-git tag v1.4.1
-git push origin v1.4.1
+git tag v1.5.0
+git push origin v1.5.0
 ```
 
 Then create release on GitHub with:
-- Tag: `v1.4.1`
-- Title: `SharpCoreDB v1.4.1 - Critical Bug Fixes & Metadata Compression`
-- Description: Link to `docs/PROGRESSION_V1.3.5_TO_V1.4.1.md`
+- Tag: `v1.5.0`
+- Title: `SharpCoreDB v1.5.0 - Critical Bug Fixes & Metadata Compression`
+- Description: Link to `docs/PROGRESSION_V1.3.5_TO_v1.5.0.md`
 
 ## 🔗 Related Documentation
 
-- [Release Checklist](../docs/RELEASE_CHECKLIST_V1.4.1.md)
-- [Version Update Summary](../docs/VERSION_UPDATE_SUMMARY_V1.4.1.md)
-- [Progression Report](../docs/PROGRESSION_V1.3.5_TO_V1.4.1.md)
+- [Release Checklist](../docs/RELEASE_CHECKLIST_v1.5.0.md)
+- [Version Update Summary](../docs/VERSION_UPDATE_SUMMARY_v1.5.0.md)
+- [Progression Report](../docs/PROGRESSION_V1.3.5_TO_v1.5.0.md)
 
 ## 🐛 Troubleshooting
 
@@ -123,11 +123,11 @@ Then create release on GitHub with:
 - Check test output in GitHub Actions artifacts
 
 ### Pack Failures
-- Ensure all dependencies are v1.4.1
+- Ensure all dependencies are v1.5.0
 - Check for missing NuGet.README.md files
 
 ---
 
 **Last Updated:** 2026-02-28  
-**Version:** 1.4.1  
+**Version:** 1.5.0  
 **Status:** ✅ Fully Operational with .NET 10 SDK

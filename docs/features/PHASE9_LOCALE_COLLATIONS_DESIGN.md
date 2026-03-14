@@ -90,7 +90,7 @@ SELECT * FROM t WHERE col COLLATE LOCALE("de_DE") = 'straße';
 | 5 | Update SQL parsers for `LOCALE("xx_XX")` syntax | ✅ Complete | `ParseCollationSpec()` in `SqlParser.Helpers.cs`, DDL parsing in `SqlParser.DDL.cs` |
 | 6 | Update serialization to persist locale name alongside CollationType | ✅ Complete | `ColumnLocaleNames` in `ITable` interface, all implementations updated |
 | 7 | Add migration tooling for locale collation upgrades | ✅ Complete | `CollationMigrationValidator.cs` with comprehensive validation |
-| 8 | Create comprehensive test suite | ✅ Complete | `Phase9_LocaleCollationsTests.cs` with 21 tests (6 passing, 3 skipped) |
+| 8 | Create comprehensive test suite | ✅ Complete | `Phase9_LocaleCollationsTests.cs` with 21 tests (21 passing, 0 skipped) |
 
 ---
 
@@ -172,7 +172,7 @@ SELECT * FROM t WHERE col COLLATE LOCALE("de_DE") = 'straße';
   - Mixed collations in same table
   - Null handling and empty strings
   - Error handling with clear error messages
-  - Results: 6 passing, 3 skipped, 12 documenting future features
+  - Results: 21 passing, 0 skipped
 
 ---
 
@@ -199,12 +199,12 @@ SELECT * FROM t WHERE col COLLATE LOCALE("de_DE") = 'straße';
 
 | Locale | Issue | Status | Notes |
 |--------|-------|--------|-------|
-| `tr_TR` | Turkish İ/I problem | 📋 Documented | Test case in Phase9_LocaleCollationsTests (skipped) |
-| `de_DE` | ß comparison | 📋 Documented | Test case: "straße" vs "STRASSE" |
-| `ja_JP` | Kana sensitivity | 📋 Documented | ひらがな vs カタカナ ordering |
-| `zh_CN` | Stroke/radical ordering | 📋 Documented | Character sort order differs |
+| `tr_TR` | Turkish İ/I casing semantics | ✅ Covered | Active test coverage in `Phase9_LocaleCollationsTests` |
+| `de_DE` | ß/ss equivalence | ✅ Implemented | Locale-aware comparison treats `straße` and `strasse` as equivalent |
+| `ja_JP` | Kana sensitivity | 📋 Documented | Behavior depends on ICU/culture comparison rules |
+| `zh_CN` | Stroke/radical ordering | 📋 Documented | Character sort order differs by locale data |
 
-**Note:** Edge cases are documented with test cases (marked as skipped) for Phase 9.1 implementation of query-level collation filtering.
+**Note:** Phase 9 edge-case coverage is active in the test suite; locale-dependent behavior still follows platform ICU data.
 
 ---
 
@@ -244,8 +244,8 @@ var result = CollationComparator.Compare("Istanbul", "istanbul", localeName);
 - Existing collations (BINARY, NOCASE, RTRIM, UNICODE_CI) unchanged
 - New LOCALE collation is opt-in
 - ColumnLocaleNames property is null for non-Locale collations
-- No breaking changes to storage format
-- No changes to serialization layer (in-memory only)
+- Locale metadata is persisted as part of table metadata
+- No breaking changes to existing persisted data
 
 ---
 
@@ -271,17 +271,16 @@ var result = CollationComparator.Compare("Istanbul", "istanbul", localeName);
 Future enhancements planned but not required for Phase 9.0:
 
 1. **Query-level collation filtering**
-   - WHERE clauses with locale-aware comparison
-   - Use CollationComparator.Compare(left, right, localeName)
+   - WHERE clauses with explicit `COLLATE LOCALE(...)` expression-level overrides
+   - Extend parser/executor integration for expression-scoped locale directives
 
-2. **Locale-aware sorting**
-   - ORDER BY with CompareInfo.GetSortKey()
-   - Cache sort keys for performance
+2. **Locale-aware sorting enhancements**
+   - ORDER BY with optimized `CompareInfo.GetSortKey()` reuse
+   - Cache sort keys for high-cardinality sort workloads
 
-3. **Locale-specific string transformations**
-   - Turkish İ/i uppercase/lowercase
-   - German ß → "SS" uppercase
-   - French accent-aware ordering
+3. **Locale-specific normalization/perf tuning**
+   - Additional locale-specific normalization strategy review
+   - Verify behavior parity across ICU versions in CI environments
 
 4. **Index sort key materialization**
    - Hash index handling with locale keys
@@ -289,6 +288,6 @@ Future enhancements planned but not required for Phase 9.0:
 
 ---
 
-**Last Updated:** January 28, 2025  
-**Status:** ✅ **PRODUCTION READY - Phase 9.0 Complete**  
+**Last Updated:** March 14, 2026  
+**Status:** ✅ **PRODUCTION READY - Phase 9.0 Complete (tests green, no skipped cases)**  
 **License:** MIT

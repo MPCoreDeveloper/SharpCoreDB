@@ -1,4 +1,4 @@
-# SharpCoreDB.Server v1.4.1 - Network Database Server
+# SharpCoreDB.Server v1.5.0 - Network Database Server
 
 **High-Performance Network Database Server for .NET 10**
 
@@ -151,4 +151,4 @@ MIT License - See https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LIC
 
 ---
 
-**Version:** 1.4.1 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready
+**Version:** 1.5.0 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready

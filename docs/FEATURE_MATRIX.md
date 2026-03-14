@@ -16,8 +16,15 @@
 | **Phase 8: Vector Search** | ✅ Complete | 1.2.0 | 100% |
 | **Phase 9: Analytics Engine** | ✅ Complete | 1.3.5 | 100% |
 | **Phase 10: Distributed & Sync** | ✅ Complete | 1.4.0 | 100% |
-| **Phase 11: Network Server** | ✅ Complete | 1.4.1 | 100% |
+| **Phase 11: Network Server** | ✅ Complete | 1.5.0 | 100% |
 | **Phase 12: Advanced GraphRAG** | ✅ Complete | 1.5.0 | 100% |
+
+---
+
+## ⚠️ Known Deferred Limitation
+
+- `SingleFileDatabase.ExecuteCompiled` with parameterized plans can still hang in specific disposal/shutdown paths.
+- Mitigation is in place (safer disposal ordering), but full resolution requires async disposal refactoring (`IAsyncDisposable`) in single-file storage internals.
 
 ---
 
@@ -67,33 +74,33 @@
 | Feature | Status | Version | Package | Notes |
 |---------|--------|---------|---------|-------|
 | **Protocols** |
-| gRPC (HTTP/2 + HTTP/3) | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Primary protocol |
-| Binary TCP Protocol | ✅ Complete | 1.4.1 | SharpCoreDB.Server | PostgreSQL wire protocol |
-| HTTPS REST API | ✅ Complete | 1.4.1 | SharpCoreDB.Server | JSON-based |
-| WebSocket Streaming | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Real-time queries |
+| gRPC (HTTP/2 + HTTP/3) | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Primary protocol |
+| Binary TCP Protocol | ✅ Complete | 1.5.0 | SharpCoreDB.Server | PostgreSQL wire protocol |
+| HTTPS REST API | ✅ Complete | 1.5.0 | SharpCoreDB.Server | JSON-based |
+| WebSocket Streaming | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Real-time queries |
 | **Client Libraries** |
-| .NET Client | ✅ Complete | 1.4.1 | SharpCoreDB.Client | ADO.NET-style |
+| .NET Client | ✅ Complete | 1.5.0 | SharpCoreDB.Client | ADO.NET-style |
 | Python Client (PyPI) | ✅ Complete | 1.0.0 | pysharpcoredb | Async/sync APIs |
 | JavaScript/TypeScript (npm) | ✅ Complete | 1.0.0 | @sharpcoredb/client | Promise-based |
 | **Security** |
-| JWT Authentication | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Token-based auth |
-| Mutual TLS (mTLS) | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Certificate auth |
-| Role-Based Access Control | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Admin/Writer/Reader |
-| TLS 1.2+ Enforcement | ✅ Complete | 1.4.1 | SharpCoreDB.Server | No plain HTTP |
+| JWT Authentication | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Token-based auth |
+| Mutual TLS (mTLS) | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Certificate auth |
+| Role-Based Access Control | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Admin/Writer/Reader |
+| TLS 1.2+ Enforcement | ✅ Complete | 1.5.0 | SharpCoreDB.Server | No plain HTTP |
 | **Enterprise Features** |
-| Multi-Database Support | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Multiple DBs per server |
-| Connection Pooling | ✅ Complete | 1.4.1 | SharpCoreDB.Server | 1000+ connections |
-| Health Checks | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Prometheus-compatible |
-| Session Management | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Lifecycle management |
-| Graceful Shutdown | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Connection draining |
+| Multi-Database Support | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Multiple DBs per server |
+| Connection Pooling | ✅ Complete | 1.5.0 | SharpCoreDB.Server | 1000+ connections |
+| Health Checks | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Prometheus-compatible |
+| Session Management | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Lifecycle management |
+| Graceful Shutdown | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Connection draining |
 | **Deployment** |
-| Docker Support | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Official images |
-| Windows Service | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Automated installer |
-| Linux systemd | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Automated installer |
+| Docker Support | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Official images |
+| Windows Service | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Automated installer |
+| Linux systemd | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Automated installer |
 | **Performance** |
-| 50K+ QPS | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Queries per second |
-| Sub-millisecond Latency | ✅ Complete | 1.4.1 | SharpCoreDB.Server | 0.8-1.2ms (p50) |
-| 1000+ Concurrent Connections | ✅ Complete | 1.4.1 | SharpCoreDB.Server | Production-tested |
+| 50K+ QPS | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Queries per second |
+| Sub-millisecond Latency | ✅ Complete | 1.5.0 | SharpCoreDB.Server | 0.8-1.2ms (p50) |
+| 1000+ Concurrent Connections | ✅ Complete | 1.5.0 | SharpCoreDB.Server | Production-tested |
 
 ---
 
@@ -131,7 +138,7 @@
 | Write-Ahead Logging (WAL) | ✅ Complete | 1.0.5 | SharpCoreDB | Crash recovery |
 | AES-256-GCM Encryption | ✅ Complete | 1.0.0 | SharpCoreDB | At-rest encryption |
 | Compression (LZ4, Brotli) | ✅ Complete | 1.0.0 | SharpCoreDB | Automatic |
-| Metadata Compression (Brotli) | ✅ Complete | 1.4.1 | SharpCoreDB | 60-80% reduction |
+| Metadata Compression (Brotli) | ✅ Complete | 1.5.0 | SharpCoreDB | 60-80% reduction |
 | **Indexing** |
 | B-tree Index | ✅ Complete | 1.0.0 | SharpCoreDB | Range queries |
 | Hash Index | ✅ Complete | 1.0.0 | SharpCoreDB | Equality lookups |
@@ -327,14 +334,14 @@
 | Feature | Status | Version | Package | Notes |
 |---------|--------|---------|---------|-------|
 | **Entity Framework Core** |
-| EF Core Provider | ✅ Complete | 1.4.1 | SharpCoreDB.EntityFrameworkCore | Full LINQ support |
-| Migrations | ✅ Complete | 1.4.1 | SharpCoreDB.EntityFrameworkCore | Code-first |
-| Change Tracking | ✅ Complete | 1.4.1 | SharpCoreDB.EntityFrameworkCore | EF Core compatible |
+| EF Core Provider | ✅ Complete | 1.5.0 | SharpCoreDB.EntityFrameworkCore | Full LINQ support |
+| Migrations | ✅ Complete | 1.5.0 | SharpCoreDB.EntityFrameworkCore | Code-first |
+| Change Tracking | ✅ Complete | 1.5.0 | SharpCoreDB.EntityFrameworkCore | EF Core compatible |
 | **Extensions** |
-| Dependency Injection | ✅ Complete | 1.4.1 | SharpCoreDB.Extensions | AddSharpCoreDB() |
-| Health Checks | ✅ Complete | 1.4.1 | SharpCoreDB.Extensions | ASP.NET Core |
+| Dependency Injection | ✅ Complete | 1.5.0 | SharpCoreDB.Extensions | AddSharpCoreDB() |
+| Health Checks | ✅ Complete | 1.5.0 | SharpCoreDB.Extensions | ASP.NET Core |
 | **Logging** |
-| Serilog Sink | ✅ Complete | 1.4.1 | SharpCoreDB.Serilog.Sinks | Structured logging |
+| Serilog Sink | ✅ Complete | 1.5.0 | SharpCoreDB.Serilog.Sinks | Structured logging |
 
 ---
 
@@ -385,15 +392,15 @@
 
 | Package | Latest Version | Status | Release Date |
 |---------|---------------|--------|--------------|
-| **SharpCoreDB** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Analytics** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.VectorSearch** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Graph** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Distributed** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Provider.Sync** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.EntityFrameworkCore** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Extensions** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
-| **SharpCoreDB.Serilog.Sinks** | 1.4.1 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Analytics** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.VectorSearch** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Graph** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Distributed** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Provider.Sync** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.EntityFrameworkCore** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Extensions** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
+| **SharpCoreDB.Serilog.Sinks** | 1.5.0 | ✅ Stable | Feb 20, 2026 |
 | **SharpCoreDB.Server** | 1.5.0-preview | 🚧 In Progress | Q2 2026 |
 | **SharpCoreDB.Server.Core** | 1.5.0-preview | 🚧 In Progress | Q2 2026 |
 | **SharpCoreDB.Server.Protocol** | 1.5.0-preview | 🚧 In Progress | Q2 2026 |

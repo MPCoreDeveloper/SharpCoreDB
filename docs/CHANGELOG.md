@@ -5,6 +5,19 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Unified `IS NULL` / `IS NOT NULL` behavior across runtime scan, join-helper, and compiled predicate paths.
+- Added parser support for scalar function expressions in SELECT columns (including `COALESCE(...)`) and parenthesized subquery expressions.
+- Improved `EnhancedSqlParser` malformed SQL detection by flagging unparsed trailing content via `HasErrors`.
+- Added LINQ translator handling for `ExpressionType.Convert` / `ConvertChecked` in enum-related comparison scenarios.
+- Improved German locale comparison behavior for `ß/ss` equivalence in locale-aware matching.
+
+### Changed
+- Updated project documentation and status reports to reflect current implementation and validation baseline.
+- Explicitly documented the remaining deferred single-file parameterized `ExecuteCompiled` disposal deadlock path.
+
 ## [1.5.0] - 2026-03-30
 
 ### 🎉 Major Achievement - Phase 12: GraphRAG Enhancement & Vector Search Integration COMPLETE

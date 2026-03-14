@@ -1,14 +1,14 @@
-# SharpCoreDB Progression: v1.3.5 → v1.4.1
+# SharpCoreDB Progression: v1.3.5 → v1.5.0
 
 **Period:** February 19-20, 2026  
-**Releases:** 3 incremental releases (1.4.0, 1.4.0.1, 1.4.1)  
+**Releases:** 3 incremental releases (1.4.0, 1.4.0.1, 1.5.0)  
 **Focus:** Enterprise features, reliability fixes, performance optimizations
 
 ---
 
 ## 📊 Executive Summary
 
-| Metric | v1.3.5 | v1.4.1 | Change |
+| Metric | v1.3.5 | v1.5.0 | Change |
 |--------|--------|--------|--------|
 | **Total Features** | Phase 1-9 Complete | **Phase 1-10 Complete** | +Phase 10 (Distributed) |
 | **Total Packages** | 5 packages | **7 packages** | +2 new packages |
@@ -20,7 +20,7 @@
 
 ---
 
-## 🎯 Major Features Added (v1.3.5 → v1.4.1)
+## 🎯 Major Features Added (v1.3.5 → v1.5.0)
 
 ### **v1.4.0 - Phase 10: Enterprise Distributed Features** (Feb 20, 2026)
 
@@ -194,7 +194,7 @@ await tx.CommitAsync(); // All-or-nothing commit
 
 ---
 
-### **v1.4.1 - JSON Metadata Improvements** (Feb 20, 2026)
+### **v1.5.0 - JSON Metadata Improvements** (Feb 20, 2026)
 
 #### 1. **JSON Edge Case Handling** 🐛 → ✅
 
@@ -208,11 +208,11 @@ await tx.CommitAsync(); // All-or-nothing commit
 
 **Solutions:**
 ```csharp
-// Before v1.4.1
+// Before v1.5.0
 meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
 // ❌ Crashes on empty JSON
 
-// v1.4.1
+// v1.5.0
 if (string.IsNullOrWhiteSpace(metaJson))
     return; // ✅ Valid for new databases
 
@@ -361,9 +361,9 @@ await tx.CommitAsync();
 | v1.3.5 | 850+ | - | Analytics (Phase 9) |
 | v1.4.0 | 930+ | +80 | Distributed, Sync |
 | v1.4.0.1 | 941+ | +11 | Reopen regression |
-| v1.4.1 | 950+ | +3 | Metadata diagnostics |
+| v1.5.0 | 950+ | +3 | Metadata diagnostics |
 
-### New Test Suites (v1.4.0 - v1.4.1)
+### New Test Suites (v1.4.0 - v1.5.0)
 
 1. **Sync Provider Tests** (40+ tests)
    - Bidirectional sync scenarios
@@ -406,7 +406,7 @@ await tx.CommitAsync();
 
 ## 📚 Documentation Expansion
 
-### New Documentation (v1.3.5 → v1.4.1)
+### New Documentation (v1.3.5 → v1.5.0)
 
 #### Distributed Features
 1. `docs/distributed/README.md` - Overview and architecture
@@ -423,12 +423,12 @@ await tx.CommitAsync();
 10. `docs/sync/TROUBLESHOOTING.md` - Common sync issues
 
 #### Storage & Performance
-11. `docs/storage/METADATA_IMPROVEMENTS_V1.4.1.md` - **THIS DOCUMENT**
+11. `docs/storage/METADATA_IMPROVEMENTS_v1.5.0.md` - **THIS DOCUMENT**
 12. `docs/storage/COMPRESSION.md` - Compression strategies
 13. `docs/storage/WAL_RECOVERY.md` - WAL recovery mechanics
 
 #### Updated Documentation
-14. Root `README.md` - Updated to v1.4.1 with all features
+14. Root `README.md` - Updated to v1.5.0 with all features
 15. `docs/INDEX.md` - Comprehensive navigation
 16. `docs/PROJECT_STATUS.md` - Current status (Phase 10 complete)
 17. `docs/CHANGELOG.md` - Full version history
@@ -439,7 +439,7 @@ await tx.CommitAsync();
 |---------|------------|----------|--------------|
 | v1.3.5 | 45 | - | - |
 | v1.4.0 | 60 | +13 | +2 |
-| v1.4.1 | 65+ | +3 | +2 |
+| v1.5.0 | 65+ | +3 | +2 |
 
 ---
 
@@ -464,7 +464,7 @@ await tx.CommitAsync();
 - **Throughput:** 10K distributed TXs/sec
 - **Recovery:** <10 seconds after network partition
 
-### v1.4.1 Performance
+### v1.5.0 Performance
 
 #### Metadata Compression
 - **Compression Ratio:** 60-80% size reduction
@@ -483,7 +483,7 @@ await tx.CommitAsync();
 
 ### None! 🎉
 
-SharpCoreDB v1.4.0 - v1.4.1 maintains **100% backward compatibility** with v1.3.5:
+SharpCoreDB v1.4.0 - v1.5.0 maintains **100% backward compatibility** with v1.3.5:
 
 ✅ **API Compatibility:** All v1.3.5 APIs unchanged
 ✅ **File Format:** Old `.scdb` files open without migration
@@ -495,10 +495,10 @@ SharpCoreDB v1.4.0 - v1.4.1 maintains **100% backward compatibility** with v1.3.
 
 **Step 1: Update NuGet packages**
 ```bash
-dotnet add package SharpCoreDB --version 1.4.1
-dotnet add package SharpCoreDB.Analytics --version 1.4.1
-dotnet add package SharpCoreDB.VectorSearch --version 1.4.1
-dotnet add package SharpCoreDB.Graph --version 1.4.1
+dotnet add package SharpCoreDB --version 1.5.0
+dotnet add package SharpCoreDB.Analytics --version 1.5.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.5.0
+dotnet add package SharpCoreDB.Graph --version 1.5.0
 
 # Optional new packages
 dotnet add package SharpCoreDB.Provider.Sync --version 1.0.0
@@ -526,7 +526,7 @@ await agent.SynchronizeAsync();
 
 ---
 
-## 🐛 Bug Fixes Summary (v1.3.5 → v1.4.1)
+## 🐛 Bug Fixes Summary (v1.3.5 → v1.5.0)
 
 ### Critical Fixes
 
@@ -536,7 +536,7 @@ await agent.SynchronizeAsync();
    - **Fix:** Immediate header flush on creation
    - **Tests:** 11 regression tests
 
-2. **JSON Metadata Parse Errors** (v1.4.1)
+2. **JSON Metadata Parse Errors** (v1.5.0)
    - **Severity:** High
    - **Impact:** New empty databases
    - **Fix:** Graceful null/empty JSON handling
@@ -574,22 +574,22 @@ await agent.SynchronizeAsync();
 
 ## 📊 Benchmark Comparisons
 
-### v1.3.5 vs v1.4.1 Benchmarks
+### v1.3.5 vs v1.5.0 Benchmarks
 
 #### Single-File Database Open (50 tables)
 
-| Operation | v1.3.5 | v1.4.1 | Delta |
+| Operation | v1.3.5 | v1.5.0 | Delta |
 |-----------|--------|--------|-------|
 | Read metadata | 12 KB | 3.2 KB | **-73% I/O** |
 | Decompress | 0 ms | 0.3 ms | +0.3 ms |
 | Parse JSON | 1.2 ms | 1.2 ms | 0 ms |
 | **Total** | **1.2 ms** | **1.5 ms** | **+0.3 ms** |
 
-**Winner:** v1.4.1 (better I/O, negligible CPU overhead)
+**Winner:** v1.5.0 (better I/O, negligible CPU overhead)
 
 #### Bulk Insert (1M rows)
 
-| Database | v1.3.5 | v1.4.1 | Delta |
+| Database | v1.3.5 | v1.5.0 | Delta |
 |----------|--------|--------|-------|
 | SharpCoreDB | 2.8s | 2.8s | 0% |
 | SQLite | 18.2s | 18.2s | 0% |
@@ -599,7 +599,7 @@ await agent.SynchronizeAsync();
 
 #### Sync Performance (NEW in v1.4.0)
 
-| Scenario | v1.4.0 | v1.4.1 | Delta |
+| Scenario | v1.4.0 | v1.5.0 | Delta |
 |----------|--------|--------|-------|
 | Initial sync (1M rows) | 45s | 45s | 0% |
 | Incremental (10K changes) | 5s | 5s | 0% |
@@ -683,13 +683,13 @@ await tx.CommitAsync(); // All-or-nothing
 
 ---
 
-### High-Table-Count Databases (NEW in v1.4.1)
+### High-Table-Count Databases (NEW in v1.5.0)
 
-**Before v1.4.1:**
+**Before v1.5.0:**
 - ⚠️ 100 tables = 24KB metadata
 - ⚠️ Slow database open on every launch
 
-**After v1.4.1:**
+**After v1.5.0:**
 ```csharp
 // 100 tables with compression
 var options = DatabaseOptions.CreateSingleFileDefault();
@@ -742,7 +742,7 @@ var db = factory.Create("large.scdb", "password", options);
 - **CHANGELOG:** `docs/CHANGELOG.md`
 - **Distributed Guide:** `docs/distributed/README.md`
 - **Sync Tutorial:** `docs/sync/TUTORIAL.md`
-- **Metadata Improvements:** `docs/storage/METADATA_IMPROVEMENTS_V1.4.1.md`
+- **Metadata Improvements:** `docs/storage/METADATA_IMPROVEMENTS_v1.5.0.md`
 
 ### Packages
 - **SharpCoreDB:** https://www.nuget.org/packages/SharpCoreDB
@@ -761,7 +761,7 @@ var db = factory.Create("large.scdb", "password", options);
 
 ## ✅ Conclusion
 
-SharpCoreDB has evolved significantly from v1.3.5 to v1.4.1:
+SharpCoreDB has evolved significantly from v1.3.5 to v1.5.0:
 
 ### **Key Achievements** 🎯
 
@@ -775,7 +775,7 @@ SharpCoreDB has evolved significantly from v1.3.5 to v1.4.1:
 
 ### **Production Ready** ✅
 
-All features from v1.3.5 to v1.4.1 are **production-ready** with:
+All features from v1.3.5 to v1.5.0 are **production-ready** with:
 - ✅ Comprehensive test coverage (950+ tests)
 - ✅ Real-world performance validation
 - ✅ Complete documentation
@@ -784,7 +784,7 @@ All features from v1.3.5 to v1.4.1 are **production-ready** with:
 
 ### **Upgrade Recommendation** 🚀
 
-**For all users:** Upgrade to v1.4.1 immediately for:
+**For all users:** Upgrade to v1.5.0 immediately for:
 - Critical reopen bug fixes
 - Metadata compression benefits
 - Access to enterprise distributed features
@@ -793,6 +793,6 @@ All features from v1.3.5 to v1.4.1 are **production-ready** with:
 ---
 
 **Last Updated:** 2026-02-20  
-**Version:** 1.4.1  
+**Version:** 1.5.0  
 **Status:** ✅ Production Ready  
 **Next Release:** v1.5.0 (Q1 2026)

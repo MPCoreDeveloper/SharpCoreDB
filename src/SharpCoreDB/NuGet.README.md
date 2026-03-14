@@ -1,10 +1,10 @@
-# SharpCoreDB v1.4.1 - Production Database Engine
+# SharpCoreDB v1.5.0 - Production Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
-## ✨ What's New in v1.4.1
+## ✨ What's New in v1.5.0
 
 ### 🎉 Phase 11 Complete: Network Database Server
 - **SharpCoreDB.Server** - Full network database server with gRPC, Binary TCP, HTTPS REST, WebSocket
@@ -83,10 +83,10 @@ npm install @sharpcoredb/client
 
 **Server Quick Start:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/QUICKSTART.md
 
-**Version 1.4.1 docs:**
-- [Metadata Improvements](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/storage/METADATA_IMPROVEMENTS_V1.4.1.md)
-- [Progression Report](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/PROGRESSION_V1.3.5_TO_V1.4.1.md)
-- [Quick Reference](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/storage/QUICK_REFERENCE_V1.4.1.md)
+**Version 1.5.0 docs:**
+- [Metadata Improvements](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/storage/METADATA_IMPROVEMENTS_v1.5.0.md)
+- [Progression Report](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/PROGRESSION_V1.3.5_TO_v1.5.0.md)
+- [Quick Reference](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/storage/QUICK_REFERENCE_v1.5.0.md)
 
 ## 💻 Quick Example
 
@@ -155,7 +155,7 @@ dotnet add package SharpCoreDB
 **100% backward compatible** - No breaking changes!
 
 ```bash
-dotnet add package SharpCoreDB --version 1.4.1
+dotnet add package SharpCoreDB --version 1.5.0
 ```
 
 Your existing databases work as-is. New metadata is automatically compressed.
@@ -174,7 +174,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.4.1 (Feb 20, 2026)  
+**Latest Version:** 1.5.0 (Feb 20, 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,468+ (100% passing)  
 **Status:** ✅ Production Ready

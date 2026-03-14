@@ -30,8 +30,8 @@
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
 - `serialization/SERIALIZATION_FAQ.md`
 - `serialization/BINARY_FORMAT_VISUAL_REFERENCE.md`
-- `storage/QUICK_REFERENCE_V1.4.1.md`
-- `storage/METADATA_IMPROVEMENTS_V1.4.1.md`
+- `storage/QUICK_REFERENCE_v1.5.0.md`
+- `storage/METADATA_IMPROVEMENTS_v1.5.0.md`
 
 ## 4. GraphRAG and Analytics
 

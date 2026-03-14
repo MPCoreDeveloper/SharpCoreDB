@@ -1,6 +1,6 @@
 # SharpCoreDB
 
-**High-Performance Embedded Database for .NET 10**
+**High-Performance Embedded & Network Database for .NET 10**
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg) ![NuGet](https://img.shields.io/badge/NuGet-1.3.0-blue.svg) ![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg) ![Tests](https://img.shields.io/badge/Tests-800+_Passing-brightgreen.svg)
 
