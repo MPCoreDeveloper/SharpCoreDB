@@ -29,7 +29,7 @@
     </PackageReference>
 
     <!-- Assertions & Mocking -->
-    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="FluentAssertions" Version="8.9.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
 
     <!-- Sync Dependencies -->
