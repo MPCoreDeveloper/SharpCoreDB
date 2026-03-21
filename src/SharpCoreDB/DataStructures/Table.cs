@@ -84,6 +84,17 @@ public partial class Table : ITable, IDisposable
     /// Gets or sets the primary key column index (-1 if no primary key).
     /// </summary>
     public int PrimaryKeyIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Gets or sets whether this table has an auto-generated internal <c>_rowid</c> column.
+    /// When true, the first column is a ULID-based auto-generated primary key that is
+    /// hidden from <c>SELECT *</c> results but queryable via <c>SELECT _rowid, ...</c>.
+    /// </summary>
+    /// <remarks>
+    /// Set automatically during CREATE TABLE when no explicit PRIMARY KEY is defined.
+    /// Persisted in metadata for correct behavior after database reload.
+    /// </remarks>
+    public bool HasInternalRowId { get; set; }
     
     /// <summary>
     /// Gets or sets which columns are auto-generated.

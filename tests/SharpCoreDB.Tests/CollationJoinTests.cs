@@ -353,6 +353,7 @@ public sealed class CollationJoinTests
         public required List<DataType> ColumnTypes { get; init; }
         public required string DataFile { get; set; }
         public required int PrimaryKeyIndex { get; init; }
+        public bool HasInternalRowId => false;
         public required List<bool> IsAuto { get; init; }
         public required List<bool> IsNotNull { get; init; }
         public required List<object?> DefaultValues { get; init; }

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Auto-ROWID**: Tables created without an explicit `PRIMARY KEY` now receive a hidden `_rowid` column (ULID type, auto-generated). Follows the SQLite rowid pattern — invisible in `SELECT *`, visible when explicitly queried via `SELECT _rowid, ...`. See [`docs/features/AUTO_ROWID.md`](features/AUTO_ROWID.md) for full documentation.
+- `Table.HasInternalRowId` property (persisted in metadata) to track tables with auto-generated `_rowid`.
+- `Table.SelectIncludingRowId()` method for queries that explicitly request `_rowid`.
+- `Database.GetColumnsIncludingHidden()` for schema discovery including hidden columns (with `IsHidden` flag).
+- `ColumnInfo.IsHidden` property for metadata-driven schema tools.
+- `PersistenceConstants.InternalRowIdColumnName` constant (`"_rowid"`).
+- 9 dedicated tests for the Auto-ROWID feature in `AutoRowIdTests.cs`.
+
 ### Fixed
 - Unified `IS NULL` / `IS NOT NULL` behavior across runtime scan, join-helper, and compiled predicate paths.
 - Added parser support for scalar function expressions in SELECT columns (including `COALESCE(...)`) and parenthesized subquery expressions.

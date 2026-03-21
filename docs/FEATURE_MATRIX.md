@@ -142,6 +142,7 @@
 | AES-256-GCM Encryption | ✅ Complete | 1.0.0 | SharpCoreDB | At-rest encryption |
 | Compression (LZ4, Brotli) | ✅ Complete | 1.0.0 | SharpCoreDB | Automatic |
 | Metadata Compression (Brotli) | ✅ Complete | 1.6.0 | SharpCoreDB | 60-80% reduction |
+| Auto-ROWID (ULID) | ✅ Complete | 1.6.0 | SharpCoreDB | Hidden PK for tables without explicit PK ([docs](features/AUTO_ROWID.md)) |
 | **Indexing** |
 | B-tree Index | ✅ Complete | 1.0.0 | SharpCoreDB | Range queries |
 | Hash Index | ✅ Complete | 1.0.0 | SharpCoreDB | Equality lookups |

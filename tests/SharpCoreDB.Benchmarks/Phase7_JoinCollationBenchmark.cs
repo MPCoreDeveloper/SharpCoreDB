@@ -181,6 +181,7 @@ public class Phase7_JoinCollationBenchmark
         public List<DataType> ColumnTypes { get; } = Enumerable.Repeat(DataType.String, columns.Count).ToList();
         public string DataFile { get; set; } = ":memory:";
         public int PrimaryKeyIndex => -1;
+        public bool HasInternalRowId => false;
         public List<bool> IsAuto => Enumerable.Repeat(false, Columns.Count).ToList();
         public List<bool> IsNotNull => Enumerable.Repeat(false, Columns.Count).ToList();
         public List<object?> DefaultValues => Enumerable.Repeat<object?>(null, Columns.Count).ToList();

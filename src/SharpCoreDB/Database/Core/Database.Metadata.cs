@@ -68,6 +68,15 @@ public partial class Database : IMetadataProvider
             // ✅ COLLATE Phase 1: Resolve collation, default to Binary if list is short
             var collation = i < collations.Count ? collations[i] : CollationType.Binary;
 
+            // ✅ AUTO-ROWID: Skip internal _rowid in default schema discovery.
+            // This follows the SQLite pattern where rowid is invisible in PRAGMA table_info.
+            // Use GetColumnsIncludingHidden() to include _rowid when needed.
+            var isHidden = table.HasInternalRowId
+                && columns[i] == Constants.PersistenceConstants.InternalRowIdColumnName;
+
+            if (isHidden)
+                continue;
+
             list.Add(new ColumnInfo
             {
                 Table = tableName,
@@ -75,7 +84,50 @@ public partial class Database : IMetadataProvider
                 DataType = types[i].ToString(),
                 Ordinal = i,
                 IsNullable = true,
-                Collation = collation == CollationType.Binary ? null : collation.ToString().ToUpperInvariant()
+                Collation = collation == CollationType.Binary ? null : collation.ToString().ToUpperInvariant(),
+                IsHidden = false
+            });
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// Gets column metadata including hidden columns (e.g., internal <c>_rowid</c>).
+    /// Unlike <see cref="GetColumns"/>, this returns ALL columns, marking hidden ones
+    /// with <see cref="ColumnInfo.IsHidden"/> = <c>true</c>.
+    /// </summary>
+    /// <param name="tableName">The table name to retrieve column info for.</param>
+    /// <returns>All columns including hidden internal columns.</returns>
+    public IReadOnlyList<ColumnInfo> GetColumnsIncludingHidden(string tableName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
+        if (!tables.TryGetValue(tableName, out var table))
+        {
+            return [];
+        }
+
+        var columns = table.Columns;
+        var types = table.ColumnTypes;
+        var collations = table.ColumnCollations;
+        List<ColumnInfo> list = new(columns.Count);
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            var collation = i < collations.Count ? collations[i] : CollationType.Binary;
+            var isHidden = table.HasInternalRowId
+                && columns[i] == Constants.PersistenceConstants.InternalRowIdColumnName;
+
+            list.Add(new ColumnInfo
+            {
+                Table = tableName,
+                Name = columns[i],
+                DataType = types[i].ToString(),
+                Ordinal = i,
+                IsNullable = !isHidden,
+                Collation = collation == CollationType.Binary ? null : collation.ToString().ToUpperInvariant(),
+                IsHidden = isHidden
             });
         }
 

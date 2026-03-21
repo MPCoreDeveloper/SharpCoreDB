@@ -30,6 +30,7 @@ internal sealed class FakeGraphTable : ITable
     public List<DataType> ColumnTypes { get; }
     public string DataFile { get; set; } = string.Empty;
     public int PrimaryKeyIndex => 0;
+    public bool HasInternalRowId => false;
     public List<bool> IsAuto { get; } = [false, false];
     public List<bool> IsNotNull { get; } = [false, false];
     public List<object?> DefaultValues { get; } = [null, null];

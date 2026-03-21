@@ -38,8 +38,9 @@ public partial class Table
         for (int i = 0; i < this.Columns.Count; i++)
         {
             var col = this.Columns[i];
-            if (!row.TryGetValue(col, out var val))
+            if (!row.TryGetValue(col, out var val) || (this.IsAuto[i] && (val is null or DBNull)))
             {
+                // ✅ AUTO-ROWID: Also auto-generate when the key exists but value is null/DBNull.
                 if (this.IsAuto[i])
                 {
                     row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
@@ -301,8 +302,11 @@ public partial class Table
             for (int i = 0; i < this.Columns.Count; i++)
             {
                 var col = this.Columns[i];
-                if (!row.TryGetValue(col, out var val))
+                if (!row.TryGetValue(col, out var val) || (this.IsAuto[i] && (val is null or DBNull)))
                 {
+                    // ✅ AUTO-ROWID: Also auto-generate when the key exists but value is null/DBNull.
+                    // This handles the BulkInsertOptimized path where StreamingRowEncoder → BinaryRowDecoder
+                    // produces a dict entry with _rowid = null for rows that lacked the column.
                     if (this.IsAuto[i])
                     {
                         row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
@@ -852,6 +856,7 @@ public partial class Table
     /// <summary>
     /// Selects rows from the table with optional WHERE and ORDER BY clauses.
     /// ✅ OPTIMIZED: Lock-free reads for high-throughput concurrent access.
+    /// ✅ AUTO-ROWID: Strips internal _rowid from results (hidden by default).
     /// </summary>
     /// <param name="where">Optional WHERE clause.</param>
     /// <param name="orderBy">Optional ORDER BY column.</param>
@@ -866,6 +871,7 @@ public partial class Table
     /// <summary>
     /// Selects rows from the table with optional WHERE, ORDER BY, and encryption bypass.
     /// ✅ OPTIMIZED: Lock-free reads for high-throughput concurrent access.
+    /// ✅ AUTO-ROWID: Strips internal _rowid from results unless explicitly requested in WHERE/ORDER.
     /// </summary>
     /// <param name="where">Optional WHERE clause.</param>
     /// <param name="orderBy">Optional ORDER BY column.</param>
@@ -877,6 +883,34 @@ public partial class Table
     {
         ArgumentNullException.ThrowIfNull(this.storage);
         // ✅ OPTIMIZATION: Lock-free reads
+        var results = SelectInternal(where, orderBy, asc, noEncrypt);
+
+        // ✅ AUTO-ROWID: Strip internal _rowid from results for SELECT * (hidden by default).
+        // The _rowid is kept internally for PK index lookups, DELETE, and UPDATE operations.
+        // Users can still access it via explicit SELECT _rowid, ... queries at the SQL parser level.
+        if (HasInternalRowId)
+        {
+            StripInternalRowId(results);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Selects rows including the internal <c>_rowid</c> column (when present).
+    /// Use this method when the caller explicitly requests <c>_rowid</c> in a SELECT query.
+    /// Unlike <see cref="Select(string?, string?, bool, bool)"/>, this method does NOT
+    /// strip the auto-generated ULID primary key from results.
+    /// </summary>
+    /// <param name="where">Optional WHERE clause.</param>
+    /// <param name="orderBy">Optional ORDER BY column.</param>
+    /// <param name="asc">Whether to order ascending.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
+    /// <returns>List of matching rows including _rowid.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public List<Dictionary<string, object>> SelectIncludingRowId(string? where, string? orderBy, bool asc, bool noEncrypt)
+    {
+        ArgumentNullException.ThrowIfNull(this.storage);
         return SelectInternal(where, orderBy, asc, noEncrypt);
     }
 
@@ -1118,7 +1152,9 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            var rows = this.Select(where);
+            // Use SelectInternal to preserve _rowid in results when it's the PK,
+            // so PK-based storage position lookups work correctly during update.
+            var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
 
             foreach (var row in rows)
             {
@@ -1295,8 +1331,10 @@ public partial class Table
             }
             else if (this.PrimaryKeyIndex >= 0)
             {
-                // Columnar with PK: Use Select + PK index to locate storage positions
-                var rows = this.Select(where);
+                // Columnar with PK: Use SelectInternal + PK index to locate storage positions.
+                // IMPORTANT: Use SelectInternal (not public Select) to preserve _rowid column
+                // when it's the PK, so the PK lookup below can find the storage position.
+                var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
                 foreach (var row in rows)
                 {
                     long storagePosition = -1;
@@ -1419,7 +1457,7 @@ public partial class Table
     public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
-        
+
         if (rowCount == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
@@ -1431,6 +1469,22 @@ public partial class Table
         // ✅ FIX: Call InsertBatch which handles locking internally
         // InsertBatch already uses rwLock.EnterWriteLock(), no need for double-locking
         return InsertBatch(rows);
+    }
+
+    /// <summary>
+    /// Strips the internal <c>_rowid</c> column from result rows.
+    /// Called after SELECT operations when <see cref="HasInternalRowId"/> is true,
+    /// ensuring the auto-generated ULID primary key remains hidden from user-facing
+    /// results (SQLite rowid pattern).
+    /// </summary>
+    /// <param name="results">The result rows to strip _rowid from. Modified in-place.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void StripInternalRowId(List<Dictionary<string, object>> results)
+    {
+        for (int i = 0; i < results.Count; i++)
+        {
+            results[i].Remove(Constants.PersistenceConstants.InternalRowIdColumnName);
+        }
     }
 
      /// <summary>

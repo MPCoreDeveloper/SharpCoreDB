@@ -36,4 +36,11 @@ public sealed record ColumnInfo
     /// ✅ COLLATE Phase 1: Exposed via metadata discovery for ADO.NET/EF Core providers.
     /// </summary>
     public string? Collation { get; init; }
+
+    /// <summary>
+    /// Whether this column is a hidden internal column (e.g., auto-generated <c>_rowid</c>).
+    /// Hidden columns are not returned by <c>SELECT *</c> but can be explicitly queried.
+    /// ✅ AUTO-ROWID: Marks the internal ULID primary key as hidden.
+    /// </summary>
+    public bool IsHidden { get; init; }
 }

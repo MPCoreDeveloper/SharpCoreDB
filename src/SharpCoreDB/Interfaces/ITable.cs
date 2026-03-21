@@ -35,6 +35,20 @@ public interface ITable
     int PrimaryKeyIndex { get; }
 
     /// <summary>
+    /// Gets whether this table has an auto-generated internal <c>_rowid</c> column.
+    /// When true, the table was created without an explicit PRIMARY KEY and SharpCoreDB
+    /// automatically injected a ULID-based <c>_rowid</c> column as the primary key.
+    /// The <c>_rowid</c> column is hidden from <c>SELECT *</c> results but can be
+    /// queried explicitly via <c>SELECT _rowid, ...</c>.
+    /// </summary>
+    /// <remarks>
+    /// This follows the SQLite rowid pattern: every table has a unique row identifier,
+    /// but it is only visible when explicitly requested. Unlike SQLite's integer rowid,
+    /// SharpCoreDB uses ULID which is globally unique and lexicographically sortable.
+    /// </remarks>
+    bool HasInternalRowId { get; }
+
+    /// <summary>
     /// Gets whether columns are auto-generated.
     /// </summary>
     List<bool> IsAuto { get; }

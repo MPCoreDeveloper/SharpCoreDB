@@ -425,6 +425,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             t.Columns,
             t.ColumnTypes,
             t.PrimaryKeyIndex,
+            t.HasInternalRowId,  // ✅ AUTO-ROWID: Persist internal _rowid flag
             t.DataFile,
             t.StorageMode,
             t.IsAuto,

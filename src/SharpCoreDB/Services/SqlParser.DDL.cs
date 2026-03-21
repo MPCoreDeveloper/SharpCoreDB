@@ -183,6 +183,28 @@ public partial class SqlParser
             }
         }
 
+        // ✅ AUTO-ROWID: When no explicit PRIMARY KEY is defined, inject a hidden
+        // _rowid column using ULID type. This ensures every table has a primary key
+        // for efficient DELETE/UPDATE operations on the columnar engine, and follows
+        // the SQLite rowid pattern (hidden by default, queryable via SELECT _rowid).
+        bool hasInternalRowId = false;
+        if (primaryKeyIndex < 0)
+        {
+            // Insert _rowid as the FIRST column (index 0) so all user columns shift by 1
+            columns.Insert(0, PersistenceConstants.InternalRowIdColumnName);
+            columnTypes.Insert(0, DataType.Ulid);
+            isAuto.Insert(0, true);        // Auto-generated via Ulid.NewUlid()
+            isNotNull.Insert(0, true);     // Never null
+            defaultValues.Insert(0, null); // Generated, not defaulted
+            defaultExpressions.Insert(0, null);
+            columnCheckExpressions.Insert(0, null);
+            columnCollations.Insert(0, CollationType.Binary);
+            columnLocaleNames.Insert(0, null);
+
+            primaryKeyIndex = 0;           // _rowid is now the PK
+            hasInternalRowId = true;
+        }
+
         // ✅ NEW: Parse FOREIGN KEY constraints (Phase 1.2)
         // Look for FOREIGN KEY definitions in the column definitions
         foreignKeys.AddRange(colDefs
@@ -296,6 +318,7 @@ public partial class SqlParser
             ColumnTypes = columnTypes,
             IsAuto = isAuto,
             PrimaryKeyIndex = primaryKeyIndex,
+            HasInternalRowId = hasInternalRowId,  // ✅ AUTO-ROWID: Track internal _rowid
             DataFile = dataFilePath,
             StorageMode = storageMode,
             IsNotNull = isNotNull,

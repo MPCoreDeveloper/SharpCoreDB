@@ -113,6 +113,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     public int PrimaryKeyIndex { get; private set; } = -1;
 
     /// <inheritdoc />
+    public bool HasInternalRowId => false;
+
+    /// <inheritdoc />
     public List<bool> IsAuto { get; } = [];
 
     /// <inheritdoc />

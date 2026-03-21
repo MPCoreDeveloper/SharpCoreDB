@@ -21,4 +21,12 @@ public static class PersistenceConstants
 
     /// <summary>The key for tables in metadata.</summary>
     public const string TablesKey = "tables";
+
+    /// <summary>
+    /// The name of the auto-generated internal row identifier column.
+    /// Injected as primary key when a table is created without an explicit PRIMARY KEY.
+    /// Uses ULID type for globally unique, lexicographically sortable identifiers.
+    /// Hidden from SELECT * but queryable via explicit column reference.
+    /// </summary>
+    public const string InternalRowIdColumnName = "_rowid";
 }
