@@ -26,6 +26,7 @@
 - Prefer Microsoft-backed packages by default.
 - If a non-Microsoft package is used (e.g., Serilog), keep it on latest stable and avoid deprecated versions.
 - Avoid prerelease packages unless explicitly requested.
+- Favor modular package design with production dependencies flowing through transitive NuGet references to core packages.
 
 ## Project-Specific Rules
 - Custom requirement A.

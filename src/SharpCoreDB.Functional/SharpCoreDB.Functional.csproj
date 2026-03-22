@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>SharpCoreDB.Functional</PackageId>
+    <Version>1.6.0</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Functional</Product>
+    <Description>Functional facade for SharpCoreDB with LanguageExt Option and Fin-based APIs, fluent composition, and low-allocation wrappers for .NET 10 and C# 14.</Description>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+    <PackageReleaseNotes>v1.6.0: Initial functional facade MVP for Option/Fin wrappers and fluent composition.</PackageReleaseNotes>
+    <PackageTags>sharpcoredb;functional;languageext;option;result;fin;monad;net10;csharp14</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LanguageExt.Core" Version="4.4.9" />
+    <PackageReference Include="SharpCoreDB" Version="1.6.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Link="SharpCoreDB.jpg" />
+  </ItemGroup>
+
+</Project>
