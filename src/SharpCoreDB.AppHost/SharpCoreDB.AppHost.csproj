@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <!-- Reference to server project -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+  <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <ProjectReference Include="..\SharpCoreDB.Server\SharpCoreDB.Server.csproj" />
   </ItemGroup>
 
