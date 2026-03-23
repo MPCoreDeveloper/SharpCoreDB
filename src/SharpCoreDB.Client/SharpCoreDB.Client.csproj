@@ -31,7 +31,7 @@
   <ItemGroup>
     <!-- gRPC Client (latest stable) -->
     <PackageReference Include="Grpc.Net.Client" Version="2.76.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.34.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.34.1" />
     
     <!-- Connection pooling -->
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.5" />
