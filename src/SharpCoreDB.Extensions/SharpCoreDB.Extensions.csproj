@@ -94,7 +94,9 @@
     <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll')" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.17.0" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
   </ItemGroup>
 
 </Project>

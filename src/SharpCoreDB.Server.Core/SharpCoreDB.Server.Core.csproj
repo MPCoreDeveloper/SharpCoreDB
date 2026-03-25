@@ -37,8 +37,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
 
     <!-- Security (latest stable for .NET 10 - updated to non-deprecated) -->
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.16.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.17.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
   </ItemGroup>
 
   <ItemGroup>
