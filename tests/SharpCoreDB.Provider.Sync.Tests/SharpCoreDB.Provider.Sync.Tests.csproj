@@ -53,6 +53,7 @@
     <ProjectReference Include="..\..\src\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
   </ItemGroup>
 
