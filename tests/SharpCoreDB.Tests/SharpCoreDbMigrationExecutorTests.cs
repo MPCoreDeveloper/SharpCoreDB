@@ -2,16 +2,23 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using FluentMigrator;
+using FluentMigrator.Runner;
+using FluentMigrator.Runner.Initialization;
+using FluentMigrator.Runner.Processors;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Moq;
 using SharpCoreDB.Extensions.Extensions;
 using SharpCoreDB.Extensions.Processor;
+using SharpCoreDB.Extensions.Runner;
 using SharpCoreDB.Interfaces;
 
 namespace SharpCoreDB.Tests;
 
 public sealed class SharpCoreDbMigrationExecutorTests
 {
+    private const string GrpcConnectionString = "Server=localhost;Port=5001;Database=master;SSL=false;Username=admin;Password=test";
+
     [Fact]
     public void ExecuteSql_WhenCustomExecutorRegistered_UsesCustomExecutorBeforeFallbacks()
     {
@@ -36,7 +43,7 @@ public sealed class SharpCoreDbMigrationExecutorTests
     }
 
     [Fact]
-    public void AddSharpCoreDBFluentMigratorGrpc_WhenCalled_RegistersGrpcSqlExecutor()
+    public void AddSharpCoreDBFluentMigrator_WhenCalled_RegistersGrpcSqlExecutor()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -49,6 +56,152 @@ public sealed class SharpCoreDbMigrationExecutorTests
 
         // Assert
         Assert.IsType<SharpCoreDbGrpcMigrationSqlExecutor>(executor);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigrator_WhenServicesNull_Throws()
+    {
+        // Arrange
+        IServiceCollection? services = null;
+
+        // Act
+        var action = () => services!.AddSharpCoreDBFluentMigrator();
+
+        // Assert
+        Assert.Throws<ArgumentNullException>(action);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigratorGrpc_WhenConnectionStringEmpty_Throws()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        var action = () => services.AddSharpCoreDBFluentMigratorGrpc(string.Empty);
+
+        // Assert
+        Assert.Throws<ArgumentException>(action);
+    }
+
+    [Fact]
+    public void ExecuteSql_WhenNoExecutionSourceRegistered_Throws()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var action = () => executor.ExecuteSql("DELETE FROM users");
+
+        // Assert
+        Assert.Throws<InvalidOperationException>(action);
+    }
+
+    [Fact]
+    public void ExecuteScalar_WhenCustomExecutorRegistered_ReturnsCustomValue()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor.Setup(x => x.ExecuteScalar("SELECT 42")).Returns(42);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(customExecutor.Object);
+
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var value = executor.ExecuteScalar("SELECT 42");
+
+        // Assert
+        Assert.Equal(42, value);
+    }
+
+    [Fact]
+    public void ExecuteScalar_WhenDatabaseReturnsNoRows_ReturnsNull()
+    {
+        // Arrange
+        var databaseMock = new Mock<IDatabase>(MockBehavior.Strict);
+        databaseMock
+            .Setup(x => x.ExecuteQuery("SELECT 1", null))
+            .Returns([]);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(databaseMock.Object);
+
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var value = executor.ExecuteScalar("SELECT 1");
+
+        // Assert
+        Assert.Null(value);
+    }
+
+    [Fact]
+    public void ExecuteScalar_WhenDatabaseReturnsRow_ReturnsFirstValue()
+    {
+        // Arrange
+        var databaseMock = new Mock<IDatabase>(MockBehavior.Strict);
+        databaseMock
+            .Setup(x => x.ExecuteQuery("SELECT id FROM users", null))
+            .Returns([new Dictionary<string, object> { ["id"] = 7 }]);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(databaseMock.Object);
+
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var value = executor.ExecuteScalar("SELECT id FROM users");
+
+        // Assert
+        Assert.Equal(7, value);
+    }
+
+    [Fact]
+    public void Read_WhenDatabaseReturnsRows_MapsDataSet()
+    {
+        // Arrange
+        var databaseMock = new Mock<IDatabase>(MockBehavior.Strict);
+        databaseMock
+            .Setup(x => x.ExecuteQuery("SELECT * FROM users", null))
+            .Returns(
+            [
+                new Dictionary<string, object> { ["id"] = 1, ["name"] = "Alice" },
+                new Dictionary<string, object> { ["id"] = 2, ["name"] = "Bob" }
+            ]);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(databaseMock.Object);
+
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var result = executor.Read("SELECT * FROM users");
+
+        // Assert
+        Assert.Equal(2, result.Tables[0].Rows.Count);
+    }
+
+    [Fact]
+    public void GetOperationConnection_WhenCustomExecutorRegistered_ReturnsCustomConnection()
+    {
+        // Arrange
+        var customConnection = new FakeDbConnection();
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor.Setup(x => x.GetOperationConnection()).Returns(customConnection);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(customExecutor.Object);
+
+        var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
+
+        // Act
+        var operationConnection = executor.GetOperationConnection();
+
+        // Assert
+        Assert.Same(customConnection, operationConnection);
     }
 
     [Fact]
@@ -157,6 +310,321 @@ public sealed class SharpCoreDbMigrationExecutorTests
 
         // Assert
         Assert.Contains("DELETE FROM users", connection.ExecutedNonQuerySql);
+    }
+
+    [Fact]
+    public void ProcessorExecuteTemplate_WhenCalled_FormatsSql()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor.Setup(x => x.ExecuteSql("DELETE FROM users WHERE id = 5"));
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        processor.Execute("DELETE FROM users WHERE id = {0}", 5);
+
+        // Assert
+        customExecutor.Verify(x => x.ExecuteSql("DELETE FROM users WHERE id = 5"), Times.Once);
+    }
+
+    [Fact]
+    public void ProcessorReadTemplate_WhenCalled_FormatsSql()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor
+            .Setup(x => x.Read("SELECT * FROM users WHERE id = 9"))
+            .Returns(new DataSet());
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        _ = processor.Read("SELECT * FROM users WHERE id = {0}", 9);
+
+        // Assert
+        customExecutor.Verify(x => x.Read("SELECT * FROM users WHERE id = 9"), Times.Once);
+    }
+
+    [Fact]
+    public void ProcessorExists_WhenExecutorReturnsNull_ReturnsFalse()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor.Setup(x => x.ExecuteScalar("SELECT 1")).Returns((object?)null);
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        var exists = processor.Exists("SELECT 1");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void ProcessorExists_WhenExecutorReturnsValue_ReturnsTrue()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor.Setup(x => x.ExecuteScalar("SELECT 1")).Returns(1);
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        var exists = processor.Exists("SELECT 1");
+
+        // Assert
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public void ProcessorSchemaExists_WhenSchemaProvided_ReturnsFalse()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource();
+
+        // Act
+        var exists = processor.SchemaExists("dbo");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void ProcessorSchemaExists_WhenSchemaEmpty_ReturnsTrue()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource();
+
+        // Act
+        var exists = processor.SchemaExists(string.Empty);
+
+        // Assert
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public void ProcessorDefaultValueExists_WhenPragmaReturnsEmptyTable_ReturnsFalse()
+    {
+        // Arrange
+        var dataSet = new DataSet();
+        dataSet.Tables.Add(new DataTable("Result"));
+
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor
+            .Setup(x => x.Read("PRAGMA table_info(\"users\")"))
+            .Returns(dataSet);
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        var exists = processor.DefaultValueExists(string.Empty, "users", "status", "active");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void ProcessorIndexExists_WhenExecutorReturnsNull_ReturnsFalse()
+    {
+        // Arrange
+        var customExecutor = new Mock<ISharpCoreDbMigrationSqlExecutor>(MockBehavior.Strict);
+        customExecutor
+            .Setup(x => x.ExecuteScalar("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'IX_users_email' LIMIT 1"))
+            .Returns((object?)null);
+
+        var processor = CreateProcessorWithCustomExecutor(customExecutor.Object);
+
+        // Act
+        var exists = processor.IndexExists(string.Empty, "users", "IX_users_email");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void ProcessorSequenceExists_WhenCalled_ReturnsFalse()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource();
+
+        // Act
+        var exists = processor.SequenceExists(string.Empty, "seq_users");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void ProcessorConstraintExists_WhenCalled_ReturnsFalse()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource();
+
+        // Act
+        var exists = processor.ConstraintExists(string.Empty, "users", "FK_users_roles");
+
+        // Assert
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public void FluentMigratorSharpRunnerMigrateUp_WhenCalled_DelegatesToMigrationRunner()
+    {
+        // Arrange
+        var migrationRunner = new Mock<IMigrationRunner>(MockBehavior.Strict);
+        migrationRunner.Setup(x => x.MigrateUp());
+        var runner = new FluentMigratorSharpRunner(migrationRunner.Object);
+
+        // Act
+        runner.MigrateUp();
+
+        // Assert
+        migrationRunner.Verify(x => x.MigrateUp(), Times.Once);
+    }
+
+    [Fact]
+    public void FluentMigratorSharpRunnerMigrateUpTo_WhenCalled_DelegatesToMigrationRunner()
+    {
+        // Arrange
+        var migrationRunner = new Mock<IMigrationRunner>(MockBehavior.Strict);
+        migrationRunner.Setup(x => x.MigrateUp(42));
+        var runner = new FluentMigratorSharpRunner(migrationRunner.Object);
+
+        // Act
+        runner.MigrateUpTo(42);
+
+        // Assert
+        migrationRunner.Verify(x => x.MigrateUp(42), Times.Once);
+    }
+
+    [Fact]
+    public void FluentMigratorSharpRunnerRollback_WhenStepsPositive_DelegatesToMigrationRunner()
+    {
+        // Arrange
+        var migrationRunner = new Mock<IMigrationRunner>(MockBehavior.Strict);
+        migrationRunner.Setup(x => x.Rollback(2));
+        var runner = new FluentMigratorSharpRunner(migrationRunner.Object);
+
+        // Act
+        runner.Rollback(2);
+
+        // Assert
+        migrationRunner.Verify(x => x.Rollback(2), Times.Once);
+    }
+
+    [Fact]
+    public void FluentMigratorSharpRunnerRollback_WhenStepsNotPositive_Throws()
+    {
+        // Arrange
+        var migrationRunner = new Mock<IMigrationRunner>(MockBehavior.Strict);
+        var runner = new FluentMigratorSharpRunner(migrationRunner.Object);
+
+        // Act
+        var action = () => runner.Rollback(0);
+
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(action);
+    }
+
+    [Fact]
+    public void VersionTableMetadata_WhenRead_HasExpectedDefaults()
+    {
+        // Arrange
+        var metadata = new SharpCoreDbVersionTableMetaData();
+
+        // Act
+        var columnName = metadata.ColumnName;
+
+        // Assert
+        Assert.Equal("Version", columnName);
+        Assert.Equal("Description", metadata.DescriptionColumnName);
+        Assert.Equal("AppliedOn", metadata.AppliedOnColumnName);
+        Assert.Equal("UX___SharpMigrations_Version", metadata.UniqueIndexName);
+        Assert.False(metadata.OwnsSchema);
+        Assert.True(metadata.CreateWithPrimaryKey);
+    }
+
+    [Fact]
+    public void GrpcMigrationSqlExecutorGetOperationConnection_WhenCalled_ReturnsNull()
+    {
+        // Arrange
+        var executor = new SharpCoreDbGrpcMigrationSqlExecutor(new SharpCoreDbGrpcMigrationOptions(GrpcConnectionString));
+
+        // Act
+        var connection = executor.GetOperationConnection();
+
+        // Assert
+        Assert.Null(connection);
+    }
+
+    [Fact]
+    public void GrpcMigrationSqlExecutorExecuteSql_WhenSqlInvalid_Throws()
+    {
+        // Arrange
+        var executor = new SharpCoreDbGrpcMigrationSqlExecutor(new SharpCoreDbGrpcMigrationOptions(GrpcConnectionString));
+
+        // Act
+        var action = () => executor.ExecuteSql(string.Empty);
+
+        // Assert
+        Assert.Throws<ArgumentException>(action);
+    }
+
+    [Fact]
+    public void GrpcMigrationSqlExecutorExecuteScalar_WhenSqlInvalid_Throws()
+    {
+        // Arrange
+        var executor = new SharpCoreDbGrpcMigrationSqlExecutor(new SharpCoreDbGrpcMigrationOptions(GrpcConnectionString));
+
+        // Act
+        var action = () => executor.ExecuteScalar(" ");
+
+        // Assert
+        Assert.Throws<ArgumentException>(action);
+    }
+
+    [Fact]
+    public void GrpcMigrationSqlExecutorRead_WhenSqlInvalid_Throws()
+    {
+        // Arrange
+        var executor = new SharpCoreDbGrpcMigrationSqlExecutor(new SharpCoreDbGrpcMigrationOptions(GrpcConnectionString));
+
+        // Act
+        var action = () => executor.Read(string.Empty);
+
+        // Assert
+        Assert.Throws<ArgumentException>(action);
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithCustomExecutor(ISharpCoreDbMigrationSqlExecutor customExecutor)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(customExecutor);
+
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(), executor);
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithoutExecutionSource()
+    {
+        var services = new ServiceCollection();
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(), executor);
+    }
+
+    private static IMigrationProcessorOptions CreateProcessorOptions()
+    {
+        var options = new Mock<IMigrationProcessorOptions>(MockBehavior.Strict);
+        options.SetupGet(x => x.PreviewOnly).Returns(false);
+        options.SetupGet(x => x.ProviderSwitches).Returns(string.Empty);
+        options.SetupGet(x => x.Timeout).Returns((int?)null);
+        return options.Object;
     }
 
     private sealed class FakeDbConnection : DbConnection
