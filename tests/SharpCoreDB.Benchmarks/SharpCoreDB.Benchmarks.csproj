@@ -17,7 +17,7 @@
     <PackageReference Include="LiteDB" Version="6.0.0-prerelease.75" />
     
     <!-- Charting and Visualization -->
-    <PackageReference Include="ScottPlot" Version="5.1.57" />
+    <PackageReference Include="ScottPlot" Version="5.1.58" />
     <PackageReference Include="Markdig" Version="1.1.2" />
   </ItemGroup>
 
