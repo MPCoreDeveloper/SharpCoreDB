@@ -6,10 +6,13 @@
 namespace SharpCoreDB.Storage.Hybrid;
 
 using System;
+using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 /// <summary>
@@ -229,81 +232,103 @@ public partial class PageManager : IDisposable
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     protected virtual Page ReadPage(PageId pageId)
     {
         if (pagesFile == null || pageId.Value == 0)
             return new();
-            
+
         lock (writeLock)
         {
             var offset = (long)((pageId.Value - 1) * PAGE_SIZE);
             if (offset >= pagesFile.Length)
                 return new();
-                
+
             pagesFile.Seek(offset, SeekOrigin.Begin);
-            var buffer = new byte[PAGE_SIZE];
-            var bytesRead = pagesFile.Read(buffer, 0, PAGE_SIZE);
-            
-            if (bytesRead < PAGE_HEADER_SIZE)
-                return new();
-            
-            var page = new Page
+            var buffer = ArrayPool<byte>.Shared.Rent(PAGE_SIZE);
+            try
             {
-                TableId = BitConverter.ToUInt32(buffer, 0),
-                Type = (PageType)buffer[4],
-                RecordCount = BitConverter.ToUInt16(buffer, 5),
-                FreeSpace = BitConverter.ToUInt16(buffer, 7),
-                PageId = pageId.Value,
-                IsDirty = false,
-                Data = new Memory<byte>(buffer, PAGE_HEADER_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE),
-                Slots = new List<(ushort offset, ushort length, RecordFlags flags)>()
-            };
-            
-            // Read slot metadata from the end of the page
-            var slotAreaStart = PAGE_HEADER_SIZE + (PAGE_SIZE - PAGE_HEADER_SIZE) - (page.RecordCount * SLOT_SIZE);
-            for (int i = 0; i < page.RecordCount; i++)
-            {
-                var slotOffset = slotAreaStart + (i * SLOT_SIZE);
-                var offset16 = BitConverter.ToUInt16(buffer, slotOffset);
-                var length = BitConverter.ToUInt16(buffer, slotOffset + 2);
-                page.Slots.Add((offset16, length, RecordFlags.Active));
+                var bytesRead = pagesFile.Read(buffer, 0, PAGE_SIZE);
+
+                if (bytesRead < PAGE_HEADER_SIZE)
+                    return new();
+
+                var bufferSpan = buffer.AsSpan();
+                var page = new Page
+                {
+                    TableId = BinaryPrimitives.ReadUInt32LittleEndian(bufferSpan),
+                    Type = (PageType)buffer[4],
+                    RecordCount = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(5)),
+                    FreeSpace = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(7)),
+                    PageId = pageId.Value,
+                    IsDirty = false,
+                    Data = new Memory<byte>(new byte[PAGE_SIZE - PAGE_HEADER_SIZE]),
+                    Slots = new List<(ushort offset, ushort length, RecordFlags flags)>()
+                };
+
+                // Copy data section
+                bufferSpan.Slice(PAGE_HEADER_SIZE, PAGE_SIZE - PAGE_HEADER_SIZE).CopyTo(page.Data.Span);
+
+                // Read slot metadata from the end of the page
+                var slotAreaStart = PAGE_HEADER_SIZE + (PAGE_SIZE - PAGE_HEADER_SIZE) - (page.RecordCount * SLOT_SIZE);
+                for (int i = 0; i < page.RecordCount; i++)
+                {
+                    var slotOffset = slotAreaStart + (i * SLOT_SIZE);
+                    var offset16 = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(slotOffset));
+                    var length = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2));
+                    page.Slots.Add((offset16, length, RecordFlags.Active));
+                }
+
+                return page;
             }
-            
-            return page;
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+            }
         }
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     protected virtual void WritePage(PageId pageId, Page page)
     {
         if (pagesFile == null || pageId.Value == 0)
             return;
-            
+
         lock (writeLock)
         {
             var offset = (long)((pageId.Value - 1) * PAGE_SIZE);
-            var buffer = new byte[PAGE_SIZE];
-            
-            // Write header
-            BitConverter.GetBytes(page.TableId).CopyTo(buffer, 0);
-            buffer[4] = (byte)page.Type;
-            BitConverter.GetBytes(page.RecordCount).CopyTo(buffer, 5);
-            BitConverter.GetBytes(page.FreeSpace).CopyTo(buffer, 7);
-            
-            // Write data
-            page.Data.Span.CopyTo(buffer.AsSpan(PAGE_HEADER_SIZE));
-            
-            // Write slot metadata
-            var slotAreaStart = PAGE_HEADER_SIZE + (PAGE_SIZE - PAGE_HEADER_SIZE) - (page.RecordCount * SLOT_SIZE);
-            for (int i = 0; i < page.Slots.Count && i < page.RecordCount; i++)
+            var buffer = ArrayPool<byte>.Shared.Rent(PAGE_SIZE);
+            try
             {
-                var slotOffset = slotAreaStart + (i * SLOT_SIZE);
-                BitConverter.GetBytes(page.Slots[i].offset).CopyTo(buffer, slotOffset);
-                BitConverter.GetBytes(page.Slots[i].length).CopyTo(buffer, slotOffset + 2);
-            }
+                var bufferSpan = buffer.AsSpan(0, PAGE_SIZE);
+                bufferSpan.Clear();
 
-            pagesFile.Seek(offset, SeekOrigin.Begin);
-            pagesFile.Write(buffer, 0, PAGE_SIZE);
-            pagesFile.Flush(flushToDisk: true); // ✅ Force OS-level flush
+                // Write header using zero-alloc BinaryPrimitives
+                BinaryPrimitives.WriteUInt32LittleEndian(bufferSpan, page.TableId);
+                buffer[4] = (byte)page.Type;
+                BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(5), page.RecordCount);
+                BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(7), page.FreeSpace);
+
+                // Write data
+                page.Data.Span.CopyTo(bufferSpan.Slice(PAGE_HEADER_SIZE));
+
+                // Write slot metadata
+                var slotAreaStart = PAGE_HEADER_SIZE + (PAGE_SIZE - PAGE_HEADER_SIZE) - (page.RecordCount * SLOT_SIZE);
+                for (int i = 0; i < page.Slots.Count && i < page.RecordCount; i++)
+                {
+                    var slotOffset = slotAreaStart + (i * SLOT_SIZE);
+                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset), page.Slots[i].offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2), page.Slots[i].length);
+                }
+
+                pagesFile.Seek(offset, SeekOrigin.Begin);
+                pagesFile.Write(buffer, 0, PAGE_SIZE);
+                // PERF: Defer flushToDisk to FlushDirtyPages/Commit for batch write efficiency
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+            }
         }
     }
     
@@ -379,6 +404,7 @@ public partial class PageManager : IDisposable
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public virtual PageId FindPageWithSpace(uint tableId, int requiredSpace)
     {
         lock (writeLock)
@@ -414,6 +440,7 @@ public partial class PageManager : IDisposable
         }
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public virtual RecordId InsertRecord(PageId pageId, byte[] data)
     {
         if (pageId.Value == 0 || data.Length > MAX_RECORD_SIZE)
@@ -542,6 +569,7 @@ public partial class PageManager : IDisposable
         }
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public virtual bool TryReadRecord(PageId pageId, RecordId recordId, out byte[]? data)
     {
         data = null;
@@ -634,6 +662,9 @@ public partial class PageManager : IDisposable
                 }
             }
             dirtyPages.Clear();
+
+            // PERF: Single OS-level flush after all pages written
+            pagesFile?.Flush(flushToDisk: true);
         }
     }
     

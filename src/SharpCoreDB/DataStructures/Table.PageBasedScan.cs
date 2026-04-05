@@ -76,7 +76,7 @@ public partial class Table
                     }
                     
                     // Apply WHERE filter if specified
-                    if (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where))
+                    if (string.IsNullOrEmpty(where) || EvaluateWhere(row, where))
                     {
                         results.Add(row);
                     }
@@ -110,6 +110,7 @@ public partial class Table
     /// <summary>
     /// Deserializes a byte array into a row dictionary.
     /// Helper method for PageBased storage scanning.
+    /// ✅ PERF: Uses _dictPool to reduce allocations during full table scans.
     /// </summary>
     private Dictionary<string, object>? DeserializeRowFromSpan(byte[] data)
     {
@@ -120,7 +121,7 @@ public partial class Table
 #endif
             return null;
         }
-        
+
 #if DEBUG
         Console.WriteLine($"[DeserializeRowFromSpan] Data length: {data.Length}, Columns: {Columns.Count}");
         if (data.Length >= 16)
@@ -128,8 +129,8 @@ public partial class Table
             Console.WriteLine($"[DeserializeRowFromSpan] First 16 bytes: {BitConverter.ToString(data, 0, 16)}");
         }
 #endif
-        
-        var row = new Dictionary<string, object>();
+
+        var row = _dictPool.Get();
         int offset = 0;
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
 
@@ -142,6 +143,7 @@ public partial class Table
 #if DEBUG
                     Console.WriteLine($"[DeserializeRowFromSpan] Offset {offset} exceeds data length {dataSpan.Length} at column {i}/{Columns.Count}");
 #endif
+                    _dictPool.Return(row);
                     return null;
                 }
 
@@ -149,7 +151,7 @@ public partial class Table
 #if DEBUG
                 Console.WriteLine($"[DeserializeRowFromSpan] Column {i} ({Columns[i]}, {ColumnTypes[i]}): offset={offset}, bytesRead={bytesRead}, value={value}");
 #endif
-                
+
                 row[Columns[i]] = value;
                 offset += bytesRead;
             }
@@ -162,8 +164,6 @@ public partial class Table
 #if DEBUG
         catch (Exception ex)
         {
-            // Exception during deserialization indicates corrupt data - ignore and return null
-            // This row will be skipped during scanning
             Console.WriteLine($"[DeserializeRowFromSpan] Exception during deserialization: {ex.Message}");
             Console.WriteLine($"[DeserializeRowFromSpan] At offset: {offset}, remaining bytes: {dataSpan.Length - offset}");
             if (offset < dataSpan.Length)
@@ -171,13 +171,13 @@ public partial class Table
                 var remaining = Math.Min(16, dataSpan.Length - offset);
                 Console.WriteLine($"[DeserializeRowFromSpan] Next {remaining} bytes: {BitConverter.ToString(data, offset, remaining)}");
             }
+            _dictPool.Return(row);
             return null;
         }
 #else
         catch
         {
-            // Exception during deserialization indicates corrupt data - ignore and return null
-            // This row will be skipped during scanning
+            _dictPool.Return(row);
             return null;
         }
 #endif

@@ -72,6 +72,10 @@ internal sealed class FakeVectorTable : ITable
     public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => [];
     public void Update(string? where, Dictionary<string, object> updates) { }
     public void Delete(string? where) { }
+    public Dictionary<string, object>? FindByPrimaryKey(object key) => null;
+    public List<Dictionary<string, object>> FindByIndex(string column, object value) => [];
+    public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => false;
+    public bool DeleteByPrimaryKey(object key) => false;
     public void CreateHashIndex(string columnName) { }
     public void CreateHashIndex(string indexName, string columnName, bool isUnique = false) { }
     public bool HasHashIndex(string columnName) => false;

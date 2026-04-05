@@ -71,6 +71,10 @@ After the `IAsyncDisposable` lifecycle refactor and SQL lexer/parser fixes, benc
 
 All other benchmarks (25 total) remain stable. Full results: [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)
 
+### ⚡ SIMD Columnar Engine Optimization (April 2026)
+
+All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of `Vector256.Create(data.AsSpan(...))`, eliminating per-iteration `Span<T>` construction and bounds checking overhead in AVX2 hot loops. This applies to both single-threaded and parallel SIMD paths for SUM, MIN, and MAX across `int`, `long`, and `double` column types. The companion performance test (`ColumnStore_Average_10kRecords_Under2ms`) was hardened with multi-iteration best-time measurement to prevent false failures under concurrent test load.
+
 ### 📚 Documentation Policy
 
 - Canonical documentation entry points are `docs/INDEX.md` and `docs/README.md`.
@@ -171,7 +175,7 @@ All other benchmarks (25 total) remain stable. Full results: [`docs/BENCHMARK_RE
 - ACID transactions with WAL
 - B-tree and hash indexing
 - Full-text search
-- SIMD-accelerated operations
+- SIMD-accelerated operations (`Vector256.LoadUnsafe` optimized)
 - Memory pooling and JIT optimizations
 
 ---

@@ -7,9 +7,11 @@ namespace SharpCoreDB.Services;
 
 using System;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Microsoft.Win32.SafeHandles;
 
 /// <summary>
 /// Storage implementation - Append partial class.
@@ -27,6 +29,39 @@ public partial class Storage
     private Optimizations.BufferedAesEncryption? _batchEncryption;
     private readonly bool enableBatchEncryption;
     private readonly int batchEncryptionSizeKB;
+
+    // ✅ PERF: Cached read handles — avoids a kernel CreateFile/CloseHandle per ReadBytesFrom call.
+    // Opened with FileShare.ReadWrite|Delete so writers can append while we hold the handle,
+    // and the temp directory can be deleted after the database is disposed.
+    private readonly ConcurrentDictionary<string, SafeFileHandle> _readHandleCache = new();
+
+    /// <summary>
+    /// Returns (or opens) a cached <see cref="SafeFileHandle"/> for random-access reads on <paramref name="path"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private SafeFileHandle GetOrOpenReadHandle(string path) =>
+        _readHandleCache.GetOrAdd(path, static p =>
+            File.OpenHandle(
+                p,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                FileOptions.None));
+
+    /// <summary>
+    /// Closes and removes all cached read handles.
+    /// Call this when the database is disposed so temp directories can be deleted on Windows.
+    /// </summary>
+    public void CloseReadHandles()
+    {
+        foreach (var (key, handle) in _readHandleCache)
+        {
+            if (_readHandleCache.TryRemove(key, out _))
+            {
+                handle.Dispose();
+            }
+        }
+    }
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -141,11 +176,8 @@ public partial class Storage
     {
         lock (appendLock)
         {
-            Console.WriteLine($"[FlushBufferedAppends] Called with {bufferedAppends.Count} files buffered");
-            
             if (bufferedAppends.Count == 0)
             {
-                Console.WriteLine("[FlushBufferedAppends] No buffered appends to flush");
                 return;
             }
 
@@ -167,11 +199,6 @@ public partial class Storage
                 if (appends.Count == 0)
                     continue;
 
-                Console.WriteLine($"[FlushBufferedAppends] Flushing {appends.Count} appends to {path}");
-                
-                // ✅ CRITICAL: Open file ONCE and write ALL appends in single operation!
-                // ✅ PERF FIX: Removed FileOptions.WriteThrough to allow OS-level buffering
-                // This reduces flush time from ~1.8s to ~100ms per batch (18x improvement)
                 using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536);
 
                 foreach (var (data, _) in appends)
@@ -180,16 +207,12 @@ public partial class Storage
                     fs.Write(lengthBuffer);
                     fs.Write(data.AsSpan());
                 }
-                
-                // ✅ PERF: Flush to OS cache (not disk) for durability without Write-Through penalty
+
                 fs.Flush(flushToDisk: false);
-                
-                Console.WriteLine($"[FlushBufferedAppends] Successfully wrote {appends.Count} records to {path}");
             }
 
             bufferedAppends.Clear();
             cachedFileLengths.Clear();
-            Console.WriteLine("[FlushBufferedAppends] Cleared buffers");
         }
     }
 
@@ -267,49 +290,41 @@ public partial class Storage
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[]? ReadBytesFrom(string path, long offset)
     {
-        if (!File.Exists(path))
+        // PERF: Use cached SafeFileHandle + RandomAccess instead of opening a new
+        // FileStream for every point-lookup call.  Reusing a handle drops kernel
+        // overhead from ~50-100 µs to a single pread/ReadFile syscall (~1-5 µs).
+        // Skip File.Exists() — if the handle opens, the file exists.
+        SafeFileHandle handle;
+        try
         {
-            return null;
+            handle = GetOrOpenReadHandle(path);
+        }
+        catch
+        {
+            // Handle may have been closed by CloseReadHandles() concurrently — evict and retry once.
+            _readHandleCache.TryRemove(path, out _);
+            try
+            {
+                handle = GetOrOpenReadHandle(path);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
-        fs.Seek(offset, SeekOrigin.Begin);
-        
-        // Read length prefix
+        // Read length prefix (4 bytes)
         Span<byte> lengthBuffer = stackalloc byte[4];
-        int bytesRead = fs.Read(lengthBuffer);
+        int bytesRead = RandomAccess.Read(handle, lengthBuffer, offset);
         if (bytesRead < 4) return null;
-        
+
         int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
-        
-        const int MaxRowSize = 1_000_000_000; // 1 GB max
-        
-        if (length < 0)
-        {
-            Console.WriteLine($"❌ ReadBytesFrom: Invalid negative length {length} at offset {offset}");
-            return null;
-        }
-        
-        if (length == 0)
-        {
-            return Array.Empty<byte>();
-        }
-        
-        if (length > MaxRowSize)
-        {
-            Console.WriteLine($"⚠️  ReadBytesFrom: Suspiciously large length {length} at offset {offset}");
-            return null;
-        }
-        
+
+        const int MaxRowSize = 1_000_000_000;
+        if (length <= 0 || length > MaxRowSize) return null;
+
         byte[] data = new byte[length];
-        bytesRead = fs.Read(data.AsSpan());
-        
-        if (bytesRead != length)
-        {
-            Console.WriteLine($"⚠️  ReadBytesFrom: Incomplete read at offset {offset}");
-            return null;
-        }
-        
-        return data;
+        bytesRead = RandomAccess.Read(handle, data.AsSpan(), offset + 4);
+        return bytesRead == length ? data : null;
     }
 }

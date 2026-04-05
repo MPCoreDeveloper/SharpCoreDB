@@ -179,18 +179,22 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(CachedQueryPlan plan, Dictionary<string, object?>? parameters = null)
     {
-        var sql = plan.Sql;
+        string sql;
+        string[] parts;
+
         if (parameters != null && parameters.Count > 0)
         {
-            sql = SqlParser.BindParameters(sql, parameters);
+            // Parameters change the SQL text — must recompute parts
+            sql = SqlParser.BindParameters(plan.Sql, parameters);
+            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         }
         else
         {
-            sql = SqlParser.SanitizeSql(sql);
+            // No parameters — reuse cached parts (skip re-tokenization)
+            sql = SqlParser.SanitizeSql(plan.Sql);
+            parts = plan.Parts;
         }
 
-        // Recompute parts to reflect bound SQL (prevents mismatches in WHERE evaluation)
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return this.ExecuteQueryInternal(sql, parts);
     }
 

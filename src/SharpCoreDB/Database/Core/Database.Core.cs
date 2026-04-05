@@ -336,12 +336,19 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
-                
+
                 // ✅ Phase 2: Set storage provider for delta-update optimization
                 table.SetStorageProvider(_storageProvider);
-                
+
                 // ✅ NEW: Set database reference for last_insert_rowid() tracking
                 table.SetDatabase(this);
+
+                // ✅ FIX: Initialize storage engine for tables loaded from metadata
+                // This ensures tables can read data from disk after database reopens
+                if (!isReadOnly)
+                {
+                    table.InitializeStorageEngine();
+                }
 
                 
                 // ✅ CRITICAL FIX: Complete initialization of new DDL properties
@@ -758,6 +765,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                     _ = ex;
                 }
             }
+
+            // ✅ Close cached read handles so temp directories can be deleted on Windows.
+            (storage as Services.Storage)?.CloseReadHandles();
 
             // ✅ SCDB Phase 1: Dispose storage provider if using SCDB mode
             _storageProvider?.Dispose();

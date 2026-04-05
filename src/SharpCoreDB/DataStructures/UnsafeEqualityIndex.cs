@@ -224,6 +224,50 @@ public sealed unsafe class UnsafeEqualityIndex : IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds multiple key-row mappings in a single lock acquisition.
+    /// Reduces lock overhead from O(n) to O(1) for batch inserts.
+    /// </summary>
+    /// <param name="keys">Pre-serialized key byte arrays (null entries are skipped).</param>
+    /// <param name="rowIds">Corresponding row identifiers.</param>
+    /// <param name="count">Number of entries to process.</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal void AddBatch(byte[][] keys, long[] rowIds, int count)
+    {
+        ThrowIfDisposed();
+        if (count <= 0) return;
+
+        lock (_gate)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var k = keys[i];
+                if (k is null || k.Length == 0) continue;
+
+                EnsureSlotCapacity();
+
+                ReadOnlySpan<byte> key = k;
+                var hash = Hash64(key);
+                var slotIndex = FindSlotForInsert(hash, key, out var exists);
+
+                if (!exists)
+                {
+                    var keyOffset = AppendKey(key);
+                    ref var slot = ref _slots[slotIndex];
+                    slot.Hash = hash;
+                    slot.KeyOffset = keyOffset;
+                    slot.KeyLength = key.Length;
+                    slot.RowHead = -1;
+                    slot.State = SlotOccupied;
+                    _slotUsed++;
+                }
+
+                var nodeIndex = AppendRowNode(rowIds[i], _slots[slotIndex].RowHead);
+                _slots[slotIndex].RowHead = nodeIndex;
+            }
+        }
+    }
+
     private void EnsureSlotCapacity()
     {
         var threshold = (int)(_slotCount * MaxLoadFactor);

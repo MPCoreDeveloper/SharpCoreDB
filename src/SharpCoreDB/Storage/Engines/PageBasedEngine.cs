@@ -11,6 +11,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Text;
 
@@ -66,131 +67,134 @@ public partial class PageBasedEngine : IStorageEngine
     public StorageEngineType EngineType => StorageEngineType.PageBased;
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public long Insert(string tableName, byte[] data)
     {
         ArgumentNullException.ThrowIfNull(data);
-        
-        var sw = Stopwatch.StartNew();
-        
-        // ✅ FIXED: Store raw binary directly - NO Base64 overhead!
-        // Data is already efficiently serialized by BinaryRowSerializer/StreamingRowEncoder
+
+        // PERF: Removed Stopwatch per-op overhead (~50-100ns per call)
         var tableId = GetTableId(tableName);
         var manager = GetOrCreatePageManager(tableName);
         var pageId = manager.FindPageWithSpace(tableId, data.Length);
         var recordId = manager.InsertRecord(pageId, data);
-        
-        sw.Stop();
-        Interlocked.Add(ref insertTicks, sw.ElapsedTicks);
+
         Interlocked.Increment(ref totalInserts);
         Interlocked.Add(ref bytesWritten, data.Length);
-        
+
         return EncodeStorageReference(pageId.Value, recordId.SlotIndex);
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long[] InsertBatch(string tableName, List<byte[]> dataBlocks)
     {
         ArgumentNullException.ThrowIfNull(dataBlocks);
-        
+
         if (dataBlocks.Count == 0)
             return Array.Empty<long>();
-        
+
         #if DEBUG
         Console.WriteLine($"[PageBasedEngine.InsertBatch] Inserting {dataBlocks.Count} records into table {tableName}");
         #endif
-        
-        var sw = Stopwatch.StartNew();
+
         var results = new long[dataBlocks.Count];
         var manager = GetOrCreatePageManager(tableName);
         var tableId = GetTableId(tableName);
-        
-        // ✅ OPTIMIZED: Store raw binary directly - no encoding overhead
+        long totalBytes = 0;
+
+        // PERF: Track current page to avoid repeated FindPageWithSpace calls
+        var currentPageId = PageManager.PageId.Invalid;
+
         for (int i = 0; i < dataBlocks.Count; i++)
         {
             var data = dataBlocks[i];
-            
-            // FindPageWithSpace is O(1) with bitmap
-            // LRU cache keeps hot pages in memory
-            var pageId = manager.FindPageWithSpace(tableId, data.Length + 16);
-            var recordId = manager.InsertRecord(pageId, data);
-            results[i] = EncodeStorageReference(pageId.Value, recordId.SlotIndex);
-            
-            Interlocked.Add(ref bytesWritten, data.Length);
+            var requiredSpace = data.Length + 16;
+
+            // Reuse current page if it has space, otherwise find a new one
+            if (!currentPageId.IsValid || currentPageId == PageManager.PageId.Invalid)
+            {
+                currentPageId = manager.FindPageWithSpace(tableId, requiredSpace);
+            }
+            else
+            {
+                // Try to keep using the same page
+                try
+                {
+                    var recordId = manager.InsertRecord(currentPageId, data);
+                    results[i] = EncodeStorageReference(currentPageId.Value, recordId.SlotIndex);
+                    totalBytes += data.Length;
+                    continue;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Page full, find new page
+                    currentPageId = manager.FindPageWithSpace(tableId, requiredSpace);
+                }
+            }
+
+            var rid = manager.InsertRecord(currentPageId, data);
+            results[i] = EncodeStorageReference(currentPageId.Value, rid.SlotIndex);
+            totalBytes += data.Length;
         }
-        
-        sw.Stop();
-        Interlocked.Add(ref insertTicks, sw.ElapsedTicks);
+
         Interlocked.Add(ref totalInserts, dataBlocks.Count);
-        
+        Interlocked.Add(ref bytesWritten, totalBytes);
+
         #if DEBUG
         Console.WriteLine($"[PageBasedEngine.InsertBatch] Inserted {dataBlocks.Count} records successfully");
-        
-        // Get cache stats
+
         var (hits, misses, hitRate, size, _) = manager.GetCacheStats();
         Console.WriteLine($"[PageBasedEngine.InsertBatch] Cache stats - Size: {size}, Hits: {hits}, Misses: {misses}, HitRate: {hitRate:P2}");
         #endif
-        
+
         return results;
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Update(string tableName, long storageReference, byte[] newData)
     {
         ArgumentNullException.ThrowIfNull(newData);
-        
-        var sw = Stopwatch.StartNew();
-        
-        // ✅ FIXED: Store raw binary directly - NO Base64 overhead!
+
         var manager = GetOrCreatePageManager(tableName);
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         manager.UpdateRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
-        
-        sw.Stop();
-        Interlocked.Add(ref updateTicks, sw.ElapsedTicks);
+
         Interlocked.Increment(ref totalUpdates);
         Interlocked.Add(ref bytesWritten, newData.Length);
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Delete(string tableName, long storageReference)
     {
-        var sw = Stopwatch.StartNew();
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var manager = GetOrCreatePageManager(tableName);
-        
-        // In-place delete - marks slot as deleted without tombstones
+
         manager.DeleteRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId));
-        
-        sw.Stop();
-        Interlocked.Add(ref deleteTicks, sw.ElapsedTicks);
+
         Interlocked.Increment(ref totalDeletes);
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[]? Read(string tableName, long storageReference)
     {
-        var sw = Stopwatch.StartNew();
-        
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var manager = GetOrCreatePageManager(tableName);
-        
-        // ✅ FIXED: Read raw binary directly - NO Base64 decoding overhead!
+
         bool success = manager.TryReadRecord(
             new PageManager.PageId(pageId), 
             new PageManager.RecordId(recordId), 
             out var data);
-        
+
         if (success && data != null)
         {
-            sw.Stop();
-            Interlocked.Add(ref readTicks, sw.ElapsedTicks);
             Interlocked.Increment(ref totalReads);
             Interlocked.Add(ref bytesRead, data.Length);
-            
             return data;
         }
-        
-        sw.Stop();
+
         return null;
     }
 
@@ -317,7 +321,6 @@ public partial class PageBasedEngine : IStorageEngine
     public StorageEngineMetrics GetMetrics()
     {
         var totalOps = totalInserts + totalUpdates + totalDeletes + totalReads;
-        var ticksPerMicrosecond = (double)Stopwatch.Frequency / 1_000_000.0;
         
         // Calculate page statistics
         long totalPages = 0;
@@ -339,18 +342,10 @@ public partial class PageBasedEngine : IStorageEngine
             TotalReads = Interlocked.Read(ref totalReads),
             BytesWritten = Interlocked.Read(ref bytesWritten),
             BytesRead = Interlocked.Read(ref bytesRead),
-            AvgInsertTimeMicros = totalInserts > 0 
-                ? (Interlocked.Read(ref insertTicks) / ticksPerMicrosecond / totalInserts) 
-                : 0,
-            AvgUpdateTimeMicros = totalUpdates > 0 
-                ? (Interlocked.Read(ref updateTicks) / ticksPerMicrosecond / totalUpdates) 
-                : 0,
-            AvgDeleteTimeMicros = totalDeletes > 0 
-                ? (Interlocked.Read(ref deleteTicks) / ticksPerMicrosecond / totalDeletes) 
-                : 0,
-            AvgReadTimeMicros = totalReads > 0 
-                ? (Interlocked.Read(ref readTicks) / ticksPerMicrosecond / totalReads) 
-                : 0,
+            AvgInsertTimeMicros = 0,
+            AvgUpdateTimeMicros = 0,
+            AvgDeleteTimeMicros = 0,
+            AvgReadTimeMicros = 0,
             CustomMetrics = new Dictionary<string, object>
             {
                 ["EngineType"] = "PageBased",

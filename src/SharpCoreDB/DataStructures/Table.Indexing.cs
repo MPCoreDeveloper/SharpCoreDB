@@ -22,7 +22,9 @@ public partial class Table
     private readonly ConcurrentDictionary<string, long> columnUsageConcurrent = new();
 
     // Resolve dynamically so performance tests and benchmarks can compare both backends in-process.
-    private static bool UseUnsafeEqualityIndex => ResolveUnsafeEqualityIndexFlag();
+    // ✅ DatabaseConfig.EnableUnsafeEqualityIndex takes precedence; AppContext/env-var are fallbacks.
+    private bool UseUnsafeEqualityIndex =>
+        _config?.EnableUnsafeEqualityIndex ?? ResolveUnsafeEqualityIndexFlag();
 
     private static bool ResolveUnsafeEqualityIndexFlag()
     {
@@ -113,26 +115,38 @@ public partial class Table
         }
     }
 
+    // ✅ OPTIMIZED: Lock-free fast-path cache for loaded, non-stale indexes.
+    // Set when index is loaded under write lock; cleared when marked stale.
+    // Avoids ReaderWriterLockSlim acquisition on every point-lookup query.
+    private readonly ConcurrentDictionary<string, byte> _indexReadyCache = new();
+
     /// <summary>
     /// Ensures that a hash index is loaded and built for the specified column.
     /// If index is already loaded, returns immediately (O(1)).
     /// If index needs building, scans table and builds index (O(n)).
     /// Thread-safe with double-check locking pattern.
     /// ✅ COLLATE Phase 4: Creates index with column collation.
-    /// OPTIMIZED: Builds index outside write lock to reduce lock contention (30-50% improvement).
+    /// OPTIMIZED: Lock-free fast path avoids rwLock for the common "already loaded" case.
     /// </summary>
     /// <param name="columnName">The column name.</param>
     /// <exception cref="InvalidOperationException">Thrown when index is not registered.</exception>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void EnsureIndexLoaded(string columnName)
     {
-        // Fast path: check if already loaded (read lock)
+        // Lock-free fast path: check concurrent ready cache
+        if (_indexReadyCache.ContainsKey(columnName))
+        {
+            return; // Already loaded and fresh — no lock needed
+        }
+
+        // Slow path: check under read lock (handles stale/not-yet-cached states)
         this.rwLock.EnterReadLock();
         try
         {
             if (this.loadedIndexes.Contains(columnName) && 
                 !this.staleIndexes.Contains(columnName))
             {
+                _indexReadyCache.TryAdd(columnName, 0);
                 return; // Already loaded and fresh
             }
         }
@@ -167,54 +181,68 @@ public partial class Table
         // ✅ COLLATE Phase 4: Pass collation to HashIndex constructor
         var index = new HashIndex(this.Name, columnName, collation, metadata.IsUnique, UseUnsafeEqualityIndex);
         
-        // FIXED: Use the same reading logic as ReadRowAtPosition to ensure compatibility
-        // Read all rows using ReadBytesFrom (which handles length prefixes correctly)
-        if (this.storage != null && File.Exists(this.DataFile))
+        if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
         {
-            var fileInfo = new FileInfo(this.DataFile);
-            if (fileInfo.Length > 0)
+            // PageBased: iterate all records via storage engine
+            var eng = GetOrCreateStorageEngine();
+            foreach (var (pos, recordData) in eng.GetAllRecords(Name))
             {
-                long position = 0;
-                
-                // Read all length-prefixed records from the file
-                while (position < fileInfo.Length)
+                var row = DeserializeRowFromSpan(recordData);
+                if (row != null && row.ContainsKey(columnName))
+                    index.Add(row, pos);
+            }
+        }
+        else if (this.storage != null && File.Exists(this.DataFile))
+        {
+            // PERF: Use a single buffered FileStream with SequentialScan hint instead of
+            // per-record RandomAccess.Read calls via storage.ReadBytesFrom(). For 100k rows
+            // this reduces syscalls from ~200k to ~150-200 buffered reads.
+            using var fs = new FileStream(
+                this.DataFile, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite, bufferSize: 65536, FileOptions.SequentialScan);
+
+            Span<byte> lengthBuf = stackalloc byte[4];
+            long position = 0;
+
+            while (fs.Position < fs.Length)
+            {
+                if (fs.Read(lengthBuf) < 4)
+                    break;
+
+                int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBuf);
+                if (length <= 0 || length > 1_000_000_000)
+                    break;
+
+                byte[] rowData = new byte[length];
+                if (fs.Read(rowData) < length)
+                    break;
+
+                var row = new Dictionary<string, object>();
+                int offset = 0;
+                ReadOnlySpan<byte> dataSpan = rowData.AsSpan();
+                bool valid = true;
+
+                for (int i = 0; i < this.Columns.Count; i++)
                 {
-                    var rowData = this.storage.ReadBytesFrom(this.DataFile, position);
-                    if (rowData == null || rowData.Length == 0)
+                    try
                     {
-                        break; // End of file or corrupted data
+                        var columnValue = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
+                        row[this.Columns[i]] = columnValue;
+                        offset += bytesRead;
                     }
-                    
-                    var row = new Dictionary<string, object>();
-                    int offset = 0;
-                    ReadOnlySpan<byte> dataSpan = rowData.AsSpan();
-                    bool valid = true;
-                    
-                    // Parse all columns in the row
-                    for (int i = 0; i < this.Columns.Count; i++)
+                    catch
                     {
-                        try
-                        {
-                            var columnValue = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
-                            row[this.Columns[i]] = columnValue;
-                            offset += bytesRead;
-                        }
-                        catch
-                        {
-                            valid = false;
-                            break;
-                        }
+                        valid = false;
+                        break;
                     }
-                    
-                    // Add to index if row was successfully parsed and contains the indexed column
-                    if (valid && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
-                    {
-                        index.Add(row, position);
-                    }
-                    
-                    // Move to next record (length prefix + data)
-                    position += 4 + rowData.Length; // 4 bytes for length prefix + data length
                 }
+
+                if (valid && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
+                {
+                    index.Add(row, position);
+                }
+
+                position += 4 + length;
             }
         }
         
@@ -233,6 +261,7 @@ public partial class Table
             this.hashIndexes[columnName] = index;
             this.loadedIndexes.Add(columnName);
             this.staleIndexes.Remove(columnName);
+            _indexReadyCache.TryAdd(columnName, 0);
         }
         finally
         {

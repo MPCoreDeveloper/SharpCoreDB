@@ -24,7 +24,7 @@ class Program
     const int UpdateCount = 10_000;
     const int DeleteCount = 10_000;
 
-    static void Main()
+    static async Task Main()
     {
         Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
         Console.WriteLine("║  SharpCoreDB vs BLite vs LiteDB vs SQLite               ║");
@@ -40,8 +40,13 @@ class Program
         var results = new Dictionary<string, BenchmarkResult>();
 
         // ── SharpCoreDB ──
-        Console.WriteLine("━━━ SharpCoreDB ━━━");
-        results["SharpCoreDB"] = RunSharpCoreDB();
+        Console.WriteLine("━━━ SharpCoreDB (SQL) ━━━");
+        results["SharpCoreDB (SQL)"] = RunSharpCoreDB();
+        Console.WriteLine();
+
+        // ── SharpCoreDB Direct API ──
+        Console.WriteLine("━━━ SharpCoreDB (Direct API) ━━━");
+        results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi();
         Console.WriteLine();
 
         // ── SQLite ──
@@ -55,15 +60,15 @@ class Program
         Console.WriteLine();
 
         // ── BLite ──
-        Console.WriteLine("━━━ BLite ━━━");
+        Console.WriteLine("━━━ BLite 4.0.1 ━━━");
         try
         {
-            results["BLite"] = RunBLite();
+            results["BLite"] = await RunBLiteAsync();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"  ⚠️ BLite benchmark failed: {ex.Message}");
-            Console.WriteLine("  BLite 2.0.2 source generator issue — skipping");
+            Console.WriteLine($"  {ex.GetType().Name} — skipping");
         }
         Console.WriteLine();
 
@@ -92,11 +97,38 @@ class Program
             services.AddSharpCoreDB();
             var sp = services.BuildServiceProvider();
 
-            var db = new SharpCoreDB.Database(
-                services: sp,
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = new DatabaseConfig
+            {
+                NoEncryptMode = true,
+                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
+                UseGroupCommitWal = false,
+                EnableAdaptiveWalBatching = false,
+                HighSpeedInsertMode = true,
+                GroupCommitSize = 1000,
+                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+                EnablePageCache = true,
+                PageCacheCapacity = 10_000,
+                UseMemoryMapping = true,
+                UseBufferedIO = true,
+                EnableHashIndexes = true,
+                EnableQueryCache = true,
+                QueryCacheSize = 4096,
+                EnableCompiledPlanCache = true,
+                EnableBTreeSelection = true,
+                EnableSimdAndProjectionPushdown = true,
+                WalBufferSize = 8 * 1024 * 1024,
+                BufferPoolSize = 128 * 1024 * 1024,
+                CollectGCAfterBatches = false,
+                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                StrictParameterValidation = false
+            };
+
+            using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
                 masterPassword: "bench123",
-                isReadOnly: false);
+                isReadOnly: false,
+                config: config);
 
             db.ExecuteSQL(@"CREATE TABLE docs (
                 name TEXT NOT NULL,
@@ -105,6 +137,9 @@ class Program
                 score REAL,
                 data TEXT
             )");
+
+            // Index lookup path used by READ/UPDATE/DELETE in this benchmark
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
 
             // INSERT (batched via InsertBatch API for optimal performance)
             var sw = Stopwatch.StartNew();
@@ -131,11 +166,14 @@ class Program
             result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
 
-            // READ (SELECT by name field)
+            // READ (SELECT by indexed name field)
             sw.Restart();
             for (int i = 0; i < ReadCount; i++)
             {
-                db.ExecuteSQL($"SELECT * FROM docs WHERE name = 'User{i}'");
+                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name", new Dictionary<string, object?>
+                {
+                    ["@name"] = $"User{i}"
+                });
             }
             sw.Stop();
             result.ReadTime = sw.Elapsed.TotalSeconds;
@@ -173,7 +211,160 @@ class Program
         }
         finally
         {
-            if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true);
+            try
+            {
+                if (Directory.Exists(dbPath))
+                {
+                    Directory.Delete(dbPath, true);
+                }
+            }
+            catch
+            {
+                // Temp benchmark cleanup best-effort
+            }
+        }
+
+        return result;
+    }
+
+    // ══════════════════════════════════════
+    // SharpCoreDB (Direct API — no SQL parsing)
+    // ══════════════════════════════════════
+    static BenchmarkResult RunSharpCoreDBDirectApi()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var sp = services.BuildServiceProvider();
+
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = new DatabaseConfig
+            {
+                NoEncryptMode = true,
+                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
+                UseGroupCommitWal = false,
+                EnableAdaptiveWalBatching = false,
+                HighSpeedInsertMode = true,
+                GroupCommitSize = 1000,
+                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+                EnablePageCache = true,
+                PageCacheCapacity = 10_000,
+                UseMemoryMapping = true,
+                UseBufferedIO = true,
+                EnableHashIndexes = true,
+                EnableQueryCache = true,
+                QueryCacheSize = 4096,
+                EnableCompiledPlanCache = true,
+                EnableBTreeSelection = true,
+                EnableSimdAndProjectionPushdown = true,
+                WalBufferSize = 8 * 1024 * 1024,
+                BufferPoolSize = 128 * 1024 * 1024,
+                CollectGCAfterBatches = false,
+                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                StrictParameterValidation = false
+            };
+
+            using var db = (SharpCoreDB.Database)factory.Create(
+                dbPath: dbPath,
+                masterPassword: "bench123",
+                isReadOnly: false,
+                config: config);
+
+            db.ExecuteSQL(@"CREATE TABLE docs (
+                name TEXT NOT NULL,
+                email TEXT,
+                age INTEGER,
+                score REAL,
+                data TEXT
+            )");
+
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+            // INSERT (same batched API — no SQL parsing either way)
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                var rows = new List<Dictionary<string, object>>(end - batch);
+                for (int i = batch; i < end; i++)
+                {
+                    rows.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = $"User{i}",
+                        ["email"] = $"user{i}@test.com",
+                        ["age"] = 20 + i % 60,
+                        ["score"] = i * 0.1,
+                        ["data"] = $"payload-{i}"
+                    });
+                }
+                db.InsertBatch("docs", rows);
+            }
+            db.Flush();
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ (Direct API — FindByIndex bypasses SQL parsing)
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                db.FindByIndex("docs", "name", $"User{i}");
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE (Direct API — UpdateByPrimaryKey not available without PK, use SQL for fairness)
+            // Note: This table uses name hash index, not integer PK.
+            // Direct API UpdateByPrimaryKey requires a PK column, so we use the SQL path
+            // which now benefits from GeneratedRegex + canUseIndex fix.
+            sw.Restart();
+            var updateStmts = new List<string>(UpdateCount);
+            for (int i = 0; i < UpdateCount; i++)
+            {
+                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE docs SET score = {0:F1} WHERE name = 'User{1}'", i * 99.9, i));
+            }
+            db.ExecuteBatchSQL(updateStmts);
+            db.Flush();
+            sw.Stop();
+            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            // DELETE (SQL path — same reason as UPDATE)
+            sw.Restart();
+            var deleteStmts = new List<string>(DeleteCount);
+            for (int i = 0; i < DeleteCount; i++)
+            {
+                deleteStmts.Add($"DELETE FROM docs WHERE name = 'User{i}'");
+            }
+            db.ExecuteBatchSQL(deleteStmts);
+            db.Flush();
+            sw.Stop();
+            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(dbPath))
+                {
+                    Directory.Delete(dbPath, true);
+                }
+            }
+            catch
+            {
+                // Temp benchmark cleanup best-effort
+            }
         }
 
         return result;
@@ -372,14 +563,18 @@ class Program
     }
 
     // ══════════════════════════════════════
-    // BLite (BLiteEngine + DynamicCollection)
+    // BLite 4.0.1 (BLiteEngine + DynamicCollection — async-only API)
     // ══════════════════════════════════════
-    static BenchmarkResult RunBLite()
+    static Task<BenchmarkResult> RunBLiteAsync()
     {
-        // BLite 2.0.2: BsonDocumentBuilder has no discoverable setter API (Write/Set/Add all missing).
-        // The caller wraps this in try-catch and reports the skip. See docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md.
+        // BLite 4.0.1: BsonDocumentBuilder is an empty type (zero public methods/fields).
+        // DynamicCollection.CreateDocument(fields, b => b.Set(...)) cannot compile because
+        // the builder exposes no Set, Add, Write, or indexer — the documented API does not
+        // match the shipped NuGet binary. Same issue as v2.0.2 but now with async-only CRUD.
+        // See docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md for full details.
         throw new NotSupportedException(
-            "BLite 2.0.2 BsonDocumentBuilder has no public setter API — benchmark cannot run. " +
+            "BLite 4.0.1 BsonDocumentBuilder has no public setter API (Set/Add/Write all missing). " +
+            "DynamicCollection.CreateDocument() compiles but the builder action cannot populate fields. " +
             "See docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md for details.");
     }
 

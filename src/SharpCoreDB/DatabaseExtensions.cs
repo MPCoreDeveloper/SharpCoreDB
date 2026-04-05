@@ -322,9 +322,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
         else if (upperSql.Contains("SELECT"))
         {
-            return ExecuteSelectInternal(sql, parameters);
+            // ✅ FIX: Bind parameters before executing SELECT to support parameterized queries
+            var boundSql = BindPreparedSql(sql, parameters);
+            return ExecuteSelectInternal(boundSql, parameters);
         }
-        
+
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
     }
 
@@ -444,7 +446,39 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         Flush();
     }
 
-    public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default) 
+    /// <inheritdoc />
+    public Dictionary<string, object>? FindByPrimaryKey(string tableName, object key)
+    {
+        if (!_tables.TryGetValue(tableName, out var table))
+            return null;
+        return table.FindByPrimaryKey(key);
+    }
+
+    /// <inheritdoc />
+    public List<Dictionary<string, object>> FindByIndex(string tableName, string column, object value)
+    {
+        if (!_tables.TryGetValue(tableName, out var table))
+            return [];
+        return table.FindByIndex(column, value);
+    }
+
+    /// <inheritdoc />
+    public bool UpdateByPrimaryKey(string tableName, object key, Dictionary<string, object> updates)
+    {
+        if (!_tables.TryGetValue(tableName, out var table))
+            return false;
+        return table.UpdateByPrimaryKey(key, updates);
+    }
+
+    /// <inheritdoc />
+    public bool DeleteByPrimaryKey(string tableName, object key)
+    {
+        if (!_tables.TryGetValue(tableName, out var table))
+            return false;
+        return table.DeleteByPrimaryKey(key);
+    }
+
+    public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default)
         => _storageProvider.VacuumAsync(mode, cancellationToken);
 
     public StorageMode StorageMode => _storageProvider.Mode;
@@ -465,6 +499,16 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
     public async ValueTask DisposeAsync()
     {
+        // ✅ FIX: Flush all table caches before disposing storage provider
+        // This ensures dirty data is persisted to disk before shutdown
+        foreach (var table in _tables.Values)
+        {
+            if (table is SingleFileTable sft)
+            {
+                sft.FlushCache();
+            }
+        }
+
         if (_storageProvider is IAsyncDisposable asyncProvider)
         {
             await asyncProvider.DisposeAsync().ConfigureAwait(false);
@@ -840,10 +884,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     [Obsolete("Regex-based SELECT with limited SQL support (no ORDER BY, LIMIT, JOIN, subqueries). Migrate to SqlParser-based execution.")]
     private List<Dictionary<string, object>> ExecuteSelectInternal(string sql, Dictionary<string, object?>? parameters)
     {
+        // ✅ FIX: Updated regex to properly handle ORDER BY clause
         var regex = new Regex(
-            @"SELECT\s+(.*?)\s+FROM\s+(\w+)\s*(?:WHERE\s+(.*))?",
+            @"SELECT\s+(.*?)\s+FROM\s+(\w+)\s*(?:WHERE\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*))?$",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        
+
         var match = regex.Match(sql);
         if (!match.Success)
         {
@@ -853,25 +898,62 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         var columns = match.Groups[1].Value.Trim();
         var tableName = match.Groups[2].Value.Trim();
         var whereClause = match.Groups[3].Value.Trim();
-        
+        var orderByClause = match.Groups[4].Value.Trim();
+
         if (!_tables.TryGetValue(tableName, out var table))
         {
             throw new InvalidOperationException($"Table '{tableName}' not found");
         }
 
         var rows = table.Select();
-        
+
         if (!string.IsNullOrWhiteSpace(whereClause))
         {
             rows = rows.Where(row => EvaluateWhereClause(row, whereClause)).ToList();
         }
-        
+
+        // ✅ FIX: Apply ORDER BY if present
+        if (!string.IsNullOrWhiteSpace(orderByClause))
+        {
+            var orderByParts = orderByClause.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var orderByColumn = orderByParts[0].Trim();
+            var isAscending = orderByParts.Length < 2 || !orderByParts[1].Equals("DESC", StringComparison.OrdinalIgnoreCase);
+
+            rows = isAscending
+                ? rows.OrderBy(row => row.TryGetValue(orderByColumn, out var value) ? value : null).ToList()
+                : rows.OrderByDescending(row => row.TryGetValue(orderByColumn, out var value) ? value : null).ToList();
+        }
+
         return rows;
     }
 
     private bool EvaluateWhereClause(Dictionary<string, object> row, string whereClause)
     {
         var condition = whereClause.Trim();
+
+        // ✅ FIX: Support AND/OR logic for complex WHERE clauses
+        // Split by AND (case-insensitive)
+        var andParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (andParts.Length > 1)
+        {
+            // All AND conditions must be true
+            return andParts.All(part => EvaluateSingleCondition(row, part.Trim()));
+        }
+
+        // Split by OR (case-insensitive)
+        var orParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+OR\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (orParts.Length > 1)
+        {
+            // At least one OR condition must be true
+            return orParts.Any(part => EvaluateSingleCondition(row, part.Trim()));
+        }
+
+        // Single condition
+        return EvaluateSingleCondition(row, condition);
+    }
+
+    private bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
+    {
         string[] operators = [">=", "<=", "!=", "<>", "=", ">", "<"];
         string? op = null;
         int opIndex = -1;

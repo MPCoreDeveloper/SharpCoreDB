@@ -22,6 +22,13 @@ public interface IStorage
     Task CommitAsync();
 
     /// <summary>
+    /// Commits the current transaction synchronously without thread-pool overhead.
+    /// Use in hot paths where <see cref="CommitAsync"/> would cause an unnecessary thread switch.
+    /// Default implementation falls back to <see cref="CommitAsync"/> for compatibility.
+    /// </summary>
+    void CommitSync() => CommitAsync().GetAwaiter().GetResult();
+
+    /// <summary>
     /// Rolls back the current transaction, discarding all buffered writes.
     /// </summary>
     void Rollback();

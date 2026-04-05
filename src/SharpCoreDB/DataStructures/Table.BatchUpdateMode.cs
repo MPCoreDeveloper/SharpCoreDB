@@ -195,6 +195,7 @@ public partial class Table
             // Mark index as clean
             staleIndexes.Remove(indexName);
             loadedIndexes.Add(indexName);
+            _indexReadyCache.TryAdd(indexName, 0);
         }
         finally
         {

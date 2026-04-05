@@ -12,6 +12,7 @@ using SharpCoreDB.Storage.Hybrid;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 /// <summary>
 /// SqlParser partial class containing DML (Data Manipulation Language) operations:
@@ -19,6 +20,10 @@ using System.Text;
 /// </summary>
 public partial class SqlParser
 {
+    private static readonly Regex UpdateRegex = new(@"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
     /// <summary>
     /// Internal method to execute a SQL statement.
     /// ✅ MODERNIZED: Uses C# 14 pattern matching with string equality checking.
@@ -1198,9 +1203,7 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot update in readonly mode");
 
         // Parse UPDATE SQL: UPDATE table SET col=val WHERE condition
-        var updateMatch = System.Text.RegularExpressions.Regex.Match(sql, 
-            @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+        var updateMatch = UpdateRegex.Match(sql);
         
         if (!updateMatch.Success)
             throw new InvalidOperationException($"Invalid UPDATE syntax: {sql}");
@@ -1245,9 +1248,7 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot delete in readonly mode");
 
         // Parse DELETE SQL: DELETE FROM table WHERE condition
-        var deleteMatch = System.Text.RegularExpressions.Regex.Match(sql,
-            @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+        var deleteMatch = DeleteRegex.Match(sql);
 
         if (!deleteMatch.Success)
             throw new InvalidOperationException($"Invalid DELETE syntax: {sql}");

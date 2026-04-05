@@ -40,17 +40,20 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     }
 
     private Node? root;
-    private readonly int degree = 3;
+    private readonly int degree = 64;
+    private readonly int maxKeys;
     private readonly int nodeCapacity;
     private readonly CollationType _collation;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BTree{TKey, TValue}"/> class.
     /// ✅ COLLATE Phase 4: Now accepts collation type for string key comparisons.
+    /// ✅ PERF: Degree 64 = 127 keys/node → shallower tree, far better CPU cache locality.
     /// </summary>
     /// <param name="collation">The collation type for string keys. Defaults to Binary (case-sensitive).</param>
     public BTree(CollationType collation = CollationType.Binary)
     {
+        maxKeys = 2 * degree - 1;
         nodeCapacity = 2 * degree;
         _collation = collation;
     }
@@ -82,6 +85,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     }
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public void Insert(TKey key, TValue value)
     {
         if (this.root == null)
@@ -94,7 +98,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             return;
         }
 
-        if (this.root.keysCount == (2 * this.degree) - 1)
+        if (this.root.keysCount == maxKeys)
         {
             var oldRoot = this.root;
             this.root = new Node(nodeCapacity) { IsLeaf = false };
@@ -106,17 +110,21 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         this.InsertNonFull(this.root, key, value);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void InsertNonFull(Node node, TKey key, TValue value)
     {
-        if (node.IsLeaf)
+        // Iterative descent to avoid recursion overhead on hot path
+        while (true)
         {
-            int insertPos = FindInsertIndex(node, key);
-            InsertKeyValue(node, insertPos, key, value);
-        }
-        else
-        {
+            if (node.IsLeaf)
+            {
+                int insertPos = FindInsertIndex(node, key);
+                InsertKeyValue(node, insertPos, key, value);
+                return;
+            }
+
             int childIndex = FindInsertIndex(node, key);
-            if (node.childrenArray[childIndex].keysCount == (2 * this.degree) - 1)
+            if (node.childrenArray[childIndex].keysCount == maxKeys)
             {
                 this.SplitChild(node, childIndex);
                 if (CompareKeys(key, node.keysArray[childIndex]) > 0)
@@ -125,7 +133,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
                 }
             }
 
-            this.InsertNonFull(node.childrenArray[childIndex], key, value);
+            node = node.childrenArray[childIndex];
         }
     }
 
@@ -135,6 +143,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     /// Before: Linear scan with culture-aware comparison - O(n) with 10-100x overhead
     /// After: Binary search with collation-aware comparison - O(log n) with minimal overhead
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int FindInsertIndex(Node node, TKey key)
     {
         int low = 0;
@@ -158,6 +167,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         return low;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void InsertKeyValue(Node node, int pos, TKey key, TValue value)
     {
         if (node.keysCount == node.keysArray.Length) ResizeKeys(node);
@@ -227,60 +237,54 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
     /// <summary>
     /// Searches for a key in the B-tree and returns the value if found.
-    /// ✅ OPTIMIZED: Uses binary search in each node (O(log n) per node vs O(n) per node).
+    /// ✅ OPTIMIZED: Iterative descent with binary search in each node.
     /// ✅ COLLATE Phase 4: Now instance method to support collation-aware comparison.
     /// This is called for EVERY primary key lookup, so this optimization is critical.
-    /// Performance improvement: 50-200x faster lookups for string keys.
     /// ⚠️ B+ tree: Values exist only in leaf nodes. Internal nodes have separator keys only.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private (bool Found, TValue? Value) Search(Node? node, TKey key)
     {
-        if (node == null)
+        // Iterative descent eliminates recursion stack overhead on the hottest path
+        while (node != null)
         {
-            return (false, default);
-        }
+            int left = 0;
+            int right = node.keysCount - 1;
 
-        // ✅ OPTIMIZED: Binary search in node keys (was: linear scan)
-        // This reduces comparisons from O(n) to O(log n) per node
-        int left = 0;
-        int right = node.keysCount - 1;
-        
-        while (left <= right)
-        {
-            int mid = left + ((right - left) >> 1);
-            int cmp = CompareKeys(key, node.keysArray[mid]);  // ✅ Single comparison
-            
-            if (cmp == 0)
+            while (left <= right)
             {
-                // ✅ B+ tree: Found matching key, but only return if it's a leaf node
-                // Internal nodes contain separator keys with null values
-                if (node.IsLeaf)
+                int mid = left + ((right - left) >> 1);
+                int cmp = CompareKeys(key, node.keysArray[mid]);
+
+                if (cmp == 0)
                 {
-                    return (true, node.valuesArray[mid]);
+                    if (node.IsLeaf)
+                    {
+                        return (true, node.valuesArray[mid]);
+                    }
+                    // Key found in internal node — descend to right child
+                    left = mid + 1;
+                    break;
                 }
-                // Key found in internal node - descend to leaf to get actual value
-                // The actual data is duplicated in the right child's leftmost leaf
-                left = mid + 1;
-                break;
+                else if (cmp < 0)
+                {
+                    right = mid - 1;
+                }
+                else
+                {
+                    left = mid + 1;
+                }
             }
-            else if (cmp < 0)
+
+            if (node.IsLeaf)
             {
-                right = mid - 1;
+                return (false, default);
             }
-            else
-            {
-                left = mid + 1;
-            }
+
+            node = node.childrenArray[left];
         }
 
-        // Not found in this node, descend into appropriate child
-        if (node.IsLeaf)
-        {
-            return (false, default);
-        }
-
-        // ✅ Note: 'left' now points to the correct child to descend into
-        return Search(node.childrenArray[left], key);
+        return (false, default);
     }
 
     /// <inheritdoc />
@@ -315,31 +319,24 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         this.root = null;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private bool DeleteFromNode(Node node, TKey key)
     {
-        int i = 0;
-        while (i < node.keysCount && CompareKeys(key, node.keysArray[i]) > 0)
-        {
-            i++;
-        }
+        // Use binary search instead of linear scan for delete too
+        int i = FindInsertIndex(node, key);
 
         if (i < node.keysCount && CompareKeys(key, node.keysArray[i]) == 0)
         {
-            // Key found in this node - remove it
+            // Key found in this node — RemoveKeyAt already shifts both keys AND values
             RemoveKeyAt(node, i);
-            if (node.IsLeaf)
-            {
-                RemoveValueAt(node, i);
-            }
             return true;
         }
         else if (!node.IsLeaf)
         {
-            // Key might be in subtree
             return DeleteFromNode(node.childrenArray[i], key);
         }
-        
-        return false; // Key not found
+
+        return false;
     }
 
     private static void RemoveKeyAt(Node node, int pos)
@@ -405,6 +402,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         node.valuesCount++;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void InsertChild(Node node, int pos, Node child)
     {
         if (node.childrenCount == node.childrenArray.Length) ResizeChildren(node);

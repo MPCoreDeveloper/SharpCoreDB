@@ -180,6 +180,44 @@ public interface IDatabase : IAsyncDisposable
     /// Call this after batch operations or before closing the connection if you want to guarantee persistence.
     /// </summary>
     void Flush();
+
+    /// <summary>
+    /// Finds a single row by primary key, bypassing SQL parsing entirely.
+    /// Returns null if the table or key is not found.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>The matching row or null.</returns>
+    Dictionary<string, object>? FindByPrimaryKey(string tableName, object key);
+
+    /// <summary>
+    /// Finds rows by an indexed column value, bypassing SQL parsing entirely.
+    /// Requires a hash index on the column.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="column">The indexed column name.</param>
+    /// <param name="value">The value to search for.</param>
+    /// <returns>Matching rows.</returns>
+    List<Dictionary<string, object>> FindByIndex(string tableName, string column, object value);
+
+    /// <summary>
+    /// Updates a row by primary key, bypassing SQL parsing entirely.
+    /// Returns true if a row was found and updated.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="key">The primary key value.</param>
+    /// <param name="updates">Column updates to apply.</param>
+    /// <returns>True if a row was updated.</returns>
+    bool UpdateByPrimaryKey(string tableName, object key, Dictionary<string, object> updates);
+
+    /// <summary>
+    /// Deletes a row by primary key, bypassing SQL parsing entirely.
+    /// Returns true if a row was found and deleted.
+    /// </summary>
+    /// <param name="tableName">The table name.</param>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>True if a row was deleted.</returns>
+    bool DeleteByPrimaryKey(string tableName, object key);
     
     /// <summary>
     /// Forces metadata to be saved to disk, ignoring the dirty flag.

@@ -348,6 +348,18 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
     }
 
+    /// <inheritdoc />
+    public Dictionary<string, object>? FindByPrimaryKey(object key) => null;
+
+    /// <inheritdoc />
+    public List<Dictionary<string, object>> FindByIndex(string column, object value) => [];
+
+    /// <inheritdoc />
+    public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => false;
+
+    /// <inheritdoc />
+    public bool DeleteByPrimaryKey(object key) => false;
+
     /// <summary>
     /// Flushes the in-memory row cache to the storage provider.
     /// </summary>

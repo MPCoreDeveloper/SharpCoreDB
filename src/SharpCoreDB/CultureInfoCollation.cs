@@ -113,9 +113,24 @@ public sealed class CultureInfoCollation
         if (left is null) return -1;
         if (right is null) return 1;
 
+        var normalizedLocale = NormalizeLocaleName(localeName);
+
+        // For German and Turkish, pre-normalize to canonical lowercase to handle
+        // locale-specific character expansions (e.g., German ß↔ss, Turkish İ/I/i/ı).
+        // CompareOptions.IgnoreNonSpace only strips combining diacritics and does NOT
+        // perform character-level expansions such as ß → ss.
+        if (normalizedLocale.StartsWith("de", StringComparison.OrdinalIgnoreCase) ||
+            normalizedLocale.StartsWith("tr", StringComparison.OrdinalIgnoreCase))
+        {
+            var leftNorm = NormalizeForComparison(left, localeName);
+            var rightNorm = NormalizeForComparison(right, localeName);
+            return string.Compare(leftNorm, rightNorm,
+                ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+
         var compareInfo = GetCompareInfo(localeName);
         // IgnoreNonSpace gives primary-level (base letter) comparison:
-        // ß = ss in German, accented chars equivalent (é = e, etc.)
+        // accented chars equivalent (é = e, etc.)
         var options = ignoreCase
             ? CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace
             : CompareOptions.None;
@@ -136,9 +151,24 @@ public sealed class CultureInfoCollation
         if (ReferenceEquals(left, right)) return true;
         if (left is null || right is null) return false;
 
+        var normalizedLocale = NormalizeLocaleName(localeName);
+
+        // For German and Turkish, pre-normalize to canonical lowercase to handle
+        // locale-specific character expansions (e.g., German ß↔ss, Turkish İ/I/i/ı).
+        // CompareOptions.IgnoreNonSpace only strips combining diacritics and does NOT
+        // perform character-level expansions such as ß → ss.
+        if (normalizedLocale.StartsWith("de", StringComparison.OrdinalIgnoreCase) ||
+            normalizedLocale.StartsWith("tr", StringComparison.OrdinalIgnoreCase))
+        {
+            var leftNorm = NormalizeForComparison(left, localeName);
+            var rightNorm = NormalizeForComparison(right, localeName);
+            return string.Equals(leftNorm, rightNorm,
+                ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+
         var compareInfo = GetCompareInfo(localeName);
         // IgnoreNonSpace gives primary-level (base letter) comparison:
-        // ß = ss in German, accented chars equivalent (é = e, etc.)
+        // accented chars equivalent (é = e, etc.)
         var options = ignoreCase
             ? CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace
             : CompareOptions.None;
@@ -229,18 +259,21 @@ public sealed class CultureInfoCollation
     
     /// <summary>
     /// Applies German-specific case normalization.
-    /// German ß (Eszett) → SS in uppercase, but ss normalizes back to ß.
+    /// German ß (Eszett) / ss equivalence: both are normalized to "ss".
     /// </summary>
     private static string ApplyGermanNormalization(string value)
     {
         if (string.IsNullOrEmpty(value))
             return value;
-        
-        var culture = CultureInfo.GetCultureInfo("de-DE");
-        // Convert to uppercase: ß → SS
-        var uppercase = value.ToUpper(culture);
-        // Convert back to lowercase for canonical form
-        return uppercase.ToLower(culture);
+
+        // Explicitly replace both Eszett forms to ensure cross-platform consistency.
+        // On .NET with ICU, string.ToUpper(de-DE) uses full Unicode case mapping where
+        // ß (U+00DF) → "SS", but behavior may vary across ICU versions.
+        // Explicit replacement guarantees ß ↔ ss equivalence regardless of runtime/ICU version.
+        return value
+            .Replace("ß", "ss", StringComparison.Ordinal)   // LATIN SMALL LETTER SHARP S → ss
+            .Replace("ẞ", "ss", StringComparison.Ordinal)   // LATIN CAPITAL LETTER SHARP S → ss
+            .ToLowerInvariant();
     }
 
     /// <summary>

@@ -16,10 +16,14 @@ using System.Text;
 /// High-performance binary row serializer using custom format.
 /// CRITICAL: 3x faster than JSON serialization!
 /// Uses modern C# 14 patterns with Span, ArrayPool, and minimal allocations.
+/// ✅ PERF: Caches column name bytes to avoid per-row Encoding.UTF8.GetBytes allocations.
 /// </summary>
 public static class BinaryRowSerializer
 {
     private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
+
+    // PERF: Thread-safe cache for column name UTF8 bytes to avoid allocation per serialize call
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> _nameCache = new();
 
     /// <summary>
     /// Serializes a row to binary format.
@@ -55,8 +59,8 @@ public static class BinaryRowSerializer
             // Write each column
             foreach (var (key, value) in row)
             {
-                // Write column name
-                var nameBytes = Encoding.UTF8.GetBytes(key);
+                // PERF: Cache column name bytes to avoid allocation per row
+                var nameBytes = _nameCache.GetOrAdd(key, static k => Encoding.UTF8.GetBytes(k));
                 BinaryPrimitives.WriteInt32LittleEndian(buffer[offset..], nameBytes.Length);
                 offset += sizeof(int);
                 nameBytes.CopyTo(buffer[offset..]);
@@ -73,7 +77,7 @@ public static class BinaryRowSerializer
         {
             if (pooledBuffer is not null)
             {
-                BufferPool.Return(pooledBuffer, clearArray: true);
+                BufferPool.Return(pooledBuffer, clearArray: false);
             }
         }
     }
@@ -185,11 +189,11 @@ public static class BinaryRowSerializer
 
             case string s:
                 buffer[offset++] = 6; // Type: String
-                var stringBytes = Encoding.UTF8.GetBytes(s);
-                BinaryPrimitives.WriteInt32LittleEndian(buffer[offset..], stringBytes.Length);
+                int stringByteCount = Encoding.UTF8.GetByteCount(s);
+                BinaryPrimitives.WriteInt32LittleEndian(buffer[offset..], stringByteCount);
                 offset += sizeof(int);
-                stringBytes.CopyTo(buffer[offset..]);
-                offset += stringBytes.Length;
+                Encoding.UTF8.GetBytes(s, buffer.Slice(offset, stringByteCount));
+                offset += stringByteCount;
                 break;
 
             case byte[] bytes:

@@ -430,9 +430,22 @@ public sealed class GenericLoadTests
         Console.WriteLine($"   Transpose time: {transposeSw.ElapsedMilliseconds}ms");
         Console.WriteLine($"   Throughput: {100_000.0 / transposeSw.Elapsed.TotalSeconds:N0} rows/sec");
 
+        // Warm up JIT: force compilation of all SIMD aggregate methods before measurement.
+        // The first call to each generic/SIMD method triggers JIT compilation, which adds 10-50ms
+        // of overhead that is irrelevant to the actual aggregate performance being tested.
+        {
+            using var warmupStore = new ColumnStore<Metric>();
+            warmupStore.Transpose([new Metric(1, "warmup", 1.0, 0L, ProductCategory.Electronics)]);
+            _ = warmupStore.Sum<long>("Id");
+            _ = warmupStore.Average("Value");
+            _ = warmupStore.Min<double>("Value");
+            _ = warmupStore.Max<double>("Value");
+            _ = warmupStore.Count("Id");
+        }
+
         // Act: SIMD aggregates
         var aggSw = Stopwatch.StartNew();
-        
+
         var sum = columnStore.Sum<long>("Id");  // ✅ FIX: Use long instead of int to prevent overflow
         var avg = columnStore.Average("Value");
         var min = columnStore.Min<double>("Value");

@@ -116,34 +116,9 @@ public partial class Table
         byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
         try
         {
-            if (SimdHelper.IsSimdSupported)
-            {
-                SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-            }
-            else
-            {
-                Array.Clear(buffer, 0, estimatedSize);
-            }
-
-            int bytesWritten = 0;
+            // PERF: Use schema-optimized writer or direct index loop (no dictionary lookup)
             Span<byte> bufferSpan = buffer.AsSpan();
-            
-            foreach (var col in this.Columns)
-            {
-                // ✅ PERFORMANCE: Use cached index instead of IndexOf
-                int colIdx = columnIndexCache[col];
-                
-                // ✅ FIX: Bounds check before accessing ColumnTypes
-                if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
-                {
-                    throw new InvalidOperationException(
-                        $"Column index {colIdx} out of bounds for column '{col}'. " +
-                        $"ColumnTypes.Count={this.ColumnTypes.Count}");
-                }
-                
-                int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                bytesWritten += written;
-            }
+            int bytesWritten = WriteRowOptimized(bufferSpan, row);
 
             var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
 
@@ -215,19 +190,16 @@ public partial class Table
                     this.Index.Insert(pkVal, position);
                 }
 
-                // Hash indexes (only for columnar mode)
-                if (StorageMode == StorageMode.Columnar)
+                // Hash indexes - works for ALL storage modes
+                foreach (var hashIndex in this.hashIndexes.Values)
                 {
-                    unloadedIndexes ??= [];
-                    foreach (var hashIndex in this.hashIndexes.Values)
-                    {
-                        hashIndex.Add(row, position);
-                    }
-                    
-                    foreach (var registeredCol in unloadedIndexes)
-                    {
-                        this.staleIndexes.Add(registeredCol);
-                    }
+                    hashIndex.Add(row, position);
+                }
+                
+                foreach (var registeredCol in unloadedIndexes)
+                {
+                    this.staleIndexes.Add(registeredCol);
+                    _indexReadyCache.TryRemove(registeredCol, out _);
                 }
 
                 // 🔥 NEW: Auto-index in B-tree if indexes exist
@@ -371,22 +343,7 @@ public partial class Table
                 try
                 {
                     Span<byte> rowBuffer = buffer.AsSpan(0, estimatedSize);
-                    if (SimdHelper.IsSimdSupported)
-                    {
-                        SimdHelper.ZeroBuffer(rowBuffer);
-                    }
-                    else
-                    {
-                        rowBuffer.Clear();
-                    }
-
-                    int bytesWritten = 0;
-                    foreach (var col in this.Columns)
-                    {
-                        int colIdx = columnIndexCache[col];
-                        int written = WriteTypedValueToSpan(rowBuffer.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                        bytesWritten += written;
-                    }
+                    int bytesWritten = WriteRowOptimized(rowBuffer, row);
 
                     parallelResults[i] = rowBuffer.Slice(0, bytesWritten).ToArray();
                 }
@@ -411,26 +368,9 @@ public partial class Table
                 var row = rows[i];
                 int estimatedSize = rowSizesArray[i];
                 
-                // Serialize directly into batch buffer section
+                // PERF: Use schema-optimized writer
                 Span<byte> rowBuffer = batchBuffer.AsSpan(bufferOffset, estimatedSize);
-                
-                if (SimdHelper.IsSimdSupported)
-                {
-                    SimdHelper.ZeroBuffer(rowBuffer);
-                }
-                else
-                {
-                    rowBuffer.Clear();
-                }
-
-                int bytesWritten = 0;
-
-                foreach (var col in this.Columns)
-                {
-                    int colIdx = columnIndexCache[col];
-                    int written = WriteTypedValueToSpan(rowBuffer.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                    bytesWritten += written;
-                }
+                int bytesWritten = WriteRowOptimized(rowBuffer, row);
 
                 // Copy serialized data to final array (required for engine.InsertBatch)
                 var rowData = rowBuffer.Slice(0, bytesWritten).ToArray();
@@ -505,25 +445,20 @@ public partial class Table
                 }
             }
 
-            // Update primary key index and hash indexes
-            for (int i = 0; i < validatedRows.Count; i++)
+            // Update primary key index
+            if (this.PrimaryKeyIndex >= 0)
             {
-                var row = validatedRows[i];
-                var position = positions[i];
-
-                if (this.PrimaryKeyIndex >= 0)
+                for (int i = 0; i < validatedRows.Count; i++)
                 {
-                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, position);
+                    var pkVal = validatedRows[i][this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    this.Index.Insert(pkVal, positions[i]);
                 }
+            }
 
-                if (StorageMode == StorageMode.Columnar)
-                {
-                    foreach (var hashIndex in this.hashIndexes.Values)
-                    {
-                        hashIndex.Add(row, position);
-                    }
-                }
+            // PERF: Batch hash index updates — single lock acquisition per index
+            foreach (var hashIndex in this.hashIndexes.Values)
+            {
+                hashIndex.AddBatch(validatedRows, positions);
             }
 
             // Update cached row count
@@ -687,26 +622,20 @@ public partial class Table
                 }
             }
 
-            // Update primary key index and hash indexes
-            for (int i = 0; i < rows.Count; i++)
+            // Update primary key index
+            if (this.PrimaryKeyIndex >= 0)
             {
-                var row = rows[i];
-                var position = positions[i];
-
-                if (this.PrimaryKeyIndex >= 0)
+                for (int i = 0; i < rows.Count; i++)
                 {
-                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, position);
+                    var pkVal = rows[i][this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    this.Index.Insert(pkVal, positions[i]);
                 }
+            }
 
-                // Hash indexes (only for columnar)
-                if (StorageMode == StorageMode.Columnar)
-                {
-                    foreach (var hashIndex in this.hashIndexes.Values)
-                    {
-                        hashIndex.Add(row, position);
-                    }
-                }
+            // PERF: Batch hash index updates — single lock acquisition per index
+            foreach (var hashIndex in this.hashIndexes.Values)
+            {
+                hashIndex.AddBatch(rows, positions);
             }
 
             // ✅ NEW: Update cached row count
@@ -818,13 +747,10 @@ public partial class Table
                     this.Index.Insert(pkVal, position);
                 }
 
-                // Hash indexes (only for columnar)
-                if (StorageMode == StorageMode.Columnar)
+                // Hash indexes - works for ALL storage modes
+                foreach (var hashIndex in this.hashIndexes.Values)
                 {
-                    foreach (var hashIndex in this.hashIndexes.Values)
-                    {
-                        hashIndex.Add(row, position);
-                    }
+                    hashIndex.Add(row, position);
                 }
             }
 
@@ -940,6 +866,9 @@ public partial class Table
                     ? this.ColumnCollations[colIdx]
                     : CollationType.Binary;
 
+                // ✅ FIX: Disable B-tree/PK index for NON-binary collations (Locale, NoCase, RTrim, etc.)
+                // Binary is the default and supports exact-match index lookups.
+                // Locale-aware collations need full-scan with collation-aware comparison.
                 if (collation != CollationType.Binary)
                 {
                     canUseIndex = false;
@@ -957,13 +886,20 @@ public partial class Table
             }
         }
 
-        // 1. HashIndex lookup (O(1)) - only for columnar storage
-        if (StorageMode == StorageMode.Columnar &&
-            !string.IsNullOrEmpty(where) &&
+        // 1. HashIndex lookup (O(1)) - works for ALL storage modes (Columnar and PageBased).
+        // ✅ Phase 9: Skip hash index for non-binary collations (Locale, NoCase, RTrim, etc.).
+        // Hash indexes use binary (exact-match) key comparison and cannot satisfy
+        // collation-aware equivalences such as German ß ↔ ss. For those columns, fall
+        // through to the full scan which uses EvaluateWhere with locale-aware comparison.
+        var _hashIndexColIdx = simpleWhereColumn != null ? this.Columns.IndexOf(simpleWhereColumn) : -1;
+        var _hashIndexCollation = _hashIndexColIdx >= 0 && _hashIndexColIdx < this.ColumnCollations.Count
+            ? this.ColumnCollations[_hashIndexColIdx]
+            : CollationType.Binary;
+        if (!string.IsNullOrEmpty(where) &&
             hasSimpleWhere &&
-            canUseIndex &&
             simpleWhereColumn != null &&
             simpleWhereValue != null &&
+            _hashIndexCollation == CollationType.Binary &&
             this.registeredIndexes.ContainsKey(simpleWhereColumn))
         {
             EnsureIndexLoaded(simpleWhereColumn);
@@ -982,7 +918,7 @@ public partial class Table
                             var data = engine.Read(Name, pos);
                             if (data != null)
                             {
-                                var row = DeserializeRow(data); // ❌ BEFORE: Allocates new dictionary
+                                var row = DeserializeRow(data);
                                 if (row != null) results.Add(row);
                             }
                         }
@@ -1038,11 +974,37 @@ public partial class Table
     /// Scans rows with SIMD optimization and filters out stale versions for columnar storage.
     /// Columnar UPDATE creates new versions, so we need to only return rows whose PK points to their position.
     /// ✅ OPTIMIZED: Uses dictionary pooling to reduce allocations by 60% during full scans.
+    /// ✅ OPTIMIZED: Early WHERE predicate push-down skips full deserialization for non-matching rows.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(byte[] data, string? where)
     {
         var results = new List<Dictionary<string, object>>();
+
+        // ✅ PERF: Pre-parse a simple "col = 'val'" WHERE once so non-matching records
+        // are skipped before the expensive DeserializeRowWithSimd call.
+        // Only enabled for STRING columns with Binary collation — other collations (NoCase,
+        // RTrim, Locale) require collation-aware comparison that only EvaluateWhere provides.
+        int earlyWhereColIdx = -1;
+        string? earlyWhereValue = null;
+        if (!string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var ewCol, out var ewValObj) &&
+            ewValObj is string ewStr)
+        {
+            int idx = this.Columns.IndexOf(ewCol);
+            if (idx >= 0 && idx < this.ColumnTypes.Count && this.ColumnTypes[idx] == DataType.String)
+            {
+                var collation = idx < this.ColumnCollations.Count
+                    ? this.ColumnCollations[idx]
+                    : CollationType.Binary;
+
+                if (collation == CollationType.Binary)
+                {
+                    earlyWhereColIdx = idx;
+                    earlyWhereValue = ewStr;
+                }
+            }
+        }
 
         // Scan file with position tracking
         int filePosition = 0;
@@ -1060,7 +1022,6 @@ public partial class Table
             const int MaxRecordSize = 1_000_000_000;
             if (recordLength < 0 || recordLength > MaxRecordSize)
             {
-                Console.WriteLine($"⚠️  Invalid record length {recordLength} at position {filePosition}");
                 break;
             }
 
@@ -1072,7 +1033,6 @@ public partial class Table
 
             if (filePosition + 4 + recordLength > dataSpan.Length)
             {
-                Console.WriteLine($"⚠️  Incomplete record at position {filePosition}");
                 break;
             }
 
@@ -1082,7 +1042,41 @@ public partial class Table
             int dataOffset = filePosition + 4;
             ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
 
-            // Parse the record
+            // ✅ PERF: Early WHERE check — read only columns 0..whereColIdx, then check the
+            // predicate before full deserialization. Skips ~4 column reads for 99 999/100 000
+            // non-matching rows in a typical point-lookup benchmark SELECT.
+            if (earlyWhereColIdx >= 0 && earlyWhereValue != null)
+            {
+                bool earlyMismatch = false;
+                int checkOffset = 0;
+                for (int ci = 0; ci <= earlyWhereColIdx && checkOffset < recordData.Length; ci++)
+                {
+                    try
+                    {
+                        var val = ReadTypedValueFromSpan(recordData[checkOffset..], this.ColumnTypes[ci], out int br);
+                        checkOffset += br;
+                        if (ci == earlyWhereColIdx)
+                        {
+                            var vs = val == DBNull.Value ? null : val?.ToString();
+                            if (!string.Equals(vs, earlyWhereValue, StringComparison.Ordinal))
+                                earlyMismatch = true;
+                        }
+                    }
+                    catch
+                    {
+                        earlyMismatch = true;
+                        break;
+                    }
+                }
+
+                if (earlyMismatch)
+                {
+                    filePosition += 4 + recordLength;
+                    continue;
+                }
+            }
+
+            // Parse the record (only reached when WHERE predicate may match, or no simple WHERE)
             var row = DeserializeRowWithSimd(recordData);
             bool valid = row != null;
 
@@ -1183,15 +1177,7 @@ public partial class Table
 
                 try
                 {
-                    if (SimdHelper.IsSimdSupported)
-                    {
-                        SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-                    }
-                    else
-                    {
-                        Array.Clear(buffer, 0, estimatedSize);
-                    }
-
+                    // ✅ PERF: No ZeroBuffer — WriteTypedValueToSpan overwrites every written byte.
                     int bytesWritten = 0;
                     Span<byte> bufferSpan = buffer.AsSpan();
 
@@ -1258,7 +1244,6 @@ public partial class Table
                     else // PageBased
                     {
                         // Page-based: In-place update
-                        // Get position from primary key index
                         if (this.PrimaryKeyIndex >= 0)
                         {
                             var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
@@ -1268,8 +1253,12 @@ public partial class Table
                                 long position = searchResult.Value;
                                 engine.Update(Name, position, rowData);
 
-                                // Index position stays the same (in-place update)
-                                // No index updates needed unless indexed column changed
+                                // Update hash indexes with same position (in-place update keeps position)
+                                foreach (var hashIndex in this.hashIndexes.Values)
+                                {
+                                    hashIndex.Remove(oldRow, position);
+                                    hashIndex.Add(row, position);
+                                }
                             }
                         }
                     }
@@ -1283,6 +1272,171 @@ public partial class Table
             // ✅ NEW: Auto-compact if threshold reached
             if (StorageMode == StorageMode.Columnar)
             {
+                TryAutoCompact();
+            }
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Processes multiple UPDATE operations under a single write lock.
+    /// PERF: Avoids N lock acquisitions + N SelectInternal calls when each WHERE targets
+    /// a single row via an indexed column. Caches column metadata once for the batch.
+    /// </summary>
+    /// <param name="operations">List of (whereClause, updates) pairs.</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal void UpdateMultiple(List<(string where, Dictionary<string, object> updates)> operations)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
+        if (operations.Count == 0) return;
+
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var engine = GetOrCreateStorageEngine();
+            var columnIndexCache = GetColumnIndexCache();
+            int updatedInBatch = 0;
+
+            foreach (var (where, updates) in operations)
+            {
+                // Resolve matching rows — prefer hash index point-lookup
+                List<Dictionary<string, object>>? rows = null;
+
+                if (!string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
+                    this.registeredIndexes.ContainsKey(whereCol))
+                {
+                    EnsureIndexLoaded(whereCol);
+                    if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex))
+                    {
+                        var colIdx = this.Columns.IndexOf(whereCol);
+                        if (colIdx >= 0)
+                        {
+                            var key = ParseValueForHashLookup(
+                                whereVal?.ToString() ?? string.Empty,
+                                this.ColumnTypes[colIdx]);
+
+                            if (key != null)
+                            {
+                                rows = [];
+                                foreach (var pos in hashIndex.LookupPositions(key))
+                                {
+                                    var data = engine.Read(Name, pos);
+                                    if (data != null)
+                                    {
+                                        var row = DeserializeRow(data);
+                                        if (row != null) rows.Add(row);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                rows ??= SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+
+                foreach (var row in rows)
+                {
+                    var oldRow = new Dictionary<string, object>(row);
+
+                    foreach (var update in updates)
+                        row[update.Key] = update.Value;
+
+                    // NOT NULL validation
+                    for (int i = 0; i < this.Columns.Count; i++)
+                    {
+                        if (i < this.IsNotNull.Count && this.IsNotNull[i] &&
+                            (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
+                        {
+                            throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                        }
+                    }
+
+                    // Serialize
+                    int estimatedSize = EstimateRowSize(row);
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+
+                    try
+                    {
+                        int bytesWritten = 0;
+                        Span<byte> bufferSpan = buffer.AsSpan();
+
+                        foreach (var col in this.Columns)
+                        {
+                            int colIdx = columnIndexCache[col];
+                            if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Column index {colIdx} out of bounds for column '{col}'.");
+                            }
+
+                            int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
+                            bytesWritten += written;
+                        }
+
+                        var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+
+                        if (StorageMode == StorageMode.Columnar)
+                        {
+                            long oldPosition = -1;
+                            if (this.PrimaryKeyIndex >= 0)
+                            {
+                                var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                var searchResult = this.Index.Search(pkVal);
+                                if (searchResult.Found)
+                                    oldPosition = searchResult.Value;
+                            }
+
+                            long newPosition = engine.Insert(Name, rowData);
+
+                            if (this.PrimaryKeyIndex >= 0)
+                            {
+                                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                this.Index.Insert(pkVal, newPosition);
+                            }
+
+                            foreach (var hashIndex in this.hashIndexes.Values)
+                            {
+                                if (oldPosition >= 0)
+                                    hashIndex.Remove(oldRow, oldPosition);
+                                hashIndex.Add(row, newPosition);
+                            }
+
+                            updatedInBatch++;
+                        }
+                        else // PageBased
+                        {
+                            if (this.PrimaryKeyIndex >= 0)
+                            {
+                                var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                var searchResult = this.Index.Search(pkVal);
+                                if (searchResult.Found)
+                                {
+                                    long position = searchResult.Value;
+                                    engine.Update(Name, position, rowData);
+
+                                    foreach (var hashIndex in this.hashIndexes.Values)
+                                    {
+                                        hashIndex.Remove(oldRow, position);
+                                        hashIndex.Add(row, position);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+                    }
+                }
+            }
+
+            if (StorageMode == StorageMode.Columnar && updatedInBatch > 0)
+            {
+                Interlocked.Add(ref _updatedRowCount, updatedInBatch);
                 TryAutoCompact();
             }
         }
@@ -1358,85 +1512,529 @@ public partial class Table
             }
             else
             {
-                // Columnar without PK: Fall back to full storage scan (same approach as PageBased)
-                // to locate matching rows by their storage reference. Without a PK index, the
-                // Select-based path above cannot resolve storage positions, so we must scan directly.
-                foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+                // Columnar without PK: try hash index fast path first, fall back to full scan.
+                // ✅ PERF: eliminates the O(n²) full-scan when deleting rows by an indexed column
+                // (e.g. a WHERE on an indexed TEXT column like 'name').
+                bool scannedViaIndex = false;
+
+                if (!string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var deleteWhereCol, out var deleteWhereVal) &&
+                    this.registeredIndexes.ContainsKey(deleteWhereCol))
                 {
-                    var row = DeserializeRowFromSpan(data);
-                    if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                    EnsureIndexLoaded(deleteWhereCol);
+                    if (this.hashIndexes.TryGetValue(deleteWhereCol, out var deleteHashIndex))
                     {
-                        recordsToDelete.Add((storageRef, row));
+                        var colIdx = this.Columns.IndexOf(deleteWhereCol);
+                        if (colIdx >= 0)
+                        {
+                            var key = ParseValueForHashLookup(
+                                deleteWhereVal?.ToString() ?? string.Empty,
+                                this.ColumnTypes[colIdx]);
+
+                            if (key != null)
+                            {
+                                foreach (var pos in deleteHashIndex.LookupPositions(key))
+                                {
+                                    var data = engine.Read(Name, pos);
+                                    if (data != null)
+                                    {
+                                        var row = DeserializeRowFromSpan(data);
+                                        if (row != null) recordsToDelete.Add((pos, row));
+                                    }
+                                }
+                                scannedViaIndex = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!scannedViaIndex)
+                {
+                    // Full scan fallback (no index or compound WHERE clause)
+                    foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+                    {
+                        var row = DeserializeRowFromSpan(data);
+                        if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                        {
+                            recordsToDelete.Add((storageRef, row));
+                        }
                     }
                 }
             }
 
             // ✅ Now delete all records in one batch - no more scanning between deletes
-            int deletedCount = 0;
+            int deletedCount = recordsToDelete.Count;
 
-            foreach (var (storagePosition, row) in recordsToDelete)
+            // PageBased: route physical deletes to engine
+            if (StorageMode == StorageMode.PageBased)
             {
-                try
+                foreach (var (storagePosition, _) in recordsToDelete)
                 {
-                    // Route to storage engine
-                    if (StorageMode == StorageMode.PageBased)
-                    {
-                        // PageBased: Physical delete (marks slot as deleted)
-                        engine.Delete(Name, storagePosition);
-                    }
-                    // Columnar: Logical delete only (no engine call needed)
-                    // Physical space reclaimed during compaction
-
-                    // Remove from indexes (both modes)
-                    if (this.PrimaryKeyIndex >= 0)
-                    {
-                        var pkCol = this.Columns[this.PrimaryKeyIndex];
-                        if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-                        {
-                            var pkStr = pkValue.ToString() ?? string.Empty;
-                            this.Index.Delete(pkStr);
-                        }
-                    }
-
-                    // Remove from hash indexes (columnar mode only)
-                    if (StorageMode == StorageMode.Columnar)
-                    {
-                        // Manual loop for performance - avoids LINQ Where allocation on hot path
-                        foreach (var kvp in this.hashIndexes)
-                        {
-                            if (this.loadedIndexes.Contains(kvp.Key))
-                            {
-                                kvp.Value.Remove(row, storagePosition);
-                            }
-                        }
-
-                        // Mark unloaded indexes as stale (columnar only)
-                        if (StorageMode == StorageMode.Columnar)
-                        {
-                            // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
-                            foreach (var col in this.registeredIndexes.Keys)
-                            {
-                                if (!this.loadedIndexes.Contains(col))
-                                {
-                                    this.staleIndexes.Add(col);
-                                }
-                            }
-
-                            // ✅ NEW: Auto-compact if threshold reached
-                            TryAutoCompact();
-                        }
-                    }
-
-                    deletedCount++;
+                    engine.Delete(Name, storagePosition);
                 }
-                catch (Exception ex)
+            }
+
+            // Remove from PK B-tree index
+            if (this.PrimaryKeyIndex >= 0)
+            {
+                var pkCol = this.Columns[this.PrimaryKeyIndex];
+                foreach (var (_, row) in recordsToDelete)
                 {
-                    Console.WriteLine($"Error deleting record at {storagePosition}: {ex.Message}");
+                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                    {
+                        this.Index.Delete(pkValue.ToString() ?? string.Empty);
+                    }
                 }
+            }
+
+            // Remove from hash indexes - batch (single lock per index)
+            if (recordsToDelete.Count > 0)
+            {
+                // Pre-collect rows and positions for batch removal
+                var batchRows = new List<Dictionary<string, object>>(recordsToDelete.Count);
+                var batchPositions = new long[recordsToDelete.Count];
+                for (int i = 0; i < recordsToDelete.Count; i++)
+                {
+                    batchRows.Add(recordsToDelete[i].row);
+                    batchPositions[i] = recordsToDelete[i].storagePosition;
+                }
+
+                foreach (var kvp in this.hashIndexes)
+                {
+                    if (this.loadedIndexes.Contains(kvp.Key))
+                    {
+                        kvp.Value.RemoveBatch(batchRows, batchPositions);
+                    }
+                }
+            }
+
+            // Mark unloaded indexes as stale ONCE (not per-row)
+            if (StorageMode == StorageMode.Columnar && deletedCount > 0)
+            {
+                foreach (var col in this.registeredIndexes.Keys)
+                {
+                    if (!this.loadedIndexes.Contains(col))
+                    {
+                        this.staleIndexes.Add(col);
+                        _indexReadyCache.TryRemove(col, out _);
+                    }
+                }
+
+                TryAutoCompact();
             }
 
             // ✅ NEW: Update cached row count
             Interlocked.Add(ref _cachedRowCount, -deletedCount);
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Deletes rows matching multiple WHERE conditions under a single write lock.
+    /// PERF: Avoids N lock acquisitions when called from ExecuteBatchSQL with N DELETE statements.
+    /// Each condition is resolved via the hash index fast path when possible.
+    /// </summary>
+    /// <param name="whereConditions">List of WHERE clause strings (one per DELETE statement).</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal void DeleteMultiple(List<string> whereConditions)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
+        if (whereConditions.Count == 0) return;
+
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var engine = GetOrCreateStorageEngine();
+            var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
+
+            foreach (var where in whereConditions)
+            {
+                // Try hash index fast path
+                if (!string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var col, out var val) &&
+                    this.registeredIndexes.ContainsKey(col))
+                {
+                    EnsureIndexLoaded(col);
+                    if (this.hashIndexes.TryGetValue(col, out var hashIndex))
+                    {
+                        var colIdx = this.Columns.IndexOf(col);
+                        if (colIdx >= 0)
+                        {
+                            var key = ParseValueForHashLookup(
+                                val?.ToString() ?? string.Empty,
+                                this.ColumnTypes[colIdx]);
+
+                            if (key != null)
+                            {
+                                foreach (var pos in hashIndex.LookupPositions(key))
+                                {
+                                    var data = engine.Read(Name, pos);
+                                    if (data != null)
+                                    {
+                                        var row = DeserializeRowFromSpan(data);
+                                        if (row != null) recordsToDelete.Add((pos, row));
+                                    }
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: PK path or full scan for this condition
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+                    var pkCol = this.Columns[this.PrimaryKeyIndex];
+                    foreach (var row in rows)
+                    {
+                        if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                        {
+                            var searchResult = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                            if (searchResult.Found)
+                                recordsToDelete.Add((searchResult.Value, row));
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+                    {
+                        var row = DeserializeRowFromSpan(data);
+                        if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                            recordsToDelete.Add((storageRef, row));
+                    }
+                }
+            }
+
+            if (recordsToDelete.Count == 0) return;
+
+            int deletedCount = recordsToDelete.Count;
+
+            // PageBased: route physical deletes
+            if (StorageMode == StorageMode.PageBased)
+            {
+                foreach (var (pos, _) in recordsToDelete)
+                    engine.Delete(Name, pos);
+            }
+
+            // Remove from PK B-tree
+            if (this.PrimaryKeyIndex >= 0)
+            {
+                var pkCol = this.Columns[this.PrimaryKeyIndex];
+                foreach (var (_, row) in recordsToDelete)
+                {
+                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                        this.Index.Delete(pkValue.ToString() ?? string.Empty);
+                }
+            }
+
+            // Batch remove from hash indexes (single lock per index)
+            var batchRows = new List<Dictionary<string, object>>(deletedCount);
+            var batchPositions = new long[deletedCount];
+            for (int i = 0; i < deletedCount; i++)
+            {
+                batchRows.Add(recordsToDelete[i].row);
+                batchPositions[i] = recordsToDelete[i].storagePosition;
+            }
+
+            foreach (var kvp in this.hashIndexes)
+            {
+                if (this.loadedIndexes.Contains(kvp.Key))
+                    kvp.Value.RemoveBatch(batchRows, batchPositions);
+            }
+
+            // Mark unloaded indexes as stale ONCE
+            if (StorageMode == StorageMode.Columnar)
+            {
+                foreach (var col in this.registeredIndexes.Keys)
+                {
+                    if (!this.loadedIndexes.Contains(col))
+                    {
+                        this.staleIndexes.Add(col);
+                        _indexReadyCache.TryRemove(col, out _);
+                    }
+                }
+
+                TryAutoCompact();
+            }
+
+            Interlocked.Add(ref _cachedRowCount, -deletedCount);
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Finds a single row by primary key value, bypassing SQL parsing entirely.
+    /// Uses B-tree PK index for O(log n) lookup + single storage read.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>The matching row or null if not found or no PK is defined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Dictionary<string, object>? FindByPrimaryKey(object key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (this.PrimaryKeyIndex < 0)
+            return null;
+
+        var engine = GetOrCreateStorageEngine();
+        var pkStr = key.ToString() ?? string.Empty;
+        var searchResult = this.Index.Search(pkStr);
+
+        if (!searchResult.Found)
+            return null;
+
+        var data = engine.Read(Name, searchResult.Value);
+        if (data == null)
+            return null;
+
+        return DeserializeRow(data);
+    }
+
+    /// <summary>
+    /// Finds rows matching a value in the specified indexed column, bypassing SQL parsing.
+    /// Uses hash index for O(1) lookup + storage reads.
+    /// Requires a hash index on the column (call CreateHashIndex first).
+    /// </summary>
+    /// <param name="column">The indexed column name.</param>
+    /// <param name="value">The value to search for.</param>
+    /// <returns>Matching rows, or empty list if no index or no matches.</returns>
+    public List<Dictionary<string, object>> FindByIndex(string column, object value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var results = new List<Dictionary<string, object>>();
+
+        if (!this.registeredIndexes.ContainsKey(column))
+            return results;
+
+        EnsureIndexLoaded(column);
+
+        if (!this.hashIndexes.TryGetValue(column, out var hashIndex))
+            return results;
+
+        var colIdx = this.Columns.IndexOf(column);
+        if (colIdx < 0)
+            return results;
+
+        var engine = GetOrCreateStorageEngine();
+        var key = ParseValueForHashLookup(value.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+
+        if (key is null)
+            return results;
+
+        var positions = hashIndex.LookupPositions(key);
+        foreach (var pos in positions)
+        {
+            var data = engine.Read(Name, pos);
+            if (data != null)
+            {
+                var row = DeserializeRow(data);
+                if (row != null)
+                    results.Add(row);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Updates a single row identified by primary key, bypassing SQL parsing entirely.
+    /// Uses B-tree PK index for O(log n) lookup, then in-place or append update.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <param name="updates">The column updates to apply.</param>
+    /// <returns>True if a row was found and updated, false otherwise.</returns>
+    public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(updates);
+
+        if (this.isReadOnly)
+            throw new InvalidOperationException("Cannot update in readonly mode");
+
+        if (this.PrimaryKeyIndex < 0)
+            return false;
+
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var engine = GetOrCreateStorageEngine();
+            var pkStr = key.ToString() ?? string.Empty;
+            var searchResult = this.Index.Search(pkStr);
+
+            if (!searchResult.Found)
+                return false;
+
+            long storagePosition = searchResult.Value;
+            var data = engine.Read(Name, storagePosition);
+            if (data == null)
+                return false;
+
+            var row = DeserializeRow(data);
+            if (row == null)
+                return false;
+
+            var oldRow = new Dictionary<string, object>(row);
+
+            // Apply updates
+            foreach (var update in updates)
+            {
+                row[update.Key] = update.Value;
+            }
+
+            // NOT NULL validation
+            for (int i = 0; i < this.Columns.Count; i++)
+            {
+                if (i < this.IsNotNull.Count && this.IsNotNull[i] &&
+                    (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
+                {
+                    throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                }
+            }
+
+            // Serialize updated row
+            int estimatedSize = EstimateRowSize(row);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+            try
+            {
+                int bytesWritten = 0;
+                Span<byte> bufferSpan = buffer.AsSpan();
+                var columnIndexCache = GetColumnIndexCache();
+
+                foreach (var col in this.Columns)
+                {
+                    int colIdx = columnIndexCache[col];
+                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
+                    bytesWritten += written;
+                }
+
+                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+
+                if (StorageMode == StorageMode.Columnar)
+                {
+                    long newPosition = engine.Insert(Name, rowData);
+                    this.Index.Insert(pkStr, newPosition);
+
+                    foreach (var hashIndex in this.hashIndexes.Values)
+                    {
+                        hashIndex.Remove(oldRow, storagePosition);
+                        hashIndex.Add(row, newPosition);
+                    }
+
+                    Interlocked.Increment(ref _updatedRowCount);
+                }
+                else
+                {
+                    engine.Update(Name, storagePosition, rowData);
+
+                    foreach (var hashIndex in this.hashIndexes.Values)
+                    {
+                        hashIndex.Remove(oldRow, storagePosition);
+                        hashIndex.Add(row, storagePosition);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+            }
+
+            if (StorageMode == StorageMode.Columnar)
+            {
+                TryAutoCompact();
+            }
+
+            return true;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Deletes a single row identified by primary key, bypassing SQL parsing entirely.
+    /// Uses B-tree PK index for O(log n) lookup, then direct storage delete.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>True if a row was found and deleted, false otherwise.</returns>
+    public bool DeleteByPrimaryKey(object key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (this.isReadOnly)
+            throw new InvalidOperationException("Cannot delete in readonly mode");
+
+        if (this.PrimaryKeyIndex < 0)
+            return false;
+
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var engine = GetOrCreateStorageEngine();
+            var pkStr = key.ToString() ?? string.Empty;
+            var searchResult = this.Index.Search(pkStr);
+
+            if (!searchResult.Found)
+                return false;
+
+            long storagePosition = searchResult.Value;
+
+            // Read row for hash index removal
+            var data = engine.Read(Name, storagePosition);
+            Dictionary<string, object>? row = null;
+            if (data != null)
+            {
+                row = DeserializeRow(data);
+            }
+
+            // Delete from storage
+            if (StorageMode == StorageMode.PageBased)
+            {
+                engine.Delete(Name, storagePosition);
+            }
+
+            // Remove from PK index
+            this.Index.Delete(pkStr);
+
+            // Remove from hash indexes
+            if (row != null)
+            {
+                foreach (var kvp in this.hashIndexes)
+                {
+                    if (this.loadedIndexes.Contains(kvp.Key))
+                    {
+                        kvp.Value.Remove(row, storagePosition);
+                    }
+                }
+            }
+
+            // Mark unloaded indexes as stale (columnar)
+            if (StorageMode == StorageMode.Columnar)
+            {
+                foreach (var col in this.registeredIndexes.Keys)
+                {
+                    if (!this.loadedIndexes.Contains(col))
+                    {
+                        this.staleIndexes.Add(col);
+                        _indexReadyCache.TryRemove(col, out _);
+                    }
+                }
+
+                TryAutoCompact();
+            }
+
+            Interlocked.Decrement(ref _cachedRowCount);
+            return true;
         }
         finally
         {
@@ -1512,6 +2110,7 @@ public partial class Table
              var pkColumn = this.Columns[this.PrimaryKeyIndex];
              var pkValue = row[pkColumn];
              
+
              // Skip null PKs (null values don't participate in unique constraints)
              if (pkValue == null || pkValue == DBNull.Value)
                  continue;

@@ -192,7 +192,8 @@ public sealed class SharpCoreDbEventStore(IDatabase database, string tableName =
             var statements = new List<string>(2)
             {
                 $"DELETE FROM {_snapshotTableName} WHERE stream_id = '{EscapeSqlLiteral(snapshot.StreamId.Value)}' AND version = {snapshot.Version}",
-                $"INSERT INTO {_snapshotTableName} VALUES ('{EscapeSqlLiteral(snapshot.StreamId.Value)}', {snapshot.Version}, '{snapshotDataBase64}', '{createdAtText}')",
+                // ✅ FIX: Explicitly specify column names to avoid misalignment with auto-generated _rowid column
+                $"INSERT INTO {_snapshotTableName} (stream_id, version, snapshot_data_base64, created_at_utc) VALUES ('{EscapeSqlLiteral(snapshot.StreamId.Value)}', {snapshot.Version}, '{snapshotDataBase64}', '{createdAtText}')",
             };
 
             _database.ExecuteBatchSQL(statements);
@@ -280,7 +281,8 @@ public sealed class SharpCoreDbEventStore(IDatabase database, string tableName =
         var metadataBase64 = Convert.ToBase64String(entry.Metadata.ToArray());
         var timestampText = entry.TimestampUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
-        return $"INSERT INTO {_tableName} VALUES ('{EscapeSqlLiteral(streamId.Value)}', {streamSequence}, {globalSequence}, '{EscapeSqlLiteral(entry.EventType)}', '{payloadBase64}', '{metadataBase64}', '{timestampText}')";
+        // ✅ FIX: Explicitly specify column names to avoid misalignment with auto-generated _rowid column
+        return $"INSERT INTO {_tableName} (stream_id, stream_sequence, global_sequence, event_type, payload_base64, metadata_base64, timestamp_utc) VALUES ('{EscapeSqlLiteral(streamId.Value)}', {streamSequence}, {globalSequence}, '{EscapeSqlLiteral(entry.EventType)}', '{payloadBase64}', '{metadataBase64}', '{timestampText}')";
     }
 
     private static EventEnvelope MapEnvelope(Dictionary<string, object> row)

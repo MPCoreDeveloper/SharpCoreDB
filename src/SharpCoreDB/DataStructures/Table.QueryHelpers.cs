@@ -26,10 +26,18 @@ public partial class Table
     {
         column = string.Empty;
         value = string.Empty;
-        
+
         if (string.IsNullOrWhiteSpace(where))
             return false;
-        
+
+        // ✅ FIX: Do NOT attempt to parse compound WHERE clauses (AND/OR).
+        // Splitting on '=' would include the rest of the compound expression in the value,
+        // causing the early-WHERE optimization to use a corrupted comparison value and
+        // incorrectly skip matching records.
+        var whereUpper = where.ToUpperInvariant();
+        if (whereUpper.Contains(" AND ") || whereUpper.Contains(" OR "))
+            return false;
+
         // Handle: column = value
         if (where.Contains('='))
         {
@@ -41,7 +49,7 @@ public partial class Table
                 return true;
             }
         }
-        
+
         return false;
     }
 

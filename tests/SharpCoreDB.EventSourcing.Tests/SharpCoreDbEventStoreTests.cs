@@ -7,6 +7,7 @@ namespace SharpCoreDB.EventSourcing.Tests;
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
+using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Integration tests for <see cref="SharpCoreDbEventStore"/> persistence behavior.
@@ -36,8 +37,18 @@ public class SharpCoreDbEventStoreTests
         var streamId = new EventStreamId("order-200");
         var entry = new EventAppendEntry("OrderPaid", "payload"u8.ToArray(), Array.Empty<byte>(), DateTimeOffset.UtcNow);
 
-        var firstStore = CreateStore(databasePath);
+        // Create first store and database
+        var services1 = new ServiceCollection();
+        services1.AddSharpCoreDB();
+        var serviceProvider1 = services1.BuildServiceProvider();
+        var factory1 = serviceProvider1.GetRequiredService<DatabaseFactory>();
+        var database1 = factory1.Create(databasePath, "event-store-test-password");
+        var firstStore = new SharpCoreDbEventStore(database1);
+
         await firstStore.AppendEventAsync(streamId, entry);
+
+        // ✅ FIX: Dispose the first database instance to ensure all data is flushed to disk
+        await database1.DisposeAsync();
 
         var secondStore = CreateStore(databasePath);
         var read = await secondStore.ReadStreamAsync(streamId, new EventReadRange(1, long.MaxValue));

@@ -144,6 +144,40 @@ public interface ITable
     void Delete(string? where);
 
     /// <summary>
+    /// Finds a single row by primary key value, bypassing SQL parsing.
+    /// Returns null if not found.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>The matching row or null.</returns>
+    Dictionary<string, object>? FindByPrimaryKey(object key);
+
+    /// <summary>
+    /// Finds rows matching a value in the specified indexed column, bypassing SQL parsing.
+    /// Requires a hash index on the column.
+    /// </summary>
+    /// <param name="column">The indexed column name.</param>
+    /// <param name="value">The value to search for.</param>
+    /// <returns>Matching rows.</returns>
+    List<Dictionary<string, object>> FindByIndex(string column, object value);
+
+    /// <summary>
+    /// Updates a single row identified by primary key, bypassing SQL parsing.
+    /// Returns true if a row was found and updated.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <param name="updates">The column updates to apply.</param>
+    /// <returns>True if a row was updated.</returns>
+    bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates);
+
+    /// <summary>
+    /// Deletes a single row identified by primary key, bypassing SQL parsing.
+    /// Returns true if a row was found and deleted.
+    /// </summary>
+    /// <param name="key">The primary key value.</param>
+    /// <returns>True if a row was deleted.</returns>
+    bool DeleteByPrimaryKey(object key);
+
+    /// <summary>
     /// Creates a hash index on the specified column for fast WHERE clause lookups.
     /// </summary>
     /// <param name="columnName">The column name to index.</param>

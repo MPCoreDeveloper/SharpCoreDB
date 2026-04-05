@@ -15,12 +15,37 @@ public partial class Table
     /// SIMD-accelerated row scanning for full table scans.
     /// FIXED: Now correctly handles length-prefixed records written by AppendBytes.
     /// Previously used legacy BinaryReader which didn't handle length prefixes.
+    /// ✅ OPTIMIZED: Early WHERE predicate push-down skips full deserialization for non-matching rows.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private List<Dictionary<string, object>> ScanRowsWithSimd(byte[] data, string? where)
     {
         var results = new List<Dictionary<string, object>>();
-        
+
+        // ✅ PERF: Pre-parse a simple "col = 'val'" WHERE once so non-matching records
+        // are skipped without deserializing unused columns. Only for STRING columns with
+        // Binary collation — other collations require collation-aware EvaluateWhere.
+        int earlyWhereColIdx = -1;
+        string? earlyWhereValue = null;
+        if (!string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var ewCol, out var ewValObj) &&
+            ewValObj is string ewStr)
+        {
+            int idx = this.Columns.IndexOf(ewCol);
+            if (idx >= 0 && idx < this.ColumnTypes.Count && this.ColumnTypes[idx] == DataType.String)
+            {
+                var collation = idx < this.ColumnCollations.Count
+                    ? this.ColumnCollations[idx]
+                    : CollationType.Binary;
+
+                if (collation == CollationType.Binary)
+                {
+                    earlyWhereColIdx = idx;
+                    earlyWhereValue = ewStr;
+                }
+            }
+        }
+
         // CRITICAL FIX: Use same length-prefixed reading logic as ReadRowAtPosition
         // Storage.AppendBytes writes: [4-byte length][data]
         // So we need to read length prefix, then data, then repeat
@@ -45,8 +70,6 @@ public partial class Table
             const int MaxRecordSize = 1_000_000_000; // 1 GB max per record
             if (recordLength < 0 || recordLength > MaxRecordSize)
             {
-                // Invalid length - likely corrupt data, stop scanning
-                Console.WriteLine($"⚠️  ScanRowsWithSimd: Invalid record length {recordLength} at position {filePosition}");
                 break;
             }
             
@@ -61,15 +84,47 @@ public partial class Table
             if (filePosition + 4 + recordLength > dataSpan.Length)
             {
                 // Incomplete record - end of file
-                Console.WriteLine($"⚠️  ScanRowsWithSimd: Incomplete record at position {filePosition}: need {recordLength} bytes, have {dataSpan.Length - filePosition - 4}");
                 break;
             }
             
             // ✅ C# 14: Range operator for record data extraction
             int dataOffset = filePosition + 4;
             ReadOnlySpan<byte> recordData = dataSpan[dataOffset..(dataOffset + recordLength)];
-            
-            // Parse the record into a row
+
+            // ✅ PERF: Early WHERE check — read only columns 0..whereColIdx, then check predicate
+            // before allocating a Dictionary. Saves ~4 column reads for non-matching rows.
+            if (earlyWhereColIdx >= 0 && earlyWhereValue != null)
+            {
+                bool earlyMismatch = false;
+                int checkOffset = 0;
+                for (int ci = 0; ci <= earlyWhereColIdx && checkOffset < recordData.Length; ci++)
+                {
+                    try
+                    {
+                        var val = ReadTypedValueFromSpan(recordData[checkOffset..], this.ColumnTypes[ci], out int br);
+                        checkOffset += br;
+                        if (ci == earlyWhereColIdx)
+                        {
+                            var vs = val == DBNull.Value ? null : val?.ToString();
+                            if (!string.Equals(vs, earlyWhereValue, StringComparison.Ordinal))
+                                earlyMismatch = true;
+                        }
+                    }
+                    catch
+                    {
+                        earlyMismatch = true;
+                        break;
+                    }
+                }
+
+                if (earlyMismatch)
+                {
+                    filePosition += 4 + recordLength;
+                    continue;
+                }
+            }
+
+            // Parse the record into a row (only for WHERE-matching or no-simple-WHERE records)
             var row = new Dictionary<string, object>();
             bool valid = true;
             int offset = 0;
@@ -145,7 +200,7 @@ public partial class Table
     /// <summary>
     /// Evaluates a WHERE clause against a row.
     /// Supports operators: equals, not equals, greater than, less than, greater or equal, less or equal,
-    /// IS NULL, IS NOT NULL.
+    /// IS NULL, IS NOT NULL, AND, OR.
     /// </summary>
     private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
@@ -153,6 +208,14 @@ public partial class Table
 
         var parts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3) return true;
+
+        // ✅ FIX: Detect complex WHERE clauses (contains AND/OR) and delegate to SqlParser.EvaluateJoinWhere
+        // which has full support for compound conditions
+        var whereUpper = where.ToUpperInvariant();
+        if (whereUpper.Contains(" AND ") || whereUpper.Contains(" OR "))
+        {
+            return SqlParser.EvaluateJoinWhere(row, where);
+        }
 
         var columnName = parts[0].Trim('"', '[', ']', '`');
 
@@ -205,29 +268,29 @@ public partial class Table
 
             return EvaluateConditionWithCollation(row, columnName, op, value);
         }
-        
+
         // Handle different operators for non-string values
         switch (op)
         {
             case "=":
                 return rowValue.ToString() == value;
-                
+
             case "!=":
             case "<>":
                 return rowValue.ToString() != value;
-                
+
             case ">":
                 return CompareValues(rowValue, value) > 0;
-                
+
             case "<":
                 return CompareValues(rowValue, value) < 0;
-                
+
             case ">=":
                 return CompareValues(rowValue, value) >= 0;
-                
+
             case "<=":
                 return CompareValues(rowValue, value) <= 0;
-                
+
             default:
                 return true; // Unsupported operator - don't filter
         }

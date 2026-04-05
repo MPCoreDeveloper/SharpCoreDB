@@ -253,7 +253,7 @@ public sealed partial class ColumnStore<T>
             {
                 var vsum = Vector256<long>.Zero;
                 for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
-                    vsum = Vector256.Add(vsum, Vector256.Create(data.AsSpan(i)));
+                    vsum = Vector256.Add(vsum, Vector256.LoadUnsafe(ref data[i]));
                 for (int j = 0; j < Vector256<long>.Count; j++)
                     partialSum += vsum[j];
             }
@@ -478,7 +478,7 @@ public sealed partial class ColumnStore<T>
         {
             var vsum = Vector256<int>.Zero;
             for (; i <= data.Length - Vector256<int>.Count; i += Vector256<int>.Count)
-                vsum = Vector256.Add(vsum, Vector256.Create(data.AsSpan(i)));
+                vsum = Vector256.Add(vsum, Vector256.LoadUnsafe(ref data[i]));
             for (int j = 0; j < Vector256<int>.Count; j++)
                 sum += vsum[j];
         }
@@ -615,9 +615,8 @@ public sealed partial class ColumnStore<T>
         if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
         {
             var vmax = Vector256.Create(long.MinValue);
-            ref long dataRef = ref data[i];
-            for (; i <= data.Length - Vector256<long>.Count; i += Vector256<long>.Count, dataRef = ref Unsafe.Add(ref dataRef, Vector256<long>.Count))
-                vmax = Vector256.Max(vmax, Vector256.LoadUnsafe(ref dataRef));
+            for (; i <= data.Length - Vector256<long>.Count; i += Vector256<long>.Count)
+                vmax = Vector256.Max(vmax, Vector256.LoadUnsafe(ref data[i]));
             for (int j = 0; j < Vector256<long>.Count; j++)
                 if (vmax[j] > max) max = vmax[j];
         }

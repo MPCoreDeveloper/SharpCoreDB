@@ -276,6 +276,7 @@ public partial class Table
             if (this.registeredIndexes.ContainsKey(columnName))
             {
                 this.staleIndexes.Add(columnName);
+                _indexReadyCache.TryRemove(columnName, out _);
             }
         }
 
@@ -493,7 +494,9 @@ public partial class Table
             if (this.staleIndexes.Contains(oldName))
             {
                 this.staleIndexes.Remove(oldName);
+                _indexReadyCache.TryRemove(oldName, out _);
                 this.staleIndexes.Add(newName);
+                _indexReadyCache.TryRemove(newName, out _);
             }
 
             // Update index name to column mapping

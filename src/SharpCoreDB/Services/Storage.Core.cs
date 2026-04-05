@@ -90,6 +90,26 @@ public partial class Storage : IStorage
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Synchronous commit — identical work to <see cref="CommitAsync"/> but without the
+    /// <c>Task.Yield()</c> thread-pool hop, eliminating scheduler overhead in hot sync paths.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public void CommitSync()
+    {
+        lock (this.transactionLock)
+        {
+            if (!this.transactionBuffer.IsInTransaction)
+            {
+                throw new InvalidOperationException("No active transaction to commit");
+            }
+            
+            FlushBufferedAppends();
+            this.transactionBuffer.Flush();
+        }
+    }
+
+    /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Rollback()
     {

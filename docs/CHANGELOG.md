@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SIMD LoadUnsafe Optimization**: All 16 columnar SIMD aggregate methods (`SumInt32`, `SumInt64`, `SumDouble`, `MinInt32`, `MinInt64`, `MinDouble`, `MaxInt32`, `MaxInt64` — both single-threaded and parallel variants) now use `Vector256.LoadUnsafe(ref data[i])` instead of `Vector256.Create(data.AsSpan(i))`. This eliminates per-iteration `Span<T>` construction and bounds checking overhead in SIMD hot loops, yielding tighter codegen on AVX2 hardware.
 - **Auto-ROWID**: Tables created without an explicit `PRIMARY KEY` now receive a hidden `_rowid` column (ULID type, auto-generated). Follows the SQLite rowid pattern — invisible in `SELECT *`, visible when explicitly queried via `SELECT _rowid, ...`. See [`docs/features/AUTO_ROWID.md`](features/AUTO_ROWID.md) for full documentation.
 - `Table.HasInternalRowId` property (persisted in metadata) to track tables with auto-generated `_rowid`.
 - `Table.SelectIncludingRowId()` method for queries that explicitly request `_rowid`.
@@ -23,10 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added LINQ translator handling for `ExpressionType.Convert` / `ConvertChecked` in enum-related comparison scenarios.
 - Improved German locale comparison behavior for `ß/ss` equivalence in locale-aware matching.
 - Fixed PAGE_BASED mixed-predicate filtering (`column = value AND other_column <= value`) by routing scan-time predicate evaluation through the shared SQL condition evaluator; added regression coverage for `ORDER BY ... LIMIT` retrieval.
+- **ColumnStore SIMD consistency**: Cleaned up inconsistent `MaxInt64SIMDDirect` implementation (previously used manual `ref` + `Unsafe.Add` pattern) to use the same `Vector256.LoadUnsafe(ref data[i])` pattern as all other SIMD methods.
 
 ### Changed
 - Updated project documentation and status reports to reflect current implementation and validation baseline.
 - Explicitly documented the remaining deferred single-file parameterized `ExecuteCompiled` disposal deadlock path.
+- **Performance test hardening**: `ColumnStore_Average_10kRecords_Under2ms` now runs 10 iterations and asserts the best (minimum) time, with an additional warmup call. This eliminates false failures caused by concurrent test execution, GC pauses, or OS scheduling jitter.
 
 ## [1.6.0] - 2026-03-30
 

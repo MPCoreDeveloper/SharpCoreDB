@@ -370,6 +370,10 @@ public sealed class CollationJoinTests
         public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt) => throw new NotImplementedException();
         public void Update(string? where, Dictionary<string, object> updates) => throw new NotImplementedException();
         public void Delete(string? where) => throw new NotImplementedException();
+        public Dictionary<string, object>? FindByPrimaryKey(object key) => throw new NotImplementedException();
+        public List<Dictionary<string, object>> FindByIndex(string column, object value) => throw new NotImplementedException();
+        public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => throw new NotImplementedException();
+        public bool DeleteByPrimaryKey(object key) => throw new NotImplementedException();
         public bool HasHashIndex(string columnName) => false;
         public void CreateHashIndex(string columnName) => throw new NotImplementedException();
         public void CreateHashIndex(string indexName, string columnName) => throw new NotImplementedException();

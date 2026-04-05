@@ -10,6 +10,7 @@
 
 namespace SharpCoreDB;
 
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 /// <summary>
@@ -23,6 +24,13 @@ using System.Text.Json;
 /// </summary>
 public partial class Database
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private SqlParser GetSharedSqlParser()
+    {
+        _sharedSqlParser ??= new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+        return _sharedSqlParser;
+    }
+
     /// <inheritdoc />
     public void ExecuteSQL(string sql)
     {
@@ -68,7 +76,7 @@ public partial class Database
         // No more separate GroupCommitWAL logic - it's integrated into the engine
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -133,7 +141,7 @@ public partial class Database
         // No more separate GroupCommitWAL logic - it's integrated into the engine
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -201,7 +209,7 @@ public partial class Database
         // No more separate GroupCommitWAL logic - it's integrated into the engine
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -254,7 +262,7 @@ public partial class Database
         // No more separate GroupCommitWAL logic - it's integrated into the engine
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
@@ -274,7 +282,7 @@ public partial class Database
     /// </summary>
     private void ExecuteSelectQuery(string sql, Dictionary<string, object?>? parameters)
     {
-        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+        var sqlParser = GetSharedSqlParser();
         sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
     }
 
@@ -285,7 +293,7 @@ public partial class Database
     {
         await Task.Run(() =>
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters ?? new Dictionary<string, object?>());
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -299,17 +307,10 @@ public partial class Database
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
         var entry = GetOrAddPlan(sql, parameters, SqlCommandType.SELECT);
-        
-        if (entry is not null && entry.CompiledPlan is not null)
-        {
-            var sqlParserCompiled = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-            return sqlParserCompiled.ExecuteQuery(entry.CachedPlan, parameters ?? []);
-        }
-
-        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-        return entry is not null 
-            ? sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? [])
-            : sqlParser.ExecuteQuery(sql, parameters ?? []);
+        var sqlParser = GetSharedSqlParser();
+        if (entry is not null)
+            return sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? []);
+        return sqlParser.ExecuteQuery(sql, parameters ?? []);
     }
 
     /// <summary>
@@ -321,7 +322,7 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters, bool noEncrypt)
     {
-        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+        var sqlParser = GetSharedSqlParser();
         return sqlParser.ExecuteQuery(sql, parameters ?? [], noEncrypt);
     }
 
@@ -335,7 +336,7 @@ public partial class Database
     public List<Dictionary<string, object>> ExecuteCompiled(CompiledQueryPlan plan, Dictionary<string, object?>? parameters = null)
     {
         var cached = new CachedQueryPlan(plan.Sql, plan.Sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-        var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+        var sqlParser = GetSharedSqlParser();
         return sqlParser.ExecuteQuery(cached, parameters ?? []);
     }
 
@@ -375,6 +376,74 @@ public partial class Database
         _sharedSqlParser ??= new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
         
         return _sharedSqlParser.ExecuteQuery(stmt.Plan, parameters ?? []);
+    }
+
+    /// <inheritdoc />
+    public Dictionary<string, object>? FindByPrimaryKey(string tableName, object key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (!tables.TryGetValue(tableName, out var table))
+            return null;
+
+        return table.FindByPrimaryKey(key);
+    }
+
+    /// <inheritdoc />
+    public List<Dictionary<string, object>> FindByIndex(string tableName, string column, object value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!tables.TryGetValue(tableName, out var table))
+            return [];
+
+        return table.FindByIndex(column, value);
+    }
+
+    /// <inheritdoc />
+    public bool UpdateByPrimaryKey(string tableName, object key, Dictionary<string, object> updates)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(updates);
+
+        if (!tables.TryGetValue(tableName, out var table))
+            return false;
+
+        lock (_walLock)
+        {
+            bool result = table.UpdateByPrimaryKey(key, updates);
+            if (result && !isReadOnly)
+            {
+                _metadataDirty = true;
+            }
+
+            return result;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool DeleteByPrimaryKey(string tableName, object key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (!tables.TryGetValue(tableName, out var table))
+            return false;
+
+        lock (_walLock)
+        {
+            bool result = table.DeleteByPrimaryKey(key);
+            if (result && !isReadOnly)
+            {
+                _metadataDirty = true;
+            }
+
+            return result;
+        }
     }
 
     /// <summary>

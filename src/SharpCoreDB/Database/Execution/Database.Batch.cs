@@ -13,6 +13,7 @@ namespace SharpCoreDB;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// Database implementation - Batch operations partial class.
@@ -261,7 +262,7 @@ public partial class Database
             try
             {
                 var positions = table.InsertBatch(rows);
-                storage.CommitAsync().GetAwaiter().GetResult();
+                storage.CommitSync();
                 return positions;
             }
             catch
@@ -320,7 +321,7 @@ public partial class Database
             try
             {
                 var positions = table.InsertBatch(rows);
-                storage.CommitAsync().GetAwaiter().GetResult();
+                storage.CommitSync();
                 return positions;
             }
             catch
@@ -362,7 +363,7 @@ public partial class Database
                 try
                 {
                     var positions = table.InsertBatch(rows);
-                    storage.CommitAsync().GetAwaiter().GetResult();
+                    storage.CommitSync();
                     return positions;
                 }
                 catch
@@ -398,7 +399,7 @@ public partial class Database
             try
             {
                 table.Insert(row);
-                storage.CommitAsync().GetAwaiter().GetResult();
+                storage.CommitSync();
                 
                 // Return -1 as we can't easily get position from ITable interface
                 // Caller can use InsertBatch for position tracking
@@ -421,6 +422,91 @@ public partial class Database
     {
         var trimmed = sql.AsSpan().Trim();
         return trimmed.Length >= 11 && trimmed[..11].Equals("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Attempts to parse an UPDATE statement for batch execution.
+    /// Extracts the table name, WHERE clause, and SET column-value pairs.
+    /// </summary>
+    /// <param name="sql">The SQL statement to parse.</param>
+    /// <param name="tableName">The parsed table name.</param>
+    /// <param name="where">The parsed WHERE clause.</param>
+    /// <param name="updates">The parsed column-value pairs from the SET clause.</param>
+    /// <returns>True if the statement was successfully parsed as an UPDATE.</returns>
+    private bool TryParseUpdateForBatch(string sql, out string tableName, out string where, out Dictionary<string, object> updates)
+    {
+        tableName = string.Empty;
+        where = string.Empty;
+        updates = [];
+
+        var span = sql.AsSpan().Trim();
+        if (span.Length < 6 || !span[..6].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Use regex to extract parts: UPDATE <table> SET <sets> WHERE <where>
+        var match = System.Text.RegularExpressions.Regex.Match(
+            sql, @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        if (!match.Success)
+            return false;
+
+        tableName = match.Groups[1].Value;
+        where = match.Groups[3].Value.Trim();
+        var setClause = match.Groups[2].Value;
+
+        if (!tables.TryGetValue(tableName, out var table))
+            return false;
+
+        // Parse SET clause: "col1 = val1, col2 = val2"
+        var setParts = setClause.Split(',');
+        foreach (var setPart in setParts)
+        {
+            var eqIdx = setPart.IndexOf('=');
+            if (eqIdx < 0) return false;
+
+            var colName = setPart[..eqIdx].Trim();
+            var valStr = setPart[(eqIdx + 1)..].Trim();
+
+            var colIdx = table.Columns.IndexOf(colName);
+            if (colIdx < 0) return false;
+
+            var parsed = SqlParser.ParseValue(valStr, table.ColumnTypes[colIdx]);
+            updates[colName] = parsed ?? DBNull.Value;
+        }
+
+        return updates.Count > 0;
+    }
+
+    /// <summary>
+    /// Attempts to parse a DELETE statement for batch execution.
+    /// Extracts the table name and WHERE clause.
+    /// </summary>
+    /// <param name="sql">The SQL statement to parse.</param>
+    /// <param name="tableName">The parsed table name.</param>
+    /// <param name="where">The parsed WHERE clause.</param>
+    /// <returns>True if the statement was successfully parsed as a DELETE.</returns>
+    private bool TryParseDeleteForBatch(string sql, out string tableName, out string where)
+    {
+        tableName = string.Empty;
+        where = string.Empty;
+
+        var span = sql.AsSpan().Trim();
+        if (span.Length < 6 || !span[..6].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Use regex: DELETE FROM <table> WHERE <where>
+        var match = System.Text.RegularExpressions.Regex.Match(
+            sql, @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        if (!match.Success)
+            return false;
+
+        tableName = match.Groups[1].Value;
+        where = match.Groups[2].Value.Trim();
+
+        return tables.ContainsKey(tableName) && !string.IsNullOrWhiteSpace(where);
     }
 
     /// <summary>
@@ -453,9 +539,13 @@ public partial class Database
 
         Dictionary<string, List<Dictionary<string, object>>> insertsByTable = [];
         List<string> nonInserts = [];
-        
+
         // ✅ PHASE 3: Track prepared statement per table for fast repeated parsing
         Dictionary<string, PreparedInsertStatement?> preparedStatements = [];
+
+        // ✅ PERF: Group UPDATE/DELETE by table for single-lock batch execution
+        Dictionary<string, List<(string where, Dictionary<string, object> updates)>> updatesByTable = [];
+        Dictionary<string, List<string>> deletesByTable = [];
 
         foreach (var sql in statements)
         {
@@ -466,19 +556,37 @@ public partial class Database
                 if (parsed.HasValue)
                 {
                     var (tableName, row) = parsed.Value;
-                    
+
                     if (!insertsByTable.TryGetValue(tableName, out var rows))
                     {
                         rows = [];
                         insertsByTable[tableName] = rows;
                     }
-                    
+
                     rows.Add(row);
                 }
                 else
                 {
                     nonInserts.Add(sql);
                 }
+            }
+            else if (TryParseUpdateForBatch(sql, out var updTableName, out var updWhere, out var updSets))
+            {
+                if (!updatesByTable.TryGetValue(updTableName, out var updList))
+                {
+                    updList = [];
+                    updatesByTable[updTableName] = updList;
+                }
+                updList.Add((updWhere, updSets));
+            }
+            else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere))
+            {
+                if (!deletesByTable.TryGetValue(delTableName, out var delList))
+                {
+                    delList = [];
+                    deletesByTable[delTableName] = delList;
+                }
+                delList.Add(delWhere);
             }
             else
             {
@@ -510,10 +618,28 @@ public partial class Database
                     }
                 }
 
+                // ✅ PERF: Batch UPDATE — single lock per table instead of per-statement
+                foreach (var (tableName, ops) in updatesByTable)
+                {
+                    if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
+                    {
+                        concreteUpdate.UpdateMultiple(ops);
+                    }
+                }
+
+                // ✅ PERF: Batch DELETE — single lock per table instead of per-statement
+                foreach (var (tableName, wheres) in deletesByTable)
+                {
+                    if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
+                    {
+                        concreteDelete.DeleteMultiple(wheres);
+                    }
+                }
+
                 if (nonInserts.Count > 0)
                 {
-                    var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-                    
+                    var sqlParser = GetSharedSqlParser();
+
                     foreach (var sql in nonInserts)
                     {
                         sqlParser.Execute(sql, null);
@@ -528,7 +654,7 @@ public partial class Database
                 // Only commit if we started the transaction
                 if (!isInTransactionBefore)
                 {
-                    storage.CommitAsync().GetAwaiter().GetResult();
+                    storage.CommitSync();
                     storage.FlushTransactionBuffer();
                 }
                 

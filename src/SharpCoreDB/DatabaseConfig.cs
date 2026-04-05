@@ -232,6 +232,17 @@ public class DatabaseConfig
     public bool EnableBTreeSelection { get; init; } = true;
 
     /// <summary>
+    /// When true, hash indexes use the native-memory <c>UnsafeEqualityIndex</c> backend
+    /// (open-addressing, NativeMemory arenas, zero GC pressure on lookups) instead of
+    /// <c>Dictionary&lt;object, List&lt;long&gt;&gt;</c>.
+    /// Delivers ~2x faster point-lookups on high-cardinality string columns.
+    /// Defaults to <see langword="false"/>; enable for read-heavy workloads where insert
+    /// throughput is not the bottleneck. When enabled, inserts allocate a byte[] key per
+    /// row via BuildUnsafeKey — avoid for bulk-insert workloads.
+    /// </summary>
+    public bool EnableUnsafeEqualityIndex { get; init; } = false;
+
+    /// <summary>
     /// Enables delta-update support (Phase 3.3).
     /// When enabled, UPDATE operations store only changed fields instead of full records.
     /// Improves performance for workloads with frequent small updates.

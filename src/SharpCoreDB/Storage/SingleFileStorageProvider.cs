@@ -949,8 +949,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             // Already signaled - ignore
         }
 
-        // ✅ Wait briefly for background worker to complete current batch
-        await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        // ✅ Yield to allow background worker a chance to process current batch
+        // (No fixed delay — the drain loop below handles any remaining items)
+        await Task.Yield();
 
         // ✅ Drain the queue by reading all pending operations (non-blocking)
         List<WriteOperation> pendingOps = [];
@@ -967,11 +968,19 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
         if (flushToDisk)
         {
-            // ✅ Ensure registry flushes all dirty entries
-            await _blockRegistry.ForceFlushAsync(cancellationToken).ConfigureAwait(false);
-
-            // ✅ Ensure full disk sync for data durability
-            _fileStream.Flush(flushToDisk: true);
+            // ✅ Ensure registry flushes all dirty entries (includes full disk sync)
+            // ForceFlushAsync performs Flush(flushToDisk: true) when registry is dirty,
+            // which covers both registry and data writes on the same file stream.
+            if (_blockRegistry.HasDirtyEntries)
+            {
+                await _blockRegistry.ForceFlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                // Registry already clean (e.g. background flush processed it),
+                // but we still need a full disk sync for any data written above.
+                _fileStream.Flush(flushToDisk: true);
+            }
         }
 
         Volatile.Write(ref _hasPendingWrites, 0);
