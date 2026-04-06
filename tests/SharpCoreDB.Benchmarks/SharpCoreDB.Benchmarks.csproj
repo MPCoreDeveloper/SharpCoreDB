@@ -18,7 +18,7 @@
     <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.6.37125.3" />
     
     <!-- Charting and Visualization -->
-    <PackageReference Include="ScottPlot" Version="5.1.57" />
+    <PackageReference Include="ScottPlot" Version="5.1.58" />
     <PackageReference Include="Markdig" Version="1.1.2" />
   </ItemGroup>
 
