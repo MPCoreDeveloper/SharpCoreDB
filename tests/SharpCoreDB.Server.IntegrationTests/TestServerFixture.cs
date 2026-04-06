@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharpCoreDB.Server.Core;
+using SharpCoreDB.Server.Core.Catalog;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using SharpCoreDB.Server.Core.Tenancy;
@@ -114,6 +115,7 @@ public sealed class TestServerFixture : IAsyncLifetime
         services.AddSingleton<TenantQuotaEnforcementService>();
         services.AddSingleton<TenantBackupRestoreService>();
         services.AddSingleton<TenantMigrationPlanningService>();
+        services.AddSingleton<PgCatalogService>();
         services.AddSingleton<SessionManager>();
         services.AddSingleton<RbacService>();
         services.AddSingleton<UserAuthenticationService>();
@@ -161,6 +163,12 @@ public sealed class TestServerFixture : IAsyncLifetime
             _serviceProvider!.GetRequiredService<ILogger<Core.DatabaseService>>(),
             _serviceProvider!.GetRequiredService<MetricsCollector>());
     }
+
+    /// <summary>
+    /// Gets the PgCatalogService instance for direct testing.
+    /// </summary>
+    public PgCatalogService GetPgCatalogService()
+        => _serviceProvider!.GetRequiredService<PgCatalogService>();
 
     /// <summary>
     /// Creates a new test session for the specified database.

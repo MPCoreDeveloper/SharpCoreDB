@@ -5,10 +5,11 @@ Deliver an administration and observability roadmap for `SharpCoreDB` that prior
 **State:** IN PROGRESS
 
 Resolved workstreams in repository:
-- [x] `01-tool-compatibility-matrix-and-certification.md`
+- [x] `01-tool-compatibility-matrix-and-certification.md` — **RESOLVED**
+- [x] `02-pg-catalog-and-information-schema-expansion.md` — **RESOLVED**
 
 Next planned work:
-- [ ] `02-pg-catalog-and-information-schema-expansion.md`
+- [ ] `03` and beyond — see remaining issue drafts.
 
 This roadmap is based on current `v1.6.0` behavior:
 - `tools/SharpCoreDB.Viewer` exists but remains minimal.

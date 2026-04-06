@@ -5,6 +5,7 @@
 
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core;
+using SharpCoreDB.Server.Core.Catalog;
 using SharpCoreDB.Server.Core.Security;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -25,12 +26,14 @@ public sealed class BinaryProtocolHandler(
     SessionManager sessionManager,
     UserAuthenticationService authService,
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
+    PgCatalogService pgCatalogService,
     ILogger<BinaryProtocolHandler> logger) : IAsyncDisposable
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
     private readonly UserAuthenticationService _authService = authService;
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
+    private readonly PgCatalogService _pgCatalogService = pgCatalogService;
     private readonly ILogger<BinaryProtocolHandler> _logger = logger;
 
     // PostgreSQL protocol constants
@@ -282,6 +285,20 @@ public sealed class BinaryProtocolHandler(
 
         _logger.LogInformation("Executing query: {Query}", queryText);
 
+        // Intercept pg_catalog / information_schema queries before reaching the engine
+        if (_pgCatalogService.TryHandleCatalogQuery(
+                queryText,
+                session.DatabaseInstance.Database,
+                session.DatabaseInstance.Configuration.Name,
+                session.UserName ?? "anonymous",
+                out var catalogRows,
+                out var catalogColumns))
+        {
+            await WriteCatalogResultAsync(catalogRows, catalogColumns, writer, cancellationToken);
+            await writer.WriteReadyForQueryAsync('I', cancellationToken);
+            return;
+        }
+
         await using var connection = await session.DatabaseInstance.GetConnectionAsync(cancellationToken);
 
         try
@@ -389,6 +406,19 @@ public sealed class BinaryProtocolHandler(
         if (portal is null)
         {
             await writer.WriteErrorResponseAsync("26000", "prepared statement does not exist", cancellationToken);
+            return;
+        }
+
+        // Intercept pg_catalog / information_schema queries via extended query protocol
+        if (_pgCatalogService.TryHandleCatalogQuery(
+                portal.Sql,
+                session.DatabaseInstance.Database,
+                session.DatabaseInstance.Configuration.Name,
+                session.UserName ?? "anonymous",
+                out var catalogRows,
+                out var catalogColumns))
+        {
+            await WriteCatalogResultAsync(catalogRows, catalogColumns, writer, cancellationToken);
             return;
         }
 
@@ -529,6 +559,49 @@ public sealed class BinaryProtocolHandler(
             _logger.LogDebug("Cancel request for process {ProcessId} — no active query found", processId);
         }
     }
+
+    /// <summary>
+    /// Writes a synthetic catalog result set to the client.
+    /// Sends RowDescription, DataRows, and CommandComplete in sequence.
+    /// </summary>
+    private static async Task WriteCatalogResultAsync(
+        List<Dictionary<string, object?>> rows,
+        List<string> columns,
+        BinaryProtocolWriter writer,
+        CancellationToken cancellationToken)
+    {
+        if (columns.Count == 0)
+        {
+            await writer.WriteCommandCompleteAsync("SELECT", 0, cancellationToken);
+            return;
+        }
+
+        var fields = columns.Select((col, idx) => new FieldDescription
+        {
+            Name = col,
+            TableId = 0,
+            ColumnId = (short)idx,
+            DataTypeId = 25, // text
+            DataTypeSize = -1,
+            TypeModifier = -1,
+            FormatCode = 0,
+        }).ToArray();
+
+        await writer.WriteRowDescriptionAsync(fields, cancellationToken);
+
+        foreach (var row in rows)
+        {
+            var values = columns
+                .Select(col => row.TryGetValue(col, out var v) && v is not null
+                    ? Encoding.UTF8.GetBytes(v.ToString()!)
+                    : null)
+                .ToArray();
+            await writer.WriteDataRowAsync(values!, cancellationToken);
+        }
+
+        await writer.WriteCommandCompleteAsync("SELECT", rows.Count, cancellationToken);
+    }
+
 
     /// <summary>
     /// Reads a null-terminated string from a stream.
