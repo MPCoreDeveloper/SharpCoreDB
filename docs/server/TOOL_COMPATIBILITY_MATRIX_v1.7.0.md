@@ -1,4 +1,4 @@
-# SharpCoreDB Server Tool Compatibility Matrix v1.6.0
+# SharpCoreDB Server Tool Compatibility Matrix v1.7.0
 
 ## Purpose
 This document defines the external database tool compatibility matrix for SharpCoreDB Server and records the repeatable certification criteria used to evaluate common workflows.
@@ -52,4 +52,4 @@ Use the assets in `tests/SharpCoreDB.Server.IntegrationTests/Compatibility/`:
 - `run-tool-compatibility-smoke.ps1`
 
 ## Versioning Note
-This matrix is versioned to `v1.6.0` and should be updated whenever protocol or metadata compatibility changes materially.
+This matrix is versioned to `v1.7.0` and should be updated whenever protocol or metadata compatibility changes materially.

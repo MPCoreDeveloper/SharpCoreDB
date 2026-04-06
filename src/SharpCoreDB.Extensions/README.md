@@ -5,13 +5,13 @@
 
   **Dapper Integration · Health Checks · Repository Pattern · Bulk Operations · Performance Monitoring · FluentMigrator**
 
-  **Version:** 1.6.0  
+  **Version:** 1.7.0  
   **Status:** Production Ready ✅
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![C#](https://img.shields.io/badge/C%23-14-blueviolet.svg)](https://learn.microsoft.com/dotnet/csharp/)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.6.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.7.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
 
 </div>
 
@@ -35,14 +35,14 @@ Built for .NET 10 with C# 14.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 1.6.0
+dotnet add package SharpCoreDB.Extensions --version 1.7.0
 ```
 
 **Dependencies** (automatically resolved):
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| SharpCoreDB | 1.6.0 | Core database engine |
+| SharpCoreDB | 1.7.0 | Core database engine |
 | Dapper | 2.1.66+ | Micro-ORM for typed queries |
 | Microsoft.Extensions.Diagnostics | 10.0+ | Health checks |
 
@@ -426,4 +426,4 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** March 23, 2026 | Version 1.6.0
+**Last Updated:** March 23, 2026 | Version 1.7.0

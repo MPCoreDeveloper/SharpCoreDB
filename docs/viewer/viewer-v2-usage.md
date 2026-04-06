@@ -1,6 +1,6 @@
 # SharpCoreDB Viewer v2 – Usage & Limitations
 
-**Version:** v1.6.0  
+**Version:** v1.7.0  
 **Component:** `tools/SharpCoreDB.Viewer`  
 **Last updated:** 2025
 
@@ -10,7 +10,7 @@
 
 SharpCoreDB Viewer is a first-party cross-platform desktop utility for exploring, querying, and managing SharpCoreDB databases. It is built with **Avalonia UI** and targets **.NET 10**.
 
-Starting with v1.6.0 (Viewer v2 foundation), the tool delivers:
+Starting with v1.7.0 (Viewer v2 foundation), the tool delivers:
 
 - Connection profile management for quick reconnects.
 - Richer database/table browser with live filter and metadata inspection.
@@ -123,7 +123,7 @@ Access via the **Tools** menu. Provides database format conversion:
 
 ---
 
-## Limitations (v1.6.0)
+## Limitations (v1.7.0)
 
 | Area | Limitation |
 |------|-----------|
@@ -132,7 +132,7 @@ Access via the **Tools** menu. Provides database format conversion:
 | **Metadata** | Column statistics and constraint details require manual `PRAGMA` queries. |
 | **Multi-database** | Only one database connection is active at a time. |
 | **Authentication** | Password is entered per session; it is not stored in profiles for security. |
-| **SQL highlighting** | The editor does not perform syntax highlighting in v1.6.0. |
+| **SQL highlighting** | The editor does not perform syntax highlighting in v1.7.0. |
 | **Export** | No export to CSV/JSON in this release; copy cells manually. |
 
 ---

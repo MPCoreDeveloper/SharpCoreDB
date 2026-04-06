@@ -21,7 +21,7 @@ GUI tools rely on catalog views to discover tables, indexes, constraints, trigge
 ## Acceptance Criteria
 - [x] External tools can introspect core schema objects without major fallback failures.
 - [x] Metadata query test suite added — 15 tests, all passing.
-- [x] Documentation updated with supported catalog coverage (`PG_CATALOG_COVERAGE_v1.6.0.md`).
+- [x] Documentation updated with supported catalog coverage (`PG_CATALOG_COVERAGE_v1.7.0.md`).
 
 ## Implementation Notes
 - `PgCatalogService` in `src/SharpCoreDB.Server.Core/Catalog/` intercepts catalog queries before the engine.

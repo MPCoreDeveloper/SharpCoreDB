@@ -1,7 +1,7 @@
 # SharpCoreDB HNSW vs Zvec (Alibaba) — Vector Search Benchmark Report
 
 **Date:** 2026-03-06  
-**SharpCoreDB Version:** 1.6.0 (.NET 10, C# 14)  
+**SharpCoreDB Version:** 1.7.0 (.NET 10, C# 14)  
 **Zvec Version:** 0.2.0 (C++, Proxima engine)
 
 ---

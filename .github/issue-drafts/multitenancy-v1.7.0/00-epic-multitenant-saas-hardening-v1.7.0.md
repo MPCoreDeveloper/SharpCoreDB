@@ -1,5 +1,5 @@
 ## Summary
-Deliver first-class multi-tenant SaaS support in `SharpCoreDB.Server` on top of current `v1.6.0` capabilities.
+Deliver first-class multi-tenant SaaS support in `SharpCoreDB.Server` on top of current `v1.7.0` capabilities.
 
 ## Status
 **State:** RESOLVED
@@ -53,7 +53,7 @@ Current baseline in codebase:
 
 ## Acceptance Criteria
 - All child issues closed.
-- Existing `v1.6.0` functionality remains backward compatible.
+- Existing `v1.7.0` functionality remains backward compatible.
 - Targeted integration tests pass for multi-tenant scenarios.
 - Docs published under `docs/server` and linked from package readmes.
 

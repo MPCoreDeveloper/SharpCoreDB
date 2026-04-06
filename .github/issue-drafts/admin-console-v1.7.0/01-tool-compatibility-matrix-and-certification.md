@@ -7,8 +7,8 @@ Create a formal compatibility matrix for external tools (DBeaver, Beekeeper Stud
 Completed in workspace.
 
 ## Completed Implementation Notes
-- Added `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md`.
-- Added `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md`.
+- Added `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.0.md`.
+- Added `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md`.
 - Added repeatable smoke certification assets under `tests/SharpCoreDB.Server.IntegrationTests/Compatibility/`.
 - Linked the new compatibility docs from server documentation entry points.
 

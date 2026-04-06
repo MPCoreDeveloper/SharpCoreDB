@@ -3,7 +3,7 @@
 
 **Status:** Final Specification (Ready for Implementation)  
 **Locked Date:** 2026-03-03  
-**Applies to:** `SharpCoreDB.EventSourcing` v1.6.0+
+**Applies to:** `SharpCoreDB.EventSourcing` v1.7.0+
 
 ---
 

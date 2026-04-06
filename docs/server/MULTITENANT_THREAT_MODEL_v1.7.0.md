@@ -1,4 +1,4 @@
-# SharpCoreDB Server Multi-Tenant Threat Model v1.6.0
+# SharpCoreDB Server Multi-Tenant Threat Model v1.7.0
 
 ## Goal
 Document primary cross-tenant security risks and the mitigations implemented in SharpCoreDB Server.

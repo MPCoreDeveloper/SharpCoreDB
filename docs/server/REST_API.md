@@ -198,7 +198,7 @@ Basic health and triage summary. **No authentication required.**
 {
   "status": "healthy",
   "timestamp": "2026-04-06T12:45:00Z",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "activeConnections": 12,
   "activeSessions": 9,
   "totalDatabases": 5,
@@ -227,7 +227,7 @@ Detailed server diagnostics. **No authentication required.**
 {
   "status": "healthy",
   "timestamp": "2026-04-06T12:45:00Z",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "uptimeSeconds": 284712,
   "activeSessions": 9,
   "activeConnections": 12,

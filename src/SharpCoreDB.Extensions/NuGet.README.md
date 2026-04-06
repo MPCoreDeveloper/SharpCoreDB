@@ -10,15 +10,15 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Extensions v1.6.0
+# SharpCoreDB.Extensions v1.7.0
 
 **Dapper Integration and ASP.NET Core Extensions**
 
 Dapper ORM integration and ASP.NET Core health check extensions for SharpCoreDB.
 
-## ✨ What's New in v1.6.0
+## ✨ What's New in v1.7.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.6.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.0
 - ✅ Dapper integration for lightweight ORM
 - ✅ ASP.NET Core health checks
 - ✅ Zero breaking changes
@@ -57,12 +57,12 @@ var userId = connection.QuerySingle<int>(
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 1.6.0
+dotnet add package SharpCoreDB.Extensions --version 1.7.0
 ```
 
-**Requires:** SharpCoreDB v1.6.0+
+**Requires:** SharpCoreDB v1.7.0+
 
 ---
 
-**Version:** 1.6.0 | **Status:** ✅ Production Ready
+**Version:** 1.7.0 | **Status:** ✅ Production Ready
 

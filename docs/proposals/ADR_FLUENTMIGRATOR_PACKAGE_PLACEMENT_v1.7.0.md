@@ -1,14 +1,14 @@
-# ADR — FluentMigrator Package Placement in `SharpCoreDB.Extensions` (v1.6.0)
+# ADR — FluentMigrator Package Placement in `SharpCoreDB.Extensions` (v1.7.0)
 
 **Status:** Accepted  
 **Date:** 2026-03-23  
-**Version label:** **v1.6.0 (V 1.60)**
+**Version label:** **v1.7.0 (V 1.70)**
 
 ---
 
 ## 1. Decision Statement
 
-For **v1.6.0**, FluentMigrator integration is implemented in **`SharpCoreDB.Extensions`** (not a separate `SharpCoreDB.Provider.FluentMigrator` package).
+For **v1.7.0**, FluentMigrator integration is implemented in **`SharpCoreDB.Extensions`** (not a separate `SharpCoreDB.Provider.FluentMigrator` package).
 
 ---
 
@@ -84,7 +84,7 @@ A design choice was required for FluentMigrator support.
 
 ## 5. Decision
 
-We choose **Option A** for v1.6.0:
+We choose **Option A** for v1.7.0:
 
 - FluentMigrator support remains in `SharpCoreDB.Extensions`.
 - Feature remains **opt-in** through explicit DI registration.
@@ -122,7 +122,7 @@ This footprint is currently closer to extension glue than to a full provider dom
 
 - Faster adoption via existing `SharpCoreDB.Extensions` package.
 - Consistent developer story with Dapper and Health Checks.
-- No core pollution and no breaking package split in v1.6.0.
+- No core pollution and no breaking package split in v1.7.0.
 
 ### Negative / Trade-offs
 
@@ -148,7 +148,7 @@ If triggered, migration path should include:
 
 ---
 
-## 9. Implementation Notes (v1.6.0)
+## 9. Implementation Notes (v1.7.0)
 
 - Main extension APIs:
   - `AddSharpCoreDBFluentMigrator(...)`
@@ -163,7 +163,7 @@ If triggered, migration path should include:
 
 ## 10. Related Documents
 
-- `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md`
-- `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md`
+- `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
+- `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 - `docs/proposals/README.md`
 - `src/SharpCoreDB.Extensions/README.md`

@@ -266,7 +266,7 @@ mypy src/pysharpcoredb/
 python -m build
 
 # Install locally
-pip install dist/pysharpcoredb-1.6.0.tar.gz
+pip install dist/pysharpcoredb-1.7.0.tar.gz
 ```
 
 ### Testing

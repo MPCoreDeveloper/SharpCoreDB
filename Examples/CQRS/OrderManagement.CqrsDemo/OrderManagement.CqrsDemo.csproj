@@ -6,7 +6,7 @@
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.6.0</Version>
+    <Version>1.7.0</Version>
     <IsPackable>false</IsPackable>
     <UseLocalSharpCoreDbSources Condition="'$(UseLocalSharpCoreDbSources)' == '' and Exists('..\..\..\src\SharpCoreDB.CQRS\SharpCoreDB.CQRS.csproj')">true</UseLocalSharpCoreDbSources>
     <UseLocalSharpCoreDbSources Condition="'$(UseLocalSharpCoreDbSources)' == ''">false</UseLocalSharpCoreDbSources>
@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.CQRS" Version="1.6.0" />
+    <PackageReference Include="SharpCoreDB.CQRS" Version="1.7.0" />
   </ItemGroup>
 
   <ItemGroup>

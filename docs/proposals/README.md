@@ -5,13 +5,13 @@
 - `docs/proposals/DOTMIM_SYNC_PROVIDER_PROPOSAL.md` — Technical architecture
 - `docs/proposals/DOTMIM_SYNC_IMPLEMENTATION_PLAN.md` — Phased execution plan
 - `docs/proposals/ADD_IN_PATTERN_SUMMARY.md` — Add-in pattern alignment
-- `docs/proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.6.0.md` — Package-boundary architecture decision for FluentMigrator
+- `docs/proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.7.0.md` — Package-boundary architecture decision for FluentMigrator
 
 ---
 
 ## Additional Architecture Decision Record
 
-### **[ADR: FluentMigrator Package Placement (v1.6.0)](./ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.6.0.md)**
+### **[ADR: FluentMigrator Package Placement (v1.7.0)](./ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.7.0.md)**
 
 This ADR explains why FluentMigrator support is currently implemented in `SharpCoreDB.Extensions` while Dotmim.Sync remains a dedicated provider package (`SharpCoreDB.Provider.Sync`).
 

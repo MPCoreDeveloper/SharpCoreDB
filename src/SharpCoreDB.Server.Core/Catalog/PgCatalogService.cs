@@ -20,7 +20,7 @@ namespace SharpCoreDB.Server.Core.Catalog;
 public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
 {
     // Server version advertised to clients
-    private const string ServerVersion = "SharpCoreDB 1.6.0 on .NET 10 (PostgreSQL protocol compatible)";
+    private const string ServerVersion = "SharpCoreDB 1.7.0 on .NET 10 (PostgreSQL protocol compatible)";
 
     // Catalog table/view names that this service handles
     private static readonly HashSet<string> KnownCatalogSources = new(StringComparer.OrdinalIgnoreCase)

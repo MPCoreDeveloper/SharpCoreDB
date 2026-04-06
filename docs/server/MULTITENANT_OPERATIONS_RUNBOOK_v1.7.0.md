@@ -1,11 +1,11 @@
-# SharpCoreDB Server Multi-Tenant Operations Runbook v1.6.0
+# SharpCoreDB Server Multi-Tenant Operations Runbook v1.7.0
 
 ## Scope
 Operational guidance for tenant lifecycle, encryption, quotas, auditing, and incident response.
 
 See also:
-- `docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.6.0.md`
-- `docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md`
+- `docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md`
+- `docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md`
 
 ## Daily Operations
 - review `GET /api/v1/tenant-security/audit`

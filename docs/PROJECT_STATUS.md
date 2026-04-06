@@ -1,34 +1,39 @@
 # SharpCoreDB Project Status
 
-**Version:** 1.6.0  
-**Status:** ✅ Production Ready — All Known Limitations Resolved  
-**Last Updated:** March 14, 2026
+**Version:** 1.7.0  
+**Status:** ✅ Production Ready (Core .NET packages) / ⚠️ SDK parity in progress  
+**Last Updated:** April 6, 2026
 
-## 🎯 Current Status
+## Current Status
 
-> **Implementation audit (March 14, 2026):** Engine limitation remediation pass completed for parser/runtime behavior. All previously documented gaps are now implemented and validated, including the parameterized `ExecuteCompiled` hang (root cause: infinite loop in `FastSqlLexer` on `?` placeholders).
+SharpCoreDB core .NET packages are release-labeled on `1.7.0` and build successfully, including:
 
-SharpCoreDB is a **production-ready, high-performance embedded AND networked database** for .NET 10 with enterprise-scale distributed capabilities, server mode, and advanced GraphRAG analytics.
+- `SharpCoreDB`
+- `SharpCoreDB.Server`
+- `SharpCoreDB.Client`
+- `SharpCoreDB.Extensions` (including FluentMigrator integration)
+- Optional Event Sourcing, Projections, CQRS, Graph, Analytics, and VectorSearch packages
 
-### ✅ Resolved During Latest Remediation Pass
+## Implementation Completeness Audit
 
-- `IS NULL` / `IS NOT NULL` evaluation parity across runtime scan, join helper path, and compiled predicate path.
-- German locale `ß/ss` equivalence in locale-aware equality via `CompareOptions.IgnoreNonSpace`.
-- Scalar function parsing in SELECT columns (including `COALESCE(...)`) via expression-backed column parsing.
-- Enhanced SQL parser trailing-token validation to reliably set `HasErrors` on malformed trailing content.
-- LINQ translator support for `ExpressionType.Convert`/`ConvertChecked` in enum-related comparisons.
+A repository-wide scan was performed for partial implementation markers (`TODO`, `NotImplemented`, `WIP`, `TBD`).
 
-### ✅ Previously Deferred Limitation — Resolved
+### Findings
 
-- `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in `FastSqlLexer.NextToken()` — the `?` character was not recognized, and the default case did not advance the read position.
-- **Fixed:** `FastSqlLexer` (parameter token + safety advance), `EnhancedSqlParser` (`?` placeholder parsing), `QueryCompiler` (parameterized plan compilation). `IAsyncDisposable` lifecycle also implemented across all storage providers.
+- Core/server .NET runtime paths are implemented and buildable.
+- Remaining partial implementations are concentrated in the Python SDK (`pysharpcoredb`) and selected non-production benchmark/test scaffolding.
 
-### 🧪 Validation Baseline
+Detailed findings are documented in:
 
-- Latest CI-style run: **1,490 passed, 0 failed, 0 skipped**.
-- Locale-collation suite: **21 passed, 0 failed, 0 skipped**.
+- `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`
 
-### Follow-up Audit Index
+## FluentMigrator Status in v1.7.0
 
-Follow-up implementation backlog (broader than the engine-limit pass) remains tracked in:
-- `docs/TODO_AUDIT_2026-03.md`
+- Embedded mode integration: available
+- gRPC migration mode integration: available
+- `IMigrationProcessorOptions` obsolete usage was reduced to required FluentMigrator interface bridge points; processor code now uses concrete options internally.
+
+## Documentation Governance
+
+- Canonical docs entry points: `README.md`, `docs/INDEX.md`, `docs/README.md`
+- Obsolete/superseded phase-planning artifacts are removed during documentation maintenance.

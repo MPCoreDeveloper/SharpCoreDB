@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -31,9 +31,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.6.0" />
-    <PackageReference Include="SharpCoreDB.Provider.YesSql" Version="1.6.0" />
-    <PackageReference Include="SharpCoreDB" Version="1.6.0" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB.Provider.YesSql" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.0" />
   </ItemGroup>
 
   <ItemGroup>

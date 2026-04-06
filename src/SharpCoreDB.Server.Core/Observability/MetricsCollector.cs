@@ -47,7 +47,7 @@ public sealed class MetricsCollector : IDisposable
 
     public MetricsCollector(string serviceName = "sharpcoredb-server")
     {
-        _meter = new Meter(serviceName, "1.6.0");
+        _meter = new Meter(serviceName, "1.7.0");
 
         _activeConnections = _meter.CreateUpDownCounter<int>(
             "sharpcoredb.connections.active",

@@ -1,4 +1,4 @@
-# SharpCoreDB.CQRS v1.6.0
+# SharpCoreDB.CQRS v1.7.0
 
 Optional CQRS package for SharpCoreDB.
 
@@ -21,9 +21,9 @@ Use this package when you want command dispatching, aggregate-side pending event
 - It does not execute projections
 - It does not require MediatR or any transport-specific broker integration
 
-## Highlights in v1.6.0
+## Highlights in v1.7.0
 
-- Synchronized with the SharpCoreDB `1.6.0` package line
+- Synchronized with the SharpCoreDB `1.7.0` package line
 - Documents persistent outbox storage, retry policy, dead-letter handling, and hosted worker support
 - Keeps CQRS guidance aligned with the current Event Sourcing and outbox integration story
 
@@ -44,4 +44,4 @@ Use this package when you want command dispatching, aggregate-side pending event
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.6.0
+dotnet add package SharpCoreDB.CQRS --version 1.7.0

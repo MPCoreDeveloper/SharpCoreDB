@@ -145,9 +145,9 @@ public static class DapperMappingExtensions
             {
                 if (columnMappings.TryGetValue(columnName, out var propertyName))
                 {
-                    return type.GetProperty(propertyName);
+                    return type.GetProperty(propertyName)!;
                 }
-                return type.GetProperty(columnName);
+                return type.GetProperty(columnName)!;
             });
 
         SqlMapper.SetTypeMap(typeof(T), map);

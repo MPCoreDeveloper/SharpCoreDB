@@ -1,6 +1,6 @@
 # SharpCoreDB Server — Security Guide
 
-**Version:** 1.6.0  
+**Version:** 1.7.0  
 **Policy:** HTTPS/TLS required. No plain HTTP endpoints.
 
 ---

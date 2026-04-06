@@ -88,8 +88,7 @@ internal class DapperTransaction(DapperConnection connection, IsolationLevel iso
 /// </summary>
 public class SharpCoreTransaction(DapperConnection connection, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted) : IDisposable
 {
-    private readonly DapperConnection _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-    private DapperTransaction? _transaction;
+    private readonly DapperTransaction _transaction = new(connection ?? throw new ArgumentNullException(nameof(connection)), isolationLevel);
     private readonly Stack<string> _savepoints = [];
     private bool _disposed;
 
@@ -134,7 +133,7 @@ public class SharpCoreTransaction(DapperConnection connection, IsolationLevel is
         if (_disposed)
             throw new ObjectDisposedException(nameof(SharpCoreTransaction));
 
-        _transaction?.Commit();
+        _transaction.Commit();
     }
 
     /// <summary>
@@ -145,7 +144,7 @@ public class SharpCoreTransaction(DapperConnection connection, IsolationLevel is
         if (_disposed)
             throw new ObjectDisposedException(nameof(SharpCoreTransaction));
 
-        _transaction?.Rollback();
+        _transaction.Rollback();
     }
 
     public void Dispose()
@@ -161,7 +160,7 @@ public class SharpCoreTransaction(DapperConnection connection, IsolationLevel is
 
         if (disposing)
         {
-            _transaction?.Dispose();
+            _transaction.Dispose();
             _savepoints.Clear();
         }
 

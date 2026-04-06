@@ -1,4 +1,4 @@
-# SharpCoreDB Server Observability Setup v1.6.0
+# SharpCoreDB Server Observability Setup v1.7.0
 
 ## Purpose
 This guide provides a baseline observability setup for SharpCoreDB Server diagnostics workflows using built-in health and metrics APIs.

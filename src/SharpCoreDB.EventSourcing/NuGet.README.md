@@ -1,4 +1,4 @@
-# SharpCoreDB.EventSourcing v1.6.0
+# SharpCoreDB.EventSourcing v1.7.0
 
 Optional event sourcing package for SharpCoreDB.
 
@@ -20,9 +20,9 @@ Use this package when you want SharpCoreDB to act as an event store for append-o
 - It does not register or run projections
 - It does not provide outbox delivery or command orchestration
 
-## Highlights in v1.6.0
+## Highlights in v1.7.0
 
-- Synchronized with the SharpCoreDB `1.6.0` package line
+- Synchronized with the SharpCoreDB `1.7.0` package line
 - Covers persistent and in-memory event store implementations
 - Documents snapshots, snapshot-aware aggregate loading, and ordered event replay
 
@@ -46,4 +46,4 @@ Use this package when you want SharpCoreDB to act as an event store for append-o
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 1.6.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.0

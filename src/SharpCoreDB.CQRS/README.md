@@ -55,9 +55,9 @@ Typical scenarios:
 - Publishing integration events through an outbox with at-least-once delivery behavior
 - Running a lightweight command pipeline without adding an external CQRS framework
 
-## v1.6.0 Highlights
+## v1.7.0 Highlights
 
-This guide matches the synchronized `1.6.0` package release and documents the current CQRS feature set, including the persistent SharpCoreDB-backed outbox, retry and dead-letter handling, the hosted outbox worker, and the outbox bridge for aggregate domain events.
+This guide matches the synchronized `1.7.0` package release and documents the current CQRS feature set, including the persistent SharpCoreDB-backed outbox, retry and dead-letter handling, the hosted outbox worker, and the outbox bridge for aggregate domain events.
 
 ## Full Documentation
 
@@ -85,7 +85,7 @@ This package does **not** enforce MediatR usage, HTTP API conventions, or transp
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.6.0
+dotnet add package SharpCoreDB.CQRS --version 1.7.0
 ```
 
 ## Quick Start

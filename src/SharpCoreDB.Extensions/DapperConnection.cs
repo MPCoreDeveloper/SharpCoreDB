@@ -1,6 +1,7 @@
 using SharpCoreDB.Interfaces;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SharpCoreDB.Extensions;
 
@@ -20,6 +21,7 @@ public class DapperConnection(IDatabase database, string connectionString) : DbC
     private DapperTransaction? _currentTransaction;
 
     /// <inheritdoc />
+    [AllowNull]
     public override string ConnectionString
     {
         get => _connectionString;
@@ -120,10 +122,11 @@ internal class DapperCommand(IDatabase database) : DbCommand
     private readonly IDatabase _database = database;
     private string _commandText = string.Empty;
 
+    [AllowNull]
     public override string CommandText
     {
         get => _commandText;
-        set => _commandText = value;
+        set => _commandText = value ?? string.Empty;
     }
 
     public override int CommandTimeout { get; set; } = 30;
@@ -315,7 +318,9 @@ public class DapperParameter : DbParameter
     public override DbType DbType { get; set; }
     public override ParameterDirection Direction { get; set; }
     public override bool IsNullable { get; set; }
+    [AllowNull]
     public override string ParameterName { get; set; } = string.Empty;
+    [AllowNull]
     public override string SourceColumn { get; set; } = string.Empty;
     public override object? Value { get; set; }
     public override bool SourceColumnNullMapping { get; set; }

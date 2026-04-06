@@ -1,12 +1,12 @@
-# SharpCoreDB.Data.Provider v1.6.0
+# SharpCoreDB.Data.Provider v1.7.0
 
 **ADO.NET Data Provider for SharpCoreDB**
 
 Complete ADO.NET provider enabling standard database connectivity patterns with SharpCoreDB's encryption and performance.
 
-## ✨ What's New in v1.6.0
+## ✨ What's New in v1.7.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.6.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.0
 - ✅ Enterprise connectivity features
 - ✅ Full ADO.NET compatibility
 - ✅ Zero breaking changes
@@ -47,12 +47,12 @@ while (reader.Read())
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.6.0
+dotnet add package SharpCoreDB.Data.Provider --version 1.7.0
 ```
 
-**Requires:** SharpCoreDB v1.6.0+
+**Requires:** SharpCoreDB v1.7.0+
 
 ---
 
-**Version:** 1.6.0 | **Status:** ✅ Production Ready
+**Version:** 1.7.0 | **Status:** ✅ Production Ready
 

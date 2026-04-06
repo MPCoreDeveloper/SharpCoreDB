@@ -1,4 +1,4 @@
-# SharpCoreDB Server Tenant Backup Restore and Migration Guide v1.6.0
+# SharpCoreDB Server Tenant Backup Restore and Migration Guide v1.7.0
 
 ## Overview
 This guide documents tenant-scoped backup, restore, and migration procedures for database-per-tenant deployments.

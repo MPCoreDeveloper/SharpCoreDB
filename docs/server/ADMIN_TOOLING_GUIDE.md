@@ -1,6 +1,6 @@
-# SharpCoreDB Admin Tooling & Adoption Guide (v1.6.0)
+# SharpCoreDB Admin Tooling & Adoption Guide (v1.7.0)
 
-**Version:** v1.6.0  
+**Version:** v1.7.0  
 **Audience:** DBAs, developers, DevOps engineers, enterprise evaluators  
 **Last updated:** 2026
 
@@ -22,7 +22,7 @@ SharpCoreDB exposes three connectivity endpoints:
 
 ## Tool Compatibility Matrix
 
-Tested against SharpCoreDB v1.6.0 binary protocol (port 5433).
+Tested against SharpCoreDB v1.7.0 binary protocol (port 5433).
 
 ### GUI Tools
 
@@ -206,7 +206,7 @@ The optional web admin is served on the HTTPS API port (8443) at the `/admin` pa
 
 ```bash
 curl -fsk https://your-server:8443/api/v1/health
-# Response: {"status":"healthy","version":"1.6.0","uptime":"...","databases":[...]}
+# Response: {"status":"healthy","version":"1.7.0","uptime":"...","databases":[...]}
 ```
 
 Integrate into monitoring systems (Prometheus blackbox exporter, Grafana, Datadog HTTP check):
@@ -338,10 +338,10 @@ Driver={PostgreSQL Unicode(x64)};Server=localhost;Port=5433;Database=appdb;Uid=a
 
 | SharpCoreDB Version | Binary Protocol | REST API | Web Admin | Min psqlODBC | Min pgjdbc |
 |---|---|---|---|---|---|
-| v1.6.0 | ✅ v3 full | ✅ v1 | ✅ optional | 13.02 | 42.7 |
+| v1.7.0 | ✅ v3 full | ✅ v1 | ✅ optional | 13.02 | 42.7 |
 | v1.5.x | ✅ v3 partial | ✅ v1 | ❌ | 13.02 | 42.7 |
 | v1.4.x | ⚠️ v3 minimal | ✅ v1 | ❌ | Not certified | Not certified |
 
 ---
 
-*This guide is version-aligned to SharpCoreDB v1.6.0. For older versions, consult the archived docs.*
+*This guide is version-aligned to SharpCoreDB v1.7.0. For older versions, consult the archived docs.*

@@ -1,11 +1,11 @@
-# SharpCoreDB.Projections OpenTelemetry Metrics (v1.6.0 / V 1.60)
+# SharpCoreDB.Projections OpenTelemetry Metrics (v1.7.0 / V 1.70)
 
 This document describes the projection metrics emitted by `OpenTelemetryProjectionMetrics`.
 
 ## Meter
 
 - Name: `SharpCoreDB.Projections`
-- Version: `1.6.0`
+- Version: `1.7.0`
 
 ## Instruments
 

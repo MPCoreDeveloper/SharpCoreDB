@@ -1,4 +1,4 @@
-# SharpCoreDB Server Configuration Schema (v1.6.0)
+# SharpCoreDB Server Configuration Schema (v1.7.0)
 
 **Supported Formats:** TOML, JSON, YAML  
 **Default File:** `appsettings.json`  
@@ -436,7 +436,7 @@ The server looks for configuration files in this order:
 version: '3.8'
 services:
   sharpcoredb:
-    image: sharpcoredb/server:1.6.0
+    image: sharpcoredb/server:1.7.0
     ports:
       - "5001:5001"   # gRPC
       - "8443:8443"   # HTTPS API

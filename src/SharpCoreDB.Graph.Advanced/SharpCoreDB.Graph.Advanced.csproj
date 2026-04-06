@@ -6,7 +6,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>SharpCoreDB.Graph.Advanced</AssemblyName>
     <RootNamespace>SharpCoreDB.Graph.Advanced</RootNamespace>
-    <Version>1.6.0</Version>
+    <Version>1.7.0</Version>
     <PackageId>SharpCoreDB.Graph.Advanced</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>MPCoreDeveloper</Company>
@@ -40,9 +40,9 @@
 
   <ItemGroup Condition="'$(UseLocalProjectReferences)' != 'true'">
     <!-- Deployed builds: use published NuGet packages -->
-    <PackageReference Include="SharpCoreDB" Version="1.6.0" />
-    <PackageReference Include="SharpCoreDB.Graph" Version="1.6.0" />
-    <PackageReference Include="SharpCoreDB.VectorSearch" Version="1.6.0" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB.Graph" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB.VectorSearch" Version="1.7.0" />
   </ItemGroup>
 
   <ItemGroup>

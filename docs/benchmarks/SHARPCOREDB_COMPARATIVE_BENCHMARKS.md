@@ -1,7 +1,7 @@
 # SharpCoreDB — Comparative Benchmark Report
 
 **Date:** 2026-03-06  
-**SharpCoreDB Version:** 1.6.0 (.NET 10, C# 14)  
+**SharpCoreDB Version:** 1.7.0 (.NET 10, C# 14)  
 **Test Machine:** Intel i7-10850H (6C/12T), 32 GB RAM, Windows 10, NVMe SSD
 
 ---
@@ -36,7 +36,7 @@ SharpCoreDB was benchmarked against four competing embedded databases across two
 
 | Database | Version | INSERT ops/sec | READ ops/sec | UPDATE ops/sec | DELETE ops/sec |
 |---|---|---|---|---|---|
-| **SharpCoreDB** | 1.6.0 | **202,222** 🥇 | 6,102 | 8,411 | 7,203 |
+| **SharpCoreDB** | 1.7.0 | **202,222** 🥇 | 6,102 | 8,411 | 7,203 |
 | **SQLite** | 10.0.3 | 167,363 | **96,724** 🥇 | **252,482** 🥇 | **378,961** 🥇 |
 | **LiteDB** | 5.0.21 | 91,845 | 13,317 | 9,218 | 13,907 |
 | **BLite** | 2.0.2 | ❌ DNF | ❌ DNF | ❌ DNF | ❌ DNF |
@@ -265,5 +265,5 @@ All benchmarks used the same test structure:
 
 ---
 
-*Report generated 2026-03-06 by SharpCoreDB Benchmark Suite v1.6.0*  
+*Report generated 2026-03-06 by SharpCoreDB Benchmark Suite v1.7.0*  
 *All tests run on: .NET 10.0.3, Intel i7-10850H, 32GB RAM, NVMe SSD, Windows 10*

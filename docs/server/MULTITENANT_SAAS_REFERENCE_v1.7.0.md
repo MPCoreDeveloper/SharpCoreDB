@@ -1,4 +1,4 @@
-# SharpCoreDB Server Multi-Tenant SaaS Reference v1.6.0
+# SharpCoreDB Server Multi-Tenant SaaS Reference v1.7.0
 
 ## Overview
 This guide describes the recommended production setup for SharpCoreDB Server multi-tenancy using a **database-per-tenant** model.

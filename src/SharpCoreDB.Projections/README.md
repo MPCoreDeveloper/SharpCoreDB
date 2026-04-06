@@ -53,9 +53,9 @@ Typical scenarios:
 - Replaying all events into a new read model after a deployment
 - Measuring projection lag, throughput, and failure behavior
 
-## v1.6.0 Highlights
+## v1.7.0 Highlights
 
-This guide matches the synchronized `1.6.0` package release and documents the current projection feature set: durable SharpCoreDB-backed checkpoints, background worker orchestration, execution mode options, and OpenTelemetry-ready metrics.
+This guide matches the synchronized `1.7.0` package release and documents the current projection feature set: durable SharpCoreDB-backed checkpoints, background worker orchestration, execution mode options, and OpenTelemetry-ready metrics.
 
 ## Scope
 
@@ -77,7 +77,7 @@ This package does **not** ship opinionated CQRS handlers, MediatR integrations, 
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.Projections --version 1.6.0
+dotnet add package SharpCoreDB.Projections --version 1.7.0
 ```
 
 ## Quick Start

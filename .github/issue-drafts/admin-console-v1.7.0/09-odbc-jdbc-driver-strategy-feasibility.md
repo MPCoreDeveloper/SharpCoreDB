@@ -6,9 +6,9 @@ Produce a concrete strategy for ODBC/JDBC enablement and external ecosystem inte
 
 ## Implementation Notes
 
-Completed for v1.6.0. Deliverable: `docs/server/ODBC_JDBC_STRATEGY.md`.
+Completed for v1.7.0. Deliverable: `docs/server/ODBC_JDBC_STRATEGY.md`.
 
-**Decision:** Adapter-first strategy — direct users to existing PostgreSQL ODBC/JDBC drivers (psqlODBC, pgjdbc) against the SharpCoreDB binary protocol endpoint (port 5433, TLS). No bespoke driver development required for v1.6.0.
+**Decision:** Adapter-first strategy — direct users to existing PostgreSQL ODBC/JDBC drivers (psqlODBC, pgjdbc) against the SharpCoreDB binary protocol endpoint (port 5433, TLS). No bespoke driver development required for v1.7.0.
 
 **Key findings:**
 - Binary protocol endpoint is live and PostgreSQL wire-compatible (Protocol v3, TLS 1.2+).

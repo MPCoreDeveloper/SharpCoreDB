@@ -10,15 +10,15 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Analytics v1.6.0
+# SharpCoreDB.Analytics v1.7.0
 
 **Advanced Analytics Engine for SharpCoreDB**
 
 Unlock enterprise-grade analytics with 100+ aggregate functions, window functions, and statistical analysis tools - **150-680x faster than SQLite**.
 
-## ✨ What's New in v1.6.0
+## ✨ What's New in v1.7.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.6.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.0
 - ✅ Phase 9 complete: 100+ aggregate and window functions
 - ✅ Statistical functions: STDDEV, VARIANCE, PERCENTILE, CORRELATION
 - ✅ SIMD-accelerated computations
@@ -48,12 +48,12 @@ Unlock enterprise-grade analytics with 100+ aggregate functions, window function
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.6.0
+dotnet add package SharpCoreDB.Analytics --version 1.7.0
 ```
 
-**Requires:** SharpCoreDB v1.6.0+
+**Requires:** SharpCoreDB v1.7.0+
 
 ---
 
-**Version:** 1.6.0 | **Status:** ✅ Production Ready | **Phase:** 9 Complete
+**Version:** 1.7.0 | **Status:** ✅ Production Ready | **Phase:** 9 Complete
 

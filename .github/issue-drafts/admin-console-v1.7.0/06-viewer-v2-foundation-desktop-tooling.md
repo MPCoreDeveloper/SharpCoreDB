@@ -2,7 +2,7 @@
 Evolve `tools/SharpCoreDB.Viewer` into a stronger development companion (`Viewer v2` foundation).
 
 ## Status
-**State:** ✅ RESOLVED — implemented in v1.6.0
+**State:** ✅ RESOLVED — implemented in v1.7.0
 
 ## Why
 A lightweight first-party desktop utility helps validate features and supports local workflows.

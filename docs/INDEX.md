@@ -1,11 +1,14 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set
+**Status:** Active documentation set (`v1.7.0`)
 
 ## 1. Project Entry Points
 
 - `../README.md`
 - `README.md`
+- `PROJECT_STATUS.md`
+- `IMPLEMENTATION_AUDIT_v1.7.0.md`
+- `OPEN_ITEMS_v1.7.0.md`
 - `release/PHASE12_RELEASE_NOTES.md`
 
 ## 2. Server Documentation
@@ -32,8 +35,8 @@
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
 - `serialization/SERIALIZATION_FAQ.md`
 - `serialization/BINARY_FORMAT_VISUAL_REFERENCE.md`
-- `storage/QUICK_REFERENCE_v1.6.0.md`
-- `storage/METADATA_IMPROVEMENTS_v1.6.0.md`
+- `storage/QUICK_REFERENCE_v1.7.0.md`
+- `storage/METADATA_IMPROVEMENTS_v1.7.0.md`
 
 ## 4. GraphRAG and Analytics
 
@@ -52,8 +55,8 @@
 - `sync/README.md`
 - `sync/CHANGELOG.md`
 - `migration/README.md`
-- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md`
-- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md`
+- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
+- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 - `migration/MIGRATION_GUIDE.md`
 - `migration/SQLITE_VECTORS_TO_SHARPCORE.md`
 
@@ -66,7 +69,7 @@
 - `api/SharpCoreDB.Graph.Advanced.API.md`
 - `performance/graphrag-performance-tuning.md`
 - `proposals/README.md`
-- `proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.6.0.md`
+- `proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.7.0.md`
 
 ## Canonical Documentation Rule
 

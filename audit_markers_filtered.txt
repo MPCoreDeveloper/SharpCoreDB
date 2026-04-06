@@ -1,0 +1,207 @@
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\CODING_STANDARDS_CSHARP14.md:753:// ✅ Mark TODO items
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\CODING_STANDARDS_CSHARP14.md:754:// TODO: Implement compression for blocks > 1MB
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\copilot-instructions.md:28:- If a non-Microsoft package is used (e.g., Serilog), keep it on latest stable and avoid deprecated versions.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:46:- name: Fail on deprecated NuGet packages
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:49:$output = dotnet list SharpCoreDB.CI.slnf package --deprecated --configfile NuGet.Config
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:54:Write-Error "Failed to evaluate deprecated packages."
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:58:if ($outputText -match "has the following deprecated packages") {
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:59:Write-Error "Deprecated NuGet packages detected. CI is configured to fail."
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\.github\workflows\ci.yml:63:Write-Host "No deprecated NuGet packages detected."
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\Examples\Server\SharpCoreDB.MultiTenantSaaSSample\README.md:25:Server --> TenantBDB[(tenant_tenant_b)]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\README.md:92:- Obsolete phase-status, kickoff, completion, and superseded planning documents are periodically removed.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\BENCHMARK_RESULTS.md:204:| **February 3, 2026** | Documentation cleanup, removed obsolete Phase 2/7 planning docs |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\CHANGELOG.md:113:- Removed obsolete phase-status, kickoff, completion, and superseded planning documents across `docs/archived`, `docs/server`, and `docs/graphrag`.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\PROJECT_STATUS.md:34:- `docs/TODO_AUDIT_2026-03.md`
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\README.md:25:Obsolete phase-status, kickoff, completion, and superseded planning documents are removed during documentation maintenance. Historical snapshots are not used as canonical product docs.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\RELEASE_NOTES_v1.3.0.md:249:- **Performance Guide:** [.github/SHARPCOREDB_PERFORMANCE_TODO.md](../.github/SHARPCOREDB_PERFORMANCE_TODO.md)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\architecture\QUERY_ROUTING_REFACTORING_PLAN.md:132:**Status:** 📋 TODO
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\architecture\QUERY_ROUTING_REFACTORING_PLAN.md:140:**Status:** 📋 TODO
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\architecture\QUERY_ROUTING_REFACTORING_PLAN.md:561:**Reviewers:** *TBD*
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\architecture\QUERY_ROUTING_REFACTORING_PLAN.md:562:**Approved By:** *TBD*
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\architecture\QUERY_ROUTING_REFACTORING_PLAN.md:563:**Implementation Team:** *TBD*
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\benchmarks\ZVEC_BENCHMARKS_STATUS.md:119:| **Fix API usage** | ⏳ **TODO** |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\features\PHASE1.5_DDL_IF_EXISTS_DESIGN.md:441:DROP INDEX IF EXISTS idx_deprecated;
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\features\advanced-graphrag.md:336:### SQL Integration (Coming Soon)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\graphrag\00_START_HERE.md:28:Historical kickoff/progress/completion snapshots were removed as obsolete and are no longer part of the maintained documentation path.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\graphrag\GRAPHRAG_PROPOSAL_ANALYSIS.md:162:| **3. Multi-Hop Query Planning** | Not implemented | 🟧 High | 🟡 Medium |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\graphrag\GRAPHRAG_PROPOSAL_ANALYSIS.md:200:> Note: RowRef column validation against foreign key targets is not implemented yet.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\graphrag\PHASE6_2_SUMMARY.md:246:| 6.3 | Observability | TBD | TBD | ⏳ Next |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\graphrag\README.md:4:**Target Release:** Roadmap item (schedule TBD)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\serialization\SERIALIZATION_AND_STORAGE_GUIDE.md:34:| **Compression** | Not implemented (reserved in header) |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\server\SECURITY.md:91:| TLS 1.1 | ❌ Rejected | Deprecated, insecure |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\server\SECURITY.md:92:| TLS 1.0 | ❌ Rejected | Deprecated, insecure |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\docs\server\SECURITY.md:93:| SSL 3.0 | ❌ Rejected | Deprecated, insecure |
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\nuget\README.md:29:- 🔄 Added `[Obsolete]` attributes to sync methods
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Analytics\Aggregation\FrequencyAggregates.cs:30:var numValue = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Analytics\Aggregation\PercentileAggregates.cs:28:_values.Add(Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Analytics\Aggregation\PercentileAggregates.cs:92:_values.Add(Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Analytics\Aggregation\StatisticalAggregates.cs:30:var numValue = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Analytics\Aggregation\StatisticalAggregates.cs:93:var numValue = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Data.Provider\SharpCoreDBDataReader.cs:167:public override double GetDouble(int ordinal) => Convert.ToDouble(GetValue(ordinal));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.EntityFrameworkCore\Storage\SharpCoreDBDataReader.cs:141:public override double GetDouble(int ordinal) => Convert.ToDouble(GetValue(ordinal));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.EntityFrameworkCore\Storage\SharpCoreDBRelationalConnection.cs:102:// No-op - command pooling not implemented yet
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.EntityFrameworkCore\USAGE.md:944:**Issue**: `NotImplementedException` when using certain LINQ methods.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Extensions\DapperDataReader.cs:115:public override double GetDouble(int ordinal) => Convert.ToDouble(GetValue(ordinal));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Graph.Advanced\SqlIntegration\GraphLoader.cs:83:weight = ConvertToDouble(weightValue);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Graph.Advanced\SqlIntegration\GraphLoader.cs:214:private static double ConvertToDouble(object value)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB.Server.Core\SharpCoreDB.Server.Core.csproj:39:<!-- Security (latest stable for .NET 10 - updated to non-deprecated) -->
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DataStructures\StructRow.cs:172:BinaryPrimitives.WriteDoubleLittleEndian(buffer.AsSpan(1, 8), Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DataStructures\Table.BTreeIndexing.cs:542:DataType.Real => Convert.ToDouble(value),
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DataStructures\Table.CRUD.cs:490:/// ✅ DEPRECATED: Use InsertBatch() which now uses optimized path by default.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DataStructures\Table.ParallelScan.cs:394:BinaryPrimitives.WriteDoubleLittleEndian(cellSpan.Slice(1, 8), Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Database\Core\Database.Core.cs:792:[Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) via Database.Execution instead.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Database\Core\Database.Core.cs:814:[Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) from Database.Execution which routes through SqlParser for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:303:[Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support (no ORDER BY, LIMIT, JOIN, subqueries). For full SQL support, use the Database class which routes through SqlParser.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:333:[Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support. For full SQL support, use the Database class which routes through SqlParser.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:723:[Obsolete("Regex-based DML parsing. Migrate to SqlParser-based execution for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:746:[Obsolete("Regex-based INSERT parsing. Migrate to SqlParser-based execution for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:794:[Obsolete("Regex-based UPDATE parsing. Migrate to SqlParser-based execution for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:829:[Obsolete("Regex-based DROP TABLE parsing. Migrate to SqlParser-based execution for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:860:[Obsolete("Regex-based DELETE parsing. Migrate to SqlParser-based execution for full SQL support.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs:884:[Obsolete("Regex-based SELECT with limited SQL support (no ORDER BY, LIMIT, JOIN, subqueries). Migrate to SqlParser-based execution.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:226:throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:231:throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:236:throw new NotImplementedException("Prepared statements not yet implemented in single-file mode");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:279:// Not implemented yet
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:284:// Not implemented yet
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:289:// Not implemented yet
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:294:throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:299:throw new NotImplementedException("Compiled queries not yet implemented in single-file mode");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:502:// TODO: Implement proper parsing
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:519:// TODO: Implement proper parsing
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:573:public List<List<string>> UniqueConstraints => new List<List<string>>(); // Not implemented
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:574:public List<ForeignKeyConstraint> ForeignKeys => new List<ForeignKeyConstraint>(); // Not implemented
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:601:// Not implemented - would need proper indexing
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:602:throw new NotImplementedException("Delete not implemented in single-file table");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:624:public void Update(string? whereClause, Dictionary<string, object> updates) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:625:public void Delete(string? whereClause) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:626:public void CreateHashIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:627:public void CreateHashIndex(string columnName, string indexName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:635:public void ClearAllIndexes() => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:638:public void CreateBTreeIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:639:public void CreateBTreeIndex(string columnName, string indexName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:641:public long[] InsertBatch(List<Dictionary<string, object>> rows) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:642:public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\DatabaseExtensions.cs.bak:644:public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Execution\AggregationOptimizer.cs:168:agg.Sum += ConvertToDouble(sumVal);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Execution\AggregationOptimizer.cs:196:agg.Sum += ConvertToDouble(avgVal);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Execution\AggregationOptimizer.cs:212:private double ConvertToDouble(object? value)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Optimizations\InsertBatchOptimized.cs:240:var doubleVal = value is double dblV ? dblV : Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Optimizations\TypedRowBuffer.cs:231:_data[rowIndex] = value is double doubleVal ? doubleVal : Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\README_NUGET.md:110:> ⚠️ **API Migration Notice (v1.1.1)**: Legacy synchronous methods (`ExecuteSQL`, `ExecuteQuery`, `Flush`, `ForceSave`) are marked as `[Obsolete]`. Please migrate to async methods (`ExecuteSQLAsync`, `ExecuteQueryAsync`, `FlushAsync`, `ForceSaveAsync`) for better performance, cancellation support, and culture-independent behavior.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SimdHelper.Deserialization.cs:310:results[i] = BitConverter.ToDouble(data.Slice(bytesConsumed, 8));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.DML.cs:736:catch (NotImplementedException)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.DML.cs:1721:throw new NotSupportedException($"AST visitor for '{nodeType}' is not implemented in AstExecutor.");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.PerformanceOptimizations.cs:312:var rowVal = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.PerformanceOptimizations.cs:331:var rowVal = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.PerformanceOptimizations.cs:347:var rowVal = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.PerformanceOptimizations.cs:363:var rowVal = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParser.PerformanceOptimizations.cs:379:var rowVal = Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlParserExtensions.cs:167:Console.WriteLine($"PRAGMA {pragmaCommand} not implemented");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Services\SqlToStringVisitor.DML.cs:114:parts.Add($"({node.Operation} not implemented)");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\SharpCoreDB.Benchmarks\Program.cs:50:Console.WriteLine("UpdatePerformanceTest not implemented yet.");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\SharpCoreDB.Benchmarks\Program.cs:51:logWriter.WriteLine("UpdatePerformanceTest not implemented yet.");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\SharpCoreDB.Benchmarks\Program.cs:57:Console.WriteLine("SelectOptimizationTest not implemented yet.");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\SharpCoreDB.Benchmarks\Program.cs:58:logWriter.WriteLine("SelectOptimizationTest not implemented yet.");
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Storage\ColumnStore.Buffers.cs:125:data[index] = value is double doubleVal ? doubleVal : Convert.ToDouble(value);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Storage\Columnar\ColumnCodec.cs:223:writer.Write(Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Storage\PageBasedDataWriter.cs:252:writer.Write(Convert.ToDouble(value));
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Storage\Scdb\ScdbExceptions.cs:189:details += "\n\nThis file format is obsolete.";
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\Storage\Scdb\TableDirectoryManager.cs:362:// For now, just skip as they're not implemented
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\GorillaCodec.cs:155:return [BitConverter.ToDouble(compressed)];
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\GorillaCodec.cs:164:result[0] = BitConverter.UInt64BitsToDouble(prevBits);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\GorillaCodec.cs:204:result[i] = BitConverter.UInt64BitsToDouble(currentBits);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\XorFloatCodec.cs:109:return [BitConverter.ToDouble(compressed)];
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\XorFloatCodec.cs:118:result[0] = BitConverter.UInt64BitsToDouble(prevBits);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDB\TimeSeries\XorFloatCodec.cs:139:result[i] = BitConverter.UInt64BitsToDouble(currentBits);
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:1072:"deprecated": "Use @eslint/config-array instead",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:1126:"deprecated": "Use @eslint/object-schema instead",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:2926:"integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:3032:"deprecated": "This version is no longer supported. Please see https://eslint.org/version-support for other options.",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:3553:"deprecated": "Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:3826:"deprecated": "This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:4371:"integrity": "sha512-KJJBsRCyyLNWCNBOvZyRDnAIfUiRJ8v+hOBQYGn8gDyF3UegwiP4gwRR3/SDa42g1YbVycTidUF3rKjyLFDWbg==",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:5578:"deprecated": "Rimraf versions prior to v4 are no longer supported",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\package-lock.json:6168:"deprecated": "The work that was done in this beta branch won't be included in future versions",
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\src\http-client.ts:72:// TODO: Implement JWT authentication
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\javascript\sharpcoredb-client\src\ws-client.ts:270:// TODO: Add authentication headers if needed
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\connection.py:171:raise NotImplementedError("Query execution not implemented for current protocol")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\connection.py:193:raise NotImplementedError("Non-query execution not implemented for current protocol")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\connection.py:207:raise NotImplementedError("Ping not implemented for current protocol")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:69:# TODO: Implement actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:70:raise NotImplementedError("gRPC Connect not implemented")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:73:# TODO: Implement actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:74:raise NotImplementedError("gRPC Disconnect not implemented")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:77:# TODO: Implement actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:78:raise NotImplementedError("gRPC ExecuteQuery not implemented")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:81:# TODO: Implement actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:82:raise NotImplementedError("gRPC ExecuteNonQuery not implemented")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:85:# TODO: Implement actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:86:raise NotImplementedError("gRPC Ping not implemented")
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:124:# TODO: Replace with actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:169:# TODO: Replace with actual streaming call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:212:# TODO: Replace with actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\grpc_client.py:229:# TODO: Replace with actual gRPC call
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\http_client.py:51:# TODO: Implement JWT authentication
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\types.py:24:# TODO: Implement column name lookup
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\ws_client.py:51:# TODO: Send authentication message if needed
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\ws_client.py:56:server_version="1.5.0"  # TODO: Get from server
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\src\SharpCoreDBServerScriptClients\python\pysharpcoredb\src\pysharpcoredb\ws_client.py:225:# TODO: Add authentication headers if needed
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:192:public void Insert(Dictionary<string, object> row) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:193:public long[] InsertBatch(List<Dictionary<string, object>> rows) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:194:public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:195:public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:196:public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:197:public void Update(string? where, Dictionary<string, object> updates) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:198:public void Delete(string? where) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:199:public Dictionary<string, object>? FindByPrimaryKey(object key) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:200:public List<Dictionary<string, object>> FindByIndex(string column, object value) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:201:public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:202:public bool DeleteByPrimaryKey(object key) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:204:public void CreateHashIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:205:public void CreateHashIndex(string indexName, string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:206:public void CreateHashIndex(string indexName, string columnName, bool unique) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:208:public void CreateBTreeIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:209:public void CreateBTreeIndex(string indexName, string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:210:public void CreateBTreeIndex(string indexName, string columnName, bool unique) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Benchmarks\Phase7_JoinCollationBenchmark.cs:216:public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:366:public void Insert(Dictionary<string, object> row) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:367:public long[] InsertBatch(List<Dictionary<string, object>> rows) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:368:public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:369:public List<Dictionary<string, object>> Select(string? where = null, string? orderBy = null, bool asc = true) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:370:public List<Dictionary<string, object>> Select(string? where, string? orderBy, bool asc, bool noEncrypt) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:371:public void Update(string? where, Dictionary<string, object> updates) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:372:public void Delete(string? where) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:373:public Dictionary<string, object>? FindByPrimaryKey(object key) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:374:public List<Dictionary<string, object>> FindByIndex(string column, object value) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:375:public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:376:public bool DeleteByPrimaryKey(object key) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:378:public void CreateHashIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:379:public void CreateHashIndex(string indexName, string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:380:public void CreateHashIndex(string indexName, string columnName, bool unique) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:382:public void CreateBTreeIndex(string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:383:public void CreateBTreeIndex(string indexName, string columnName) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:384:public void CreateBTreeIndex(string indexName, string columnName, bool unique) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CollationJoinTests.cs:390:public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\CompiledQueryTests.cs:253:// TODO: Once QueryCompiler.Compile() is fixed, this should achieve <15ms using expression trees
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\DatabaseFileTests.cs:122:// TODO: Add more comprehensive tests for edge cases, multiple pages, encryption verification, etc.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:23:[Fact(Skip = "Performance test: CPU-dependent timing - skipped in CI. TODO: Implement adaptive timeouts based on hardware performance counters.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:74:[Fact(Skip = "Performance test: String key lookup timing varies on CI hardware. TODO: Use BenchmarkDotNet for accurate cross-platform comparisons.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:120:[Fact(Skip = "Performance test: Duplicate key performance varies on CI. TODO: Profile memory allocation patterns for large result sets.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:165:[Fact(Skip = "Auto-indexing performance benchmark skipped in CI. TODO: Implement background analysis without blocking query execution.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:213:[Fact(Skip = "Memory efficiency test: Baseline memory usage varies by platform. TODO: Establish baseline metrics for each CI platform (Windows/Linux/macOS).")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\GenericIndexPerformanceTests.cs:240:[Fact(Skip = "Bulk insert performance test: Hardware-dependent. TODO: Extract performance-critical path and focus on correctness instead of timing.")]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:60:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:111:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:150:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:191:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:235:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\JoinRegressionTests.cs:279:// TODO: Fix FlushPendingWalStatements when PageManager is restored
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\Phase1_5_DDL_IfExistsTests.cs:353:DROP PROCEDURE IF EXISTS sp_deprecated_proc;
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\SharpCoreDB.Tests\TransactionBuffer_PageBased_Test.cs:27:/// TODO: Implement full IStorage mock or integration tests.
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\README.md:55:⏳ **TODO (Weeks 4-5):**
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\SharpCoreDB.Benchmarks\Zvec\ZvecQueryBenchmark.cs:19:// TODO: Week 4 - Load indexed vectors, prepare query sets
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\SharpCoreDB.Benchmarks\Zvec\ZvecQueryBenchmark.cs:25:// TODO: Week 4 - Execute top-k queries for k=[10, 100, 1000]
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\SharpCoreDB.Benchmarks\Zvec\ZvecQueryBenchmark.cs:32:// TODO: Week 4 - Execute concurrent queries (8 threads)
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\SharpCoreDB.Benchmarks\Zvec\ZvecQueryBenchmark.cs:39:// TODO: Week 4 - Measure recall at various ef_search values
+D:\source\repos\MPCoreDeveloper\SharpCoreDB\tests\benchmarks\SharpCoreDB.Benchmarks\Zvec\ZvecQueryBenchmark.cs:46:// TODO: Week 4 - Incremental 900K insert test

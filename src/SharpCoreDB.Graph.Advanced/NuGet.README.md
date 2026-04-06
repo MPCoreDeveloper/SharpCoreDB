@@ -1,4 +1,4 @@
-# SharpCoreDB.Graph.Advanced v1.6.0
+# SharpCoreDB.Graph.Advanced v1.7.0
 
 Advanced graph analytics and GraphRAG for SharpCoreDB on .NET 10.
 
@@ -14,7 +14,7 @@ Advanced graph analytics and GraphRAG for SharpCoreDB on .NET 10.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.6.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
 ```
 
 ## Package Dependencies
@@ -31,4 +31,4 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.6.0
 - Release notes: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/release/PHASE12_RELEASE_NOTES.md
 - Repository docs index: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/INDEX.md
 
-**Version:** 1.6.0 | **Status:** Production Ready
+**Version:** 1.7.0 | **Status:** Production Ready

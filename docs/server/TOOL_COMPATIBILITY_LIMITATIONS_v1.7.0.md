@@ -1,4 +1,4 @@
-# SharpCoreDB Server Tool Compatibility Limitations v1.6.0
+# SharpCoreDB Server Tool Compatibility Limitations v1.7.0
 
 ## Overview
 This document records known limitations and operator guidance when using external PostgreSQL-oriented database tools with SharpCoreDB Server.

@@ -1,7 +1,7 @@
-# FluentMigrator with SharpCoreDB — Embedded Mode Guide (v1.6.0)
+# FluentMigrator with SharpCoreDB — Embedded Mode Guide (v1.7.0)
 
 **Scope:** `SharpCoreDB.Extensions` FluentMigrator integration in **embedded/local** execution mode  
-**Version label:** **v1.6.0 (V 1.60)**
+**Version label:** **v1.7.0 (V 1.70)**
 
 ---
 
@@ -184,6 +184,6 @@ Fix:
 
 ## 9. Related Docs
 
-- `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md`
+- `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 - `docs/migration/MIGRATION_GUIDE.md`
 - `src/SharpCoreDB.Extensions/README.md`

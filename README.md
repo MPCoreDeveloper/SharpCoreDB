@@ -7,7 +7,7 @@
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.6.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.7.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
   [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![Tests](https://img.shields.io/badge/Tests-1490+_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
   [![C#](https://img.shields.io/badge/C%23-14-purple.svg)](https://learn.microsoft.com/en-us/dotnet/csharp/)
@@ -15,27 +15,20 @@
 
 ---
 
-## 📌 **Current Status — v1.6.0 (March 20, 2026)**
+## 📌 **Current Status — v1.7.0 (April 6, 2026)**
 
-### ✅ **Production-Ready: ALL Phase 1-12 Features Complete (100%)**
+### ✅ **Production-Ready Core + Server (.NET) / SDK Parity In Progress**
 
-**SharpCoreDB v1.6.0 is the synchronized package release for the current feature and fix set: all NuGet packages now ship on the same version, the package documentation has been refreshed, and the optional Event Sourcing, Projections, and CQRS packages are documented as first-class companions to the core engine.**
+**SharpCoreDB v1.7.0 is the synchronized package release for the current feature and fix set: all NuGet packages now ship on the same version, package documentation has been refreshed, and optional Event Sourcing, Projections, and CQRS packages remain first-class companions to the core engine.**
 
-#### 🎉 **Major Milestone: All Core Features + Server Complete**
+#### 🎉 **Major Milestone: Core Features + Server Delivered**
 
-**Phase 1-12 (100% Complete):** SharpCoreDB is now a **fully-featured, production-ready embedded AND networked database** with advanced analytics, vector search, graph algorithms, GraphRAG analytics, distributed capabilities, and server mode.
+SharpCoreDB provides a **production-ready embedded and networked .NET database stack** with analytics, vector search, graph algorithms, GraphRAG analytics, distributed capabilities, and server mode.
 
-**Latest Achievement:** 🚀 **Phase 12 - SharpCoreDB.Graph.Advanced COMPLETE (100%)**  
-SharpCoreDB now includes a dedicated **advanced graph analytics and GraphRAG package** with community detection, centrality metrics, subgraph analysis, and graph-aware semantic ranking.
+**Latest package milestone:** 🚀 **`SharpCoreDB.Graph.Advanced` delivered**  
+Advanced graph analytics and GraphRAG package with community detection, centrality metrics, subgraph analysis, and graph-aware semantic ranking.
 
-**Latest Package Delivered:**
-- ✅ `SharpCoreDB.Graph.Advanced`
-- ✅ GraphRAG ranking and vector integration
-- ✅ SQL graph analytics helpers
-- ✅ Community detection and centrality metrics
-- ✅ Subgraph analysis and profiling utilities
-
-**Server Features Delivered:**
+**Server Features Delivered (.NET stack):**
 - ✅ gRPC protocol (HTTP/2 + HTTP/3, primary protocol)
 - ✅ Binary TCP protocol handler
 - ✅ HTTPS REST API (DatabaseController)
@@ -46,19 +39,22 @@ SharpCoreDB now includes a dedicated **advanced graph analytics and GraphRAG pac
 - ✅ Connection pooling (1000+ concurrent connections)
 - ✅ Health checks & metrics (Prometheus-compatible)
 - ✅ .NET Client library (ADO.NET-style)
-- ✅ Python client (PySharpDB - published to PyPI)
+- ⚠️ Python client (PySharpDB) currently contains partial transport implementations and is tracked as in-progress
 - ✅ JavaScript/TypeScript SDK (published to npm)
 - ✅ Docker + Docker Compose deployment
 - ✅ Cross-platform installers (Windows Service, Linux systemd)
 - ✅ Complete server documentation and examples
 
+**Current implementation audit:** `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`  
+**Project status:** `docs/PROJECT_STATUS.md`
+
 **See documentation:** `docs/INDEX.md`
 
-**Tool compatibility matrix:** `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md`  
-**Tool compatibility limitations:** `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md`  
-**Multi-tenant SaaS reference:** `docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md`  
-**Threat model:** `docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md`  
-**Operations runbook:** `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md`  
+**Tool compatibility matrix:** `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.0.md`  
+**Tool compatibility limitations:** `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md`  
+**Multi-tenant SaaS reference:** `docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md`  
+**Threat model:** `docs/server/MULTITENANT_THREAT_MODEL_v1.7.0.md`  
+**Operations runbook:** `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.7.0.md`  
 **Reference sample:** `Examples/Server/SharpCoreDB.MultiTenantSaaSSample/`
 
 ### ✅ Previously Known Limitation — Resolved
@@ -94,9 +90,9 @@ All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of
 
 ---
 
-#### 🎯 Latest Release (v1.5.0 → v1.6.0)
+#### 🎯 Latest Release (v1.5.0 → v1.7.0)
 
-### New in v1.6.0 compared to v1.5.0
+### New in v1.7.0 compared to v1.5.0
 
 - **Functional package family introduced**
   - `SharpCoreDB.Functional` adds a functional façade over `Database` / `IDatabase`
@@ -113,7 +109,7 @@ All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of
   - These capabilities are now presented as first-class companion modules in the documentation and package ecosystem
 
 - **Core engine and packaging improvements**
-  - Synchronized `1.6.0` package versioning across the SharpCoreDB ecosystem
+  - Synchronized `1.7.0` package versioning across the SharpCoreDB ecosystem
   - Refreshed package documentation for the core engine and companion packages
   - Brotli compression for metadata with backward-compatible format detection
   - Immediate metadata flush and reopen-path fixes for improved durability and startup reliability
@@ -121,7 +117,7 @@ All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of
 
 - **Quality and validation**
   - New functional module tests added for core, Dapper, and EF Core adapters
-  - Zero breaking changes intended from `1.5.0` to `1.6.0`
+  - Zero breaking changes intended from `1.5.0` to `1.7.0`
   - Workspace and targeted adapter test suites validate the new modules successfully
   
 - **📊 Quality Metrics**
@@ -191,43 +187,43 @@ All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.6.0
+dotnet add package SharpCoreDB --version 1.7.0
 
 # Server mode (network database server)
-dotnet add package SharpCoreDB.Server --version 1.6.0
-dotnet add package SharpCoreDB.Client --version 1.6.0
+dotnet add package SharpCoreDB.Server --version 1.7.0
+dotnet add package SharpCoreDB.Client --version 1.7.0
 
 # Distributed features
-dotnet add package SharpCoreDB.Distributed --version 1.6.0
+dotnet add package SharpCoreDB.Distributed --version 1.7.0
 
 # Analytics engine
-dotnet add package SharpCoreDB.Analytics --version 1.6.0
+dotnet add package SharpCoreDB.Analytics --version 1.7.0
 
 # Vector search
-dotnet add package SharpCoreDB.VectorSearch --version 1.6.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.0
 
 # Sync integration
-dotnet add package SharpCoreDB.Provider.Sync --version 1.6.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.7.0
 
 # Graph algorithms
-dotnet add package SharpCoreDB.Graph --version 1.6.0
+dotnet add package SharpCoreDB.Graph --version 1.7.0
 
 # Advanced graph analytics and GraphRAG
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.6.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
 
 # Optional integrations
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.6.0
-dotnet add package SharpCoreDB.Extensions --version 1.6.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
+dotnet add package SharpCoreDB.Extensions --version 1.7.0
 
 # Functional programming adapters (optional packages)
-dotnet add package SharpCoreDB.Functional --version 1.6.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.6.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.6.0
+dotnet add package SharpCoreDB.Functional --version 1.7.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
 ```
 
 ---
 
-## ⚡ Event Sourcing + CQRS Foundation (v1.6.0 / V 1.60)
+## ⚡ Event Sourcing + CQRS Foundation (v1.7.0 / V 1.70)
 
 `SharpCoreDB.EventSourcing` is now available as a dedicated optional package for append-only streams, global ordering, replay, and snapshot persistence in both embedded and server-backed deployments.
 `SharpCoreDB.Projections` is available as an optional projection scaffold package for registration, checkpointing, runner primitives, and OpenTelemetry-ready projection metrics.

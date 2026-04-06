@@ -298,12 +298,14 @@ public sealed class SharpCoreDbMigrationExecutorTests
 
         var executor = new SharpCoreDbMigrationExecutor(services.BuildServiceProvider());
 
-        var processorOptions = new Mock<IMigrationProcessorOptions>(MockBehavior.Strict);
-        processorOptions.SetupGet(x => x.PreviewOnly).Returns(false);
-        processorOptions.SetupGet(x => x.ProviderSwitches).Returns(string.Empty);
-        processorOptions.SetupGet(x => x.Timeout).Returns((int?)null);
+        var processorOptions = new ProcessorOptions
+        {
+            PreviewOnly = false,
+            ProviderSwitches = string.Empty,
+            Timeout = null,
+        };
 
-        var processor = new SharpCoreDbProcessor("sharpcoredb://test", processorOptions.Object, executor);
+        var processor = new SharpCoreDbProcessor("sharpcoredb://test", processorOptions, executor);
 
         // Act
         processor.Execute("DELETE FROM users");
@@ -618,13 +620,14 @@ public sealed class SharpCoreDbMigrationExecutorTests
         return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(), executor);
     }
 
-    private static IMigrationProcessorOptions CreateProcessorOptions()
+    private static ProcessorOptions CreateProcessorOptions()
     {
-        var options = new Mock<IMigrationProcessorOptions>(MockBehavior.Strict);
-        options.SetupGet(x => x.PreviewOnly).Returns(false);
-        options.SetupGet(x => x.ProviderSwitches).Returns(string.Empty);
-        options.SetupGet(x => x.Timeout).Returns((int?)null);
-        return options.Object;
+        return new ProcessorOptions
+        {
+            PreviewOnly = false,
+            ProviderSwitches = string.Empty,
+            Timeout = null,
+        };
     }
 
     private sealed class FakeDbConnection : DbConnection

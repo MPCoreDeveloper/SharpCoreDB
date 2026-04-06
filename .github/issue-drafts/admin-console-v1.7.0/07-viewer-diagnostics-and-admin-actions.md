@@ -27,7 +27,7 @@ Users requested direct access to runtime metrics and common operational actions.
 - Depends on diagnostics endpoint upgrades.
 
 ## Resolution
-Implemented in v1.6.0. Affected files:
+Implemented in v1.7.0. Affected files:
 - `tools/SharpCoreDB.Viewer/Models/DiagnosticsSnapshot.cs` — immutable snapshot record
 - `tools/SharpCoreDB.Viewer/ViewModels/DiagnosticsViewModel.cs` — PRAGMA-based data collection, admin commands
 - `tools/SharpCoreDB.Viewer/Views/DiagnosticsDialog.axaml` — modal diagnostics dialog

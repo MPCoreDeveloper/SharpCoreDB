@@ -17,9 +17,9 @@ Resolved workstreams in repository:
 - [x] `10-documentation-and-adoption-playbook.md` — **RESOLVED**
 - [x] `11-tool-compatibility-ci-smoke-tests.md` — **RESOLVED**
 
-All workstreams complete. Epic 100% delivered for v1.6.0.
+All workstreams complete. Epic 100% delivered for v1.7.0.
 
-This roadmap is based on current `v1.6.0` behavior:
+This roadmap is based on current `v1.7.0` behavior:
 - `tools/SharpCoreDB.Viewer` exists but remains minimal.
 - Server binary protocol is PostgreSQL-wire-compatible in foundation form.
 - Existing docs/spec mention compatibility direction, but broad GUI tool certification and metadata completeness are not finalized.
@@ -70,4 +70,4 @@ Building a full admin console from scratch is expensive; compatibility with matu
 - Epic checklist completed.
 - All child issues closed with tests/docs.
 - Release notes include compatibility status and migration guidance.
-- Version labels/docs aligned to `v1.6.0` policy.
+- Version labels/docs aligned to `v1.7.0` policy.

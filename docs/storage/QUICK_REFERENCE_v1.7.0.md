@@ -1,4 +1,4 @@
-# Quick Reference: v1.6.0 Improvements
+# Quick Reference: v1.7.0 Improvements
 
 **TL;DR:** Critical bug fixes + 60-80% metadata compression. Upgrade immediately.
 
@@ -33,7 +33,7 @@
 
 ### Step 1: Update NuGet
 ```bash
-dotnet add package SharpCoreDB --version 1.6.0
+dotnet add package SharpCoreDB --version 1.7.0
 ```
 
 ### Step 2: No Code Changes Needed!
@@ -70,8 +70,8 @@ else
 
 ## 📚 Full Documentation
 
-- **Technical Details:** `docs/storage/METADATA_IMPROVEMENTS_v1.6.0.md`
-- **Progression Report:** `docs/PROGRESSION_V1.3.5_TO_v1.6.0.md`
+- **Technical Details:** `docs/storage/METADATA_IMPROVEMENTS_v1.7.0.md`
+- **Progression Report:** `docs/PROGRESSION_V1.3.5_TO_v1.7.0.md`
 - **Changelog:** `docs/CHANGELOG.md`
 
 ---
@@ -84,6 +84,6 @@ Fixes critical reopen issues and provides significant storage optimization with 
 
 ---
 
-**Version:** 1.6.0  
+**Version:** 1.7.0  
 **Date:** 2026-02-20  
 **Status:** ✅ Production Ready

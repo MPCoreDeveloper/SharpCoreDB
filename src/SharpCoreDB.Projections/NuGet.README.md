@@ -1,4 +1,4 @@
-# SharpCoreDB.Projections v1.6.0
+# SharpCoreDB.Projections v1.7.0
 
 Optional projection package for SharpCoreDB Event Sourcing.
 
@@ -20,9 +20,9 @@ Use this package when you want to consume stored events and turn them into read 
 - It does not dispatch commands
 - It does not impose a full CQRS framework
 
-## Highlights in v1.6.0
+## Highlights in v1.7.0
 
-- Synchronized with the SharpCoreDB `1.6.0` package line
+- Synchronized with the SharpCoreDB `1.7.0` package line
 - Documents durable SharpCoreDB-backed checkpoints and hosted worker support
 - Includes OpenTelemetry-ready projection metrics in the baseline package guidance
 
@@ -44,4 +44,4 @@ Use this package when you want to consume stored events and turn them into read 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Projections --version 1.6.0
+dotnet add package SharpCoreDB.Projections --version 1.7.0

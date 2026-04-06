@@ -1,10 +1,10 @@
 # SharpCoreDB.Graph.Advanced
 
-**Version:** 1.6.0  
+**Version:** 1.7.0  
 **Status:** ✅ Production Ready
 
 **Target Framework:** .NET 10 / C# 14  
-**Package:** `SharpCoreDB.Graph.Advanced` v1.6.0
+**Package:** `SharpCoreDB.Graph.Advanced` v1.7.0
 
 ---
 
@@ -39,7 +39,7 @@ In short:
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.6.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
 ```
 
 ### Dependencies
@@ -70,4 +70,4 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.6.0
 
 ---
 
-**Version:** 1.6.0 | **Package:** `SharpCoreDB.Graph.Advanced` | **Phase:** 12 Complete
+**Version:** 1.7.0 | **Package:** `SharpCoreDB.Graph.Advanced` | **Phase:** 12 Complete

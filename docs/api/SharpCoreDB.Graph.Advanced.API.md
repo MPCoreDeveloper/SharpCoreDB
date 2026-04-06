@@ -1,6 +1,6 @@
 # SharpCoreDB.Graph.Advanced API Reference
 
-**Version:** 1.6.0 (Phase 12 Complete)  
+**Version:** 1.7.0 (Phase 12 Complete)  
 **Target Framework:** .NET 10  
 **Language:** C# 14
 
@@ -580,7 +580,7 @@ All methods follow consistent error handling patterns:
 
 ## Version History
 
-- **1.6.0**: Complete GraphRAG implementation with vector search integration
+- **1.7.0**: Complete GraphRAG implementation with vector search integration
 - **1.0.0**: Initial graph analytics algorithms (community detection, metrics, subgraphs)
 - **0.1.0**: Foundation algorithms and data structures
 

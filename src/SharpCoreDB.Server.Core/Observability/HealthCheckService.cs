@@ -74,7 +74,7 @@ public sealed class HealthCheckService(
         {
             Status = overallStatus,
             Timestamp = DateTimeOffset.UtcNow,
-            Version = "1.6.0",
+            Version = "1.7.0",
             UptimeSeconds = (long)_uptime.Elapsed.TotalSeconds,
             ActiveSessions = _sessionManager.ActiveSessionCount,
             ActiveConnections = snapshot.ActiveConnections,

@@ -1,4 +1,4 @@
-# pg_catalog and information_schema Coverage — V 1.60
+# pg_catalog and information_schema Coverage — V 1.70
 
 **SharpCoreDB Server** intercepts PostgreSQL catalog queries and returns live schema metadata, enabling GUI tools to introspect tables, columns, types, and schemas without requiring native catalog storage.
 
@@ -26,7 +26,7 @@ Both the simple query path (`Q` message) and the extended query path (`P`/`B`/`E
 | Expression | Returns |
 |---|---|
 | `current_database()` | Active database name |
-| `version()` | `SharpCoreDB 1.6.0 on .NET 10 (PostgreSQL protocol compatible)` |
+| `version()` | `SharpCoreDB 1.7.0 on .NET 10 (PostgreSQL protocol compatible)` |
 | `current_user` | Authenticated user name |
 | `session_user` | Authenticated user name |
 | `current_schema()` | `public` |
@@ -107,7 +107,7 @@ SharpCoreDB engine types are mapped to standard SQL and PostgreSQL type names:
 | Complex multi-join catalog queries | May not match simple patterns | Tools receive empty rows without error |
 | `WHERE` clause parsing | Only equality filters on `table_name`, `table_schema`, `schemaname` | Other filters return all rows |
 
-See `TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md` for full gap list and workarounds.
+See `TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md` for full gap list and workarounds.
 
 ---
 
@@ -135,4 +135,4 @@ See `TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md` for full gap list and workarounds
 
 ---
 
-*Phase 02 of admin-console roadmap — implemented in SharpCoreDB V 1.60*
+*Phase 02 of admin-console roadmap — implemented in SharpCoreDB V 1.70*

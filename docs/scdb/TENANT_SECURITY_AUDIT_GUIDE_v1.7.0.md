@@ -1,4 +1,4 @@
-# Tenant Security Audit Guide (v1.6.0)
+# Tenant Security Audit Guide (v1.7.0)
 
 ## Overview
 SharpCoreDB Server emits tenant-aware security audit events for login, connect, grant changes, provisioning, and denied access decisions.

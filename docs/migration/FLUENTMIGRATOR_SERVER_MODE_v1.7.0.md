@@ -1,19 +1,19 @@
-# FluentMigrator with SharpCoreDB — Server Mode Guide (v1.6.0)
+# FluentMigrator with SharpCoreDB — Server Mode Guide (v1.7.0)
 
 **Scope:** `SharpCoreDB.Extensions` FluentMigrator integration in **server/network** scenarios  
-**Version label:** **v1.6.0 (V 1.60)**
+**Version label:** **v1.7.0 (V 1.70)**
 
 ---
 
 ## Decision Summary (Package Placement)
 
-FluentMigrator support is intentionally delivered through `SharpCoreDB.Extensions` for v1.6.0 because it is currently an integration/glue feature (DI registration + migration processor + execution adapters), not a standalone provider domain.
+FluentMigrator support is intentionally delivered through `SharpCoreDB.Extensions` for v1.7.0 because it is currently an integration/glue feature (DI registration + migration processor + execution adapters), not a standalone provider domain.
 
 Dotmim.Sync remains a separate package (`SharpCoreDB.Provider.Sync`) because it has a broader provider/runtime scope and independent lifecycle.
 
 For the full architecture decision, see:
 
-- `docs/proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.6.0.md`
+- `docs/proposals/ADR_FLUENTMIGRATOR_PACKAGE_PLACEMENT_v1.7.0.md`
 
 ---
 
@@ -201,7 +201,7 @@ migrationRunner.MigrateUp();
 
 ## 10. Related Docs
 
-- `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md`
+- `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
 - `docs/server/CLIENT_GUIDE.md`
 - `docs/migration/MIGRATION_GUIDE.md`
 - `src/SharpCoreDB.Extensions/README.md`

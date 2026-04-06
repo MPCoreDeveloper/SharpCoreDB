@@ -11,7 +11,7 @@ Completed in workspace. Pending git commit/push for the latest phase-13 changes 
 - Implemented `TenantBackupRestoreService` with validation and rollback handling.
 - Added `TenantMigrationPlanningService` with migration steps and execution hooks.
 - Exposed tenant backup, restore, and migration-plan REST endpoints.
-- Published operational guidance in `docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.6.0.md`.
+- Published operational guidance in `docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md`.
 
 ## Validation
 - Integration tests cover restore correctness and rollback behavior.

@@ -1,4 +1,4 @@
-# SharpCoreDB Binary Protocol Specification (v1.6.0)
+# SharpCoreDB Binary Protocol Specification (v1.7.0)
 
 **Protocol Version:** 1.0  
 **Compatible With:** PostgreSQL Wire Protocol (extended)  
@@ -103,7 +103,7 @@ Value: null-terminated string
 ```
 
 **Common Parameters:**
-- server_version: "1.6.0"
+- server_version: "1.7.0"
 - client_encoding: "UTF8"
 - server_encoding: "UTF8"
 - session_authorization: username

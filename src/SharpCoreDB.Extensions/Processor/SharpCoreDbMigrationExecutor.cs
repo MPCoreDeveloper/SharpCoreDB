@@ -131,9 +131,9 @@ public sealed class SharpCoreDbMigrationExecutor(IServiceProvider serviceProvide
 
         if (TryGetDatabase(out var database))
         {
-            var dapperConnection = database.GetDapperConnection();
-            dapperConnection.Open();
-            return dapperConnection;
+            var operationConnection = CreateEmbeddedOperationConnection(database);
+            EnsureOpen(operationConnection);
+            return operationConnection;
         }
 
         return null;
@@ -195,6 +195,12 @@ public sealed class SharpCoreDbMigrationExecutor(IServiceProvider serviceProvide
 
         connection = default!;
         return false;
+    }
+
+    private static DbConnection CreateEmbeddedOperationConnection(IDatabase database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        return new global::SharpCoreDB.Extensions.DapperConnection(database, "sharpcoredb://embedded");
     }
 
     private static void EnsureOpen(DbConnection connection)

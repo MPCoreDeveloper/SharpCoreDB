@@ -53,9 +53,9 @@ Typical scenarios:
 - Systems that build read models from a global event feed
 - Test suites that want in-memory event storage first and durable storage later
 
-## v1.6.0 Highlights
+## v1.7.0 Highlights
 
-This guide matches the synchronized `1.6.0` package release and covers the current event store feature set: in-memory and persistent stores, ordered global feeds, snapshots, snapshot-aware aggregate loading, and optional upcasting for schema evolution.
+This guide matches the synchronized `1.7.0` package release and covers the current event store feature set: in-memory and persistent stores, ordered global feeds, snapshots, snapshot-aware aggregate loading, and optional upcasting for schema evolution.
 
 ## Scope
 
@@ -75,7 +75,7 @@ This package does **not** implement a full CQRS framework, aggregate orchestrati
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 1.6.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.0
 ```
 
 ## Optionality

@@ -1,7 +1,7 @@
-# SharpCoreDB ODBC/JDBC Driver Strategy & Feasibility (v1.6.0)
+# SharpCoreDB ODBC/JDBC Driver Strategy & Feasibility (v1.7.0)
 
 **Status:** Decision Record — Approved  
-**Version:** v1.6.0  
+**Version:** v1.7.0  
 **Audience:** Engineering, Product, Enterprise customers
 
 ---
@@ -217,7 +217,7 @@ No new development required.
 
 ## Decision Record
 
-**Decision:** Proceed with **Option A** (PostgreSQL adapter) immediately for v1.6.0.
+**Decision:** Proceed with **Option A** (PostgreSQL adapter) immediately for v1.7.0.
 
 **Rationale:**
 1. The binary protocol endpoint is already deployed and certified for PostgreSQL drivers.
@@ -296,4 +296,4 @@ try (Connection conn = DriverManager.getConnection(url, "username", "password"))
 
 ---
 
-*This document is version-aligned to SharpCoreDB v1.6.0. Review at each major version milestone.*
+*This document is version-aligned to SharpCoreDB v1.7.0. Review at each major version milestone.*

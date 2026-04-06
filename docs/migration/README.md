@@ -6,7 +6,7 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 
 ## 🎯 Migration Guides
 
-### **[FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md)** ✅ v1.6.0
+### **[FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)** ✅ v1.7.0
 **Detailed guide for local/in-process schema migrations with SharpCoreDB.Extensions**
 
 **Best for:**
@@ -20,7 +20,7 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 - `__SharpMigrations` version-table behavior
 - Troubleshooting and production checklist
 
-### **[FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md)** ✅ v1.6.0
+### **[FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)** ✅ v1.7.0
 **Detailed guide for server deployments: in-process host and remote gRPC migration execution**
 
 **Best for:**
@@ -69,12 +69,12 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 
 ### Scenario 1: FluentMigrator in Embedded Mode
 **Goal:** Run schema migrations locally in app/service process  
-**Guide:** [FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md)  
+**Guide:** [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)  
 **Benefit:** Minimal operational complexity, direct engine execution
 
 ### Scenario 2: FluentMigrator in Server Mode
 **Goal:** Run schema migrations for server deployments (hosted or remote over gRPC)  
-**Guide:** [FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md)  
+**Guide:** [FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)  
 **Benefit:** Deployment-pipeline friendly and secure remote orchestration
 
 ### Scenario 3: Migrate Vector Search from SQLite
@@ -129,8 +129,8 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 
 | Document | Purpose | Audience | Read Time |
 |----------|---------|----------|-----------|
-| [FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.6.0.md) | Embedded migration architecture and operations | Developers/Architects | 10-15 min |
-| [FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.6.0.md) | Server migration architecture (host + gRPC) | DevOps/Architects | 12-18 min |
+| [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md) | Embedded migration architecture and operations | Developers/Architects | 10-15 min |
+| [FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md) | Server migration architecture (host + gRPC) | DevOps/Architects | 12-18 min |
 | [SQLITE_VECTORS_TO_SHARPCORE.md](./SQLITE_VECTORS_TO_SHARPCORE.md) | Vector migration (9 steps) | DevOps/Architects | 15-20 min |
 | [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) | Storage format migration | DevOps | 10-15 min |
 | [../USER_MANUAL.md](../USER_MANUAL.md) | General database usage | Developers | 30-40 min |

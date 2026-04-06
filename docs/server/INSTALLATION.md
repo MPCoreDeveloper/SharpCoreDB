@@ -1,6 +1,6 @@
 # SharpCoreDB Server — Installation Guide
 
-**Version:** 1.6.0  
+**Version:** 1.7.0  
 **Platforms:** Windows, Linux, macOS, Docker  
 **Requirements:** .NET 10 Runtime
 
@@ -112,7 +112,7 @@ environment:
 ### Build Custom Image
 
 ```bash
-docker build -t sharpcoredb/server:1.6.0 -f src/SharpCoreDB.Server/Dockerfile .
+docker build -t sharpcoredb/server:1.7.0 -f src/SharpCoreDB.Server/Dockerfile .
 ```
 
 ---
@@ -260,7 +260,7 @@ cd installers/macos
 bash build_pkg.sh
 
 # Install the .pkg
-sudo installer -pkg SharpCoreDB-Server-1.6.0.pkg -target /
+sudo installer -pkg SharpCoreDB-Server-1.7.0.pkg -target /
 ```
 
 ### Manual Install
@@ -343,7 +343,7 @@ After installing on any platform, verify the server is running:
 curl -fsk https://localhost:8443/api/v1/health
 
 # Expected response:
-# {"status":"healthy","timestamp":"...","version":"1.6.0",...}
+# {"status":"healthy","timestamp":"...","version":"1.7.0",...}
 
 # 2. Detailed health (no auth required)
 curl -fsk https://localhost:8443/api/v1/health/detailed

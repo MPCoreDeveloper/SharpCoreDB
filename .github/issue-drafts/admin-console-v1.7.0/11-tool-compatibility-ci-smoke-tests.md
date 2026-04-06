@@ -6,7 +6,7 @@ Add CI smoke tests for core external-tool compatibility scenarios.
 
 ## Implementation Notes
 
-Completed for v1.6.0. Deliverables: `tests/CompatibilitySmoke/` and `.github/workflows/compatibility-smoke.yml`.
+Completed for v1.7.0. Deliverables: `tests/CompatibilitySmoke/` and `.github/workflows/compatibility-smoke.yml`.
 
 **Delivered:**
 

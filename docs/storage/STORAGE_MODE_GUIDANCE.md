@@ -1,6 +1,6 @@
-# Storage Mode Guidance — v1.6.0
+# Storage Mode Guidance — v1.7.0
 
-**Applies to:** SharpCoreDB v1.6.0+ (.NET 10 / C# 14)
+**Applies to:** SharpCoreDB v1.7.0+ (.NET 10 / C# 14)
 
 ---
 
@@ -38,11 +38,11 @@ If omitted, the default is **Columnar** (unless overridden by `DatabaseConfig.St
 
 DELETE and UPDATE work correctly. The PK B-tree index is used to locate storage positions for logical deletion (index removal). Physical space is reclaimed during compaction.
 
-### Without a PRIMARY KEY (fixed in v1.6.0)
+### Without a PRIMARY KEY (fixed in v1.7.0)
 
-> **History:** Prior to v1.6.0, DELETE on Columnar tables without a PRIMARY KEY was a **silent no-op** — rows were not removed, no error was raised. This was a critical data integrity bug.
+> **History:** Prior to v1.7.0, DELETE on Columnar tables without a PRIMARY KEY was a **silent no-op** — rows were not removed, no error was raised. This was a critical data integrity bug.
 
-As of v1.6.0, Columnar DELETE without a PK falls back to a full storage scan (`engine.GetAllRecords()`) to locate matching rows. This works correctly but is **O(n)** for every delete operation.
+As of v1.7.0, Columnar DELETE without a PK falls back to a full storage scan (`engine.GetAllRecords()`) to locate matching rows. This works correctly but is **O(n)** for every delete operation.
 
 ### Recommendation
 

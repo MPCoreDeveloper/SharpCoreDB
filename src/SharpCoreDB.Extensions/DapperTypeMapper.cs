@@ -233,12 +233,12 @@ public class EnhancedDapperParameter : DapperParameter
     /// <summary>
     /// Gets or sets the precision for decimal types.
     /// </summary>
-    public byte Precision { get; set; }
+    public override byte Precision { get; set; }
 
     /// <summary>
     /// Gets or sets the scale for decimal types.
     /// </summary>
-    public byte Scale { get; set; }
+    public override byte Scale { get; set; }
 
     /// <summary>
     /// Gets or sets whether the parameter is a Unicode string.

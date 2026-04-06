@@ -22,7 +22,7 @@ Upgrade diagnostics surfaces for admin and monitoring workflows.
   - `ObservabilityContractTests.GetSnapshot_AfterTraffic_ShouldExposeActionableCounters`
   - `ObservabilityContractTests.GetDetailedHealth_WhenErrorsPresent_ShouldSurfaceTriageSignals`
 - Added operator documentation:
-  - `docs/server/OBSERVABILITY_SETUP_v1.6.0.md` with Prometheus JSON-scrape baseline and dashboard panel queries
+  - `docs/server/OBSERVABILITY_SETUP_v1.7.0.md` with Prometheus JSON-scrape baseline and dashboard panel queries
   - Updated `docs/server/REST_API.md` and `docs/server/QUICKSTART.md` examples for upgraded diagnostics contracts
 
 ## Why

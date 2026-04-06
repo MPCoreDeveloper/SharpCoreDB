@@ -6,7 +6,7 @@ Publish a practical adoption playbook for admin and tooling workflows.
 
 ## Implementation Notes
 
-Completed for v1.6.0. Deliverable: `docs/server/ADMIN_TOOLING_GUIDE.md`.
+Completed for v1.7.0. Deliverable: `docs/server/ADMIN_TOOLING_GUIDE.md`.
 
 **Delivered content:**
 - Three-endpoint overview (binary protocol / gRPC / HTTPS REST) with default ports.
@@ -39,7 +39,7 @@ Users need clear guidance on what works now, what is in progress, and recommende
 ## Acceptance Criteria
 - Docs enable fast, low-friction onboarding. ✅
 - Limitations and support levels are transparent. ✅
-- Docs remain version-aligned to `v1.6.0` policy. ✅
+- Docs remain version-aligned to `v1.7.0` policy. ✅
 
 ## Dependencies
 - Finalization workstream tied to all roadmap outputs.

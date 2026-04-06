@@ -1,4 +1,4 @@
-# SharpCoreDB.Server v1.6.0 - Network Database Server
+# SharpCoreDB.Server v1.7.0 - Network Database Server
 
 **High-Performance Network Database Server for .NET 10**
 
@@ -133,17 +133,17 @@ npm install @sharpcoredb/client
 
 **Security Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/SECURITY.md
 
-**Tool Compatibility Matrix:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md
+**Tool Compatibility Matrix:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.0.md
 
-**Tool Compatibility Limitations:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md
+**Tool Compatibility Limitations:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md
 
-**Multi-Tenant SaaS Reference:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md
+**Multi-Tenant SaaS Reference:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md
 
-**Multi-Tenant Threat Model:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md
+**Multi-Tenant Threat Model:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_THREAT_MODEL_v1.7.0.md
 
-**Operations Runbook:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md
+**Operations Runbook:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.7.0.md
 
-**Tenant Backup/Restore/Migration Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.6.0.md
+**Tenant Backup/Restore/Migration Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md
 
 **Reference Sample:** https://github.com/MPCoreDeveloper/SharpCoreDB/tree/master/Examples/Server/SharpCoreDB.MultiTenantSaaSSample
 
@@ -165,4 +165,4 @@ MIT License - See https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LIC
 
 ---
 
-**Version:** 1.6.0 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready
+**Version:** 1.7.0 | **Release Date:** March 8, 2026 | **Status:** ✅ Production Ready

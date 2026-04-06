@@ -1,11 +1,11 @@
-# SharpCoreDB.CQRS Quickstart (v1.6.0)
+# SharpCoreDB.CQRS Quickstart (v1.7.0)
 
 This quickstart shows the fastest way to run CQRS + outbox dispatch with `SharpCoreDB.CQRS`.
 
 ## 1) Install
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.6.0
+dotnet add package SharpCoreDB.CQRS --version 1.7.0
 ```
 
 ## 2) Define a command and handler

@@ -1,12 +1,12 @@
-# SharpCoreDB.EntityFrameworkCore v1.6.0
+# SharpCoreDB.EntityFrameworkCore v1.7.0
 
 **Entity Framework Core Provider for SharpCoreDB**
 
 Full EF Core integration with SharpCoreDB's encryption and performance for modern .NET applications.
 
-## ✨ What's New in v1.6.0
+## ✨ What's New in v1.7.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.6.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.0
 - ✅ Entity Framework Core integration
 - ✅ Enterprise distributed features support
 - ✅ Zero breaking changes
@@ -49,12 +49,12 @@ var users = await context.Users.Where(u => u.IsActive).ToListAsync();
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.6.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
 ```
 
-**Requires:** SharpCoreDB v1.6.0+, EntityFrameworkCore v8.0+
+**Requires:** SharpCoreDB v1.7.0+, EntityFrameworkCore v8.0+
 
 ---
 
-**Version:** 1.6.0 | **Status:** ✅ Production Ready
+**Version:** 1.7.0 | **Status:** ✅ Production Ready
 

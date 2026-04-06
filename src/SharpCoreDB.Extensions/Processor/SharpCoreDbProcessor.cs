@@ -4,6 +4,7 @@ using System.Text;
 using FluentMigrator;
 using FluentMigrator.Expressions;
 using FluentMigrator.Model;
+using FluentMigrator.Runner.Processors;
 
 namespace SharpCoreDB.Extensions.Processor;
 
@@ -12,13 +13,20 @@ namespace SharpCoreDB.Extensions.Processor;
 /// </summary>
 public sealed class SharpCoreDbProcessor(
     string connectionString,
-    IMigrationProcessorOptions options,
+    ProcessorOptions options,
     SharpCoreDbMigrationExecutor executor) : IMigrationProcessor
 {
     private readonly SharpCoreDbMigrationExecutor _executor = executor;
 
+    /// <summary>
+    /// Gets strongly typed processor options.
+    /// </summary>
+    public ProcessorOptions ProcessorOptions { get; } = options;
+
+#pragma warning disable CS0612
     /// <inheritdoc />
-    public IMigrationProcessorOptions Options { get; } = options;
+    public IMigrationProcessorOptions Options => ProcessorOptions;
+#pragma warning restore CS0612
 
     /// <inheritdoc />
     public string ConnectionString { get; } = connectionString;
