@@ -2,7 +2,9 @@
 Publish a complete SaaS reference sample and documentation set for multi-tenant deployments.
 
 ## Status
-Completed in workspace.
+**State:** RESOLVED
+
+Completed in workspace and committed/pushed to repository.
 
 ## Completed Implementation Notes
 - Added a multi-tenant SaaS reference sample under `Examples/Server/SharpCoreDB.MultiTenantSaaSSample`.

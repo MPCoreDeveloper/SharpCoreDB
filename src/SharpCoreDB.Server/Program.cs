@@ -215,6 +215,8 @@ builder.Services.Configure<ServerConfiguration>(
 builder.Services.AddSingleton<NetworkServer>();
 builder.Services.AddSingleton<DatabaseRegistry>();
 builder.Services.AddSingleton<TenantQuotaEnforcementService>();
+builder.Services.AddSingleton<TenantBackupRestoreService>();
+builder.Services.AddSingleton<TenantMigrationPlanningService>();
 builder.Services.AddSingleton<SessionManager>();
 builder.Services.AddSingleton<RbacService>();
 builder.Services.AddSingleton<UserAuthenticationService>();

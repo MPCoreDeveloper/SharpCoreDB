@@ -112,6 +112,8 @@ public sealed class TestServerFixture : IAsyncLifetime
         services.AddSingleton(Options.Create(testConfig));
         services.AddSingleton<DatabaseRegistry>();
         services.AddSingleton<TenantQuotaEnforcementService>();
+        services.AddSingleton<TenantBackupRestoreService>();
+        services.AddSingleton<TenantMigrationPlanningService>();
         services.AddSingleton<SessionManager>();
         services.AddSingleton<RbacService>();
         services.AddSingleton<UserAuthenticationService>();

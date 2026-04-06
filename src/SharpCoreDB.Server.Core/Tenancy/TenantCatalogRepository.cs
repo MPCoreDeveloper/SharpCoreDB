@@ -394,6 +394,51 @@ public sealed class TenantCatalogRepository(
     }
 
     /// <summary>
+    /// Updates tenant database location metadata.
+    /// </summary>
+    public async Task UpdateTenantDatabaseLocationAsync(
+        string tenantId,
+        string databaseName,
+        string databasePath,
+        string? storageMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+
+        lock (_catalogLock)
+        {
+            try
+            {
+                var escapedTenantId = EscapeSql(tenantId);
+                var escapedDatabaseName = EscapeSql(databaseName);
+                var escapedPath = EscapeSql(databasePath);
+                var modeUpdate = string.IsNullOrWhiteSpace(storageMode)
+                    ? string.Empty
+                    : $", storage_mode = '{EscapeSql(storageMode)}'";
+
+                var sql = $"""
+                    UPDATE tenant_databases
+                    SET database_path = '{escapedPath}'{modeUpdate}
+                    WHERE tenant_id = '{escapedTenantId}'
+                      AND database_name = '{escapedDatabaseName}'
+                    """;
+
+                masterDatabase.Database.ExecuteSQL(sql);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Failed to update location for database '{DatabaseName}' tenant '{TenantId}'",
+                    databaseName,
+                    tenantId);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
     /// Retrieves all databases for a tenant.
     /// </summary>
     public async Task<IReadOnlyList<TenantDatabaseMapping>> GetTenantDatabasesAsync(

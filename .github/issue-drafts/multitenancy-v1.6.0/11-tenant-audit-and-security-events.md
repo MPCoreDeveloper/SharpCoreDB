@@ -2,7 +2,9 @@
 Implement tenant-aware audit trail and security event logging.
 
 ## Status
-Completed in workspace.
+**State:** RESOLVED
+
+Completed in workspace and committed/pushed to repository.
 
 ## Completed Implementation Notes
 - Added tenant security audit event model, in-memory store, sink abstraction, and emission service.

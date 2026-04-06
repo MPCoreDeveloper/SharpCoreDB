@@ -2,14 +2,17 @@
 Deliver first-class multi-tenant SaaS support in `SharpCoreDB.Server` on top of current `v1.6.0` capabilities.
 
 ## Status
-Implemented in workspace:
+**State:** RESOLVED for the current multitenancy draft set in the repository.
+
+Resolved workstreams in repository:
 - [x] `09-tenant-encryption-key-management.md`
 - [x] `10-per-tenant-quotas-and-limits.md`
 - [x] `11-tenant-audit-and-security-events.md`
 - [x] `12-saas-sample-docs-and-threat-model.md`
+- [x] `13-tenant-ops-backup-restore-migrate.md`
 
-Next planned work:
-- [ ] `13-tenant-ops-backup-restore-migrate.md`
+Roadmap note:
+- [x] Multitenancy roadmap implementation complete in the current draft set.
 
 Current baseline in codebase:
 - Multi-database hosting in one server instance is available (`DatabaseRegistry`, `ServerConfiguration.Databases`).

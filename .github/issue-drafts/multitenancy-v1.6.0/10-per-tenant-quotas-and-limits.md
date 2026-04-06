@@ -2,7 +2,9 @@
 Add configurable per-tenant quotas and limit enforcement.
 
 ## Status
-Completed in workspace.
+**State:** RESOLVED
+
+Completed in workspace and committed/pushed to repository.
 
 ## Completed Implementation Notes
 - Added `TenantQuotaPolicy` model and tenant quota catalog persistence.

@@ -24,6 +24,8 @@ public sealed class TenantsController(
     TenantProvisioningService provisioningService,
     TenantEncryptionKeyRotationService keyRotationService,
     TenantQuotaEnforcementService quotaEnforcementService,
+    TenantBackupRestoreService backupRestoreService,
+    TenantMigrationPlanningService migrationPlanningService,
     TenantCatalogRepository catalogRepository,
     ILogger<TenantsController> logger) : ControllerBase
 {
@@ -454,6 +456,160 @@ public sealed class TenantsController(
             UpdatedAt = effective.UpdatedAt,
         });
     }
+
+    /// <summary>
+    /// Creates a tenant-scoped backup export.
+    /// POST /api/v1/tenants/{tenantId}/databases/{databaseName}/backup
+    /// </summary>
+    [HttpPost("{tenantId}/databases/{databaseName}/backup")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<TenantBackupApiResponse>> CreateTenantBackup(
+        string tenantId,
+        string databaseName,
+        [FromBody] CreateTenantBackupApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.BackupDirectory))
+        {
+            return BadRequest(new ErrorResponse { Message = "BackupDirectory is required" });
+        }
+
+        var tenant = await catalogRepository.GetTenantByIdAsync(tenantId, cancellationToken);
+        if (tenant is null)
+        {
+            return NotFound(new ErrorResponse { Message = "Tenant not found" });
+        }
+
+        var operation = await backupRestoreService.CreateBackupAsync(
+            tenantId,
+            databaseName,
+            request.BackupDirectory,
+            request.IdempotencyKey ?? Guid.NewGuid().ToString("N"),
+            cancellationToken);
+
+        if (operation.Status == TenantDataOperationStatus.Failed)
+        {
+            return StatusCode(500, new ErrorResponse { Message = operation.ErrorMessage ?? "Backup failed" });
+        }
+
+        return Ok(new TenantBackupApiResponse
+        {
+            OperationId = operation.OperationId,
+            TenantId = operation.TenantId,
+            DatabaseName = operation.DatabaseName,
+            BackupPath = operation.BackupPath,
+            BackupSizeBytes = operation.BackupSizeBytes,
+            Status = operation.Status.ToString(),
+            StartedAt = operation.StartedAt,
+            CompletedAt = operation.CompletedAt,
+        });
+    }
+
+    /// <summary>
+    /// Restores a tenant database from a tenant-scoped backup export.
+    /// POST /api/v1/tenants/{tenantId}/databases/{databaseName}/restore
+    /// </summary>
+    [HttpPost("{tenantId}/databases/{databaseName}/restore")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<TenantRestoreApiResponse>> RestoreTenantBackup(
+        string tenantId,
+        string databaseName,
+        [FromBody] RestoreTenantBackupApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.BackupPath))
+        {
+            return BadRequest(new ErrorResponse { Message = "BackupPath is required" });
+        }
+
+        var tenant = await catalogRepository.GetTenantByIdAsync(tenantId, cancellationToken);
+        if (tenant is null)
+        {
+            return NotFound(new ErrorResponse { Message = "Tenant not found" });
+        }
+
+        var operation = await backupRestoreService.RestoreBackupAsync(
+            tenantId,
+            databaseName,
+            request.BackupPath,
+            request.TargetDatabasePath,
+            request.IdempotencyKey ?? Guid.NewGuid().ToString("N"),
+            cancellationToken);
+
+        if (operation.Status == TenantDataOperationStatus.Failed)
+        {
+            return StatusCode(500, new ErrorResponse { Message = operation.ErrorMessage ?? "Restore failed" });
+        }
+
+        return Ok(new TenantRestoreApiResponse
+        {
+            OperationId = operation.OperationId,
+            TenantId = operation.TenantId,
+            DatabaseName = operation.DatabaseName,
+            SourceBackupPath = operation.SourceBackupPath,
+            RestoredDatabasePath = operation.RestoredDatabasePath,
+            ValidationPassed = operation.ValidationPassed,
+            RollbackApplied = operation.RollbackApplied,
+            Status = operation.Status.ToString(),
+            StartedAt = operation.StartedAt,
+            CompletedAt = operation.CompletedAt,
+        });
+    }
+
+    /// <summary>
+    /// Creates a migration plan for moving a tenant database to another server instance.
+    /// POST /api/v1/tenants/{tenantId}/databases/{databaseName}/migration-plan
+    /// </summary>
+    [HttpPost("{tenantId}/databases/{databaseName}/migration-plan")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<TenantMigrationPlanApiResponse>> CreateTenantMigrationPlan(
+        string tenantId,
+        string databaseName,
+        [FromBody] CreateTenantMigrationPlanApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.TargetServer) || string.IsNullOrWhiteSpace(request.ExportDirectory))
+        {
+            return BadRequest(new ErrorResponse { Message = "TargetServer and ExportDirectory are required" });
+        }
+
+        var tenant = await catalogRepository.GetTenantByIdAsync(tenantId, cancellationToken);
+        if (tenant is null)
+        {
+            return NotFound(new ErrorResponse { Message = "Tenant not found" });
+        }
+
+        var plan = await migrationPlanningService.CreateMigrationPlanAsync(
+            tenantId,
+            databaseName,
+            request.TargetServer,
+            request.ExportDirectory,
+            cancellationToken);
+
+        return Ok(new TenantMigrationPlanApiResponse
+        {
+            PlanId = plan.PlanId,
+            TenantId = plan.TenantId,
+            DatabaseName = plan.DatabaseName,
+            SourceDatabasePath = plan.SourceDatabasePath,
+            TargetServer = plan.TargetServer,
+            ExportArtifactPath = plan.ExportArtifactPath,
+            DatabaseSizeBytes = plan.DatabaseSizeBytes,
+            Steps = plan.Steps,
+            ExportHook = plan.ExecutionHooks.ExportHook,
+            RestoreHook = plan.ExecutionHooks.RestoreHook,
+            ValidationHook = plan.ExecutionHooks.ValidationHook,
+            CreatedAt = plan.CreatedAt,
+        });
+    }
+
+    // ...existing code...
 }
 
 // API Request/Response DTOs
@@ -628,4 +784,83 @@ public sealed class TenantQuotaApiResponse
     public required long MaxStorageMb { get; init; }
     public required int MaxBatchSize { get; init; }
     public required DateTime? UpdatedAt { get; init; }
+}
+
+/// <summary>
+/// Request to create a tenant backup.
+/// </summary>
+public sealed class CreateTenantBackupApiRequest
+{
+    public required string BackupDirectory { get; init; }
+    public string? IdempotencyKey { get; init; }
+}
+
+/// <summary>
+/// Response from tenant backup request.
+/// </summary>
+public sealed class TenantBackupApiResponse
+{
+    public required string OperationId { get; init; }
+    public required string TenantId { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string BackupPath { get; init; }
+    public required long BackupSizeBytes { get; init; }
+    public required string Status { get; init; }
+    public required DateTime StartedAt { get; init; }
+    public required DateTime? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// Request to restore a tenant backup.
+/// </summary>
+public sealed class RestoreTenantBackupApiRequest
+{
+    public required string BackupPath { get; init; }
+    public string? TargetDatabasePath { get; init; }
+    public string? IdempotencyKey { get; init; }
+}
+
+/// <summary>
+/// Response from tenant restore request.
+/// </summary>
+public sealed class TenantRestoreApiResponse
+{
+    public required string OperationId { get; init; }
+    public required string TenantId { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string SourceBackupPath { get; init; }
+    public required string RestoredDatabasePath { get; init; }
+    public required bool ValidationPassed { get; init; }
+    public required bool RollbackApplied { get; init; }
+    public required string Status { get; init; }
+    public required DateTime StartedAt { get; init; }
+    public required DateTime? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// Request to create a tenant migration plan.
+/// </summary>
+public sealed class CreateTenantMigrationPlanApiRequest
+{
+    public required string TargetServer { get; init; }
+    public required string ExportDirectory { get; init; }
+}
+
+/// <summary>
+/// Response from tenant migration plan request.
+/// </summary>
+public sealed class TenantMigrationPlanApiResponse
+{
+    public required string PlanId { get; init; }
+    public required string TenantId { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string SourceDatabasePath { get; init; }
+    public required string TargetServer { get; init; }
+    public required string ExportArtifactPath { get; init; }
+    public required long DatabaseSizeBytes { get; init; }
+    public required string[] Steps { get; init; }
+    public required string ExportHook { get; init; }
+    public required string RestoreHook { get; init; }
+    public required string ValidationHook { get; init; }
+    public required DateTime CreatedAt { get; init; }
 }

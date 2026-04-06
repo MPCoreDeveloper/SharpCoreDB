@@ -2,7 +2,9 @@
 Introduce per-tenant encryption key integration and rotation hooks.
 
 ## Status
-Completed in workspace.
+**State:** RESOLVED
+
+Completed in workspace and committed/pushed to repository.
 
 ## Completed Implementation Notes
 - Added `ITenantEncryptionKeyProvider` and `ConfigurationTenantEncryptionKeyProvider`.

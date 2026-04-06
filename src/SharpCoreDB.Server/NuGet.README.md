@@ -139,6 +139,8 @@ npm install @sharpcoredb/client
 
 **Operations Runbook:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md
 
+**Tenant Backup/Restore/Migration Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.6.0.md
+
 **Reference Sample:** https://github.com/MPCoreDeveloper/SharpCoreDB/tree/master/Examples/Server/SharpCoreDB.MultiTenantSaaSSample
 
 **Full Documentation:** https://github.com/MPCoreDeveloper/SharpCoreDB
