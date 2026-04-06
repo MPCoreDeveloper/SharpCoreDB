@@ -133,6 +133,14 @@ npm install @sharpcoredb/client
 
 **Security Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/SECURITY.md
 
+**Multi-Tenant SaaS Reference:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md
+
+**Multi-Tenant Threat Model:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md
+
+**Operations Runbook:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md
+
+**Reference Sample:** https://github.com/MPCoreDeveloper/SharpCoreDB/tree/master/Examples/Server/SharpCoreDB.MultiTenantSaaSSample
+
 **Full Documentation:** https://github.com/MPCoreDeveloper/SharpCoreDB
 
 ## 🏆 Why SharpCoreDB.Server?

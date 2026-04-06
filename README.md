@@ -54,6 +54,11 @@ SharpCoreDB now includes a dedicated **advanced graph analytics and GraphRAG pac
 
 **See documentation:** `docs/INDEX.md`
 
+**Multi-tenant SaaS reference:** `docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md`  
+**Threat model:** `docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md`  
+**Operations runbook:** `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md`  
+**Reference sample:** `Examples/Server/SharpCoreDB.MultiTenantSaaSSample/`
+
 ### ✅ Previously Known Limitation — Resolved
 
 - `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in the SQL lexer (`?` parameter placeholder). Fixed: FastSqlLexer, EnhancedSqlParser, QueryCompiler. Full `IAsyncDisposable` lifecycle also implemented.

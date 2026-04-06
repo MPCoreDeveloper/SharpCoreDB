@@ -1,0 +1,44 @@
+@baseUrl = https://localhost:8443
+@adminUser = admin
+@adminPassword = admin123
+
+### Login as platform admin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{adminUser}}",
+  "password": "{{adminPassword}}"
+}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### Create tenant A
+POST {{baseUrl}}/api/v1/tenants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tenantKey": "tenant-a",
+  "displayName": "Tenant A",
+  "databasePath": "./data/tenant-a.db",
+  "planTier": "starter",
+  "encryptionKeyReference": "tenant-a-key"
+}
+
+### Create tenant B
+POST {{baseUrl}}/api/v1/tenants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tenantKey": "tenant-b",
+  "displayName": "Tenant B",
+  "databasePath": "./data/tenant-b.db",
+  "planTier": "starter",
+  "encryptionKeyReference": "tenant-b-key"
+}
+
+### Review tenant security audit
+GET {{baseUrl}}/api/v1/tenant-security/audit?maxCount=50
+Authorization: Bearer {{adminToken}}

@@ -141,6 +141,18 @@ await tx.CommitAsync();
 
 ---
 
+## Multi-Tenant SaaS Reference
+
+For a tenant-focused onboarding and isolation validation flow, see:
+- `docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md`
+- `docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md`
+- `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md`
+- `Examples/Server/SharpCoreDB.MultiTenantSaaSSample/`
+
+The sample includes a PowerShell isolation validation script and a REST onboarding flow.
+
+---
+
 ## Architecture Overview
 
 ```
