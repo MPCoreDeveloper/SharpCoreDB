@@ -1,6 +1,9 @@
 ## Summary
 Add diagnostics and lightweight admin actions to `SharpCoreDB.Viewer`.
 
+## Status
+**State:** OPEN
+
 ## Why
 Users requested direct access to runtime metrics and common operational actions.
 

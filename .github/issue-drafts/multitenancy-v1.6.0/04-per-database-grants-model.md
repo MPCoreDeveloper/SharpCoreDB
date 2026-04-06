@@ -1,6 +1,9 @@
 ## Summary
 Introduce per-database grants to authorize access at database scope, not only role scope.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Current RBAC is role-based (`admin/writer/reader`) and lacks explicit allowed-database mapping.
 

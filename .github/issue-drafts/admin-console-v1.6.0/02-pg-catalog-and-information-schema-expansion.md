@@ -1,7 +1,8 @@
 ## Summary
 Expand PostgreSQL metadata compatibility (`pg_catalog`, `information_schema`) to improve GUI introspection.
 
-**State: RESOLVED** — Implemented in commit on master. See `docs/server/PG_CATALOG_COVERAGE_v1.6.0.md`.
+## Status
+**State:** RESOLVED
 
 ## Why
 GUI tools rely on catalog views to discover tables, indexes, constraints, triggers, and relationships.

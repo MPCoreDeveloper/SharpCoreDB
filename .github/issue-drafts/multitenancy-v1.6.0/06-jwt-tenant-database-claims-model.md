@@ -1,6 +1,9 @@
 ## Summary
 Extend JWT claims model to include tenant/database scope and enforce claim integrity.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Current token model carries identity/roles; SaaS needs explicit tenant scope semantics.
 

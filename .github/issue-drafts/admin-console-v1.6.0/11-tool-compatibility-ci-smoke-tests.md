@@ -1,6 +1,9 @@
 ## Summary
 Add CI smoke tests for core external-tool compatibility scenarios.
 
+## Status
+**State:** OPEN
+
 ## Why
 Compatibility can regress silently without automated checks.
 

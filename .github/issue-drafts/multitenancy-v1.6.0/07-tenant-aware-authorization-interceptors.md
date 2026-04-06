@@ -1,6 +1,9 @@
 ## Summary
 Implement tenant-aware authorization checks in gRPC interceptor and REST authorization path.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Protocol-level interception is required to avoid bypass and guarantee uniform enforcement.
 

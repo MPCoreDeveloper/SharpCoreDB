@@ -1,6 +1,9 @@
 ## Summary
 Produce a concrete strategy for ODBC/JDBC enablement and external ecosystem integration.
 
+## Status
+**State:** OPEN
+
 ## Why
 Some teams require standard connectivity layers for governance and tool compatibility.
 

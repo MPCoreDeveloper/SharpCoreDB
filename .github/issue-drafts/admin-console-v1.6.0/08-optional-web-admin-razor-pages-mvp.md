@@ -1,6 +1,9 @@
 ## Summary
 Investigate and deliver an optional lightweight web admin MVP using ASP.NET Core Razor Pages.
 
+## Status
+**State:** OPEN
+
 ## Why
 A browser-based console lowers operational friction without committing to a heavy full console rewrite.
 

@@ -1,6 +1,9 @@
 ## Summary
 Enforce database grants during `Connect` and session creation for all protocols.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Even with grant storage, enforcement must happen at auth/session boundary.
 

@@ -1,6 +1,9 @@
 ## Summary
 Add runtime tenant provisioning/deprovisioning APIs (gRPC + REST) to create and manage tenant databases.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Tenant DBs are currently startup-config oriented; SaaS needs runtime onboarding from C#.
 

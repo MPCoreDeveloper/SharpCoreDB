@@ -1,6 +1,9 @@
 ## Summary
 Expose supported runtime attach/detach operations in `DatabaseRegistry` for tenant DB lifecycle.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 `DatabaseRegistry` initializes from configuration; runtime provisioning needs controlled dynamic registration.
 

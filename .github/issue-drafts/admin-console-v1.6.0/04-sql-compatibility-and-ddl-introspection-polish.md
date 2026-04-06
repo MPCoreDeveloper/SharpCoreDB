@@ -1,6 +1,9 @@
 ## Summary
 Improve SQL compatibility and DDL/introspection behavior required by admin tools.
 
+## Status
+**State:** OPEN
+
 ## Why
 Many tools execute introspection SQL and DDL probes beyond regular CRUD workloads.
 

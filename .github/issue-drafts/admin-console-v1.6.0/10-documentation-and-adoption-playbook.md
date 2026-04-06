@@ -1,6 +1,9 @@
 ## Summary
 Publish a practical adoption playbook for admin and tooling workflows.
 
+## Status
+**State:** OPEN
+
 ## Why
 Users need clear guidance on what works now, what is in progress, and recommended paths.
 

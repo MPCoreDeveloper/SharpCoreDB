@@ -1,6 +1,9 @@
 ## Summary
 Upgrade diagnostics surfaces for admin and monitoring workflows.
 
+## Status
+**State:** OPEN
+
 ## Why
 Developers and operators need reliable health and metrics insight without deep internals access.
 

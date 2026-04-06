@@ -1,6 +1,9 @@
 ## Summary
 Create a tenant catalog in `master` to manage tenant metadata and database mappings.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Current server supports multiple databases but lacks first-class tenant metadata/lifecycle state.
 

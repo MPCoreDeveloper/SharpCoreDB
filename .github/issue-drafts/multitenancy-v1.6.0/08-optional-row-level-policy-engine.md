@@ -1,6 +1,9 @@
 ## Summary
 Add optional row-level policy engine for shared-database multi-tenancy mode.
 
+## Status
+**State:** RESOLVED
+
 ## Why
 Database-per-tenant is preferred; some users still require shared DB with policy isolation.
 

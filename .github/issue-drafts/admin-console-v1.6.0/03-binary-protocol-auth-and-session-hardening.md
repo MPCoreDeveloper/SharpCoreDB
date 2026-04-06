@@ -1,6 +1,9 @@
 ## Summary
 Harden binary protocol authentication/session behavior for external GUI and driver expectations.
 
+## Status
+**State:** OPEN
+
 ## Why
 Current binary protocol startup/auth flow is functional but needs stronger parity and production behavior.
 

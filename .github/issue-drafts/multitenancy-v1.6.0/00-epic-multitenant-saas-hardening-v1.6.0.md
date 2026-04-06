@@ -2,7 +2,7 @@
 Deliver first-class multi-tenant SaaS support in `SharpCoreDB.Server` on top of current `v1.6.0` capabilities.
 
 ## Status
-**State:** RESOLVED for the current multitenancy draft set in the repository.
+**State:** RESOLVED
 
 Resolved workstreams in repository:
 - [x] `09-tenant-encryption-key-management.md`
