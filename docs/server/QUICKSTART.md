@@ -141,6 +141,15 @@ await tx.CommitAsync();
 
 ---
 
+## Tool Compatibility
+
+For external database client certification and known PostgreSQL-tooling gaps, see:
+- `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md`
+- `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md`
+- `tests/SharpCoreDB.Server.IntegrationTests/Compatibility/ToolCompatibilitySmoke.README.md`
+
+---
+
 ## Multi-Tenant SaaS Reference
 
 For a tenant-focused onboarding and isolation validation flow, see:

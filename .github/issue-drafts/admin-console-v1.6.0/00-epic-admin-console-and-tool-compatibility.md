@@ -1,6 +1,15 @@
 ## Summary
 Deliver an administration and observability roadmap for `SharpCoreDB` that prioritizes compatibility with existing database tools and optionally adds a lightweight native admin experience.
 
+## Status
+**State:** IN PROGRESS
+
+Resolved workstreams in repository:
+- [x] `01-tool-compatibility-matrix-and-certification.md`
+
+Next planned work:
+- [ ] `02-pg-catalog-and-information-schema-expansion.md`
+
 This roadmap is based on current `v1.6.0` behavior:
 - `tools/SharpCoreDB.Viewer` exists but remains minimal.
 - Server binary protocol is PostgreSQL-wire-compatible in foundation form.

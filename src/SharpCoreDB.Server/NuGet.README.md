@@ -133,6 +133,10 @@ npm install @sharpcoredb/client
 
 **Security Guide:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/SECURITY.md
 
+**Tool Compatibility Matrix:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md
+
+**Tool Compatibility Limitations:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md
+
 **Multi-Tenant SaaS Reference:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md
 
 **Multi-Tenant Threat Model:** https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md

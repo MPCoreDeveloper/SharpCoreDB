@@ -54,6 +54,8 @@ SharpCoreDB now includes a dedicated **advanced graph analytics and GraphRAG pac
 
 **See documentation:** `docs/INDEX.md`
 
+**Tool compatibility matrix:** `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md`  
+**Tool compatibility limitations:** `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md`  
 **Multi-tenant SaaS reference:** `docs/server/MULTITENANT_SAAS_REFERENCE_v1.6.0.md`  
 **Threat model:** `docs/server/MULTITENANT_THREAT_MODEL_v1.6.0.md`  
 **Operations runbook:** `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.6.0.md`  

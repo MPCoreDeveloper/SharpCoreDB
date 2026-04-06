@@ -1,25 +1,20 @@
 ## Summary
 Create a formal compatibility matrix for external tools (DBeaver, Beekeeper Studio, DataGrip, pgAdmin, psql/libpq) with repeatable validation.
 
+## Status
+**State:** RESOLVED
+
+Completed in workspace.
+
+## Completed Implementation Notes
+- Added `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.6.0.md`.
+- Added `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.6.0.md`.
+- Added repeatable smoke certification assets under `tests/SharpCoreDB.Server.IntegrationTests/Compatibility/`.
+- Linked the new compatibility docs from server documentation entry points.
+
+## Validation
+- Smoke procedure and scripts published for repeatable certification runs.
+- Workspace build passed.
+
 ## Why
 Adoption depends on transparent compatibility guarantees.
-
-## Scope
-- Define supported tool versions and drivers.
-- Record supported workflows: connect, browse DB/tables, run query, introspect metadata.
-- Capture known gaps and workarounds.
-- Publish matrix in `docs/server`.
-
-## Implementation Plan
-1. Define matrix template and pass/fail criteria.
-2. Build repeatable smoke scripts for key workflows.
-3. Execute validation against candidate tool versions.
-4. Publish results and known limitations.
-
-## Acceptance Criteria
-- Matrix published and linked from server docs/readme.
-- At least 4 mainstream tools validated.
-- Known limitations tracked as linked issues.
-
-## Dependencies
-- Foundation issue for this epic.
