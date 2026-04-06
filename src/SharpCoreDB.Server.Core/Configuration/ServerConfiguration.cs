@@ -77,6 +77,9 @@ public sealed class ServerConfiguration
     /// <summary>Connection pool configuration.</summary>
     public ConnectionPoolConfiguration ConnectionPool { get; init; } = new();
 
+    /// <summary>Tenant quota policy configuration.</summary>
+    public TenantQuotaConfiguration TenantQuotas { get; init; } = new();
+
     /// <summary>Optional projection runtime configuration for server-hosted projection execution.</summary>
     public ProjectionRuntimeConfiguration Projections { get; init; } = new();
 }
@@ -100,6 +103,9 @@ public sealed class DatabaseInstanceConfiguration
 
     /// <summary>Encryption key file path for this database.</summary>
     public string? EncryptionKeyFile { get; init; }
+
+    /// <summary>Resolved encryption master password for this database.</summary>
+    public string? EncryptionMasterPassword { get; init; }
 
     /// <summary>Connection pool size for this database.</summary>
     public int ConnectionPoolSize { get; init; } = 1000;
@@ -176,8 +182,35 @@ public sealed class SecurityConfiguration
     /// </summary>
     public List<CertificateRoleMapping> CertificateRoleMappings { get; init; } = [];
 
+    /// <summary>Tenant encryption key provider configuration.</summary>
+    public TenantEncryptionConfiguration TenantEncryption { get; init; } = new();
+
     /// <summary>Connection pool configuration.</summary>
     public ConnectionPoolConfiguration ConnectionPool { get; init; } = new();
+}
+
+/// <summary>
+/// Tenant encryption key management configuration.
+/// </summary>
+public sealed class TenantEncryptionConfiguration
+{
+    /// <summary>Enables tenant-dedicated encryption key resolution.</summary>
+    public bool Enabled { get; init; }
+
+    /// <summary>When true, tenant databases must resolve to a dedicated key reference.</summary>
+    public bool RequireDedicatedTenantKey { get; init; }
+
+    /// <summary>Logical key provider name (used for diagnostics/KMS routing).</summary>
+    public string DefaultProvider { get; init; } = "configuration";
+
+    /// <summary>Fallback default key reference when tenant-specific mapping is missing.</summary>
+    public string? DefaultKeyReference { get; init; }
+
+    /// <summary>Tenant to default encryption key reference mapping.</summary>
+    public Dictionary<string, string> DefaultKeyReferenceByTenant { get; init; } = [];
+
+    /// <summary>Key reference to key material mapping (for local/dev usage).</summary>
+    public Dictionary<string, string> KeyMaterialByReference { get; init; } = [];
 }
 
 /// <summary>
@@ -209,6 +242,15 @@ public sealed class UserConfiguration
 
     /// <summary>Assigned role: admin, writer, or reader.</summary>
     public string Role { get; init; } = "reader";
+
+    /// <summary>Tenant ID to embed in JWT scope claims (default: "default").</summary>
+    public string TenantId { get; init; } = "default";
+
+    /// <summary>Allowed databases for JWT scope claims (default: wildcard access).</summary>
+    public List<string> AllowedDatabases { get; init; } = ["*"];
+
+    /// <summary>JWT scope claim version emitted for this user (default: "1").</summary>
+    public string ScopeVersion { get; init; } = "1";
 }
 
 /// <summary>
@@ -275,6 +317,48 @@ public sealed class ConnectionPoolConfiguration
 
     /// <summary>Health check interval in seconds.</summary>
     public int HealthCheckIntervalSeconds { get; init; } = 60;
+}
+
+/// <summary>
+/// Tenant quota configuration with global defaults and plan-tier overrides.
+/// </summary>
+public sealed class TenantQuotaConfiguration
+{
+    /// <summary>Enable tenant quota enforcement.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>Default maximum active sessions per tenant.</summary>
+    public int DefaultMaxActiveSessions { get; init; } = 100;
+
+    /// <summary>Default maximum requests per second per tenant.</summary>
+    public int DefaultMaxRequestsPerSecond { get; init; } = 500;
+
+    /// <summary>Default maximum storage in MB per tenant database.</summary>
+    public long DefaultMaxStorageMb { get; init; } = 4096;
+
+    /// <summary>Default maximum batch size per tenant request.</summary>
+    public int DefaultMaxBatchSize { get; init; } = 1000;
+
+    /// <summary>Optional plan-tier quota overrides keyed by plan tier.</summary>
+    public Dictionary<string, TenantPlanQuotaConfiguration> PlanDefaults { get; init; } = [];
+}
+
+/// <summary>
+/// Quota values for a specific plan tier.
+/// </summary>
+public sealed class TenantPlanQuotaConfiguration
+{
+    /// <summary>Maximum active sessions per tenant.</summary>
+    public int MaxActiveSessions { get; init; } = 100;
+
+    /// <summary>Maximum requests per second.</summary>
+    public int MaxRequestsPerSecond { get; init; } = 500;
+
+    /// <summary>Maximum storage in MB.</summary>
+    public long MaxStorageMb { get; init; } = 4096;
+
+    /// <summary>Maximum batch size.</summary>
+    public int MaxBatchSize { get; init; } = 1000;
 }
 
 /// <summary>

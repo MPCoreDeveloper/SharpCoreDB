@@ -74,6 +74,151 @@ public sealed class DatabaseRegistry(
     }
 
     /// <summary>
+    /// Registers a new database instance at runtime for tenant provisioning.
+    /// Supports safe attachment of databases without server restart.
+    /// Fails if database already registered.
+    /// </summary>
+    /// <param name="databaseName">Logical database name.</param>
+    /// <param name="databasePath">Physical path to database file.</param>
+    /// <param name="storageMode">Storage mode (SingleFile, Directory, Columnar).</param>
+    /// <param name="connectionPoolSize">Connection pool size for this database.</param>
+    /// <param name="encryptionEnabled">Whether encryption is enabled.</param>
+    /// <param name="encryptionMasterPassword">Optional master password for encryption.</param>
+    /// <param name="encryptionKeyReference">Optional key file reference for encryption.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The registered database instance.</returns>
+    /// <exception cref="InvalidOperationException">If database is already registered.</exception>
+    public async Task<DatabaseInstance> RegisterDatabaseRuntimeAsync(
+        string databaseName,
+        string databasePath,
+        string storageMode = "SingleFile",
+        int connectionPoolSize = 10,
+        bool encryptionEnabled = false,
+        string? encryptionMasterPassword = null,
+        string? encryptionKeyReference = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(databaseName);
+        ArgumentNullException.ThrowIfNull(databasePath);
+
+        logger.LogInformation(
+            "Registering database '{Name}' at runtime from path '{Path}'",
+            databaseName, databasePath);
+
+        lock (_registryLock)
+        {
+            if (_databases.ContainsKey(databaseName))
+            {
+                logger.LogError("Database '{Name}' is already registered", databaseName);
+                throw new InvalidOperationException($"Database '{databaseName}' is already registered");
+            }
+        }
+
+        try
+        {
+            var config = new DatabaseInstanceConfiguration
+            {
+                Name = databaseName,
+                DatabasePath = databasePath,
+                StorageMode = storageMode,
+                ConnectionPoolSize = connectionPoolSize,
+                EncryptionEnabled = encryptionEnabled,
+                EncryptionMasterPassword = encryptionMasterPassword,
+                EncryptionKeyFile = encryptionKeyReference,
+                IsSystemDatabase = false,
+                IsReadOnly = false
+            };
+
+            var instance = new DatabaseInstance(config, logger);
+            await instance.InitializeAsync(cancellationToken);
+
+            lock (_registryLock)
+            {
+                if (!_databases.TryAdd(databaseName, instance))
+                {
+                    logger.LogError("Failed to add database '{Name}' to registry (race condition)", databaseName);
+                    throw new InvalidOperationException($"Database '{databaseName}' registration race condition");
+                }
+            }
+
+            logger.LogInformation("Database '{Name}' registered at runtime successfully", databaseName);
+            return instance;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to register database '{Name}' at runtime", databaseName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Unregisters a database instance at runtime with graceful connection draining.
+    /// Safe for tenant deprovisioning - closes connections and removes registry entry.
+    /// Fails if database not found or currently in use.
+    /// </summary>
+    /// <param name="databaseName">Logical database name to unregister.</param>
+    /// <param name="gracefulTimeoutSeconds">Timeout for draining connections (default 30s).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">If database not found.</exception>
+    /// <exception cref="OperationCanceledException">If graceful drain times out.</exception>
+    public async Task UnregisterDatabaseRuntimeAsync(
+        string databaseName,
+        int gracefulTimeoutSeconds = 30,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(databaseName);
+
+        logger.LogInformation("Unregistering database '{Name}' at runtime", databaseName);
+
+        DatabaseInstance? instance = null;
+
+        lock (_registryLock)
+        {
+            if (!_databases.TryRemove(databaseName, out instance))
+            {
+                logger.LogError("Database '{Name}' not found in registry", databaseName);
+                throw new InvalidOperationException($"Database '{databaseName}' not found");
+            }
+        }
+
+        if (instance == null)
+        {
+            logger.LogError("Database instance for '{Name}' is null", databaseName);
+            throw new InvalidOperationException($"Database instance '{databaseName}' is null");
+        }
+
+        try
+        {
+            logger.LogInformation(
+                "Draining connections for database '{Name}' with {Seconds}s timeout",
+                databaseName, gracefulTimeoutSeconds);
+
+            using var gracefulCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            gracefulCts.CancelAfter(TimeSpan.FromSeconds(gracefulTimeoutSeconds));
+
+            await instance.ShutdownAsync(gracefulCts.Token);
+
+            logger.LogInformation("Database '{Name}' unregistered successfully", databaseName);
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Graceful shutdown of database '{Name}' timed out after {Seconds}s",
+                databaseName, gracefulTimeoutSeconds);
+
+            // Force cleanup even on timeout
+            await instance.ShutdownAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to unregister database '{Name}' at runtime", databaseName);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Registers a new database instance.
     /// </summary>
     /// <param name="config">Database configuration.</param>
@@ -198,7 +343,11 @@ public sealed class DatabaseInstance(
         var serviceProvider = services.BuildServiceProvider();
 
         var config = new DatabaseConfig(); // Use default config
-        _database = new Database(serviceProvider, _config.DatabasePath, "default-password", _config.IsReadOnly, config);
+        var masterPassword = string.IsNullOrWhiteSpace(_config.EncryptionMasterPassword)
+            ? "default-password"
+            : _config.EncryptionMasterPassword;
+
+        _database = new Database(serviceProvider, _config.DatabasePath, masterPassword, _config.IsReadOnly, config);
 
         // Initialize connection pool
         _connectionPool = new ConnectionPool(_database, _config.ConnectionPoolSize, _logger);

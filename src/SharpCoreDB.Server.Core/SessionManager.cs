@@ -5,6 +5,7 @@
 
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using System.Collections.Concurrent;
 
 namespace SharpCoreDB.Server.Core;
@@ -16,9 +17,11 @@ namespace SharpCoreDB.Server.Core;
 /// </summary>
 public sealed class SessionManager(
     DatabaseRegistry databaseRegistry,
+    TenantQuotaEnforcementService tenantQuotaEnforcementService,
     ILogger<SessionManager> logger)
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
+    private readonly TenantQuotaEnforcementService _tenantQuotaEnforcementService = tenantQuotaEnforcementService;
     private readonly ILogger<SessionManager> _logger = logger;
     private readonly ConcurrentDictionary<string, ClientSession> _sessions = new();
     private readonly Lock _sessionLock = new();
@@ -35,6 +38,7 @@ public sealed class SessionManager(
     /// <param name="userName">Client username.</param>
     /// <param name="clientAddress">Client network address.</param>
     /// <param name="role">Authenticated user role.</param>
+    /// <param name="tenantId">Tenant identifier for quota evaluation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>New client session.</returns>
     public async Task<ClientSession> CreateSessionAsync(
@@ -42,24 +46,38 @@ public sealed class SessionManager(
         string? userName,
         string clientAddress,
         DatabaseRole role = DatabaseRole.Reader,
+        string tenantId = "default",
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
         var database = _databaseRegistry.GetDatabase(databaseName);
         if (database == null)
         {
             throw new ArgumentException($"Database '{databaseName}' not found", nameof(databaseName));
         }
 
+        var tenantSessionCount = _sessions.Values.Count(s => string.Equals(s.TenantId, tenantId, StringComparison.Ordinal));
+        await _tenantQuotaEnforcementService
+            .EnsureSessionQuotaAsync(tenantId, tenantSessionCount, cancellationToken)
+            .ConfigureAwait(false);
+
         var sessionId = Guid.NewGuid().ToString();
-        var session = new ClientSession(sessionId, database, userName, clientAddress, DateTimeOffset.UtcNow, role);
+        var session = new ClientSession(sessionId, database, userName, clientAddress, DateTimeOffset.UtcNow, role, tenantId);
 
         if (!_sessions.TryAdd(sessionId, session))
         {
             throw new InvalidOperationException($"Session ID collision: {sessionId}");
         }
 
-        _logger.LogInformation("Created session {SessionId} for user '{User}' (role={Role}) from {ClientAddress} to database '{Database}'",
-            sessionId, userName ?? "anonymous", role, clientAddress, databaseName);
+        _logger.LogInformation(
+            "Created session {SessionId} for user '{User}' tenant '{TenantId}' (role={Role}) from {ClientAddress} to database '{Database}'",
+            sessionId,
+            userName ?? "anonymous",
+            tenantId,
+            role,
+            clientAddress,
+            databaseName);
 
         return session;
     }
@@ -190,7 +208,8 @@ public sealed class ClientSession(
     string? userName,
     string clientAddress,
     DateTimeOffset createdAt,
-    DatabaseRole role = DatabaseRole.Reader)
+    DatabaseRole role = DatabaseRole.Reader,
+    string tenantId = "default")
 {
     /// <summary>
     /// Gets the unique session identifier.
@@ -206,6 +225,11 @@ public sealed class ClientSession(
     /// Gets the authenticated username.
     /// </summary>
     public string? UserName { get; } = userName;
+
+    /// <summary>
+    /// Gets the owning tenant identifier.
+    /// </summary>
+    public string TenantId { get; } = tenantId;
 
     /// <summary>
     /// Gets the client network address.

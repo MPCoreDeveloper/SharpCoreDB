@@ -14,6 +14,7 @@ using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Grpc;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 
 namespace SharpCoreDB.Server.Core;
 
@@ -26,12 +27,16 @@ public sealed class DatabaseService(
     DatabaseRegistry databaseRegistry,
     SessionManager sessionManager,
     UserAuthenticationService authService,
+    TenantQuotaEnforcementService tenantQuotaEnforcementService,
+    TenantSecurityAuditService securityAuditService,
     ILogger<DatabaseService> logger,
     MetricsCollector metricsCollector) : Server.Protocol.DatabaseService.DatabaseServiceBase
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
     private readonly UserAuthenticationService _authService = authService;
+    private readonly TenantQuotaEnforcementService _tenantQuotaEnforcementService = tenantQuotaEnforcementService;
+    private readonly TenantSecurityAuditService _securityAuditService = securityAuditService;
     private readonly ILogger<DatabaseService> _logger = logger;
     private readonly MetricsCollector _metricsCollector = metricsCollector;
 
@@ -41,20 +46,27 @@ public sealed class DatabaseService(
     /// </summary>
     public override async Task<ConnectResponse> Connect(ConnectRequest request, ServerCallContext context)
     {
+        var requestedUser = request.UserName ?? "anonymous";
+        var databaseName = string.IsNullOrWhiteSpace(request.DatabaseName)
+            ? "master"
+            : request.DatabaseName;
+
         try
         {
             _logger.LogInformation("Connect request from client '{Client}' for database '{Database}'",
-                request.ClientName, request.DatabaseName);
+                request.ClientName, databaseName);
 
             // Validate database exists
-            var databaseName = request.DatabaseName;
-            if (string.IsNullOrEmpty(databaseName))
-            {
-                databaseName = "master";
-            }
-
             if (!_databaseRegistry.DatabaseExists(databaseName))
             {
+                EmitConnectEvent(
+                    requestedUser,
+                    tenantId: "unknown",
+                    databaseName,
+                    isAllowed: false,
+                    code: "CONNECT_DATABASE_NOT_FOUND",
+                    reason: "Database does not exist");
+
                 return new ConnectResponse
                 {
                     Status = ConnectionStatus.DatabaseNotFound
@@ -71,15 +83,38 @@ public sealed class DatabaseService(
             if (!authResult.IsAuthenticated)
             {
                 _logger.LogWarning("Connect failed: invalid credentials for user '{User}'", request.UserName);
+                EmitConnectEvent(
+                    requestedUser,
+                    tenantId: "unknown",
+                    databaseName,
+                    isAllowed: false,
+                    code: "CONNECT_INVALID_CREDENTIALS",
+                    reason: "Authentication failed");
+
                 return new ConnectResponse
                 {
                     Status = ConnectionStatus.InvalidCredentials
                 };
             }
 
+            var tenantId = _authService.GetUserTenantId(request.UserName ?? string.Empty) ?? "default";
+
             // Create session with authenticated role
             var session = await _sessionManager.CreateSessionAsync(
-                databaseName, request.UserName, context.Peer, authResult.Role, context.CancellationToken);
+                databaseName,
+                request.UserName,
+                context.Peer,
+                authResult.Role,
+                tenantId,
+                context.CancellationToken).ConfigureAwait(false);
+
+            EmitConnectEvent(
+                requestedUser,
+                tenantId,
+                databaseName,
+                isAllowed: true,
+                code: "CONNECT_OK",
+                reason: "Connect succeeded");
 
             return new ConnectResponse
             {
@@ -89,9 +124,33 @@ public sealed class DatabaseService(
                 Status = ConnectionStatus.Success
             };
         }
+        catch (TenantQuotaExceededException ex)
+        {
+            _logger.LogWarning(ex, "Connect throttled by tenant quota");
+            EmitConnectEvent(
+                requestedUser,
+                tenantId: _authService.GetUserTenantId(request.UserName ?? string.Empty) ?? "default",
+                databaseName,
+                isAllowed: false,
+                code: ex.Code,
+                reason: ex.Message);
+
+            return new ConnectResponse
+            {
+                Status = ConnectionStatus.ConnectionLimitExceeded
+            };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Connect request failed");
+            EmitConnectEvent(
+                requestedUser,
+                tenantId: _authService.GetUserTenantId(request.UserName ?? string.Empty) ?? "unknown",
+                databaseName,
+                isAllowed: false,
+                code: "CONNECT_SERVER_UNAVAILABLE",
+                reason: ex.Message);
+
             return new ConnectResponse
             {
                 Status = ConnectionStatus.ServerUnavailable
@@ -143,6 +202,10 @@ public sealed class DatabaseService(
             _metricsCollector.RecordFailedRequest(method, "UNAUTHENTICATED");
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Invalid session"));
         }
+
+        await _tenantQuotaEnforcementService
+            .EnsureRequestQuotaAsync(session.TenantId, method, cancellationToken: context.CancellationToken)
+            .ConfigureAwait(false);
 
         await using var connection = await session.DatabaseInstance.GetConnectionAsync(context.CancellationToken).ConfigureAwait(false);
 
@@ -241,6 +304,11 @@ public sealed class DatabaseService(
             var totalElapsed = Stopwatch.GetElapsedTime(start);
             _metricsCollector.RecordSuccessfulRequest(method, totalElapsed.TotalMilliseconds, totalBytesReceived, totalBytesSent, totalRowsReturned);
         }
+        catch (TenantQuotaExceededException ex)
+        {
+            _metricsCollector.RecordFailedRequest(method, ex.Code);
+            throw new RpcException(new Status(StatusCode.ResourceExhausted, ex.Message));
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogError(ex, "Query execution failed for session {SessionId}", request.SessionId);
@@ -268,6 +336,18 @@ public sealed class DatabaseService(
         {
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Invalid session"));
         }
+
+        await _tenantQuotaEnforcementService
+            .EnsureRequestQuotaAsync(session.TenantId, context.Method, cancellationToken: context.CancellationToken)
+            .ConfigureAwait(false);
+
+        await _tenantQuotaEnforcementService
+            .EnsureStorageQuotaAsync(
+                session.TenantId,
+                session.DatabaseInstance.Configuration.DatabasePath,
+                context.Method,
+                context.CancellationToken)
+            .ConfigureAwait(false);
 
         await using var connection = await session.DatabaseInstance.GetConnectionAsync(context.CancellationToken);
 
@@ -310,6 +390,10 @@ public sealed class DatabaseService(
                 RowsAffected = rowsAffected,
                 ExecutionTimeMs = executionTime.TotalMilliseconds
             };
+        }
+        catch (TenantQuotaExceededException ex)
+        {
+            throw new RpcException(new Status(StatusCode.ResourceExhausted, ex.Message));
         }
         catch (Exception ex)
         {
@@ -531,5 +615,25 @@ public sealed class DatabaseService(
         }
 
         return "SELECT 0";
+    }
+
+    private void EmitConnectEvent(
+        string principal,
+        string tenantId,
+        string databaseName,
+        bool isAllowed,
+        string code,
+        string reason)
+    {
+        _securityAuditService.Emit(new TenantSecurityAuditEvent(
+            TimestampUtc: DateTime.UtcNow,
+            EventType: isAllowed ? TenantSecurityEventType.ConnectSucceeded : TenantSecurityEventType.ConnectDenied,
+            TenantId: string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId,
+            DatabaseName: databaseName,
+            Principal: principal,
+            Protocol: "gRPC",
+            IsAllowed: isAllowed,
+            DecisionCode: code,
+            Reason: reason));
     }
 }

@@ -5,6 +5,7 @@
 
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core;
+using SharpCoreDB.Server.Core.Security;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -22,10 +23,14 @@ namespace SharpCoreDB.Server.Core;
 public sealed class BinaryProtocolHandler(
     DatabaseRegistry databaseRegistry,
     SessionManager sessionManager,
+    UserAuthenticationService authService,
+    TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     ILogger<BinaryProtocolHandler> logger) : IAsyncDisposable
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
+    private readonly UserAuthenticationService _authService = authService;
+    private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
     private readonly ILogger<BinaryProtocolHandler> _logger = logger;
 
     // PostgreSQL protocol constants
@@ -162,9 +167,34 @@ public sealed class BinaryProtocolHandler(
     {
         try
         {
+            var principal = _authService.CreatePrincipalForUser(startup.User);
+            if (principal is null)
+            {
+                await writer.WriteErrorResponseAsync("28000", "authentication failed", cancellationToken);
+                return null;
+            }
+
+            var scopeDecision = _tenantAuthorizationPolicyService.AuthorizeDatabaseAccess(
+                principal,
+                startup.Database,
+                DatabasePermission.Connect,
+                protocol: "Binary",
+                operation: "Startup");
+
+            if (!scopeDecision.IsAllowed)
+            {
+                await writer.WriteErrorResponseAsync("42501", $"tenant authorization failed: {scopeDecision.Code}", cancellationToken);
+                return null;
+            }
+
             // Binary protocol clients default to reader role until full auth is implemented
             var session = await _sessionManager.CreateSessionAsync(
-                startup.Database, startup.User, "binary-client", DatabaseRole.Reader, cancellationToken);
+                startup.Database,
+                startup.User,
+                "binary-client",
+                DatabaseRole.Reader,
+                tenantId: principal.GetTenantId() ?? "default",
+                cancellationToken: cancellationToken);
 
             // Send authentication success
             await writer.WriteAuthenticationOkAsync(cancellationToken);

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using System.Diagnostics;
 
 namespace SharpCoreDB.Server;
@@ -24,6 +25,10 @@ public sealed class DatabaseController(
     DatabaseRegistry databaseRegistry,
     SessionManager sessionManager,
     UserAuthenticationService authService,
+    TenantAccessAuditStore tenantAccessAuditStore,
+    TenantSecurityAuditStore tenantSecurityAuditStore,
+    TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
+    TenantQuotaEnforcementService tenantQuotaEnforcementService,
     MetricsCollector metricsCollector,
     ILogger<DatabaseController> logger) : ControllerBase
 {
@@ -48,11 +53,15 @@ public sealed class DatabaseController(
             return BadRequest(new ErrorResponse { Error = "SQL is required", Code = "INVALID_SQL", Details = "Query SQL cannot be empty" });
         }
 
-        var (db, session, error) = await ResolveSessionAsync(request.Database, cancellationToken);
+        var (db, session, error) = await ResolveSessionAsync(request.Database, DatabasePermission.Select, cancellationToken);
         if (error is not null) return error;
 
         try
         {
+            await tenantQuotaEnforcementService
+                .EnsureRequestQuotaAsync(session!.TenantId, "REST/query", cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
             await using var connection = await db!.GetConnectionAsync(cancellationToken);
             var result = connection.Database.ExecuteQuery(request.Sql, request.Parameters ?? []);
 
@@ -85,6 +94,11 @@ public sealed class DatabaseController(
                 ExecutionTimeMs = elapsed.TotalMilliseconds,
             });
         }
+        catch (TenantQuotaExceededException ex)
+        {
+            metricsCollector.RecordFailedRequest("REST/query", ex.Code);
+            return StatusCode(429, new ErrorResponse { Error = ex.Message, Code = ex.Code, Details = "Tenant quota exceeded" });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "REST query failed: {Sql}", request.Sql);
@@ -111,11 +125,23 @@ public sealed class DatabaseController(
     {
         var start = Stopwatch.GetTimestamp();
 
-        var (db, session, error) = await ResolveSessionAsync(request.Database, cancellationToken);
+        var (db, session, error) = await ResolveSessionAsync(request.Database, DatabasePermission.Insert, cancellationToken);
         if (error is not null) return error;
 
         try
         {
+            await tenantQuotaEnforcementService
+                .EnsureRequestQuotaAsync(session!.TenantId, "REST/execute", cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            await tenantQuotaEnforcementService
+                .EnsureStorageQuotaAsync(
+                    session.TenantId,
+                    session.DatabaseInstance.Configuration.DatabasePath,
+                    "REST/execute",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             await using var connection = await db!.GetConnectionAsync(cancellationToken);
             connection.Database.ExecuteSQL(request.Sql);
             var elapsed = Stopwatch.GetElapsedTime(start);
@@ -127,6 +153,11 @@ public sealed class DatabaseController(
                 RowsAffected = 0,
                 ExecutionTimeMs = elapsed.TotalMilliseconds,
             });
+        }
+        catch (TenantQuotaExceededException ex)
+        {
+            metricsCollector.RecordFailedRequest("REST/execute", ex.Code);
+            return StatusCode(429, new ErrorResponse { Error = ex.Message, Code = ex.Code, Details = "Tenant quota exceeded" });
         }
         catch (Exception ex)
         {
@@ -159,11 +190,27 @@ public sealed class DatabaseController(
             return BadRequest(new ErrorResponse { Error = "No statements", Code = "EMPTY_BATCH", Details = "Batch requires at least one statement" });
         }
 
-        var (db, session, error) = await ResolveSessionAsync(request.Database, cancellationToken);
+        var (db, session, error) = await ResolveSessionAsync(request.Database, DatabasePermission.Insert, cancellationToken);
         if (error is not null) return error;
 
         try
         {
+            await tenantQuotaEnforcementService
+                .EnsureRequestQuotaAsync(
+                    session!.TenantId,
+                    "REST/batch",
+                    batchSize: request.Statements.Length,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            await tenantQuotaEnforcementService
+                .EnsureStorageQuotaAsync(
+                    session.TenantId,
+                    session.DatabaseInstance.Configuration.DatabasePath,
+                    "REST/batch",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             await using var connection = await db!.GetConnectionAsync(cancellationToken);
             connection.Database.ExecuteBatchSQL(request.Statements);
             var elapsed = Stopwatch.GetElapsedTime(start);
@@ -176,6 +223,11 @@ public sealed class DatabaseController(
                 TotalExecutionTimeMs = elapsed.TotalMilliseconds,
                 Success = true,
             });
+        }
+        catch (TenantQuotaExceededException ex)
+        {
+            metricsCollector.RecordFailedRequest("REST/batch", ex.Code);
+            return StatusCode(429, new ErrorResponse { Error = ex.Message, Code = ex.Code, Details = "Tenant quota exceeded" });
         }
         catch (Exception ex)
         {
@@ -342,10 +394,73 @@ public sealed class DatabaseController(
     }
 
     /// <summary>
+    /// Gets recent tenant access authorization audit events.
+    /// </summary>
+    [HttpGet("tenant-access/audit")]
+    [Authorize(Roles = "admin")]
+    [ProducesResponseType(typeof(TenantAccessAuditResponse), 200)]
+    public IActionResult GetTenantAccessAudit(
+        [FromQuery] int maxCount = 100,
+        [FromQuery] bool deniedOnly = false)
+    {
+        var events = tenantAccessAuditStore.GetRecent(maxCount, deniedOnly);
+
+        return Ok(new TenantAccessAuditResponse
+        {
+            TotalRetained = tenantAccessAuditStore.Count,
+            Returned = events.Count,
+            DeniedOnly = deniedOnly,
+            Events = events.Select(static e => new TenantAccessAuditItem
+            {
+                TimestampUtc = e.TimestampUtc,
+                IsAllowed = e.IsAllowed,
+                Code = e.Code,
+                Reason = e.Reason,
+                Username = e.Username,
+                TenantId = e.TenantId,
+                Database = e.DatabaseName,
+                Protocol = e.Protocol,
+                Operation = e.Operation,
+            }).ToArray(),
+        });
+    }
+
+    /// <summary>
+    /// Gets recent tenant security audit events.
+    /// </summary>
+    [HttpGet("tenant-security/audit")]
+    [Authorize(Roles = "admin")]
+    [ProducesResponseType(typeof(TenantSecurityAuditResponse), 200)]
+    public IActionResult GetTenantSecurityAudit([FromQuery] int maxCount = 100)
+    {
+        var events = tenantSecurityAuditStore.GetRecent(maxCount);
+
+        return Ok(new TenantSecurityAuditResponse
+        {
+            TotalRetained = tenantSecurityAuditStore.Count,
+            Returned = events.Count,
+            Events = events.Select(static e => new TenantSecurityAuditItem
+            {
+                TimestampUtc = e.TimestampUtc,
+                EventType = e.EventType.ToString(),
+                TenantId = e.TenantId,
+                Database = e.DatabaseName,
+                Principal = e.Principal,
+                Protocol = e.Protocol,
+                IsAllowed = e.IsAllowed,
+                DecisionCode = e.DecisionCode,
+                Reason = e.Reason,
+            }).ToArray(),
+        });
+    }
+
+    /// <summary>
     /// Resolves a database and creates a short-lived session for the REST request.
     /// </summary>
-    private async Task<(DatabaseInstance? db, ClientSession? session, IActionResult? error)> ResolveSessionAsync(
+    private async Task<(DatabaseInstance? db, ClientSession? session, IActionResult? error)>
+        ResolveSessionAsync(
         string? databaseName,
+        DatabasePermission requiredPermission,
         CancellationToken cancellationToken)
     {
         var name = databaseName ?? "master";
@@ -356,12 +471,28 @@ public sealed class DatabaseController(
             return (null, null, err);
         }
 
+        var decision = tenantAuthorizationPolicyService.AuthorizeDatabaseAccess(
+            User,
+            name,
+            requiredPermission,
+            protocol: "REST",
+            operation: HttpContext.Request.Path);
+
+        if (!decision.IsAllowed)
+        {
+            var err = Forbid();
+            return (null, null, err);
+        }
+
         var role = RbacService.GetRoleFromPrincipal(User);
+        var tenantId = User.GetTenantId() ?? authService.GetUserTenantId(User.Identity?.Name ?? string.Empty) ?? "default";
+
         var session = await sessionManager.CreateSessionAsync(
             name,
             User.Identity?.Name ?? "anonymous",
             HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             role,
+            tenantId,
             cancellationToken);
 
         return (db, session, null);
@@ -607,4 +738,95 @@ public sealed class LoginResponse
 
     /// <summary>Token expiration timestamp.</summary>
     public required DateTimeOffset ExpiresAt { get; init; }
+}
+
+/// <summary>Tenant access audit response payload.</summary>
+public sealed class TenantAccessAuditResponse
+{
+    /// <summary>Total retained audit events in memory.</summary>
+    public required int TotalRetained { get; init; }
+
+    /// <summary>Number of returned events.</summary>
+    public required int Returned { get; init; }
+
+    /// <summary>Whether response is denied-only filtered.</summary>
+    public required bool DeniedOnly { get; init; }
+
+    /// <summary>Returned audit events.</summary>
+    public required TenantAccessAuditItem[] Events { get; init; }
+}
+
+/// <summary>Single tenant access audit item.</summary>
+public sealed class TenantAccessAuditItem
+{
+    /// <summary>Event timestamp in UTC.</summary>
+    public required DateTime TimestampUtc { get; init; }
+
+    /// <summary>Authorization decision.</summary>
+    public required bool IsAllowed { get; init; }
+
+    /// <summary>Decision code.</summary>
+    public required string Code { get; init; }
+
+    /// <summary>Decision reason.</summary>
+    public required string Reason { get; init; }
+
+    /// <summary>User name for the request.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Tenant identifier.</summary>
+    public required string TenantId { get; init; }
+
+    /// <summary>Database name.</summary>
+    public required string Database { get; init; }
+
+    /// <summary>Protocol name.</summary>
+    public required string Protocol { get; init; }
+
+    /// <summary>Operation identifier.</summary>
+    public required string Operation { get; init; }
+}
+
+/// <summary>Tenant security audit response payload.</summary>
+public sealed class TenantSecurityAuditResponse
+{
+    /// <summary>Total retained audit events in memory.</summary>
+    public required int TotalRetained { get; init; }
+
+    /// <summary>Number of returned events.</summary>
+    public required int Returned { get; init; }
+
+    /// <summary>Returned security audit events.</summary>
+    public required TenantSecurityAuditItem[] Events { get; init; }
+}
+
+/// <summary>Single tenant security audit item.</summary>
+public sealed class TenantSecurityAuditItem
+{
+    /// <summary>Event timestamp in UTC.</summary>
+    public required DateTime TimestampUtc { get; init; }
+
+    /// <summary>Security event type.</summary>
+    public required string EventType { get; init; }
+
+    /// <summary>Tenant identifier.</summary>
+    public required string TenantId { get; init; }
+
+    /// <summary>Database name.</summary>
+    public required string Database { get; init; }
+
+    /// <summary>Principal identifier.</summary>
+    public required string Principal { get; init; }
+
+    /// <summary>Protocol.</summary>
+    public required string Protocol { get; init; }
+
+    /// <summary>Authorization decision.</summary>
+    public required bool IsAllowed { get; init; }
+
+    /// <summary>Decision code.</summary>
+    public required string DecisionCode { get; init; }
+
+    /// <summary>Decision reason.</summary>
+    public required string Reason { get; init; }
 }

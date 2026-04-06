@@ -24,6 +24,9 @@ public sealed class MetricsCollector : IDisposable
     private readonly Counter<long> _failedRequests;
     private readonly UpDownCounter<int> _activeSessions;
     private readonly Histogram<int> _rowsReturned;
+    private readonly Counter<long> _tenantAuthorizationAllowed;
+    private readonly Counter<long> _tenantAuthorizationDenied;
+    private readonly Counter<long> _tenantQuotaThrottles;
 
     public MetricsCollector(string serviceName = "sharpcoredb-server")
     {
@@ -68,6 +71,21 @@ public sealed class MetricsCollector : IDisposable
             "sharpcoredb.query.rows_returned",
             unit: "{row}",
             description: "Number of rows returned per query");
+
+        _tenantAuthorizationAllowed = _meter.CreateCounter<long>(
+            "sharpcoredb.tenant.auth.allowed",
+            unit: "{decision}",
+            description: "Total number of allowed tenant database authorization decisions");
+
+        _tenantAuthorizationDenied = _meter.CreateCounter<long>(
+            "sharpcoredb.tenant.auth.denied",
+            unit: "{decision}",
+            description: "Total number of denied tenant database authorization decisions");
+
+        _tenantQuotaThrottles = _meter.CreateCounter<long>(
+            "sharpcoredb.tenant.quota.throttles",
+            unit: "{event}",
+            description: "Total tenant quota throttle events");
     }
 
     /// <summary>
@@ -137,6 +155,68 @@ public sealed class MetricsCollector : IDisposable
     public void DecrementActiveSessions()
     {
         _activeSessions.Add(-1);
+    }
+
+    /// <summary>
+    /// Records a tenant authorization decision for observability.
+    /// </summary>
+    /// <param name="protocol">Protocol name (e.g. gRPC/REST/Binary).</param>
+    /// <param name="operation">Operation name.</param>
+    /// <param name="databaseName">Target database name.</param>
+    /// <param name="isAllowed">Authorization result.</param>
+    /// <param name="code">Decision code.</param>
+    public void RecordTenantAuthorizationDecision(
+        string protocol,
+        string operation,
+        string databaseName,
+        bool isAllowed,
+        string code)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(protocol);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
+        var tags = new TagList
+        {
+            { "protocol", protocol },
+            { "operation", operation },
+            { "database", databaseName },
+            { "code", code },
+        };
+
+        if (isAllowed)
+        {
+            _tenantAuthorizationAllowed.Add(1, tags);
+            return;
+        }
+
+        _tenantAuthorizationDenied.Add(1, tags);
+    }
+
+    /// <summary>
+    /// Records a tenant quota throttle event.
+    /// </summary>
+    public void RecordTenantQuotaThrottle(
+        string tenantId,
+        string quotaType,
+        string operation,
+        string code)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(quotaType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
+        var tags = new TagList
+        {
+            { "tenant_id", tenantId },
+            { "quota_type", quotaType },
+            { "operation", operation },
+            { "code", code },
+        };
+
+        _tenantQuotaThrottles.Add(1, tags);
     }
 
     /// <summary>

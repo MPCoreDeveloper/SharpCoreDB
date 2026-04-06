@@ -57,4 +57,8 @@
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Tenancy\" />
+  </ItemGroup>
+
 </Project>

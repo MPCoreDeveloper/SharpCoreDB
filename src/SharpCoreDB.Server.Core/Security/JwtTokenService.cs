@@ -16,16 +16,22 @@ namespace SharpCoreDB.Server.Core.Security;
 /// </summary>
 public sealed class JwtTokenService(
     string secretKey,
-    int expirationHours = 24)
+    int expirationHours = 24,
+    bool allowLegacyTokens = true)
 {
     private readonly string _secretKey = secretKey ?? throw new ArgumentNullException(nameof(secretKey));
     private readonly int _expirationHours = expirationHours;
+    private readonly bool _allowLegacyTokens = allowLegacyTokens;
     private readonly JwtSecurityTokenHandler _tokenHandler = new();
 
     /// <summary>
     /// Generates a new JWT token for the specified username and session.
     /// </summary>
-    public string GenerateToken(string username, string sessionId, string? roles = null)
+    public string GenerateToken(
+        string username,
+        string sessionId,
+        string? roles = null,
+        JwtTenantScope? tenantScope = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
@@ -37,17 +43,22 @@ public sealed class JwtTokenService(
 
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, username),
-            new Claim("session_id", sessionId),
-            new Claim("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()),
+            new(ClaimTypes.NameIdentifier, username),
+            new("session_id", sessionId),
+            new("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()),
         };
 
         if (!string.IsNullOrWhiteSpace(roles))
         {
-            foreach (var role in roles.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            foreach (var role in roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                claims.Add(new Claim(ClaimTypes.Role, role.Trim()));
+                claims.Add(new Claim(ClaimTypes.Role, role));
             }
+        }
+
+        if (tenantScope is not null)
+        {
+            claims.AddRange(BuildTenantScopeClaims(tenantScope));
         }
 
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -88,15 +99,19 @@ public sealed class JwtTokenService(
             var principal = _tokenHandler.ValidateToken(token, tokenValidationParameters, out var validatedToken);
 
             if (validatedToken is not JwtSecurityToken jwtToken ||
-                !jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256,
-                    StringComparison.OrdinalIgnoreCase))
+                !jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new SecurityTokenInvalidSignatureException("Token signature validation failed");
             }
 
+            ValidateTenantScopeClaims(principal);
             return principal;
         }
-        catch (Exception ex)
+        catch (SecurityTokenException ex)
+        {
+            throw new SecurityTokenValidationException($"Token validation failed: {ex.Message}", ex);
+        }
+        catch (ArgumentException ex)
         {
             throw new SecurityTokenValidationException($"Token validation failed: {ex.Message}", ex);
         }
@@ -116,5 +131,84 @@ public sealed class JwtTokenService(
     public string? GetUsernameFromToken(ClaimsPrincipal principal)
     {
         return principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static IReadOnlyList<Claim> BuildTenantScopeClaims(JwtTenantScope tenantScope)
+    {
+        var builder = TenantAwareTokenService
+            .CreateClaimsBuilder()
+            .WithTenantId(tenantScope.TenantId)
+            .WithAllowedDatabases([..tenantScope.AllowedDatabases])
+            .WithDatabasePermissions(tenantScope.Permissions)
+            .WithScopeVersion(tenantScope.ScopeVersion);
+
+        return [.. builder.Build()];
+    }
+
+    private void ValidateTenantScopeClaims(ClaimsPrincipal principal)
+    {
+        var scopeVersion = principal.GetScopeVersion();
+        var tenantId = principal.GetTenantId();
+        var allowedDatabases = principal.GetAllowedDatabases();
+
+        var hasTenantScopeData = !string.IsNullOrWhiteSpace(tenantId) || allowedDatabases.Count > 0;
+
+        if (string.IsNullOrWhiteSpace(scopeVersion))
+        {
+            if (hasTenantScopeData)
+            {
+                throw new SecurityTokenValidationException("Token scope claims are incomplete: missing scope_version");
+            }
+
+            if (!_allowLegacyTokens)
+            {
+                throw new SecurityTokenValidationException("Legacy JWT tokens without scope_version are not allowed");
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            throw new SecurityTokenValidationException("Token scope claims are incomplete: missing tenant_id");
+        }
+
+        if (allowedDatabases.Count == 0)
+        {
+            throw new SecurityTokenValidationException("Token scope claims are incomplete: missing allowed_databases");
+        }
+    }
+}
+/// <summary>
+/// Tenant scope contract embedded in JWT claims.
+/// </summary>
+public sealed record JwtTenantScope(
+    string TenantId,
+    IReadOnlyList<string> AllowedDatabases,
+    DatabasePermission Permissions,
+    string ScopeVersion = TenantAwareClaims.CurrentScopeVersion)
+{
+    /// <summary>
+    /// Creates a normalized tenant scope object for JWT claim generation.
+    /// </summary>
+    public static JwtTenantScope Create(
+        string tenantId,
+        DatabasePermission permissions,
+        params string[] allowedDatabases)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+
+        var normalizedDatabases = allowedDatabases
+            .Where(static db => !string.IsNullOrWhiteSpace(db))
+            .Select(static db => db.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedDatabases.Length == 0)
+        {
+            throw new ArgumentException("At least one allowed database is required", nameof(allowedDatabases));
+        }
+
+        return new JwtTenantScope(tenantId, normalizedDatabases, permissions);
     }
 }

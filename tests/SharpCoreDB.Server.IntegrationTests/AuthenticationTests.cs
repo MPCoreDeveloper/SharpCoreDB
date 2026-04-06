@@ -5,7 +5,9 @@
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using SharpCoreDB.Server.Core;
+using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using SharpCoreDB.Server.Protocol;
 
@@ -110,6 +112,55 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     }
 
     [Fact]
+    public void Authenticate_GeneratedTokenContainsTenantScopeClaims()
+    {
+        // Arrange
+        var authService = CreateAuthService();
+        var tokenService = CreateTokenService();
+
+        // Act
+        var result = authService.Authenticate("writer", "writer123", "session-scope-1");
+
+        // Assert
+        Assert.True(result.IsAuthenticated);
+
+        var principal = tokenService.ValidateToken(result.Token!);
+
+        Assert.Equal("default", principal.GetTenantId());
+        Assert.Equal(TenantAwareClaims.CurrentScopeVersion, principal.GetScopeVersion());
+        Assert.Contains("*", principal.GetAllowedDatabases());
+        Assert.True(principal.HasDatabasePermission(DatabasePermission.Connect));
+    }
+
+    [Fact]
+    public void ValidateToken_LegacyTokenWithoutScopeVersion_AllowedWhenConfigured()
+    {
+        // Arrange
+        var legacyIssuer = new JwtTokenService("integration-test-secret-key-32chars!!", 1, allowLegacyTokens: true);
+        var strictValidator = new JwtTokenService("integration-test-secret-key-32chars!!", 1, allowLegacyTokens: true);
+        var legacyToken = legacyIssuer.GenerateToken("legacy-user", "legacy-session", "reader");
+
+        // Act
+        var principal = strictValidator.ValidateToken(legacyToken);
+
+        // Assert
+        Assert.Equal("legacy-user", strictValidator.GetUsernameFromToken(principal));
+        Assert.Null(principal.GetScopeVersion());
+    }
+
+    [Fact]
+    public void ValidateToken_LegacyTokenWithoutScopeVersion_RejectedWhenDisabled()
+    {
+        // Arrange
+        var legacyIssuer = new JwtTokenService("integration-test-secret-key-32chars!!", 1, allowLegacyTokens: true);
+        var strictValidator = new JwtTokenService("integration-test-secret-key-32chars!!", 1, allowLegacyTokens: false);
+        var legacyToken = legacyIssuer.GenerateToken("legacy-user", "legacy-session", "reader");
+
+        // Act / Assert
+        Assert.Throws<SecurityTokenValidationException>(() => strictValidator.ValidateToken(legacyToken));
+    }
+
+    [Fact]
     public void GetUserRole_ExistingUser_ReturnsRole()
     {
         var authService = CreateAuthService();
@@ -195,7 +246,7 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     public async Task Session_CreatedWithRole_HasCorrectRole()
     {
         var session = await _fixture.SessionManager!.CreateSessionAsync(
-            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, CancellationToken.None);
+            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, cancellationToken: CancellationToken.None);
 
         Assert.Equal(DatabaseRole.Reader, session.Role);
     }
@@ -204,7 +255,7 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     public async Task ValidateSessionAsync_ReaderWithReadPermission_ReturnsTrue()
     {
         var session = await _fixture.SessionManager!.CreateSessionAsync(
-            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, CancellationToken.None);
+            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, cancellationToken: CancellationToken.None);
 
         var valid = await _fixture.SessionManager.ValidateSessionAsync(
             session.SessionId, Permission.Read);
@@ -216,7 +267,7 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     public async Task ValidateSessionAsync_ReaderWithWritePermission_ReturnsFalse()
     {
         var session = await _fixture.SessionManager!.CreateSessionAsync(
-            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, CancellationToken.None);
+            "testdb", "reader", "127.0.0.1", DatabaseRole.Reader, cancellationToken: CancellationToken.None);
 
         var valid = await _fixture.SessionManager.ValidateSessionAsync(
             session.SessionId, Permission.Write);
@@ -228,7 +279,7 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     public async Task ValidateSessionAsync_AdminWithAllPermissions_ReturnsTrue()
     {
         var session = await _fixture.SessionManager!.CreateSessionAsync(
-            "testdb", "admin", "127.0.0.1", DatabaseRole.Admin, CancellationToken.None);
+            "testdb", "admin", "127.0.0.1", DatabaseRole.Admin, cancellationToken: CancellationToken.None);
 
         Assert.True(await _fixture.SessionManager.ValidateSessionAsync(session.SessionId, Permission.Read));
         Assert.True(await _fixture.SessionManager.ValidateSessionAsync(session.SessionId, Permission.Write));
@@ -242,9 +293,14 @@ public sealed class AuthenticationTests : IClassFixture<TestServerFixture>
     {
         var config = CreateTestConfig();
         var tokenService = CreateTokenService();
+        var auditService = new TenantSecurityAuditService(
+            new TenantSecurityAuditStore(),
+            NullLogger<TenantSecurityAuditService>.Instance);
+
         return new UserAuthenticationService(
             Options.Create(config),
             tokenService,
+            auditService,
             NullLogger<UserAuthenticationService>.Instance);
     }
 

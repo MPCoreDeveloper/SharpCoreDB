@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using CoreDatabaseService = SharpCoreDB.Server.Core.DatabaseService;
 
 namespace SharpCoreDB.Server.IntegrationTests;
@@ -39,6 +40,9 @@ public sealed class TestServerFixture : IAsyncLifetime
 
     /// <summary>Gets the JWT token service for creating test tokens.</summary>
     public JwtTokenService? TokenService { get; private set; }
+
+    /// <summary>Gets tenant security audit store for test assertions.</summary>
+    public TenantSecurityAuditStore? TenantSecurityAuditStore { get; private set; }
 
     public TestServerFixture()
     {
@@ -107,9 +111,16 @@ public sealed class TestServerFixture : IAsyncLifetime
 
         services.AddSingleton(Options.Create(testConfig));
         services.AddSingleton<DatabaseRegistry>();
+        services.AddSingleton<TenantQuotaEnforcementService>();
         services.AddSingleton<SessionManager>();
         services.AddSingleton<RbacService>();
         services.AddSingleton<UserAuthenticationService>();
+        services.AddSingleton<TenantAccessAuditStore>();
+        services.AddSingleton<TenantSecurityAuditStore>();
+        services.AddSingleton<TenantSecurityAuditService>();
+        services.AddSingleton<ITenantEncryptionKeyProvider, ConfigurationTenantEncryptionKeyProvider>();
+        services.AddSingleton<TenantEncryptionKeyRotationService>();
+        services.AddSingleton<TenantAuthorizationPolicyService>();
         services.AddSingleton(new MetricsCollector("test-server"));
         services.AddSingleton(new JwtTokenService(
             testConfig.Security.JwtSecretKey, 1));
@@ -119,13 +130,18 @@ public sealed class TestServerFixture : IAsyncLifetime
         DatabaseRegistry = _serviceProvider.GetRequiredService<DatabaseRegistry>();
         SessionManager = _serviceProvider.GetRequiredService<SessionManager>();
         TokenService = _serviceProvider.GetRequiredService<JwtTokenService>();
+        TenantSecurityAuditStore = _serviceProvider.GetRequiredService<TenantSecurityAuditStore>();
 
         // Initialize databases
         await DatabaseRegistry.InitializeAsync(CancellationToken.None);
 
         // Create a test session for convenience
         var session = await SessionManager.CreateSessionAsync(
-            "testdb", "test-user", "127.0.0.1:0", DatabaseRole.Admin, CancellationToken.None);
+            "testdb",
+            "test-user",
+            "127.0.0.1:0",
+            DatabaseRole.Admin,
+            cancellationToken: CancellationToken.None);
         TestSessionId = session.SessionId;
     }
 
@@ -138,6 +154,8 @@ public sealed class TestServerFixture : IAsyncLifetime
             DatabaseRegistry!,
             SessionManager!,
             _serviceProvider!.GetRequiredService<UserAuthenticationService>(),
+            _serviceProvider!.GetRequiredService<TenantQuotaEnforcementService>(),
+            _serviceProvider!.GetRequiredService<TenantSecurityAuditService>(),
             _serviceProvider!.GetRequiredService<ILogger<Core.DatabaseService>>(),
             _serviceProvider!.GetRequiredService<MetricsCollector>());
     }
@@ -148,7 +166,11 @@ public sealed class TestServerFixture : IAsyncLifetime
     public async Task<string> CreateSessionAsync(string databaseName = "testdb")
     {
         var session = await SessionManager!.CreateSessionAsync(
-            databaseName, "test-user", "127.0.0.1:0", DatabaseRole.Admin, CancellationToken.None);
+            databaseName,
+            "test-user",
+            "127.0.0.1:0",
+            DatabaseRole.Admin,
+            cancellationToken: CancellationToken.None);
         return session.SessionId;
     }
 

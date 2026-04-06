@@ -202,7 +202,12 @@ public sealed class WebSocketHandler(
             var databaseName = request.Database ?? _config.DefaultDatabase;
             var role = RbacService.GetRoleFromPrincipal(principal);
             _session = await _sessionManager.CreateSessionAsync(
-                databaseName, username, "websocket", role, cancellationToken).ConfigureAwait(false);
+                databaseName,
+                username,
+                "websocket",
+                role,
+                tenantId: principal.GetTenantId() ?? "default",
+                cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "WebSocket authenticated: User={Username}, Session={SessionId}, Role={Role}",

@@ -19,6 +19,7 @@ using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Grpc;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using SharpCoreDB.Server.Core.WebSockets;
 
 // Create and configure the host
@@ -213,9 +214,16 @@ builder.Services.Configure<ServerConfiguration>(
 // Add core services
 builder.Services.AddSingleton<NetworkServer>();
 builder.Services.AddSingleton<DatabaseRegistry>();
+builder.Services.AddSingleton<TenantQuotaEnforcementService>();
 builder.Services.AddSingleton<SessionManager>();
 builder.Services.AddSingleton<RbacService>();
 builder.Services.AddSingleton<UserAuthenticationService>();
+builder.Services.AddSingleton<TenantAccessAuditStore>();
+builder.Services.AddSingleton<TenantSecurityAuditStore>();
+builder.Services.AddSingleton<TenantSecurityAuditService>();
+builder.Services.AddSingleton<ITenantEncryptionKeyProvider, ConfigurationTenantEncryptionKeyProvider>();
+builder.Services.AddSingleton<TenantEncryptionKeyRotationService>();
+builder.Services.AddSingleton<TenantAuthorizationPolicyService>();
 builder.Services.AddSingleton<CertificateAuthenticationService>();
 builder.Services.AddSingleton<GrpcRequestMetricsInterceptor>();
 builder.Services.AddSingleton<GrpcAuthorizationInterceptor>();
@@ -285,7 +293,7 @@ app.MapControllers();
 // Map health check endpoint
 app.MapHealthChecks("/health");
 
-// Map REST API endpoints (placeholder)
+ // Map REST API endpoints (placeholder)
 app.MapGet("/", () => new
 {
     name = "SharpCoreDB Server",
