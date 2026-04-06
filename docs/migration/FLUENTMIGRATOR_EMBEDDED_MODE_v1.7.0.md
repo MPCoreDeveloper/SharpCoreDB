@@ -5,6 +5,23 @@
 
 ---
 
+## 0. Short Answer for the Most Common Question
+
+**Question:** Does FluentMigrator only work with a remote SharpCoreDB server because the built-in `ISharpCoreDbMigrationSqlExecutor` implementation is the gRPC one?
+
+**Answer:** **No. Embedded mode is fully supported.**
+
+The gRPC executor is only the built-in implementation of the **optional custom executor extension point**. It is used for **remote** execution scenarios.
+
+For **embedded/in-process** execution, FluentMigrator does **not** require any `ISharpCoreDbMigrationSqlExecutor` registration. The migration pipeline runs directly against:
+
+1. `IDatabase` (preferred embedded path)
+2. `DbConnection` (fallback path)
+
+If your application registers SharpCoreDB locally and calls `AddSharpCoreDBFluentMigrator(...)`, migrations execute locally in-process without gRPC.
+
+---
+
 ## 1. What Embedded Mode Means
 
 Embedded mode runs migrations directly against a local SharpCoreDB engine instance in the same process.
@@ -36,6 +53,43 @@ builder.Services.AddSharpCoreDBFluentMigrator(runner =>
     runner.ScanIn(typeof(Program).Assembly).For.Migrations();
 });
 ```
+
+### What must be registered for embedded execution
+
+`AddSharpCoreDBFluentMigrator(...)` registers the FluentMigrator processor integration, but it does **not** force a remote client path.
+
+Embedded execution works when the DI container can resolve one of these local execution sources:
+
+- `IDatabase`
+- `DbConnection`
+
+That means this is valid embedded usage:
+
+```csharp
+using FluentMigrator.Runner;
+using SharpCoreDB.Extensions.Extensions;
+using SharpCoreDB.Interfaces;
+
+builder.Services.AddSingleton<IDatabase>(database);
+builder.Services.AddSharpCoreDBFluentMigrator(runner =>
+{
+    runner.ScanIn(typeof(Program).Assembly).For.Migrations();
+});
+```
+
+A custom `ISharpCoreDbMigrationSqlExecutor` is optional and should only be added when you intentionally want to override SQL execution behavior.
+
+### Why the API can look misleading at first
+
+Users often inspect the package and notice that the only built-in `ISharpCoreDbMigrationSqlExecutor` implementation is the gRPC one.
+
+That does **not** mean FluentMigrator is remote-only.
+
+It means:
+
+- the custom executor interface is an extension point
+- the current built-in custom executor implementation targets remote gRPC execution
+- embedded execution uses `IDatabase` or `DbConnection` directly instead of going through that custom interface
 
 ### Recommended startup execution
 
@@ -119,11 +173,21 @@ public sealed class CreateUsersTableMigration : Migration
 
 ### Resolution order in `SharpCoreDbMigrationExecutor`
 
+`SharpCoreDbMigrationExecutor` resolves the execution target in this order:
+
 1. `ISharpCoreDbMigrationSqlExecutor` (custom override, if registered)
-2. `IDatabase` (embedded engine path)
+2. `IDatabase` (normal embedded engine path)
 3. `DbConnection` fallback
 
-If you only use `AddSharpCoreDBFluentMigrator(...)` and embedded database DI, path (2) is used.
+This design allows one integration pipeline to support both local and remote execution models.
+
+### What happens when no custom executor is registered
+
+If you only use `AddSharpCoreDBFluentMigrator(...)` and register an embedded SharpCoreDB `IDatabase`, the executor uses the `IDatabase` path directly.
+
+No gRPC client is created.
+No network hop is required.
+No remote server dependency is introduced.
 
 ### Transaction model
 
@@ -151,8 +215,19 @@ Cause:
 
 Fix:
 - Register SharpCoreDB database services before `AddSharpCoreDBFluentMigrator(...)`.
+- For embedded scenarios, prefer registering `IDatabase`.
 
-### B) Migration expression not supported
+### B) "I do not see an embedded migration SQL executor implementation"
+
+Cause:
+- You are looking at the custom executor extension point and assuming every execution mode must implement it.
+
+Fix:
+- Use `AddSharpCoreDBFluentMigrator(...)` for embedded mode.
+- Ensure `IDatabase` or `DbConnection` is registered.
+- Only use `AddSharpCoreDBFluentMigratorGrpc(...)` when you explicitly want remote execution over gRPC.
+
+### C) Migration expression not supported
 
 Cause:
 - Expression translates to SQL not supported by the current engine behavior.
@@ -161,7 +236,7 @@ Fix:
 - Rewrite migration to equivalent supported SQL operations.
 - For advanced custom behavior, use explicit SQL in migration steps.
 
-### C) Version table missing
+### D) Version table missing
 
 Cause:
 - Processor not initialized in the migration pipeline.
@@ -174,6 +249,8 @@ Fix:
 ## 8. Production Checklist (Embedded)
 
 - [ ] `AddSharpCoreDBFluentMigrator(...)` is registered.
+- [ ] Embedded `IDatabase` or `DbConnection` is registered in DI.
+- [ ] No remote gRPC executor is registered unless intentionally overriding execution behavior.
 - [ ] Migrations are scanned from correct assembly.
 - [ ] Startup path executes `MigrateUp()` exactly once.
 - [ ] Backup/restore strategy exists before schema upgrades.

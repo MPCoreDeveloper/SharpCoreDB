@@ -158,8 +158,17 @@ public sealed class SecurityConfiguration
     /// <summary>TLS certificate file path.</summary>
     public required string TlsCertificatePath { get; init; }
 
-    /// <summary>TLS private key file path.</summary>
-    public required string TlsPrivateKeyPath { get; init; }
+    /// <summary>
+    /// TLS private key file path.
+    /// Required when certificate path points to PEM/CRT; optional for PFX certificates.
+    /// </summary>
+    public string? TlsPrivateKeyPath { get; init; }
+
+    /// <summary>
+    /// Optional TLS certificate password.
+    /// Used when certificate path points to password-protected PFX certificates.
+    /// </summary>
+    public string? TlsCertificatePassword { get; init; }
 
     /// <summary>JWT secret key for token signing.</summary>
     public required string JwtSecretKey { get; init; }

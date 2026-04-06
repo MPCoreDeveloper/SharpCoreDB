@@ -52,11 +52,20 @@ dotnet add package SharpCoreDB.Extensions --version 1.7.0
 
 ### FluentMigrator Schema Migrations (Optional)
 
+**Important:** FluentMigrator is **not** limited to remote/server mode.
+
+- `AddSharpCoreDBFluentMigrator(...)` = embedded or in-process execution
+- `AddSharpCoreDBFluentMigratorGrpc(...)` = remote gRPC execution
+
+The built-in gRPC executor is only used for the remote path. Embedded mode works without a custom migration SQL executor by executing directly against a registered local `IDatabase` or `DbConnection`.
+
 ```csharp
 using FluentMigrator;
 using FluentMigrator.Runner;
 using SharpCoreDB.Extensions.Extensions;
+using SharpCoreDB.Interfaces;
 
+builder.Services.AddSingleton<IDatabase>(database);
 builder.Services.AddSharpCoreDBFluentMigrator(runner =>
 {
     runner.ScanIn(typeof(Program).Assembly).For.Migrations();
@@ -68,6 +77,18 @@ using var scope = app.Services.CreateScope();
 var migrationRunner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
 migrationRunner.MigrateUp();
 ```
+
+#### Embedded mode summary
+
+Use embedded mode when SharpCoreDB runs in the same process as the migration runner.
+
+Execution target resolution order is:
+
+1. custom `ISharpCoreDbMigrationSqlExecutor` if you intentionally register one
+2. local `IDatabase`
+3. local `DbConnection`
+
+That means the absence of an embedded executor implementation is expected. Embedded mode does not need one.
 
 #### Automatic startup migration (Program.cs + HostedService)
 
@@ -129,6 +150,11 @@ migrationRunner.MigrateUp();
 ```
 
 Remote mode executes SQL over `SharpCoreDB.Client` and does not expose an `IDbConnection` for `PerformDBOperationExpression` callbacks.
+
+For detailed architecture and troubleshooting guidance, see:
+
+- `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
+- `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
 Example migration:
 

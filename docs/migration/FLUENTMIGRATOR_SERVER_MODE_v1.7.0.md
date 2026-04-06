@@ -5,6 +5,21 @@
 
 ---
 
+## Quick Clarification
+
+A common point of confusion is seeing the built-in gRPC implementation of `ISharpCoreDbMigrationSqlExecutor` and assuming that FluentMigrator only works against a remote SharpCoreDB server.
+
+That assumption is incorrect.
+
+SharpCoreDB supports both:
+
+- **in-process server-host execution** via local `IDatabase` or `DbConnection`
+- **remote server execution** via `AddSharpCoreDBFluentMigratorGrpc(...)`
+
+The custom executor interface is an extension point. The built-in gRPC executor is only the implementation for the remote path.
+
+---
+
 ## Decision Summary (Package Placement)
 
 FluentMigrator support is intentionally delivered through `SharpCoreDB.Extensions` for v1.7.0 because it is currently an integration/glue feature (DI registration + migration processor + execution adapters), not a standalone provider domain.
@@ -52,9 +67,15 @@ builder.Services.AddSharpCoreDBFluentMigrator(runner =>
 
 This path resolves execution via:
 
-- custom executor (if registered)
-- then `IDatabase`
-- then `DbConnection`
+1. custom executor (only if you explicitly register one)
+2. `IDatabase`
+3. `DbConnection`
+
+### Important behavior note
+
+In-process server-host mode does **not** require `ISharpCoreDbMigrationSqlExecutor`.
+
+If the server host already has a local SharpCoreDB engine registered in DI, FluentMigrator runs locally in-process exactly like embedded mode. The fact that the process is a server does not automatically move it to the gRPC path.
 
 ---
 
@@ -84,6 +105,12 @@ This wires:
 - `ISharpCoreDbMigrationSqlExecutor` → `SharpCoreDbGrpcMigrationSqlExecutor`
 - SQL execution through `SharpCoreDB.Client`
 
+### When the custom executor is actually used
+
+The built-in `SharpCoreDbGrpcMigrationSqlExecutor` is used only when you register `AddSharpCoreDBFluentMigratorGrpc(...)` or explicitly register a custom `ISharpCoreDbMigrationSqlExecutor` yourself.
+
+If you do neither, SharpCoreDB falls back to local `IDatabase` / `DbConnection` resolution.
+
 ### Behavior notes
 
 - `MigrateUp` / target version / rollback are available.
@@ -108,6 +135,7 @@ This wires:
 
 - Preferred for single-service ownership deployments.
 - Run before endpoint binding/traffic readiness.
+- Uses the same local execution model as embedded mode when `IDatabase` or `DbConnection` is available.
 
 ### B) External migration job (remote)
 
@@ -131,13 +159,24 @@ This wires:
 | `Rollback(steps)` | ✅ | ✅ |
 | `PerformDBOperationExpression` with connection object | ✅ (if connection available) | ⚠️ Limited (`null` connection) |
 | Uses local `IDatabase` | ✅ | ❌ |
+| Uses local `DbConnection` | ✅ | ❌ |
+| Requires `ISharpCoreDbMigrationSqlExecutor` | ❌ | ✅ |
 | Uses `SharpCoreDB.Client` network transport | ❌ | ✅ |
 
 ---
 
 ## 7. Troubleshooting (Server Mode)
 
-### A) Authentication/session failures in remote mode
+### A) "Why do I only see a gRPC migration executor implementation?"
+
+Cause:
+- You are looking at the optional custom executor extension point rather than the full execution resolution model.
+
+Fix:
+- For in-process server-host execution, use `AddSharpCoreDBFluentMigrator(...)` and register local `IDatabase` or `DbConnection`.
+- For remote execution, use `AddSharpCoreDBFluentMigratorGrpc(...)`.
+
+### B) Authentication/session failures in remote mode
 
 Symptoms:
 - gRPC errors on command execution
@@ -148,7 +187,7 @@ Fix:
 - verify target database exists
 - verify TLS/connectivity settings
 
-### B) Migration works in embedded but fails in remote
+### C) Migration works in embedded but fails in remote
 
 Cause:
 - remote mode has no direct `IDbConnection` callback object for DB-operation expressions.
@@ -157,7 +196,7 @@ Fix:
 - replace DB-operation callback with explicit migration SQL steps
 - avoid connection-dependent callback logic in remote pipelines
 
-### C) Connection timeouts
+### D) Connection timeouts
 
 Fix:
 - increase `SharpCoreDbGrpcMigrationOptions.CommandTimeoutMs`
@@ -191,6 +230,8 @@ migrationRunner.MigrateUp();
 ## 9. Production Checklist (Server Mode)
 
 - [ ] Correct mode selected: in-process vs remote gRPC.
+- [ ] In-process mode uses local `IDatabase` or `DbConnection` registration.
+- [ ] Remote mode uses `AddSharpCoreDBFluentMigratorGrpc(...)` intentionally.
 - [ ] Migration credentials scoped and secret-managed.
 - [ ] TLS enforced in all non-local environments.
 - [ ] Migration step integrated in deployment pipeline.

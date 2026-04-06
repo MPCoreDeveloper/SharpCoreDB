@@ -11,12 +11,12 @@
     <!-- This is a GUI viewer tool, not a NuGet package -->
     <IsPackable>false</IsPackable>
     
-    <Version>1.0.5</Version>
+    <Version>1.0.7</Version>
     <PackageId>SharpCoreDB.Viewer</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Description>Viewer tool for SharpCoreDB.</Description>
-    <PackageReleaseNotes>v1.0.5: Updated to .NET 10; minor UX fixes; better error handling during batch operations.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.0.7: Updated to .NET 10; minor UX fixes; better error handling during batch operations.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

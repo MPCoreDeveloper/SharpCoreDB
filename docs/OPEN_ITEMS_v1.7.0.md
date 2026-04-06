@@ -21,6 +21,13 @@
   - `docs/storage/METADATA_IMPROVEMENTS_V1.5.0.md` → `docs/storage/METADATA_IMPROVEMENTS_v1.7.0.md`
   - `docs/storage/QUICK_REFERENCE_V1.5.0.md` → `docs/storage/QUICK_REFERENCE_v1.7.0.md`
 - Updated `docs/release/PHASE12_RELEASE_NOTES.md` version references to `v1.7.0`.
+- Fixed CI compatibility smoke readiness failures:
+  - Added server `GET /api/v1/health` endpoint to match smoke test expectations.
+  - Added TLS PFX password support in server startup configuration.
+  - Increased workflow readiness timeout and added startup log dump on readiness failures.
+- Added CI coverage threshold validation in `.github/workflows/ci.yml`:
+  - Aggregates Cobertura line metrics from generated test coverage files.
+  - Fails CI when merged line coverage drops below `MIN_LINE_COVERAGE_PERCENT`.
 
 ## Open items intentionally left for dedicated follow-up
 

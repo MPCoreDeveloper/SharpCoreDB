@@ -4,6 +4,30 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 
 ---
 
+## FluentMigrator FAQ
+
+### Does FluentMigrator only work with a remote SharpCoreDB server?
+
+**No.** SharpCoreDB supports FluentMigrator in all of these scenarios:
+
+- **Embedded/local app execution** via `AddSharpCoreDBFluentMigrator(...)`
+- **In-process server-host execution** via `AddSharpCoreDBFluentMigrator(...)`
+- **Remote gRPC execution** via `AddSharpCoreDBFluentMigratorGrpc(...)`
+
+The built-in gRPC executor is only the implementation for the **remote** path. It is **not** a requirement for embedded mode.
+
+For embedded mode, migrations execute directly against a registered local:
+
+- `IDatabase` (preferred)
+- `DbConnection` (fallback)
+
+If this was the point of confusion, start here first:
+
+- [FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)
+- [FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)
+
+---
+
 ## 🎯 Migration Guides
 
 ### **[FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)** ✅ v1.7.0
@@ -15,6 +39,7 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 - Direct engine-backed migration execution
 
 **Includes:**
+- Explicit clarification that embedded mode does not require gRPC
 - Architecture and execution pipeline
 - DI registration and startup patterns
 - `__SharpMigrations` version-table behavior
@@ -30,6 +55,7 @@ This directory contains comprehensive guides for **migrating to and within Sharp
 
 **Includes:**
 - In-process vs remote mode comparison
+- Clear explanation of when the gRPC executor is used
 - gRPC registration and operational patterns
 - Security recommendations and limitations
 - Troubleshooting and production checklist

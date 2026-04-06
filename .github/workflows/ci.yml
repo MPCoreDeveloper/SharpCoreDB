@@ -15,6 +15,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
   CI_TEST_FILTER: 'Category!=Performance&Category!=Debug&Category!=Manual'
+  MIN_LINE_COVERAGE_PERCENT: '60'
 
 jobs:
   build:
@@ -97,7 +98,47 @@ jobs:
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
-      
+
+    - name: Validate coverage threshold
+      if: matrix.os == 'ubuntu-latest'
+      shell: python3 {0}
+      run: |
+        import glob
+        import os
+        import sys
+        import xml.etree.ElementTree as ET
+
+        threshold = float(os.environ.get("MIN_LINE_COVERAGE_PERCENT", "60"))
+        files = glob.glob("**/TestResults/**/coverage.cobertura.xml", recursive=True)
+
+        if not files:
+          print("No coverage.cobertura.xml files found.", file=sys.stderr)
+          sys.exit(1)
+
+        covered = 0
+        valid = 0
+        for file in files:
+          try:
+            root = ET.parse(file).getroot()
+            lines_valid = int(root.attrib.get("lines-valid", "0"))
+            lines_covered = int(root.attrib.get("lines-covered", "0"))
+            valid += lines_valid
+            covered += lines_covered
+            print(f"Coverage input: {file} -> {lines_covered}/{lines_valid}")
+          except Exception as ex:
+            print(f"Skipping unreadable coverage file {file}: {ex}")
+
+        if valid == 0:
+          print("Coverage reports found but lines-valid is 0.", file=sys.stderr)
+          sys.exit(1)
+
+        percent = (covered / valid) * 100.0
+        print(f"Merged line coverage: {percent:.2f}% (threshold: {threshold:.2f}%)")
+
+        if percent < threshold:
+          print("Coverage threshold not met.", file=sys.stderr)
+          sys.exit(1)
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4

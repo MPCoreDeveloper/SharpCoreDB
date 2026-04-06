@@ -10,7 +10,7 @@ on:
       timeout:
         description: Seconds to wait for server ready
         required: false
-        default: '90'
+        default: '180'
 
 permissions:
   contents: read
@@ -26,13 +26,13 @@ env:
   SMOKE_PASSWORD: admin123
   SMOKE_DATABASE: smokedb
   SMOKE_CERT_PASS: smoketest
-  SERVER_READY_TIMEOUT: ${{ github.event.inputs.timeout || '90' }}
+  SERVER_READY_TIMEOUT: ${{ github.event.inputs.timeout || '180' }}
 
 jobs:
   compatibility-smoke:
     name: Server Compatibility Smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
     - name: Checkout
@@ -109,25 +109,41 @@ jobs:
 
         port    = int(os.environ["SMOKE_HTTPS_PORT"])
         timeout = int(os.environ["SERVER_READY_TIMEOUT"])
-        url     = f"https://127.0.0.1:{port}/api/v1/health"
+        urls    = [
+          f"https://127.0.0.1:{port}/api/v1/health",
+          f"https://127.0.0.1:{port}/health"
+        ]
+
         ctx     = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode    = ssl.CERT_NONE
 
-        print(f"Polling {url} for up to {timeout}s …", flush=True)
+        print(f"Polling {urls[0]} / fallback {urls[1]} for up to {timeout}s …", flush=True)
         deadline = time.monotonic() + timeout
+        last_error = None
         while time.monotonic() < deadline:
-            try:
-                with urllib.request.urlopen(url, context=ctx, timeout=3) as r:
-                    if r.status == 200:
-                        print("Server is healthy.", flush=True)
-                        sys.exit(0)
-            except Exception as e:
-                pass
+            for url in urls:
+                try:
+                    with urllib.request.urlopen(url, context=ctx, timeout=3) as r:
+                        if r.status == 200:
+                            print(f"Server is healthy via {url}", flush=True)
+                            sys.exit(0)
+                except Exception as e:
+                    last_error = e
             time.sleep(2)
 
         print(f"Server not ready after {timeout}s — failing.", file=sys.stderr)
+        if last_error is not None:
+            print(f"Last readiness error: {last_error}", file=sys.stderr)
         sys.exit(1)
+
+    - name: Dump server logs on readiness failure
+      if: failure()
+      run: |
+        echo "=== Server stdout/stderr (tail -200) ==="
+        tail -n 200 tests/CompatibilitySmoke/smoke-logs/server-stdout.log || true
+        echo "=== Smoke log file (tail -200) ==="
+        tail -n 200 tests/CompatibilitySmoke/smoke-logs/smoke.log || true
 
     - name: Run compatibility smoke tests
       run: |

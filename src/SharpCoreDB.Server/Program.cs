@@ -70,6 +70,13 @@ builder.WebHost.ConfigureKestrel((context, options) =>
         throw new InvalidOperationException("TLS certificate path is required.");
     }
 
+    var certificatePath = config.Security.TlsCertificatePath;
+    var isPfxCertificate = string.Equals(Path.GetExtension(certificatePath), ".pfx", StringComparison.OrdinalIgnoreCase);
+    if (!isPfxCertificate && string.IsNullOrWhiteSpace(config.Security.TlsPrivateKeyPath))
+    {
+        throw new InvalidOperationException("TLS private key path is required when TLS certificate is not a PFX file.");
+    }
+
     var tlsVersion = config.Security.MinimumTlsVersion;
     var minimumTls = tlsVersion switch
     {
@@ -97,7 +104,7 @@ builder.WebHost.ConfigureKestrel((context, options) =>
             listenOptions.Protocols = config.EnableGrpcHttp3
                 ? HttpProtocols.Http2 | HttpProtocols.Http3
                 : HttpProtocols.Http2;
-            listenOptions.UseHttps(config.Security.TlsCertificatePath, config.Security.TlsPrivateKeyPath);
+            ConfigureHttpsEndpoint(listenOptions, config.Security);
         });
     }
 
@@ -107,7 +114,7 @@ builder.WebHost.ConfigureKestrel((context, options) =>
         options.ListenAnyIP(config.HttpsApiPort, listenOptions =>
         {
             listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-            listenOptions.UseHttps(config.Security.TlsCertificatePath, config.Security.TlsPrivateKeyPath);
+            ConfigureHttpsEndpoint(listenOptions, config.Security);
         });
     }
 });
@@ -426,10 +433,24 @@ if (serverConfig.EnableWebAdmin)
 app.MapGet("/", () => new
 {
     name = "SharpCoreDB Server",
-    version = "1.5.0",
+    version = "1.7.0",
     status = "running",
     transport = "HTTPS/TLS only",
 });
+
+// Map API health endpoint used by smoke tests and external tooling
+app.MapGet("/api/v1/health", (HealthCheckService healthService) =>
+{
+    var health = healthService.GetDetailedHealth();
+    return Results.Ok(new
+    {
+        status = health.Status,
+        version = health.Version,
+        timestamp = health.Timestamp,
+    });
+})
+.WithName("Health")
+.Produces(StatusCodes.Status200OK);
 
 // Map detailed health endpoint
 app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService) =>
@@ -441,7 +462,7 @@ app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService) =>
 .Produces<ServerHealthInfo>(StatusCodes.Status200OK);
 
 // Start the server
-Log.Information("Starting SharpCoreDB Server v1.5.0");
+Log.Information("Starting SharpCoreDB Server v1.7.0");
 Log.Information("🔒 Security Features:");
 Log.Information("  • Security Headers (SafeWebCore): HSTS / X-Content-Type-Options / Referrer-Policy / Server removal");
 Log.Information("  • Web Admin CSP: Nonce-based (active at /admin when EnableWebAdmin = true)");
@@ -624,4 +645,37 @@ static void InvokeProjectionExtension(Type extensionType, string methodName, par
     }
 
     _ = method.Invoke(null, args);
+}
+
+static void ConfigureHttpsEndpoint(ListenOptions listenOptions, SecurityConfiguration security)
+{
+    ArgumentNullException.ThrowIfNull(listenOptions);
+    ArgumentNullException.ThrowIfNull(security);
+
+    if (string.IsNullOrWhiteSpace(security.TlsCertificatePath))
+    {
+        throw new InvalidOperationException("TLS certificate path is required.");
+    }
+
+    var certificatePath = security.TlsCertificatePath;
+    var isPfxCertificate = string.Equals(Path.GetExtension(certificatePath), ".pfx", StringComparison.OrdinalIgnoreCase);
+
+    if (isPfxCertificate)
+    {
+        if (string.IsNullOrWhiteSpace(security.TlsCertificatePassword))
+        {
+            listenOptions.UseHttps(certificatePath);
+            return;
+        }
+
+        listenOptions.UseHttps(certificatePath, security.TlsCertificatePassword);
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(security.TlsPrivateKeyPath))
+    {
+        throw new InvalidOperationException("TLS private key path is required when TLS certificate is not a PFX file.");
+    }
+
+    listenOptions.UseHttps(certificatePath, security.TlsPrivateKeyPath);
 }
