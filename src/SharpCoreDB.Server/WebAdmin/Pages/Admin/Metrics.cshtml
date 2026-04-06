@@ -1,0 +1,107 @@
+@page "/admin/metrics"
+@model SharpCoreDB.Server.WebAdmin.Pages.Admin.MetricsModel
+@{
+    ViewData["Title"] = "Metrics";
+}
+
+<div class="page-wrapper">
+    <h1>Metrics</h1>
+
+    <div class="card-grid">
+        <div class="stat-card">
+            <div class="stat-label">Active Connections</div>
+            <div class="stat-value">@Model.Snapshot.ActiveConnections</div>
+            <div class="stat-sub">@Model.Snapshot.ActiveSessions active sessions</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-value">@Model.Snapshot.TotalRequests</div>
+            <div class="stat-sub">@Model.Snapshot.FailedRequests failed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Error Rate</div>
+            <div class="stat-value">@Model.Snapshot.ErrorRatePercent <span style="font-size:14px;font-weight:400">%</span></div>
+            <div class="stat-sub">last failure: @(Model.Snapshot.LastFailureCode ?? "none")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg Latency</div>
+            <div class="stat-value">@Model.Snapshot.AverageLatencyMs <span style="font-size:14px;font-weight:400">ms</span></div>
+            <div class="stat-sub">average per request</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Query Requests</div>
+            <div class="stat-value">@Model.Snapshot.QueryRequests</div>
+            <div class="stat-sub">@Model.Snapshot.NonQueryRequests non-query</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Rows Returned</div>
+            <div class="stat-value">@Model.Snapshot.TotalRowsReturned</div>
+            <div class="stat-sub">total across all queries</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Network</h2>
+        <table>
+            <thead>
+                <tr><th>Direction</th><th>Bytes</th><th>Human</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Received</td>
+                    <td class="mono">@Model.Snapshot.TotalBytesReceived</td>
+                    <td>@MetricsModel.FormatBytes(Model.Snapshot.TotalBytesReceived)</td>
+                </tr>
+                <tr>
+                    <td>Sent</td>
+                    <td class="mono">@Model.Snapshot.TotalBytesSent</td>
+                    <td>@MetricsModel.FormatBytes(Model.Snapshot.TotalBytesSent)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.Snapshot.Protocols.Count > 0)
+    {
+        <div class="card">
+            <h2>Protocol Breakdown</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Protocol</th>
+                        <th>Active Connections</th>
+                        <th>Total Connections</th>
+                        <th>Total Messages</th>
+                        <th>Error Messages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (protocol, proto) in Model.Snapshot.Protocols)
+                    {
+                        <tr>
+                            <td><strong>@protocol</strong></td>
+                            <td>@proto.ActiveConnections</td>
+                            <td>@proto.TotalConnections</td>
+                            <td>@proto.TotalMessages</td>
+                            <td>
+                                @if (proto.ErrorMessages > 0)
+                                {
+                                    <span class="badge badge-red">@proto.ErrorMessages</span>
+                                }
+                                else
+                                {
+                                    <span>0</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <p style="font-size:12px;color:#6b778c;text-align:right">
+        Captured at @Model.Snapshot.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz")
+        &nbsp;·&nbsp; Last request age: @Model.Snapshot.LastRequestAgeSeconds.ToString("F1") s
+    </p>
+</div>

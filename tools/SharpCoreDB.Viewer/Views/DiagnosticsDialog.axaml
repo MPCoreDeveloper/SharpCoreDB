@@ -1,0 +1,236 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SharpCoreDB.Viewer.ViewModels"
+        xmlns:loc="using:SharpCoreDB.Viewer.Converters"
+        mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="700"
+        x:Class="SharpCoreDB.Viewer.Views.DiagnosticsDialog"
+        x:DataType="vm:DiagnosticsViewModel"
+        Classes="Dialog"
+        Title="{loc:Localize DiagnosticsTitle}"
+        Width="700" Height="700"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Icon="/Assets/SharpCoreDB.ico">
+
+    <Design.DataContext>
+        <vm:DiagnosticsViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.header">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,10,0,5"/>
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="Red"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style Selector="TextBlock.success">
+            <Setter Property="Foreground" Value="Green"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="Gray"/>
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <PathIcon Data="{StaticResource InfoIcon}" Width="24" Height="24" VerticalAlignment="Center"/>
+                <TextBlock Classes="header" Text="{loc:Localize DiagnosticsTitle}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="{loc:Localize DiagnosticsSubtitle}" Foreground="Gray" FontSize="12"/>
+        </StackPanel>
+
+        <!-- Body -->
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="10">
+
+                <!-- Storage Statistics -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="12" CornerRadius="5"
+                        IsVisible="{Binding HasDiagnostics}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="{loc:Localize DiagnosticsStorageSection}"/>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsPageCount}" Margin="0,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding PageCount}" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsPageSize}" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding PageSize}" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsTotalSize}" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding TotalSize}" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsCacheSize}" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding CacheSizePages}" Margin="0,2"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsJournalMode}" Margin="0,2"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding JournalMode}" Margin="0,2"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Health Status -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="12" CornerRadius="5"
+                        IsVisible="{Binding HasDiagnostics}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="{loc:Localize DiagnosticsHealthSection}"/>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsIntegrity}" Margin="0,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding IntegrityStatus}" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="{loc:Localize DiagnosticsCapturedAt}" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding CapturedAt}" Margin="0,2"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Table Row Counts -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="12" CornerRadius="5"
+                        IsVisible="{Binding HasDiagnostics}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="{loc:Localize DiagnosticsTableCounts}"/>
+                        <ListBox ItemsSource="{Binding TableRowCounts}"
+                                 MaxHeight="130"
+                                 FontFamily="Cascadia Code,Consolas,Courier New"
+                                 FontSize="12"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Admin Actions -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="12" CornerRadius="5">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="section" Text="{loc:Localize DiagnosticsAdminSection}"/>
+
+                        <!-- Imported snapshot notice -->
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    IsVisible="{Binding IsImportedSnapshot}">
+                            <PathIcon Data="{StaticResource InfoIcon}" Width="14" Height="14"
+                                      Foreground="DodgerBlue" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Localize DiagnosticsImportedNotice}"
+                                       FontSize="12" Foreground="DodgerBlue"
+                                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Command="{Binding OptimizeDatabaseCommand}"
+                                    IsEnabled="{Binding !IsRunning}"
+                                    Width="160"
+                                    ToolTip.Tip="{loc:Localize DiagnosticsOptimizeTooltip}">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <PathIcon Data="{StaticResource SettingsIcon}" Width="14" Height="14"/>
+                                    <TextBlock Text="{loc:Localize DiagnosticsOptimize}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding CheckpointWalCommand}"
+                                    IsEnabled="{Binding !IsRunning}"
+                                    Width="160"
+                                    ToolTip.Tip="{loc:Localize DiagnosticsCheckpointTooltip}">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <PathIcon Data="{StaticResource DocumentIcon}" Width="14" Height="14"/>
+                                    <TextBlock Text="{loc:Localize DiagnosticsCheckpoint}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Running indicator -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsRunning}">
+                            <ProgressBar IsIndeterminate="True" Width="120" Height="4"/>
+                            <TextBlock FontSize="12" Foreground="Gray" VerticalAlignment="Center"
+                                       Text="{loc:Localize DiagnosticsActionRunning}"/>
+                        </StackPanel>
+
+                        <!-- Error -->
+                        <StackPanel Orientation="Horizontal" Spacing="5"
+                                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <PathIcon Data="{StaticResource ErrorIcon}" Width="14" Height="14"
+                                      Foreground="Red" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                            <TextBlock Classes="error" Text="{Binding ErrorMessage}" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <!-- Success -->
+                        <StackPanel Orientation="Horizontal" Spacing="5"
+                                    IsVisible="{Binding AdminActionComplete}">
+                            <PathIcon Data="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"
+                                      Width="14" Height="14" Foreground="Green" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                            <TextBlock Classes="success" Text="{Binding StatusMessage}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Empty state -->
+                <Border IsVisible="{Binding !HasDiagnostics}" Padding="20">
+                    <StackPanel HorizontalAlignment="Center" Spacing="10">
+                        <PathIcon Data="{StaticResource InfoIcon}" Width="40" Height="40"
+                                  Opacity="0.3" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Localize DiagnosticsEmptyState}"
+                                   HorizontalAlignment="Center"
+                                   Foreground="Gray"
+                                   FontSize="13"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,15,0,0">
+            <Button Command="{Binding $parent[Window].Close}" Width="90">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource DisconnectIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize Close}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Command="{Binding ImportSnapshotCommand}"
+                    IsEnabled="{Binding !IsRunning}"
+                    Width="155"
+                    ToolTip.Tip="{loc:Localize DiagnosticsImportTooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource FolderIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize DiagnosticsImportSnapshot}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Command="{Binding ExportSnapshotCommand}"
+                    IsEnabled="{Binding HasDiagnostics}"
+                    Width="155">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource DocumentIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize DiagnosticsExportSnapshot}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Command="{Binding RunDiagnosticsCommand}"
+                    IsEnabled="{Binding !IsRunning}"
+                    Width="165"
+                    Classes="accent">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <PathIcon Data="{StaticResource InfoIcon}" Width="14" Height="14"/>
+                    <TextBlock Text="{loc:Localize DiagnosticsRefresh}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+    </Grid>
+
+</Window>

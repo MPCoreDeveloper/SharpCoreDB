@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Catalog;
+using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -28,7 +29,8 @@ public sealed class NetworkServer(
     SessionManager sessionManager,
     UserAuthenticationService authService,
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
-    PgCatalogService pgCatalogService) : IAsyncDisposable
+    PgCatalogService pgCatalogService,
+    MetricsCollector metricsCollector) : IAsyncDisposable
 {
     private readonly ServerConfiguration _config = configuration.Value;
     private readonly ILogger<NetworkServer> _logger = logger;
@@ -38,6 +40,7 @@ public sealed class NetworkServer(
     private readonly UserAuthenticationService _authService = authService;
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
     private readonly PgCatalogService _pgCatalogService = pgCatalogService;
+    private readonly MetricsCollector _metricsCollector = metricsCollector;
     private readonly ConcurrentDictionary<string, ClientConnection> _connections = new();
     private readonly Lock _lifecycleLock = new();
     private bool _isRunning;
@@ -270,6 +273,7 @@ public sealed class NetworkServer(
             _authService,
             _tenantAuthorizationPolicyService,
             _pgCatalogService,
+            _metricsCollector,
             _loggerFactory.CreateLogger<BinaryProtocolHandler>());
 
         if (_config.EnableBinaryProtocol)

@@ -1,0 +1,85 @@
+@page "/admin"
+@model SharpCoreDB.Server.WebAdmin.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="page-wrapper">
+    <h1>Dashboard</h1>
+
+    <div class="card-grid">
+        <div class="stat-card">
+            <div class="stat-label">Status</div>
+            <div class="stat-value">
+                <span class="badge @(Model.Health.Status == "healthy" ? "badge-green" : "badge-red")">
+                    @Model.Health.Status
+                </span>
+            </div>
+            <div class="stat-sub">@Model.Health.Version</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value">@Model.UptimeDisplay</div>
+            <div class="stat-sub">since server start</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Sessions</div>
+            <div class="stat-value">@Model.Health.ActiveSessions</div>
+            <div class="stat-sub">@Model.Health.ActiveConnections connections</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Databases</div>
+            <div class="stat-value">@Model.Health.DatabasesOnline / @Model.Health.HostedDatabases</div>
+            <div class="stat-sub">online / hosted</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Memory</div>
+            <div class="stat-value">@Model.Health.MemoryUsageMb <span style="font-size:14px;font-weight:400">MB</span></div>
+            <div class="stat-sub">managed heap</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Error Rate</div>
+            <div class="stat-value">@Model.Health.ErrorRatePercent <span style="font-size:14px;font-weight:400">%</span></div>
+            <div class="stat-sub">@Model.Health.FailedRequests / @Model.Health.TotalRequests failed</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Health Checks</h2>
+        <table>
+            <thead>
+                <tr><th>Check</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var (check, status) in Model.Health.Checks)
+                {
+                    <tr>
+                        <td>@check</td>
+                        <td>
+                            <span class="badge @(status == "healthy" ? "badge-green" : status == "degraded" ? "badge-red" : "badge-yellow")">
+                                @status
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.Health.DatabaseErrors.Count > 0)
+    {
+        <div class="alert alert-error">
+            <strong>Database errors:</strong>
+            <ul style="margin-top:6px;padding-left:18px;">
+                @foreach (var err in Model.Health.DatabaseErrors)
+                {
+                    <li>@err</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <p style="font-size:12px;color:#6b778c;text-align:right">
+        Captured at @Model.Health.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz")
+    </p>
+</div>

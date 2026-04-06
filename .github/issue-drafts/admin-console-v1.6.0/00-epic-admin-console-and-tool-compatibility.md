@@ -2,14 +2,22 @@
 Deliver an administration and observability roadmap for `SharpCoreDB` that prioritizes compatibility with existing database tools and optionally adds a lightweight native admin experience.
 
 ## Status
-**State:** IN PROGRESS
+**State:** RESOLVED ✅
 
 Resolved workstreams in repository:
 - [x] `01-tool-compatibility-matrix-and-certification.md` — **RESOLVED**
 - [x] `02-pg-catalog-and-information-schema-expansion.md` — **RESOLVED**
+- [x] `03-binary-protocol-auth-and-session-hardening.md` — **RESOLVED**
+- [x] `04-sql-compatibility-and-ddl-introspection-polish.md` — **RESOLVED**
+- [x] `05-diagnostics-and-metrics-surface-upgrades.md` — **RESOLVED**
+- [x] `06-viewer-v2-foundation-desktop-tooling.md` — **RESOLVED**
+- [x] `07-viewer-diagnostics-and-admin-actions.md` — **RESOLVED**
+- [x] `08-optional-web-admin-razor-pages-mvp.md` — **RESOLVED**
+- [x] `09-odbc-jdbc-driver-strategy-feasibility.md` — **RESOLVED**
+- [x] `10-documentation-and-adoption-playbook.md` — **RESOLVED**
+- [x] `11-tool-compatibility-ci-smoke-tests.md` — **RESOLVED**
 
-Next planned work:
-- [ ] `03` and beyond — see remaining issue drafts.
+All workstreams complete. Epic 100% delivered for v1.6.0.
 
 This roadmap is based on current `v1.6.0` behavior:
 - `tools/SharpCoreDB.Viewer` exists but remains minimal.

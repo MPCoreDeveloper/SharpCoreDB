@@ -18,7 +18,7 @@ public class SettingsService
     private AppSettings _settings;
 
     // Supported languages in the application
-    private static readonly string[] SupportedLanguages = 
+    private static readonly string[] SupportedLanguages =
     [
         "en-US",
         "nl-NL",
@@ -27,6 +27,8 @@ public class SettingsService
         "es-ES",
         "it-IT"
     ];
+
+    private const int MaxRecentConnections = 8;
 
     public static SettingsService Instance => _instance ??= new SettingsService();
 
@@ -37,7 +39,7 @@ public class SettingsService
         var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appFolder = Path.Combine(appDataPath, "SharpCoreDB.Viewer");
         Directory.CreateDirectory(appFolder);
-        
+
         _settingsPath = Path.Combine(appFolder, "settings.json");
         _settings = LoadSettings();
     }
@@ -46,12 +48,83 @@ public class SettingsService
 
     public void SaveSettings(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+
         _settings = settings;
-        
+        EnsureSettingsDefaults(_settings);
+
         var json = JsonSerializer.Serialize(settings, _jsonOptions);
-        
+
         File.WriteAllText(_settingsPath, json);
         SettingsChanged?.Invoke(this, settings);
+    }
+
+    /// <summary>
+    /// Gets recent connection profiles ordered by most recently used first.
+    /// </summary>
+    public IReadOnlyList<ConnectionProfile> GetRecentConnections()
+    {
+        EnsureSettingsDefaults(_settings);
+        return _settings.RecentConnections
+            .OrderByDescending(static c => c.LastConnectedUtc)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Saves or updates a recent connection profile.
+    /// </summary>
+    public void SaveRecentConnection(string databasePath, string storageMode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageMode);
+
+        EnsureSettingsDefaults(_settings);
+
+        var normalizedPath = Path.GetFullPath(databasePath);
+        var existing = _settings.RecentConnections
+            .FirstOrDefault(c => string.Equals(c.DatabasePath, normalizedPath, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
+            _settings.RecentConnections.Add(new ConnectionProfile
+            {
+                Name = Path.GetFileNameWithoutExtension(normalizedPath),
+                DatabasePath = normalizedPath,
+                StorageMode = storageMode,
+                LastConnectedUtc = DateTimeOffset.UtcNow,
+            });
+        }
+        else
+        {
+            existing.StorageMode = storageMode;
+            existing.LastConnectedUtc = DateTimeOffset.UtcNow;
+            existing.Name = Path.GetFileNameWithoutExtension(normalizedPath);
+        }
+
+        _settings.RecentConnections = _settings.RecentConnections
+            .OrderByDescending(static c => c.LastConnectedUtc)
+            .Take(MaxRecentConnections)
+            .ToList();
+
+        SaveSettings(_settings);
+    }
+
+    /// <summary>
+    /// Removes a recent connection profile by database path.
+    /// </summary>
+    public void RemoveRecentConnection(string databasePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+
+        EnsureSettingsDefaults(_settings);
+
+        var removed = _settings.RecentConnections.RemoveAll(
+            profile => string.Equals(profile.DatabasePath, databasePath, StringComparison.OrdinalIgnoreCase));
+
+        if (removed > 0)
+        {
+            SaveSettings(_settings);
+        }
     }
 
     private AppSettings LoadSettings()
@@ -62,7 +135,7 @@ public class SettingsService
             {
                 var json = File.ReadAllText(_settingsPath);
                 var settings = JsonSerializer.Deserialize<AppSettings>(json);
-                
+
                 if (settings != null)
                 {
                     // Validate that the saved language is still supported
@@ -70,6 +143,8 @@ public class SettingsService
                     {
                         settings.Language = GetDefaultLanguage();
                     }
+
+                    EnsureSettingsDefaults(settings);
                     return settings;
                 }
             }
@@ -87,6 +162,13 @@ public class SettingsService
         };
     }
 
+    private static void EnsureSettingsDefaults(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        settings.RecentConnections ??= [];
+    }
+
     /// <summary>
     /// Gets the default language based on system culture.
     /// Falls back to "en-US" if system language is not supported.
@@ -94,11 +176,11 @@ public class SettingsService
     private static string GetDefaultLanguage()
     {
         var systemCulture = CultureInfo.CurrentUICulture.Name;
-        
+
 #if DEBUG
         Console.WriteLine($"[SettingsService] System culture detected: {systemCulture}");
 #endif
-        
+
         // Check if exact match exists (e.g., "nl-NL")
         if (SupportedLanguages.Contains(systemCulture))
         {
@@ -107,11 +189,11 @@ public class SettingsService
 #endif
             return systemCulture;
         }
-        
+
         // Try to match just the language part (e.g., "nl" from "nl-BE")
         var languageOnly = systemCulture.Split('-')[0];
         var match = SupportedLanguages.FirstOrDefault(lang => lang.StartsWith(languageOnly + "-"));
-        
+
         if (match != null)
         {
 #if DEBUG
@@ -119,11 +201,11 @@ public class SettingsService
 #endif
             return match;
         }
-        
+
 #if DEBUG
         Console.WriteLine($"[SettingsService] No match found, falling back to: en-US");
 #endif
-        
+
         // Fallback to English (neutral language)
         return "en-US";
     }
@@ -132,7 +214,7 @@ public class SettingsService
     {
         // Apply language
         LocalizationService.Instance.SetLanguage(_settings.Language);
-        
+
         // Theme will be applied by App.axaml
     }
 }

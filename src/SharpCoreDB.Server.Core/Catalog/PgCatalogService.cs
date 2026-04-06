@@ -175,6 +175,36 @@ public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
             var s when s.EndsWith("pg_am", StringComparison.OrdinalIgnoreCase)
                 => HandlePgAm(out rows, out columns),
 
+            var s when s.EndsWith("pg_indexes", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgIndexesColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_index", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgIndexColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_constraint", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgConstraintColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_proc", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgProcColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_trigger", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgTriggerColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_description", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgDescriptionColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_stat_user_tables", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgStatUserTablesColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_sequence", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgSequenceColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_attrdef", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgAttrDefColumns, out rows, out columns),
+
+            var s when s.EndsWith("pg_depend", StringComparison.OrdinalIgnoreCase)
+                => HandleEmptyCatalog(PgDependColumns, out rows, out columns),
+
             _ => HandleEmptyCatalog(GenericCatalogColumns, out rows, out columns),
         };
 
@@ -703,13 +733,12 @@ public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
 
     private static string? DetectCatalogSource(string normalized)
     {
-        foreach (var source in KnownCatalogSources)
-        {
-            if (normalized.Contains(source.ToLowerInvariant(), StringComparison.Ordinal))
-                return source;
-        }
+        var matched = KnownCatalogSources
+            .Where(source => normalized.Contains(source, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(source => source.Length)
+            .FirstOrDefault();
 
-        return null;
+        return matched;
     }
 
     private static string? ExtractTableNameFilter(string sql)
@@ -853,5 +882,72 @@ public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
         "is_deferrable", "initially_deferred", "enforced"
     ];
 
+    private static readonly string[] PgIndexesColumns =
+    [
+        "schemaname", "tablename", "indexname", "tablespace", "indexdef"
+    ];
+
+    private static readonly string[] PgIndexColumns =
+    [
+        "indexrelid", "indrelid", "indnatts", "indnkeyatts", "indisunique", "indnullsnotdistinct",
+        "indisprimary", "indisexclusion", "indimmediate", "indisclustered", "indisvalid", "indcheckxmin",
+        "indisready", "indislive", "indisreplident", "indkey", "indcollation", "indclass", "indoption",
+        "indexprs", "indpred"
+    ];
+
+    private static readonly string[] PgConstraintColumns =
+    [
+        "oid", "conname", "connamespace", "contype", "condeferrable", "condeferred", "convalidated",
+        "conrelid", "contypid", "conindid", "conparentid", "confrelid", "confupdtype", "confdeltype",
+        "confmatchtype", "conislocal", "coninhcount", "connoinherit", "conkey", "confkey", "conpfeqop",
+        "conppeqop", "conffeqop", "confdelsetcols", "conexclop", "conbin"
+    ];
+
+    private static readonly string[] PgProcColumns =
+    [
+        "oid", "proname", "pronamespace", "proowner", "prolang", "procost", "prorows", "provariadic",
+        "prosupport", "prokind", "prosecdef", "proleakproof", "proisstrict", "proretset", "provolatile",
+        "proparallel", "pronargs", "pronargdefaults", "prorettype", "proargtypes", "proallargtypes",
+        "proargmodes", "proargnames", "proargdefaults", "protrftypes", "prosrc", "probin", "prosqlbody",
+        "proconfig", "proacl"
+    ];
+
+    private static readonly string[] PgTriggerColumns =
+    [
+        "oid", "tgrelid", "tgparentid", "tgname", "tgfoid", "tgtype", "tgenabled", "tgisinternal",
+        "tgconstrrelid", "tgconstrindid", "tgconstraint", "tgdeferrable", "tginitdeferred", "tgnargs",
+        "tgattr", "tgargs", "tgqual", "tgoldtable", "tgnewtable"
+    ];
+
+    private static readonly string[] PgDescriptionColumns =
+    [
+        "objoid", "classoid", "objsubid", "description"
+    ];
+
+    private static readonly string[] PgStatUserTablesColumns =
+    [
+        "relid", "schemaname", "relname", "seq_scan", "seq_tup_read", "idx_scan", "idx_tup_fetch",
+        "n_tup_ins", "n_tup_upd", "n_tup_del", "n_tup_hot_upd", "n_live_tup", "n_dead_tup", "n_mod_since_analyze",
+        "n_ins_since_vacuum", "last_vacuum", "last_autovacuum", "last_analyze", "last_autoanalyze",
+        "vacuum_count", "autovacuum_count", "analyze_count", "autoanalyze_count"
+    ];
+
+    private static readonly string[] PgSequenceColumns =
+    [
+        "seqrelid", "seqtypid", "seqstart", "seqincrement", "seqmax", "seqmin", "seqcache", "seqcycle"
+    ];
+
+    private static readonly string[] PgAttrDefColumns =
+    [
+        "oid", "adrelid", "adnum", "adbin"
+    ];
+
+    private static readonly string[] PgDependColumns =
+    [
+        "classid", "objid", "objsubid", "refclassid", "refobjid", "refobjsubid", "deptype"
+    ];
+
     private static readonly string[] GenericCatalogColumns = ["oid"];
 }
+
+

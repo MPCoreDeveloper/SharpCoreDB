@@ -6,6 +6,7 @@
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Catalog;
+using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -27,6 +28,7 @@ public sealed class BinaryProtocolHandler(
     UserAuthenticationService authService,
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     PgCatalogService pgCatalogService,
+    MetricsCollector metricsCollector,
     ILogger<BinaryProtocolHandler> logger) : IAsyncDisposable
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
@@ -34,6 +36,7 @@ public sealed class BinaryProtocolHandler(
     private readonly UserAuthenticationService _authService = authService;
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
     private readonly PgCatalogService _pgCatalogService = pgCatalogService;
+    private readonly MetricsCollector _metricsCollector = metricsCollector;
     private readonly ILogger<BinaryProtocolHandler> _logger = logger;
 
     // PostgreSQL protocol constants
@@ -56,6 +59,7 @@ public sealed class BinaryProtocolHandler(
     {
         var clientAddress = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
         _logger.LogInformation("Binary protocol connection from {ClientAddress}", clientAddress);
+        _metricsCollector.RecordConnectionOpened("binary");
 
         try
         {
@@ -94,86 +98,131 @@ public sealed class BinaryProtocolHandler(
         }
         catch (Exception ex)
         {
+            _metricsCollector.RecordFailedRequest("binary/connection", "CONNECTION_ERROR");
             _logger.LogError(ex, "Binary protocol error for client {ClientAddress}", clientAddress);
         }
         finally
         {
+            _metricsCollector.RecordConnectionClosed("binary");
             client.Close();
             _logger.LogInformation("Binary protocol connection closed for {ClientAddress}", clientAddress);
         }
     }
 
     /// <summary>
-    /// Reads and parses the startup message.
+    /// Reads and parses the startup message from the raw stream.
+    /// Startup packets have no type byte (unlike regular protocol messages):
+    /// Int32 length (including self) + payload.
+    /// Loops on SSL/cancel negotiation packets before returning the actual startup.
     /// </summary>
     private async Task<StartupMessage?> ReadStartupMessageAsync(BinaryProtocolReader reader, CancellationToken cancellationToken)
     {
-        var message = await reader.ReadMessageAsync(cancellationToken);
-        if (message == null || message.Type != 0) // Startup messages have no type byte
-        {
-            return null;
-        }
+        var stream = reader.Stream;
 
-        var readerStream = new MemoryStream(message.Payload);
-        var buffer = new byte[4];
-        var bytesRead = await readerStream.ReadAsync(buffer, cancellationToken);
-        if (bytesRead < 4) return null;
-        var protocolVersion = BinaryPrimitives.ReadInt32BigEndian(buffer);
-
-        if (protocolVersion == CancelRequestCode)
+        while (!cancellationToken.IsCancellationRequested)
         {
-            // Handle cancel request
-            await HandleCancelRequestAsync(readerStream);
-            return null;
-        }
-
-        if (protocolVersion == SslRequestCode)
-        {
-            // SSL negotiation - we require SSL
-            await reader.Stream.WriteAsync(new byte[] { (byte)'N' }, cancellationToken); // 'N' = SSL not supported
-            return null;
-        }
-
-        if (protocolVersion != ProtocolVersion3)
-        {
-            _logger.LogWarning("Unsupported protocol version: {Version}", protocolVersion);
-            return null;
-        }
-
-        // Read parameters
-        var parameters = new Dictionary<string, string>();
-        while (readerStream.Position < readerStream.Length)
-        {
-            var key = await ReadNullTerminatedStringAsync(readerStream);
-            if (string.IsNullOrEmpty(key))
+            // Startup packets: 4-byte length (includes itself) + payload (no type byte)
+            var lengthBuf = new byte[4];
+            var bytesRead = await stream.ReadAsync(lengthBuf, cancellationToken);
+            if (bytesRead == 0)
             {
-                break; // End of parameters
+                return null; // Connection closed
             }
-            var value = await ReadNullTerminatedStringAsync(readerStream);
-            parameters[key] = value;
+
+            await stream.ReadExactlyAsync(lengthBuf.AsMemory(bytesRead, 4 - bytesRead), cancellationToken);
+            var packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuf);
+            if (packetLength < 4)
+            {
+                return null;
+            }
+
+            var payload = new byte[packetLength - 4];
+            if (payload.Length > 0)
+            {
+                await stream.ReadExactlyAsync(payload, cancellationToken);
+            }
+
+            if (payload.Length < 4)
+            {
+                return null;
+            }
+
+            var protocolVersion = BinaryPrimitives.ReadInt32BigEndian(payload.AsSpan(0, 4));
+
+            if (protocolVersion == SslRequestCode)
+            {
+                // Reject SSL and loop back to read the real startup message
+                _logger.LogDebug("SSL request received — responding with 'N' (not supported)");
+                await stream.WriteAsync(new byte[] { (byte)'N' }, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+                continue;
+            }
+
+            if (protocolVersion == CancelRequestCode)
+            {
+                using var cancelStream = new MemoryStream(payload, 4, payload.Length - 4);
+                await HandleCancelRequestAsync(cancelStream);
+                return null;
+            }
+
+            if (protocolVersion != ProtocolVersion3)
+            {
+                _logger.LogWarning("Unsupported protocol version: {Version}", protocolVersion);
+                return null;
+            }
+
+            // Parse startup parameters (everything after the 4-byte version)
+            var parameters = new Dictionary<string, string>();
+            using var paramStream = new MemoryStream(payload, 4, payload.Length - 4);
+            while (paramStream.Position < paramStream.Length)
+            {
+                var key = await ReadNullTerminatedStringAsync(paramStream);
+                if (string.IsNullOrEmpty(key))
+                {
+                    break;
+                }
+
+                var value = await ReadNullTerminatedStringAsync(paramStream);
+                parameters[key] = value;
+            }
+
+            return new StartupMessage
+            {
+                ProtocolVersion = protocolVersion,
+                Parameters = parameters,
+                Database = parameters.GetValueOrDefault("database", "master"),
+                User = parameters.GetValueOrDefault("user", "anonymous")
+            };
         }
 
-        return new StartupMessage
-        {
-            ProtocolVersion = protocolVersion,
-            Parameters = parameters,
-            Database = parameters.GetValueOrDefault("database", "master"),
-            User = parameters.GetValueOrDefault("user", "anonymous")
-        };
+        return null;
     }
 
     /// <summary>
     /// Authenticates the client and creates a session.
+    /// Validates database existence, user identity, and tenant authorization.
+    /// Sends PostgreSQL-compatible parameter status messages on success.
     /// </summary>
     private async Task<ClientSession?> AuthenticateAndCreateSessionAsync(
         StartupMessage startup, BinaryProtocolWriter writer, CancellationToken cancellationToken)
     {
         try
         {
+            // Validate database exists before attempting auth
+            if (!_databaseRegistry.DatabaseExists(startup.Database))
+            {
+                _logger.LogWarning("Connection rejected: database '{Database}' does not exist", startup.Database);
+                await writer.WriteFatalErrorResponseAsync(
+                    "3D000", $"database \"{startup.Database}\" does not exist", cancellationToken);
+                return null;
+            }
+
             var principal = _authService.CreatePrincipalForUser(startup.User);
             if (principal is null)
             {
-                await writer.WriteErrorResponseAsync("28000", "authentication failed", cancellationToken);
+                _logger.LogWarning("Authentication failed for unknown user '{User}'", startup.User);
+                await writer.WriteFatalErrorResponseAsync(
+                    "28000", $"password authentication failed for user \"{startup.User}\"", cancellationToken);
                 return null;
             }
 
@@ -186,7 +235,11 @@ public sealed class BinaryProtocolHandler(
 
             if (!scopeDecision.IsAllowed)
             {
-                await writer.WriteErrorResponseAsync("42501", $"tenant authorization failed: {scopeDecision.Code}", cancellationToken);
+                _logger.LogWarning(
+                    "Tenant authorization denied for user '{User}' on database '{Database}': {Code}",
+                    startup.User, startup.Database, scopeDecision.Code);
+                await writer.WriteFatalErrorResponseAsync(
+                    "42501", $"permission denied for database \"{startup.Database}\"", cancellationToken);
                 return null;
             }
 
@@ -202,11 +255,21 @@ public sealed class BinaryProtocolHandler(
             // Send authentication success
             await writer.WriteAuthenticationOkAsync(cancellationToken);
 
-            // Send parameter status messages
-            await writer.WriteParameterStatusAsync("server_version", "1.5.0", cancellationToken);
+            // Send parameter status messages (PostgreSQL-compatible set expected by GUI tools)
+            var applicationName = startup.Parameters.GetValueOrDefault("application_name", "");
+            var clientEncoding = startup.Parameters.GetValueOrDefault("client_encoding", "UTF8");
+
+            await writer.WriteParameterStatusAsync("server_version", "16.0", cancellationToken);
+            await writer.WriteParameterStatusAsync("server_version_num", "160000", cancellationToken);
             await writer.WriteParameterStatusAsync("server_encoding", "UTF8", cancellationToken);
-            await writer.WriteParameterStatusAsync("client_encoding", "UTF8", cancellationToken);
+            await writer.WriteParameterStatusAsync("client_encoding", clientEncoding, cancellationToken);
+            await writer.WriteParameterStatusAsync("application_name", applicationName, cancellationToken);
+            await writer.WriteParameterStatusAsync("session_authorization", startup.User, cancellationToken);
+            await writer.WriteParameterStatusAsync("is_superuser", "on", cancellationToken);
+            await writer.WriteParameterStatusAsync("standard_conforming_strings", "on", cancellationToken);
             await writer.WriteParameterStatusAsync("DateStyle", "ISO, MDY", cancellationToken);
+            await writer.WriteParameterStatusAsync("TimeZone", "UTC", cancellationToken);
+            await writer.WriteParameterStatusAsync("integer_datetimes", "on", cancellationToken);
 
             // Send backend key data (for cancel requests)
             await writer.WriteBackendKeyDataAsync(session.SessionId.GetHashCode(), 0, cancellationToken);
@@ -216,7 +279,7 @@ public sealed class BinaryProtocolHandler(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Authentication failed for user {User}", startup.User);
-            await writer.WriteErrorResponseAsync("08006", "authentication failed", cancellationToken);
+            await writer.WriteFatalErrorResponseAsync("08006", "connection failure", cancellationToken);
             return null;
         }
     }
@@ -227,6 +290,9 @@ public sealed class BinaryProtocolHandler(
     private async Task ProcessMessageAsync(
         ProtocolMessage message, ClientSession session, BinaryProtocolWriter writer, CancellationToken cancellationToken)
     {
+        var messageName = GetMessageName((char)message.Type);
+        _metricsCollector.RecordProtocolMessage("binary", messageName);
+
         try
         {
             switch (message.Type)
@@ -263,6 +329,8 @@ public sealed class BinaryProtocolHandler(
                     return; // Close connection
 
                 default:
+                    _metricsCollector.RecordProtocolMessage("binary", "Unknown", isError: true);
+                    _metricsCollector.RecordFailedRequest("binary/unknown", "PROTOCOL_ERROR");
                     _logger.LogWarning("Unknown message type: {Type}", (char)message.Type);
                     await writer.WriteErrorResponseAsync("08P01", "protocol error", cancellationToken);
                     break;
@@ -270,6 +338,8 @@ public sealed class BinaryProtocolHandler(
         }
         catch (Exception ex)
         {
+            _metricsCollector.RecordProtocolMessage("binary", messageName, isError: true);
+            _metricsCollector.RecordFailedRequest($"binary/{messageName}", "INTERNAL_ERROR");
             _logger.LogError(ex, "Error processing message type {Type}", (char)message.Type);
             await writer.WriteErrorResponseAsync("XX000", "internal error", cancellationToken);
         }
@@ -303,36 +373,45 @@ public sealed class BinaryProtocolHandler(
 
         try
         {
-            // Execute query
-            var result = connection.Database.ExecuteQuery(queryText, []);
-
-            // Send row description
-            if (result.Count > 0)
+            var normalizedSql = queryText.TrimStart();
+            if (IsRowReturningStatement(normalizedSql))
             {
-                var firstRow = result[0];
-                var fields = firstRow.Select((kvp, idx) => new FieldDescription
-                {
-                    Name = kvp.Key,
-                    TableId = 0,
-                    ColumnId = (short)idx,
-                    DataTypeId = GetPostgreSqlTypeId(kvp.Value?.GetType() ?? typeof(string)),
-                    DataTypeSize = -1,
-                    TypeModifier = -1,
-                    FormatCode = 0 // Text format
-                }).ToArray();
+                // Execute query
+                var result = connection.Database.ExecuteQuery(queryText, []);
 
-                await writer.WriteRowDescriptionAsync(fields, cancellationToken);
-
-                // Send data rows
-                foreach (var row in result)
+                // Send row description
+                if (result.Count > 0)
                 {
-                    var values = row.Values.Select(v => Encoding.UTF8.GetBytes(v?.ToString() ?? "")).ToArray();
-                    await writer.WriteDataRowAsync(values, cancellationToken);
+                    var firstRow = result[0];
+                    var fields = firstRow.Select((kvp, idx) => new FieldDescription
+                    {
+                        Name = kvp.Key,
+                        TableId = 0,
+                        ColumnId = (short)idx,
+                        DataTypeId = GetPostgreSqlTypeId(kvp.Value?.GetType() ?? typeof(string)),
+                        DataTypeSize = -1,
+                        TypeModifier = -1,
+                        FormatCode = 0 // Text format
+                    }).ToArray();
+
+                    await writer.WriteRowDescriptionAsync(fields, cancellationToken);
+
+                    // Send data rows
+                    foreach (var row in result)
+                    {
+                        var values = row.Values.Select(v => Encoding.UTF8.GetBytes(v?.ToString() ?? "")).ToArray();
+                        await writer.WriteDataRowAsync(values, cancellationToken);
+                    }
                 }
-            }
 
-            // Send command completion
-            await writer.WriteCommandCompleteAsync("SELECT", result.Count, cancellationToken);
+                // Send command completion
+                await writer.WriteCommandCompleteAsync(BuildCommandTag(normalizedSql, result.Count), cancellationToken);
+            }
+            else
+            {
+                connection.Database.ExecuteSQL(queryText);
+                await writer.WriteCommandCompleteAsync(BuildCommandTag(normalizedSql, 0), cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -427,7 +506,7 @@ public sealed class BinaryProtocolHandler(
         try
         {
             var sql = portal.Sql.Trim();
-            if (sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            if (IsRowReturningStatement(sql))
             {
                 var result = connection.Database.ExecuteQuery(sql, []);
 
@@ -440,12 +519,12 @@ public sealed class BinaryProtocolHandler(
                     }
                 }
 
-                await writer.WriteCommandCompleteAsync("SELECT", result.Count, cancellationToken);
+                await writer.WriteCommandCompleteAsync(BuildCommandTag(sql, result.Count), cancellationToken);
             }
             else
             {
                 connection.Database.ExecuteSQL(sql);
-                await writer.WriteCommandCompleteAsync("EXECUTE", 0, cancellationToken);
+                await writer.WriteCommandCompleteAsync(BuildCommandTag(sql, 0), cancellationToken);
             }
         }
         catch (Exception ex)
@@ -572,7 +651,7 @@ public sealed class BinaryProtocolHandler(
     {
         if (columns.Count == 0)
         {
-            await writer.WriteCommandCompleteAsync("SELECT", 0, cancellationToken);
+            await writer.WriteCommandCompleteAsync("SELECT 0", cancellationToken);
             return;
         }
 
@@ -599,9 +678,113 @@ public sealed class BinaryProtocolHandler(
             await writer.WriteDataRowAsync(values!, cancellationToken);
         }
 
-        await writer.WriteCommandCompleteAsync("SELECT", rows.Count, cancellationToken);
+        await writer.WriteCommandCompleteAsync($"SELECT {rows.Count}", cancellationToken);
     }
 
+    private static bool IsRowReturningStatement(string sql)
+    {
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return false;
+        }
+
+        return sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("WITH", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("SHOW", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildCommandTag(string sql, int rowsAffected)
+    {
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return "EMPTYQUERY";
+        }
+
+        if (sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("WITH", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("SHOW", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"SELECT {rowsAffected}";
+        }
+
+        if (sql.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"INSERT 0 {rowsAffected}";
+        }
+
+        if (sql.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"UPDATE {rowsAffected}";
+        }
+
+        if (sql.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"DELETE {rowsAffected}";
+        }
+
+        if (sql.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return "CREATE TABLE";
+        }
+
+        if (sql.StartsWith("CREATE INDEX", StringComparison.OrdinalIgnoreCase))
+        {
+            return "CREATE INDEX";
+        }
+
+        if (sql.StartsWith("DROP TABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DROP TABLE";
+        }
+
+        if (sql.StartsWith("DROP INDEX", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DROP INDEX";
+        }
+
+        if (sql.StartsWith("ALTER TABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ALTER TABLE";
+        }
+
+        if (sql.StartsWith("BEGIN", StringComparison.OrdinalIgnoreCase)
+            || sql.StartsWith("START TRANSACTION", StringComparison.OrdinalIgnoreCase))
+        {
+            return "BEGIN";
+        }
+
+        if (sql.StartsWith("COMMIT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "COMMIT";
+        }
+
+        if (sql.StartsWith("ROLLBACK", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ROLLBACK";
+        }
+
+        if (sql.StartsWith("SET", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SET";
+        }
+
+        return "OK";
+    }
+
+    private static string GetMessageName(char messageType) => messageType switch
+    {
+        'Q' => "Query",
+        'P' => "Parse",
+        'B' => "Bind",
+        'E' => "Execute",
+        'C' => "Close",
+        'D' => "Describe",
+        'S' => "Sync",
+        'X' => "Terminate",
+        _ => "Unknown",
+    };
 
     /// <summary>
     /// Reads a null-terminated string from a stream.
@@ -833,28 +1016,51 @@ public sealed class BinaryProtocolWriter(Stream stream) : IDisposable
     }
 
     /// <summary>
-    /// Writes a command complete message.
+    /// Writes a command complete message using a fully formatted PostgreSQL command tag.
     /// </summary>
-    public async Task WriteCommandCompleteAsync(string command, int rowsAffected, CancellationToken cancellationToken = default)
+    public async Task WriteCommandCompleteAsync(string commandTag, CancellationToken cancellationToken = default)
     {
-        var message = $"{command} {rowsAffected}";
-        var payload = Encoding.UTF8.GetBytes(message + '\0');
+        var payload = Encoding.UTF8.GetBytes(commandTag + '\0');
         await WriteMessageAsync((byte)'C', payload, cancellationToken);
     }
 
     /// <summary>
-    /// Writes an error response message.
+    /// Writes a command complete message.
+    /// </summary>
+    public async Task WriteCommandCompleteAsync(string command, int rowsAffected, CancellationToken cancellationToken = default)
+    {
+        await WriteCommandCompleteAsync($"{command} {rowsAffected}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes an error response message with ERROR severity.
     /// </summary>
     public async Task WriteErrorResponseAsync(string code, string message, CancellationToken cancellationToken = default)
     {
-        var payload = new[]
-        {
-            (byte)'C', // Error code field
-        }.Concat(Encoding.UTF8.GetBytes(code + '\0'))
-         .Concat([(byte)'M']) // Message field
-         .Concat(Encoding.UTF8.GetBytes(message + '\0'))
-         .Concat([(byte)'\0']) // End of fields
-         .ToArray();
+        await WriteErrorResponseCoreAsync("ERROR", code, message, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes a fatal error response message. Connection should be closed after this.
+    /// </summary>
+    public async Task WriteFatalErrorResponseAsync(string code, string message, CancellationToken cancellationToken = default)
+    {
+        await WriteErrorResponseCoreAsync("FATAL", code, message, cancellationToken);
+    }
+
+    /// <summary>
+    /// Core error response writer. Includes severity ('S'), SQLSTATE code ('C'), and message ('M') fields.
+    /// </summary>
+    private async Task WriteErrorResponseCoreAsync(string severity, string code, string message, CancellationToken cancellationToken)
+    {
+        var payload = new[] { (byte)'S' }
+            .Concat(Encoding.UTF8.GetBytes(severity + '\0'))
+            .Concat([(byte)'C'])
+            .Concat(Encoding.UTF8.GetBytes(code + '\0'))
+            .Concat([(byte)'M'])
+            .Concat(Encoding.UTF8.GetBytes(message + '\0'))
+            .Concat([(byte)'\0'])
+            .ToArray();
 
         await WriteMessageAsync((byte)'E', payload, cancellationToken);
     }

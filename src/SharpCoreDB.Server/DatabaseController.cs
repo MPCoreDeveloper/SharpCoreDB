@@ -30,6 +30,7 @@ public sealed class DatabaseController(
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     TenantQuotaEnforcementService tenantQuotaEnforcementService,
     MetricsCollector metricsCollector,
+    HealthCheckService healthCheckService,
     ILogger<DatabaseController> logger) : ControllerBase
 {
     private static readonly Stopwatch ServerUptime = Stopwatch.StartNew();
@@ -358,14 +359,21 @@ public sealed class DatabaseController(
     [ProducesResponseType(typeof(HealthResponse), 200)]
     public IActionResult GetHealth()
     {
+        var detailed = healthCheckService.GetDetailedHealth();
+
         return Ok(new HealthResponse
         {
-            Status = "healthy",
+            Status = detailed.Status,
             Timestamp = DateTimeOffset.UtcNow,
-            Version = "1.5.0",
-            ActiveConnections = sessionManager.ActiveSessionCount,
-            TotalDatabases = databaseRegistry.DatabaseNames.Count,
+            Version = detailed.Version,
+            ActiveConnections = detailed.ActiveConnections,
+            ActiveSessions = detailed.ActiveSessions,
+            TotalDatabases = detailed.HostedDatabases,
+            DatabasesOnline = detailed.DatabasesOnline,
+            ErrorRatePercent = detailed.ErrorRatePercent,
+            LastFailureCode = detailed.LastFailureCode,
             Uptime = ServerUptime.Elapsed.ToString(@"d\.hh\:mm\:ss"),
+            Checks = detailed.Checks,
         });
     }
 
@@ -377,16 +385,30 @@ public sealed class DatabaseController(
     [ProducesResponseType(typeof(MetricsResponse), 200)]
     public IActionResult GetMetrics()
     {
+        var snapshot = metricsCollector.GetSnapshot();
         var memoryMb = GC.GetTotalMemory(forceFullCollection: false) / (1024.0 * 1024.0);
 
         return Ok(new MetricsResponse
         {
-            Timestamp = DateTimeOffset.UtcNow,
-            ActiveConnections = sessionManager.ActiveSessionCount,
-            TotalConnections = 0, // would need cumulative counter
+            Timestamp = snapshot.Timestamp,
+            ActiveConnections = snapshot.ActiveConnections,
+            ActiveSessions = snapshot.ActiveSessions,
+            TotalConnections = snapshot.Protocols.Values.Sum(static protocol => protocol.TotalConnections),
+            TotalRequests = snapshot.TotalRequests,
+            FailedRequests = snapshot.FailedRequests,
+            ErrorRatePercent = snapshot.ErrorRatePercent,
+            AverageLatencyMs = snapshot.AverageLatencyMs,
+            QueriesPerSecond = snapshot.LastRequestAgeSeconds <= 1 && snapshot.TotalRequests > 0 ? 1 : 0,
+            QueryRequests = snapshot.QueryRequests,
+            NonQueryRequests = snapshot.NonQueryRequests,
+            TotalRowsReturned = snapshot.TotalRowsReturned,
+            TotalBytesReceived = snapshot.TotalBytesReceived,
+            TotalBytesSent = snapshot.TotalBytesSent,
+            LastFailureCode = snapshot.LastFailureCode,
+            LastFailureTimestamp = snapshot.LastFailureTimestamp,
             MemoryUsageMb = Math.Round(memoryMb, 2),
-            CpuUsagePercent = 0, // not trivially available
-            QueriesPerSecond = 0, // would need sliding window
+            CpuUsagePercent = 0,
+            ProtocolMetrics = snapshot.Protocols,
             DatabaseMetrics = databaseRegistry.DatabaseNames.ToDictionary(
                 name => name,
                 name => new DatabaseMetrics { Name = name, SizeMb = 0, ConnectionCount = 0 }),
@@ -659,11 +681,26 @@ public sealed class HealthResponse
     /// <summary>Active connections.</summary>
     public required int ActiveConnections { get; init; }
 
+    /// <summary>Active sessions.</summary>
+    public required int ActiveSessions { get; init; }
+
     /// <summary>Total databases.</summary>
     public required int TotalDatabases { get; init; }
 
+    /// <summary>Databases currently online.</summary>
+    public required int DatabasesOnline { get; init; }
+
+    /// <summary>Current failed request percentage.</summary>
+    public required double ErrorRatePercent { get; init; }
+
+    /// <summary>Most recent error code observed in metrics.</summary>
+    public required string LastFailureCode { get; init; }
+
     /// <summary>Server uptime (d.hh:mm:ss).</summary>
     public required string Uptime { get; init; }
+
+    /// <summary>Named health checks for quick triage.</summary>
+    public required Dictionary<string, string> Checks { get; init; }
 }
 
 /// <summary>Metrics response data.</summary>
@@ -678,14 +715,53 @@ public sealed class MetricsResponse
     /// <summary>Active connections.</summary>
     public required int ActiveConnections { get; init; }
 
+    /// <summary>Active sessions.</summary>
+    public required int ActiveSessions { get; init; }
+
     /// <summary>Total connections since startup.</summary>
     public required long TotalConnections { get; init; }
+
+    /// <summary>Total requests since startup.</summary>
+    public required long TotalRequests { get; init; }
+
+    /// <summary>Total failed requests since startup.</summary>
+    public required long FailedRequests { get; init; }
+
+    /// <summary>Current failed request percentage.</summary>
+    public required double ErrorRatePercent { get; init; }
+
+    /// <summary>Average request latency in milliseconds.</summary>
+    public required double AverageLatencyMs { get; init; }
+
+    /// <summary>Total query-style requests.</summary>
+    public required long QueryRequests { get; init; }
+
+    /// <summary>Total non-query requests.</summary>
+    public required long NonQueryRequests { get; init; }
+
+    /// <summary>Total rows returned by query operations.</summary>
+    public required long TotalRowsReturned { get; init; }
+
+    /// <summary>Total network payload bytes received.</summary>
+    public required long TotalBytesReceived { get; init; }
+
+    /// <summary>Total network payload bytes sent.</summary>
+    public required long TotalBytesSent { get; init; }
+
+    /// <summary>Most recent failure code.</summary>
+    public required string LastFailureCode { get; init; }
+
+    /// <summary>Timestamp of the most recent failure.</summary>
+    public required DateTimeOffset? LastFailureTimestamp { get; init; }
 
     /// <summary>Memory usage in MB.</summary>
     public required double MemoryUsageMb { get; init; }
 
     /// <summary>CPU usage percentage.</summary>
     public required double CpuUsagePercent { get; init; }
+
+    /// <summary>Per-protocol counters for requests, errors, and messages.</summary>
+    public required Dictionary<string, ProtocolMetricsSnapshot> ProtocolMetrics { get; init; }
 
     /// <summary>Per-database metrics.</summary>
     public required Dictionary<string, DatabaseMetrics> DatabaseMetrics { get; init; }

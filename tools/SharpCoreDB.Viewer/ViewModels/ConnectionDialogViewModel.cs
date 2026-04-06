@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SharpCoreDB.Data.Provider;
+using SharpCoreDB.Viewer.Models;
 using SharpCoreDB.Viewer.Services;
+using System.Collections.ObjectModel;
 using Avalonia.Platform.Storage;
 
 namespace SharpCoreDB.Viewer.ViewModels;
@@ -24,6 +26,7 @@ public enum DatabaseFormatType
 public partial class ConnectionDialogViewModel : ViewModelBase
 {
     private readonly LocalizationService _localization = LocalizationService.Instance;
+    private readonly SettingsService _settingsService = SettingsService.Instance;
 
     [ObservableProperty]
     private string _databasePath = string.Empty;
@@ -46,6 +49,14 @@ public partial class ConnectionDialogViewModel : ViewModelBase
     [ObservableProperty]
     private bool _showFormatSelector = true;
 
+    [ObservableProperty]
+    private ObservableCollection<ConnectionProfile> _recentConnections = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyProfileCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveProfileCommand))]
+    private ConnectionProfile? _selectedRecentConnection;
+
     public SharpCoreDBConnection? Connection { get; private set; }
     
     public bool IsConnected { get; private set; }
@@ -56,6 +67,7 @@ public partial class ConnectionDialogViewModel : ViewModelBase
 
     public ConnectionDialogViewModel()
     {
+        LoadRecentConnections();
     }
     
     /// <summary>
@@ -113,16 +125,16 @@ public partial class ConnectionDialogViewModel : ViewModelBase
             {
                 new FilePickerFileType("SharpCoreDB Database")
                 {
-                    Patterns = new[] { "*.scdb" }
+                    Patterns = ["*.scdb"]
                 },
                 new FilePickerFileType("All Files")
                 {
-                    Patterns = new[] { "*" }
+                    Patterns = ["*"]
                 }
             }
         };
 
-        var result = await StorageProvider.OpenFilePickerAsync(options);
+        var result = await StorageProvider.OpenFilePickerAsync(options).ConfigureAwait(true);
 
         if (result.Count > 0)
         {
@@ -144,16 +156,16 @@ public partial class ConnectionDialogViewModel : ViewModelBase
                 Title = _localization["SelectNewDatabaseLocation"],
                 DefaultExtension = ".scdb",
                 SuggestedFileName = "NewDatabase.scdb",
-                FileTypeChoices = new[]
-                {
+                FileTypeChoices =
+                [
                     new FilePickerFileType("SharpCoreDB Single-File Database")
                     {
-                        Patterns = new[] { "*.scdb" }
+                        Patterns = ["*.scdb"]
                     }
-                }
+                ]
             };
 
-            var result = await StorageProvider.SaveFilePickerAsync(options);
+            var result = await StorageProvider.SaveFilePickerAsync(options).ConfigureAwait(true);
 
             if (result != null)
             {
@@ -169,27 +181,61 @@ public partial class ConnectionDialogViewModel : ViewModelBase
                 AllowMultiple = false
             };
 
-            var result = await StorageProvider.OpenFolderPickerAsync(options);
+            var result = await StorageProvider.OpenFolderPickerAsync(options).ConfigureAwait(true);
 
             if (result.Count > 0)
             {
                 var basePath = result[0].Path.LocalPath;
-                
+
                 // Suggest a default name
                 var suggestedName = "NewDatabase";
                 var counter = 1;
                 var newDbPath = Path.Combine(basePath, suggestedName);
-                
+
                 // Find unique name
                 while (Directory.Exists(newDbPath))
                 {
                     newDbPath = Path.Combine(basePath, $"{suggestedName}{counter}");
                     counter++;
                 }
-                
+
                 DatabasePath = newDbPath;
             }
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanApplySelectedProfile))]
+    private void ApplyProfile()
+    {
+        if (SelectedRecentConnection is null)
+        {
+            return;
+        }
+
+        DatabasePath = SelectedRecentConnection.DatabasePath;
+        SelectedFormat = string.Equals(SelectedRecentConnection.StorageMode, "SingleFile", StringComparison.OrdinalIgnoreCase)
+            ? DatabaseFormatType.SingleFile
+            : DatabaseFormatType.Directory;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanApplySelectedProfile))]
+    private void RemoveProfile()
+    {
+        if (SelectedRecentConnection is null)
+        {
+            return;
+        }
+
+        _settingsService.RemoveRecentConnection(SelectedRecentConnection.DatabasePath);
+        LoadRecentConnections();
+    }
+
+    private bool CanApplySelectedProfile() => SelectedRecentConnection is not null;
+
+    private void LoadRecentConnections()
+    {
+        RecentConnections = new ObservableCollection<ConnectionProfile>(_settingsService.GetRecentConnections());
+        SelectedRecentConnection = RecentConnections.FirstOrDefault();
     }
 
     [RelayCommand]
@@ -215,10 +261,10 @@ public partial class ConnectionDialogViewModel : ViewModelBase
         try
         {
             // Detect format and create connection string
-            bool isSingleFile = DatabasePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase) ||
+            var isSingleFile = DatabasePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase) ||
                                SelectedFormat == DatabaseFormatType.SingleFile;
             
-            bool isNewDatabase = !Directory.Exists(DatabasePath) && !File.Exists(DatabasePath);
+            var isNewDatabase = !Directory.Exists(DatabasePath) && !File.Exists(DatabasePath);
             
             // Ensure correct extension for new single-file databases
             if (isNewDatabase && isSingleFile && !DatabasePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
@@ -245,15 +291,17 @@ public partial class ConnectionDialogViewModel : ViewModelBase
             }
 
             // Create connection string with storage mode
-            var connectionString = $"Path={DatabasePath};Password={Password};StorageMode={( isSingleFile ? "SingleFile" : "Directory")}";
+            var storageMode = isSingleFile ? "SingleFile" : "Directory";
+            var connectionString = $"Path={DatabasePath};Password={Password};StorageMode={storageMode}";
 
             // Create and test connection
             var connection = new SharpCoreDBConnection(connectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync().ConfigureAwait(true);
 
             // Success!
             Connection = connection;
             IsConnected = true;
+            _settingsService.SaveRecentConnection(DatabasePath, storageMode);
             OnPropertyChanged(nameof(IsConnected));
         }
         catch (SharpCoreDBException ex)

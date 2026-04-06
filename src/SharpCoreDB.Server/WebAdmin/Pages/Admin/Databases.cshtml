@@ -1,0 +1,67 @@
+@page "/admin/databases"
+@model SharpCoreDB.Server.WebAdmin.Pages.Admin.DatabasesModel
+@{
+    ViewData["Title"] = "Databases";
+}
+
+<div class="page-wrapper">
+    <h1>Databases</h1>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Storage Mode</th>
+                    <th>Path</th>
+                    <th>Encrypted</th>
+                    <th>Type</th>
+                    <th>Read-Only</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var db in Model.Databases)
+                {
+                    <tr>
+                        <td><strong>@db.Name</strong></td>
+                        <td>
+                            <span class="badge @(db.IsOnline ? "badge-green" : "badge-red")">
+                                @(db.IsOnline ? "online" : "offline")
+                            </span>
+                        </td>
+                        <td>@db.StorageMode</td>
+                        <td class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                            title="@db.Path">@db.Path</td>
+                        <td>
+                            @if (db.Encrypted)
+                            {
+                                <span class="badge badge-blue">encrypted</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-gray">no</span>
+                            }
+                        </td>
+                        <td>
+                            @if (db.IsSystem)
+                            {
+                                <span class="badge badge-yellow">system</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-gray">user</span>
+                            }
+                        </td>
+                        <td>@(db.IsReadOnly ? "yes" : "no")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <p style="font-size:12px;color:#6b778c">
+        @Model.Databases.Count(d => d.IsOnline) online of @Model.Databases.Count total.
+        Captured at @DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss").
+    </p>
+</div>

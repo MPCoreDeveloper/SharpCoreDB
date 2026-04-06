@@ -14,10 +14,12 @@ namespace SharpCoreDB.Server.Core.Observability;
 /// </summary>
 public sealed class HealthCheckService(
     DatabaseRegistry databaseRegistry,
-    SessionManager sessionManager)
+    SessionManager sessionManager,
+    MetricsCollector metricsCollector)
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
+    private readonly MetricsCollector _metricsCollector = metricsCollector;
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
     /// <summary>
@@ -25,13 +27,6 @@ public sealed class HealthCheckService(
     /// </summary>
     public ServerHealthInfo GetDetailedHealth()
     {
-        var data = new Dictionary<string, object>
-        {
-            ["uptime_seconds"] = _uptime.Elapsed.TotalSeconds,
-            ["timestamp_utc"] = DateTime.UtcNow.ToString("O"),
-            ["version"] = "1.5.0",
-        };
-
         // Database status
         var totalDatabases = _databaseRegistry.DatabaseNames.Count;
         var onlineDatabases = 0;
@@ -61,17 +56,40 @@ public sealed class HealthCheckService(
         var memoryMb = GC.GetTotalMemory(forceFullCollection: false) / (1024 * 1024);
         var gcInfo = GC.GetGCMemoryInfo();
 
+        var snapshot = _metricsCollector.GetSnapshot();
+
+        var checks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["databases"] = dbErrors.Count == 0 ? "healthy" : "degraded",
+            ["request_errors"] = snapshot.ErrorRatePercent >= 20 ? "degraded" : "healthy",
+            ["request_activity"] = snapshot.LastRequestAgeSeconds > 300 ? "stale" : "healthy",
+            ["memory"] = memoryMb > 4096 ? "degraded" : "healthy",
+        };
+
+        var overallStatus = checks.Values.Any(static s => string.Equals(s, "degraded", StringComparison.OrdinalIgnoreCase))
+            ? "degraded"
+            : "healthy";
+
         return new ServerHealthInfo
         {
-            Status = dbErrors.Count == 0 ? "healthy" : "degraded",
+            Status = overallStatus,
             Timestamp = DateTimeOffset.UtcNow,
-            Version = "1.5.0",
+            Version = "1.6.0",
             UptimeSeconds = (long)_uptime.Elapsed.TotalSeconds,
             ActiveSessions = _sessionManager.ActiveSessionCount,
+            ActiveConnections = snapshot.ActiveConnections,
             MemoryUsageMb = memoryMb,
             HostedDatabases = totalDatabases,
             DatabasesOnline = onlineDatabases,
             DatabaseErrors = dbErrors,
+            ErrorRatePercent = snapshot.ErrorRatePercent,
+            TotalRequests = snapshot.TotalRequests,
+            FailedRequests = snapshot.FailedRequests,
+            AverageRequestLatencyMs = snapshot.AverageLatencyMs,
+            LastFailureCode = snapshot.LastFailureCode,
+            LastFailureTimestamp = snapshot.LastFailureTimestamp,
+            Checks = checks,
+            Protocols = snapshot.Protocols,
             GarbageCollections = new GarbageCollectionMetrics
             {
                 HeapSizeMb = (int)(gcInfo.HeapSizeBytes / (1024 * 1024)),
@@ -92,10 +110,19 @@ public sealed class ServerHealthInfo
     public required string Version { get; init; }
     public required long UptimeSeconds { get; init; }
     public required int ActiveSessions { get; init; }
+    public required int ActiveConnections { get; init; }
     public required long MemoryUsageMb { get; init; }
     public required int HostedDatabases { get; init; }
     public required int DatabasesOnline { get; init; }
     public required List<string> DatabaseErrors { get; init; }
+    public required double ErrorRatePercent { get; init; }
+    public required long TotalRequests { get; init; }
+    public required long FailedRequests { get; init; }
+    public required double AverageRequestLatencyMs { get; init; }
+    public required string LastFailureCode { get; init; }
+    public required DateTimeOffset? LastFailureTimestamp { get; init; }
+    public required Dictionary<string, string> Checks { get; init; }
+    public required Dictionary<string, ProtocolMetricsSnapshot> Protocols { get; init; }
     public required GarbageCollectionMetrics GarbageCollections { get; init; }
 }
 

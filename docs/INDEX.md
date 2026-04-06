@@ -13,6 +13,8 @@
 - `server/QUICKSTART.md`
 - `server/INSTALLATION.md`
 - `server/CLIENT_GUIDE.md`
+- `server/ADMIN_TOOLING_GUIDE.md`
+- `server/ODBC_JDBC_STRATEGY.md`
 - `server/REST_API.md`
 - `server/BINARY_PROTOCOL_SPEC.md`
 - `server/CONFIGURATION_SCHEMA.md`

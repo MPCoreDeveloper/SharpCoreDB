@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
-using SharpCoreDB.Viewer.ViewModels;
 using SharpCoreDB.Data.Provider;
 using SharpCoreDB.Viewer.Services;
+using SharpCoreDB.Viewer.ViewModels;
 
 namespace SharpCoreDB.Viewer.Views;
 
@@ -11,10 +12,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        
+
         // Subscribe to ViewModel events
         DataContextChanged += OnDataContextChanged;
-        
+        KeyDown += OnMainWindowKeyDown;
+
         // Subscribe to language changes to force UI refresh
         LocalizationService.Instance.LanguageChanged += (s, e) =>
         {
@@ -23,6 +25,26 @@ public partial class MainWindow : Window
             DataContext = null;
             DataContext = currentContext;
         };
+    }
+
+    private async void OnMainWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var isExecuteShortcut = e.Key == Key.F5 || (e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control));
+        if (!isExecuteShortcut)
+        {
+            return;
+        }
+
+        if (viewModel.ExecuteQueryCommand.CanExecute(null))
+        {
+            await viewModel.ExecuteQueryCommand.ExecuteAsync(null).ConfigureAwait(true);
+            e.Handled = true;
+        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -174,6 +196,26 @@ public partial class MainWindow : Window
         {
             DataContext = new ViewModels.ToolsViewModel()
         };
+        await dialog.ShowDialog(this);
+    }
+
+    private async void OnDiagnosticsClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel || viewModel.ActiveConnection is null)
+        {
+            return;
+        }
+
+        var diagnosticsVm = new ViewModels.DiagnosticsViewModel
+        {
+            Connection = viewModel.ActiveConnection
+        };
+
+        var dialog = new DiagnosticsDialog
+        {
+            DataContext = diagnosticsVm
+        };
+
         await dialog.ShowDialog(this);
     }
 

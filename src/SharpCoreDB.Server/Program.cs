@@ -10,6 +10,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Certificate;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -22,6 +23,9 @@ using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using SharpCoreDB.Server.Core.Tenancy;
 using SharpCoreDB.Server.Core.WebSockets;
+using SafeWebCore.Builder;
+using SafeWebCore.Extensions;
+using SafeWebCore.Options;
 
 // Create and configure the host
 var builder = WebApplication.CreateBuilder(args);
@@ -167,6 +171,18 @@ builder.Services.AddAuthentication(options =>
             return Task.CompletedTask;
         },
     };
+})
+.AddCookie("WebAdmin", options =>
+{
+    options.LoginPath = "/admin/login";
+    options.LogoutPath = "/admin/logout";
+    options.AccessDeniedPath = "/admin/login";
+    options.Cookie.Name = "SharpCoreDB.Admin";
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.ExpireTimeSpan = TimeSpan.FromHours(serverConfig.Security.JwtExpirationHours);
+    options.SlidingExpiration = false;
 });
 
 // Configure rate limiting for gRPC (fixed-window per IP)
@@ -207,6 +223,103 @@ builder.Services.AddGrpcReflection();
 // Add MVC for REST API
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
+
+// Security response headers via SafeWebCore.
+// Global baseline covers all protocols (gRPC, REST, WebSocket).
+// The /admin path policy adds full browser-specific headers and a nonce-based CSP
+// for the Razor Pages web admin. CSP is intentionally off at the global level
+// because gRPC/JSON responses have no HTML surface to protect.
+builder.Services.AddNetSecureHeaders(opts =>
+{
+    // ── Global baseline (all routes) ─────────────────────────────────────
+    opts.EnableHsts = true;
+    opts.HstsValue = "max-age=63072000; includeSubDomains; preload";
+    opts.EnableXContentTypeOptions = true;
+    opts.EnableReferrerPolicy = true;
+    opts.ReferrerPolicyValue = "no-referrer";
+    opts.RemoveServerHeader = true;
+
+    // Framing, CSP and cross-origin isolation are HTML/browser-only concerns:
+    // disabled globally so that gRPC and JSON API responses are unaffected.
+    opts.EnableCsp = false;
+    opts.EnableXFrameOptions = false;
+    opts.EnablePermissionsPolicy = false;
+    opts.EnableCoep = false;
+    opts.EnableCoop = false;
+    opts.EnableCorp = false;
+    opts.EnableXDnsPrefetchControl = false;
+    opts.EnableXPermittedCrossDomainPolicies = false;
+
+    // ── /admin path policy (Razor Pages web admin) ───────────────────────
+    // Full browser security headers + nonce-based CSP.
+    // Longest-prefix matching in SafeWebCore means /admin wins over the global default.
+    opts.PathPolicies.Add(new PathPolicyOptions
+    {
+        PathPrefix = "/admin",
+        Options = new NetSecureHeadersOptions
+        {
+            EnableHsts = true,
+            HstsValue = "max-age=63072000; includeSubDomains; preload",
+            EnableXFrameOptions = true,
+            XFrameOptionsValue = "DENY",
+            EnableXContentTypeOptions = true,
+            EnableReferrerPolicy = true,
+            ReferrerPolicyValue = "no-referrer",
+            EnablePermissionsPolicy = true,
+            PermissionsPolicyValue = "camera=(), microphone=(), geolocation=()",
+            EnableCoep = true,
+            CoepValue = "require-corp",
+            EnableCoop = true,
+            CoopValue = "same-origin",
+            EnableCorp = true,
+            CorpValue = "same-origin",
+            EnableXDnsPrefetchControl = true,
+            EnableXPermittedCrossDomainPolicies = true,
+            RemoveServerHeader = true,
+            EnableCsp = true,
+            // Nonce-based CSP: SafeWebCore TagHelper auto-injects nonce on <style> elements.
+            // No script-src needed — the web admin has no JavaScript.
+            Csp = new CspBuilder()
+                .DefaultSrc("'none'")
+                .StyleSrc("'nonce-{nonce}'")
+                .ImgSrc("'self' data:")
+                .FormAction("'self'")
+                .FrameAncestors("'none'")
+                .BaseUri("'none'")
+                .UpgradeInsecureRequests()
+                .Build(),
+        },
+    });
+});
+
+// Add optional web admin Razor Pages
+if (serverConfig.EnableWebAdmin)
+{
+    builder.Services.AddRazorPages(options =>
+    {
+        options.Conventions.AuthorizeFolder("/Admin", "WebAdmin");
+        options.Conventions.AllowAnonymousToPage("/Admin/Login");
+    }).WithRazorPagesRoot("/WebAdmin/Pages");
+
+    builder.Services.AddRouting(options => options.LowercaseUrls = true);
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("WebAdmin", policy =>
+        {
+            policy.AuthenticationSchemes = ["WebAdmin"];
+            policy.RequireAuthenticatedUser();
+            policy.RequireRole("admin");
+        });
+    });
+
+    builder.Services.AddAntiforgery(options =>
+    {
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.HttpOnly = true;
+    });
+}
 
 // Add server configuration
 builder.Services.Configure<ServerConfiguration>(
@@ -250,6 +363,10 @@ builder.Services.AddTransient<WebSocketHandler>();
 TryConfigureProjectionRuntime(builder.Services, serverConfig);
 
 var app = builder.Build();
+
+// Security response headers — must be first so all responses carry the headers,
+// regardless of whether they hit an authenticated endpoint or error handler.
+app.UseNetSecureHeaders();
 
 // Use authentication and authorization middleware (BEFORE route mapping)
 app.UseAuthentication();
@@ -297,7 +414,15 @@ app.MapControllers();
 // Map health check endpoint
 app.MapHealthChecks("/health");
 
- // Map REST API endpoints (placeholder)
+// Map optional web admin Razor Pages UI
+if (serverConfig.EnableWebAdmin)
+{
+    app.UseStaticFiles();
+    app.MapRazorPages();
+    Log.Information("🌐 Web Admin UI: Enabled (https://...:{Port}/admin)", serverConfig.HttpsApiPort);
+}
+
+// Map REST API endpoints (placeholder)
 app.MapGet("/", () => new
 {
     name = "SharpCoreDB Server",
@@ -318,6 +443,8 @@ app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService) =>
 // Start the server
 Log.Information("Starting SharpCoreDB Server v1.5.0");
 Log.Information("🔒 Security Features:");
+Log.Information("  • Security Headers (SafeWebCore): HSTS / X-Content-Type-Options / Referrer-Policy / Server removal");
+Log.Information("  • Web Admin CSP: Nonce-based (active at /admin when EnableWebAdmin = true)");
 Log.Information("  • TLS/HTTPS: {TlsVersion} (required, no plain HTTP)", serverConfig.Security.MinimumTlsVersion);
 Log.Information("  • JWT Authentication: Enabled (via Bearer token)");
 Log.Information("  • Mutual TLS (mTLS): {MtlsEnabled}", serverConfig.Security.EnableMutualTls);

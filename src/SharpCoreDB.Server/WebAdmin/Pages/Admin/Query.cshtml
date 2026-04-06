@@ -1,0 +1,81 @@
+@page "/admin/query"
+@model SharpCoreDB.Server.WebAdmin.Pages.Admin.QueryModel
+@{
+    ViewData["Title"] = "Ad-hoc Query";
+}
+
+<div class="page-wrapper">
+    <h1>Ad-hoc Query</h1>
+
+    <div class="alert alert-warning">
+        <strong>Admin access only.</strong> All queries are logged. Changes are permanent. Use with care.
+    </div>
+
+    <div class="card">
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <div class="form-group">
+                <label for="Database">Database</label>
+                <select id="Database" name="Input.Database">
+                    @foreach (var name in Model.DatabaseNames)
+                    {
+                        <option value="@name" selected="@(Model.Input.Database == name)">@name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="Sql">SQL</label>
+                <textarea id="Sql" name="Input.Sql" rows="6" spellcheck="false">@Model.Input.Sql</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Run Query</button>
+        </form>
+    </div>
+
+    @if (Model.ErrorMessage is not null)
+    {
+        <div class="alert alert-error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Result is not null)
+    {
+        <div class="card">
+            <h2>Results <span style="font-size:13px;font-weight:400;color:#6b778c">— @Model.Result.RowCount rows (@Model.Result.ElapsedMs ms)</span></h2>
+            @if (Model.Result.Columns.Length == 0)
+            {
+                <p style="color:#6b778c;font-size:13px">Query executed successfully. No rows returned.</p>
+            }
+            else
+            {
+                <div class="query-result-table">
+                    <table class="mono">
+                        <thead>
+                            <tr>
+                                @foreach (var col in Model.Result.Columns)
+                                {
+                                    <th>@col</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.Result.Rows)
+                            {
+                                <tr>
+                                    @foreach (var cell in row)
+                                    {
+                                        <td>@(cell ?? "<null>")</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Model.Result.Truncated)
+                {
+                    <p class="alert alert-warning" style="margin-top:12px;margin-bottom:0">
+                        Result truncated to @Model.Result.RowCount rows. Use LIMIT to narrow results.
+                    </p>
+                }
+            }
+        </div>
+    }
+</div>

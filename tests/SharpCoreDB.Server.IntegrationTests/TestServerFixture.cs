@@ -45,6 +45,18 @@ public sealed class TestServerFixture : IAsyncLifetime
     /// <summary>Gets tenant security audit store for test assertions.</summary>
     public TenantSecurityAuditStore? TenantSecurityAuditStore { get; private set; }
 
+    /// <summary>
+    /// Gets the MetricsCollector instance for observability assertions.
+    /// </summary>
+    public MetricsCollector GetMetricsCollector()
+        => _serviceProvider!.GetRequiredService<MetricsCollector>();
+
+    /// <summary>
+    /// Gets the HealthCheckService instance for observability assertions.
+    /// </summary>
+    public HealthCheckService GetHealthCheckService()
+        => _serviceProvider!.GetRequiredService<HealthCheckService>();
+
     public TestServerFixture()
     {
         _testDataDir = Path.Combine(
@@ -126,6 +138,7 @@ public sealed class TestServerFixture : IAsyncLifetime
         services.AddSingleton<TenantEncryptionKeyRotationService>();
         services.AddSingleton<TenantAuthorizationPolicyService>();
         services.AddSingleton(new MetricsCollector("test-server"));
+        services.AddSingleton<HealthCheckService>();
         services.AddSingleton(new JwtTokenService(
             testConfig.Security.JwtSecretKey, 1));
 
@@ -169,6 +182,21 @@ public sealed class TestServerFixture : IAsyncLifetime
     /// </summary>
     public PgCatalogService GetPgCatalogService()
         => _serviceProvider!.GetRequiredService<PgCatalogService>();
+
+    /// <summary>
+    /// Creates a <see cref="BinaryProtocolHandler"/> wired to the test DI container.
+    /// </summary>
+    public BinaryProtocolHandler CreateBinaryProtocolHandler()
+    {
+        return new BinaryProtocolHandler(
+            DatabaseRegistry!,
+            SessionManager!,
+            _serviceProvider!.GetRequiredService<UserAuthenticationService>(),
+            _serviceProvider!.GetRequiredService<TenantAuthorizationPolicyService>(),
+            _serviceProvider!.GetRequiredService<PgCatalogService>(),
+            _serviceProvider!.GetRequiredService<MetricsCollector>(),
+            _serviceProvider!.GetRequiredService<ILogger<BinaryProtocolHandler>>());
+    }
 
     /// <summary>
     /// Creates a new test session for the specified database.

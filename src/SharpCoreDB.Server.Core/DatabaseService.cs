@@ -46,6 +46,8 @@ public sealed class DatabaseService(
     /// </summary>
     public override async Task<ConnectResponse> Connect(ConnectRequest request, ServerCallContext context)
     {
+        var start = Stopwatch.GetTimestamp();
+        var method = context.Method;
         var requestedUser = request.UserName ?? "anonymous";
         var databaseName = string.IsNullOrWhiteSpace(request.DatabaseName)
             ? "master"
@@ -67,6 +69,7 @@ public sealed class DatabaseService(
                     code: "CONNECT_DATABASE_NOT_FOUND",
                     reason: "Database does not exist");
 
+                _metricsCollector.RecordFailedRequest(method, "DATABASE_NOT_FOUND");
                 return new ConnectResponse
                 {
                     Status = ConnectionStatus.DatabaseNotFound
@@ -91,6 +94,7 @@ public sealed class DatabaseService(
                     code: "CONNECT_INVALID_CREDENTIALS",
                     reason: "Authentication failed");
 
+                _metricsCollector.RecordFailedRequest(method, "INVALID_CREDENTIALS");
                 return new ConnectResponse
                 {
                     Status = ConnectionStatus.InvalidCredentials
@@ -116,6 +120,10 @@ public sealed class DatabaseService(
                 code: "CONNECT_OK",
                 reason: "Connect succeeded");
 
+            _metricsCollector.IncrementActiveSessions();
+            var elapsed = Stopwatch.GetElapsedTime(start);
+            _metricsCollector.RecordSuccessfulRequest(method, elapsed.TotalMilliseconds, 128, 192, 0);
+
             return new ConnectResponse
             {
                 SessionId = session.SessionId,
@@ -135,6 +143,7 @@ public sealed class DatabaseService(
                 code: ex.Code,
                 reason: ex.Message);
 
+            _metricsCollector.RecordFailedRequest(method, ex.Code);
             return new ConnectResponse
             {
                 Status = ConnectionStatus.ConnectionLimitExceeded
@@ -151,6 +160,7 @@ public sealed class DatabaseService(
                 code: "CONNECT_SERVER_UNAVAILABLE",
                 reason: ex.Message);
 
+            _metricsCollector.RecordFailedRequest(method, "SERVER_UNAVAILABLE");
             return new ConnectResponse
             {
                 Status = ConnectionStatus.ServerUnavailable
@@ -163,14 +173,21 @@ public sealed class DatabaseService(
     /// </summary>
     public override async Task<DisconnectResponse> Disconnect(DisconnectRequest request, ServerCallContext context)
     {
+        var start = Stopwatch.GetTimestamp();
+        var method = context.Method;
+
         try
         {
             await _sessionManager.RemoveSessionAsync(request.SessionId, context.CancellationToken);
+            _metricsCollector.DecrementActiveSessions();
+            var elapsed = Stopwatch.GetElapsedTime(start);
+            _metricsCollector.RecordSuccessfulRequest(method, elapsed.TotalMilliseconds, 64, 64, 0);
             return new DisconnectResponse { Success = true };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Disconnect request failed for session {SessionId}", request.SessionId);
+            _metricsCollector.RecordFailedRequest(method, "DISCONNECT_FAILED");
             return new DisconnectResponse { Success = false };
         }
     }
@@ -331,9 +348,13 @@ public sealed class DatabaseService(
     /// </summary>
     public override async Task<NonQueryResponse> ExecuteNonQuery(NonQueryRequest request, ServerCallContext context)
     {
+        var start = Stopwatch.GetTimestamp();
+        var method = context.Method;
+
         var session = await _sessionManager.GetSessionAsync(request.SessionId, context.CancellationToken);
         if (session == null)
         {
+            _metricsCollector.RecordFailedRequest(method, "UNAUTHENTICATED");
             throw new RpcException(new Status(StatusCode.Unauthenticated, "Invalid session"));
         }
 
@@ -353,7 +374,7 @@ public sealed class DatabaseService(
 
         try
         {
-            var startTime = Stopwatch.GetTimestamp();
+            var executionStart = Stopwatch.GetTimestamp();
 
             var sql = request.Sql;
             var sqlUpper = sql.Trim().ToUpperInvariant();
@@ -383,7 +404,9 @@ public sealed class DatabaseService(
             if (sqlUpper.StartsWith("INSERT"))
                 rowsAffected = 1; // Single INSERT always affects 1 row
 
-            var executionTime = Stopwatch.GetElapsedTime(startTime);
+            var executionTime = Stopwatch.GetElapsedTime(executionStart);
+            var elapsed = Stopwatch.GetElapsedTime(start);
+            _metricsCollector.RecordSuccessfulRequest(method, elapsed.TotalMilliseconds, request.Sql?.Length ?? 0, 96, rowsAffected);
 
             return new NonQueryResponse
             {
@@ -393,11 +416,13 @@ public sealed class DatabaseService(
         }
         catch (TenantQuotaExceededException ex)
         {
+            _metricsCollector.RecordFailedRequest(method, ex.Code);
             throw new RpcException(new Status(StatusCode.ResourceExhausted, ex.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Non-query execution failed for session {SessionId}", request.SessionId);
+            _metricsCollector.RecordFailedRequest(method, "NONQUERY_FAILED");
             throw new RpcException(new Status(StatusCode.Internal, ex.Message));
         }
     }

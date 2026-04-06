@@ -206,10 +206,12 @@ The sample includes a PowerShell isolation validation script and a REST onboardi
 | `POST` | `/api/v1/batch` | ✅ JWT | Execute batch of SQL statements |
 | `GET` | `/api/v1/schema` | ✅ JWT | Get database schema (tables, columns) |
 | `GET` | `/api/v1/databases` | ✅ JWT | List all hosted databases |
-| `GET` | `/api/v1/health` | ❌ Open | Server health status |
-| `GET` | `/api/v1/metrics` | ✅ JWT | Server metrics (memory, connections) |
-| `GET` | `/api/v1/health/detailed` | ❌ Open | Detailed diagnostics (GC, uptime) |
+| `GET` | `/api/v1/health` | ❌ Open | Server health status + triage checks |
+| `GET` | `/api/v1/metrics` | ✅ JWT | Server diagnostics metrics (requests, latency, errors, protocol counters) |
+| `GET` | `/api/v1/health/detailed` | ❌ Open | Detailed diagnostics (GC, uptime, protocol/error telemetry) |
 | `GET` | `/health` | ❌ Open | ASP.NET Core health check |
+
+For Prometheus scraping and dashboard baseline queries, see `docs/server/OBSERVABILITY_SETUP_v1.6.0.md`.
 
 ### gRPC (HTTPS :5001)
 

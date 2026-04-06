@@ -1,0 +1,32 @@
+@page "/admin/login"
+@model SharpCoreDB.Server.WebAdmin.Pages.Admin.LoginModel
+@{
+    Layout = "/WebAdmin/Pages/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Sign In";
+}
+
+<div class="login-center">
+    <div class="login-box">
+        <h1>SharpCoreDB Admin</h1>
+        <p class="sub">Sign in with your admin credentials to continue.</p>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-error">@Model.ErrorMessage</div>
+        }
+
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <div class="form-group">
+                <label for="Username">Username</label>
+                <input id="Username" name="Input.Username" type="text" autocomplete="username"
+                       autofocus value="@Model.Input.Username" />
+            </div>
+            <div class="form-group">
+                <label for="Password">Password</label>
+                <input id="Password" name="Input.Password" type="password" autocomplete="current-password" />
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">Sign In</button>
+        </form>
+    </div>
+</div>

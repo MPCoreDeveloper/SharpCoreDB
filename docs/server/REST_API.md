@@ -190,18 +190,28 @@ List all hosted databases.
 
 ### GET `/api/v1/health`
 
-Server health status. **No authentication required.**
+Basic health and triage summary. **No authentication required.**
 
 **Response (200):**
 
 ```json
 {
   "status": "healthy",
-  "timestamp": "2026-03-07T14:30:00Z",
+  "timestamp": "2026-04-06T12:45:00Z",
   "version": "1.6.0",
   "activeConnections": 12,
+  "activeSessions": 9,
   "totalDatabases": 5,
-  "uptime": "3.08:45:12"
+  "databasesOnline": 5,
+  "errorRatePercent": 1.25,
+  "lastFailureCode": "none",
+  "uptime": "3.08:45:12",
+  "checks": {
+    "databases": "healthy",
+    "request_errors": "healthy",
+    "request_activity": "healthy",
+    "memory": "healthy"
+  }
 }
 ```
 
@@ -215,15 +225,36 @@ Detailed server diagnostics. **No authentication required.**
 
 ```json
 {
-  "status": "Healthy",
-  "uptimeSeconds": 284712.5,
-  "activeSessions": 12,
-  "totalDatabases": 5,
-  "gcHeapSizeMb": 128.5,
-  "totalMemoryBytes": 536870912,
-  "databaseHealth": {
-    "master": "OK",
-    "appdb": "OK"
+  "status": "healthy",
+  "timestamp": "2026-04-06T12:45:00Z",
+  "version": "1.6.0",
+  "uptimeSeconds": 284712,
+  "activeSessions": 9,
+  "activeConnections": 12,
+  "memoryUsageMb": 128,
+  "hostedDatabases": 5,
+  "databasesOnline": 5,
+  "databaseErrors": [],
+  "errorRatePercent": 1.25,
+  "totalRequests": 240,
+  "failedRequests": 3,
+  "averageRequestLatencyMs": 4.22,
+  "lastFailureCode": "none",
+  "lastFailureTimestamp": null,
+  "checks": {
+    "databases": "healthy",
+    "request_errors": "healthy",
+    "request_activity": "healthy",
+    "memory": "healthy"
+  },
+  "protocols": {
+    "grpc": { "activeConnections": 0, "totalConnections": 0, "totalRequests": 210, "failedRequests": 2, "totalMessages": 0, "errorMessages": 0 },
+    "rest": { "activeConnections": 0, "totalConnections": 0, "totalRequests": 24, "failedRequests": 1, "totalMessages": 0, "errorMessages": 0 },
+    "binary": { "activeConnections": 2, "totalConnections": 8, "totalRequests": 6, "failedRequests": 0, "totalMessages": 94, "errorMessages": 0 }
+  },
+  "garbageCollections": {
+    "heapSizeMb": 64,
+    "totalMemoryBytes": 67108864
   }
 }
 ```
@@ -238,12 +269,29 @@ Server metrics for monitoring systems.
 
 ```json
 {
-  "timestamp": "2026-03-07T14:30:00Z",
+  "timestamp": "2026-04-06T12:45:00Z",
+  "queriesPerSecond": 1,
   "activeConnections": 12,
-  "totalConnections": 0,
+  "activeSessions": 9,
+  "totalConnections": 8,
+  "totalRequests": 240,
+  "failedRequests": 3,
+  "errorRatePercent": 1.25,
+  "averageLatencyMs": 4.22,
+  "queryRequests": 180,
+  "nonQueryRequests": 60,
+  "totalRowsReturned": 12450,
+  "totalBytesReceived": 524288,
+  "totalBytesSent": 1782579,
+  "lastFailureCode": "none",
+  "lastFailureTimestamp": null,
   "memoryUsageMb": 128.5,
   "cpuUsagePercent": 0,
-  "queriesPerSecond": 0,
+  "protocolMetrics": {
+    "grpc": { "activeConnections": 0, "totalConnections": 0, "totalRequests": 210, "failedRequests": 2, "totalMessages": 0, "errorMessages": 0 },
+    "rest": { "activeConnections": 0, "totalConnections": 0, "totalRequests": 24, "failedRequests": 1, "totalMessages": 0, "errorMessages": 0 },
+    "binary": { "activeConnections": 2, "totalConnections": 8, "totalRequests": 6, "failedRequests": 0, "totalMessages": 94, "errorMessages": 0 }
+  },
   "databaseMetrics": {
     "master": { "name": "master", "sizeMb": 0, "connectionCount": 0 },
     "appdb": { "name": "appdb", "sizeMb": 0, "connectionCount": 0 }

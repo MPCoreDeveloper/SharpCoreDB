@@ -2,7 +2,15 @@
 Harden binary protocol authentication/session behavior for external GUI and driver expectations.
 
 ## Status
-**State:** OPEN
+**State:** RESOLVED ✅
+**Completed:** 2025-04-06
+
+### Delivered
+- Fixed SSL negotiation loop (reject repeat `SSLRequest` after initial negotiation)
+- Added missing parameter status messages (`server_version`, `server_encoding`, `client_encoding`, `DateStyle`, `TimeZone`, `integer_datetimes`, `application_name`) in `AuthenticateAndCreateSessionAsync`
+- Added `severity` field to `WriteErrorResponseAsync` for PG-compliant error responses
+- Added database existence validation before authentication (returns `3D000 invalid_catalog_name`)
+- 4 integration tests covering handshake, SSL, auth failure, and unknown database scenarios — all passing
 
 ## Why
 Current binary protocol startup/auth flow is functional but needs stronger parity and production behavior.

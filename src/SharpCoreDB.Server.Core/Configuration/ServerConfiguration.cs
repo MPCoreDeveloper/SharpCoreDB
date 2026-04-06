@@ -50,6 +50,12 @@ public sealed class ServerConfiguration
     /// <summary>WebSocket keep-alive interval (seconds).</summary>
     public int WebSocketKeepAliveSeconds { get; init; } = 30;
 
+    /// <summary>Enable optional web admin Razor Pages UI (admin role required, HTTPS only, disabled by default).</summary>
+    public bool EnableWebAdmin { get; init; } = false;
+
+    /// <summary>Web admin UI base path (default: /admin).</summary>
+    public string WebAdminPath { get; init; } = "/admin";
+
     /// <summary>Maximum concurrent connections.</summary>
     public int MaxConnections { get; init; } = 10000;
 

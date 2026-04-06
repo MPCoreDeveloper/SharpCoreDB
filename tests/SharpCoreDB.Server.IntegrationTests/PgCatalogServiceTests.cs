@@ -332,4 +332,65 @@ public sealed class PgCatalogServiceTests : IAsyncLifetime
         Assert.Contains("schema_name", columns);
         Assert.Contains(rows, r => r["schema_name"]?.ToString() == "public");
     }
+
+    [Fact]
+    public void TryHandleCatalogQuery_PgIndexes_ReturnsExpectedShapeWhenEmpty()
+    {
+        // Arrange
+        var service = _fixture.GetPgCatalogService();
+        var db = _fixture.DatabaseRegistry!.GetDatabase("testdb")!.Database;
+
+        // Act
+        var handled = service.TryHandleCatalogQuery(
+            "SELECT schemaname, tablename, indexname, indexdef FROM pg_catalog.pg_indexes",
+            db, "testdb", "admin",
+            out var rows, out var columns);
+
+        // Assert
+        Assert.True(handled);
+        Assert.Empty(rows);
+        Assert.Equal(new[] { "schemaname", "tablename", "indexname", "tablespace", "indexdef" }, columns);
+    }
+
+    [Fact]
+    public void TryHandleCatalogQuery_PgConstraint_ReturnsExpectedShapeWhenEmpty()
+    {
+        // Arrange
+        var service = _fixture.GetPgCatalogService();
+        var db = _fixture.DatabaseRegistry!.GetDatabase("testdb")!.Database;
+
+        // Act
+        var handled = service.TryHandleCatalogQuery(
+            "SELECT conname, contype FROM pg_catalog.pg_constraint",
+            db, "testdb", "admin",
+            out var rows, out var columns);
+
+        // Assert
+        Assert.True(handled);
+        Assert.Empty(rows);
+        Assert.Contains("conname", columns);
+        Assert.Contains("contype", columns);
+        Assert.Contains("convalidated", columns);
+    }
+
+    [Fact]
+    public void TryHandleCatalogQuery_PgProc_ReturnsExpectedShapeWhenEmpty()
+    {
+        // Arrange
+        var service = _fixture.GetPgCatalogService();
+        var db = _fixture.DatabaseRegistry!.GetDatabase("testdb")!.Database;
+
+        // Act
+        var handled = service.TryHandleCatalogQuery(
+            "SELECT proname, proargtypes FROM pg_catalog.pg_proc",
+            db, "testdb", "admin",
+            out var rows, out var columns);
+
+        // Assert
+        Assert.True(handled);
+        Assert.Empty(rows);
+        Assert.Contains("proname", columns);
+        Assert.Contains("proargtypes", columns);
+        Assert.Contains("prorettype", columns);
+    }
 }

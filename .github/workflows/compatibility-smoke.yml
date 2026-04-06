@@ -1,0 +1,180 @@
+name: Compatibility Smoke Tests
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: Seconds to wait for server ready
+        required: false
+        default: '90'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  SMOKE_HTTPS_PORT: 8443
+  SMOKE_PG_PORT: 5433
+  SMOKE_USERNAME: smokeadmin
+  SMOKE_PASSWORD: admin123
+  SMOKE_DATABASE: smokedb
+  SMOKE_CERT_PASS: smoketest
+  SERVER_READY_TIMEOUT: ${{ github.event.inputs.timeout || '90' }}
+
+jobs:
+  compatibility-smoke:
+    name: Server Compatibility Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET ${{ env.DOTNET_VERSION }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies
+      run: pip install requests --quiet
+
+    - name: Restore server dependencies
+      run: dotnet restore src/SharpCoreDB.Server/SharpCoreDB.Server.csproj
+
+    - name: Build server
+      run: dotnet build src/SharpCoreDB.Server/SharpCoreDB.Server.csproj --configuration Release --no-restore
+
+    - name: Generate TLS development certificate
+      run: |
+        mkdir -p tests/CompatibilitySmoke/smoke-certs
+        mkdir -p tests/CompatibilitySmoke/smoke-data
+        mkdir -p tests/CompatibilitySmoke/smoke-logs
+        dotnet dev-certs https \
+          -ep tests/CompatibilitySmoke/smoke-certs/smoke.pfx \
+          -p "${{ env.SMOKE_CERT_PASS }}"
+
+    - name: Patch smoke server configuration
+      shell: python3 {0}
+      run: |
+        import json, os, pathlib
+
+        smoke_dir = pathlib.Path("tests/CompatibilitySmoke")
+        with open(smoke_dir / "appsettings.smoke.json") as f:
+            cfg = json.load(f)
+
+        cert_path = str((smoke_dir / "smoke-certs/smoke.pfx").resolve())
+        data_path = str((smoke_dir / "smoke-data/smokedb.scdb").resolve())
+        log_path  = str((smoke_dir / "smoke-logs/smoke.log").resolve())
+
+        cfg["Server"]["Security"]["TlsCertificatePath"] = cert_path
+        cfg["Server"]["Databases"][0]["DatabasePath"]   = data_path
+        cfg["Server"]["Logging"]["FilePath"]            = log_path
+        cfg["Server"]["GrpcPort"]                       = 5001
+        cfg["Server"]["HttpsApiPort"]                   = int(os.environ["SMOKE_HTTPS_PORT"])
+        cfg["Server"]["BinaryProtocolPort"]             = int(os.environ["SMOKE_PG_PORT"])
+
+        out = smoke_dir / "appsettings.smoke.ci.json"
+        with open(out, "w") as f:
+            json.dump(cfg, f, indent=2)
+        print(f"Patched config written to {out}")
+
+    - name: Start SharpCoreDB Server (background)
+      run: |
+        dotnet run \
+          --project src/SharpCoreDB.Server/SharpCoreDB.Server.csproj \
+          --configuration Release \
+          --no-build \
+          -- --appsettings "$(pwd)/tests/CompatibilitySmoke/appsettings.smoke.ci.json" \
+          > tests/CompatibilitySmoke/smoke-logs/server-stdout.log 2>&1 &
+        echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+        echo "Server started in background (PID: $!)"
+
+    - name: Wait for server to be healthy
+      shell: python3 {0}
+      run: |
+        import ssl, time, sys, urllib.request, urllib.error, os
+
+        port    = int(os.environ["SMOKE_HTTPS_PORT"])
+        timeout = int(os.environ["SERVER_READY_TIMEOUT"])
+        url     = f"https://127.0.0.1:{port}/api/v1/health"
+        ctx     = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
+
+        print(f"Polling {url} for up to {timeout}s …", flush=True)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, context=ctx, timeout=3) as r:
+                    if r.status == 200:
+                        print("Server is healthy.", flush=True)
+                        sys.exit(0)
+            except Exception as e:
+                pass
+            time.sleep(2)
+
+        print(f"Server not ready after {timeout}s — failing.", file=sys.stderr)
+        sys.exit(1)
+
+    - name: Run compatibility smoke tests
+      run: |
+        python3 tests/CompatibilitySmoke/smoke_tests.py \
+          --host 127.0.0.1 \
+          --https-port "$SMOKE_HTTPS_PORT" \
+          --pg-port    "$SMOKE_PG_PORT" \
+          --username   "$SMOKE_USERNAME" \
+          --password   "$SMOKE_PASSWORD" \
+          --database   "$SMOKE_DATABASE" \
+          --no-verify-tls \
+          --output     tests/CompatibilitySmoke/smoke-results.json \
+          --timeout    30
+
+    - name: Print smoke results summary
+      if: always()
+      run: |
+        if [ -f tests/CompatibilitySmoke/smoke-results.json ]; then
+          echo "=== Smoke Test Results ==="
+          python3 -c "
+        import json, sys
+        with open('tests/CompatibilitySmoke/smoke-results.json') as f:
+            r = json.load(f)
+        print(f\"Passed: {r['passed']}  Failed: {r['failed']}\")
+        for t in r['results']:
+            icon = '✓' if t['passed'] else '✗'
+            ms   = f\"  {t['elapsed_ms']:.0f}ms\" if t['elapsed_ms'] else ''
+            print(f\"  {icon}  {t['name']}{ms}\")
+            if not t['passed'] and t['detail']:
+                print(f\"       → {t['detail']}\")
+          "
+        fi
+
+    - name: Stop server
+      if: always()
+      run: |
+        if [ -n "${SERVER_PID:-}" ]; then
+          kill "$SERVER_PID" 2>/dev/null || true
+          echo "Server stopped."
+        fi
+
+    - name: Upload smoke test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: smoke-test-results-${{ github.run_number }}
+        retention-days: 14
+        path: |
+          tests/CompatibilitySmoke/smoke-results.json
+          tests/CompatibilitySmoke/smoke-logs/
