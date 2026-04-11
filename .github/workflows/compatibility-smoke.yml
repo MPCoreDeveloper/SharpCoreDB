@@ -109,6 +109,10 @@ jobs:
 
         port    = int(os.environ["SMOKE_HTTPS_PORT"])
         timeout = int(os.environ["SERVER_READY_TIMEOUT"])
+        server_pid_raw = os.environ.get("SERVER_PID", "").strip()
+        server_pid = int(server_pid_raw) if server_pid_raw.isdigit() else None
+        log_path = "tests/CompatibilitySmoke/smoke-logs/server-stdout.log"
+
         urls    = [
           f"https://127.0.0.1:{port}/api/v1/health",
           f"https://127.0.0.1:{port}/health"
@@ -118,10 +122,34 @@ jobs:
         ctx.check_hostname = False
         ctx.verify_mode    = ssl.CERT_NONE
 
+        def is_process_alive(pid: int | None) -> bool:
+            if pid is None:
+                return True
+            try:
+                os.kill(pid, 0)
+                return True
+            except OSError:
+                return False
+
+        def print_log_tail(path: str, max_lines: int = 120) -> None:
+            print("=== Server stdout/stderr tail ===", file=sys.stderr)
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+                for line in lines[-max_lines:]:
+                    print(line.rstrip("\n"), file=sys.stderr)
+            except Exception as ex:
+                print(f"Unable to read server log tail from {path}: {ex}", file=sys.stderr)
+
         print(f"Polling {urls[0]} / fallback {urls[1]} for up to {timeout}s …", flush=True)
         deadline = time.monotonic() + timeout
         last_error = None
         while time.monotonic() < deadline:
+            if not is_process_alive(server_pid):
+                print(f"Server process exited early (PID: {server_pid_raw or 'unknown'}) before readiness.", file=sys.stderr)
+                print_log_tail(log_path)
+                sys.exit(1)
+
             for url in urls:
                 try:
                     with urllib.request.urlopen(url, context=ctx, timeout=3) as r:
@@ -135,6 +163,7 @@ jobs:
         print(f"Server not ready after {timeout}s — failing.", file=sys.stderr)
         if last_error is not None:
             print(f"Last readiness error: {last_error}", file=sys.stderr)
+        print_log_tail(log_path)
         sys.exit(1)
 
     - name: Dump server logs on readiness failure

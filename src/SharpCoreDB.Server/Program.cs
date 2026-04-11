@@ -31,6 +31,12 @@ using SafeWebCore.Options;
 // Create and configure the host
 var builder = WebApplication.CreateBuilder(args);
 
+var customAppSettingsPath = TryResolveCustomAppSettingsPath(args);
+if (!string.IsNullOrWhiteSpace(customAppSettingsPath))
+{
+    builder.Configuration.AddJsonFile(customAppSettingsPath, optional: false, reloadOnChange: false);
+}
+
 var serverConfig = builder.Configuration.GetSection("Server").Get<ServerConfiguration>()
     ?? throw new InvalidOperationException("Server configuration is missing");
 
@@ -708,4 +714,38 @@ static void ConfigureHttpsEndpoint(ListenOptions listenOptions, SecurityConfigur
     }
 
     listenOptions.UseHttps(certificatePath, security.TlsPrivateKeyPath);
+}
+
+static string? TryResolveCustomAppSettingsPath(string[] args)
+{
+    ArgumentNullException.ThrowIfNull(args);
+
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+
+        if (string.Equals(arg, "--appsettings", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
+            {
+                throw new InvalidOperationException("--appsettings requires a non-empty path value.");
+            }
+
+            return Path.GetFullPath(args[i + 1]);
+        }
+
+        const string Prefix = "--appsettings=";
+        if (arg.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var path = arg[Prefix.Length..];
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidOperationException("--appsettings requires a non-empty path value.");
+            }
+
+            return Path.GetFullPath(path);
+        }
+    }
+
+    return null;
 }

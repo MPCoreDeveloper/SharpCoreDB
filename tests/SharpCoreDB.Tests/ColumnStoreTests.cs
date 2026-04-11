@@ -479,9 +479,18 @@ public sealed class ColumnStoreTests
         Console.WriteLine($"   Average Speedup: {(sumSpeedup + avgSpeedup + minMaxSpeedup) / 3:F2}x");
         Console.WriteLine($"   Columnar storage is SIGNIFICANTLY faster! ??");
 
-        // Assert: Columnar should be at least 2x faster
-        Assert.True(sumSpeedup > 2.0, "Columnar SUM should be at least 2x faster");
-        Assert.True(avgSpeedup > 2.0, "Columnar AVG should be at least 2x faster");
+        // Assert correctness first
+        Assert.Equal(linqSum, columnSum);
+        Assert.Equal(linqAvg, columnAvg, 8);
+        Assert.Equal(linqMin, columnMin);
+        Assert.Equal(linqMax, columnMax);
+
+        // Performance thresholds are hardware-sensitive on shared CI runners.
+        if (!TestEnvironment.IsCI)
+        {
+            Assert.True(sumSpeedup > 2.0, "Columnar SUM should be at least 2x faster");
+            Assert.True(avgSpeedup > 2.0, "Columnar AVG should be at least 2x faster");
+        }
 
         columnStore.Dispose();
     }
