@@ -379,6 +379,7 @@ builder.Services.AddSingleton(sp => new JwtTokenService(
 var metricsCollector = new MetricsCollector("sharpcoredb-server");
 builder.Services.AddSingleton(metricsCollector);
 builder.Services.AddSingleton<HealthCheckService>();
+builder.Services.AddSingleton<StartupState>();
 
 // Add health checks
 builder.Services.AddHealthChecks();
@@ -473,29 +474,28 @@ app.MapGet("/", () => new
 });
 
 // Map API health endpoint used by smoke tests and external tooling
-app.MapGet("/api/v1/health", (HealthCheckService healthService) =>
-{
-    var health = healthService.GetDetailedHealth();
-    return Results.Ok(new
-    {
-        status = health.Status,
-        version = health.Version,
-        timestamp = health.Timestamp,
-    });
-})
-.WithName("Health")
-.AllowAnonymous()
-.Produces(StatusCodes.Status200OK);
+// Health is served by DatabaseController so it can share the REST API surface
+// without duplicating routes.
 
 // Map detailed health endpoint
-app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService) =>
+app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService, StartupState startupState) =>
 {
+    if (!startupState.IsReady)
+    {
+        return Results.Json(new
+        {
+            status = startupState.ErrorMessage is null ? "starting" : "failed",
+            error = startupState.ErrorMessage,
+        }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
     var health = healthService.GetDetailedHealth();
     return Results.Ok(health);
 })
 .WithName("DetailedHealth")
 .AllowAnonymous()
-.Produces<ServerHealthInfo>(StatusCodes.Status200OK);
+.Produces<ServerHealthInfo>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status503ServiceUnavailable);
 
 // Start the server
 Log.Information("Starting SharpCoreDB Server v1.7.0");
@@ -536,19 +536,22 @@ if (serverConfig.Projections.Enabled)
 
 try
 {
-    // Initialize database registry before constructing startup-dependent services.
+    var startupState = app.Services.GetRequiredService<StartupState>();
+
+    await app.StartAsync(app.Lifetime.ApplicationStopping);
+
     var databaseRegistry = app.Services.GetRequiredService<DatabaseRegistry>();
     await databaseRegistry.InitializeAsync(app.Lifetime.ApplicationStopping);
 
-    // Start the network server
     var networkServer = app.Services.GetRequiredService<NetworkServer>();
     await networkServer.StartAsync(app.Lifetime.ApplicationStopping);
 
-    // Run the web host
-    await app.RunAsync();
+    startupState.MarkReady();
+    await app.WaitForShutdownAsync(app.Lifetime.ApplicationStopping);
 }
 catch (InvalidOperationException ex)
 {
+    app.Services.GetRequiredService<StartupState>().MarkFailed(ex.Message);
     Log.Fatal(ex, "SharpCoreDB Server failed startup validation");
 }
 finally
@@ -735,7 +738,7 @@ static string? TryResolveCustomAppSettingsPath(string[] args)
                 throw new InvalidOperationException("--appsettings requires a non-empty path value.");
             }
 
-            return Path.GetFullPath(args[i + 1]);
+            return ResolveCustomAppSettingsPath(args[i + 1]);
         }
 
         const string Prefix = "--appsettings=";
@@ -747,9 +750,71 @@ static string? TryResolveCustomAppSettingsPath(string[] args)
                 throw new InvalidOperationException("--appsettings requires a non-empty path value.");
             }
 
-            return Path.GetFullPath(path);
+            return ResolveCustomAppSettingsPath(path);
         }
     }
 
     return null;
+}
+
+static string ResolveCustomAppSettingsPath(string path)
+{
+    ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+    if (Path.IsPathRooted(path))
+    {
+        return Path.GetFullPath(path);
+    }
+
+    var visitedCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var basePath in GetCandidateBaseDirectories())
+    {
+        string candidate;
+        try
+        {
+            candidate = Path.GetFullPath(path, basePath);
+        }
+        catch (Exception)
+        {
+            continue;
+        }
+
+        if (!visitedCandidates.Add(candidate))
+        {
+            continue;
+        }
+
+        if (File.Exists(candidate))
+        {
+            return candidate;
+        }
+    }
+
+    return Path.GetFullPath(path);
+}
+
+static IEnumerable<string> GetCandidateBaseDirectories()
+{
+    foreach (var baseDirectory in EnumerateBaseDirectories())
+    {
+        if (string.IsNullOrWhiteSpace(baseDirectory) || !Directory.Exists(baseDirectory))
+        {
+            continue;
+        }
+
+        var directory = new DirectoryInfo(baseDirectory);
+        while (directory is not null)
+        {
+            yield return directory.FullName;
+            directory = directory.Parent;
+        }
+    }
+}
+
+static IEnumerable<string?> EnumerateBaseDirectories()
+{
+    yield return Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+    yield return Environment.GetEnvironmentVariable("PWD");
+    yield return Environment.CurrentDirectory;
+    yield return AppContext.BaseDirectory;
 }

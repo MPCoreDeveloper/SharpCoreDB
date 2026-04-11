@@ -31,6 +31,7 @@ public sealed class DatabaseController(
     TenantQuotaEnforcementService tenantQuotaEnforcementService,
     MetricsCollector metricsCollector,
     HealthCheckService healthCheckService,
+    StartupState startupState,
     ILogger<DatabaseController> logger,
     DatabaseAuthorizationService? databaseAuthorizationService = null) : ControllerBase
 {
@@ -358,8 +359,30 @@ public sealed class DatabaseController(
     [HttpGet("health")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(HealthResponse), 200)]
+    [ProducesResponseType(typeof(HealthResponse), 503)]
     public IActionResult GetHealth()
     {
+        if (!startupState.IsReady)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new HealthResponse
+            {
+                Status = startupState.ErrorMessage is null ? "starting" : "failed",
+                Timestamp = DateTimeOffset.UtcNow,
+                Version = "1.7.0",
+                ActiveConnections = 0,
+                ActiveSessions = 0,
+                TotalDatabases = databaseRegistry.DatabaseNames.Count,
+                DatabasesOnline = 0,
+                ErrorRatePercent = 0,
+                LastFailureCode = startupState.ErrorMessage ?? string.Empty,
+                Uptime = ServerUptime.Elapsed.ToString(@"d\.hh\:mm\:ss"),
+                Checks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["startup"] = startupState.ErrorMessage is null ? "starting" : "failed",
+                },
+            });
+        }
+
         var detailed = healthCheckService.GetDetailedHealth();
 
         return Ok(new HealthResponse

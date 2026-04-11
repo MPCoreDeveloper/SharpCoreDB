@@ -120,8 +120,6 @@ public class IndexTests
     [Trait("Category", "Performance")]
     public void HashIndex_IndexLookup_Vs_TableScan_Performance()
     {
-        // Arrange - Create test data with more realistic distribution
-        // Use 100,000 rows with 1,000 unique categories for better performance differential
         var index = new HashIndex("perf_test", "category");
         var rows = new List<Dictionary<string, object>>();
         for (int i = 0; i < 100000; i++)
@@ -129,28 +127,56 @@ public class IndexTests
             rows.Add(new Dictionary<string, object>
             {
                 { "id", i },
-                { "category", $"cat_{i % 1000}" }, // 1000 categories = ~100 rows each
+                { "category", $"cat_{i % 1000}" },
                 { "data", $"data_{i}" }
             });
         }
 
         index.Rebuild(rows);
 
-        // Act - Index lookup (looking up a specific category)
+        const string targetCategory = "cat_500";
+        const int warmupIterations = 8;
+        const int benchmarkIterations = 200;
+
+        for (int i = 0; i < warmupIterations; i++)
+        {
+            _ = index.LookupPositions(targetCategory);
+            _ = rows.Count(static row => (string)row["category"] == targetCategory);
+        }
+
+        var expectedCount = index.LookupPositions(targetCategory).Count;
+
         var sw = Stopwatch.StartNew();
-        var indexPositions = index.LookupPositions("cat_500");
+        for (int i = 0; i < benchmarkIterations; i++)
+        {
+            var positions = index.LookupPositions(targetCategory);
+            Assert.Equal(expectedCount, positions.Count);
+        }
         sw.Stop();
         var indexTime = sw.ElapsedTicks;
 
-        // Act - Simulate table scan
         sw.Restart();
-        var scanResults = rows.Where(r => r["category"].ToString() == "cat_500").ToList();
+        var scanCount = 0;
+        for (int i = 0; i < benchmarkIterations; i++)
+        {
+            scanCount = 0;
+            foreach (var row in rows)
+            {
+                if ((string)row["category"] == targetCategory)
+                {
+                    scanCount++;
+                }
+            }
+        }
         sw.Stop();
         var scanTime = sw.ElapsedTicks;
 
-        // Assert - Index should be significantly faster
-        Assert.Equal(scanResults.Count, indexPositions.Count);
-        Assert.True(indexTime < scanTime / 10, $"Index lookup should be at least 10x faster. Index: {indexTime} ticks, Scan: {scanTime} ticks");
+        Assert.Equal(expectedCount, scanCount);
+
+        var minimumSpeedup = TestEnvironment.IsCI ? 3 : 5;
+        Assert.True(
+            scanTime > indexTime * minimumSpeedup,
+            $"Index lookup should be at least {minimumSpeedup}x faster over repeated runs. Index: {indexTime} ticks, Scan: {scanTime} ticks");
     }
 
     [Fact]

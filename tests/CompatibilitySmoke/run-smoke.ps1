@@ -51,6 +51,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot  = Resolve-Path "$PSScriptRoot/../.."
+$ResolvedServerProject = (Resolve-Path (Join-Path $RepoRoot $ServerProject)).Path
 $SmokeDir  = $PSScriptRoot
 $CertDir   = Join-Path $SmokeDir "smoke-certs"
 $DataDir   = Join-Path $SmokeDir "smoke-data"
@@ -89,7 +90,7 @@ try {
     # ── 1. Build ─────────────────────────────────────────────────────────────
     if (-not $SkipBuild) {
         Write-Step "Building server project..."
-        dotnet build $ServerProject -c Release --nologo -v q
+        dotnet build $ResolvedServerProject -c Release --nologo -v q
         if ($LASTEXITCODE -ne 0) { throw "Build failed." }
         Write-Pass "Build succeeded."
     } else {
@@ -134,7 +135,7 @@ try {
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName  = "dotnet"
-    $startInfo.Arguments = "run --project $ServerProject --configuration Release " +
+    $startInfo.Arguments = "run --project $ResolvedServerProject --configuration Release " +
                            "--no-build -- " +
                            "--appsettings $patchedConfig"
     $startInfo.UseShellExecute  = $false
