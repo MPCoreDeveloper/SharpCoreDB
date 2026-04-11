@@ -584,7 +584,7 @@ public sealed class DatabaseController(
 // ── REST API Request/Response DTOs ──
 
 /// <summary>Query request parameters.</summary>
-public sealed class QueryRequest
+public sealed record QueryRequest
 {
     /// <summary>SQL query text.</summary>
     public required string Sql { get; init; }
@@ -600,7 +600,7 @@ public sealed class QueryRequest
 }
 
 /// <summary>Query response data.</summary>
-public sealed class QueryResponse
+public sealed record QueryResponse
 {
     /// <summary>Column information.</summary>
     public required ColumnInfo[] Columns { get; init; }
@@ -616,7 +616,7 @@ public sealed class QueryResponse
 }
 
 /// <summary>Column information.</summary>
-public sealed class ColumnInfo
+public sealed record ColumnInfo
 {
     /// <summary>Column name.</summary>
     public required string Name { get; init; }
@@ -629,7 +629,7 @@ public sealed class ColumnInfo
 }
 
 /// <summary>Execute request parameters.</summary>
-public sealed class ExecuteRequest
+public sealed record ExecuteRequest
 {
     /// <summary>SQL statement text.</summary>
     public required string Sql { get; init; }
@@ -645,7 +645,7 @@ public sealed class ExecuteRequest
 }
 
 /// <summary>Execute response data.</summary>
-public sealed class ExecuteResponse
+public sealed record ExecuteResponse
 {
     /// <summary>Number of rows affected.</summary>
     public required int RowsAffected { get; init; }
@@ -655,7 +655,7 @@ public sealed class ExecuteResponse
 }
 
 /// <summary>Batch request parameters.</summary>
-public sealed class BatchRequest
+public sealed record BatchRequest
 {
     /// <summary>SQL statements to execute.</summary>
     public required string[] Statements { get; init; }
@@ -668,7 +668,7 @@ public sealed class BatchRequest
 }
 
 /// <summary>Batch response data.</summary>
-public sealed class BatchResponse
+public sealed record BatchResponse
 {
     /// <summary>Number of statements executed.</summary>
     public required int StatementsExecuted { get; init; }
@@ -681,7 +681,7 @@ public sealed class BatchResponse
 }
 
 /// <summary>Schema response data.</summary>
-public sealed class SchemaResponse
+public sealed record SchemaResponse
 {
     /// <summary>Database name.</summary>
     public required string Database { get; init; }
@@ -694,7 +694,7 @@ public sealed class SchemaResponse
 }
 
 /// <summary>Table information.</summary>
-public sealed class RestTableInfo
+public sealed record RestTableInfo
 {
     /// <summary>Table name.</summary>
     public required string Name { get; init; }
@@ -707,14 +707,14 @@ public sealed class RestTableInfo
 }
 
 /// <summary>Database list response.</summary>
-public sealed class DatabaseListResponse
+public sealed record DatabaseListResponse
 {
     /// <summary>All hosted databases.</summary>
     public required DatabaseInfo[] Databases { get; init; }
 }
 
 /// <summary>Database information.</summary>
-public sealed class DatabaseInfo
+public sealed record DatabaseInfo
 {
     /// <summary>Database name.</summary>
     public required string Name { get; init; }
@@ -727,7 +727,7 @@ public sealed class DatabaseInfo
 }
 
 /// <summary>Health response data.</summary>
-public sealed class HealthResponse
+public sealed record HealthResponse
 {
     /// <summary>Health status.</summary>
     public required string Status { get; init; }
@@ -764,7 +764,7 @@ public sealed class HealthResponse
 }
 
 /// <summary>Metrics response data.</summary>
-public sealed class MetricsResponse
+public sealed record MetricsResponse
 {
     /// <summary>Response timestamp.</summary>
     public required DateTimeOffset Timestamp { get; init; }
@@ -828,7 +828,7 @@ public sealed class MetricsResponse
 }
 
 /// <summary>Database metrics.</summary>
-public sealed class DatabaseMetrics
+public sealed record DatabaseMetrics
 {
     /// <summary>Database name.</summary>
     public required string Name { get; init; }
@@ -841,7 +841,7 @@ public sealed class DatabaseMetrics
 }
 
 /// <summary>Error response data.</summary>
-public sealed class ErrorResponse
+public sealed record ErrorResponse
 {
     /// <summary>Error message.</summary>
     public required string Error { get; init; }
@@ -854,7 +854,7 @@ public sealed class ErrorResponse
 }
 
 /// <summary>Login request parameters.</summary>
-public sealed class LoginRequest
+public sealed record LoginRequest
 {
     /// <summary>Username.</summary>
     public required string Username { get; init; }
@@ -864,7 +864,7 @@ public sealed class LoginRequest
 }
 
 /// <summary>Login response with JWT token.</summary>
-public sealed class LoginResponse
+public sealed record LoginResponse
 {
     /// <summary>JWT bearer token.</summary>
     public required string Token { get; init; }
@@ -877,7 +877,7 @@ public sealed class LoginResponse
 }
 
 /// <summary>Tenant access audit response payload.</summary>
-public sealed class TenantAccessAuditResponse
+public sealed record TenantAccessAuditResponse
 {
     /// <summary>Total retained audit events in memory.</summary>
     public required int TotalRetained { get; init; }
@@ -893,7 +893,7 @@ public sealed class TenantAccessAuditResponse
 }
 
 /// <summary>Single tenant access audit item.</summary>
-public sealed class TenantAccessAuditItem
+public sealed record TenantAccessAuditItem
 {
     /// <summary>Event timestamp in UTC.</summary>
     public required DateTime TimestampUtc { get; init; }
@@ -924,7 +924,7 @@ public sealed class TenantAccessAuditItem
 }
 
 /// <summary>Tenant security audit response payload.</summary>
-public sealed class TenantSecurityAuditResponse
+public sealed record TenantSecurityAuditResponse
 {
     /// <summary>Total retained audit events in memory.</summary>
     public required int TotalRetained { get; init; }
@@ -937,7 +937,7 @@ public sealed class TenantSecurityAuditResponse
 }
 
 /// <summary>Single tenant security audit item.</summary>
-public sealed class TenantSecurityAuditItem
+public sealed record TenantSecurityAuditItem
 {
     /// <summary>Event timestamp in UTC.</summary>
     public required DateTime TimestampUtc { get; init; }

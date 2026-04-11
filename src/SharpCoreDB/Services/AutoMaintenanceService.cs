@@ -5,19 +5,20 @@
 namespace SharpCoreDB.Services;
 
 using SharpCoreDB.Interfaces;
-using System.Timers;
 
 /// <summary>
 /// Provides automatic VACUUM and WAL checkpointing functionality.
+/// C# 14: Uses PeriodicTimer for background scheduling, Interlocked for lock-free counters.
 /// </summary>
-public class AutoMaintenanceService : IDisposable
+public sealed class AutoMaintenanceService : IDisposable, IAsyncDisposable
 {
-    private readonly IDatabase database;
-    private readonly System.Timers.Timer timer;
-    private int writeCount = 0;
-    private readonly int writeThreshold;
-    private readonly Lock @lock = new();
-    private bool disposed = false;
+    private readonly IDatabase _database;
+    private readonly PeriodicTimer _timer;
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Task _backgroundTask;
+    private readonly int _writeThreshold;
+    private int _writeCount;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AutoMaintenanceService"/> class.
@@ -28,13 +29,12 @@ public class AutoMaintenanceService : IDisposable
     /// <param name="writeThreshold">Number of writes before triggering maintenance (default 1000).</param>
     public AutoMaintenanceService(IDatabase database, int intervalSeconds = 300, int writeThreshold = 1000)
     {
-        this.database = database ?? throw new ArgumentNullException(nameof(database));
-        this.writeThreshold = writeThreshold;
+        ArgumentNullException.ThrowIfNull(database);
 
-        this.timer = new System.Timers.Timer(intervalSeconds * 1000);
-        this.timer.Elapsed += this.OnTimerElapsed;
-        this.timer.AutoReset = true;
-        this.timer.Start();
+        _database = database;
+        _writeThreshold = writeThreshold;
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
+        _backgroundTask = RunTimerLoopAsync(_cts.Token);
     }
 
     /// <summary>
@@ -42,20 +42,35 @@ public class AutoMaintenanceService : IDisposable
     /// </summary>
     public void IncrementWriteCount()
     {
-        if (this.disposed)
+        if (_disposed)
         {
             return;
         }
 
-        lock (this.@lock)
+        var current = Interlocked.Increment(ref _writeCount);
+        if (current >= _writeThreshold)
         {
-            this.writeCount++;
-            if (this.writeCount >= this.writeThreshold)
-            {
-                this.PerformMaintenance();
-            }
+            PerformMaintenance();
         }
     }
+
+    /// <summary>
+    /// Manually triggers maintenance.
+    /// </summary>
+    public void TriggerMaintenance()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        PerformMaintenance();
+    }
+
+    /// <summary>
+    /// Gets the current write count.
+    /// </summary>
+    public int WriteCount => Volatile.Read(ref _writeCount);
 
     /// <summary>
     /// Performs maintenance tasks (VACUUM and WAL checkpoint).
@@ -64,21 +79,15 @@ public class AutoMaintenanceService : IDisposable
     {
         try
         {
-            // In a production system, these would execute actual VACUUM and CHECKPOINT commands
-            // For now, we'll log that maintenance was triggered
             Console.WriteLine($"[AutoMaintenance] Performing maintenance at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
 
-            // Reset write count
-            lock (this.@lock)
-            {
-                this.writeCount = 0;
-            }
+            // Reset write count atomically
+            Interlocked.Exchange(ref _writeCount, 0);
 
             // Clear query cache at WAL checkpoint to ensure consistency
-            this.database.ClearQueryCache();
+            _database.ClearQueryCache();
 
-            // Note: Actual VACUUM and CHECKPOINT implementation would go here
-            // This would typically involve:
+            // Actual VACUUM and CHECKPOINT implementation would go here:
             // 1. WAL checkpoint to flush changes to main database
             // 2. VACUUM to reclaim space from deleted records
             // 3. ANALYZE to update query optimizer statistics
@@ -90,65 +99,58 @@ public class AutoMaintenanceService : IDisposable
     }
 
     /// <summary>
-    /// Timer elapsed event handler.
+    /// Background loop using PeriodicTimer for scheduled maintenance.
     /// </summary>
-    private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
+    private async Task RunTimerLoopAsync(CancellationToken cancellationToken)
     {
-        this.PerformMaintenance();
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                PerformMaintenance();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
+        }
     }
 
-    /// <summary>
-    /// Manually triggers maintenance.
-    /// </summary>
-    public void TriggerMaintenance()
+    /// <inheritdoc />
+    public void Dispose()
     {
-        if (this.disposed)
+        if (_disposed)
         {
             return;
         }
 
-        this.PerformMaintenance();
+        _disposed = true;
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
     }
 
-    /// <summary>
-    /// Gets the current write count.
-    /// </summary>
-    public int WriteCount
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
     {
-        get
+        if (_disposed)
         {
-            lock (this.@lock)
-            {
-                return this.writeCount;
-            }
+            return;
         }
-    }
 
-    /// <summary>
-    /// Disposes the auto maintenance service.
-    /// </summary>
-    public void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
-    }
+        _disposed = true;
+        await _cts.CancelAsync().ConfigureAwait(false);
 
-    /// <summary>
-    /// Releases the unmanaged resources used by the AutoMaintenanceService and optionally releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!this.disposed)
+        try
         {
-            if (disposing)
-            {
-                // Dispose managed resources
-                this.timer.Stop();
-                this.timer.Dispose();
-            }
-
-            this.disposed = true;
+            await _backgroundTask.ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
+        }
+
+        _timer.Dispose();
+        _cts.Dispose();
     }
 }

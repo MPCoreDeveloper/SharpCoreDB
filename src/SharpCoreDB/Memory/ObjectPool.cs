@@ -28,31 +28,20 @@ namespace SharpCoreDB.Memory;
 /// - 2-4x improvement for allocation-heavy operations
 /// </summary>
 /// <typeparam name="T">Type of objects to pool. Should be a reference type.</typeparam>
-public class ObjectPool<T> where T : class, new()
+/// <param name="maxPoolSize">Maximum number of objects to keep in the pool. Default: 100.</param>
+/// <param name="resetAction">Optional action to reset object state when returned to pool.</param>
+/// <param name="factory">Optional factory function to create new instances. If null, uses new T().</param>
+public class ObjectPool<T>(int maxPoolSize = 100, Action<T>? resetAction = null, Func<T>? factory = null)
+    where T : class, new()
 {
-    private readonly ConcurrentBag<T> availableObjects;
-    private readonly int maxPoolSize;
-    private readonly Action<T>? resetAction;
-    private readonly Func<T>? factory;
-    private long rentCount = 0;
-    private long reuseCount = 0;
-
-    /// <summary>
-    /// Initializes a new instance of the ObjectPool class.
-    /// </summary>
-    /// <param name="maxPoolSize">Maximum number of objects to keep in the pool. Default: 100.</param>
-    /// <param name="resetAction">Optional action to reset object state when returned to pool.</param>
-    /// <param name="factory">Optional factory function to create new instances. If null, uses new T().</param>
-    public ObjectPool(int maxPoolSize = 100, Action<T>? resetAction = null, Func<T>? factory = null)
-    {
-        if (maxPoolSize <= 0)
-            throw new ArgumentException("Pool size must be greater than 0", nameof(maxPoolSize));
-
-        this.maxPoolSize = maxPoolSize;
-        this.resetAction = resetAction;
-        this.factory = factory;
-        this.availableObjects = new ConcurrentBag<T>();
-    }
+    private readonly int _maxPoolSize = maxPoolSize > 0
+        ? maxPoolSize
+        : throw new ArgumentException("Pool size must be greater than 0", nameof(maxPoolSize));
+    private readonly Action<T>? _resetAction = resetAction;
+    private readonly Func<T>? _factory = factory;
+    private readonly ConcurrentBag<T> _availableObjects = new();
+    private long _rentCount;
+    private long _reuseCount;
 
     /// <summary>
     /// Gets or creates an object from the pool.
@@ -62,16 +51,16 @@ public class ObjectPool<T> where T : class, new()
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T Rent()
     {
-        Interlocked.Increment(ref rentCount);
+        Interlocked.Increment(ref _rentCount);
 
-        if (availableObjects.TryTake(out var obj))
+        if (_availableObjects.TryTake(out var obj))
         {
-            Interlocked.Increment(ref reuseCount);
+            Interlocked.Increment(ref _reuseCount);
             return obj;
         }
 
         // Pool empty, create new
-        return factory?.Invoke() ?? new T();
+        return _factory?.Invoke() ?? new T();
     }
 
     /// <summary>
@@ -86,12 +75,12 @@ public class ObjectPool<T> where T : class, new()
             return;
 
         // Reset object state
-        resetAction?.Invoke(obj);
+        _resetAction?.Invoke(obj);
 
         // Return to pool if not full
-        if (availableObjects.Count < maxPoolSize)
+        if (_availableObjects.Count < _maxPoolSize)
         {
-            availableObjects.Add(obj);
+            _availableObjects.Add(obj);
         }
     }
 
@@ -100,7 +89,7 @@ public class ObjectPool<T> where T : class, new()
     /// </summary>
     public void Clear()
     {
-        while (availableObjects.TryTake(out _))
+        while (_availableObjects.TryTake(out _))
         {
             // Discard object
         }
@@ -109,7 +98,7 @@ public class ObjectPool<T> where T : class, new()
     /// <summary>
     /// Gets the number of objects currently in the pool.
     /// </summary>
-    public int AvailableCount => availableObjects.Count;
+    public int AvailableCount => _availableObjects.Count;
 
     /// <summary>
     /// Gets statistics about pool usage.
@@ -118,11 +107,11 @@ public class ObjectPool<T> where T : class, new()
     {
         return new PoolStatistics
         {
-            TotalRents = rentCount,
-            ReuseCount = reuseCount,
-            ReusageRate = rentCount > 0 ? (double)reuseCount / rentCount : 0.0,
-            CurrentPoolSize = availableObjects.Count,
-            MaxPoolSize = maxPoolSize
+            TotalRents = _rentCount,
+            ReuseCount = _reuseCount,
+            ReusageRate = _rentCount > 0 ? (double)_reuseCount / _rentCount : 0.0,
+            CurrentPoolSize = _availableObjects.Count,
+            MaxPoolSize = _maxPoolSize
         };
     }
 }
@@ -130,32 +119,32 @@ public class ObjectPool<T> where T : class, new()
 /// <summary>
 /// Statistics about object pool usage.
 /// </summary>
-public class PoolStatistics
+public sealed record PoolStatistics
 {
     /// <summary>
     /// Total number of rent operations.
     /// </summary>
-    public long TotalRents { get; set; }
+    public required long TotalRents { get; init; }
 
     /// <summary>
     /// Number of times objects were reused from pool.
     /// </summary>
-    public long ReuseCount { get; set; }
+    public required long ReuseCount { get; init; }
 
     /// <summary>
     /// Percentage of rents that were satisfied by reuse (0.0 to 1.0).
     /// </summary>
-    public double ReusageRate { get; set; }
+    public required double ReusageRate { get; init; }
 
     /// <summary>
     /// Current number of objects in the pool.
     /// </summary>
-    public int CurrentPoolSize { get; set; }
+    public required int CurrentPoolSize { get; init; }
 
     /// <summary>
     /// Maximum size of the pool.
     /// </summary>
-    public int MaxPoolSize { get; set; }
+    public required int MaxPoolSize { get; init; }
 
     /// <summary>
     /// Gets a human-readable summary of pool statistics.
@@ -187,28 +176,19 @@ public static class ObjectPoolExtensions
 /// RAII handle for automatic object return to pool.
 /// Usage: using var handle = pool.RentUsing(out var obj)
 /// </summary>
-public struct PooledObjectHandle<T> : IDisposable where T : class, new()
+public struct PooledObjectHandle<T>(ObjectPool<T> pool, T obj) : IDisposable where T : class, new()
 {
-    private readonly ObjectPool<T> pool;
-    private readonly T obj;
-    private bool disposed;
-
-    internal PooledObjectHandle(ObjectPool<T> pool, T obj)
-    {
-        this.pool = pool;
-        this.obj = obj;
-        this.disposed = false;
-    }
+    private bool _disposed;
 
     /// <summary>
     /// Returns the object to the pool.
     /// </summary>
     public void Dispose()
     {
-        if (!disposed)
+        if (!_disposed)
         {
             pool?.Return(obj);
-            disposed = true;
+            _disposed = true;
         }
     }
 }

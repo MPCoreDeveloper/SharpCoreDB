@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Parallel query executor for multi-threaded query processing.
-/// C# 14: Async/await, Parallel LINQ, partitioning.
+/// C# 14: Primary constructor, async/await, Parallel LINQ, partitioning.
 /// 
 /// ✅ SCDB Phase 7.4: Advanced Query Optimization - Parallel Execution
 /// 
@@ -24,21 +24,13 @@ using System.Threading.Tasks;
 /// - Parallel joins
 /// - Work-stealing scheduler
 /// </summary>
-public sealed class ParallelQueryExecutor : IDisposable
+/// <param name="degreeOfParallelism">Number of parallel threads (0 = auto).</param>
+public sealed class ParallelQueryExecutor(int degreeOfParallelism = 0) : IDisposable
 {
-    private readonly int _degreeOfParallelism;
+    private readonly int _degreeOfParallelism = degreeOfParallelism > 0
+        ? degreeOfParallelism
+        : Environment.ProcessorCount;
     private bool _disposed;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ParallelQueryExecutor"/> class.
-    /// </summary>
-    /// <param name="degreeOfParallelism">Number of parallel threads (0 = auto).</param>
-    public ParallelQueryExecutor(int degreeOfParallelism = 0)
-    {
-        _degreeOfParallelism = degreeOfParallelism > 0
-            ? degreeOfParallelism
-            : Environment.ProcessorCount;
-    }
 
     /// <summary>Gets the degree of parallelism.</summary>
     public int DegreeOfParallelism => _degreeOfParallelism;

@@ -290,11 +290,15 @@ public class RowMaterializer : IDisposable
 /// <summary>
 /// Statistics for row materialization monitoring.
 /// </summary>
-public class RowMaterializerStatistics
+public sealed record RowMaterializerStatistics
 {
-    public int CachedRowSize { get; set; }
-    public int ColumnCount { get; set; }
+    /// <summary>Number of columns in the cached row.</summary>
+    public required int CachedRowSize { get; init; }
 
+    /// <summary>Total number of columns in the schema.</summary>
+    public required int ColumnCount { get; init; }
+
+    /// <inheritdoc />
     public override string ToString()
     {
         return $"Cached: {CachedRowSize} columns, Metadata: {ColumnCount} columns";

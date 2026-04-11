@@ -478,6 +478,7 @@ app.MapGet("/api/v1/health", (HealthCheckService healthService) =>
     });
 })
 .WithName("Health")
+.AllowAnonymous()
 .Produces(StatusCodes.Status200OK);
 
 // Map detailed health endpoint
@@ -487,6 +488,7 @@ app.MapGet("/api/v1/health/detailed", (HealthCheckService healthService) =>
     return Results.Ok(health);
 })
 .WithName("DetailedHealth")
+.AllowAnonymous()
 .Produces<ServerHealthInfo>(StatusCodes.Status200OK);
 
 // Start the server
