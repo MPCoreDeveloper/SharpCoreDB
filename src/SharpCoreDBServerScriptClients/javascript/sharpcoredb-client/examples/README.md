@@ -2,6 +2,18 @@
 
 This directory contains examples demonstrating how to use @sharpcoredb/client to connect to and interact with SharpCoreDB Server.
 
+## Features demonstrated
+
+- Server connection and query execution
+- Basic CRUD command flows
+- Connection pooling patterns
+- Error handling and latency checks
+
+## Changes in v1.7.0
+
+- Example docs aligned to the current `v1.7.0` server/client release line
+- References updated for gRPC-first server usage
+
 ## Prerequisites
 
 Before running the examples, ensure you have:

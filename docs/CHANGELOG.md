@@ -31,6 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicitly documented the remaining deferred single-file parameterized `ExecuteCompiled` disposal deadlock path.
 - **Performance test hardening**: `ColumnStore_Average_10kRecords_Under2ms` now runs 10 iterations and asserts the best (minimum) time, with an additional warmup call. This eliminates false failures caused by concurrent test execution, GC pauses, or OS scheduling jitter.
 
+## [1.7.0] - 2026-04-06
+
+### Added
+- `SharpCoreDB.Graph.Advanced` package for advanced graph analytics and GraphRAG workflows.
+- Functional package family: `SharpCoreDB.Functional`, `SharpCoreDB.Functional.Dapper`, `SharpCoreDB.Functional.EntityFrameworkCore`.
+- Expanded optional package guidance for `SharpCoreDB.EventSourcing`, `SharpCoreDB.Projections`, and `SharpCoreDB.CQRS`.
+
+### Changed
+- Ecosystem-wide package version synchronization on `1.7.0`.
+- Documentation refresh across root/docs/src package README files with per-project features and v1.7.0 changes.
+- SIMD aggregate hot loops updated to `Vector256.LoadUnsafe` pattern in columnar paths.
+
+### Fixed
+- SQL lexer/parser reliability for parameterized compiled-query execution.
+- Metadata flush/reopen reliability paths with backward-compatible metadata format handling.
+
 ## [1.6.0] - 2026-03-30
 
 ### 🎉 Major Achievement - Phase 12: GraphRAG Enhancement & Vector Search Integration COMPLETE

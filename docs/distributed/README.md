@@ -1,5 +1,14 @@
 # SharpCoreDB.Distributed Documentation
 
+**Version line:** `v1.7.0`
+
+## v1.7.0 changes
+
+- Distributed package/docs synchronized to `v1.7.0`
+- Replication + transaction primitives aligned with current implementation
+- Documentation aligned with multi-master/vector-clock and 2PC-focused architecture
+- Cross-reference added to `../FEATURE_MATRIX_v1.7.0.md`
+
 ## Overview
 
 SharpCoreDB.Distributed provides enterprise-scale distributed database capabilities for SharpCoreDB, including:
@@ -66,7 +75,7 @@ await replicationManager.StartAsync();
 // Perform distributed operations
 await replicationManager.ProcessWriteOperationAsync("node1",
     new WriteOperation("Users", OperationType.Insert, 1,
-        new Dictionary<string, object?> { ["Name"] = "Alice", ["Age"] = 28 }));
+        new Dictionary<string, object?> { ["Name"] = "Alice", ["Age"] = 28 } ));
 ```
 
 ### 2. Distributed Transactions

@@ -6,6 +6,7 @@ This index lists the maintained SCDB documentation set.
 
 - `README.md` - SCDB overview and architecture context.
 - `PRODUCTION_GUIDE.md` - Operational and production guidance.
+- `../FEATURE_MATRIX_v1.7.0.md` - Cross-package feature map for v1.7.0.
 
 ## Related Core References
 

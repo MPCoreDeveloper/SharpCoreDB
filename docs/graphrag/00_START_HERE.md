@@ -1,6 +1,12 @@
 # GraphRAG Documentation — Start Here
 
-This page is the entry point for active GraphRAG documentation.
+This page is the entry point for active GraphRAG documentation (`v1.7.0`).
+
+## v1.7.0 focus
+
+- `SharpCoreDB.Graph.Advanced` is the primary advanced graph analytics + GraphRAG package
+- Pair with `SharpCoreDB.Graph` for traversal/pathfinding and `SharpCoreDB.VectorSearch` for semantic retrieval
+- See `../FEATURE_MATRIX_v1.7.0.md` for package-level capability mapping
 
 ## Recommended Reading Order
 

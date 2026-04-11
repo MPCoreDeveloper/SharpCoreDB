@@ -1,19 +1,31 @@
 # SharpCoreDB.Functional.EntityFrameworkCore
 
-Entity Framework Core adapter package for `SharpCoreDB.Functional`.
+Entity Framework Core adapter for `SharpCoreDB.Functional`.
 
-## Purpose
+**Version:** `v1.7.0`  
+**Package:** `SharpCoreDB.Functional.EntityFrameworkCore`
 
-This module provides functional wrappers over `DbContext` operations:
+## Features
 
+- Functional wrappers over `DbContext` operations
 - `Task<Option<T>>` for optional reads
 - `Task<Fin<Unit>>` for write operations
-- `Task<Seq<T>>` for sequence-based queries
+- `Task<Seq<T>>` for sequence-based query results
+- Complements `SharpCoreDB.EntityFrameworkCore` provider usage
 
-## Entry points
+## Changes in v1.7.0
 
-- `DbContext.Functional()`
+- Functional EF Core adapter introduced in `v1.7.0`
+- Documentation aligned with modular functional package family
+- Keeps dependencies optional and transitive through package references
 
-## Production dependency model
+## Installation
 
-In production NuGet usage, this package references `SharpCoreDB.Functional` and `SharpCoreDB.EntityFrameworkCore` as package dependencies, which provide transitive core references.
+```bash
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
+```
+
+## Documentation
+
+- `docs/INDEX.md`
+- `src/SharpCoreDB.Functional/README.md`

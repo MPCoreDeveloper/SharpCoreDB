@@ -1,49 +1,27 @@
 # SharpCoreDB.EventSourcing v1.7.0
 
-Optional event sourcing package for SharpCoreDB.
+Event store primitives for `SharpCoreDB`.
 
-## What this package is for
+## Features
 
-Use this package when you want SharpCoreDB to act as an event store for append-only business events, ordered replay, and snapshots.
+- Append-only per-stream events with ordered sequences
+- Global ordered event feed
+- In-memory and persistent event store implementations
+- Snapshot persistence and snapshot-aware loading
+- Optional upcasting pipeline for schema evolution
 
-## What this package does exactly
+## Changes in v1.7.0
 
-- Stores events per stream with contiguous sequence numbers
-- Exposes a global ordered feed across all streams
-- Supports in-memory and persistent SharpCoreDB-backed event stores
-- Persists snapshots for faster aggregate reloads
-- Supports upcasting during reads for event schema evolution
-
-## What this package does not do
-
-- It is not a CQRS framework
-- It does not register or run projections
-- It does not provide outbox delivery or command orchestration
-
-## Highlights in v1.7.0
-
-- Synchronized with the SharpCoreDB `1.7.0` package line
-- Covers persistent and in-memory event store implementations
-- Documents snapshots, snapshot-aware aggregate loading, and ordered event replay
-
-## Included in this scaffold
-
-- `EventStreamId`
-- `EventAppendEntry`
-- `EventEnvelope`
-- `EventSnapshot`
-- `EventReadRange`
-- `IEventUpcaster`
-- `EventUpcasterPipeline`
-
-## Design rules
-
-- Append-only semantics at contract level
-- Strong stream identity and per-stream sequence intent
-- No mandatory coupling to server runtime
-- Separate package boundary to preserve SharpCoreDB core optionality
+- Package/docs synchronized to `v1.7.0`
+- Production guidance clarified for snapshots and replay workflows
 
 ## Installation
 
 ```bash
 dotnet add package SharpCoreDB.EventSourcing --version 1.7.0
+```
+
+## Documentation
+
+- `docs/INDEX.md`
+- `src/SharpCoreDB.EventSourcing/README.md`

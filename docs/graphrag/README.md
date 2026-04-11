@@ -1,25 +1,27 @@
-# GraphRAG — Lightweight Graph Capabilities for SharpCoreDB
+# GraphRAG — Advanced Graph Analytics for SharpCoreDB
 
-**Status:** ✅ **Phase 6.3 Complete** (Phases 1-5 complete, Phase 6.1-6.3 complete)  
-**Target Release:** Roadmap item (schedule TBD)  
-**Last Updated:** 2025-02-16
+**Status:** ✅ Production Ready (`v1.7.0`)  
+**Primary package:** `SharpCoreDB.Graph.Advanced`  
+**Companion packages:** `SharpCoreDB.Graph`, `SharpCoreDB.VectorSearch`
 
 ---
 
 ## Overview
 
-GraphRAG provides comprehensive graph database capabilities for SharpCoreDB, including:
-- **ROWREF data type** - Native graph storage with serialization
-- **Graph traversal** - BFS, DFS, Bidirectional, Dijkstra algorithms
-- **Traversal optimization** - Automatic strategy selection with cost modeling
-- **Hybrid graph+vector queries** - Combined graph and semantic search
-- **A* pathfinding** - Optimal path discovery with cost estimation
-- **Query plan caching** - 11x faster repeated queries
-- **Parallel traversal** - Multi-threaded BFS for large graphs (2-4x speedup)
-- **Custom heuristics** - User-defined A* guidance functions (30-50% faster)
-- **Metrics & observability** - OpenTelemetry integration for production monitoring
+GraphRAG in SharpCoreDB combines semantic vector retrieval with graph analytics for context-aware ranking and discovery.
 
-### Current Implementation Status
+Key capabilities in the current `v1.7.0` line include:
+- Community detection (Louvain, Label Propagation, Connected Components)
+- Centrality metrics (Degree, Betweenness, Closeness, Eigenvector, Clustering)
+- Subgraph analysis (K-core, clique, triangle)
+- Graph-aware ranking, result caching, and profiling helpers
+- Integration paths with `SharpCoreDB.Graph` traversal and `SharpCoreDB.VectorSearch`
+
+For package-level mapping, see `../FEATURE_MATRIX_v1.7.0.md`.
+
+---
+
+## Current Implementation Status
 
 ✅ **Phase 1:** ROWREF data type + storage serialization (complete)  
 ✅ **Phase 2:** Graph traversal (BFS/DFS/Bidirectional/Dijkstra) + SQL + EF Core (complete)  

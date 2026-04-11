@@ -5,12 +5,12 @@
   
   **Entity Framework Core 10 Provider for SharpCoreDB**
   
-  **Version:** 1.3.5 (Phase 9.2)  
+  **Version:** 1.7.0 (Phase 9.2)  
   **Status:** Production Ready ✅
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.3.5-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.7.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.EntityFrameworkCore)
   [![EF Core](https://img.shields.io/badge/EF%20Core-10.0.2-purple.svg)](https://docs.microsoft.com/ef/core/)
   
 </div>
@@ -28,18 +28,23 @@ Entity Framework Core 10 database provider for **SharpCoreDB** — a high-perfor
 - ✅ **Collation support** (Binary, NoCase, Unicode, Locale-aware)
 - ✅ **Zero-config deployment** - Single file, no server
 
-**v1.3.5 Features:**
-- ✅ CREATE TABLE COLLATE clause support
-- ✅ Direct SQL query execution with proper collation handling
-- ✅ Full ACID transaction support
-- ✅ Phase 9 Analytics integration (COUNT, AVG, STDDEV, PERCENTILE, RANK, etc.)
+**v1.7.0 Features:**
+- ✅ Enhanced LINQ query translation
+- ✅ Migration and update SQL generation support
+- ✅ Improved provider-specific translators and type mappings
 
 ---
+
+## Changes in v1.7.0
+
+- Package version synchronized to `v1.7.0`
+- Documentation updated around provider feature scope
+- Inherits core metadata/parser reliability improvements
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.3.5
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
 ```
 
 **Requirements:**
@@ -414,4 +419,4 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** February 19, 2026 | Version 1.3.5
+**Last Updated:** February 19, 2026 | Version 1.7.0

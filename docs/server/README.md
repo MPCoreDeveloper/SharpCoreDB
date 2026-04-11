@@ -1,7 +1,15 @@
 # SharpCoreDB Server Documentation
 
 SharpCoreDB Server turns SharpCoreDB into a **real network database server** for .NET 10.
-It supports secure remote access, multiple hosted databases (including system databases), and production-ready operations.
+
+**Version line:** `v1.7.0`
+
+## v1.7.0 highlights
+
+- gRPC-first server runtime over HTTPS (HTTP/2 + HTTP/3)
+- Multi-database hosting with system-database security model
+- JWT/RBAC baseline with optional mTLS hardening
+- Production operations guidance for health, metrics, and deployment
 
 ## What Server Mode Means
 
@@ -14,6 +22,7 @@ In server mode, SharpCoreDB runs as a network service instead of an in-process e
 
 ## Start Here
 
+- `../FEATURE_MATRIX_v1.7.0.md` — package feature coverage
 - `QUICKSTART.md` — first server startup in minutes
 - `INSTALLATION.md` — platform-specific installation and service setup
 - `CONFIGURATION_SCHEMA.md` — full server configuration reference

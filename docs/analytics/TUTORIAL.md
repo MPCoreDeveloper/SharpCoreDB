@@ -1,6 +1,6 @@
 # Analytics Engine - Complete Tutorial
 
-**Version:** 1.3.5 (Phase 9.2)
+**Version:** 1.7.0
 
 ## Table of Contents
 
@@ -23,8 +23,8 @@ Create a new console application:
 ```bash
 dotnet new console -n AnalyticsDemo
 cd AnalyticsDemo
-dotnet add package SharpCoreDB --version 1.3.5
-dotnet add package SharpCoreDB.Analytics --version 1.3.5
+dotnet add package SharpCoreDB --version 1.7.0
+dotnet add package SharpCoreDB.Analytics --version 1.7.0
 ```
 
 ### Dependency Injection Setup

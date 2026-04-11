@@ -1,6 +1,37 @@
 # SharpCoreDB.Functional
 
-Functional facade for SharpCoreDB built on .NET 10 + C# 14 with zero-dependency functional types.
+Functional facade for `SharpCoreDB`.
+
+**Version:** `v1.7.0`  
+**Package:** `SharpCoreDB.Functional`
+
+## Features
+
+- Functional wrappers for database workflows
+- Core types: `Option<T>`, `Fin<T>`, `Seq<T>`, and `Unit`
+- Functional query/command style extensions over `Database` and `IDatabase`
+- Works as base module for Dapper and EF Core functional adapters
+
+## Changes in v1.7.0
+
+- Functional package introduced and aligned to `v1.7.0`
+- Documentation aligned with modular adapter ecosystem
+- Maintains optional architecture with transitive dependency flow
+
+## Installation
+
+```bash
+dotnet add package SharpCoreDB.Functional --version 1.7.0
+```
+
+## Related packages
+
+- `SharpCoreDB.Functional.Dapper`
+- `SharpCoreDB.Functional.EntityFrameworkCore`
+
+## Documentation
+
+- `docs/INDEX.md`
 
 ## MVP API
 

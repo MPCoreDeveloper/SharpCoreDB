@@ -1,0 +1,30 @@
+# SharpCoreDB.Distributed
+
+Distributed capabilities extension for `SharpCoreDB`.
+
+**Version:** `v1.7.0`  
+**Package:** `SharpCoreDB.Distributed`
+
+## Features
+
+- Multi-master replication with vector clocks
+- Distributed transaction components (2PC-oriented)
+- Sharding and shard-routing abstractions
+- Replication streaming coordination and monitoring primitives
+
+## Changes in v1.7.0
+
+- Package/docs synchronized to `v1.7.0`
+- Distributed feature set aligned with current replication/transaction modules
+- Documentation updated for enterprise distributed scenarios
+
+## Installation
+
+```bash
+dotnet add package SharpCoreDB.Distributed --version 1.7.0
+```
+
+## Documentation
+
+- `docs/INDEX.md`
+- `src/SharpCoreDB.Distributed/NuGet.README.md`

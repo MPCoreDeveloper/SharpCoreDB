@@ -1,28 +1,31 @@
 # SharpCoreDB Documentation
 
-This folder contains the maintained documentation set for SharpCoreDB.
+This folder contains the maintained documentation set for SharpCoreDB (`v1.7.0`).
 
 ## Start Here
 
 - `INDEX.md` - Canonical documentation index.
-- `PROJECT_STATUS.md` - Current product status for v1.7.0.
-- `IMPLEMENTATION_AUDIT_v1.7.0.md` - Repository-wide implementation completeness audit.
-- `OPEN_ITEMS_v1.7.0.md` - Repository-wide open points and follow-up tracker.
-- `../README.md` - Project overview, features, and installation.
-- `release/PHASE12_RELEASE_NOTES.md` - Latest release notes.
+- `FEATURE_MATRIX_v1.7.0.md` - Consolidated feature coverage by package.
+- `PROJECT_STATUS.md` - Current project status.
+- `IMPLEMENTATION_AUDIT_v1.7.0.md` - Repository-wide implementation audit.
+- `../README.md` - Product overview and quick start.
 
 ## Core Areas
 
-- `server/` - Server operation, security, API, and protocol docs.
-- `scdb/` - SCDB format and production guidance.
-- `serialization/` - Binary format and storage serialization details.
-- `distributed/` - Distributed and replication documentation.
-- `sync/` - Sync provider guidance and changelog.
-- `graphrag/` - GraphRAG usage and technical guides.
-- `analytics/` - Analytics feature documentation.
-- `migration/` - Migration guides.
-- `proposals/` - Active proposal documents.
+- `server/` - Server operation, security, APIs, and protocols.
+- `scdb/` - Storage engine and SCDB guidance.
+- `serialization/` - Binary format and serialization internals.
+- `analytics/` - Analytics capabilities and usage.
+- `Vectors/` - Vector search and semantic retrieval.
+- `graphrag/` - GraphRAG and advanced graph workflows.
+- `distributed/` - Distributed architecture components.
+- `sync/` - Dotmim.Sync provider usage.
+- `migration/` - Migration and interoperability guides.
+
+## Package Documentation
+
+Per-package docs are maintained in `src/*/README.md` and `src/*/NuGet.README.md`, aligned to `v1.7.0`.
 
 ## Cleanup Policy
 
-Obsolete phase-status, kickoff, completion, and superseded planning documents are removed during documentation maintenance. Historical snapshots are not used as canonical product docs.
+Obsolete phase-status, kickoff, and superseded planning docs are removed during maintenance. Historical snapshots are not canonical product docs.

@@ -5,7 +5,7 @@
 
   **ADO.NET Data Provider for SharpCoreDB**
 
-  **Version:** 1.3.5  
+  **Version:** 1.7.0  
   **Status:** Production Ready ✅
 
   [![NuGet Version](https://img.shields.io/nuget/v/SharpCoreDB.Data.Provider)](https://www.nuget.org/packages/SharpCoreDB.Data.Provider)
@@ -35,10 +35,18 @@ Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encryp
 
 ---
 
+## Changes in v1.7.0
+
+- Package version standardized to `v1.7.0`
+- Documentation refreshed to align with current provider behavior
+- Inherits core metadata durability and parser reliability fixes
+
+---
+
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.3.5
+dotnet add package SharpCoreDB.Data.Provider --version 1.7.0
 ```
 
 **Requirements:** .NET 10.0+
@@ -103,119 +111,10 @@ public class UserRepository
 
 ## Features
 
-### Parameterized Queries
-
-```csharp
-using var connection = new SharpCoreDBConnection(connectionString);
-await connection.OpenAsync();
-
-using var command = connection.CreateCommand();
-command.CommandText = @"
-    SELECT id, name, email FROM users 
-    WHERE age > @minAge AND email LIKE @emailPattern
-";
-command.Parameters.AddWithValue("@minAge", 18);
-command.Parameters.AddWithValue("@emailPattern", "%@example.com");
-
-using var reader = await command.ExecuteReaderAsync();
-while (await reader.ReadAsync())
-{
-    Console.WriteLine($"{reader["name"]} ({reader["email"]})");
-}
-```
-
-### Transactions
-
-```csharp
-using var connection = new SharpCoreDBConnection(connectionString);
-await connection.OpenAsync();
-
-using var transaction = await connection.BeginTransactionAsync();
-try
-{
-    using var command = connection.CreateCommand();
-    command.Transaction = transaction;
-    
-    command.CommandText = "INSERT INTO users (name, age) VALUES (@name, @age)";
-    command.Parameters.AddWithValue("@name", "Alice");
-    command.Parameters.AddWithValue("@age", 30);
-    
-    await command.ExecuteNonQueryAsync();
-    
-    command.CommandText = "INSERT INTO users (name, age) VALUES (@name, @age)";
-    command.Parameters["@name"].Value = "Bob";
-    command.Parameters["@age"].Value = 25;
-    
-    await command.ExecuteNonQueryAsync();
-    
-    await transaction.CommitAsync();
-}
-catch
-{
-    await transaction.RollbackAsync();
-    throw;
-}
-```
-
-### Schema Discovery
-
-```csharp
-using var connection = new SharpCoreDBConnection(connectionString);
-await connection.OpenAsync();
-
-// Get list of tables
-var tables = await connection.GetSchemaAsync("Tables");
-foreach (DataRow row in tables.Rows)
-{
-    Console.WriteLine($"Table: {row["TABLE_NAME"]}");
-}
-
-// Get columns in a table
-var columns = await connection.GetSchemaAsync("Columns");
-var userColumns = columns.Select($"TABLE_NAME = 'users'");
-foreach (DataRow row in userColumns)
-{
-    Console.WriteLine($"Column: {row["COLUMN_NAME"]} ({row["DATA_TYPE"]})");
-}
-```
-
-### Batch Operations
-
-```csharp
-using var adapter = new DbDataAdapter();
-adapter.SelectCommand = connection.CreateCommand();
-adapter.SelectCommand.CommandText = "SELECT * FROM users";
-
-using var builder = new DbCommandBuilder(adapter);
-builder.GetUpdateCommand();
-builder.GetInsertCommand();
-builder.GetDeleteCommand();
-
-// Use adapter to update DataSet
-var dataSet = new DataSet();
-await adapter.FillAsync(dataSet);
-
-// Modify data
-var table = dataSet.Tables[0];
-table.Rows.Add(new object[] { 999, "Carol", 28 });
-
-// Save changes
-var affectedRows = await adapter.UpdateAsync(dataSet);
-```
-
----
-
-## Connection String Options
-
-```
-Data Source=./myapp.db;          // File path (required)
-Password=SecurePassword!;         // Encryption password (optional)
-Encryption=Full;                  // Full|None (default: Full)
-Cache=Shared;                     // Shared|Private (default: Shared)
-ReadOnly=false;                   // Read-only mode (default: false)
-Timeout=30000;                    // Operation timeout in ms (default: 30000)
-PoolSize=5;                       // Connection pool size (default: 5)
-```
+- Full ADO.NET compatibility (`DbConnection`, `DbCommand`, `DbDataReader`)
+- Async operations, transactions, and parameterized queries
+- Connection pooling and schema discovery support
+- Uses SharpCoreDB encryption and performance capabilities
 
 ---
 
@@ -341,4 +240,4 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** February 19, 2026 | Version 1.3.5
+**Last Updated:** February 19, 2026 | Version 1.7.0

@@ -1,221 +1,237 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="200"/>
-  
-  # SharpCoreDB
-  
-  **High-Performance Embedded & Network Database for .NET 10**
-  
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.7.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB)
-  [![Build](https://img.shields.io/badge/Build-✅_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
-  [![Tests](https://img.shields.io/badge/Tests-1490+_Passing-brightgreen.svg)](https://github.com/MPCoreDeveloper/SharpCoreDB)
-  [![C#](https://img.shields.io/badge/C%23-14-purple.svg)](https://learn.microsoft.com/en-us/dotnet/csharp/)
+  <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="180"/>
+
+# SharpCoreDB
+
+**High-Performance Encrypted Database for .NET 10**  
+**Embedded engine + production gRPC server in one ecosystem**
+
+[![GitHub stars](https://img.shields.io/github/stars/MPCoreDeveloper/SharpCoreDB?style=for-the-badge)](https://github.com/MPCoreDeveloper/SharpCoreDB/stargazers)
+[![NuGet](https://img.shields.io/nuget/v/SharpCoreDB?style=for-the-badge)](https://www.nuget.org/packages/SharpCoreDB)
+[![NuGet downloads](https://img.shields.io/nuget/dt/SharpCoreDB?style=for-the-badge)](https://www.nuget.org/packages/SharpCoreDB)
+[![.NET 10](https://img.shields.io/badge/.NET-10-blue?style=for-the-badge)](https://dotnet.microsoft.com/download)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational?style=for-the-badge)](#)
 </div>
 
 ---
 
-## 📌 **Current Status — v1.7.0 (April 6, 2026)**
+SharpCoreDB is for .NET teams that want **SQLite-like simplicity**, **enterprise-grade security**, and **server-scale capabilities** without leaving the .NET ecosystem.
 
-### ✅ **Production-Ready Core + Server (.NET) / SDK Parity In Progress**
+Use it when you need:
+- Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
+- A secure network database via **gRPC (HTTP/2 + HTTP/3)**
+- Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
+- A production-focused stack validated by **1,490+ tests** and **backward compatibility**
 
-**SharpCoreDB v1.7.0 is the synchronized package release for the current feature and fix set: all NuGet packages now ship on the same version, package documentation has been refreshed, and optional Event Sourcing, Projections, and CQRS packages remain first-class companions to the core engine.**
+> Full documentation: **`docs/INDEX.md`**
 
-#### 🎉 **Major Milestone: Core Features + Server Delivered**
+---
 
-SharpCoreDB provides a **production-ready embedded and networked .NET database stack** with analytics, vector search, graph algorithms, GraphRAG analytics, distributed capabilities, and server mode.
+## Why SharpCoreDB?
 
-**Latest package milestone:** 🚀 **`SharpCoreDB.Graph.Advanced` delivered**  
-Advanced graph analytics and GraphRAG package with community detection, centrality metrics, subgraph analysis, and graph-aware semantic ranking.
+- **One stack, two deployment models**: embedded and server mode
+- **Performance-first design**: SIMD acceleration, memory pooling, optimized query paths
+- **Security by default**: TLS 1.2+, JWT, optional mTLS, RBAC, encrypted single-file storage
+- **Modern .NET 10-native**: C# 14, optional ecosystem packages, production-ready modules
 
-**Server Features Delivered (.NET stack):**
-- ✅ gRPC protocol (HTTP/2 + HTTP/3, primary protocol)
-- ✅ Binary TCP protocol handler
-- ✅ HTTPS REST API (DatabaseController)
-- ✅ WebSocket streaming protocol (real-time query streaming)
-- ✅ JWT authentication + Role-Based Access Control
-- ✅ Mutual TLS (certificate-based authentication)
-- ✅ Multi-database registry with system databases
-- ✅ Connection pooling (1000+ concurrent connections)
-- ✅ Health checks & metrics (Prometheus-compatible)
-- ✅ .NET Client library (ADO.NET-style)
-- ⚠️ Python client (PySharpDB) currently contains partial transport implementations and is tracked as in-progress
-- ✅ JavaScript/TypeScript SDK (published to npm)
-- ✅ Docker + Docker Compose deployment
-- ✅ Cross-platform installers (Windows Service, Linux systemd)
-- ✅ Complete server documentation and examples
+### Quick comparison
 
-**Current implementation audit:** `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`  
-**Project status:** `docs/PROJECT_STATUS.md`
+| Capability | SharpCoreDB | LiteDB | SQLite | RavenDB / MongoDB |
+|---|---|---|---|---|
+| .NET-native embedded experience | ✅ First-class | ✅ | ⚠️ via provider wrappers | ❌ network-first |
+| Built-in encrypted single-file DB (AES-256-GCM) | ✅ | ⚠️ limited/variant approaches | ❌ (extensions/custom setup) | ❌ |
+| Built-in gRPC server mode in same ecosystem | ✅ | ❌ | ❌ | ⚠️ different server architecture |
+| Vector search + GraphRAG tooling | ✅ | ❌ | ⚠️ extension-dependent | ⚠️ feature varies by product/tier |
+| Advanced analytics + SIMD focus | ✅ | ⚠️ basic querying | ⚠️ strong SQL, fewer .NET-specific SIMD paths | ⚠️ server-side analytics patterns |
+| Optional Event Sourcing / CQRS packages | ✅ | ❌ | ❌ | ⚠️ usually external patterns |
 
-**See documentation:** `docs/INDEX.md`
+---
 
-**Tool compatibility matrix:** `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.0.md`  
-**Tool compatibility limitations:** `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md`  
-**Multi-tenant SaaS reference:** `docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md`  
-**Threat model:** `docs/server/MULTITENANT_THREAT_MODEL_v1.7.0.md`  
-**Operations runbook:** `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.7.0.md`  
-**Reference sample:** `Examples/Server/SharpCoreDB.MultiTenantSaaSSample/`
+## Quick Start (under 30 seconds)
 
-### ✅ Previously Known Limitation — Resolved
+### 1) Embedded mode
 
-- `SingleFileDatabase.ExecuteCompiled` with parameterized plans previously hung due to an infinite loop in the SQL lexer (`?` parameter placeholder). Fixed: FastSqlLexer, EnhancedSqlParser, QueryCompiler. Full `IAsyncDisposable` lifecycle also implemented.
+```bash
+dotnet add package SharpCoreDB --version 1.7.0
+```
 
-### 📈 Performance Improvements (March 20, 2026)
+```csharp
+using SharpCoreDB;
 
-After the `IAsyncDisposable` lifecycle refactor and SQL lexer/parser fixes, benchmarks show **zero regressions** and significant gains:
+var db = new Database("app.scdb");
+db.ExecuteSQL("CREATE TABLE Users (Id INT, Name TEXT)");
+db.ExecuteBatchSQL([
+    "INSERT INTO Users VALUES (1, 'Ada')",
+    "INSERT INTO Users VALUES (2, 'Linus')"
+]);
+db.Flush();
+db.ForceSave();
+```
+
+### 2) Server mode (gRPC-first)
+
+```bash
+dotnet run --project src/SharpCoreDB.Server -c Release
+```
+
+Health endpoint: `https://localhost:8443/health`  
+gRPC endpoint: `https://localhost:5001`
+
+Install client/server packages:
+
+```bash
+dotnet add package SharpCoreDB.Server --version 1.7.0
+dotnet add package SharpCoreDB.Client --version 1.7.0
+```
+
+---
+
+## v1.7.0 highlights
+
+- Synchronized package release across the ecosystem (`1.7.0`)
+- New **`SharpCoreDB.Graph.Advanced`** package (community detection, centrality, subgraph analysis, graph-aware ranking)
+- Optional functional package family:
+  - `SharpCoreDB.Functional`
+  - `SharpCoreDB.Functional.Dapper`
+  - `SharpCoreDB.Functional.EntityFrameworkCore`
+- Event Sourcing / Projections / CQRS guidance strengthened for production workflows
+- SQL lexer/parser and compiled-query parameter fixes
+- Durability and reopen-path improvements (metadata flush/reliability)
+- **1,490+ tests passing**, **zero breaking changes intended**, **100% backward compatible**
+
+---
+
+## Performance snapshot
+
+Recent benchmark improvements after parser/lifecycle refactors:
 
 | Benchmark | Before | After | Improvement |
-|-----------|-------:|------:|:------------|
+|---|---:|---:|---:|
 | Single-File SELECT (Unencrypted) | 4.01 ms | **1.81 ms** | **55% faster** |
 | Single-File SELECT (Encrypted) | 2.74 ms | **1.57 ms** | **43% faster** |
 | AppendOnly UPDATE | 143.42 ms | **70.36 ms** | **51% faster** |
 | Dir Encrypted UPDATE | 9.16 ms | **7.91 ms** | **14% faster** |
 
-All other benchmarks (25 total) remain stable. Full results: [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)
+Additional SIMD optimization: columnar aggregate paths now use `Vector256.LoadUnsafe` to reduce per-iteration overhead in AVX2 hot loops.
 
-### ⚡ SIMD Columnar Engine Optimization (April 2026)
-
-All 16 columnar SIMD aggregate methods now use `Vector256.LoadUnsafe` instead of `Vector256.Create(data.AsSpan(...))`, eliminating per-iteration `Span<T>` construction and bounds checking overhead in AVX2 hot loops. This applies to both single-threaded and parallel SIMD paths for SUM, MIN, and MAX across `int`, `long`, and `double` column types. The companion performance test (`ColumnStore_Average_10kRecords_Under2ms`) was hardened with multi-iteration best-time measurement to prevent false failures under concurrent test load.
-
-### 📚 Documentation Policy
-
-- Canonical documentation entry points are `docs/INDEX.md` and `docs/README.md`.
-- Topic-level canonical entry points are maintained under:
-  - `docs/server/README.md`
-  - `docs/scdb/README_INDEX.md`
-  - `docs/graphrag/00_START_HERE.md`
-- Obsolete phase-status, kickoff, completion, and superseded planning documents are periodically removed.
-- Historical snapshots are not treated as canonical product documentation.
+Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 ---
 
-#### 🎯 Latest Release (v1.5.0 → v1.7.0)
+## Complete feature set
 
-### New in v1.7.0 compared to v1.5.0
+### Core database engine (embedded)
 
-- **Functional package family introduced**
-  - `SharpCoreDB.Functional` adds a functional façade over `Database` / `IDatabase`
-  - `SharpCoreDB.Functional.Dapper` adds modular Dapper adapters with `Option<T>`, `Fin<Unit>`, and `Seq<T>`-based APIs
-  - `SharpCoreDB.Functional.EntityFrameworkCore` adds modular EF Core adapters with the same functional programming model
-  - All functional packages are designed as optional modules and keep production dependencies flowing through transitive NuGet references
-
-- **Advanced graph analytics and GraphRAG package delivered**
-  - New `SharpCoreDB.Graph.Advanced` package
-  - Community detection, centrality metrics, subgraph analysis, graph-aware ranking, and profiling helpers
-
-- **Event Sourcing / Projections / CQRS package maturity improvements**
-  - Optional package guidance now clearly documents durable snapshots, projection checkpointing, persistent outbox workflows, retry handling, dead-letter support, and hosted background workers
-  - These capabilities are now presented as first-class companion modules in the documentation and package ecosystem
-
-- **Core engine and packaging improvements**
-  - Synchronized `1.7.0` package versioning across the SharpCoreDB ecosystem
-  - Refreshed package documentation for the core engine and companion packages
-  - Brotli compression for metadata with backward-compatible format detection
-  - Immediate metadata flush and reopen-path fixes for improved durability and startup reliability
-  - SQL lexer / parser fixes for parameterized compiled-query execution paths
-
-- **Quality and validation**
-  - New functional module tests added for core, Dapper, and EF Core adapters
-  - Zero breaking changes intended from `1.5.0` to `1.7.0`
-  - Workspace and targeted adapter test suites validate the new modules successfully
-  
-- **📊 Quality Metrics**
-  - **1,490+ tests** (was 850+ in v1.3.5)
-  - **100% backward compatible**
-  - **All 12 phases production-ready**
-
----
-
-#### 🚀 Complete Feature Set (Phases 1-12)
-
-**Phase 12: Advanced Graph Analytics & GraphRAG** ✅
-- `SharpCoreDB.Graph.Advanced` package for advanced graph analytics
-- GraphRAG search with semantic + graph-aware ranking
-- Community detection: Louvain, Label Propagation, Connected Components
-- Centrality metrics: Degree, Betweenness, Closeness, Eigenvector, Clustering
-- Subgraph queries: K-core, clique detection, triangle detection
-- SQL integration, result caching, and profiling utilities
-
-**Phase 11: SharpCoreDB.Server (Network Database Server)** ✅
-- gRPC protocol (HTTP/2 + HTTP/3) - primary, high-performance protocol
-- Binary TCP protocol - PostgreSQL wire protocol compatibility
-- HTTPS REST API - web browser and simple integration support
-- WebSocket streaming - real-time query streaming
-- JWT + Mutual TLS authentication
-- Role-Based Access Control (Admin/Writer/Reader)
-- Multi-database support with system databases
-- Connection pooling (1000+ concurrent connections)
-- Health checks & Prometheus metrics
-- .NET, Python, JavaScript/TypeScript client libraries
-- Docker + cross-platform installers (Windows/Linux)
-- Complete documentation and examples
-
-**Phase 10: Enterprise Distributed Features** ✅
-- Multi-master replication with vector clocks (Phase 10.2)
-- Distributed transactions with 2PC protocol (Phase 10.3)
-- Dotmim.Sync integration for cloud sync (Phase 10.1)
-
-**Phase 9: Advanced Analytics** ✅
-- 100+ aggregate functions (COUNT, SUM, AVG, STDDEV, VARIANCE, PERCENTILE, CORRELATION)
-- Window functions (ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD)
-- **150-680x faster than SQLite**
-
-**Phase 8: Vector Search** ✅
-- HNSW indexing with SIMD acceleration
-- **50-100x faster than SQLite**
-- Production-tested with 10M+ vectors
-
-**Phase 6: Graph Algorithms** ✅
-- A* pathfinding (30-50% improvement)
-- Graph traversal (BFS, DFS, bidirectional search)
-- ROWREF data type for graph edges
-- GRAPH_TRAVERSE() SQL function
-
-**Phases 1-5: Core Engine** ✅
-- Single-file encrypted database (AES-256-GCM)
+- Single-file encrypted database with **AES-256-GCM**
 - SQL support with advanced query optimization
 - ACID transactions with WAL
 - B-tree and hash indexing
 - Full-text search
-- SIMD-accelerated operations (`Vector256.LoadUnsafe` optimized)
-- Memory pooling and JIT optimizations
+- SIMD-accelerated operations (including `Vector256.LoadUnsafe` optimizations)
+- Memory pooling and JIT-oriented performance optimizations
+- Metadata durability improvements (flush + reopen reliability)
+
+### Network server (`SharpCoreDB.Server`)
+
+- **Primary protocol:** gRPC over HTTPS (HTTP/2 + HTTP/3)
+- Secondary protocols: Binary TCP handler, HTTPS REST API, WebSocket streaming
+- Multi-database hosting with system databases
+- Security stack: TLS 1.2+, JWT auth, RBAC (Admin/Writer/Reader), optional mTLS
+- Connection pooling (1000+ concurrent connections)
+- Health checks and Prometheus-compatible metrics
+- Graceful shutdown and production deployment support
+- Deployment options: Docker/Docker Compose, Windows Service, Linux systemd, macOS launchd
+
+### Clients and SDKs
+
+- .NET client library (`SharpCoreDB.Client`, ADO.NET-style)
+- JavaScript/TypeScript SDK (npm)
+- Python client (`PySharpDB`) with partial transport parity in progress
+
+### Analytics and query capabilities
+
+- 100+ aggregate functions (COUNT, SUM, AVG, STDDEV, VARIANCE, PERCENTILE, CORRELATION)
+- Window functions (ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD)
+- Proven high-throughput analytics performance in benchmark suite
+
+### Vector search
+
+- HNSW indexing with SIMD acceleration
+- Production-tested with large vector workloads (10M+ vectors)
+- Performance-oriented semantic retrieval workflows
+
+### Graph and GraphRAG
+
+- Graph traversal: BFS, DFS, bidirectional search
+- A* pathfinding improvements
+- `ROWREF` data type support for graph edges
+- `GRAPH_TRAVERSE()` SQL function integration
+- Advanced graph analytics via `SharpCoreDB.Graph.Advanced`:
+  - Community detection (Louvain, Label Propagation, Connected Components)
+  - Centrality metrics (Degree, Betweenness, Closeness, Eigenvector, Clustering)
+  - Subgraph analysis (K-core, clique, triangle detection)
+  - Graph-aware semantic ranking and profiling helpers
+
+### Distributed and sync features
+
+- Multi-master replication with vector clocks
+- Distributed transactions with 2PC protocol
+- Dotmim.Sync integration for cloud/data sync scenarios
+
+### Event Sourcing, Projections, and CQRS (optional packages)
+
+- `SharpCoreDB.EventSourcing`:
+  - Append-only per-stream event storage
+  - Global ordered event feed
+  - In-memory and persistent event store implementations
+  - Snapshot persistence and snapshot-aware aggregate loading
+  - Optional snapshot policy helpers
+- `SharpCoreDB.Projections`:
+  - Projection registration and runner scaffolding
+  - Checkpoint persistence
+  - OpenTelemetry-ready projection metrics
+- `SharpCoreDB.CQRS`:
+  - Command/handler abstractions
+  - Aggregate root support
+  - Outbox primitives with retry/dead-letter workflow support
+
+### Quality and compatibility
+
+- **1,490+ tests passing**
+- **100% backward compatible** across the v1.7.0 release line
+- Zero breaking changes intended from v1.5.0 to v1.7.0
+
+For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-#### 📦 Installation
+## Available NuGet packages (v1.7.0)
 
 ```bash
-# Core database
+# Core
 dotnet add package SharpCoreDB --version 1.7.0
 
-# Server mode (network database server)
+# Server/client
 dotnet add package SharpCoreDB.Server --version 1.7.0
 dotnet add package SharpCoreDB.Client --version 1.7.0
 
-# Distributed features
-dotnet add package SharpCoreDB.Distributed --version 1.7.0
-
-# Analytics engine
+# Engines and extensions
 dotnet add package SharpCoreDB.Analytics --version 1.7.0
-
-# Vector search
 dotnet add package SharpCoreDB.VectorSearch --version 1.7.0
-
-# Sync integration
-dotnet add package SharpCoreDB.Provider.Sync --version 1.7.0
-
-# Graph algorithms
 dotnet add package SharpCoreDB.Graph --version 1.7.0
-
-# Advanced graph analytics and GraphRAG
 dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
-
-# Optional integrations
+dotnet add package SharpCoreDB.Distributed --version 1.7.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.7.0
 dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
 dotnet add package SharpCoreDB.Extensions --version 1.7.0
 
-# Functional programming adapters (optional packages)
+# Optional architecture packages
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.0
+dotnet add package SharpCoreDB.Projections --version 1.7.0
+dotnet add package SharpCoreDB.CQRS --version 1.7.0
+
+# Optional functional adapters
 dotnet add package SharpCoreDB.Functional --version 1.7.0
 dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.0
 dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
@@ -223,130 +239,40 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
 
 ---
 
-## ⚡ Event Sourcing + CQRS Foundation (v1.7.0 / V 1.70)
+## What’s new in v1.7.0
 
-`SharpCoreDB.EventSourcing` is now available as a dedicated optional package for append-only streams, global ordering, replay, and snapshot persistence in both embedded and server-backed deployments.
-`SharpCoreDB.Projections` is available as an optional projection scaffold package for registration, checkpointing, runner primitives, and OpenTelemetry-ready projection metrics.
-`SharpCoreDB.CQRS` is available as an optional CQRS scaffold package for command dispatching, aggregate root base support, and outbox primitives.
-
-### Which package should I use?
-
-| Package | Use it for | What it does exactly | What it does not do |
-|---------|------------|----------------------|---------------------|
-| `SharpCoreDB.EventSourcing` | Persisting and replaying business events | Stores append-only events per stream, exposes a global ordered feed, supports snapshots, aggregate rehydration, and optional upcasting | Does not dispatch commands or run projections |
-| `SharpCoreDB.Projections` | Building read models from stored events | Registers projections, runs them inline or in the background, persists checkpoints, and exposes projection metrics | Does not store events or handle command dispatch |
-| `SharpCoreDB.CQRS` | Modeling the command side and reliable message publication | Defines commands and handlers, dispatches commands, collects aggregate events, and manages an outbox with retry/dead-letter support | Does not persist event streams or execute projections |
-
-### How the three packages fit together
-
-- Use `SharpCoreDB.EventSourcing` to **store the truth as events**.
-- Use `SharpCoreDB.Projections` to **turn those events into read models**.
-- Use `SharpCoreDB.CQRS` to **handle commands and publish integration messages reliably**.
-
-### What is available now
-
-- ✅ Append-only per-stream event storage
-- ✅ Global ordered event feed
-- ✅ In-memory and persistent (`SharpCoreDbEventStore`) implementations
-- ✅ Point-in-time reconstruction by stream sequence
-- ✅ Snapshot persistence APIs
-- ✅ Snapshot-aware aggregate loading (`LoadWithSnapshotAsync`)
-- ✅ Optional snapshot policy helpers (`SnapshotPolicy`, `AppendEventsWithSnapshotPolicyAsync`)
-- ✅ Optional projection package scaffold (`ProjectionBuilder`, checkpoints, inline runner)
-- ✅ Optional OpenTelemetry projection metrics (`OpenTelemetryProjectionMetrics`, meter `SharpCoreDB.Projections`)
-- ✅ Optional CQRS scaffold (`ICommand`, `ICommandHandler<TCommand>`, `AggregateRoot`, `IOutboxStore`)
-
-### Current scope
-
-- ES primitives are production-ready.
-- CQRS orchestration, projection hosting, and MediatR integration remain optional follow-up packages.
-
-### Quickstart
-
-```csharp
-using SharpCoreDB.EventSourcing;
-
-var eventStore = new InMemoryEventStore();
-var streamId = new EventStreamId("order-1001");
-
-await eventStore.AppendEventAsync(
-    streamId,
-    new EventAppendEntry(
-        EventType: "OrderCreated",
-        Payload: """{"orderId":"order-1001","total":199.99}"""u8.ToArray(),
-        Metadata: ReadOnlyMemory<byte>.Empty,
-        TimestampUtc: DateTimeOffset.UtcNow));
-
-var loadResult = await eventStore.LoadWithSnapshotAsync(
-    streamId,
-    fromEvents: static events => OrderAggregate.FromEventStream(events),
-    fromSnapshot: static snapshotData => OrderAggregate.FromSnapshot(snapshotData),
-    replayFromSnapshot: static (aggregate, events) => aggregate.Replay(events));
-```
-
-### ES docs and examples
-
-- Package docs: `src/SharpCoreDB.EventSourcing/README.md`
-- In-memory demo: `Examples/EventSourcing/OrderManagement`
-- Persistent demo: `Examples/EventSourcing/OrderManagement.PersistentDemo`
-- ES tests: `tests/SharpCoreDB.EventSourcing.Tests`
+- Unified package versioning across the full SharpCoreDB family
+- New advanced GraphRAG package: `SharpCoreDB.Graph.Advanced`
+- Maturity improvements for optional Event Sourcing / Projections / CQRS workflows
+- Reliability and startup/durability fixes in core engine metadata handling
+- Expanded validation with new functional adapter test coverage
 
 ---
 
-## 🌐 Server Mode: Run SharpCoreDB as a Real Network Database Server
+## Important documentation links
 
-SharpCoreDB is no longer only an embedded database. In `Server` mode it can run as a **real multi-database network server** with secure remote access over your LAN, datacenter, or cloud network.
-
-### What you get in Server mode
-
-- **Primary protocol: gRPC (HTTPS, HTTP/2 + HTTP/3)** for high-throughput and streaming scenarios
-- **Secondary protocols:** HTTPS REST API and WebSocket streaming
-- **Strict security defaults:** TLS 1.2+, JWT auth, optional mTLS, RBAC
-- **Multi-database hosting:** system databases + user databases in one server process
-- **Production operations:** health checks, metrics, connection pooling, graceful shutdown
-
-### Quick network setup
-
-1. Install packages:
-   - `SharpCoreDB.Server`
-   - `SharpCoreDB.Client`
-2. Configure TLS certificate and server settings in `appsettings.json`.
-3. Start the server:
-
-```bash
-dotnet run --project src/SharpCoreDB.Server -c Release
-```
-
-4. Verify endpoints:
-   - Health: `https://localhost:8443/health`
-   - gRPC endpoint: `https://localhost:5001`
-
-### Installers and deployment options
-
-- **Windows Service installer:** `installers/windows/install-service.ps1`
-- **Linux systemd installer:** `installers/linux/install.sh`
-- **macOS launchd installer:** `installers/macos/install.sh`
-- **Docker / Docker Compose:** `src/SharpCoreDB.Server/docker-compose.yml`
-
-### Server documentation
-
-- Quick start: `docs/server/QUICKSTART.md`
-- Installation and installers: `docs/server/INSTALLATION.md`
-- Configuration reference: `docs/server/CONFIGURATION_SCHEMA.md`
+- Documentation hub: `docs/INDEX.md`
+- Project docs index: `docs/README.md`
+- Server docs: `docs/server/README.md`
+- Server quick start: `docs/server/QUICKSTART.md`
+- Server install/config: `docs/server/INSTALLATION.md`, `docs/server/CONFIGURATION_SCHEMA.md`
 - Security hardening: `docs/server/SECURITY.md`
-- Client usage: `docs/server/CLIENT_GUIDE.md`
+- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`, `docs/PROJECT_STATUS.md`
 
 ---
 
-## 📖 Documentation
+## Contributing
 
-Start here:
-- `docs/INDEX.md`
-- `docs/README.md`
+Contributions are welcome. Please open an issue for ideas, bug reports, and feature proposals, or submit a PR directly.
 
-Server-specific:
-- `docs/server/README.md`
-- `docs/server/QUICKSTART.md`
-- `docs/server/INSTALLATION.md`
+---
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
+
+---
+
+**Made with ❤️ for the .NET community**
 
 

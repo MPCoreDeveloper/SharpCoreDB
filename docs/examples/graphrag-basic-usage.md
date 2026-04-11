@@ -1,6 +1,6 @@
 # GraphRAG Basic Usage Tutorial
 
-**SharpCoreDB.Graph.Advanced v2.0.0**  
+**SharpCoreDB.Graph.Advanced v1.7.0**  
 **Time to Complete:** 15 minutes  
 **Difficulty:** Beginner
 
@@ -17,8 +17,8 @@ This tutorial shows you how to get started with GraphRAG (Graph Retrieval-Augmen
 ## Prerequisites
 
 - .NET 10 SDK
-- SharpCoreDB 1.3.5+
-- SharpCoreDB.VectorSearch 1.3.5+ (for GraphRAG features)
+- SharpCoreDB 1.7.0+
+- SharpCoreDB.VectorSearch 1.7.0+ (for GraphRAG features)
 
 ## Step 1: Project Setup
 
@@ -32,9 +32,9 @@ cd GraphRagTutorial
 Add the required packages:
 
 ```bash
-dotnet add package SharpCoreDB --version 1.3.5
-dotnet add package SharpCoreDB.VectorSearch --version 1.3.5
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
+dotnet add package SharpCoreDB --version 1.7.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
 ```
 
 ## Step 2: Basic Graph Analytics
