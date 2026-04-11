@@ -8,6 +8,7 @@
 - Standardize all documentation/version labels to v1.7.0 ("V 1.70").
 - Continue implementation until the scoped roadmap work is finished without pausing for confirmation.
 - When roadmap issues are completed, explicitly mark the corresponding issue draft documents as resolved/completed so the status is visibly updated in the repository.
+- Validate issue status claims against current open issues and actively work through unresolved issues, ensuring they are not considered done prematurely.
 
 ## Testing Policy
 - All test projects in SharpCoreDB must use **xUnit v3** (`xunit.v3` NuGet package, currently 3.2.2+). **Never** use `xunit` v2 (package id `xunit`). The old v2 package is incompatible with .NET 10 / C# 14.

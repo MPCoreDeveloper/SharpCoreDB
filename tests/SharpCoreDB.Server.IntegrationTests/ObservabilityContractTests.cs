@@ -24,6 +24,7 @@ public sealed class ObservabilityContractTests : IAsyncLifetime
     {
         // Arrange
         var metrics = _fixture.GetMetricsCollector();
+        var baseline = metrics.GetSnapshot();
 
         // Act
         metrics.RecordConnectionOpened("binary");
@@ -32,11 +33,11 @@ public sealed class ObservabilityContractTests : IAsyncLifetime
         metrics.RecordFailedRequest("REST/query", "QUERY_ERROR");
         var snapshot = metrics.GetSnapshot();
 
-        // Assert
-        Assert.Equal(2, snapshot.TotalRequests);
-        Assert.Equal(1, snapshot.FailedRequests);
-        Assert.Equal(2, snapshot.QueryRequests);
-        Assert.Equal(0, snapshot.NonQueryRequests);
+        // Assert — use deltas to isolate from fixture initialization traffic
+        Assert.Equal(2, snapshot.TotalRequests - baseline.TotalRequests);
+        Assert.Equal(1, snapshot.FailedRequests - baseline.FailedRequests);
+        Assert.Equal(2, snapshot.QueryRequests - baseline.QueryRequests);
+        Assert.Equal(0, snapshot.NonQueryRequests - baseline.NonQueryRequests);
         Assert.Equal("QUERY_ERROR", snapshot.LastFailureCode);
         Assert.True(snapshot.Protocols.ContainsKey("binary"));
         Assert.True(snapshot.Protocols.ContainsKey("rest"));

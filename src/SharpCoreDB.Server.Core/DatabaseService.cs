@@ -30,7 +30,8 @@ public sealed class DatabaseService(
     TenantQuotaEnforcementService tenantQuotaEnforcementService,
     TenantSecurityAuditService securityAuditService,
     ILogger<DatabaseService> logger,
-    MetricsCollector metricsCollector) : Server.Protocol.DatabaseService.DatabaseServiceBase
+    MetricsCollector metricsCollector,
+    RowLevelPolicyEngine? rowLevelPolicyEngine = null) : Server.Protocol.DatabaseService.DatabaseServiceBase
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
@@ -39,6 +40,7 @@ public sealed class DatabaseService(
     private readonly TenantSecurityAuditService _securityAuditService = securityAuditService;
     private readonly ILogger<DatabaseService> _logger = logger;
     private readonly MetricsCollector _metricsCollector = metricsCollector;
+    private readonly RowLevelPolicyEngine? _rowLevelPolicyEngine = rowLevelPolicyEngine;
 
     /// <summary>
     /// Establishes a database connection and creates a session.
@@ -110,7 +112,8 @@ public sealed class DatabaseService(
                 context.Peer,
                 authResult.Role,
                 tenantId,
-                context.CancellationToken).ConfigureAwait(false);
+                principal: null,
+                cancellationToken: context.CancellationToken).ConfigureAwait(false);
 
             EmitConnectEvent(
                 requestedUser,
@@ -130,6 +133,23 @@ public sealed class DatabaseService(
                 ServerVersion = "1.5.0",
                 SupportedFeatures = { "SQL", "Transactions", "VectorSearch", "Analytics", "Graph", "RBAC" },
                 Status = ConnectionStatus.Success
+            };
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Connect denied by database grants for user '{User}'", request.UserName);
+            EmitConnectEvent(
+                requestedUser,
+                tenantId: _authService.GetUserTenantId(request.UserName ?? string.Empty) ?? "default",
+                databaseName,
+                isAllowed: false,
+                code: "CONNECT_DATABASE_GRANT_DENIED",
+                reason: ex.Message);
+
+            _metricsCollector.RecordFailedRequest(method, "DATABASE_GRANT_DENIED");
+            return new ConnectResponse
+            {
+                Status = ConnectionStatus.InvalidCredentials
             };
         }
         catch (TenantQuotaExceededException ex)
@@ -242,6 +262,21 @@ public sealed class DatabaseService(
         {
             var executionStart = Stopwatch.GetTimestamp();
             var result = connection.Database.ExecuteQuery(sql, []);
+
+            // Row-level policy: filter results by tenant discriminator
+            if (_rowLevelPolicyEngine is not null && result.Count > 0)
+            {
+                var queryTable = ExtractSelectTable(sql);
+                if (queryTable is not null)
+                {
+                    result = _rowLevelPolicyEngine.FilterRows(
+                        session.DatabaseInstance.Configuration.Name,
+                        queryTable,
+                        session.TenantId,
+                        result);
+                }
+            }
+
             var fetchSize = request.Options?.FetchSize > 0 ? request.Options.FetchSize : 1000;
 
             var columnNames = result.Count > 0
@@ -378,6 +413,21 @@ public sealed class DatabaseService(
 
             var sql = request.Sql;
             var sqlUpper = sql.Trim().ToUpperInvariant();
+
+            // Row-level policy: validate writes against tenant discriminator
+            if (_rowLevelPolicyEngine is not null)
+            {
+                var writeDecision = _rowLevelPolicyEngine.ValidateWriteStatement(
+                    session.DatabaseInstance.Configuration.Name,
+                    sql,
+                    session.TenantId);
+
+                if (!writeDecision.IsAllowed)
+                {
+                    _metricsCollector.RecordFailedRequest(method, "ROW_POLICY_DENIED");
+                    throw new RpcException(new Status(StatusCode.PermissionDenied, writeDecision.DenialReason ?? "Row-level policy denied the write."));
+                }
+            }
 
             // For DML statements, estimate rows affected from a pre-query count
             var rowsAffected = 0;
@@ -660,5 +710,23 @@ public sealed class DatabaseService(
             IsAllowed: isAllowed,
             DecisionCode: code,
             Reason: reason));
+    }
+
+    /// <summary>
+    /// Extracts the target table name from a SELECT statement for row-level policy lookup.
+    /// </summary>
+    private static string? ExtractSelectTable(string sql)
+    {
+        var upper = sql.Trim().ToUpperInvariant();
+        var fromIdx = upper.IndexOf(" FROM ", StringComparison.Ordinal);
+        if (fromIdx < 0)
+        {
+            return null;
+        }
+
+        var afterFrom = sql.Trim()[(fromIdx + 6)..].TrimStart();
+        var endIdx = afterFrom.IndexOfAny([' ', ';', '\r', '\n', ',']);
+        var tableName = endIdx > 0 ? afterFrom[..endIdx] : afterFrom;
+        return tableName.Trim('"', '`', '[', ']', ';');
     }
 }

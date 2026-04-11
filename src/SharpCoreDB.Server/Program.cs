@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using SharpCoreDB.Server.Core;
@@ -335,6 +336,19 @@ builder.Services.Configure<ServerConfiguration>(
 // Add core services
 builder.Services.AddSingleton<NetworkServer>();
 builder.Services.AddSingleton<DatabaseRegistry>();
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
+    var registry = sp.GetRequiredService<DatabaseRegistry>();
+    var logger = sp.GetRequiredService<ILogger<TenantCatalogRepository>>();
+
+    var catalogDatabase = registry.GetDatabase(config.SystemDatabases.MasterDatabaseName)
+        ?? registry.GetDatabase(config.DefaultDatabase)
+        ?? throw new InvalidOperationException("Unable to resolve master database for tenant catalog repository.");
+
+    return new TenantCatalogRepository(catalogDatabase, logger);
+});
+builder.Services.AddSingleton<TenantProvisioningService>();
 builder.Services.AddSingleton<TenantQuotaEnforcementService>();
 builder.Services.AddSingleton<TenantBackupRestoreService>();
 builder.Services.AddSingleton<TenantMigrationPlanningService>();
@@ -366,6 +380,20 @@ builder.Services.AddHealthChecks();
 // Add DatabaseService to DI
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddTransient<WebSocketHandler>();
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
+    var registry = sp.GetRequiredService<DatabaseRegistry>();
+    var auditService = sp.GetRequiredService<TenantSecurityAuditService>();
+    var logger = sp.GetRequiredService<ILogger<DatabaseGrantsRepository>>();
+
+    var grantsDatabase = registry.GetDatabase(config.SystemDatabases.MasterDatabaseName)
+        ?? registry.GetDatabase(config.DefaultDatabase)
+        ?? throw new InvalidOperationException("Unable to resolve master database for database grants repository.");
+
+    return new DatabaseGrantsRepository(grantsDatabase, auditService, logger);
+});
+builder.Services.AddSingleton<DatabaseAuthorizationService>();
 
 TryConfigureProjectionRuntime(builder.Services, serverConfig);
 

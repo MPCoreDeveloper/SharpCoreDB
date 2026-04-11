@@ -109,6 +109,76 @@ public sealed class TenantSecurityAuditTests : IClassFixture<TestServerFixture>
         Assert.Equal("tenant-a", denied.TenantId);
     }
 
+    [Fact]
+    public async Task GrantPermission_EmitsGrantChangedSecurityEvent()
+    {
+        var securityStore = new TenantSecurityAuditStore();
+        var auditService = new TenantSecurityAuditService(
+            securityStore,
+            NullLogger<TenantSecurityAuditService>.Instance);
+
+        var masterDb = _fixture.DatabaseRegistry!.GetDatabase("master")
+            ?? throw new InvalidOperationException("master database required");
+
+        if (!masterDb.Database.TryGetTable("database_grants", out _))
+        {
+            masterDb.Database.ExecuteSQL(
+                "CREATE TABLE database_grants (grant_id TEXT PRIMARY KEY, tenant_id TEXT, database_name TEXT, principal TEXT, permission INTEGER, is_grantable INTEGER, created_at TEXT, expires_at TEXT)");
+        }
+
+        var grantsRepo = new DatabaseGrantsRepository(
+            masterDb,
+            auditService,
+            NullLogger<DatabaseGrantsRepository>.Instance);
+
+        await grantsRepo.GrantPermissionAsync(
+            "tenant-audit", "testdb", "user-a", DatabasePermission.Select, cancellationToken: CancellationToken.None);
+
+        var grantEvent = securityStore.GetRecent(10)
+            .FirstOrDefault(e => e.EventType == TenantSecurityEventType.GrantChanged);
+
+        Assert.NotNull(grantEvent);
+        Assert.Equal("tenant-audit", grantEvent!.TenantId);
+        Assert.Equal("GRANT_CREATED", grantEvent.DecisionCode);
+        Assert.True(grantEvent.IsAllowed);
+    }
+
+    [Fact]
+    public void AuditService_Emit_ForwardsToSinksAndStore()
+    {
+        var store = new TenantSecurityAuditStore();
+        var sinkEvents = new List<TenantSecurityAuditEvent>();
+        var sink = new TestAuditSink(sinkEvents);
+
+        var auditService = new TenantSecurityAuditService(
+            store,
+            NullLogger<TenantSecurityAuditService>.Instance,
+            [sink]);
+
+        var auditEvent = new TenantSecurityAuditEvent(
+            TimestampUtc: DateTime.UtcNow,
+            EventType: TenantSecurityEventType.Provisioning,
+            TenantId: "tenant-prov",
+            DatabaseName: "pending",
+            Principal: "admin",
+            Protocol: "Provisioning",
+            IsAllowed: true,
+            DecisionCode: "PROVISIONING_STARTED",
+            Reason: "Create tenant flow started");
+
+        auditService.Emit(auditEvent);
+
+        Assert.Equal(1, store.Count);
+        Assert.Single(sinkEvents);
+        Assert.Equal(TenantSecurityEventType.Provisioning, sinkEvents[0].EventType);
+        Assert.Equal("tenant-prov", sinkEvents[0].TenantId);
+    }
+
+    private sealed class TestAuditSink(List<TenantSecurityAuditEvent> events) : ITenantSecurityAuditSink
+    {
+        public void Write(TenantSecurityAuditEvent auditEvent) => events.Add(auditEvent);
+    }
+
     private static ServerConfiguration CreateConfig() => new()
     {
         ServerName = "AuditTest",

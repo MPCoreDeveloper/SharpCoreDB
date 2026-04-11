@@ -140,6 +140,98 @@ public sealed class TenantEncryptionKeyManagementTests : IAsyncLifetime
         Assert.True(_databaseRegistry.DatabaseExists(mapping.DatabaseName));
     }
 
+    [Fact]
+    public async Task RotateTenantDatabaseKeyAsync_WithValidNewKey_ShouldCompleteAndUpdateCatalog()
+    {
+        // Arrange
+        var tenantPath = Path.Combine(_tempRoot, "tenant-rotate-success.db");
+        var (tenant, _) = await _provisioningService.CreateTenantAsync(
+            "tenant-rotate-ok",
+            "Tenant Rotate OK",
+            tenantPath,
+            "idem-create-rotate-ok",
+            planTier: "pro",
+            encryptionKeyReference: "key-old",
+            cancellationToken: CancellationToken.None);
+
+        var mapping = (await _catalogRepository.GetTenantDatabasesAsync(tenant.TenantId, CancellationToken.None)).Single();
+
+        // Act — use key-rotated (same material as key-old, simulates KMS key versioning)
+        var rotation = await _rotationService.RotateTenantDatabaseKeyAsync(
+            tenant.TenantId,
+            mapping.DatabaseName,
+            "key-rotated",
+            "idem-rotate-success",
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(TenantEncryptionKeyRotationStatus.Completed, rotation.Status);
+        Assert.Equal("key-old", rotation.PreviousKeyReference);
+        Assert.Equal("key-rotated", rotation.NewKeyReference);
+        Assert.NotNull(rotation.CompletedAt);
+        Assert.False(rotation.RollbackApplied);
+
+        var after = await _catalogRepository.GetTenantDatabaseAsync(
+            tenant.TenantId,
+            mapping.DatabaseName,
+            CancellationToken.None);
+
+        Assert.NotNull(after);
+        Assert.Equal("key-rotated", after!.EncryptionKeyReference);
+        Assert.True(_databaseRegistry.DatabaseExists(mapping.DatabaseName));
+    }
+
+    [Fact]
+    public async Task RotateTenantDatabaseKeyAsync_ShouldRecordAuditLifecycleEvents()
+    {
+        // Arrange
+        var tenantPath = Path.Combine(_tempRoot, "tenant-rotate-audit.db");
+        var (tenant, _) = await _provisioningService.CreateTenantAsync(
+            "tenant-rotate-audit",
+            "Tenant Rotate Audit",
+            tenantPath,
+            "idem-create-rotate-audit",
+            planTier: "pro",
+            encryptionKeyReference: "key-old",
+            cancellationToken: CancellationToken.None);
+
+        var mapping = (await _catalogRepository.GetTenantDatabasesAsync(tenant.TenantId, CancellationToken.None)).Single();
+
+        // Act — use key-rotated (compatible material) so rotation completes and emits Started+Completed
+        await _rotationService.RotateTenantDatabaseKeyAsync(
+            tenant.TenantId,
+            mapping.DatabaseName,
+            "key-rotated",
+            "idem-rotate-audit",
+            CancellationToken.None);
+
+        // Assert
+        var events = await _catalogRepository.GetLifecycleEventsAsync(tenant.TenantId, cancellationToken: CancellationToken.None);
+        var rotationEvents = events
+            .Where(e => e.EventType.StartsWith("EncryptionKeyRotation", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Contains(rotationEvents, e => e.EventType == "EncryptionKeyRotationStarted");
+        Assert.Contains(rotationEvents, e => e.EventType == "EncryptionKeyRotationCompleted");
+    }
+
+    [Fact]
+    public async Task ResolveDatabaseKeyAsync_WithValidReference_ShouldReturnMaterial()
+    {
+        // Act
+        var material = await _keyProvider.ResolveDatabaseKeyAsync(
+            "any-tenant",
+            "any-db",
+            "key-old",
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(material.EncryptionEnabled);
+        Assert.Equal("key-old", material.KeyReference);
+        Assert.Equal("tenant-old-password", material.KeyMaterial);
+        Assert.Equal("configuration", material.ProviderName);
+    }
+
     private static void EnsureCatalogTablesForTests(DatabaseInstance masterDatabase)
     {
         ArgumentNullException.ThrowIfNull(masterDatabase);
@@ -200,6 +292,7 @@ public sealed class TenantEncryptionKeyManagementTests : IAsyncLifetime
                     {
                         ["key-old"] = "tenant-old-password",
                         ["key-new"] = "tenant-new-password",
+                        ["key-rotated"] = "tenant-old-password",
                     },
                 },
             },

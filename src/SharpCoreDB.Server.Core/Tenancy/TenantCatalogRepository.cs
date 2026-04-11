@@ -33,8 +33,32 @@ public sealed class TenantCatalogRepository(
         {
             lock (_catalogLock)
             {
-                // Create catalog tables using ExecuteSQL
-                masterDatabase.Database.ExecuteSQL(TenantCatalogSchema.CreateCatalogTables);
+                EnsureCatalogTableExists(
+                    "tenants",
+                    "CREATE TABLE tenants (tenant_id TEXT PRIMARY KEY, tenant_key TEXT, display_name TEXT, status TEXT, plan_tier TEXT, created_at TEXT, updated_at TEXT, created_by TEXT, metadata TEXT)");
+
+                EnsureCatalogTableExists(
+                    "tenant_databases",
+                    "CREATE TABLE tenant_databases (mapping_id TEXT PRIMARY KEY, tenant_id TEXT, database_name TEXT, database_path TEXT, is_primary INTEGER, storage_mode TEXT, encryption_enabled INTEGER, encryption_key_reference TEXT, created_at TEXT)");
+
+                EnsureCatalogTableExists(
+                    "tenant_quotas",
+                    "CREATE TABLE tenant_quotas (tenant_id TEXT PRIMARY KEY, max_active_sessions INTEGER, max_qps INTEGER, max_storage_mb INTEGER, max_batch_size INTEGER, updated_at TEXT)");
+
+                EnsureCatalogTableExists(
+                    "tenant_lifecycle_events",
+                    "CREATE TABLE tenant_lifecycle_events (event_id TEXT PRIMARY KEY, tenant_id TEXT, event_type TEXT, event_status TEXT, event_details TEXT, created_at TEXT)");
+
+                CreateIndexIfMissing("idx_tenants_tenant_key", "CREATE INDEX idx_tenants_tenant_key ON tenants(tenant_key)");
+                CreateIndexIfMissing("idx_tenants_status", "CREATE INDEX idx_tenants_status ON tenants(status)");
+                CreateIndexIfMissing("idx_tenants_created_at", "CREATE INDEX idx_tenants_created_at ON tenants(created_at)");
+                CreateIndexIfMissing("idx_tenant_db_tenant_id", "CREATE INDEX idx_tenant_db_tenant_id ON tenant_databases(tenant_id)");
+                CreateIndexIfMissing("idx_tenant_db_database_name", "CREATE INDEX idx_tenant_db_database_name ON tenant_databases(database_name)");
+                CreateIndexIfMissing("idx_tenant_db_is_primary", "CREATE INDEX idx_tenant_db_is_primary ON tenant_databases(is_primary)");
+                CreateIndexIfMissing("idx_tenant_quotas_updated", "CREATE INDEX idx_tenant_quotas_updated ON tenant_quotas(updated_at)");
+                CreateIndexIfMissing("idx_lifecycle_tenant_id", "CREATE INDEX idx_lifecycle_tenant_id ON tenant_lifecycle_events(tenant_id)");
+                CreateIndexIfMissing("idx_lifecycle_event_type", "CREATE INDEX idx_lifecycle_event_type ON tenant_lifecycle_events(event_type)");
+                CreateIndexIfMissing("idx_lifecycle_created_at", "CREATE INDEX idx_lifecycle_created_at ON tenant_lifecycle_events(created_at)");
             }
 
             logger.LogInformation("Tenant catalog schema initialized successfully");
@@ -628,6 +652,32 @@ public sealed class TenantCatalogRepository(
                 logger.LogError(ex, "Failed to upsert quota policy for tenant '{TenantId}'", quotaPolicy.TenantId);
                 throw;
             }
+        }
+    }
+
+    private void EnsureCatalogTableExists(string tableName, string createSql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(createSql);
+
+        if (!masterDatabase.Database.TryGetTable(tableName, out _))
+        {
+            masterDatabase.Database.ExecuteSQL(createSql);
+        }
+    }
+
+    private void CreateIndexIfMissing(string indexName, string createIndexSql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(createIndexSql);
+
+        try
+        {
+            masterDatabase.Database.ExecuteSQL(createIndexSql);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Index creation skipped for '{IndexName}'", indexName);
         }
     }
 

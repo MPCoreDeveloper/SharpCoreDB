@@ -24,7 +24,10 @@ public sealed class TenantProvisioningService(
     ILogger<TenantProvisioningService> logger) : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, ProvisioningOperation> _activeOperations = new();
+    private readonly ConcurrentDictionary<string, ProvisioningOperation> _operationHistory = new();
+    private readonly ConcurrentDictionary<string, string> _idempotencyOperationIds = new();
     private readonly Lock _orchestrationLock = new();
+    private const int MaxOperationHistoryEntries = 1_000;
 
     /// <summary>
     /// Represents the result of a provisioning operation with tracking and rollback capability.
@@ -115,6 +118,23 @@ public sealed class TenantProvisioningService(
             DecisionCode: "PROVISIONING_STARTED",
             Reason: "Create tenant flow started"));
 
+        if (TryGetIdempotentOperation(ProvisioningOperationType.Create, idempotencyKey, out var existingOperation))
+        {
+            var existingTenant = await ResolveTenantForOperationAsync(existingOperation, tenantKey, cancellationToken);
+            if (existingTenant is not null)
+            {
+                logger.LogInformation(
+                    "Returning cached create operation '{OperationId}' for tenant '{TenantKey}'",
+                    existingOperation.OperationId,
+                    tenantKey);
+
+                return (existingTenant, existingOperation);
+            }
+
+            throw new InvalidOperationException(
+                $"Idempotency key '{idempotencyKey}' was already used for operation '{existingOperation.OperationId}'.");
+        }
+
         var operationId = Guid.NewGuid().ToString("N");
         var operation = new ProvisioningOperation
         {
@@ -144,7 +164,8 @@ public sealed class TenantProvisioningService(
 
             lock (_orchestrationLock)
             {
-                _activeOperations[operationId] = operation;
+                TrackActiveOperation(operation);
+                _idempotencyOperationIds[BuildIdempotencyLookupKey(ProvisioningOperationType.Create, idempotencyKey)] = operationId;
             }
 
             // Create tenant in catalog
@@ -247,6 +268,7 @@ public sealed class TenantProvisioningService(
             lock (_orchestrationLock)
             {
                 _activeOperations.TryRemove(operationId, out _);
+                TrackOperationHistory(operation);
             }
         }
     }
@@ -282,6 +304,15 @@ public sealed class TenantProvisioningService(
             DecisionCode: "DEPROVISIONING_STARTED",
             Reason: "Delete tenant flow started"));
 
+        if (TryGetIdempotentOperation(ProvisioningOperationType.Delete, idempotencyKey, out var existingOperation))
+        {
+            logger.LogInformation(
+                "Returning cached delete operation '{OperationId}' for tenant '{TenantId}'",
+                existingOperation.OperationId,
+                tenantId);
+            return existingOperation;
+        }
+
         var operationId = Guid.NewGuid().ToString("N");
         var operation = new ProvisioningOperation
         {
@@ -307,7 +338,8 @@ public sealed class TenantProvisioningService(
 
             lock (_orchestrationLock)
             {
-                _activeOperations[operationId] = operation;
+                TrackActiveOperation(operation);
+                _idempotencyOperationIds[BuildIdempotencyLookupKey(ProvisioningOperationType.Delete, idempotencyKey)] = operationId;
             }
 
             // Get all databases for tenant
@@ -398,6 +430,7 @@ public sealed class TenantProvisioningService(
             lock (_orchestrationLock)
             {
                 _activeOperations.TryRemove(operationId, out _);
+                TrackOperationHistory(operation);
             }
         }
     }
@@ -409,10 +442,46 @@ public sealed class TenantProvisioningService(
     /// <returns>Operation details or null if not found.</returns>
     public ProvisioningOperation? GetOperationStatus(string operationId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+
         lock (_orchestrationLock)
         {
-            _activeOperations.TryGetValue(operationId, out var operation);
-            return operation;
+            if (_activeOperations.TryGetValue(operationId, out var activeOperation))
+            {
+                return activeOperation;
+            }
+
+            _operationHistory.TryGetValue(operationId, out var completedOperation);
+            return completedOperation;
+        }
+    }
+
+    /// <summary>
+    /// Gets the status of a provisioning operation via tenant idempotency key.
+    /// </summary>
+    /// <param name="operationType">Provisioning operation type.</param>
+    /// <param name="idempotencyKey">Idempotency key used by the request.</param>
+    /// <returns>Operation details or null when no operation matches the key.</returns>
+    public ProvisioningOperation? GetOperationStatusByIdempotencyKey(
+        ProvisioningOperationType operationType,
+        string idempotencyKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+
+        lock (_orchestrationLock)
+        {
+            if (!_idempotencyOperationIds.TryGetValue(BuildIdempotencyLookupKey(operationType, idempotencyKey), out var operationId))
+            {
+                return null;
+            }
+
+            if (_activeOperations.TryGetValue(operationId, out var activeOperation))
+            {
+                return activeOperation;
+            }
+
+            _operationHistory.TryGetValue(operationId, out var completedOperation);
+            return completedOperation;
         }
     }
 
@@ -484,5 +553,95 @@ public sealed class TenantProvisioningService(
         }
 
         await Task.CompletedTask;
+    }
+
+    private bool TryGetIdempotentOperation(
+        ProvisioningOperationType operationType,
+        string idempotencyKey,
+        out ProvisioningOperation operation)
+    {
+        lock (_orchestrationLock)
+        {
+            var lookupKey = BuildIdempotencyLookupKey(operationType, idempotencyKey);
+            if (!_idempotencyOperationIds.TryGetValue(lookupKey, out var operationId))
+            {
+                operation = null!;
+                return false;
+            }
+
+            if (_activeOperations.TryGetValue(operationId, out operation))
+            {
+                return true;
+            }
+
+            if (_operationHistory.TryGetValue(operationId, out operation))
+            {
+                return true;
+            }
+
+            _idempotencyOperationIds.TryRemove(lookupKey, out _);
+            operation = null!;
+            return false;
+        }
+    }
+
+    private static string BuildIdempotencyLookupKey(ProvisioningOperationType operationType, string idempotencyKey)
+    {
+        return $"{operationType}:{idempotencyKey.Trim()}";
+    }
+
+    private static void TrimOperationHistory(ConcurrentDictionary<string, ProvisioningOperation> operationHistory)
+    {
+        while (operationHistory.Count > MaxOperationHistoryEntries)
+        {
+            var oldest = operationHistory
+                .OrderBy(static kvp => kvp.Value.StartedAt)
+                .FirstOrDefault();
+
+            if (oldest.Equals(default(KeyValuePair<string, ProvisioningOperation>)))
+            {
+                break;
+            }
+
+            operationHistory.TryRemove(oldest.Key, out _);
+        }
+    }
+
+    private static void TrackOperation(ProvisioningOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+    }
+
+    private void TrackActiveOperation(ProvisioningOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        _activeOperations[operation.OperationId] = operation;
+        TrackOperationHistory(operation);
+    }
+
+    private void TrackOperationHistory(ProvisioningOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        _operationHistory[operation.OperationId] = operation;
+        TrimOperationHistory(_operationHistory);
+    }
+
+    private async Task<TenantInfo?> ResolveTenantForOperationAsync(
+        ProvisioningOperation operation,
+        string tenantKey,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(operation.TenantId))
+        {
+            var tenantById = await catalogRepository.GetTenantByIdAsync(operation.TenantId, cancellationToken);
+            if (tenantById is not null)
+            {
+                return tenantById;
+            }
+        }
+
+        return await catalogRepository.GetTenantByKeyAsync(tenantKey, cancellationToken);
     }
 }

@@ -207,6 +207,7 @@ public sealed class WebSocketHandler(
                 "websocket",
                 role,
                 tenantId: principal.GetTenantId() ?? "default",
+                principal: principal,
                 cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(

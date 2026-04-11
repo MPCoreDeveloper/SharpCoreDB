@@ -115,29 +115,15 @@ public sealed class DatabaseGrantsRepository(
 
         try
         {
-            const string createGrantsTable = """
-                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'database_grants')
-                BEGIN
-                    CREATE TABLE database_grants (
-                        grant_id NVARCHAR(128) PRIMARY KEY,
-                        tenant_id NVARCHAR(128) NOT NULL,
-                        database_name NVARCHAR(128) NOT NULL,
-                        principal NVARCHAR(256) NOT NULL,
-                        permission BIGINT NOT NULL,
-                        is_grantable BIT NOT NULL DEFAULT 0,
-                        created_at DATETIME NOT NULL DEFAULT GETUTCDATE(),
-                        expires_at DATETIME NOT NULL,
-                        revoked_at DATETIME
-                    );
-                    
-                    CREATE INDEX idx_grants_tenant ON database_grants(tenant_id);
-                    CREATE INDEX idx_grants_principal ON database_grants(principal);
-                    CREATE INDEX idx_grants_database ON database_grants(database_name);
-                    CREATE INDEX idx_grants_expires ON database_grants(expires_at);
-                END
-                """;
+            lock (_grantsLock)
+            {
+                EnsureGrantsTableExists();
+                CreateIndexIfMissing("idx_grants_tenant", "CREATE INDEX idx_grants_tenant ON database_grants(tenant_id)");
+                CreateIndexIfMissing("idx_grants_principal", "CREATE INDEX idx_grants_principal ON database_grants(principal)");
+                CreateIndexIfMissing("idx_grants_database", "CREATE INDEX idx_grants_database ON database_grants(database_name)");
+                CreateIndexIfMissing("idx_grants_expires", "CREATE INDEX idx_grants_expires ON database_grants(expires_at)");
+            }
 
-            masterDatabase.Database.ExecuteSQL(createGrantsTable);
             logger.LogInformation("Database grants schema initialized");
         }
         catch (Exception ex)
@@ -291,7 +277,7 @@ public sealed class DatabaseGrantsRepository(
         {
             try
             {
-                var sql = $"UPDATE database_grants SET revoked_at = GETUTCDATE() WHERE grant_id = '{EscapeSql(grantId)}'";
+                var sql = $"UPDATE database_grants SET revoked_at = datetime('now') WHERE grant_id = '{EscapeSql(grantId)}'";
                 masterDatabase.Database.ExecuteSQL(sql);
                 logger.LogInformation("Grant '{GrantId}' revoked", grantId);
 
@@ -489,6 +475,32 @@ public sealed class DatabaseGrantsRepository(
     }
 
     private static string EscapeSql(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private void EnsureGrantsTableExists()
+    {
+        if (masterDatabase.Database.TryGetTable("database_grants", out _))
+        {
+            return;
+        }
+
+        masterDatabase.Database.ExecuteSQL(
+            "CREATE TABLE database_grants (grant_id TEXT PRIMARY KEY, tenant_id TEXT, database_name TEXT, principal TEXT, permission INTEGER, is_grantable INTEGER, created_at TEXT, expires_at TEXT, revoked_at TEXT)");
+    }
+
+    private void CreateIndexIfMissing(string indexName, string createIndexSql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(createIndexSql);
+
+        try
+        {
+            masterDatabase.Database.ExecuteSQL(createIndexSql);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Index creation skipped for '{IndexName}'", indexName);
+        }
+    }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

@@ -15,8 +15,8 @@ using SharpCoreDB.Server.Core.Security;
 namespace SharpCoreDB.Server.Core.Grpc;
 
 /// <summary>
-/// gRPC interceptor for JWT token validation, certificate auth, RBAC, and tenant-aware authorization.
-/// Supports both Bearer JWT tokens and client certificates (mutual TLS).
+/// gRPC interceptor for JWT token validation, certificate auth, RBAC, tenant-aware authorization,
+/// and database grants enforcement. Supports both Bearer JWT tokens and client certificates (mutual TLS).
 /// C# 14: Primary constructor with immutable dependencies.
 /// </summary>
 public sealed class GrpcAuthorizationInterceptor(
@@ -26,7 +26,8 @@ public sealed class GrpcAuthorizationInterceptor(
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     SessionManager sessionManager,
     IHttpContextAccessor httpContextAccessor,
-    ILogger<GrpcAuthorizationInterceptor> logger) : Interceptor
+    ILogger<GrpcAuthorizationInterceptor> logger,
+    DatabaseAuthorizationService? databaseAuthorizationService = null) : Interceptor
 {
     private readonly JwtTokenService _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
     private readonly RbacService _rbacService = rbacService ?? throw new ArgumentNullException(nameof(rbacService));
@@ -34,6 +35,7 @@ public sealed class GrpcAuthorizationInterceptor(
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService ?? throw new ArgumentNullException(nameof(tenantAuthorizationPolicyService));
     private readonly SessionManager _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
     private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+    private readonly DatabaseAuthorizationService? _databaseAuthorizationService = databaseAuthorizationService;
     private readonly ILogger<GrpcAuthorizationInterceptor> _logger = logger;
 
     private static readonly HashSet<string> PublicMethods =
@@ -190,6 +192,36 @@ public sealed class GrpcAuthorizationInterceptor(
         {
             throw new RpcException(new Status(StatusCode.PermissionDenied,
                 $"Tenant authorization failed: {decision.Code}"));
+        }
+
+        // Enforce database grants if the service is available
+        if (_databaseAuthorizationService is not null)
+        {
+            var username = _tokenService.GetUsernameFromToken(principal);
+            var tenantId = principal.GetTenantId() ?? "default";
+
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                var isGranted = await _databaseAuthorizationService.AuthorizeOperationAsync(
+                    tenantId,
+                    databaseName,
+                    username,
+                    requiredPermission,
+                    context.CancellationToken).ConfigureAwait(false);
+
+                if (!isGranted)
+                {
+                    _logger.LogWarning(
+                        "gRPC grants enforcement denied {Permission} for user '{Username}' on database '{Database}' (protocol=gRPC, method={Method})",
+                        requiredPermission,
+                        username,
+                        databaseName,
+                        context.Method);
+
+                    throw new RpcException(new Status(StatusCode.PermissionDenied,
+                        $"Database grant denied: {requiredPermission} on {databaseName}"));
+                }
+            }
         }
     }
 

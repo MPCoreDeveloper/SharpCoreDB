@@ -4,6 +4,7 @@
 // </copyright>
 
 using Microsoft.Extensions.Logging;
+using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
 using SharpCoreDB.Server.Core.Tenancy;
 using System.Collections.Concurrent;
@@ -18,10 +19,16 @@ namespace SharpCoreDB.Server.Core;
 public sealed class SessionManager(
     DatabaseRegistry databaseRegistry,
     TenantQuotaEnforcementService tenantQuotaEnforcementService,
-    ILogger<SessionManager> logger)
+    ILogger<SessionManager> logger,
+    DatabaseGrantsRepository? databaseGrantsRepository = null,
+    DatabaseAuthorizationService? databaseAuthorizationService = null,
+    MetricsCollector? metricsCollector = null)
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly TenantQuotaEnforcementService _tenantQuotaEnforcementService = tenantQuotaEnforcementService;
+    private readonly DatabaseGrantsRepository? _databaseGrantsRepository = databaseGrantsRepository;
+    private readonly DatabaseAuthorizationService? _databaseAuthorizationService = databaseAuthorizationService;
+    private readonly MetricsCollector? _metricsCollector = metricsCollector;
     private readonly ILogger<SessionManager> _logger = logger;
     private readonly ConcurrentDictionary<string, ClientSession> _sessions = new();
     private readonly Lock _sessionLock = new();
@@ -39,6 +46,7 @@ public sealed class SessionManager(
     /// <param name="clientAddress">Client network address.</param>
     /// <param name="role">Authenticated user role.</param>
     /// <param name="tenantId">Tenant identifier for quota evaluation.</param>
+    /// <param name="principal">Validated JWT claims principal for scope enforcement (optional).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>New client session.</returns>
     public async Task<ClientSession> CreateSessionAsync(
@@ -47,6 +55,7 @@ public sealed class SessionManager(
         string clientAddress,
         DatabaseRole role = DatabaseRole.Reader,
         string tenantId = "default",
+        System.Security.Claims.ClaimsPrincipal? principal = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
@@ -55,6 +64,75 @@ public sealed class SessionManager(
         if (database == null)
         {
             throw new ArgumentException($"Database '{databaseName}' not found", nameof(databaseName));
+        }
+
+        // Enforce JWT claims scope if principal is provided
+        if (principal is not null && role != DatabaseRole.Admin)
+        {
+            var scopeVersion = principal.GetScopeVersion();
+            if (!string.IsNullOrWhiteSpace(scopeVersion))
+            {
+                if (!principal.HasDatabaseAccess(databaseName))
+                {
+                    _metricsCollector?.RecordFailedRequest("session/create", "JWT_SCOPE_DENIED");
+                    _logger.LogWarning(
+                        "Session creation denied by JWT scope for user '{User}' tenant '{TenantId}' database '{Database}' (scope_version={ScopeVersion})",
+                        userName,
+                        tenantId,
+                        databaseName,
+                        scopeVersion);
+
+                    throw new UnauthorizedAccessException("JWT_SCOPE_DENIED: database is not in token's allowed_databases claim.");
+                }
+
+                var requiredPermission = DatabasePermission.Connect;
+                if (!principal.HasDatabasePermission(requiredPermission))
+                {
+                    _metricsCollector?.RecordFailedRequest("session/create", "JWT_PERMISSION_DENIED");
+                    _logger.LogWarning(
+                        "Session creation denied by JWT permission for user '{User}' tenant '{TenantId}' database '{Database}' (required={Required})",
+                        userName,
+                        tenantId,
+                        databaseName,
+                        requiredPermission);
+
+                    throw new UnauthorizedAccessException("JWT_PERMISSION_DENIED: token does not have CONNECT permission.");
+                }
+            }
+        }
+
+        if (role != DatabaseRole.Admin &&
+            !string.IsNullOrWhiteSpace(userName) &&
+            _databaseGrantsRepository is not null &&
+            _databaseAuthorizationService is not null)
+        {
+            var activeGrants = await _databaseGrantsRepository
+                .GetPrincipalGrantsAsync(userName, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (activeGrants.Count > 0)
+            {
+                var isAllowed = await _databaseAuthorizationService
+                    .AuthorizeOperationAsync(
+                        tenantId,
+                        databaseName,
+                        userName,
+                        DatabasePermission.Connect,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!isAllowed)
+                {
+                    _metricsCollector?.RecordFailedRequest("session/create", "DATABASE_GRANT_DENIED");
+                    _logger.LogWarning(
+                        "Session creation denied by grants for user '{User}' tenant '{TenantId}' database '{Database}'",
+                        userName,
+                        tenantId,
+                        databaseName);
+
+                    throw new UnauthorizedAccessException("DATABASE_GRANT_DENIED: principal is not granted CONNECT on the requested database.");
+                }
+            }
         }
 
         var tenantSessionCount = _sessions.Values.Count(s => string.Equals(s.TenantId, tenantId, StringComparison.Ordinal));
@@ -78,6 +156,8 @@ public sealed class SessionManager(
             role,
             clientAddress,
             databaseName);
+
+        _metricsCollector?.RecordSuccessfulRequest("session/create", 0, 0, 0, 0);
 
         return session;
     }

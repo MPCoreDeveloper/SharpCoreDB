@@ -89,6 +89,31 @@ public sealed class TenantManagementGrpcService(
     }
 
     /// <summary>
+    /// Creates a tenant database at runtime.
+    /// Issue #122 endpoint alias to align API contract naming.
+    /// </summary>
+    public Task<CreateTenantResponse> CreateTenantDatabaseAsync(
+        string tenantKey,
+        string displayName,
+        string databasePath,
+        string idempotencyKey,
+        string? planTier = null,
+        string? encryptionKeyReference = null,
+        string? metadataJson = null,
+        CancellationToken cancellationToken = default)
+    {
+        return CreateTenantAsync(
+            tenantKey,
+            displayName,
+            databasePath,
+            idempotencyKey,
+            planTier,
+            encryptionKeyReference,
+            metadataJson,
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Deletes a tenant and its associated databases.
     /// Supports idempotency for safe retries.
     /// </summary>
@@ -133,6 +158,18 @@ public sealed class TenantManagementGrpcService(
     }
 
     /// <summary>
+    /// Deletes a tenant database at runtime.
+    /// Issue #122 endpoint alias to align API contract naming.
+    /// </summary>
+    public Task<DeleteTenantResponse> DeleteTenantDatabaseAsync(
+        string tenantId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        return DeleteTenantAsync(tenantId, idempotencyKey, cancellationToken);
+    }
+
+    /// <summary>
     /// Gets the status of a provisioning operation.
     /// </summary>
     public async Task<GetProvisioningStatusResponse> GetProvisioningStatusAsync(
@@ -156,6 +193,17 @@ public sealed class TenantManagementGrpcService(
             logger.LogError(ex, "Failed to get provisioning status for operation '{OperationId}'", operationId);
             return new GetProvisioningStatusResponse { Found = false };
         }
+    }
+
+    /// <summary>
+    /// Gets tenant provisioning status.
+    /// Issue #122 endpoint alias to align API contract naming.
+    /// </summary>
+    public Task<GetProvisioningStatusResponse> GetTenantProvisioningStatusAsync(
+        string operationId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetProvisioningStatusAsync(operationId, cancellationToken);
     }
 
     /// <summary>

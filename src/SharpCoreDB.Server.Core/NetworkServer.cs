@@ -9,6 +9,7 @@ using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Catalog;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
@@ -265,6 +266,26 @@ public sealed class NetworkServer(
 
         // Initialize database registry
         await _databaseRegistry.InitializeAsync(cancellationToken);
+
+        // Bootstrap tenant catalog schema in master database
+        var masterDatabase = _databaseRegistry.GetDatabase(_config.SystemDatabases.MasterDatabaseName)
+            ?? _databaseRegistry.GetDatabase(_config.DefaultDatabase)
+            ?? throw new InvalidOperationException("Unable to resolve master database for tenant catalog bootstrap.");
+
+        var catalogRepository = new TenantCatalogRepository(
+            masterDatabase,
+            _loggerFactory.CreateLogger<TenantCatalogRepository>());
+
+        await catalogRepository.InitializeCatalogAsync(cancellationToken);
+
+        var grantsRepository = new DatabaseGrantsRepository(
+            masterDatabase,
+            new TenantSecurityAuditService(
+                new TenantSecurityAuditStore(),
+                _loggerFactory.CreateLogger<TenantSecurityAuditService>()),
+            _loggerFactory.CreateLogger<DatabaseGrantsRepository>());
+
+        await grantsRepository.InitializeGrantsSchemaAsync(cancellationToken);
 
         // Initialize binary protocol handler
         _binaryProtocolHandler = new BinaryProtocolHandler(

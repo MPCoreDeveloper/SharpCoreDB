@@ -8,6 +8,7 @@ using SharpCoreDB.Server.Core;
 using SharpCoreDB.Server.Core.Catalog;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
+using SharpCoreDB.Server.Core.Tenancy;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -29,7 +30,10 @@ public sealed class BinaryProtocolHandler(
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     PgCatalogService pgCatalogService,
     MetricsCollector metricsCollector,
-    ILogger<BinaryProtocolHandler> logger) : IAsyncDisposable
+    ILogger<BinaryProtocolHandler> logger,
+    DatabaseAuthorizationService? databaseAuthorizationService = null,
+    RowLevelPolicyEngine? rowLevelPolicyEngine = null,
+    TenantQuotaEnforcementService? tenantQuotaEnforcementService = null) : IAsyncDisposable
 {
     private readonly DatabaseRegistry _databaseRegistry = databaseRegistry;
     private readonly SessionManager _sessionManager = sessionManager;
@@ -37,6 +41,9 @@ public sealed class BinaryProtocolHandler(
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
     private readonly PgCatalogService _pgCatalogService = pgCatalogService;
     private readonly MetricsCollector _metricsCollector = metricsCollector;
+    private readonly DatabaseAuthorizationService? _databaseAuthorizationService = databaseAuthorizationService;
+    private readonly RowLevelPolicyEngine? _rowLevelPolicyEngine = rowLevelPolicyEngine;
+    private readonly TenantQuotaEnforcementService? _tenantQuotaEnforcementService = tenantQuotaEnforcementService;
     private readonly ILogger<BinaryProtocolHandler> _logger = logger;
 
     // PostgreSQL protocol constants
@@ -243,6 +250,29 @@ public sealed class BinaryProtocolHandler(
                 return null;
             }
 
+            // Enforce database grants at protocol level if available
+            if (_databaseAuthorizationService is not null)
+            {
+                var tenantIdForGrants = principal.GetTenantId() ?? "default";
+                var isGranted = await _databaseAuthorizationService.AuthorizeOperationAsync(
+                    tenantIdForGrants,
+                    startup.Database,
+                    startup.User,
+                    DatabasePermission.Connect,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (!isGranted)
+                {
+                    _logger.LogWarning(
+                        "Binary grants enforcement denied CONNECT for user '{User}' on database '{Database}' (protocol=Binary)",
+                        startup.User,
+                        startup.Database);
+                    await writer.WriteFatalErrorResponseAsync(
+                        "42501", $"permission denied for database \"{startup.Database}\"", cancellationToken);
+                    return null;
+                }
+            }
+
             // Binary protocol clients default to reader role until full auth is implemented
             var session = await _sessionManager.CreateSessionAsync(
                 startup.Database,
@@ -250,6 +280,7 @@ public sealed class BinaryProtocolHandler(
                 "binary-client",
                 DatabaseRole.Reader,
                 tenantId: principal.GetTenantId() ?? "default",
+                principal: principal,
                 cancellationToken: cancellationToken);
 
             // Send authentication success
@@ -275,6 +306,19 @@ public sealed class BinaryProtocolHandler(
             await writer.WriteBackendKeyDataAsync(session.SessionId.GetHashCode(), 0, cancellationToken);
 
             return session;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex,
+                "Binary connect denied by database grants for user '{User}' on database '{Database}'",
+                startup.User,
+                startup.Database);
+
+            await writer.WriteFatalErrorResponseAsync(
+                "42501",
+                $"permission denied for database \"{startup.Database}\"",
+                cancellationToken);
+            return null;
         }
         catch (Exception ex)
         {
@@ -355,6 +399,23 @@ public sealed class BinaryProtocolHandler(
 
         _logger.LogInformation("Executing query: {Query}", queryText);
 
+        // Enforce per-tenant request rate/batch quota
+        if (_tenantQuotaEnforcementService is not null)
+        {
+            try
+            {
+                await _tenantQuotaEnforcementService
+                    .EnsureRequestQuotaAsync(session.TenantId, "binary/query", cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (TenantQuotaExceededException ex)
+            {
+                await writer.WriteErrorResponseAsync("53400", ex.Message, cancellationToken);
+                await writer.WriteReadyForQueryAsync('I', cancellationToken);
+                return;
+            }
+        }
+
         // Intercept pg_catalog / information_schema queries before reaching the engine
         if (_pgCatalogService.TryHandleCatalogQuery(
                 queryText,
@@ -378,6 +439,20 @@ public sealed class BinaryProtocolHandler(
             {
                 // Execute query
                 var result = connection.Database.ExecuteQuery(queryText, []);
+
+                // Row-level policy: filter results by tenant discriminator
+                if (_rowLevelPolicyEngine is not null && result.Count > 0)
+                {
+                    var queryTable = ExtractSelectTable(normalizedSql);
+                    if (queryTable is not null)
+                    {
+                        result = _rowLevelPolicyEngine.FilterRows(
+                            session.DatabaseInstance.Configuration.Name,
+                            queryTable,
+                            session.TenantId,
+                            result);
+                    }
+                }
 
                 // Send row description
                 if (result.Count > 0)
@@ -409,6 +484,22 @@ public sealed class BinaryProtocolHandler(
             }
             else
             {
+                // Row-level policy: validate writes against tenant discriminator
+                if (_rowLevelPolicyEngine is not null)
+                {
+                    var writeDecision = _rowLevelPolicyEngine.ValidateWriteStatement(
+                        session.DatabaseInstance.Configuration.Name,
+                        queryText,
+                        session.TenantId);
+
+                    if (!writeDecision.IsAllowed)
+                    {
+                        await writer.WriteErrorResponseAsync("42501", writeDecision.DenialReason ?? "Row-level policy denied the write.", cancellationToken);
+                        await writer.WriteReadyForQueryAsync('I', cancellationToken);
+                        return;
+                    }
+                }
+
                 connection.Database.ExecuteSQL(queryText);
                 await writer.WriteCommandCompleteAsync(BuildCommandTag(normalizedSql, 0), cancellationToken);
             }
@@ -488,6 +579,30 @@ public sealed class BinaryProtocolHandler(
             return;
         }
 
+        // Enforce per-tenant request rate/batch and storage quota
+        if (_tenantQuotaEnforcementService is not null)
+        {
+            try
+            {
+                await _tenantQuotaEnforcementService
+                    .EnsureRequestQuotaAsync(session.TenantId, "binary/execute", cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+
+                await _tenantQuotaEnforcementService
+                    .EnsureStorageQuotaAsync(
+                        session.TenantId,
+                        session.DatabaseInstance.Configuration.DatabasePath,
+                        "binary/execute",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (TenantQuotaExceededException ex)
+            {
+                await writer.WriteErrorResponseAsync("53400", ex.Message, cancellationToken);
+                return;
+            }
+        }
+
         // Intercept pg_catalog / information_schema queries via extended query protocol
         if (_pgCatalogService.TryHandleCatalogQuery(
                 portal.Sql,
@@ -510,6 +625,20 @@ public sealed class BinaryProtocolHandler(
             {
                 var result = connection.Database.ExecuteQuery(sql, []);
 
+                // Row-level policy: filter results by tenant discriminator
+                if (_rowLevelPolicyEngine is not null && result.Count > 0)
+                {
+                    var queryTable = ExtractSelectTable(sql);
+                    if (queryTable is not null)
+                    {
+                        result = _rowLevelPolicyEngine.FilterRows(
+                            session.DatabaseInstance.Configuration.Name,
+                            queryTable,
+                            session.TenantId,
+                            result);
+                    }
+                }
+
                 if (result.Count > 0)
                 {
                     foreach (var row in result)
@@ -523,6 +652,21 @@ public sealed class BinaryProtocolHandler(
             }
             else
             {
+                // Row-level policy: validate writes against tenant discriminator
+                if (_rowLevelPolicyEngine is not null)
+                {
+                    var writeDecision = _rowLevelPolicyEngine.ValidateWriteStatement(
+                        session.DatabaseInstance.Configuration.Name,
+                        sql,
+                        session.TenantId);
+
+                    if (!writeDecision.IsAllowed)
+                    {
+                        await writer.WriteErrorResponseAsync("42501", writeDecision.DenialReason ?? "Row-level policy denied the write.", cancellationToken);
+                        return;
+                    }
+                }
+
                 connection.Database.ExecuteSQL(sql);
                 await writer.WriteCommandCompleteAsync(BuildCommandTag(sql, 0), cancellationToken);
             }
@@ -842,6 +986,24 @@ public sealed class BinaryProtocolHandler(
         if (type == typeof(DateTime)) return 1114; // timestamp
         if (type == typeof(Guid)) return 2950;   // uuid
         return 25; // text as fallback
+    }
+
+    /// <summary>
+    /// Extracts the target table name from a SELECT statement for row-level policy lookup.
+    /// </summary>
+    private static string? ExtractSelectTable(string sql)
+    {
+        var upper = sql.Trim().ToUpperInvariant();
+        var fromIdx = upper.IndexOf(" FROM ", StringComparison.Ordinal);
+        if (fromIdx < 0)
+        {
+            return null;
+        }
+
+        var afterFrom = sql.Trim()[(fromIdx + 6)..].TrimStart();
+        var endIdx = afterFrom.IndexOfAny([' ', ';', '\r', '\n', ',']);
+        var tableName = endIdx > 0 ? afterFrom[..endIdx] : afterFrom;
+        return tableName.Trim('"', '`', '[', ']', ';');
     }
 
     /// <inheritdoc />

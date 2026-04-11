@@ -31,7 +31,8 @@ public sealed class DatabaseController(
     TenantQuotaEnforcementService tenantQuotaEnforcementService,
     MetricsCollector metricsCollector,
     HealthCheckService healthCheckService,
-    ILogger<DatabaseController> logger) : ControllerBase
+    ILogger<DatabaseController> logger,
+    DatabaseAuthorizationService? databaseAuthorizationService = null) : ControllerBase
 {
     private static readonly Stopwatch ServerUptime = Stopwatch.StartNew();
 
@@ -506,16 +507,75 @@ public sealed class DatabaseController(
             return (null, null, err);
         }
 
+        // Enforce database grants at protocol level if available
+        if (databaseAuthorizationService is not null)
+        {
+            var username = User.Identity?.Name;
+            var tenantIdForGrants = User.GetTenantId() ?? authService.GetUserTenantId(username ?? string.Empty) ?? "default";
+
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                var isGranted = await databaseAuthorizationService.AuthorizeOperationAsync(
+                    tenantIdForGrants,
+                    name,
+                    username,
+                    requiredPermission,
+                    cancellationToken);
+
+                if (!isGranted)
+                {
+                    logger.LogWarning(
+                        "REST grants enforcement denied {Permission} for user '{User}' on database '{Database}' (protocol=REST, operation={Operation})",
+                        requiredPermission,
+                        username,
+                        name,
+                        HttpContext.Request.Path);
+
+                    var err = StatusCode(StatusCodes.Status403Forbidden,
+                        new ErrorResponse
+                        {
+                            Error = "Database access denied",
+                            Code = "DATABASE_GRANT_DENIED",
+                            Details = $"Grant denied: {requiredPermission} on {name}",
+                        });
+
+                    return (null, null, err);
+                }
+            }
+        }
+
         var role = RbacService.GetRoleFromPrincipal(User);
         var tenantId = User.GetTenantId() ?? authService.GetUserTenantId(User.Identity?.Name ?? string.Empty) ?? "default";
 
-        var session = await sessionManager.CreateSessionAsync(
-            name,
-            User.Identity?.Name ?? "anonymous",
-            HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            role,
-            tenantId,
-            cancellationToken);
+        ClientSession session;
+        try
+        {
+            session = await sessionManager.CreateSessionAsync(
+                name,
+                User.Identity?.Name ?? "anonymous",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                role,
+                tenantId,
+                User,
+                cancellationToken);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning(ex,
+                "REST session creation denied by grants for user '{User}' on database '{Database}'",
+                User.Identity?.Name ?? "anonymous",
+                name);
+
+            var err = StatusCode(StatusCodes.Status403Forbidden,
+                new ErrorResponse
+                {
+                    Error = "Database access denied",
+                    Code = "DATABASE_GRANT_DENIED",
+                    Details = ex.Message,
+                });
+
+            return (null, null, err);
+        }
 
         return (db, session, null);
     }

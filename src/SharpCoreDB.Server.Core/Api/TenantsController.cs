@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core.Tenancy;
+using SharpCoreDB.Server.Core.Security;
 using System.Text.Json;
 
 namespace SharpCoreDB.Server.Core.Api;
@@ -27,6 +28,7 @@ public sealed class TenantsController(
     TenantBackupRestoreService backupRestoreService,
     TenantMigrationPlanningService migrationPlanningService,
     TenantCatalogRepository catalogRepository,
+    DatabaseGrantsRepository databaseGrantsRepository,
     ILogger<TenantsController> logger) : ControllerBase
 {
     /// <summary>
@@ -90,6 +92,22 @@ public sealed class TenantsController(
             return StatusCode(500,
                 new ErrorResponse { Message = "Failed to create tenant" });
         }
+    }
+
+    /// <summary>
+    /// Creates a tenant database at runtime.
+    /// POST /api/v1/tenants/databases
+    /// </summary>
+    [HttpPost("databases")]
+    [ProducesResponseType(201)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(409)]
+    [ProducesResponseType(500)]
+    public Task<ActionResult<CreateTenantApiResponse>> CreateTenantDatabase(
+        [FromBody] CreateTenantApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return CreateTenant(request, cancellationToken);
     }
 
     /// <summary>
@@ -339,6 +357,21 @@ public sealed class TenantsController(
     }
 
     /// <summary>
+    /// Deletes a tenant database at runtime.
+    /// DELETE /api/v1/tenants/databases/{tenantId}
+    /// </summary>
+    [HttpDelete("databases/{tenantId}")]
+    [ProducesResponseType(202)]
+    [ProducesResponseType(404)]
+    public Task<ActionResult<DeleteTenantApiResponse>> DeleteTenantDatabase(
+        string tenantId,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        return DeleteTenant(tenantId, idempotencyKey, cancellationToken);
+    }
+
+    /// <summary>
     /// Gets provisioning operation status.
     /// GET /api/v1/tenants/operations/{operationId}
     /// </summary>
@@ -376,6 +409,18 @@ public sealed class TenantsController(
             return StatusCode(500,
                 new ErrorResponse { Message = "Failed to retrieve operation status" });
         }
+    }
+
+    /// <summary>
+    /// Gets tenant provisioning status.
+    /// GET /api/v1/tenants/provisioning/{operationId}
+    /// </summary>
+    [HttpGet("provisioning/{operationId}")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(404)]
+    public ActionResult<GetOperationStatusApiResponse> GetTenantProvisioningStatus(string operationId)
+    {
+        return GetOperationStatus(operationId);
     }
 
     /// <summary>
@@ -609,10 +654,136 @@ public sealed class TenantsController(
         });
     }
 
-    // ...existing code...
+    /// <summary>
+    /// Grants permissions for a principal on a tenant database.
+    /// POST /api/v1/tenants/{tenantId}/databases/{databaseName}/grants
+    /// </summary>
+    [HttpPost("{tenantId}/databases/{databaseName}/grants")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<DatabaseGrantApiResponse>> GrantDatabaseAccess(
+        string tenantId,
+        string databaseName,
+        [FromBody] GrantDatabaseAccessApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Principal) || string.IsNullOrWhiteSpace(request.Permission))
+        {
+            return BadRequest(new ErrorResponse { Message = "Principal and Permission are required" });
+        }
+
+        var tenant = await catalogRepository.GetTenantByIdAsync(tenantId, cancellationToken);
+        if (tenant is null)
+        {
+            return NotFound(new ErrorResponse { Message = "Tenant not found" });
+        }
+
+        if (!Enum.TryParse<DatabasePermission>(request.Permission, ignoreCase: true, out var permission))
+        {
+            return BadRequest(new ErrorResponse { Message = "Invalid database permission" });
+        }
+
+        var grant = await databaseGrantsRepository.GrantPermissionAsync(
+            tenantId,
+            databaseName,
+            request.Principal,
+            permission,
+            request.IsGrantable,
+            cancellationToken);
+
+        return Ok(new DatabaseGrantApiResponse
+        {
+            GrantId = grant.GrantId,
+            TenantId = grant.TenantId,
+            DatabaseName = grant.DatabaseName,
+            Principal = grant.Principal,
+            Permission = grant.Permission.ToString(),
+            IsGrantable = grant.IsGrantable,
+            CreatedAt = grant.CreatedAt,
+            ExpiresAt = grant.ExpiresAt,
+        });
+    }
+
+    /// <summary>
+    /// Revokes a database grant.
+    /// DELETE /api/v1/tenants/grants/{grantId}
+    /// </summary>
+    [HttpDelete("grants/{grantId}")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> RevokeDatabaseGrant(
+        string grantId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(grantId))
+        {
+            return BadRequest(new ErrorResponse { Message = "GrantId is required" });
+        }
+
+        await databaseGrantsRepository.RevokeGrantAsync(grantId, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Lists active database grants for a principal.
+    /// GET /api/v1/tenants/grants?principal={principal}
+    /// </summary>
+    [HttpGet("grants")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(400)]
+    public async Task<ActionResult<List<DatabaseGrantApiResponse>>> ListDatabaseGrants(
+        [FromQuery] string principal,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(principal))
+        {
+            return BadRequest(new ErrorResponse { Message = "Principal is required" });
+        }
+
+        var grants = await databaseGrantsRepository.GetPrincipalGrantsAsync(principal, cancellationToken);
+        var response = grants.Select(static grant => new DatabaseGrantApiResponse
+        {
+            GrantId = grant.GrantId,
+            TenantId = grant.TenantId,
+            DatabaseName = grant.DatabaseName,
+            Principal = grant.Principal,
+            Permission = grant.Permission.ToString(),
+            IsGrantable = grant.IsGrantable,
+            CreatedAt = grant.CreatedAt,
+            ExpiresAt = grant.ExpiresAt,
+        }).ToList();
+
+        return Ok(response);
+    }
 }
 
 // API Request/Response DTOs
+
+/// <summary>
+/// Request to grant principal access to a database.
+/// </summary>
+public sealed class GrantDatabaseAccessApiRequest
+{
+    public required string Principal { get; init; }
+    public required string Permission { get; init; }
+    public bool IsGrantable { get; init; }
+}
+
+/// <summary>
+/// Response model representing a database grant.
+/// </summary>
+public sealed class DatabaseGrantApiResponse
+{
+    public required string GrantId { get; init; }
+    public required string TenantId { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string Principal { get; init; }
+    public required string Permission { get; init; }
+    public required bool IsGrantable { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public required DateTime ExpiresAt { get; init; }
+}
 
 /// <summary>
 /// Request to create a new tenant.

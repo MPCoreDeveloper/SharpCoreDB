@@ -1,12 +1,12 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using SharpCoreDB.Viewer.Services;
 using SharpCoreDB.Viewer.ViewModels;
 using SharpCoreDB.Viewer.Views;
+using System.Collections;
+using System.Reflection;
 
 namespace SharpCoreDB.Viewer;
 
@@ -59,16 +59,22 @@ public partial class App : Application
         };
     }
 
-    private void DisableAvaloniaDataAnnotationValidation()
+    private static void DisableAvaloniaDataAnnotationValidation()
     {
-        // Get an array of plugins to remove
-        var dataValidationPluginsToRemove =
-            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
+        var bindingPluginsType = Type.GetType("Avalonia.Data.Core.Plugins.BindingPlugins, Avalonia.Base", throwOnError: false);
+        var dataValidatorsProperty = bindingPluginsType?.GetProperty("DataValidators", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
-        // remove each entry found
-        foreach (var plugin in dataValidationPluginsToRemove)
+        if (dataValidatorsProperty?.GetValue(null) is not IList validators)
         {
-            BindingPlugins.DataValidators.Remove(plugin);
+            return;
+        }
+
+        for (var i = validators.Count - 1; i >= 0; i--)
+        {
+            if (validators[i]?.GetType().Name is "DataAnnotationsValidationPlugin")
+            {
+                validators.RemoveAt(i);
+            }
         }
     }
 }

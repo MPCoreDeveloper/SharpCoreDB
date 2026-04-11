@@ -37,3 +37,11 @@ Detailed findings are documented in:
 
 - Canonical docs entry points: `README.md`, `docs/INDEX.md`, `docs/README.md`
 - Obsolete/superseded phase-planning artifacts are removed during documentation maintenance.
+
+## Roadmap Issue Closure Tracking
+
+- ✅ `#125` Enforce database grants in Connect and session creation — completed and closed.
+- ✅ `#124` Per-database grants model for tenant isolation — completed and closed.
+- ✅ `#123` DatabaseRegistry runtime attach/detach APIs — completed and closed.
+- ✅ `#122` Runtime tenant database provisioning APIs (gRPC + REST) — completed and closed.
+- ✅ `#121` Tenant catalog in master database for SaaS lifecycle metadata — completed and closed.

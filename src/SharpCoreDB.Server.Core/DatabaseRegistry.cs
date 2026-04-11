@@ -39,7 +39,7 @@ public sealed class DatabaseRegistry(
 
         foreach (var dbConfig in _config.Databases)
         {
-            await RegisterDatabaseAsync(dbConfig, cancellationToken);
+            await RegisterConfiguredDatabaseAsync(dbConfig, cancellationToken);
         }
 
         // Initialize system databases if enabled
@@ -72,6 +72,56 @@ public sealed class DatabaseRegistry(
         ArgumentNullException.ThrowIfNull(databaseName);
         return _databases.ContainsKey(databaseName);
     }
+
+    /// <summary>
+    /// Registers a new database instance at runtime for tenant provisioning.
+    /// Supports safe attachment of databases without server restart.
+    /// Fails if database already registered.
+    /// </summary>
+    /// <param name="databaseName">Logical database name.</param>
+    /// <param name="databasePath">Physical path to database file.</param>
+    /// <param name="storageMode">Storage mode (SingleFile, Directory, Columnar).</param>
+    /// <param name="connectionPoolSize">Connection pool size for this database.</param>
+    /// <param name="encryptionEnabled">Whether encryption is enabled.</param>
+    /// <param name="encryptionMasterPassword">Optional master password for encryption.</param>
+    /// <param name="encryptionKeyReference">Optional key file reference for encryption.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The registered database instance.</returns>
+    /// <exception cref="InvalidOperationException">If database is already registered.</exception>
+    public Task<DatabaseInstance> RegisterDatabaseAsync(
+        string databaseName,
+        string databasePath,
+        string storageMode = "SingleFile",
+        int connectionPoolSize = 10,
+        bool encryptionEnabled = false,
+        string? encryptionMasterPassword = null,
+        string? encryptionKeyReference = null,
+        CancellationToken cancellationToken = default) =>
+        RegisterDatabaseRuntimeAsync(
+            databaseName,
+            databasePath,
+            storageMode,
+            connectionPoolSize,
+            encryptionEnabled,
+            encryptionMasterPassword,
+            encryptionKeyReference,
+            cancellationToken);
+
+    /// <summary>
+    /// Unregisters a database instance at runtime with graceful connection draining.
+    /// Safe for tenant deprovisioning - closes connections and removes registry entry.
+    /// Fails if database not found or currently in use.
+    /// </summary>
+    /// <param name="databaseName">Logical database name to unregister.</param>
+    /// <param name="gracefulTimeoutSeconds">Timeout for draining connections (default 30s).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">If database not found.</exception>
+    /// <exception cref="OperationCanceledException">If graceful drain times out.</exception>
+    public Task UnregisterDatabaseAsync(
+        string databaseName,
+        int gracefulTimeoutSeconds = 30,
+        CancellationToken cancellationToken = default) =>
+        UnregisterDatabaseRuntimeAsync(databaseName, gracefulTimeoutSeconds, cancellationToken);
 
     /// <summary>
     /// Registers a new database instance at runtime for tenant provisioning.
@@ -223,7 +273,7 @@ public sealed class DatabaseRegistry(
     /// </summary>
     /// <param name="config">Database configuration.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    private async Task RegisterDatabaseAsync(DatabaseInstanceConfiguration config, CancellationToken cancellationToken)
+    private async Task RegisterConfiguredDatabaseAsync(DatabaseInstanceConfiguration config, CancellationToken cancellationToken)
     {
         logger.LogInformation("Registering database '{Name}' at '{Path}'", config.Name, config.DatabasePath);
 
@@ -255,7 +305,7 @@ public sealed class DatabaseRegistry(
             ConnectionPoolSize = 10
         };
 
-        await RegisterDatabaseAsync(masterConfig, cancellationToken);
+        await RegisterConfiguredDatabaseAsync(masterConfig, cancellationToken);
 
         // Model database - template for new databases
         var modelConfig = new DatabaseInstanceConfiguration
@@ -267,7 +317,7 @@ public sealed class DatabaseRegistry(
             ConnectionPoolSize = 5
         };
 
-        await RegisterDatabaseAsync(modelConfig, cancellationToken);
+        await RegisterConfiguredDatabaseAsync(modelConfig, cancellationToken);
 
         logger.LogInformation("System databases initialized");
     }
