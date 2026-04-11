@@ -24,6 +24,8 @@ public sealed class DatabaseRegistry(
     private readonly ServerConfiguration _config = configuration.Value;
     private readonly ConcurrentDictionary<string, DatabaseInstance> _databases = new();
     private readonly Lock _registryLock = new();
+    private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
+    private bool _isInitialized;
 
     /// <summary>
     /// Gets all registered database names.
@@ -35,20 +37,35 @@ public sealed class DatabaseRegistry(
     /// </summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Initializing database registry with {Count} databases", _config.Databases.Count);
-
-        foreach (var dbConfig in _config.Databases)
+        await _initializationSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await RegisterConfiguredDatabaseAsync(dbConfig, cancellationToken);
-        }
+            if (_isInitialized)
+            {
+                logger.LogDebug("Database registry already initialized. Skipping.");
+                return;
+            }
 
-        // Initialize system databases if enabled
-        if (_config.SystemDatabases.Enabled)
+            logger.LogInformation("Initializing database registry with {Count} databases", _config.Databases.Count);
+
+            foreach (var dbConfig in _config.Databases)
+            {
+                await RegisterConfiguredDatabaseAsync(dbConfig, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Initialize system databases if enabled
+            if (_config.SystemDatabases.Enabled)
+            {
+                await InitializeSystemDatabasesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            _isInitialized = true;
+            logger.LogInformation("Database registry initialized with {Count} databases", _databases.Count);
+        }
+        finally
         {
-            await InitializeSystemDatabasesAsync(cancellationToken);
+            _initializationSemaphore.Release();
         }
-
-        logger.LogInformation("Database registry initialized with {Count} databases", _databases.Count);
     }
 
     /// <summary>
@@ -339,6 +356,11 @@ public sealed class DatabaseRegistry(
         await Task.WhenAll(shutdownTasks);
         _databases.Clear();
 
+        lock (_registryLock)
+        {
+            _isInitialized = false;
+        }
+
         logger.LogInformation("Database registry shutdown complete");
     }
 
@@ -346,6 +368,7 @@ public sealed class DatabaseRegistry(
     public async ValueTask DisposeAsync()
     {
         await ShutdownAsync();
+        _initializationSemaphore.Dispose();
     }
 }
 

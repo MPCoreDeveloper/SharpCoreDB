@@ -536,6 +536,10 @@ if (serverConfig.Projections.Enabled)
 
 try
 {
+    // Initialize database registry before constructing startup-dependent services.
+    var databaseRegistry = app.Services.GetRequiredService<DatabaseRegistry>();
+    await databaseRegistry.InitializeAsync(app.Lifetime.ApplicationStopping);
+
     // Start the network server
     var networkServer = app.Services.GetRequiredService<NetworkServer>();
     await networkServer.StartAsync(app.Lifetime.ApplicationStopping);
