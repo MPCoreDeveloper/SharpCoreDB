@@ -12,6 +12,7 @@ namespace SharpCoreDB.Tests;
 /// Tests for Phase 1.3/1.4 DDL features: Stored Procedures, Views, Triggers.
 /// Covers CREATE, DROP, EXEC, and error paths for each feature.
 /// </summary>
+[Collection("SerialTriggerTests")]
 public class DdlProcedureViewTriggerTests : IDisposable
 {
     private readonly string testDbPath;

@@ -12,6 +12,7 @@ namespace SharpCoreDB.Tests;
 /// Tests trigger execution when trigger body writes to a different table.
 /// Validates cross-table DML support for sync change tracking.
 /// </summary>
+[Collection("SerialTriggerTests")]
 public class TriggerCrossTableDmlTests : IDisposable
 {
     private readonly string testDbPath;
