@@ -163,10 +163,10 @@ public class BlockRegistryBatchingTests : IDisposable
         }
         
         // Wait for periodic flush (Phase 3: 500ms interval)
-        // Timer starts when BlockRegistry is created, so first tick could be anywhere from 0-500ms
-        // ✅ OPTIMIZED: Reduced from 1200ms to 600ms - one timer interval is sufficient
-        // (worst case: writes happen just after a tick, next tick at +500ms)
-        await Task.Delay(600);
+        // Timer starts when BlockRegistry is created, so first tick could be anywhere from 0-500ms.
+        // On slow CI runners (macOS), flush I/O + scheduling jitter can add significant delay,
+        // so wait for at least 3 full intervals to eliminate flakiness.
+        await Task.Delay(1600);
         
         // Assert - Periodic timer should have flushed
         var finalMetrics = registry.GetMetrics();
