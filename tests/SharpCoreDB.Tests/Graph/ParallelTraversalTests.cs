@@ -165,15 +165,15 @@ public class ParallelTraversalTests
         }
         var table = new FakeGraphTable(rows, "next");
         var engine = new ParallelGraphTraversalEngine();
-        var cts = new System.Threading.CancellationTokenSource();
 
-        // Act
-        var task = engine.TraverseBfsParallelAsync(table, 1, "next", 1000, cts.Token);
-        await Task.Delay(50); // Let it start
+        // Use a pre-cancelled token to deterministically trigger cancellation
+        // without relying on timing (avoids race on fast CI runners).
+        using var cts = new System.Threading.CancellationTokenSource();
         cts.Cancel();
 
         // Assert - TaskCanceledException is a subclass of OperationCanceledException
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await engine.TraverseBfsParallelAsync(table, 1, "next", 1000, cts.Token));
     }
 
     [Fact]
