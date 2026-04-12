@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "SharpCoreDB.sln",
+    "path": "SharpCoreDB.slnx",
     "projects": [
       "src\\SharpCoreDB\\SharpCoreDB.csproj",
       "src\\SharpCoreDB.VectorSearch\\SharpCoreDB.VectorSearch.csproj",

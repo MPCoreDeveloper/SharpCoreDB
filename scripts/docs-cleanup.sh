@@ -7,7 +7,7 @@ echo "===================================="
 echo ""
 
 # Check if we're in the right directory
-if [ ! -f "SharpCoreDB.sln" ]; then
+if [ ! -f "SharpCoreDB.slnx" ]; then
     echo "❌ Error: Must run from repository root"
     exit 1
 fi

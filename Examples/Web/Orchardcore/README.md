@@ -31,4 +31,4 @@ dotnet build Examples/Web/Orchardcore/SharpCoreDb.Orchardcore/SharpCoreDb.Orchar
 
 The main SharpCoreDB solution uses a solution filter (`SharpCoreDB.CI.slnf`) for CI builds which excludes this example project to prevent build failures when preview packages are unavailable.
 
-For local development, you can continue to use the full `SharpCoreDB.sln` solution.
+For local development, you can continue to use the full `SharpCoreDB.slnx` solution.

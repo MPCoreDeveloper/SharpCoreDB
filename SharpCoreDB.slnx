@@ -1,0 +1,148 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/.github/">
+    <File Path=".github/CI_STATUS.md" />
+    <File Path=".github/CODING_STANDARDS_CSHARP14.md" />
+    <File Path=".github/copilot-instructions.md" />
+    <File Path=".github/dependabot.yml" />
+    <File Path=".github/FUNDING.yml" />
+    <File Path=".github/SIMD_STANDARDS.md" />
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/IMPLEMENTATION_AUDIT_v1.7.0.md" />
+    <File Path="docs/ACTION_PLAN_2026.md" />
+    <File Path="docs/BENCHMARK_RESULTS.md" />
+    <File Path="docs/CONTRIBUTING.md" />
+    <File Path="docs/INDEX.md" />
+    <File Path="docs/PROJECT_STATUS.md" />
+    <File Path="docs/UseCases.md" />
+    <File Path="docs/USER_MANUAL.md" />
+  </Folder>
+  <Folder Name="/docs/server-docs/">
+    <File Path="docs/server/BINARY_PROTOCOL_SPEC.md" />
+    <File Path="docs/server/CLIENT_GUIDE.md" />
+    <File Path="docs/server/CONFIGURATION_SCHEMA.md" />
+    <File Path="docs/server/HTTP_REST_API.md" />
+    <File Path="docs/server/INSTALLATION.md" />
+    <File Path="docs/server/QUICKSTART.md" />
+    <File Path="docs/server/REST_API.md" />
+    <File Path="docs/server/SECURITY.md" />
+  </Folder>
+  <Folder Name="/Examples/" />
+  <Folder Name="/Examples/CQRS/">
+    <Project Path="Examples/CQRS/OrderManagement.CqrsDemo/OrderManagement.CqrsDemo.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Desktop/">
+    <Project Path="Examples/Desktop/SharpCoreDB.Examples.TimeSeries/SharpCoreDB.Examples.TimeSeries.csproj" />
+  </Folder>
+  <Folder Name="/Examples/EventSourcing/">
+    <Project Path="Examples/EventSourcing/OrderManagement.PersistentDemo/OrderManagement.PersistentDemo.csproj" />
+    <Project Path="Examples/EventSourcing/OrderManagement.Tests/OrderManagement.Tests.csproj" />
+    <Project Path="Examples/EventSourcing/OrderManagement/OrderManagement.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Mobile/" />
+  <Folder Name="/Examples/Snippets/" />
+  <Folder Name="/Examples/Web/" />
+  <Folder Name="/Examples/Web/OrchardCore/" />
+  <Folder Name="/Examples/Web/OrchardCore/SharpCoreDb.Orchardcore/">
+    <Project Path="Examples/Web/Orchardcore/SharpCoreDb.Orchardcore/SharpCoreDb.Orchardcore.csproj" />
+  </Folder>
+  <Folder Name="/installers/" />
+  <Folder Name="/installers/linux/">
+    <File Path="installers/linux/install.sh" />
+    <File Path="installers/linux/sharpcoredb.service" />
+  </Folder>
+  <Folder Name="/installers/macos/">
+    <File Path="installers/macos/build_pkg.sh" />
+    <File Path="installers/macos/com.sharpcoredb.server.plist" />
+    <File Path="installers/macos/install.sh" />
+    <File Path="installers/macos/uninstall.sh" />
+  </Folder>
+  <Folder Name="/installers/windows/">
+    <File Path="installers/windows/install-service.ps1" />
+  </Folder>
+  <Folder Name="/scripts/">
+    <File Path="scripts/build-nuget.ps1" />
+    <File Path="scripts/build-server.bat" />
+    <File Path="scripts/commit-grpc.bat" />
+    <File Path="scripts/commit-server-phase1.bat" />
+    <File Path="scripts/create-collate-issue.ps1" />
+    <File Path="scripts/docs-cleanup.bat" />
+    <File Path="scripts/docs-cleanup.ps1" />
+    <File Path="scripts/docs-cleanup.sh" />
+    <File Path="scripts/docs-commit.bat" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="docs/CHANGELOG.md" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="SharpCoreDB.jpg" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/SharpCoreDB.Analytics/SharpCoreDB.Analytics.csproj" />
+    <Project Path="src/SharpCoreDB.AppHost/SharpCoreDB.AppHost.csproj" />
+    <Project Path="src/SharpCoreDB.Client.Protocol/SharpCoreDB.Client.Protocol.csproj" />
+    <Project Path="src/SharpCoreDB.Client/SharpCoreDB.Client.csproj" />
+    <Project Path="src/SharpCoreDB.CQRS/SharpCoreDB.CQRS.csproj" />
+    <Project Path="src/SharpCoreDB.Data.Provider/SharpCoreDB.Data.Provider.csproj" />
+    <Project Path="src/SharpCoreDB.Distributed/SharpCoreDB.Distributed.csproj" />
+    <Project Path="src/SharpCoreDB.EntityFrameworkCore/SharpCoreDB.EntityFrameworkCore.csproj" />
+    <Project Path="src/SharpCoreDB.EventSourcing/SharpCoreDB.EventSourcing.csproj" />
+    <Project Path="src/SharpCoreDB.Extensions/SharpCoreDB.Extensions.csproj" />
+    <Project Path="src/SharpCoreDB.Functional.Dapper/SharpCoreDB.Functional.Dapper.csproj" />
+    <Project Path="src/SharpCoreDB.Functional.EntityFrameworkCore/SharpCoreDB.Functional.EntityFrameworkCore.csproj" />
+    <Project Path="src/SharpCoreDB.Functional/SharpCoreDB.Functional.csproj" />
+    <Project Path="src/SharpCoreDB.Graph.Advanced/SharpCoreDB.Graph.Advanced.csproj" />
+    <Project Path="src/SharpCoreDB.Graph/SharpCoreDB.Graph.csproj" />
+    <Project Path="src/SharpCoreDB.Projections/SharpCoreDB.Projections.csproj" />
+    <Project Path="src/SharpCoreDB.Provider.Sync/SharpCoreDB.Provider.Sync.csproj" />
+    <Project Path="src/SharpCoreDB.Provider.YesSql/SharpCoreDB.Provider.YesSql.csproj" />
+    <Project Path="src/SharpCoreDB.Serilog.Sinks/SharpCoreDB.Serilog.Sinks.csproj" />
+    <Project Path="src/SharpCoreDB.Server.Core/SharpCoreDB.Server.Core.csproj" />
+    <Project Path="src/SharpCoreDB.Server.Protocol/SharpCoreDB.Server.Protocol.csproj" />
+    <Project Path="src/SharpCoreDB.Server/SharpCoreDB.Server.csproj" />
+    <Project Path="src/SharpCoreDB.VectorSearch/SharpCoreDB.VectorSearch.csproj" />
+    <Project Path="src/SharpCoreDB/SharpCoreDB.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DiagTest/DiagTest.csproj" />
+    <Project Path="tests/Manual/RefFieldDemo/RefFieldDemo.csproj" />
+    <Project Path="tests/SharpCoreDB.Analytics.Tests/SharpCoreDB.Analytics.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj" />
+    <Project Path="tests/SharpCoreDB.CQRS.Tests/SharpCoreDB.CQRS.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.DemoJoinsSubQ/SharpCoreDB.DemoJoinsSubQ.csproj" />
+    <Project Path="tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.EventSourcing.Tests/SharpCoreDB.EventSourcing.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Profiling/SharpCoreDB.Profiling.csproj" />
+    <Project Path="tests/SharpCoreDB.Projections.Tests/SharpCoreDB.Projections.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Server.IntegrationTests/SharpCoreDB.Server.IntegrationTests.csproj" />
+    <Project Path="tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/benchmarks/">
+    <Project Path="tests/benchmarks/QuickZvecTest/QuickZvecTest.csproj" />
+    <Project Path="tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/SharpCoreDB.Benchmarks.Comparative.csproj" />
+    <Project Path="tests/benchmarks/SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj" />
+    <Project Path="tests/benchmarks/SharpCoreDB.Server.Benchmarks/SharpCoreDB.Server.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/tests/Manual/">
+    <Project Path="tests/Manual/SingleFileTest/SingleFileTest.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/SharpCoreDB.DebugBenchmark/SharpCoreDB.DebugBenchmark.csproj" />
+    <Project Path="tools/SharpCoreDB.Demo/SharpCoreDB.Demo.csproj" />
+    <Project Path="tools/SharpCoreDB.Viewer/SharpCoreDB.Viewer.csproj" />
+  </Folder>
+</Solution>

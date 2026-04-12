@@ -6,7 +6,7 @@ Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Check if we're in the right directory
-if (!(Test-Path "SharpCoreDB.sln")) {
+if (!(Test-Path "SharpCoreDB.slnx")) {
     Write-Host "❌ Error: Must run from repository root" -ForegroundColor Red
     exit 1
 }
