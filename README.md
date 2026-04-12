@@ -22,7 +22,7 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by **1,490+ tests** and **backward compatibility**
+- A production-focused stack validated by **2,000+ tests** and **backward compatibility**
 
 > Full documentation: **`docs/INDEX.md`**
 
@@ -98,7 +98,7 @@ dotnet add package SharpCoreDB.Client --version 1.7.0
 - Event Sourcing / Projections / CQRS guidance strengthened for production workflows
 - SQL lexer/parser and compiled-query parameter fixes
 - Durability and reopen-path improvements (metadata flush/reliability)
-- **1,490+ tests passing**, **zero breaking changes intended**, **100% backward compatible**
+- **2,000+ tests passing**, **zero breaking changes intended**, **100% backward compatible**
 
 ---
 
@@ -198,7 +198,7 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 ### Quality and compatibility
 
-- **1,490+ tests passing**
+- **2,000+ tests passing**
 - **100% backward compatible** across the v1.7.0 release line
 - Zero breaking changes intended from v1.5.0 to v1.7.0
 
