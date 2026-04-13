@@ -24,7 +24,7 @@
     <PackageReference Include="MimeKit" Version="4.15.1" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.5" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.3.28" />
+    <PackageReference Include="AWSSDK.Core" Version="4.0.3.29" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' == 'true'">
