@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>SharpCoreDB.Identity</PackageId>
+    <Version>1.7.0</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Identity</Product>
+    <Description>Lightweight native identity services for SharpCoreDB encrypted single-file databases on .NET 10.</Description>
+    <PackageTags>sharpcoredb;identity;authentication;authorization;pbkdf2;net10;csharp14</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpCoreDB" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" Condition="Exists('SharpCoreDB.jpg')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.202" />
+  </ItemGroup>
+
+</Project>

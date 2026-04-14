@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SharpCoreDB.EventSourcing;
 using SharpCoreDB.Interfaces;
+using SharpDispatch;
 
 /// <summary>
 /// Dependency injection extensions for SharpCoreDB.CQRS primitives.
@@ -32,22 +33,6 @@ public static class CqrsServiceCollectionExtensions
             return new InMemoryOutboxStore(retryPolicy);
         });
         services.TryAddSingleton<OutboxDispatchService>();
-        return services;
-    }
-
-    /// <summary>
-    /// Registers command handler implementation for dependency injection.
-    /// </summary>
-    /// <typeparam name="TCommand">Command type.</typeparam>
-    /// <typeparam name="THandler">Handler implementation type.</typeparam>
-    /// <param name="services">Service collection.</param>
-    /// <returns>Service collection for chaining.</returns>
-    public static IServiceCollection AddCommandHandler<TCommand, THandler>(this IServiceCollection services)
-        where TCommand : ICommand
-        where THandler : class, ICommandHandler<TCommand>
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.AddSingleton<ICommandHandler<TCommand>, THandler>();
         return services;
     }
 

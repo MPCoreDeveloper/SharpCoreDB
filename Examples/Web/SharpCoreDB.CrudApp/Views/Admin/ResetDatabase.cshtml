@@ -1,0 +1,15 @@
+@{
+    ViewData["Title"] = "Reset Database";
+}
+
+<div class="alert alert-warning">
+    <h4 class="alert-heading">Development-only destructive action</h4>
+    <p>This action deletes the encrypted <code>.scdb</code> file, recreates identity and demo schema, and seeds the default admin account.</p>
+    <p class="mb-0"><strong>All data will be lost.</strong></p>
+</div>
+
+<form asp-action="ResetDatabaseConfirmed" method="post" onsubmit="return confirm('This will permanently delete the database file. Continue?');">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">Reset Database</button>
+    <a asp-controller="Products" asp-action="Index" class="btn btn-secondary">Cancel</a>
+</form>

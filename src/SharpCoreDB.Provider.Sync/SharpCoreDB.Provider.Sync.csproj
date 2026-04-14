@@ -49,8 +49,8 @@
     <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
 
     <!-- Dependency Injection -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.6" />
   </ItemGroup>
 
   <!-- Reference local SharpCoreDB when not using NuGet packages -->
@@ -66,7 +66,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.202" />
   </ItemGroup>
 
 </Project>

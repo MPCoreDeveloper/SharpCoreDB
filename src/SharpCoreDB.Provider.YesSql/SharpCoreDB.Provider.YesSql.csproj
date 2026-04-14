@@ -46,7 +46,7 @@
     <PackageReference Include="YesSql.Provider.Sqlite" Version="5.4.7" />
     
     <!-- DI for OrchardCore integration -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.6" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" Condition="'$(TargetFramework)' == 'net8.0'" />
 
     <!-- SharpCoreDB dependencies -->
@@ -65,7 +65,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.202" />
   </ItemGroup>
 
   <ItemGroup>
@@ -117,7 +117,7 @@
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.6" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll')" />
     
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll')" />

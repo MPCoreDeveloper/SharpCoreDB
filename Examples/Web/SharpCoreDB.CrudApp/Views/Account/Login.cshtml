@@ -1,0 +1,39 @@
+@model LoginViewModel
+@{
+    ViewData["Title"] = "Login";
+    var returnUrl = ViewData["returnUrl"] as string;
+}
+
+<h2>Login</h2>
+<form asp-action="Login" method="post" class="row g-3">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <div class="col-12">
+        <label asp-for="UserName" class="form-label"></label>
+        <input asp-for="UserName" class="form-control" />
+        <span asp-validation-for="UserName" class="text-danger"></span>
+    </div>
+
+    <div class="col-12">
+        <label asp-for="Password" class="form-label"></label>
+        <input asp-for="Password" class="form-control" />
+        <span asp-validation-for="Password" class="text-danger"></span>
+    </div>
+
+    <div class="col-12 form-check">
+        <input asp-for="RememberMe" class="form-check-input" />
+        <label asp-for="RememberMe" class="form-check-label"></label>
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Login</button>
+        <a asp-action="Register" class="btn btn-link">Create account</a>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

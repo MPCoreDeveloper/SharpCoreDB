@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>SharpCoreDB.CrudApp-DevSecrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\..\src\SharpCoreDB.Identity\SharpCoreDB.Identity.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.202" />
+  </ItemGroup>
+
+</Project>

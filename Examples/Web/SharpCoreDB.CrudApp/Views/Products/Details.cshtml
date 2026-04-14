@@ -1,0 +1,37 @@
+@model ProductDetailsViewModel
+@{
+    ViewData["Title"] = "Product Details";
+}
+
+<h2>Product Details</h2>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">@Model.Product.Name</h5>
+        <p class="card-text">@Model.Product.Description</p>
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Category</dt>
+            <dd class="col-sm-9">@Model.CategoryName</dd>
+
+            <dt class="col-sm-3">Price</dt>
+            <dd class="col-sm-9">@Model.Product.Price.ToString("C")</dd>
+
+            <dt class="col-sm-3">Stock</dt>
+            <dd class="col-sm-9">@Model.Product.StockQuantity</dd>
+
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9">@(Model.Product.IsActive ? "Active" : "Inactive")</dd>
+
+            <dt class="col-sm-3">Created</dt>
+            <dd class="col-sm-9">@Model.Product.CreatedDate</dd>
+
+            <dt class="col-sm-3">Updated</dt>
+            <dd class="col-sm-9">@Model.Product.LastUpdatedDate</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a asp-action="Edit" asp-route-id="@Model.Product.Id" class="btn btn-primary">Edit</a>
+    <a asp-action="Index" class="btn btn-secondary">Back</a>
+</div>

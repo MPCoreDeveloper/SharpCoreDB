@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <Version>1.7.0</Version>
+    <AssemblyTitle>SharpCoreDB.CQRS.Benchmarks</AssemblyTitle>
+    <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
+    <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\SharpCoreDB.CQRS\SharpCoreDB.CQRS.csproj" />
+  </ItemGroup>
+
+</Project>

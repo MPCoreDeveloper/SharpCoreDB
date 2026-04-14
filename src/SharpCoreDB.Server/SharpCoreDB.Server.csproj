@@ -38,8 +38,8 @@
 
   <ItemGroup>
     <!-- Authentication/JWT (latest stable for .NET 10) -->
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="10.0.6" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
 
     <!-- Security headers middleware (own library) -->
@@ -54,7 +54,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.202" />
   </ItemGroup>
 
   <ItemGroup>
