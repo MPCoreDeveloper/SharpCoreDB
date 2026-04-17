@@ -3,6 +3,8 @@
 // Licensed under the MIT License.
 // </copyright>
 
+using SharpDispatch;
+
 namespace SharpCoreDB.CQRS.Tests;
 
 /// <summary>

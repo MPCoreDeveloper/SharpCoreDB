@@ -109,6 +109,26 @@ public class ColumnNode : SqlNode
     public double? AggregateArgument { get; set; }
 
     /// <summary>
+    /// Gets or sets the window function if any (ROW_NUMBER, RANK, etc.).
+    /// </summary>
+    public string? WindowFunction { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PARTITION BY columns for window functions.
+    /// </summary>
+    public List<string>? WindowPartitionBy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ORDER BY specifications for window functions.
+    /// </summary>
+    public List<OrderByItem>? WindowOrderBy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the FILTER expression for window functions.
+    /// </summary>
+    public ExpressionNode? WindowFilter { get; set; }
+
+    /// <summary>
     /// Gets or sets a parsed expression for scalar functions (e.g., COALESCE, IIF, NULLIF).
     /// When set, this expression represents the full column value computation.
     /// </summary>

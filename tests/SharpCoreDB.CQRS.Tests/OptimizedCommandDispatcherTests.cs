@@ -6,6 +6,7 @@
 namespace SharpCoreDB.CQRS.Tests;
 
 using Microsoft.Extensions.DependencyInjection;
+using SharpDispatch;
 
 /// <summary>
 /// Unit tests for <see cref="OptimizedCommandDispatcher"/> and the
@@ -178,7 +179,7 @@ public class OptimizedCommandDispatcherTests
         services.AddSharpCoreDBCqrs();
 
         using var provider = services.BuildServiceProvider();
-        var dispatcher = provider.GetRequiredService<ICommandDispatcher);
+        var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
 
         Assert.IsType<ServiceProviderCommandDispatcher>(dispatcher);
     }

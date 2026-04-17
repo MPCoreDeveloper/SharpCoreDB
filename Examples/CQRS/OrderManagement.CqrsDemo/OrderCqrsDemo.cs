@@ -5,7 +5,7 @@
 
 namespace OrderManagement.CqrsDemo;
 
-using SharpCoreDB.CQRS;
+using SharpDispatch;
 
 /// <summary>
 /// Command for creating an order on the write side.

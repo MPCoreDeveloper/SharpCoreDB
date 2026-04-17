@@ -6,6 +6,7 @@
 namespace SharpCoreDB.CQRS.Tests;
 
 using Microsoft.Extensions.DependencyInjection;
+using SharpDispatch;
 
 /// <summary>
 /// Unit tests for <see cref="ServiceProviderCommandDispatcher"/> and CQRS DI extensions.

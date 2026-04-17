@@ -53,7 +53,7 @@ public partial class SqlParser
         var colsStart = sql.IndexOf('(');
         var colsEnd = sql.LastIndexOf(')');
         var colsStr = sql.Substring(colsStart + 1, colsEnd - colsStart - 1);
-        List<string> colDefs = colsStr.Split(',').Select(c => c.Trim()).ToList();
+        List<string> colDefs = SplitSqlDefinitions(colsStr);
         var columns = new List<string>();
         var columnTypes = new List<DataType>();
         var isAuto = new List<bool>();
@@ -113,12 +113,33 @@ public partial class SqlParser
         for (int i = 0; i < colDefs.Count; i++)
         {
             var def = colDefs[i];
+            var defUpper = def.ToUpperInvariant();
+
+            if (defUpper.StartsWith("UNIQUE", StringComparison.OrdinalIgnoreCase))
+            {
+                var uniqueColumns = ParseUniqueConstraintColumns(def);
+                if (uniqueColumns.Count > 0)
+                {
+                    uniqueConstraints.Add(uniqueColumns);
+                }
+                continue;
+            }
+
+            if (defUpper.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase))
+            {
+                tableCheckConstraints.Add(def);
+                continue;
+            }
+
+            if (defUpper.StartsWith("FOREIGN KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
             var partsDef = def.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var colName = partsDef[0];
             var typeStr = partsDef[1].ToUpper();
 
-            var defUpper = def.ToUpperInvariant();
             var isPrimary = defUpper.Contains("PRIMARY") && defUpper.Contains("KEY");
             var isAutoGen = defUpper.Contains("AUTO");
             var isNotNullCol = defUpper.Contains("NOT NULL");
@@ -1116,5 +1137,111 @@ public partial class SqlParser
         }
 
         return collateRemainder.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+    }
+
+    private static List<string> SplitSqlDefinitions(string definitions)
+    {
+        List<string> items = [];
+        var current = new StringBuilder();
+        int depth = 0;
+        bool inSingleQuotes = false;
+        bool inDoubleQuotes = false;
+        bool inBracketQuotes = false;
+        bool inBacktickQuotes = false;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            char c = definitions[i];
+
+            if (c == '\'' && !inDoubleQuotes && !inBracketQuotes && !inBacktickQuotes)
+            {
+                if (inSingleQuotes && i + 1 < definitions.Length && definitions[i + 1] == '\'')
+                {
+                    current.Append(c);
+                    current.Append(definitions[++i]);
+                    continue;
+                }
+
+                inSingleQuotes = !inSingleQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '"' && !inSingleQuotes && !inBracketQuotes && !inBacktickQuotes)
+            {
+                inDoubleQuotes = !inDoubleQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '[' && !inSingleQuotes && !inDoubleQuotes && !inBacktickQuotes)
+            {
+                inBracketQuotes = true;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == ']' && inBracketQuotes)
+            {
+                inBracketQuotes = false;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '`' && !inSingleQuotes && !inDoubleQuotes && !inBracketQuotes)
+            {
+                inBacktickQuotes = !inBacktickQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (!inSingleQuotes && !inDoubleQuotes && !inBracketQuotes && !inBacktickQuotes)
+            {
+                if (c == '(')
+                {
+                    depth++;
+                }
+                else if (c == ')')
+                {
+                    depth--;
+                }
+                else if (c == ',' && depth == 0)
+                {
+                    var item = current.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(item))
+                    {
+                        items.Add(item);
+                    }
+
+                    current.Clear();
+                    continue;
+                }
+            }
+
+            current.Append(c);
+        }
+
+        var lastItem = current.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(lastItem))
+        {
+            items.Add(lastItem);
+        }
+
+        return items;
+    }
+
+    private static List<string> ParseUniqueConstraintColumns(string definition)
+    {
+        var openParen = definition.IndexOf('(');
+        var closeParen = definition.LastIndexOf(')');
+        if (openParen < 0 || closeParen <= openParen)
+        {
+            return [];
+        }
+
+        var inner = definition.Substring(openParen + 1, closeParen - openParen - 1);
+        return [.. SplitSqlDefinitions(inner)
+            .Select(c => c.Trim().Trim('"', '[', ']', '`'))
+            .Where(c => !string.IsNullOrWhiteSpace(c))];
     }
 }

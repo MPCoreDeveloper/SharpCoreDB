@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -18,6 +18,10 @@
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
     <PackageReference Include="SharpCoreDB.CQRS" Version="1.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpDispatch" Version="1.0.1" />
   </ItemGroup>
 
   <ItemGroup>

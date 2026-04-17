@@ -20,6 +20,28 @@ public partial class EnhancedSqlParser
         try
         {
             ConsumeKeyword(); // INSERT
+
+            if (MatchKeyword("OR"))
+            {
+                node.ConflictPolicy = PeekKeyword()?.ToUpperInvariant() switch
+                {
+                    "IGNORE" => InsertConflictPolicy.Ignore,
+                    "REPLACE" => InsertConflictPolicy.Replace,
+                    "FAIL" => InsertConflictPolicy.Fail,
+                    "ABORT" => InsertConflictPolicy.Abort,
+                    _ => node.ConflictPolicy,
+                };
+
+                if (node.ConflictPolicy is InsertConflictPolicy.None)
+                {
+                    RecordError("Expected IGNORE, REPLACE, FAIL, or ABORT after INSERT OR");
+                }
+                else
+                {
+                    ConsumeKeyword();
+                }
+            }
+
             if (!MatchKeyword("INTO"))
                 RecordError("Expected INTO after INSERT");
 
@@ -57,6 +79,81 @@ public partial class EnhancedSqlParser
             else if (PeekKeyword()?.ToUpperInvariant() == "SELECT")
             {
                 node.SelectStatement = ParseSelect();
+            }
+
+            if (MatchKeyword("ON"))
+            {
+                if (!MatchKeyword("CONFLICT"))
+                {
+                    RecordError("Expected CONFLICT after ON");
+                }
+                else
+                {
+                    if (MatchToken("("))
+                    {
+                        do
+                        {
+                            var col = ConsumeIdentifier();
+                            if (col is not null)
+                                node.ConflictTargetColumns.Add(col);
+                        } while (MatchToken(","));
+
+                        if (!MatchToken(")"))
+                            RecordError("Expected ) after ON CONFLICT target columns");
+                    }
+
+                    if (!MatchKeyword("DO"))
+                    {
+                        RecordError("Expected DO after ON CONFLICT");
+                    }
+                    else if (MatchKeyword("NOTHING"))
+                    {
+                        node.OnConflictAction = InsertOnConflictAction.DoNothing;
+                    }
+                    else if (MatchKeyword("UPDATE"))
+                    {
+                        node.OnConflictAction = InsertOnConflictAction.DoUpdate;
+
+                        if (!MatchKeyword("SET"))
+                            RecordError("Expected SET after DO UPDATE");
+
+                        // Parse one or more col = expr assignments
+                        do
+                        {
+                            var assignCol = ConsumeIdentifier();
+                            if (assignCol is null)
+                                break;
+
+                            if (!MatchToken("="))
+                                RecordError("Expected = in DO UPDATE SET");
+
+                            // Capture raw SQL text for the expression
+                            var exprStart = _position;
+                            // Skip leading whitespace to find the true start
+                            while (exprStart < _sql.Length && char.IsWhiteSpace(_sql[exprStart]))
+                                exprStart++;
+                            ParseExpression(); // advance _position past the expression
+                            // Trim trailing whitespace/comma so the raw text is clean
+                            var rawExpr = _sql[exprStart.._position].Trim().TrimEnd(',');
+                            node.DoUpdateAssignments[assignCol] = rawExpr;
+                        }
+                        while (MatchToken(","));
+
+                        // Optional WHERE on DO UPDATE
+                        if (MatchKeyword("WHERE"))
+                        {
+                            var whereStart = _position;
+                            while (whereStart < _sql.Length && char.IsWhiteSpace(_sql[whereStart]))
+                                whereStart++;
+                            ParseExpression();
+                            node.DoUpdateWhere = _sql[whereStart.._position].Trim();
+                        }
+                    }
+                    else
+                    {
+                        RecordError("Expected NOTHING or UPDATE after ON CONFLICT DO");
+                    }
+                }
             }
         }
         catch (Exception ex)

@@ -110,11 +110,11 @@ public partial class EnhancedSqlParser
 
     private string? ParseComparisonOperator()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|LIKE|NOT\s+LIKE)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|NOT\s+REGEXP|NOT\s+LIKE|REGEXP|LIKE)", RegexOptions.IgnoreCase);
         if (match.Success)
         {
             _position += match.Length;
-            return match.Groups[1].Value.ToUpperInvariant();
+            return match.Groups[1].Value.ToUpperInvariant().Trim();
         }
         return null;
     }

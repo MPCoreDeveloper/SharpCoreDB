@@ -296,6 +296,27 @@ var running = await database.QueryAsync(
 );
 ```
 
+### FILTER on Window Functions
+✅ **Supported since v1.7.0** — FILTER clause applies to window functions, filtering the window frame before calculation.
+
+```csharp
+// Row numbers only for active employees
+var activeRanking = await database.QueryAsync(
+    @"SELECT name, department,
+             ROW_NUMBER() FILTER (WHERE active = 1) OVER (PARTITION BY department ORDER BY salary DESC) AS active_rank
+       FROM employees
+       ORDER BY department, active_rank"
+);
+
+// Department averages excluding inactive employees
+var deptAvgs = await database.QueryAsync(
+    @"SELECT name, department, salary,
+             AVG(salary) FILTER (WHERE active = 1) OVER (PARTITION BY department) AS active_dept_avg
+       FROM employees
+       ORDER BY department, salary"
+);
+```
+
 ---
 
 ## Group By and Having
@@ -316,20 +337,73 @@ var byRegion = await database.QueryAsync(
 );
 ```
 
+### FILTER (WHERE ...)
+Applies a predicate to a single aggregate expression, matching the SQLite/PostgreSQL aggregate `FILTER` style for the currently supported aggregate executor path.
+
+```csharp
+// Count only paid sales while still returning grouped totals
+var filtered = await database.QueryAsync(
+    @"SELECT
+        category,
+        COUNT(*) AS total_count,
+        COUNT(*) FILTER (WHERE status = 'paid') AS paid_count,
+        SUM(amount) FILTER (WHERE status = 'paid') AS paid_total
+      FROM sales
+      GROUP BY category
+      ORDER BY category"
+);
+```
+
+Current support and known gaps are tracked in `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.7.0.md`.
+
 ### HAVING
 Filters grouped results (WHERE applies before GROUP BY, HAVING after).
 
+✅ **Supported since v1.7.0** — HAVING predicates can reference aggregate aliases defined in SELECT.
+
 ```csharp
-// Find departments with >5 employees
-var largeDepts = await database.QueryAsync(
+// Find categories with total revenue > 100
+var highRevenue = await database.QueryAsync(
     @"SELECT 
-        department,
-        COUNT(*) AS emp_count,
-        AVG(salary) AS avg_salary
-      FROM employees
-      GROUP BY department
-      HAVING COUNT(*) > 5
-      ORDER BY emp_count DESC"
+        category,
+        SUM(amount) AS total
+      FROM orders
+      GROUP BY category
+      HAVING total > 100
+      ORDER BY total DESC"
+);
+
+// Filter groups by count
+var popularItems = await database.QueryAsync(
+    @"SELECT category, COUNT(*) AS cnt
+      FROM items
+      GROUP BY category
+      HAVING cnt >= 2"
+);
+```
+
+### Arithmetic expressions inside aggregates
+✅ **Supported since v1.7.0** — aggregate arguments accept arithmetic expressions such as `price * qty`, `a + b`, `a - b / c`.
+
+```csharp
+// Total revenue: SUM(price * quantity)
+var revenue = await database.QueryAsync(
+    @"SELECT SUM(price * qty) AS revenue FROM sales"
+);
+```
+
+### FILTER with JOIN queries
+✅ **Supported since v1.7.0** — FILTER clause works on both single-table and JOIN-backed aggregate queries.
+
+```csharp
+// Active payroll per department (JOIN + FILTER + GROUP BY)
+var payroll = await database.QueryAsync(
+    @"SELECT departments.name,
+             SUM(employees.salary) FILTER (WHERE employees.active = 1) AS active_payroll
+      FROM departments
+      JOIN employees ON departments.id = employees.dept_id
+      GROUP BY departments.name
+      ORDER BY departments.name"
 );
 ```
 

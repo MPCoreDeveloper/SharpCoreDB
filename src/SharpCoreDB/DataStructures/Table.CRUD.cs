@@ -1606,6 +1606,7 @@ public partial class Table
                         kvp.Value.RemoveBatch(batchRows, batchPositions);
                     }
                 }
+
             }
 
             // Mark unloaded indexes as stale ONCE (not per-row)
@@ -1744,7 +1745,9 @@ public partial class Table
             foreach (var kvp in this.hashIndexes)
             {
                 if (this.loadedIndexes.Contains(kvp.Key))
+                {
                     kvp.Value.RemoveBatch(batchRows, batchPositions);
+                }
             }
 
             // Mark unloaded indexes as stale ONCE
@@ -1846,6 +1849,160 @@ public partial class Table
         return results;
     }
 
+    internal bool TryGetConflictingUniquePrimaryKey(
+        Dictionary<string, object> row,
+        List<string>? conflictTargetColumns,
+        out object? conflictingPrimaryKey)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        conflictingPrimaryKey = null;
+        if (this.PrimaryKeyIndex < 0)
+            return false;
+
+        var primaryKeyColumn = this.Columns[this.PrimaryKeyIndex];
+        row.TryGetValue(primaryKeyColumn, out var currentPrimaryKeyValue);
+        var targetedColumns = conflictTargetColumns ?? [];
+        bool restrictToTarget = targetedColumns.Count > 0;
+
+        var uniqueColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var uniqueConstraint in this.UniqueConstraints)
+        {
+            if (uniqueConstraint.Count == 1)
+            {
+                var uniqueColumn = uniqueConstraint[0];
+                if (!restrictToTarget || targetedColumns.Contains(uniqueColumn, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (!row.TryGetValue(uniqueColumn, out var uniqueValue) || uniqueValue is null or DBNull)
+                        continue;
+
+                    uniqueColumns.Add(uniqueColumn);
+                }
+            }
+        }
+
+        this.rwLock.EnterReadLock();
+        try
+        {
+            foreach (var (columnName, metadata) in this.registeredIndexes)
+            {
+                if (metadata.IsUnique &&
+                    (!restrictToTarget || targetedColumns.Contains(columnName, StringComparer.OrdinalIgnoreCase)))
+                {
+                    uniqueColumns.Add(columnName);
+                }
+            }
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
+
+        uniqueColumns.Remove(primaryKeyColumn);
+
+        foreach (var uniqueColumn in uniqueColumns)
+        {
+            if (!row.TryGetValue(uniqueColumn, out var uniqueValue) || uniqueValue is null or DBNull)
+                continue;
+
+            var matches = FindByIndex(uniqueColumn, uniqueValue);
+            foreach (var match in matches)
+            {
+                if (!TryResolveConflictingPrimaryKey(match, primaryKeyColumn, currentPrimaryKeyValue, out conflictingPrimaryKey))
+                    continue;
+
+                return true;
+            }
+        }
+
+        foreach (var uniqueConstraint in this.UniqueConstraints)
+        {
+            if (uniqueConstraint.Count <= 1)
+                continue;
+
+            if (restrictToTarget && !uniqueConstraint.SequenceEqual(targetedColumns, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            if (!TryFindCompositeUniqueConflict(row, uniqueConstraint, primaryKeyColumn, currentPrimaryKeyValue, out conflictingPrimaryKey))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryFindCompositeUniqueConflict(
+        Dictionary<string, object> row,
+        List<string> uniqueConstraint,
+        string primaryKeyColumn,
+        object? currentPrimaryKeyValue,
+        out object? conflictingPrimaryKey)
+    {
+        conflictingPrimaryKey = null;
+
+        foreach (var constraintColumn in uniqueConstraint)
+        {
+            if (!row.TryGetValue(constraintColumn, out var value) || value is null or DBNull)
+                return false;
+        }
+
+        var seedColumn = uniqueConstraint[0];
+        var seedValue = row[seedColumn];
+        var candidateRows = FindByIndex(seedColumn, seedValue);
+        foreach (var candidateRow in candidateRows)
+        {
+            bool allColumnsMatch = true;
+            foreach (var constraintColumn in uniqueConstraint)
+            {
+                candidateRow.TryGetValue(constraintColumn, out var existingValue);
+                row.TryGetValue(constraintColumn, out var incomingValue);
+
+                if (!SqlParser.AreValuesEqual(existingValue, incomingValue))
+                {
+                    allColumnsMatch = false;
+                    break;
+                }
+            }
+
+            if (!allColumnsMatch)
+                continue;
+
+            if (!TryResolveConflictingPrimaryKey(candidateRow, primaryKeyColumn, currentPrimaryKeyValue, out conflictingPrimaryKey))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryResolveConflictingPrimaryKey(
+        Dictionary<string, object> existingRow,
+        string primaryKeyColumn,
+        object? currentPrimaryKeyValue,
+        out object? conflictingPrimaryKey)
+    {
+        conflictingPrimaryKey = null;
+
+        if (!existingRow.TryGetValue(primaryKeyColumn, out var existingPrimaryKeyValue) || existingPrimaryKeyValue is null or DBNull)
+            return false;
+
+        if (currentPrimaryKeyValue is not null && currentPrimaryKeyValue is not DBNull)
+        {
+            var samePrimaryKey = string.Equals(
+                existingPrimaryKeyValue.ToString(),
+                currentPrimaryKeyValue.ToString(),
+                StringComparison.OrdinalIgnoreCase);
+
+            if (samePrimaryKey)
+                return false;
+        }
+
+        conflictingPrimaryKey = existingPrimaryKeyValue;
+        return true;
+    }
+
     /// <summary>
     /// Updates a single row identified by primary key, bypassing SQL parsing entirely.
     /// Uses B-tree PK index for O(log n) lookup, then in-place or append update.
@@ -1929,8 +2086,6 @@ public partial class Table
                         hashIndex.Remove(oldRow, storagePosition);
                         hashIndex.Add(row, newPosition);
                     }
-
-                    Interlocked.Increment(ref _updatedRowCount);
                 }
                 else
                 {
@@ -2043,31 +2198,31 @@ public partial class Table
     }
 
     /// <summary>
-    /// ✅ NEW: Inserts multiple rows from binary-encoded buffer (zero-allocation path).
-    /// Uses StreamingRowEncoder format to avoid Dictionary materialization.
-    /// Expected: 40-60% faster than InsertBatch() for large batches (10K+ rows).
-    /// ✅ FIXED: Avoid double locking - decode rows inside lock, call internal methods directly.
-    /// </summary>
-    /// <param name="encodedData">Binary-encoded row data from StreamingRowEncoder.</param>
-    /// <param name="rowCount">Number of rows encoded in the buffer.</param>
-    /// <returns>Array of file positions where each row was written.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount)
-    {
-        ArgumentNullException.ThrowIfNull(this.storage);
+ /// ✅ NEW: Inserts multiple rows from binary-encoded buffer (zero-allocation path).
+ /// Uses StreamingRowEncoder format to avoid Dictionary materialization.
+ /// Expected: 40-60% faster than InsertBatch() for large batches (10K+ rows).
+ /// ✅ FIXED: Avoid double locking - decode rows inside lock, call internal methods directly.
+ /// </summary>
+ /// <param name="encodedData">Binary-encoded row data from StreamingRowEncoder.</param>
+ /// <param name="rowCount">Number of rows encoded in the buffer.</param>
+ /// <returns>Array of file positions where each row was written.</returns>
+ [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+ public long[] InsertBatchFromBuffer(ReadOnlySpan<byte> encodedData, int rowCount)
+ {
+     ArgumentNullException.ThrowIfNull(this.storage);
 
-        if (rowCount == 0) return [];
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+     if (rowCount == 0) return [];
+     if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
-        // ✅ FIX: Decode OUTSIDE the lock, then call optimized path which handles its own locking
-        // Decode binary data to Dictionary rows using BinaryRowDecoder
-        var decoder = new Optimizations.BinaryRowDecoder(this.Columns, this.ColumnTypes);
-        var rows = decoder.DecodeRows(encodedData, rowCount);
+     // ✅ FIX: Decode OUTSIDE the lock, then call optimized path which handles its own locking
+     // Decode binary data to Dictionary rows using BinaryRowDecoder
+     var decoder = new Optimizations.BinaryRowDecoder(this.Columns, this.ColumnTypes);
+     var rows = decoder.DecodeRows(encodedData, rowCount);
 
-        // ✅ FIX: Call InsertBatch which handles locking internally
-        // InsertBatch already uses rwLock.EnterWriteLock(), no need for double-locking
-        return InsertBatch(rows);
-    }
+     // ✅ FIX: Call InsertBatch which handles locking internally
+     // InsertBatch already uses rwLock.EnterWriteLock(), no need for double-locking
+     return InsertBatch(rows);
+ }
 
     /// <summary>
     /// Strips the internal <c>_rowid</c> column from result rows.
@@ -2086,7 +2241,7 @@ public partial class Table
     }
 
      /// <summary>
-     /// ✅ PHASE 2A FRIDAY: Batch validates primary keys BEFORE critical section.
+     /// ✅ PHASE 2A FRIDAY: Batch validates primary keys BEFORE critical section
      /// Checks for duplicates within the batch AND against existing index.
      /// This reduces per-row overhead and improves cache locality.
      /// 

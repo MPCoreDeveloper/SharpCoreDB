@@ -178,6 +178,152 @@ public partial class EnhancedSqlParser
                 return column;
             }
 
+            // Check for window function
+            var windowFuncMatch = Regex.Match(
+                _sql.Substring(_position),
+                @"^\s*(ROW_NUMBER|RANK|DENSE_RANK|LAG|LEAD|FIRST_VALUE|LAST_VALUE)\s*\(",
+                RegexOptions.IgnoreCase);
+            if (windowFuncMatch.Success)
+            {
+                column.WindowFunction = windowFuncMatch.Groups[1].Value.ToUpperInvariant();
+                _position += windowFuncMatch.Length;
+
+                // Parse function arguments
+                if (column.WindowFunction is "LAG" or "LEAD")
+                {
+                    // LAG/LEAD take column and optional offset
+                    var tableAlias = ConsumeIdentifier();
+                    if (tableAlias != null && MatchToken("."))
+                    {
+                        var columnName = ConsumeIdentifier();
+                        if (columnName != null)
+                        {
+                            column.TableAlias = tableAlias;
+                            column.Name = columnName;
+                        }
+                        else
+                        {
+                            column.Name = tableAlias;
+                        }
+                    }
+                    else
+                    {
+                        column.Name = tableAlias ?? "";
+                    }
+
+                    if (MatchToken(","))
+                    {
+                        var offsetLiteral = ParseLiteral();
+                        if (offsetLiteral?.Value is int offset)
+                        {
+                            column.AggregateArgument = offset;
+                        }
+                        else
+                        {
+                            RecordError("Expected integer offset for LAG/LEAD");
+                        }
+                    }
+                }
+                else
+                {
+                    // Other window functions take a column
+                    var tableAlias = ConsumeIdentifier();
+                    if (tableAlias != null && MatchToken("."))
+                    {
+                        var columnName = ConsumeIdentifier();
+                        if (columnName != null)
+                        {
+                            column.TableAlias = tableAlias;
+                            column.Name = columnName;
+                        }
+                        else
+                        {
+                            column.Name = tableAlias;
+                        }
+                    }
+                    else
+                    {
+                        column.Name = tableAlias ?? "";
+                    }
+                }
+
+                if (!MatchToken(")"))
+                    RecordError("Expected ) after window function");
+
+                // Parse OVER clause
+                if (!MatchKeyword("OVER"))
+                    RecordError("Expected OVER clause for window function");
+
+                if (!MatchToken("("))
+                    RecordError("Expected ( after OVER");
+
+                // Parse PARTITION BY
+                if (MatchKeyword("PARTITION"))
+                {
+                    if (!MatchKeyword("BY"))
+                        RecordError("Expected BY after PARTITION");
+
+                    column.WindowPartitionBy = [];
+                    do
+                    {
+                        var partCol = ConsumeIdentifier();
+                        if (partCol != null)
+                        {
+                            column.WindowPartitionBy.Add(partCol);
+                        }
+                    } while (MatchToken(","));
+                }
+
+                // Parse ORDER BY
+                if (MatchKeyword("ORDER"))
+                {
+                    if (!MatchKeyword("BY"))
+                        RecordError("Expected BY after ORDER");
+
+                    column.WindowOrderBy = [];
+                    do
+                    {
+                        var orderCol = ConsumeIdentifier();
+                        if (orderCol != null)
+                        {
+                            var isDescending = MatchKeyword("DESC");
+                            if (!isDescending && !MatchKeyword("ASC"))
+                            {
+                                // Default to ASC
+                            }
+                            column.WindowOrderBy.Add(new OrderByItem
+                            {
+                                Column = new ColumnReferenceNode { ColumnName = orderCol },
+                                IsAscending = !isDescending
+                            });
+                        }
+                    } while (MatchToken(","));
+                }
+
+                if (!MatchToken(")"))
+                    RecordError("Expected ) after OVER clause");
+
+                // Parse optional FILTER clause
+                if (MatchKeyword("FILTER"))
+                {
+                    if (!MatchToken("("))
+                        RecordError("Expected ( after FILTER");
+
+                    if (!MatchKeyword("WHERE"))
+                        RecordError("FILTER clause must use WHERE");
+
+                    column.WindowFilter = ParseExpression();
+
+                    if (!MatchToken(")"))
+                        RecordError("Expected ) after FILTER clause");
+                }
+
+                if (MatchKeyword("AS"))
+                    column.Alias = ConsumeIdentifier();
+
+                return column;
+            }
+
             // Parse table.column or column
             // First check for parenthesized expression (scalar subquery or grouped expression)
             var remaining = _sql.Substring(_position);

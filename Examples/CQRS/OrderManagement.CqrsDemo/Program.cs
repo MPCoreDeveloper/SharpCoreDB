@@ -4,7 +4,7 @@
 // </copyright>
 
 using OrderManagement.CqrsDemo;
-using SharpCoreDB.CQRS;
+using SharpDispatch;
 
 Console.WriteLine("========================================");
 Console.WriteLine(" SharpCoreDB Explicit CQRS Demo");

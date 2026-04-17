@@ -1,77 +1,12 @@
 # SQLite Compatibility Matrix (SharpCoreDB)
 
-**Status:** Draft — to be completed in Phase 0 (Task 0.6)
+**Status:** See `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.7.0.md` for the current, complete compatibility matrix.
+
+This file is superseded by that document.
 
 ## Requirement
 SharpCoreDB must be **100% compatible with SQLite syntax and behavior** for all operations users could perform in SQLite. We may extend beyond SQLite, but **must never support less than SQLite**. This requirement applies to the sync provider, schema provisioning, and all generated SQL.
 
----
+## Gaps to close (see priority list in main matrix)
 
-## Scope
-
-### DDL (Schema)
-| Feature | SQLite Support | SharpCoreDB Support | Notes | Status |
-|---|---|---|---|---|
-| CREATE TABLE | ✅ | ☐ | | ☐ |
-| PRIMARY KEY | ✅ | ☐ | | ☐ |
-| UNIQUE | ✅ | ☐ | | ☐ |
-| FOREIGN KEY | ✅ | ☐ | | ☐ |
-| CREATE INDEX | ✅ | ☐ | | ☐ |
-| CREATE TRIGGER | ✅ | ☐ | | ☐ |
-| DROP TABLE | ✅ | ☐ | | ☐ |
-| DROP TRIGGER | ✅ | ☐ | | ☐ |
-| IF EXISTS | ✅ | ☐ | | ☐ |
-| DEFAULT values | ✅ | ☐ | | ☐ |
-| AUTOINCREMENT | ✅ | ☐ | | ☐ |
-
-### DML (Data)
-| Feature | SQLite Support | SharpCoreDB Support | Notes | Status |
-|---|---|---|---|---|
-| INSERT | ✅ | ☐ | | ☐ |
-| INSERT OR REPLACE | ✅ | ☐ | | ☐ |
-| UPDATE | ✅ | ☐ | | ☐ |
-| DELETE | ✅ | ☐ | | ☐ |
-| UPSERT (ON CONFLICT) | ✅ | ☐ | | ☐ |
-| WHERE clauses | ✅ | ☐ | | ☐ |
-| ORDER BY | ✅ | ☐ | | ☐ |
-| GROUP BY | ✅ | ☐ | | ☐ |
-| HAVING | ✅ | ☐ | | ☐ |
-| GUID/ULID storage | ✅ | ☐ | Validate TEXT/BLOB storage compatibility | ☐ |
-
-### SELECT & JOINs
-| Feature | SQLite Support | SharpCoreDB Support | Notes | Status |
-|---|---|---|---|---|
-| SELECT * | ✅ | ☐ | | ☐ |
-| SELECT column list | ✅ | ☐ | | ☐ |
-| INNER JOIN | ✅ | ☐ | | ☐ |
-| LEFT JOIN | ✅ | ☐ | | ☐ |
-| RIGHT JOIN | ✅ | ☐ | | ☐ |
-| CROSS JOIN | ✅ | ☐ | | ☐ |
-| Subqueries | ✅ | ☐ | | ☐ |
-| LIMIT/OFFSET | ✅ | ☐ | | ☐ |
-
-### Functions Used by Sync
-| Function | SQLite Support | SharpCoreDB Support | Notes | Status |
-|---|---|---|---|---|
-| CURRENT_TIMESTAMP | ✅ | ☐ | | ☐ |
-| datetime('now') | ✅ | ☐ | | ☐ |
-| strftime | ✅ | ☐ | | ☐ |
-| last_insert_rowid() | ✅ | ✅ | Already supported | ✅ |
-| SYNC_TIMESTAMP() | N/A | ☐ | Custom function | ☐ |
-
-### Trigger Semantics
-| Feature | SQLite Support | SharpCoreDB Support | Notes | Status |
-|---|---|---|---|---|
-| AFTER INSERT | ✅ | ☐ | | ☐ |
-| AFTER UPDATE | ✅ | ☐ | | ☐ |
-| AFTER DELETE | ✅ | ☐ | | ☐ |
-| NEW.* references | ✅ | ☐ | | ☐ |
-| OLD.* references | ✅ | ☐ | | ☐ |
-| Multiple statements | ✅ | ☐ | | ☐ |
-
----
-
-## Notes
-- This matrix is the authoritative record of SQLite compatibility status.
-- Any gaps must be tracked as explicit issues and resolved before Phase 2 completes.
-- All sync-generated SQL must stay within SQLite-compatible syntax.
+See **Section 11** of the main compatibility matrix for the ordered list of SQLite parity gaps, ranked P0–P3 by user impact.

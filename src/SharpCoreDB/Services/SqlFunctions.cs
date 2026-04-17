@@ -167,6 +167,103 @@ public static class SqlFunctions
     public static TimeSpan CurrentTime() => DateTime.UtcNow.TimeOfDay;
 
     /// <summary>
+    /// Converts a hexadecimal string to a UTF-8 string.
+    /// SQLite-compatible UNHEX behavior for textual payloads.
+    /// </summary>
+    /// <param name="hex">Hexadecimal string.</param>
+    /// <returns>Decoded UTF-8 string.</returns>
+    /// <exception cref="ArgumentException">Thrown when input is not valid even-length hex.</exception>
+    public static string Unhex(string hex)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hex);
+
+        if ((hex.Length & 1) != 0)
+        {
+            throw new ArgumentException("UNHEX input must have an even number of characters.", nameof(hex));
+        }
+
+        var bytes = new byte[hex.Length / 2];
+        for (int i = 0; i < hex.Length; i += 2)
+        {
+            var pair = hex.AsSpan(i, 2);
+            if (!byte.TryParse(pair, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var b))
+            {
+                throw new ArgumentException("UNHEX input contains non-hex characters.", nameof(hex));
+            }
+
+            bytes[i / 2] = b;
+        }
+
+        return System.Text.Encoding.UTF8.GetString(bytes);
+    }
+
+    /// <summary>
+    /// Returns an SQL literal representation of a value (SQLite QUOTE semantics).
+    /// </summary>
+    /// <param name="value">The value to quote.</param>
+    /// <returns>Quoted SQL literal text.</returns>
+    public static string Quote(object? value)
+    {
+        return value switch
+        {
+            null or DBNull => "NULL",
+            string s => $"'{s.Replace("'", "''", StringComparison.Ordinal)}'",
+            bool b => b ? "1" : "0",
+            byte[] bytes => $"X'{Convert.ToHexString(bytes)}'",
+            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+            DateTimeOffset dto => $"'{dto:yyyy-MM-dd HH:mm:ss zzz}'",
+            _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                 ?? "NULL",
+        };
+    }
+
+    /// <summary>
+    /// Returns a string built from one or more Unicode code points.
+    /// SQLite-compatible CHAR semantics.
+    /// </summary>
+    /// <param name="codePoints">Unicode code points.</param>
+    /// <returns>Constructed string.</returns>
+    /// <exception cref="ArgumentException">Thrown when a code point is outside valid Unicode range.</exception>
+    public static string Char(params int[] codePoints)
+    {
+        ArgumentNullException.ThrowIfNull(codePoints);
+
+        if (codePoints.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new System.Text.StringBuilder(codePoints.Length);
+        foreach (var cp in codePoints)
+        {
+            if (cp is < 0 or > 0x10FFFF)
+            {
+                throw new ArgumentException("CHAR input contains an invalid Unicode code point.", nameof(codePoints));
+            }
+
+            sb.Append(char.ConvertFromUtf32(cp));
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the Unicode code point of the first character in a string.
+    /// SQLite-compatible UNICODE semantics.
+    /// </summary>
+    /// <param name="value">Input string.</param>
+    /// <returns>Unicode code point, or null for null/empty input.</returns>
+    public static int? Unicode(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        return char.ConvertToUtf32(value, 0);
+    }
+
+    /// <summary>
     /// Evaluates a SQL function call.
     /// </summary>
     /// <param name="functionName">The function name.</param>
@@ -189,7 +286,25 @@ public static class SqlFunctions
                 ? StrFTime(dt2, fmt) : null,
             "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit
                 ? DateAdd(dt3, val, unit) : null,
+            "UNHEX" => arguments.Count >= 1 && arguments[0] is not null ? Unhex(arguments[0]!.ToString() ?? string.Empty) : null,
+            "QUOTE" => arguments.Count >= 1 ? Quote(arguments[0]) : "NULL",
+            "CHAR" => Char([.. arguments.Select(ConvertToCharCodePoint)]),
+            "UNICODE" => arguments.Count >= 1 ? Unicode(arguments[0]?.ToString()) : null,
             _ => EvaluateCustomFunction(upperName, arguments, customProviders),
+        };
+    }
+
+    private static int ConvertToCharCodePoint(object? value)
+    {
+        return value switch
+        {
+            null or DBNull => throw new ArgumentException("CHAR does not accept NULL code points."),
+            int i => i,
+            long l when l is >= int.MinValue and <= int.MaxValue => (int)l,
+            short s => s,
+            byte b => b,
+            string s when int.TryParse(s, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var i) => i,
+            _ => Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture),
         };
     }
 

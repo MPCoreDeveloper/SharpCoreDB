@@ -36,7 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB.EventSourcing\SharpCoreDB.EventSourcing.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.CQRS.Dispatch" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    
   </ItemGroup>
 
   <ItemGroup>

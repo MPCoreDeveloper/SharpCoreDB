@@ -18,11 +18,90 @@ public static partial class SqlAst
 }
 
 /// <summary>
+/// INSERT conflict resolution policies.
+/// </summary>
+public enum InsertConflictPolicy
+{
+    /// <summary>
+    /// No conflict resolution policy.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// Ignore the conflict.
+    /// </summary>
+    Ignore,
+
+    /// <summary>
+    /// Replace the existing row.
+    /// </summary>
+    Replace,
+
+    /// <summary>
+    /// Fail with an error.
+    /// </summary>
+    Fail,
+
+    /// <summary>
+    /// Abort the statement.
+    /// </summary>
+    Abort,
+}
+
+/// <summary>
+/// INSERT ON CONFLICT actions.
+/// </summary>
+public enum InsertOnConflictAction
+{
+    /// <summary>
+    /// No ON CONFLICT clause.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// DO NOTHING — skip the conflicting row.
+    /// </summary>
+    DoNothing,
+
+    /// <summary>
+    /// DO UPDATE SET — update the conflicting row with the supplied assignments.
+    /// </summary>
+    DoUpdate,
+}
+
+/// <summary>
 /// Represents an INSERT statement.
 /// ✅ C# 14: Collection expressions.
 /// </summary>
 public class InsertNode : SqlNode
 {
+    /// <summary>
+    /// Gets or sets the SQLite-style conflict policy for INSERT OR ... variants.
+    /// </summary>
+    public InsertConflictPolicy ConflictPolicy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ON CONFLICT action.
+    /// </summary>
+    public InsertOnConflictAction OnConflictAction { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional ON CONFLICT target columns.
+    /// </summary>
+    public List<string> ConflictTargetColumns { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the SET assignments for DO UPDATE.
+    /// Key = column name, Value = raw expression string (e.g. "excluded.name" or "'literal'").
+    /// </summary>
+    public Dictionary<string, string> DoUpdateAssignments { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the optional WHERE filter for DO UPDATE (as a raw SQL expression string).
+    /// When set, the update is skipped if the expression evaluates to false for the conflicting row.
+    /// </summary>
+    public string? DoUpdateWhere { get; set; }
+
     /// <summary>
     /// Gets or sets the table name.
     /// </summary>
