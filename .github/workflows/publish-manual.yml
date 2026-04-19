@@ -1,0 +1,61 @@
+name: Manual NuGet Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual publish'
+        required: false
+        default: 'Manual publish'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  publish:
+    name: Manually Publish to NuGet.org
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore SharpCoreDB.CI.slnf --configfile NuGet.Config
+
+    - name: Build
+      run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+    - name: Pack NuGet packages
+      run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true --configfile NuGet.Config
+
+    - name: Publish to NuGet.org
+      run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+    - name: Create release summary
+      run: |
+        echo "## 📦 Manual NuGet Publish Completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Reason**: ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Published $(ls -1 ./artifacts/*.nupkg | wc -l) package(s) to NuGet.org" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Packages" >> $GITHUB_STEP_SUMMARY
+        ls -1 ./artifacts/*.nupkg | xargs -I {} basename {} >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
