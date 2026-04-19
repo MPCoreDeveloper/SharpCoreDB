@@ -312,4 +312,4 @@ Passed! - Failed: 0, Passed: 14, Skipped: 0, Total: 14
 
 ---
 
-*Document version: v1.7.0 | Last updated: 2025-07-15 | Test suite: `NullSafetyComparisonTests` (12 tests)*
+*Document version: v1.7.0 | Last updated: 2026-04-19 | Test suite: `NullSafetyComparisonTests` (14 tests)*
