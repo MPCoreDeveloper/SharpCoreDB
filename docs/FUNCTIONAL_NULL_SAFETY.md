@@ -215,9 +215,39 @@ This suite validates parser translation, `OPTIONALLY FROM`, `IS SOME` / `IS NONE
 
 ---
 
+## Why "Databases return NULL, so why not just use NULL?"
+
+This objection is valid at SQL level: databases should return `NULL` / empty sets for missing data.
+
+The practical issue is the **application boundary**:
+
+- SQL returns `NULL` (or empty string in some providers)
+- application code often assumes value presence
+- the failure then appears as app-level exceptions (`NullReferenceException`, index errors, mapping failures)
+
+So the goal is **not** "replace SQL NULL with exceptions".
+The goal is: make absence explicit in types (`Option<T>`) so missing data stays a value, not a crash path.
+
+### Static analysis limit (core point)
+
+You can only remove null branches when non-nullability is provable for every row at compile time.
+For real queries that is often impossible due to runtime data shape (missing references, partial projections, semantic nulls like `""` or `"NULL"`).
+
+### Cost proof
+
+In .NET, branch checks are cheap; thrown exceptions are expensive.
+The added proof test compares:
+
+1. exception-driven missing-data handling
+2. `Option<T>`-driven missing-data handling
+
+and verifies the `Option` path is faster for the same workload.
+
+---
+
 ## Verify It Yourself
 
-All claims above are backed by **12 passing tests** you can run right now.
+All claims above are backed by **14 passing tests** you can run right now.
 
 ### Prerequisites
 
@@ -254,11 +284,13 @@ dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~Null
 | 10 | `WriteOperation_FinCapturesErrorsAsValues` | `Fin<T>` captures insert failure as value, not exception |
 | 11 | `Pipeline_OptionSeqProvidesSafeComposition` | `Option` pipeline filters null/empty emails without exceptions |
 | 12 | `RealWorkload_BatchLookupWithMissingReferences` | 100 batch lookups with ~50% missing FKs — all handled via `Option.Match`, zero exceptions |
+| 13 | `SemanticNulls_CannotBeProvenStaticallyForRuntimeRows` | Runtime row semantics (`null`, `""`, `"NULL"`) cannot be fully proven at compile time |
+| 14 | `ExceptionDrivenMissingData_IsSlowerThanOptionFlow` | Exception-based control flow is slower than `Option`-based value flow for missing-data handling |
 
 ### Expected Output
 
 ```
-Passed! - Failed: 0, Passed: 12, Skipped: 0, Total: 12
+Passed! - Failed: 0, Passed: 14, Skipped: 0, Total: 14
 ```
 
 ---
