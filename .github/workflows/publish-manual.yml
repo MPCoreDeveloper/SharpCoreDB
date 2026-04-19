@@ -43,8 +43,75 @@ jobs:
     - name: Pack NuGet packages
       run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true --configfile NuGet.Config
 
-    - name: Publish to NuGet.org
-      run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+    - name: Publish packages in dependency order
+      shell: bash
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        NUGET_SOURCE: https://api.nuget.org/v3/index.json
+      run: |
+        set -euo pipefail
+
+        push_layer() {
+          local layer_name="$1"
+          shift
+          local found_any=false
+
+          echo "::group::Publishing $layer_name"
+          for pattern in "$@"; do
+            for pkg in ./artifacts/${pattern}; do
+              [ -f "$pkg" ] || continue
+              found_any=true
+              echo "  ↗ Pushing $(basename "$pkg")"
+              dotnet nuget push "$pkg" \
+                --api-key "$NUGET_API_KEY" \
+                --source "$NUGET_SOURCE" \
+                --skip-duplicate || true
+            done
+          done
+          echo "::endgroup::"
+
+          if [ "$found_any" = true ]; then
+            echo "⏳ Waiting 30s for NuGet.org to index $layer_name..."
+            sleep 30
+          fi
+        }
+
+        push_layer "Layer 0 (core)" \
+          "SharpCoreDB.[0-9]*.nupkg" \
+          "SharpCoreDB.Client.Protocol.*.nupkg" \
+          "SharpCoreDB.Server.Protocol.*.nupkg"
+
+        push_layer "Layer 1 (core dependents)" \
+          "SharpCoreDB.Graph.[0-9]*.nupkg" \
+          "SharpCoreDB.VectorSearch.*.nupkg" \
+          "SharpCoreDB.Functional.[0-9]*.nupkg" \
+          "SharpCoreDB.EventSourcing.*.nupkg" \
+          "SharpCoreDB.Analytics.*.nupkg" \
+          "SharpCoreDB.Distributed.*.nupkg" \
+          "SharpCoreDB.Identity.*.nupkg" \
+          "SharpCoreDB.Serilog.Sinks.*.nupkg"
+
+        push_layer "Layer 2 (mid-level)" \
+          "SharpCoreDB.Client.[0-9]*.nupkg" \
+          "SharpCoreDB.EntityFrameworkCore.[0-9]*.nupkg" \
+          "SharpCoreDB.Extensions.*.nupkg" \
+          "SharpCoreDB.Data.Provider.*.nupkg" \
+          "SharpCoreDB.Server.Core.*.nupkg" \
+          "SharpCoreDB.CQRS.*.nupkg" \
+          "SharpCoreDB.Projections.*.nupkg"
+
+        push_layer "Layer 3 (top-level)" \
+          "SharpCoreDB.Server.[0-9]*.nupkg" \
+          "SharpCoreDB.Graph.Advanced.*.nupkg" \
+          "SharpCoreDB.Provider.Sync.*.nupkg" \
+          "SharpCoreDB.Provider.YesSql.*.nupkg" \
+          "SharpCoreDB.Functional.Dapper.*.nupkg" \
+          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg"
+
+        push_layer "Remaining packages" \
+          "*.nupkg"
+
+        echo "✅ All packages published in dependency order."
 
     - name: Create release summary
       run: |
