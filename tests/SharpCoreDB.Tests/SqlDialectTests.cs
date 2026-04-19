@@ -168,4 +168,28 @@ public class SqlDialectTests
         // Assert
         Assert.IsType<SharpCoreDbDialect>(dialect);
     }
+
+    [Fact]
+    public void StandardDialect_DoesNotSupportSharpCoreSpecificOptionalFeatures()
+    {
+        // Arrange
+        var dialect = new StandardSqlDialect();
+
+        // Assert
+        Assert.False(dialect.SupportsGraphRagClause);
+        Assert.False(dialect.SupportsOptionallyProjection);
+        Assert.False(dialect.SupportsSomeNonePredicates);
+    }
+
+    [Fact]
+    public void SharpCoreDbDialect_SupportsGraphRagAndOptionFeatures()
+    {
+        // Arrange
+        var dialect = new SharpCoreDbDialect();
+
+        // Assert
+        Assert.True(dialect.SupportsGraphRagClause);
+        Assert.True(dialect.SupportsOptionallyProjection);
+        Assert.True(dialect.SupportsSomeNonePredicates);
+    }
 }

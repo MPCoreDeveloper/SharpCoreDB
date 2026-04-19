@@ -6,7 +6,7 @@ This page consolidates the major SharpCoreDB capabilities by package for quick d
 
 | Package | Purpose | Key capabilities in v1.7.0 |
 |---|---|---|
-| `SharpCoreDB` | Embedded core engine | AES-256-GCM encryption, SQL engine, ACID + WAL, indexing, FTS, SIMD optimizations, metadata durability fixes, compiled-query parser fixes |
+| `SharpCoreDB` | Embedded core engine | AES-256-GCM encryption, SQL engine, ACID + WAL, indexing, FTS, SIMD optimizations, metadata durability fixes, compiled-query parser fixes, `GRAPH_RAG` SQL clause, `OPTIONALLY` + `IS SOME`/`IS NONE` optional SQL semantics |
 | `SharpCoreDB.Server` | Network server runtime | gRPC-first (HTTP/2 + HTTP/3), REST, WebSocket, JWT/RBAC, optional mTLS, multi-database hosting, health/metrics |
 | `SharpCoreDB.Client` | .NET client | ADO.NET-style commands/readers, async access, parameterized execution, server connectivity |
 

@@ -183,4 +183,35 @@ public sealed partial class SqlToStringVisitor
         var strategy = node.Strategy == "DFS" ? ", 'DFS'" : "";
         return $"GRAPH_TRAVERSE({node.TableName}, {startNode}, '{node.RelationshipColumn}', {maxDepth}{strategy})";
     }
+
+    /// <inheritdoc/>
+    protected override string VisitSetOperationCore(SetOperationNode node)
+    {
+        var left = node.Left.Accept(this);
+        var right = node.Right.Accept(this);
+        var opKeyword = node.Operation switch
+        {
+            SetOperationType.Union => "UNION",
+            SetOperationType.UnionAll => "UNION ALL",
+            SetOperationType.Intersect => "INTERSECT",
+            SetOperationType.Except => "EXCEPT",
+            _ => "UNION",
+        };
+
+        var result = $"{left} {opKeyword} {right}";
+
+        if (node.OrderBy?.Items.Count > 0)
+        {
+            result += " " + node.OrderBy.Accept(this);
+        }
+
+        if (node.Limit is not null)
+        {
+            result += $" LIMIT {node.Limit}";
+            if (node.Offset is not null)
+                result += $" OFFSET {node.Offset}";
+        }
+
+        return result;
+    }
 }

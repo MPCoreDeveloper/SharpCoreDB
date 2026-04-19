@@ -360,4 +360,171 @@ public sealed class ScalarFunctionTests
         Assert.Equal("Bob", rows[1]["name"]);
         Assert.Equal("Alice", rows[2]["name"]);
     }
+
+    // ── W2-3: Extended numeric scalar functions ──────────────────────────────
+
+    [Theory]
+    [InlineData(2, 3, 8.0)]
+    [InlineData(9, 0.5, 3.0)]
+    public void Pow_ReturnsExponent(object x, object y, double expected)
+    {
+        var rows = Execute(
+            $"SELECT POW(val, exp) AS v FROM t",
+            ("t", [new() { ["val"] = x, ["exp"] = y }]));
+
+        Assert.Equal(expected, Convert.ToDouble(rows[0]["v"]), precision: 10);
+    }
+
+    [Fact]
+    public void Power_AliasWorks()
+    {
+        var rows = Execute(
+            "SELECT POWER(val, 2) AS v FROM t",
+            ("t", [new() { ["val"] = 5 }]));
+
+        Assert.Equal(25.0, Convert.ToDouble(rows[0]["v"]), precision: 10);
+    }
+
+    [Theory]
+    [InlineData(16, 4.0)]
+    [InlineData(2, 1.4142135623730951)]
+    public void Sqrt_ReturnsSquareRoot(object input, double expected)
+    {
+        var rows = Execute(
+            "SELECT SQRT(val) AS v FROM t",
+            ("t", [new() { ["val"] = input }]));
+
+        Assert.Equal(expected, Convert.ToDouble(rows[0]["v"]), precision: 10);
+    }
+
+    [Theory]
+    [InlineData(10, 3, 1.0)]
+    [InlineData(7, 2, 1.0)]
+    public void Mod_ReturnsModulo(object x, object y, double expected)
+    {
+        var rows = Execute(
+            "SELECT MOD(a, b) AS v FROM t",
+            ("t", [new() { ["a"] = x, ["b"] = y }]));
+
+        Assert.Equal(expected, Convert.ToDouble(rows[0]["v"]), precision: 10);
+    }
+
+    [Theory]
+    [InlineData(5, 1)]
+    [InlineData(-3, -1)]
+    [InlineData(0, 0)]
+    public void Sign_ReturnsSignOfValue(object input, int expected)
+    {
+        var rows = Execute(
+            "SELECT SIGN(val) AS v FROM t",
+            ("t", [new() { ["val"] = input }]));
+
+        Assert.Equal(expected, Convert.ToInt32(rows[0]["v"]));
+    }
+
+    [Fact]
+    public void Random_ReturnsInt64()
+    {
+        var rows = Execute(
+            "SELECT RANDOM() AS v FROM t",
+            ("t", [new() { ["x"] = 1 }]));
+
+        Assert.IsType<long>(rows[0]["v"]);
+    }
+
+    [Theory]
+    [InlineData(3, 7, 7)]
+    [InlineData(10, 2, 10)]
+    public void ScalarMax_ReturnsBiggerValue(object a, object b, int expected)
+    {
+        var rows = Execute(
+            "SELECT MAX(x, y) AS v FROM t",
+            ("t", [new() { ["x"] = a, ["y"] = b }]));
+
+        Assert.Equal(expected, Convert.ToInt32(rows[0]["v"]));
+    }
+
+    [Theory]
+    [InlineData(3, 7, 3)]
+    [InlineData(10, 2, 2)]
+    public void ScalarMin_ReturnsSmallerValue(object a, object b, int expected)
+    {
+        var rows = Execute(
+            "SELECT MIN(x, y) AS v FROM t",
+            ("t", [new() { ["x"] = a, ["y"] = b }]));
+
+        Assert.Equal(expected, Convert.ToInt32(rows[0]["v"]));
+    }
+
+    // ── W2-4: GLOB operator ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Glob_StarWildcard_MatchesAnySequence()
+    {
+        var rows = Execute(
+            "SELECT name FROM t WHERE name GLOB 'Al*'",
+            ("t", [
+                new() { ["name"] = "Alice" },
+                new() { ["name"] = "Bob" },
+                new() { ["name"] = "Alex" },
+            ]));
+
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    public void Glob_QuestionWildcard_MatchesSingleChar()
+    {
+        var rows = Execute(
+            "SELECT name FROM t WHERE name GLOB '?ob'",
+            ("t", [
+                new() { ["name"] = "Bob" },
+                new() { ["name"] = "Rob" },
+                new() { ["name"] = "Bobby" },
+            ]));
+
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    public void Glob_CharacterClass_MatchesRange()
+    {
+        var rows = Execute(
+            "SELECT name FROM t WHERE name GLOB '[A-C]*'",
+            ("t", [
+                new() { ["name"] = "Alice" },
+                new() { ["name"] = "Bob" },
+                new() { ["name"] = "Dave" },
+            ]));
+
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    public void Glob_IsCaseSensitive()
+    {
+        var rows = Execute(
+            "SELECT name FROM t WHERE name GLOB 'a*'",
+            ("t", [
+                new() { ["name"] = "Alice" },
+                new() { ["name"] = "alice" },
+            ]));
+
+        Assert.Single(rows);
+        Assert.Equal("alice", rows[0]["name"]);
+    }
+
+    [Fact]
+    public void NotGlob_ExcludesMatchingRows()
+    {
+        var rows = Execute(
+            "SELECT name FROM t WHERE name NOT GLOB 'A*'",
+            ("t", [
+                new() { ["name"] = "Alice" },
+                new() { ["name"] = "Bob" },
+            ]));
+
+        Assert.Single(rows);
+        Assert.Equal("Bob", rows[0]["name"]);
+    }
 }

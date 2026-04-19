@@ -28,6 +28,14 @@ public partial class Database
     private SqlParser GetSharedSqlParser()
     {
         _sharedSqlParser ??= new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+
+        // Optional GRAPH_RAG provider wiring from DI (zero overhead if not registered)
+        var graphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
+        if (graphRagProvider is not null)
+        {
+            _sharedSqlParser.SetGraphRagProvider(graphRagProvider);
+        }
+
         return _sharedSqlParser;
     }
 

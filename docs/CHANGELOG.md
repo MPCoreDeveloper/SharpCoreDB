@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ColumnInfo.IsHidden` property for metadata-driven schema tools.
 - `PersistenceConstants.InternalRowIdColumnName` constant (`"_rowid"`).
 - 9 dedicated tests for the Auto-ROWID feature in `AutoRowIdTests.cs`.
+- **GRAPH_RAG SQL clause**: New top-level `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, and `TOP_K` options, plus provider-based execution integration via `IGraphRagProvider`.
+- **OPTIONALLY SQL projection mode**: New `OPTIONALLY` keyword after SELECT list enabling `Option<T>` mapping in ADO.NET readers, integrated with `SharpCoreDB.Functional`.
+- **SOME/NONE predicates**: New `IS SOME` and `IS NONE` predicates (and NOT variants) supported in parser and runtime evaluators.
 
 ### Fixed
 - Unified `IS NULL` / `IS NOT NULL` behavior across runtime scan, join-helper, and compiled predicate paths.

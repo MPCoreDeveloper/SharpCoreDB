@@ -2,8 +2,7 @@
 
 > **Goal:** Full SQLite syntax parity + key PostgreSQL additions in SharpCoreDB.  
 > **Reference matrix:** `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.7.0.md`  
-> **Last updated:** v1.7.0  
-> **Estimated total effort:** ~19 weeks solo / ~10 weeks with AI pair-programming.
+> **Last updated:** v1.7.0 — 2025-07-03 (W3-5 DEFAULT expression marked done; AstExecutor VisitSetOperation implemented)
 
 ---
 
@@ -81,17 +80,17 @@
 ## 🟠 Wave 2 — P1 High Impact (~8 weeks)
 
 ### W2-1 · Set operations
-- [ ] Parse `UNION` between two SELECT arms
-- [ ] Parse `UNION ALL`
-- [ ] Parse `INTERSECT`
-- [ ] Parse `EXCEPT`
-- [ ] Add `SetOperationNode` to `SqlAst.Nodes.cs`
-- [ ] Execute UNION (deduplicate)
-- [ ] Execute UNION ALL (no dedup)
-- [ ] Execute INTERSECT
-- [ ] Execute EXCEPT
-- [ ] `ORDER BY` / `LIMIT` on outer set result
-- [ ] Tests for all four set operations
+- [x] Parse `UNION` between two SELECT arms
+- [x] Parse `UNION ALL`
+- [x] Parse `INTERSECT`
+- [x] Parse `EXCEPT`
+- [x] Add `SetOperationNode` to `SqlAst.Nodes.cs`
+- [x] Execute UNION (deduplicate)
+- [x] Execute UNION ALL (no dedup)
+- [x] Execute INTERSECT
+- [x] Execute EXCEPT
+- [x] `ORDER BY` / `LIMIT` on outer set result
+- [x] Tests for all four set operations
 
 ### W2-2 · String scalar functions (extended)
 - [x] `SUBSTR(s, start)` — 1-based index, SQLite convention
@@ -107,20 +106,20 @@
 - [x] Tests for implemented string functions
 
 ### W2-3 · Numeric scalar functions (extended)
-- [ ] `MAX(a, b)` — 2-arg scalar form (distinct from aggregate MAX)
-- [ ] `MIN(a, b)` — 2-arg scalar form
-- [ ] `POW(x, y)` / `POWER(x, y)`
-- [ ] `SQRT(x)`
-- [ ] `MOD(x, y)` / `%` operator
+- [x] `MAX(a, b)` — 2-arg scalar form (distinct from aggregate MAX)
+- [x] `MIN(a, b)` — 2-arg scalar form
+- [x] `POW(x, y)` / `POWER(x, y)`
+- [x] `SQRT(x)`
+- [x] `MOD(x, y)` / `%` operator
 - [x] `SIGN(x)`
-- [ ] `RANDOM()` — returns random integer (SQLite: 64-bit signed)
+- [x] `RANDOM()` — returns random integer (SQLite: 64-bit signed)
 - [x] Tests for implemented numeric functions
 
 ### W2-4 · GLOB operator
-- [ ] Parse `col GLOB pattern` in expression parser
-- [ ] Implement glob→regex conversion (`*`→`.*`, `?`→`.`, case-sensitive)
-- [ ] Support character classes `[A-Z]`
-- [ ] Tests for GLOB with various patterns
+- [x] Parse `col GLOB pattern` in expression parser
+- [x] Implement glob→regex conversion (`*`→`.*`, `?`→`.`, case-sensitive)
+- [x] Support character classes `[A-Z]`
+- [x] Tests for GLOB with various patterns
 
 ### W2-5 · `WITH RECURSIVE` CTE
 - [ ] Detect `RECURSIVE` keyword in `WITH` clause
@@ -171,9 +170,9 @@
 - [ ] `LAST_INSERT_ROWID()` — verify works in all execution paths
 
 ### W3-5 · DEFAULT expression evaluation
-- [ ] At INSERT time, evaluate `DEFAULT (expr)` for omitted columns
-- [ ] Support `DEFAULT (strftime('%Y-%m-%d', 'now'))`
-- [ ] Tests for DEFAULT expression columns
+- [x] At INSERT time, evaluate `DEFAULT (expr)` for omitted columns
+- [x] Support `DEFAULT (strftime('%Y-%m-%d', 'now'))`
+- [x] Tests for DEFAULT expression columns
 
 ### W3-6 · Correlated subquery (full support)
 - [ ] Pass outer row context into inner executor on each iteration
@@ -242,11 +241,11 @@
 | Wave | Total items | Done | Remaining |
 |---|---|---|---|
 | Quick Wins | 14 | 14 | 0 |
-| W1 — P0 | 18 | 2 | 16 |
-| W2 — P1 | 34 | 8 | 26 |
-| W3 — P2 | 28 | 2 | 26 |
-| W4 — P3 | 24 | 1 | 23 |
-| **Total** | **118** | **27** | **91** |
+| W1 — P0 | 31 | 31 | 0 |
+| W2 — P1 | 42 | 35 | 7 |
+| W3 — P2 | 38 | 5 | 33 |
+| W4 — P3 | 27 | 1 | 26 |
+| **Total** | **152** | **86** | **66** |
 
 ---
 

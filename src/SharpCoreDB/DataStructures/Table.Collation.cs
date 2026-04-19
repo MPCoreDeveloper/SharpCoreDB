@@ -68,6 +68,12 @@ public partial class Table
             "LIKE" => CollationComparator.Like(rowValueStr, valueStr, collation),
             "NOT LIKE" => !CollationComparator.Like(rowValueStr, valueStr, collation),
 
+            // REGEXP operator
+            "REGEXP" => rowValueStr is not null && valueStr is not null
+                && System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr),
+            "NOT REGEXP" => rowValueStr is null || valueStr is null
+                || !System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr),
+
             // IN operator - check if value is in a comma-separated list
             "IN" => EvaluateInOperator(rowValueStr, valueStr, collation),
             "NOT IN" => !EvaluateInOperator(rowValueStr, valueStr, collation),

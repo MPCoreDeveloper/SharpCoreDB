@@ -63,7 +63,7 @@ public partial class EnhancedSqlParser
     {
         var left = ParsePrimaryExpression();
 
-        // Check for IS NULL / IS NOT NULL
+        // Check for IS NULL / IS NOT NULL / IS SOME / IS NONE
         if (MatchKeyword("IS"))
         {
             bool isNot = MatchKeyword("NOT");
@@ -77,6 +77,28 @@ public partial class EnhancedSqlParser
                     Right = new LiteralNode { Position = _position, Value = null }
                 };
             }
+
+            if (MatchKeyword("SOME"))
+            {
+                return new BinaryExpressionNode
+                {
+                    Position = _position,
+                    Left = left,
+                    Operator = isNot ? "IS NOT SOME" : "IS SOME",
+                    Right = new LiteralNode { Position = _position, Value = true }
+                };
+            }
+
+            if (MatchKeyword("NONE"))
+            {
+                return new BinaryExpressionNode
+                {
+                    Position = _position,
+                    Left = left,
+                    Operator = isNot ? "IS NOT NONE" : "IS NONE",
+                    Right = new LiteralNode { Position = _position, Value = true }
+                };
+            }
         }
 
         // Check for IN expression
@@ -85,10 +107,17 @@ public partial class EnhancedSqlParser
             return ParseInExpression(left);
         }
 
-        // S1066 fix: merge nested if
-        if (MatchKeyword("NOT") && MatchKeyword("IN"))
+        // S1066 fix: merge nested if — save position to restore if NOT is not followed by IN
+        var posBeforeNot = _position;
+        if (MatchKeyword("NOT"))
         {
-            return ParseInExpression(left, isNot: true);
+            if (MatchKeyword("IN"))
+            {
+                return ParseInExpression(left, isNot: true);
+            }
+
+            // NOT was consumed but next token isn't IN — restore so ParseComparisonOperator can match "NOT GLOB" etc.
+            _position = posBeforeNot;
         }
 
         // Check for comparison operators
@@ -110,11 +139,12 @@ public partial class EnhancedSqlParser
 
     private string? ParseComparisonOperator()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|NOT\s+REGEXP|NOT\s+LIKE|REGEXP|LIKE)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|NOT\s+REGEXP|NOT\s+LIKE|NOT\s+GLOB|REGEXP|LIKE|GLOB)", RegexOptions.IgnoreCase);
         if (match.Success)
         {
             _position += match.Length;
-            return match.Groups[1].Value.ToUpperInvariant().Trim();
+            // Normalize internal whitespace so "NOT  GLOB" becomes "NOT GLOB"
+            return Regex.Replace(match.Groups[1].Value.Trim(), @"\s+", " ").ToUpperInvariant();
         }
         return null;
     }

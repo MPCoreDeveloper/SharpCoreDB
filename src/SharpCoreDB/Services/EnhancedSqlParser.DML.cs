@@ -152,21 +152,27 @@ public partial class EnhancedSqlParser
                     else
                     {
                         RecordError("Expected NOTHING or UPDATE after ON CONFLICT DO");
+                                }
+                            }
+                        }
+
+                            // Parse RETURNING clause
+                            if (MatchKeyword("RETURNING"))
+                            {
+                                node.ReturningColumns = ParseReturningColumns();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            RecordError($"Error parsing INSERT: {ex.Message}");
+                        }
+
+                        return node;
                     }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            RecordError($"Error parsing INSERT: {ex.Message}");
-        }
 
-        return node;
-    }
-
-    private UpdateNode ParseUpdate()
-    {
-        var node = new UpdateNode { Position = _position };
+                    private UpdateNode ParseUpdate()
+                    {
+                        var node = new UpdateNode { Position = _position };
 
         try
         {
@@ -193,6 +199,12 @@ public partial class EnhancedSqlParser
             // Parse WHERE clause
             if (MatchKeyword("WHERE"))
                 node.Where = ParseWhere();
+
+            // Parse RETURNING clause
+            if (MatchKeyword("RETURNING"))
+            {
+                node.ReturningColumns = ParseReturningColumns();
+            }
         }
         catch (Exception ex)
         {
@@ -217,6 +229,12 @@ public partial class EnhancedSqlParser
             // Parse WHERE clause
             if (MatchKeyword("WHERE"))
                 node.Where = ParseWhere();
+
+            // Parse RETURNING clause
+            if (MatchKeyword("RETURNING"))
+            {
+                node.ReturningColumns = ParseReturningColumns();
+            }
         }
         catch (Exception ex)
         {
@@ -224,5 +242,27 @@ public partial class EnhancedSqlParser
         }
 
         return node;
+    }
+
+    /// <summary>
+    /// Parses a RETURNING column list (e.g., RETURNING id, name or RETURNING *).
+    /// </summary>
+    private List<string> ParseReturningColumns()
+    {
+        List<string> columns = [];
+        do
+        {
+            if (MatchToken("*"))
+            {
+                columns.Add("*");
+            }
+            else
+            {
+                var col = ConsumeIdentifier();
+                if (col is not null)
+                    columns.Add(col);
+            }
+        } while (MatchToken(","));
+        return columns;
     }
 }

@@ -98,7 +98,7 @@
 | `BETWEEN … AND …` | ✅ | ✅ | ✅ | |
 | `IN (…)` / `NOT IN (…)` | ✅ | ✅ | ✅ | |
 | `LIKE` (% and _ wildcards) | ✅ | ✅ | ✅ | **New in v1.7.0** — scalar function-form `LIKE(value, pattern)` supported in literal SELECT path |
-| `GLOB` | ✅ | ❌ | ❌ | Gap — SQLite-specific |
+| `GLOB` | ✅ | ❌ | ✅ | Implemented v1.7.0 |
 | `REGEXP` | ✅ extension | ✅ | ✅ | **New in v1.7.0** — AST WHERE evaluation supports `REGEXP` / `NOT REGEXP` |
 | `ORDER BY col [ASC\|DESC]` | ✅ | ✅ | ✅ | |
 | `ORDER BY ordinal position` (e.g. `ORDER BY 2`) | ✅ | ✅ | ✅ | |
@@ -118,13 +118,13 @@
 | `WITH RECURSIVE` CTE | ✅ | ✅ | ❌ | Gap |
 | `CASE WHEN … THEN … ELSE … END` | ✅ | ✅ | ⚠️ | Evaluated in AST executor; not in legacy DML path |
 | `CAST(… AS type)` | ✅ | ✅ | ⚠️ | TypeConverter handles common casts |
-| `COALESCE(…)` | ✅ | ✅ | ❌ | Gap |
-| `IFNULL(a, b)` / `NULLIF(a, b)` | ✅ | ✅ | ❌ | Gap |
-| `IIF(cond, t, f)` | ✅ | ❌ | ❌ | Gap |
-| `TYPEOF(x)` | ✅ | ❌ | ❌ | Gap |
+| `COALESCE(…)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
+| `IFNULL(a, b)` / `NULLIF(a, b)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
+| `IIF(cond, t, f)` | ✅ | ❌ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
+| `TYPEOF(x)` | ✅ | ❌ | ✅ | **New in v1.7.0** — SQLite type names (`integer`, `real`, `text`, `blob`, `null`) |
 | `EXISTS (subquery)` / `NOT EXISTS` | ✅ | ✅ | ⚠️ | Partial |
-| `UNION` / `UNION ALL` | ✅ | ✅ | ❌ | Gap |
-| `INTERSECT` / `EXCEPT` | ✅ | ✅ | ❌ | Gap |
+| `UNION` / `UNION ALL` | ✅ | ✅ | ✅ | Implemented v1.7.0 |
+| `INTERSECT` / `EXCEPT` | ✅ | ✅ | ✅ | Implemented v1.7.0 |
 | `EXPLAIN` / `EXPLAIN QUERY PLAN` | ✅ | ✅ | ⚠️ | Text output; not structured rows |
 
 ---
@@ -181,10 +181,10 @@
 | `TRIM(s)` / `LTRIM(s)` / `RTRIM(s)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
 | `REPLACE(s, from, to)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
 | `INSTR(s, sub)` | ✅ | ❌ | ✅ | **New in v1.7.0** — SQLite-compatible 1-based index |
-| `LIKE(s, pattern)` | ✅ | ✅ | ❌ | Gap — function form |
+| `LIKE(s, pattern)` | ✅ | ✅ | ✅ | **New in v1.7.0** — scalar function-form supported |
 | `HEX(x)` / `UNHEX(x)` | ✅ | ❌ | ✅ | `HEX(x)` and `UNHEX(x)` both supported |
 | `QUOTE(x)` | ✅ | ❌ | ✅ | **New in v1.7.0** — returns SQL literal text with proper single-quote escaping |
-| `RANDOM()` | ✅ | ✅ | ❌ | Gap |
+| `RANDOM()` | ✅ | ✅ | ✅ | Implemented v1.7.0 |
 | `COALESCE(a, b, …)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
 | `IFNULL(a, b)` | ✅ | ❌ | ✅ | **New in v1.7.0** — SQLite alias of COALESCE |
 | `NULLIF(a, b)` | ✅ | ✅ | ✅ | **New in v1.7.0** — AST scalar function dispatch |
@@ -266,11 +266,11 @@ These are the most impactful missing features for full SQLite compatibility, ord
 |---|---|---|
 | 🔴 P0 | `COALESCE` / `IFNULL` scalar functions | Missing scalar function |
 | 🔴 P0 | `INSERT OR REPLACE` / `INSERT OR IGNORE` | Missing DML variant |
-| 🟠 P1 | `UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT` | Missing set operations |
+| ✅ Done | `UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT` | Implemented v1.7.0 |
 | 🟠 P1 | `WITH RECURSIVE` (recursive CTE) | Missing CTE variant |
-| 🟠 P1 | `GLOB` operator | Missing WHERE operator |
+| ✅ Done | `GLOB` operator | Implemented v1.7.0 |
 | 🟠 P1 | String functions: `LIKE()` function-form, `UNHEX`, `QUOTE`, `CHAR`, `UNICODE` | Missing scalar functions |
-| 🟠 P1 | Numeric functions: scalar `MAX/MIN`, `POW/POWER`, `SQRT`, `MOD`, `RANDOM` | Missing scalar functions |
+| ✅ Done | Numeric functions: scalar `MAX/MIN`, `POW/POWER`, `SQRT`, `MOD`, `RANDOM` | Implemented v1.7.0 |
 | 🟡 P2 | `CHANGES()` / `TOTAL_CHANGES()` full semantics | Missing scalar function semantics |
 | 🟡 P2 | `CHECK` constraint enforcement at DML time | Constraint enforcement |
 | 🟡 P2 | `SAVEPOINT` / `RELEASE` / `ROLLBACK TO` | Missing transaction feature |

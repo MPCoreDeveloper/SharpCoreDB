@@ -6,6 +6,7 @@ namespace SharpCoreDB.Services;
 
 using SharpCoreDB.DataStructures;
 using System.Text;
+using System.Text.RegularExpressions;
 
 /// <summary>
 /// SqlParser partial class containing helper methods:
@@ -281,6 +282,22 @@ public partial class SqlParser
             return !row.TryGetValue(key, out var v) || v is null || v is DBNull;
         }
 
+        // Handle IS SOME (parts: key, IS, SOME)
+        if (op.Equals("IS", StringComparison.OrdinalIgnoreCase)
+            && parts.Length >= 3
+            && parts[2].Trim().Equals("SOME", StringComparison.OrdinalIgnoreCase))
+        {
+            return row.TryGetValue(key, out var v) && v is not null and not DBNull;
+        }
+
+        // Handle IS NONE (parts: key, IS, NONE)
+        if (op.Equals("IS", StringComparison.OrdinalIgnoreCase)
+            && parts.Length >= 3
+            && parts[2].Trim().Equals("NONE", StringComparison.OrdinalIgnoreCase))
+        {
+            return !row.TryGetValue(key, out var v) || v is null or DBNull;
+        }
+
         var value = parts[2].Trim().Trim('\'');
 
         if (value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
@@ -328,6 +345,20 @@ public partial class SqlParser
                      && parts[i + 2].Trim().Equals("NULL", StringComparison.OrdinalIgnoreCase))
             {
                 expr = !row.TryGetValue(key, out var v) || v is null || v is DBNull;
+                consumed = 3;
+            }
+            // Handle IS SOME (3 tokens: key IS SOME)
+            else if (op.Equals("IS", StringComparison.OrdinalIgnoreCase)
+                     && parts[i + 2].Trim().Equals("SOME", StringComparison.OrdinalIgnoreCase))
+            {
+                expr = row.TryGetValue(key, out var v) && v is not null and not DBNull;
+                consumed = 3;
+            }
+            // Handle IS NONE (3 tokens: key IS NONE)
+            else if (op.Equals("IS", StringComparison.OrdinalIgnoreCase)
+                     && parts[i + 2].Trim().Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            {
+                expr = !row.TryGetValue(key, out var v) || v is null or DBNull;
                 consumed = 3;
             }
             else
@@ -493,6 +524,8 @@ public partial class SqlParser
             ">=" => Compare(rowValue, rhs) >= 0,
             "LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) == true,
             "NOT LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) != true,
+            "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None),
+            "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None),
             "IN" => value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false,
             "NOT IN" => !(value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false),
             _ => throw new InvalidOperationException($"Unsupported operator {op}"),

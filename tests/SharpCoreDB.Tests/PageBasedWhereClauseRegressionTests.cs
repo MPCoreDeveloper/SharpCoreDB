@@ -36,7 +36,7 @@ public class PageBasedWhereClauseRegressionTests
     {
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
-        using var serviceProvider = services.BuildServiceProvider();
+        var serviceProvider = services.BuildServiceProvider();
         var factory = serviceProvider.GetRequiredService<DatabaseFactory>();
         var path = Path.Combine(Path.GetTempPath(), $"SharpCoreDB_PageBasedWhere_{Guid.NewGuid():N}");
         return factory.Create(path, "regression-test-password");

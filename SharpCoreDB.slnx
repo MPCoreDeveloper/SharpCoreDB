@@ -124,6 +124,7 @@
     <Project Path="tests/SharpCoreDB.DemoJoinsSubQ/SharpCoreDB.DemoJoinsSubQ.csproj" />
     <Project Path="tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.EventSourcing.Tests/SharpCoreDB.EventSourcing.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Profiling/SharpCoreDB.Profiling.csproj" />
     <Project Path="tests/SharpCoreDB.Projections.Tests/SharpCoreDB.Projections.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj" />

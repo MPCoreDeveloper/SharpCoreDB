@@ -184,12 +184,33 @@ public partial class SqlParser
                 };
             }
 
+            // Parse inline CHECK constraint: e.g. "price REAL CHECK (price > 0)"
+            string? colCheckExpr = null;
+            var checkIdx = def.IndexOf("CHECK", StringComparison.OrdinalIgnoreCase);
+            if (checkIdx >= 0)
+            {
+                var afterCheck = def[checkIdx..].Trim();
+                var parenOpen = afterCheck.IndexOf('(');
+                if (parenOpen >= 0)
+                {
+                    int depth2 = 0;
+                    int closeP = -1;
+                    for (int ci = parenOpen; ci < afterCheck.Length; ci++)
+                    {
+                        if (afterCheck[ci] == '(') depth2++;
+                        else if (afterCheck[ci] == ')') { depth2--; if (depth2 == 0) { closeP = ci; break; } }
+                    }
+                    if (closeP > parenOpen)
+                        colCheckExpr = afterCheck[(parenOpen + 1)..closeP].Trim();
+                }
+            }
+
             columnTypes.Add(colType);
             isAuto.Add(isAutoGen);
             isNotNull.Add(isNotNullCol);
             defaultValues.Add(null); // Default to null, would need more parsing for actual DEFAULT values
             defaultExpressions.Add(null); // Phase 2: Default expressions
-            columnCheckExpressions.Add(null); // Phase 2: Column CHECK constraints
+            columnCheckExpressions.Add(colCheckExpr); // Phase 2: Column CHECK constraints
             columnCollations.Add(collation); // ✅ COLLATE Phase 2
             columnLocaleNames.Add(localeName); // ✅ Phase 9
             

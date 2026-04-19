@@ -52,12 +52,18 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
             var result = keyword?.ToUpperInvariant() switch
             {
-                "SELECT" => ParseSelect(),
+                "SELECT" => ParseSelectOrSetOperation(),
+                "WITH" => ParseWithCte(),
                 "INSERT" => ParseInsert(),
                 "UPDATE" => ParseUpdate(),
                 "DELETE" => ParseDelete(),
                 "CREATE" => ParseCreate(),
                 "ALTER" => ParseAlter(),
+                "EXPLAIN" => ParseExplainQueryPlan(),
+                "BEGIN" => ParseBeginTransaction(),
+                "SAVEPOINT" => ParseSavepointStatement(),
+                "RELEASE" => ParseReleaseStatement(),
+                "ROLLBACK" => ParseRollbackStatement(),
                 _ => throw new InvalidOperationException($"Unsupported statement type: {keyword}")
             };
 
@@ -153,7 +159,41 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private static bool IsReservedKeyword(string keyword)
     {
-        string[] reserved = ["SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS", "ON", "GROUP", "BY", "HAVING", "ORDER", "LIMIT", "OFFSET"];
+        string[] reserved =
+        [
+            "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS",
+            "ON", "GROUP", "BY", "HAVING", "ORDER", "LIMIT", "OFFSET",
+            "GRAPH_RAG", "WITH", "SCORE", "CONTEXT", "TOP_K",
+            "OPTIONALLY", "SOME", "NONE",
+            "UNION", "INTERSECT", "EXCEPT",
+            "RETURNING", "RECURSIVE", "SAVEPOINT", "RELEASE", "ROLLBACK",
+            "BEGIN", "IMMEDIATE", "EXCLUSIVE", "EXPLAIN"
+        ];
         return reserved.Contains(keyword.ToUpperInvariant());
+    }
+
+    /// <summary>
+    /// Consumes a frame bound expression (e.g., "UNBOUNDED PRECEDING", "CURRENT ROW", "3 PRECEDING").
+    /// </summary>
+    private string ConsumeFrameBound()
+    {
+        if (MatchKeyword("UNBOUNDED"))
+        {
+            var dir = MatchKeyword("PRECEDING") ? "PRECEDING" : MatchKeyword("FOLLOWING") ? "FOLLOWING" : "PRECEDING";
+            return $"UNBOUNDED {dir}";
+        }
+        if (MatchKeyword("CURRENT"))
+        {
+            MatchKeyword("ROW");
+            return "CURRENT ROW";
+        }
+        // Numeric offset: N PRECEDING or N FOLLOWING
+        var n = ParseInteger();
+        if (n is not null)
+        {
+            var dir2 = MatchKeyword("PRECEDING") ? "PRECEDING" : MatchKeyword("FOLLOWING") ? "FOLLOWING" : "PRECEDING";
+            return $"{n} {dir2}";
+        }
+        return "CURRENT ROW";
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
+using SharpCoreDB.Functional;
 
 namespace SharpCoreDB.Data.Provider;
 
@@ -14,13 +15,15 @@ public sealed class SharpCoreDBDataReader : DbDataReader
     private readonly List<Dictionary<string, object>> _results;
     private readonly string[] _fieldNames;
     private readonly Dictionary<string, int> _fieldOrdinals;
+    private readonly bool _useOptionalProjection;
+    private readonly Type[] _optionalFieldInnerTypes;
     private int _currentRow = -1;
     private bool _isClosed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SharpCoreDBDataReader"/> class.
     /// </summary>
-    public SharpCoreDBDataReader(List<Dictionary<string, object>> results, CommandBehavior behavior)
+    public SharpCoreDBDataReader(List<Dictionary<string, object>> results, CommandBehavior behavior, bool useOptionalProjection = false)
     {
         _results = results ?? [];
 
@@ -36,6 +39,9 @@ public sealed class SharpCoreDBDataReader : DbDataReader
             _fieldNames = [];
             _fieldOrdinals = [];
         }
+
+        _useOptionalProjection = useOptionalProjection;
+        _optionalFieldInnerTypes = InferOptionalInnerTypes();
     }
 
     /// <summary>
@@ -171,6 +177,14 @@ public sealed class SharpCoreDBDataReader : DbDataReader
     /// </summary>
     public override Type GetFieldType(int ordinal)
     {
+        if (ordinal < 0 || ordinal >= _fieldNames.Length)
+            throw new ArgumentOutOfRangeException(nameof(ordinal), $"Ordinal {ordinal} is out of range");
+
+        if (_useOptionalProjection)
+        {
+            return typeof(Option<>).MakeGenericType(_optionalFieldInnerTypes[ordinal]);
+        }
+
         if (_currentRow < 0 || _currentRow >= _results.Count)
             return typeof(object);
 
@@ -257,8 +271,73 @@ public sealed class SharpCoreDBDataReader : DbDataReader
 
         var fieldName = _fieldNames[ordinal];
         var row = _results[_currentRow];
+        var raw = row.TryGetValue(fieldName, out var value) ? value : DBNull.Value;
 
-        return row.TryGetValue(fieldName, out var value) ? value : DBNull.Value;
+        if (_useOptionalProjection)
+        {
+            return CreateOptionValue(_optionalFieldInnerTypes[ordinal], raw);
+        }
+
+        return raw;
+    }
+
+    private Type[] InferOptionalInnerTypes()
+    {
+        if (_fieldNames.Length == 0)
+        {
+            return [];
+        }
+
+        var inferred = new Type[_fieldNames.Length];
+
+        for (int i = 0; i < _fieldNames.Length; i++)
+        {
+            inferred[i] = typeof(object);
+            var name = _fieldNames[i];
+
+            foreach (var row in _results)
+            {
+                if (!row.TryGetValue(name, out var candidate) || candidate is null or DBNull)
+                {
+                    continue;
+                }
+
+                inferred[i] = candidate.GetType();
+                break;
+            }
+        }
+
+        return inferred;
+    }
+
+    private static object CreateOptionValue(Type innerType, object? raw)
+    {
+        var optionType = typeof(Option<>).MakeGenericType(innerType);
+
+        if (raw is null or DBNull)
+        {
+            var noneProperty = optionType.GetProperty(nameof(Option<object>.None), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                ?? throw new InvalidOperationException($"Failed to resolve None property for Option<{innerType.Name}>.");
+            return noneProperty.GetValue(null)
+                ?? throw new InvalidOperationException($"Failed to create None value for Option<{innerType.Name}>.");
+        }
+
+        object converted;
+        if (innerType.IsAssignableFrom(raw.GetType()))
+        {
+            converted = raw;
+        }
+        else
+        {
+            converted = Convert.ChangeType(raw, innerType, System.Globalization.CultureInfo.InvariantCulture)
+                ?? throw new InvalidOperationException($"Failed to convert value for Option<{innerType.Name}>.");
+        }
+
+        var someMethod = optionType.GetMethod(nameof(Option<object>.Some), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException($"Failed to resolve Some method for Option<{innerType.Name}>.");
+
+        return someMethod.Invoke(null, [converted])
+            ?? throw new InvalidOperationException($"Failed to create Some value for Option<{innerType.Name}>.");
     }
 
     /// <summary>

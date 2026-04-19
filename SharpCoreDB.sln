@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.1.11312.151
@@ -210,6 +211,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Identity", "src\SharpCoreDB.Identity\SharpCoreDB.Identity.csproj", "{09550D6E-8D1A-F43A-0C06-B03F7A2A6193}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.CrudApp", "Examples\Web\SharpCoreDB.CrudApp\SharpCoreDB.CrudApp.csproj", "{FED5C1D6-0A80-DD7D-6C55-1AD989A759CA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpCoreDB.Functional.Tests", "tests\SharpCoreDB.Functional.Tests\SharpCoreDB.Functional.Tests.csproj", "{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -869,6 +872,18 @@ Global
 		{FED5C1D6-0A80-DD7D-6C55-1AD989A759CA}.Release|x64.Build.0 = Release|Any CPU
 		{FED5C1D6-0A80-DD7D-6C55-1AD989A759CA}.Release|x86.ActiveCfg = Release|Any CPU
 		{FED5C1D6-0A80-DD7D-6C55-1AD989A759CA}.Release|x86.Build.0 = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|x64.Build.0 = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Debug|x86.Build.0 = Debug|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|x64.ActiveCfg = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|x64.Build.0 = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|x86.ActiveCfg = Release|Any CPU
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -942,6 +957,7 @@ Global
 		{DC85D720-0F4B-4904-8369-753A9365765F} = {A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}
 		{09550D6E-8D1A-F43A-0C06-B03F7A2A6193} = {F8B5E3A4-1C2D-4E5F-8B9A-1D2E3F4A5B6C}
 		{FED5C1D6-0A80-DD7D-6C55-1AD989A759CA} = {50B921FA-F081-4B7B-A8E0-AF3DCC098CCC}
+		{87E3DF4B-8BF3-45CC-85A0-218418ED54AA} = {A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F40825F5-26A1-4E85-9D0A-B0121A7ED5F8}

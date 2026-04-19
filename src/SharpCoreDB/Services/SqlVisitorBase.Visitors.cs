@@ -180,4 +180,13 @@ public abstract partial class SqlVisitorBase<TResult>
     /// Core implementation of ALTER TABLE visit.
     /// </summary>
     protected abstract TResult VisitAlterTableCore(AlterTableNode node);
+
+    /// <inheritdoc/>
+    public virtual TResult VisitSetOperation(SetOperationNode node) =>
+        SafeVisit(() => VisitSetOperationCore(node), "SET OPERATION", node);
+
+    /// <summary>
+    /// Core implementation of set operation (UNION / UNION ALL / INTERSECT / EXCEPT) visit.
+    /// </summary>
+    protected abstract TResult VisitSetOperationCore(SetOperationNode node);
 }

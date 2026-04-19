@@ -158,6 +158,93 @@ public static class WindowFunctionFactory
             "LEAD" => new LeadFunction(offset ?? 1),
             "FIRST_VALUE" => new FirstValueFunction(),
             "LAST_VALUE" => new LastValueFunction(),
+            "NTILE" => new NtileFunction(offset ?? 1),
+            "PERCENT_RANK" => new PercentRankFunction(),
+            "CUME_DIST" => new CumeDistFunction(),
             _ => throw new ArgumentException($"Unknown window function: {functionName}")
         };
+}
+
+/// <summary>
+/// Implements NTILE(n) window function.
+/// Distributes rows into n roughly equal groups.
+/// </summary>
+public sealed class NtileFunction : IWindowFunction
+{
+    private readonly int _buckets;
+    private int _totalRows;
+    private int _currentRow;
+
+    public string FunctionName => "NTILE";
+
+    public NtileFunction(int buckets)
+    {
+        _buckets = buckets > 0 ? buckets : 1;
+    }
+
+    public void ProcessValue(object? value) => _totalRows++;
+
+    public object? GetResult()
+    {
+        _currentRow++;
+        // Each bucket gets totalRows/buckets rows; first (totalRows % buckets) buckets get one extra
+        int rowsPerBucket = _totalRows / _buckets;
+        int extraRows = _totalRows % _buckets;
+        int bucket = 1;
+        int accumulated = 0;
+        for (int b = 1; b <= _buckets; b++)
+        {
+            int size = rowsPerBucket + (b <= extraRows ? 1 : 0);
+            accumulated += size;
+            if (_currentRow <= accumulated)
+            {
+                bucket = b;
+                break;
+            }
+        }
+        return bucket;
+    }
+}
+
+/// <summary>
+/// Implements PERCENT_RANK() window function.
+/// Returns (rank - 1) / (total_rows - 1). Returns 0.0 if only one row.
+/// </summary>
+public sealed class PercentRankFunction : IWindowFunction
+{
+    private int _totalRows;
+    private int _currentRank;
+
+    public string FunctionName => "PERCENT_RANK";
+
+    public void ProcessValue(object? value) => _totalRows++;
+
+    public object? GetResult()
+    {
+        _currentRank++;
+        if (_totalRows <= 1) return 0.0;
+        return (double)(_currentRank - 1) / (_totalRows - 1);
+    }
+}
+
+/// <summary>
+/// Implements CUME_DIST() window function.
+/// Returns the fraction of rows with values less than or equal to the current row's value.
+/// Simplified: returns currentRow / totalRows.
+/// </summary>
+public sealed class CumeDistFunction : IWindowFunction
+{
+    private int _totalRows;
+    private int _currentRow;
+
+    public string FunctionName => "CUME_DIST";
+
+    public void ProcessValue(object? value) => _totalRows++;
+
+    public object? GetResult()
+    {
+        _currentRow++;
+        if (_totalRows == 0) return 1.0;
+        return (double)_currentRow / _totalRows;
+    }
 }

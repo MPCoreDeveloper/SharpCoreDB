@@ -27,7 +27,7 @@ This document tracks test-related runtime issues that can affect reliability, pe
 5. **LINQ translator enum-convert expressions**
    - `ExpressionType.Convert` / `ConvertChecked` are now translated in unary visitor flow.
 
-### ⚠️ Deferred (Known Limitation) — ✅ NOW RESOLVED
+### ✅ Resolved (Previously Deferred)
 
 1. **Single-file parameterized `ExecuteCompiled` hang**
    - **Root cause found:** `FastSqlLexer.NextToken()` had an infinite loop — the `?` parameter placeholder character did not match any case in the switch expression, and the default case returned an `Unknown` token without advancing `position`. Since `Tokenize()` discards `Unknown` tokens and re-reads, this caused an infinite loop.

@@ -81,6 +81,9 @@ public interface ISqlVisitor<out TResult>
 
     /// <summary>Visits an ALTER TABLE node.</summary>
     TResult VisitAlterTable(AlterTableNode node);
+
+    /// <summary>Visits a set operation node (UNION / UNION ALL / INTERSECT / EXCEPT).</summary>
+    TResult VisitSetOperation(SetOperationNode node);
 }
 
 /// <summary>

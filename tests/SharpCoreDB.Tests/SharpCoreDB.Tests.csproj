@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="8.0.1">
+    <PackageReference Include="coverlet.collector" Version="10.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -39,10 +39,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Functional\SharpCoreDB.Functional.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Distributed\SharpCoreDB.Distributed.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Extensions\SharpCoreDB.Extensions.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Graph\SharpCoreDB.Graph.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Graph.Advanced\SharpCoreDB.Graph.Advanced.csproj" />
   </ItemGroup>
 
   <ItemGroup>

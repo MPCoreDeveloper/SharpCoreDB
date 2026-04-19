@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Services;
 
 namespace SharpCoreDB.Data.Provider;
 
@@ -171,7 +172,7 @@ public sealed class SharpCoreDBCommand : DbCommand
             var db = Connection!.DbInstance!;
             var parameters = BuildParameterDictionary();
 
-            // ? FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
+            // 🔧 FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
             var commandTextUpper = CommandText!.ToUpperInvariant().Trim();
             if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
             {
@@ -184,11 +185,27 @@ public sealed class SharpCoreDBCommand : DbCommand
             else
                 results = db.ExecuteQuery(CommandText!);
 
-            return new SharpCoreDBDataReader(results, behavior);
+            var optionalProjection = IsOptionalProjectionQuery(CommandText!);
+            return new SharpCoreDBDataReader(results, behavior, optionalProjection);
         }
         catch (Exception ex)
         {
             throw new SharpCoreDBException("Error executing data reader command.", ex);
+        }
+    }
+
+    private static bool IsOptionalProjectionQuery(string sql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+
+        try
+        {
+            var ast = SqlParser.ParseWithEnhancedParser(sql);
+            return ast is SelectNode selectNode && selectNode.IsOptionalProjection;
+        }
+        catch (InvalidOperationException)
+        {
+            return sql.Contains("OPTIONALLY", StringComparison.OrdinalIgnoreCase);
         }
     }
 

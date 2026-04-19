@@ -50,6 +50,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Functional\SharpCoreDB.Functional.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -69,9 +70,11 @@
   <ItemGroup>
     <!-- Development: use project reference -->
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
-    
+    <ProjectReference Include="..\SharpCoreDB.Functional\SharpCoreDB.Functional.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
+
     <!-- Packaging: use NuGet package reference -->
     <PackageReference Include="SharpCoreDB" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Functional" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
 </Project>

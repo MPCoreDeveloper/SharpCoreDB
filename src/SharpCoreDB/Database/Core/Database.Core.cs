@@ -29,6 +29,7 @@ using System.Text.Json;
 /// </summary>
 public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 {
+    private readonly IServiceProvider _serviceProvider;
     private readonly IStorage storage;
     private readonly IUserService userService;
     private readonly Dictionary<string, ITable> tables = new(StringComparer.OrdinalIgnoreCase);  // Case-insensitive for SQL compatibility
@@ -104,14 +105,15 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14: Modern validation
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(masterPassword);
-        
+
+        _serviceProvider = services;
         _dbPath = dbPath;
         this.isReadOnly = isReadOnly;
         this.config = config ?? DatabaseConfig.Default;
         _storageProvider = storageProvider;  // ✅ SCDB Phase 1: Store storage provider
-        
+
         Directory.CreateDirectory(_dbPath);
-        
+
         var crypto = services.GetRequiredService<ICryptoService>();
         
         // SECURITY: Database-specific salt prevents rainbow table attacks

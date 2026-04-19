@@ -46,6 +46,26 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private readonly DatabaseConfig? config = config;
 
     /// <summary>
+    /// Number of rows changed by the last DML statement (for CHANGES() function).
+    /// </summary>
+    private int _lastChanges;
+
+    /// <summary>
+    /// Cumulative number of rows changed since the connection was opened (for TOTAL_CHANGES() function).
+    /// </summary>
+    private int _totalChanges;
+
+    /// <summary>
+    /// Row ID of the last inserted row (for LAST_INSERT_ROWID() function).
+    /// </summary>
+    private long _lastInsertRowId;
+
+    /// <summary>
+    /// Temporary query buffer for statements that return rows from non-SELECT operations (e.g., DML RETURNING).
+    /// </summary>
+    private List<Dictionary<string, object>> _pendingQueryResults = [];
+
+    /// <summary>
     /// Optional vector query optimizer registered by the VectorSearch module.
     /// When set, the query planner detects ORDER BY vec_distance_*() + LIMIT patterns
     /// and routes them to a vector index instead of a full table scan.

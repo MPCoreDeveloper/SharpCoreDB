@@ -30,6 +30,12 @@ public class SelectNode : SqlNode
     public List<ColumnNode> Columns { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets whether SELECT uses OPTIONALLY mode.
+    /// When true, result mappers should prefer Option&lt;T&gt; wrappers for projected values.
+    /// </summary>
+    public bool IsOptionalProjection { get; set; }
+
+    /// <summary>
     /// Gets or sets the FROM clause.
     /// </summary>
     public FromNode? From { get; set; }
@@ -68,6 +74,11 @@ public class SelectNode : SqlNode
     /// Gets or sets the HAVING clause.
     /// </summary>
     public HavingNode? Having { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional GRAPH_RAG clause.
+    /// </summary>
+    public GraphRagClauseNode? GraphRag { get; set; }
 
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitSelect(this);
@@ -127,6 +138,11 @@ public class ColumnNode : SqlNode
     /// Gets or sets the FILTER expression for window functions.
     /// </summary>
     public ExpressionNode? WindowFilter { get; set; }
+
+    /// <summary>
+    /// Gets or sets the window FRAME clause (e.g., "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW").
+    /// </summary>
+    public string? WindowFrame { get; set; }
 
     /// <summary>
     /// Gets or sets a parsed expression for scalar functions (e.g., COALESCE, IIF, NULLIF).
@@ -452,4 +468,207 @@ public class GraphTraverseNode : ExpressionNode
 
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitGraphTraverse(this);
+}
+
+/// <summary>
+/// Represents a GRAPH_RAG clause attached to a SELECT statement.
+/// </summary>
+public class GraphRagClauseNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the natural-language question prompt.
+    /// </summary>
+    public string Question { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the optional score threshold.
+    /// </summary>
+    public double? MinScore { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether enriched context should be included in result rows.
+    /// </summary>
+    public bool IncludeContext { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional TOP_K value for candidate retrieval.
+    /// </summary>
+    public int? TopK { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional limit override scoped to GRAPH_RAG output.
+    /// </summary>
+    public int? Limit { get; set; }
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor)
+        => throw new NotSupportedException("GRAPH_RAG clause does not participate in SQL visitor traversal directly.");
+}
+
+/// <summary>
+/// Defines the type of set operation between two SELECT arms.
+/// </summary>
+public enum SetOperationType
+{
+    /// <summary>UNION — deduplicated.</summary>
+    Union,
+
+    /// <summary>UNION ALL — no deduplication.</summary>
+    UnionAll,
+
+    /// <summary>INTERSECT — rows present in both arms.</summary>
+    Intersect,
+
+    /// <summary>EXCEPT — rows in left arm but not in right arm.</summary>
+    Except,
+}
+
+/// <summary>
+/// Represents a set operation (UNION / UNION ALL / INTERSECT / EXCEPT) combining two SELECT arms.
+/// The outer ORDER BY and LIMIT/OFFSET apply to the combined result.
+/// </summary>
+public class SetOperationNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the left SELECT arm.
+    /// </summary>
+    public required SelectNode Left { get; set; }
+
+    /// <summary>
+    /// Gets or sets the right SELECT arm.
+    /// </summary>
+    public required SelectNode Right { get; set; }
+
+    /// <summary>
+    /// Gets or sets the set operation type.
+    /// </summary>
+    public SetOperationType Operation { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional outer ORDER BY clause applied to the combined result.
+    /// </summary>
+    public OrderByNode? OrderBy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional outer LIMIT.
+    /// </summary>
+    public int? Limit { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional outer OFFSET.
+    /// </summary>
+    public int? Offset { get; set; }
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitSetOperation(this);
+}
+
+/// <summary>
+/// Represents a WITH RECURSIVE CTE (Common Table Expression).
+/// </summary>
+public class WithRecursiveNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the CTE name.
+    /// </summary>
+    public string CteName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the optional CTE column list.
+    /// </summary>
+    public List<string> ColumnNames { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets whether this is a RECURSIVE CTE.
+    /// </summary>
+    public bool IsRecursive { get; set; }
+
+    /// <summary>
+    /// Gets or sets the anchor (base case) SELECT.
+    /// </summary>
+    public required SelectNode AnchorSelect { get; set; }
+
+    /// <summary>
+    /// Gets or sets the recursive SELECT arm (after UNION ALL).
+    /// </summary>
+    public SelectNode? RecursiveSelect { get; set; }
+
+    /// <summary>
+    /// Gets or sets the outer query that references the CTE.
+    /// </summary>
+    public required SqlNode OuterQuery { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum iteration limit for cycle detection.
+    /// </summary>
+    public int MaxIterations { get; set; } = 1000;
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitSelect(
+        (SelectNode)OuterQuery); // Delegate to outer query execution
+}
+
+/// <summary>
+/// Represents an EXPLAIN QUERY PLAN statement.
+/// </summary>
+public class ExplainQueryPlanNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the inner statement being explained.
+    /// </summary>
+    public required SqlNode InnerStatement { get; set; }
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) =>
+        throw new NotSupportedException("EXPLAIN QUERY PLAN is handled directly by the executor.");
+}
+
+/// <summary>
+/// Represents a BEGIN TRANSACTION statement.
+/// </summary>
+public class BeginTransactionNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the transaction mode (DEFERRED, IMMEDIATE, EXCLUSIVE).
+    /// </summary>
+    public string Mode { get; set; } = "DEFERRED";
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) =>
+        throw new NotSupportedException("BEGIN TRANSACTION is handled directly by the executor.");
+}
+
+/// <summary>
+/// Represents a SAVEPOINT statement.
+/// </summary>
+public class SavepointNode : SqlNode
+{
+    /// <summary>
+    /// Gets or sets the savepoint name.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the savepoint action (Save, Release, RollbackTo).
+    /// </summary>
+    public SavepointAction Action { get; set; }
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) =>
+        throw new NotSupportedException("SAVEPOINT is handled directly by the executor.");
+}
+
+/// <summary>
+/// Savepoint action types.
+/// </summary>
+public enum SavepointAction
+{
+    /// <summary>Create a savepoint.</summary>
+    Save,
+
+    /// <summary>Release (commit) a savepoint.</summary>
+    Release,
+
+    /// <summary>Rollback to a savepoint.</summary>
+    RollbackTo,
 }

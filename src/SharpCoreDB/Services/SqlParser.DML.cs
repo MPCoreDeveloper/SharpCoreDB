@@ -49,97 +49,97 @@ public partial class SqlParser
             case (SqlConstants.CREATE, SqlConstants.TABLE):
                 ExecuteCreateTable(sql, parts, wal);
                 break;
-            
+
             case (SqlConstants.CREATE, "INDEX"):
                 ExecuteCreateIndex(sql, parts, wal);
                 break;
-            
+
             case (SqlConstants.CREATE, "UNIQUE"):
                 ExecuteCreateIndex(sql, parts, wal);
                 break;
-            
+
             case (SqlConstants.INSERT, SqlConstants.INTO):
                 ExecuteInsert(sql, wal);
                 break;
-            
+
             case ("UPDATE", _):
                 ExecuteUpdate(sql, wal);
                 break;
-            
+
             case ("DELETE", _):
                 ExecuteDelete(sql, wal);
                 break;
-            
+
             case ("EXPLAIN", _):
                 ExecuteExplain(parts);
                 break;
-            
+
             case (SqlConstants.SELECT, _):
                 ExecuteSelect(sql, parts, noEncrypt);
                 break;
-            
+
             case ("DROP", "TABLE") when parts.Length > 1:
                 ExecuteDropTable(parts, sql, wal);
                 break;
-            
+
             case ("DROP", "INDEX") when parts.Length > 1:
                 ExecuteDropIndex(parts, sql, wal);
                 break;
-            
+
             // Phase 5: Vector Index DDL
             case (SqlConstants.CREATE, "VECTOR") when parts.Length > 2
                 && parts[2].Equals("INDEX", StringComparison.OrdinalIgnoreCase):
                 ExecuteCreateVectorIndex(sql, parts, wal);
                 break;
-            
+
             case ("DROP", "VECTOR") when parts.Length > 2
                 && parts[2].Equals("INDEX", StringComparison.OrdinalIgnoreCase):
                 ExecuteDropVectorIndex(sql, parts, wal);
                 break;
-            
+
             case ("ALTER", SqlConstants.TABLE) when parts.Length > 1:
                 ExecuteAlterTable(parts, sql, wal);
                 break;
-            
+
             case ("VACUUM", _):
                 ExecuteVacuum(parts);
                 break;
-            
+
             // Phase 1.3: Stored Procedures
             case (SqlConstants.CREATE, "PROCEDURE") when parts.Length > 2:
                 ExecuteCreateProcedure(sql, parts, wal);
                 break;
-            
+
             case ("DROP", "PROCEDURE") when parts.Length > 2:
                 ExecuteDropProcedure(sql, parts, wal);
                 break;
-            
+
             case ("EXEC", _) when parts.Length > 1:
                 ExecuteExecProcedure(sql, parts);
                 break;
-            
+
             // Phase 1.3: Views
             case (SqlConstants.CREATE, "VIEW") when parts.Length > 2:
                 ExecuteCreateView(sql, parts, wal);
                 break;
-            
+
             case (SqlConstants.CREATE, "MATERIALIZED") when parts.Length > 3:
                 ExecuteCreateView(sql, parts, wal);
                 break;
-            
+
             case ("DROP", "VIEW") when parts.Length > 2:
                 ExecuteDropView(sql, parts, wal);
                 break;
-            
+
             // Phase 1.4: Triggers
             case (SqlConstants.CREATE, "TRIGGER") when parts.Length > 2:
                 ExecuteCreateTrigger(sql, parts, wal);
                 break;
-            
+
             case ("DROP", "TRIGGER") when parts.Length > 2:
                 ExecuteDropTrigger(sql, parts, wal);
                 break;
-            
+
             default:
                 throw new InvalidOperationException($"Unsupported SQL statement: {firstWord} {secondWord}");
         }
@@ -154,9 +154,19 @@ public partial class SqlParser
     /// <returns>A list of dictionaries representing the query results.</returns>
     private List<Dictionary<string, object>> ExecuteQueryInternal(string sql, string[] parts, bool noEncrypt = false)
     {
-        List<Dictionary<string, object>> results = [];
+        if (parts.Length == 0) return [];
 
-        return string.Equals(parts[0], SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase) ? ExecuteSelectQuery(sql, parts, noEncrypt) : results;
+        // ─── WITH [RECURSIVE] CTE ─────────────────────────────────────────
+        if (parts[0].Equals("WITH", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExecuteWithCte(sql);
+        }
+
+        if (string.Equals(parts[0], SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
+            return ExecuteSelectQuery(sql, parts, noEncrypt);
+        _pendingQueryResults = [];
+        ExecuteInternal(sql, parts, wal: null, noEncrypt: noEncrypt);
+        return _pendingQueryResults is { Count: > 0 } ? [.. _pendingQueryResults] : [];
     }
 
     /// <summary>
@@ -167,91 +177,116 @@ public partial class SqlParser
     /// </summary>
     private void ExecuteInsert(string sql, IWAL? wal)
     {
-        if (this.isReadOnly)
-            throw new InvalidOperationException("Cannot insert in readonly mode");
-
-        var insertSql = sql[sql.IndexOf("INSERT INTO")..];
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        _lastChanges = 0;
+        var returningColumns = TryExtractReturningColumns(sql, out var sqlWithoutReturning);
+        var insertSql = sqlWithoutReturning[sqlWithoutReturning.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase)..];
         var tableStart = "INSERT INTO ".Length;
         var tableEnd = insertSql.IndexOf(' ', tableStart);
-        if (tableEnd == -1)
-            tableEnd = insertSql.IndexOf('(', tableStart);
-
+        if (tableEnd == -1) tableEnd = insertSql.IndexOf('(', tableStart);
         var tableName = insertSql[tableStart..tableEnd].Trim().Trim('"', '[', ']', '`');
-
         if (!this.tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
-
         var rest = insertSql[tableEnd..];
         List<string>? insertColumns = null;
         if (rest.TrimStart().StartsWith('('))
         {
             var colStart = rest.IndexOf('(') + 1;
             var colEnd = rest.IndexOf(')', colStart);
-            var colStr = rest[colStart..colEnd];
-            insertColumns = [.. colStr.Split(',').Select(c => c.Trim().Trim('"', '[', ']', '`'))];
+            insertColumns = [.. rest[colStart..colEnd].Split(',').Select(c => c.Trim().Trim('"', '[', ']', '`'))];
             rest = rest[(colEnd + 1)..];
         }
 
+        // ─── INSERT INTO … SELECT (no VALUES keyword) ─────────────────────
+        var restTrimmed = rest.Trim();
+        if (restTrimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        {
+            var selectSql = restTrimmed;
+            var selectParts = selectSql.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var sourceRows = ExecuteSelectQuery(selectSql, selectParts, noEncrypt: false);
+            var insertedFromSelect = new List<Dictionary<string, object>>();
+            foreach (var sourceRow in sourceRows)
+            {
+                var newRow = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                if (insertColumns is not null)
+                {
+                    for (int ci = 0; ci < insertColumns.Count; ci++)
+                    {
+                        var destCol = insertColumns[ci];
+                        var srcKey = sourceRow.Keys.ElementAtOrDefault(ci) ?? destCol;
+                        newRow[destCol] = sourceRow.TryGetValue(srcKey, out var sv) ? sv : DBNull.Value;
+                    }
+                }
+                else
+                {
+                    foreach (var kv in sourceRow)
+                        newRow[kv.Key] = kv.Value;
+                }
+                FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: newRow);
+                table.Insert(newRow);
+                FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: newRow);
+                insertedFromSelect.Add(new Dictionary<string, object>(newRow, StringComparer.OrdinalIgnoreCase));
+            }
+            _lastChanges = insertedFromSelect.Count;
+            _totalChanges += insertedFromSelect.Count;
+            if (insertedFromSelect.Count > 0) _lastInsertRowId++;
+            if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedFromSelect, returningColumns);
+            wal?.Log(sqlWithoutReturning);
+            return;
+        }
+        // ──────────────────────────────────────────────────────────────────
         var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
         var valuesRest = rest[valuesStart..].Trim();
-
-        // ✅ FIXED: Parse multi-row VALUES clause like: (1, 'a'), (2, 'b'), (3, 'c')
         List<List<string>> allRowValues = ParseMultiRowInsertValues(valuesRest);
-
-        // ✅ AUTO-ROWID: Determine which columns receive user-supplied values.
-        // When the table has an internal _rowid and the user does not explicitly
-        // reference it, skip _rowid during value mapping so user values align
-        // with the user-visible columns. The _rowid will be auto-generated by
-        // Table.Insert() via the IsAuto mechanism.
         var tableAsTable = table as Table;
         bool skipInternalRowId = tableAsTable is { HasInternalRowId: true }
-            && (insertColumns is null
-                || !insertColumns.Contains(
-                    Constants.PersistenceConstants.InternalRowIdColumnName,
-                    StringComparer.OrdinalIgnoreCase));
-
-        // Insert each row
+            && (insertColumns is null || !insertColumns.Contains(Constants.PersistenceConstants.InternalRowIdColumnName, StringComparer.OrdinalIgnoreCase));
+        var insertedRows = new List<Dictionary<string, object>>();
         foreach (var rowValues in allRowValues)
         {
             var row = new Dictionary<string, object>();
-
             if (insertColumns is null)
             {
-                // All user-visible columns (skip _rowid when internal)
                 int valueIdx = 0;
                 for (int i = 0; i < table.Columns.Count; i++)
                 {
                     var col = table.Columns[i];
-
-                    // Skip internal _rowid — it will be auto-generated
-                    if (skipInternalRowId && col == Constants.PersistenceConstants.InternalRowIdColumnName)
-                        continue;
-
+                    if (skipInternalRowId && col == Constants.PersistenceConstants.InternalRowIdColumnName) continue;
                     var type = table.ColumnTypes[i];
-                    var valueStr = valueIdx < rowValues.Count ? rowValues[valueIdx] : "NULL";
-                    row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                    row[col] = SqlParser.ParseValue(valueIdx < rowValues.Count ? rowValues[valueIdx] : "NULL", type) ?? DBNull.Value;
                     valueIdx++;
                 }
             }
             else
             {
-                // Specified columns  
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
                     var col = insertColumns[i];
                     var idx = table.Columns.IndexOf(col);
-                    var type = table.ColumnTypes[idx];
-                    var valueStr = i < rowValues.Count ? rowValues[i] : "NULL";
-                    row[col] = SqlParser.ParseValue(valueStr, type) ?? DBNull.Value;
+                    row[col] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
                 }
             }
-
             FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
             table.Insert(row);
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
+            insertedRows.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
         }
-
-        wal?.Log(sql);
+        _lastChanges = insertedRows.Count;
+        _totalChanges += insertedRows.Count;
+        if (insertedRows.Count > 0)
+        {
+            // SQLite compatibility: last_insert_rowid returns the first INTEGER column value
+            var lastRow = insertedRows[^1];
+            var firstIntCol = table.Columns
+                .Select((col, i) => (col, type: table.ColumnTypes[i]))
+                .FirstOrDefault(c => c.type == DataType.Integer || c.type == DataType.Long);
+            if (firstIntCol.col is not null && lastRow.TryGetValue(firstIntCol.col, out var idVal) && idVal is not null and not DBNull)
+                _lastInsertRowId = Convert.ToInt64(idVal);
+            else
+                _lastInsertRowId++;
+        }
+        if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedRows, returningColumns);
+        wal?.Log(sqlWithoutReturning);
     }
 
     /// <summary>
@@ -263,25 +298,25 @@ public partial class SqlParser
     {
         List<List<string>> allRows = [];
         var remaining = valuesRest.Trim();
-        
+
         // Parse multiple rows: (val1, val2), (val3, val4), ...
         while (remaining.Length > 0 && remaining[0] == '(')
         {
             int closeParenIdx = FindMatchingCloseParen(remaining, 0);
             if (closeParenIdx < 0)
                 throw new InvalidOperationException("Mismatched parentheses in VALUES clause");
-            
+
             var rowStr = remaining[1..closeParenIdx]; // Extract content between parens
             var rowValues = ParseInsertValues(rowStr);
             allRows.Add(rowValues);
-            
+
             remaining = remaining[(closeParenIdx + 1)..].Trim();
-            
+
             // Skip comma if present
             if (remaining.StartsWith(','))
                 remaining = remaining[1..].Trim();
         }
-        
+
         return allRows;
     }
 
@@ -292,17 +327,17 @@ public partial class SqlParser
     {
         int depth = 0;
         bool inQuotes = false;
-        
+
         for (int i = openParenIdx; i < str.Length; i++)
         {
             char c = str[i];
-            
+
             // Toggle quote state, respecting escape
-            if (c == '\'' && (i == 0 || str[i-1] != '\\'))
+            if (c == '\'' && (i == 0 || str[i - 1] != '\\'))
             {
                 inQuotes = !inQuotes;
             }
-            
+
             // Track parenthesis depth only outside quotes
             if (!inQuotes)
             {
@@ -314,7 +349,7 @@ public partial class SqlParser
                 }
             }
         }
-        
+
         return -1; // Unmatched
     }
 
@@ -327,7 +362,7 @@ public partial class SqlParser
         List<string> values = [];
         var currentValue = new StringBuilder();
         bool inQuotes = false;
-        
+
         foreach (char c in valuesStr)
         {
             if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
@@ -335,7 +370,7 @@ public partial class SqlParser
                 inQuotes = !inQuotes;
                 continue;  // Skip quote character itself
             }
-            
+
             if (c == ',' && !inQuotes)
             {
                 values.Add(currentValue.ToString().Trim());
@@ -346,10 +381,10 @@ public partial class SqlParser
                 currentValue.Append(c);
             }
         }
-        
+
         if (currentValue.Length > 0)
             values.Add(currentValue.ToString().Trim());
-        
+
         return values;
     }
 
@@ -361,18 +396,18 @@ public partial class SqlParser
     {
         if (parts.Length < 2 || !string.Equals(parts[1], "SELECT", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("EXPLAIN only supports SELECT queries");
-        
+
         var selectParts = parts.Skip(1).ToArray();
         var sql = string.Join(" ", selectParts);
-        var tableName = ExtractMainTableNameFromSql(sql, 0) 
+        var tableName = ExtractMainTableNameFromSql(sql, 0)
             ?? SelectFallbackTableName(selectParts);
-        
+
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
-        
+
         var whereIdx = Array.IndexOf(selectParts, SqlConstants.WHERE);
         var plan = GenerateQueryPlan(selectParts, tableName, whereIdx);
-        
+
         Console.WriteLine($"EXPLAIN: {plan}");
     }
 
@@ -384,7 +419,7 @@ public partial class SqlParser
         var fromIdx = Array.IndexOf(selectParts, SqlConstants.FROM);
         if (fromIdx < 0 || fromIdx + 1 >= selectParts.Length)
             throw new InvalidOperationException("Invalid SELECT query for EXPLAIN");
-        
+
         return selectParts[fromIdx + 1].TrimEnd(')', ',', ';').Trim('"', '[', ']', '`');
     }
 
@@ -432,7 +467,7 @@ public partial class SqlParser
             _ => $"Full table scan with WHERE on {col}"
         };
     }
-    
+
     /// <summary>
     /// Executes SELECT statement (console output version).
     /// NOTE: This method is for interactive/demo use only. Use ExecuteQuery() for production.
@@ -441,7 +476,7 @@ public partial class SqlParser
     private void ExecuteSelect(string sql, string[] parts, bool noEncrypt)
     {
         var results = ExecuteSelectQuery(sql, parts, noEncrypt);
-        
+
         // ✅ FIX: Skip console output in CI environments to prevent log overflow
         // GitHub Actions sets CI=true, Azure DevOps sets TF_BUILD=true
         if (Environment.GetEnvironmentVariable("CI") is not null ||
@@ -450,7 +485,7 @@ public partial class SqlParser
         {
             return;
         }
-        
+
         foreach (var row in results)
         {
             Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}")));
@@ -473,11 +508,21 @@ public partial class SqlParser
             return ExecuteSqliteMasterQuery(sql);
         }
 
+        // ✅ Route GRAPH_RAG queries through EnhancedSqlParser before regex-based parsing
+        if (sql.Contains("GRAPH_RAG", StringComparison.OrdinalIgnoreCase))
+        {
+            var ast = ParseWithEnhancedParser(sql);
+            if (ast is SelectNode graphRagNode && graphRagNode.GraphRag is not null)
+            {
+                return ExecuteGraphRagSelect(graphRagNode);
+            }
+        }
+
         // Extract table name
         var tableName = ExtractMainTableNameFromSql(sql, 0);
-        
+
         // ✅ NEW: Check for JOIN keywords to route through Enhanced Parser for proper alias handling
-        var hasJoin = parts.Any(p => 
+        var hasJoin = parts.Any(p =>
             p.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
             p.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
             p.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
@@ -491,10 +536,10 @@ public partial class SqlParser
         }
 
         var selectClause = string.Join(" ", parts.Skip(1).TakeWhile(p => !p.Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase)));
-        
+
         // ✅ C# 14: Collection expressions for parameter lists
         var keywords = new[] { "WHERE", "ORDER", "LIMIT" };
-        
+
         // Check for aggregate functions
         var selectUpper = selectClause.ToUpperInvariant();
         if (selectUpper.Contains("COUNT(*)"))
@@ -562,7 +607,7 @@ public partial class SqlParser
 
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
-        
+
         TrackColumnUsage(tableName, whereStr);
 
         // Phase 5.4: Detect ORDER BY vec_distance_*(col, query) LIMIT k → route to vector index
@@ -588,7 +633,7 @@ public partial class SqlParser
         // Apply limit and offset
         if (offset.HasValue && offset.Value > 0)
             results = [.. results.Skip(offset.Value)]; // ✅ C# 14: Collection expression with spread
-        
+
         if (limit.HasValue && limit.Value > 0)
             results = [.. results.Take(limit.Value)];
 
@@ -598,68 +643,6 @@ public partial class SqlParser
         return results;
     }
 
-    private static List<Dictionary<string, object>> ExecuteSelectLiteralQuery(string selectClause)
-    {
-        var row = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-        var expressions = selectClause.Split(',', StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var expression in expressions)
-        {
-            var trimmed = expression.Trim();
-            if (trimmed.Length == 0)
-            {
-                continue;
-            }
-
-            row[trimmed] = ParseSelectLiteralValue(trimmed) ?? DBNull.Value;
-        }
-
-        return [row];
-    }
-
-    private static object? ParseSelectLiteralValue(string literal)
-    {
-        if (literal.Equals("NULL", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        if (literal.Length >= 2)
-        {
-            if ((literal[0] == '\'' && literal[^1] == '\'') ||
-                (literal[0] == '"' && literal[^1] == '"'))
-            {
-                return literal[1..^1];
-            }
-        }
-
-        if (int.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
-        {
-            return intValue;
-        }
-
-        if (long.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
-        {
-            return longValue;
-        }
-
-        if (decimal.TryParse(literal, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
-        {
-            return decimalValue;
-        }
-
-        if (double.TryParse(literal, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var doubleValue))
-        {
-            return doubleValue;
-        }
-
-        if (bool.TryParse(literal, out var boolValue))
-        {
-            return boolValue;
-        }
-
-        return literal;
-    }
 
     /// <summary>
     /// Executes COUNT(*) aggregate query with modern patterns.
@@ -669,7 +652,7 @@ public partial class SqlParser
     {
         var sql = string.Join(" ", parts);
         var tableName = ExtractMainTableNameFromSql(sql, 0) ?? SelectFallbackTableName(parts.Skip(1).ToArray());
-        
+
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
@@ -677,7 +660,7 @@ public partial class SqlParser
         string? whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
 
         var allRows = this.tables[tableName].Select();
-        
+
         if (!string.IsNullOrEmpty(whereStr))
             allRows = [.. allRows.Where(r => SqlParser.EvaluateJoinWhere(r, whereStr))]; // ✅ C# 14: Collection expression
 
@@ -693,22 +676,139 @@ public partial class SqlParser
             return (null, null);
 
         var limitParts = parts.Skip(limitIdx + 1).ToArray();
-        if (limitParts.Length == 0)
-            return (null, null);
-
-        // ✅ C# 14: Pattern matching with tuple unpacking
-        return (limitParts.Length, limitParts.Length > 2 && limitParts[1].ToUpper() == "OFFSET") switch
+        if (limitParts.Length == 1)
         {
-            (> 2, true) => (int.Parse(limitParts[0]), int.Parse(limitParts[2])),
-            (> 0, _) => (int.Parse(limitParts[0]), null),
-            _ => (null, null)
+            if (int.TryParse(limitParts[0], out var limit))
+                return (limit, null);
+
+            // Handle OFFSET X shorthand
+            if (limitParts[0].StartsWith("OFFSET", StringComparison.OrdinalIgnoreCase))
+            {
+                var offsetValue = limitParts[0][6..].Trim();
+                if (int.TryParse(offsetValue, out var offset))
+                    return (null, offset);
+            }
+        }
+        else if (limitParts.Length == 2)
+        {
+            if (int.TryParse(limitParts[0], out var offset) && offset >= 0)
+            {
+                if (int.TryParse(limitParts[1], out var limit) && limit > 0)
+                    return (limit, offset);
+            }
+        }
+
+        throw new ArgumentException("Invalid LIMIT clause");
+    }
+
+    /// <summary>
+    /// Evaluates a scalar function call with the given arguments.
+    /// Includes COALESCE, IFNULL, NULLIF, IIF, TYPEOF, and more.
+    /// </summary>
+    private object? EvaluateScalarFunction(FunctionCallNode functionCall, object?[] args)
+    {
+        // Normalize DBNull to null for consistency
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] is DBNull)
+                args[i] = null;
+        }
+
+        // Phase 5.2: TIMESTAMPDIFF function with modern pattern matching
+        if (functionCall.FunctionName.Equals("TIMESTAMPDIFF", StringComparison.OrdinalIgnoreCase) && args.Length == 3)
+        {
+            return (args[0] is DateTime start && args[1] is DateTime end && args[2] is string unit)
+                ? unit.ToUpperInvariant() switch
+                {
+                    "MICROSECOND" => (end - start).TotalMilliseconds * 1000,
+                    "MILLISECOND" => (end - start).TotalMilliseconds,
+                    "SECOND" => (end - start).TotalSeconds,
+                    "MINUTE" => (end - start).TotalMinutes,
+                    "HOUR" => (end - start).TotalHours,
+                    "DAY" => (end - start).TotalDays,
+                    _ => null
+                }
+                : null;
+        }
+
+        // General scalar function evaluation
+        return functionCall.FunctionName.ToUpperInvariant() switch
+        {
+            "COALESCE" => (object?)args.FirstOrDefault(arg => arg is not null),
+            "IFNULL" => args.Length == 2 ? (object?)(args[0] ?? args[1]) : throw new ArgumentException("IFNULL requires 2 arguments"),
+            "NULLIF" => args.Length == 2 ? (object?)(SqlParser.AreValuesEqual(args[0], args[1]) ? null : args[0]) : throw new ArgumentException("NULLIF requires 2 arguments"),
+            "IIF" => args.Length == 3 ? (object?)(args[0] is bool condition ? (condition ? args[1] : args[2]) : null) : throw new ArgumentException("IIF requires 3 arguments"),
+            "TYPEOF" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                null => "null",
+                int or long => "integer",
+                double or float => "real",
+                string => "text",
+                bool => "integer",
+                _ => "text"
+            }) : throw new ArgumentException("TYPEOF requires 1 argument"),
+            "ABS" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                double d => Math.Abs(d),
+                int i => Math.Abs(i),
+                long l => Math.Abs(l),
+                _ => null
+            }) : throw new ArgumentException("ABS requires 1 argument"),
+            "ROUND" => args.Length >= 1 && args.Length <= 2 && args[0] is double rd ? (object?)Math.Round(rd, args.Length == 2 && args[1] is int ri ? ri : 0) : null,
+            "CEIL" or "CEILING" => args.Length == 1 && args[0] is double cd ? (object?)Math.Ceiling(cd) : null,
+            "FLOOR" => args.Length == 1 && args[0] is double fd ? (object?)Math.Floor(fd) : null,
+            "UPPER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToUpperInvariant() : throw new ArgumentException("UPPER requires 1 argument"),
+            "LOWER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToLowerInvariant() : throw new ArgumentException("LOWER requires 1 argument"),
+            "LENGTH" => args.Length == 1 ? (object?)(args[0]?.ToString()?.Length ?? 0) : throw new ArgumentException("LENGTH requires 1 argument"),
+            "TRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.Trim() : throw new ArgumentException("TRIM requires 1 argument"),
+            "LTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimStart() : throw new ArgumentException("LTRIM requires 1 argument"),
+            "RTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimEnd() : throw new ArgumentException("RTRIM requires 1 argument"),
+            "SUBSTR" or "SUBSTRING" => args.Length >= 2 && args.Length <= 3 ? (object?)(args[0]?.ToString() is string sstr && args[1] is int sstart ? sstr.Length >= sstart && sstart > 0 ? sstr.Substring(sstart - 1, Math.Min(args.Length == 3 && args[2] is int sl ? sl : sstr.Length - sstart + 1, sstr.Length - sstart + 1)) : "" : null) : throw new ArgumentException("SUBSTR requires 2 or 3 arguments"),
+            "REPLACE" => args.Length == 3 ? (object?)args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : throw new ArgumentException("REPLACE requires 3 arguments"),
+            "INSTR" => args.Length == 2 ? (object?)(args[0]?.ToString() is string istr && args[1]?.ToString() is string isubstr ? (istr.IndexOf(isubstr, StringComparison.Ordinal) is int iidx && iidx >= 0 ? iidx + 1 : 0) : 0) : throw new ArgumentException("INSTR requires 2 arguments"),
+            "REGEXP" => args.Length == 2 ? (object?)(args[0]?.ToString() is string rpattern && args[1]?.ToString() is string rinput ? Regex.IsMatch(rinput, rpattern) : false) : throw new ArgumentException("REGEXP requires 2 arguments"),
+            "GLOB" => args.Length == 2 ? (object?)(args[0]?.ToString() is string gpattern && args[1]?.ToString() is string gstr ? Regex.IsMatch(gstr, "^" + Regex.Escape(gpattern).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase) : false) : throw new ArgumentException("GLOB requires 2 arguments"),
+            "NOT" when args.Length == 1 && args[0] is bool nb => (object?)!nb,
+            "MOD" => args.Length == 2 ? (object?)(args[0] is double ma && args[1] is double mb && mb != 0 ? ma % mb : args[0] is int mia && args[1] is int mib && mib != 0 ? mia % mib : null) : throw new ArgumentException("MOD requires 2 arguments"),
+            "POW" or "POWER" => args.Length == 2 && args[0] is double pa && args[1] is double pb ? (object?)Math.Pow(pa, pb) : null,
+            "SQRT" => args.Length == 1 && args[0] is double sqd && sqd >= 0 ? (object?)Math.Sqrt(sqd) : null,
+            "SIGN" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                double sd => Math.Sign(sd),
+                int si => Math.Sign(si),
+                long sl => Math.Sign(sl),
+                _ => 0
+            }) : throw new ArgumentException("SIGN requires 1 argument"),
+            "MIN" => args.Length == 2 ? (object?)(args[0] is double mina && args[1] is double minb ? Math.Min(mina, minb) : args[0] is int minia && args[1] is int minib ? Math.Min(minia, minib) : args[0]) : throw new ArgumentException("MIN requires 2 arguments"),
+            "MAX" => args.Length == 2 ? (object?)(args[0] is double maxa && args[1] is double maxb ? Math.Max(maxa, maxb) : args[0] is int maxia && args[1] is int maxib ? Math.Max(maxia, maxib) : args[0]) : throw new ArgumentException("MAX requires 2 arguments"),
+            "RANDOM" => (object?)Random.Shared.NextInt64(),
+            _ => throw new NotSupportedException("Function '" + functionCall.FunctionName + "' is not supported.")
         };
     }
 
     /// <summary>
-    /// Handles derived tables and JOINs.
-    /// For JOINs, executes directly via JoinExecutor instead of AST stub.
+    /// Evaluates a function call node against a row, resolving arguments from the row context.
     /// </summary>
+    private object? EvaluateFunctionCall(FunctionCallNode functionCall, Dictionary<string, object> row)
+    {
+        ArgumentNullException.ThrowIfNull(functionCall);
+        ArgumentNullException.ThrowIfNull(row);
+
+        var args = new object?[functionCall.Arguments.Count];
+        for (int i = 0; i < functionCall.Arguments.Count; i++)
+        {
+            args[i] = functionCall.Arguments[i] switch
+            {
+                LiteralNode lit => lit.Value,
+                ColumnReferenceNode col => row.TryGetValue(col.ColumnName, out var v) ? v : null,
+                FunctionCallNode nested => EvaluateFunctionCall(nested, row),
+                _ => null
+            };
+        }
+
+        return EvaluateScalarFunction(functionCall, args);
+    }
+
     private List<Dictionary<string, object>> HandleDerivedTable(string sql, bool noEncrypt)
     {
         // Route JOIN queries to direct execution
@@ -1101,7 +1201,7 @@ public partial class SqlParser
         if (whereIdx >= 0)
         {
             var whereCl = sql[whereIdx..];
-            
+
             // Extract type filter (e.g., type='table')
             var typeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"type\s*=\s*'(\w+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (typeMatch.Success)
@@ -1128,10 +1228,10 @@ public partial class SqlParser
             {
                 if (nameFilter != null)
                 {
-                    var isMatch = nameFilter.Contains(".*") 
+                    var isMatch = nameFilter.Contains(".*")
                         ? System.Text.RegularExpressions.Regex.IsMatch(tableName, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
                         : tableName.Equals(nameFilter, StringComparison.OrdinalIgnoreCase);
-                    
+
                     if (!isMatch)
                         continue;
                 }
@@ -1186,11 +1286,11 @@ public partial class SqlParser
     {
         if (parts.Length < 2)
             throw new InvalidOperationException("VACUUM requires a table name");
-        
+
         var tableName = parts[1];
         if (!this.tables.TryGetValue(tableName, out _))
             throw new InvalidOperationException($"Table {tableName} does not exist");
-        
+
         Console.WriteLine($"VACUUM: {tableName} - compaction completed");
     }
 
@@ -1204,7 +1304,7 @@ public partial class SqlParser
 
         // Parse UPDATE SQL: UPDATE table SET col=val WHERE condition
         var updateMatch = UpdateRegex.Match(sql);
-        
+
         if (!updateMatch.Success)
             throw new InvalidOperationException($"Invalid UPDATE syntax: {sql}");
 
@@ -1223,7 +1323,7 @@ public partial class SqlParser
             {
                 var colName = parts[0].Trim();
                 var valueStr = parts[1].Trim();
-                
+
                 // Find column type
                 var colIndex = table.Columns.IndexOf(colName);
                 if (colIndex >= 0)
@@ -1454,6 +1554,38 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         return ApplyProjection(sourceRows, selectNode.Columns);
     }
 
+    /// <summary>
+    /// Executes a set operation (UNION, UNION ALL, INTERSECT, EXCEPT) and returns the combined results.
+    /// </summary>
+    public List<Dictionary<string, object>> ExecuteSetOperation(SetOperationNode setOp)
+    {
+        ArgumentNullException.ThrowIfNull(setOp);
+
+        var leftRows = ExecuteSelect(setOp.Left);
+        var rightRows = ExecuteSelect(setOp.Right);
+
+        static string RowKey(Dictionary<string, object> row) =>
+            string.Join("|", row.OrderBy(static kv => kv.Key).Select(static kv => $"{kv.Key}:{kv.Value}"));
+
+        List<Dictionary<string, object>> combined = setOp.Operation switch
+        {
+            SetOperationType.UnionAll => [.. leftRows, .. rightRows],
+            SetOperationType.Union => [.. leftRows.Concat(rightRows)
+                .GroupBy(RowKey)
+                .Select(static g => g.First())],
+            SetOperationType.Intersect => [.. leftRows
+                .Where(l => rightRows.Any(r => RowKey(l) == RowKey(r)))],
+            SetOperationType.Except => [.. leftRows
+                .Where(l => !rightRows.Any(r => RowKey(l) == RowKey(r)))],
+            _ => throw new NotSupportedException($"Set operation '{setOp.Operation}' is not supported.")
+        };
+
+        combined = ApplyOrderBy(combined, setOp.OrderBy);
+        combined = ApplyWindowing(combined, setOp.Offset, setOp.Limit);
+
+        return combined;
+    }
+
     private List<Dictionary<string, object>> ResolveSourceRows(FromNode? from, List<ColumnNode> columns)
     {
         if (from is null)
@@ -1529,20 +1661,176 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             var output = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             foreach (var column in columns)
             {
-                var value = GetValue(row, column.Name);
-                if (value is null)
+                object? value;
+                if (column.Expression is not null)
                 {
-                    continue;
+                    value = EvaluateExpression(column.Expression, row);
+                }
+                else
+                {
+                    value = GetValue(row, column.Name);
                 }
 
                 var outputName = string.IsNullOrWhiteSpace(column.Alias) ? column.Name : column.Alias;
-                output[outputName] = value;
+                output[outputName] = value!;
             }
 
             projected.Add(output);
         }
 
         return projected;
+    }
+
+    private object? EvaluateExpression(ExpressionNode expression, Dictionary<string, object> row)
+    {
+        return expression switch
+        {
+            FunctionCallNode func => EvaluateFunctionCallInRow(func, row),
+            LiteralNode literal => literal.Value,
+            ColumnReferenceNode column => GetValue(row, column.ColumnName),
+            BinaryExpressionNode binary => EvaluateBinaryValueExpression(binary, row),
+            _ => null
+        };
+    }
+
+    private object? EvaluateFunctionCallInRow(FunctionCallNode func, Dictionary<string, object> row)
+    {
+        var args = new object?[func.Arguments.Count];
+        for (int i = 0; i < func.Arguments.Count; i++)
+        {
+            args[i] = EvaluateExpression(func.Arguments[i], row);
+        }
+
+        var name = func.FunctionName.ToUpperInvariant();
+        return name switch
+        {
+            "COALESCE" => args.FirstOrDefault(a => a is not null and not DBNull),
+            "IFNULL" => args.Length == 2 ? (args[0] is null or DBNull ? args[1] : args[0]) : null,
+            "NULLIF" => args.Length == 2 ? (SqlParser.AreValuesEqual(args[0], args[1]) ? null : args[0]) : null,
+            "IIF" => args.Length == 3 ? (IsTruthy(args[0]) ? args[1] : args[2]) : null,
+            "TYPEOF" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                null or DBNull => "null",
+                int or long => "integer",
+                double or float => "real",
+                string => "text",
+                bool => "integer",
+                _ => "text"
+            }) : null,
+            "ABS" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                double d => Math.Abs(d),
+                int i => Math.Abs(i),
+                long l => Math.Abs(l),
+                _ => null
+            }) : null,
+            "ROUND" => args.Length >= 1 && args.Length <= 2 ? EvalRound(args) : null,
+            "CEIL" or "CEILING" => args.Length == 1 && ToDouble(args[0]) is double cd ? (object?)Math.Ceiling(cd) : null,
+            "FLOOR" => args.Length == 1 && ToDouble(args[0]) is double fd ? (object?)Math.Floor(fd) : null,
+            "UPPER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToUpperInvariant() : null,
+            "LOWER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToLowerInvariant() : null,
+            "LENGTH" => args.Length == 1 ? (object?)(args[0]?.ToString()?.Length ?? 0) : null,
+            "TRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.Trim() : null,
+            "LTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimStart() : null,
+            "RTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimEnd() : null,
+            "SUBSTR" or "SUBSTRING" => EvalSubstr(args),
+            "REPLACE" => args.Length == 3 ? (object?)args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : null,
+            "INSTR" => args.Length == 2 ? EvalInstr(args) : null,
+            "SIGN" => args.Length == 1 ? (object?)(args[0] switch
+            {
+                double d => Math.Sign(d),
+                int i => Math.Sign(i),
+                long l => Math.Sign(l),
+                _ => 0
+            }) : null,
+            "MIN" => args.Length == 2 ? EvalMinMax(args, isMin: true) : null,
+            "MAX" => args.Length == 2 ? EvalMinMax(args, isMin: false) : null,
+            "MOD" => args.Length == 2 ? EvalMod(args) : null,
+            "POW" or "POWER" => args.Length == 2 && ToDouble(args[0]) is double pa && ToDouble(args[1]) is double pb ? (object?)Math.Pow(pa, pb) : null,
+            "SQRT" => args.Length == 1 && ToDouble(args[0]) is double sd && sd >= 0 ? (object?)Math.Sqrt(sd) : null,
+            "RANDOM" => (object?)Random.Shared.NextInt64(),
+            _ => null
+        };
+    }
+
+    private static bool IsTruthy(object? value) => value switch
+    {
+        bool b => b,
+        int i => i != 0,
+        long l => l != 0,
+        double d => d != 0,
+        string s => !string.IsNullOrEmpty(s),
+        null or DBNull => false,
+        _ => true
+    };
+
+    private static double? ToDouble(object? value) => value switch
+    {
+        double d => d,
+        int i => i,
+        long l => l,
+        float f => f,
+        _ => null
+    };
+
+    private static int? ToInt(object? value) => value switch
+    {
+        int i => i,
+        long l => (int)l,
+        double d => (int)d,
+        _ => null
+    };
+
+    private static object? EvalRound(object?[] args)
+    {
+        if (ToDouble(args[0]) is not double d) return null;
+        int digits = args.Length == 2 && ToInt(args[1]) is int di ? di : 0;
+        return (object?)Math.Round(d, digits, MidpointRounding.AwayFromZero);
+    }
+
+    private static object? EvalSubstr(object?[] args)
+    {
+        if (args.Length < 2 || args.Length > 3) return null;
+        if (args[0]?.ToString() is not string str) return null;
+        if (ToInt(args[1]) is not int start || start < 1) return null;
+        int maxLen = str.Length - start + 1;
+        if (maxLen < 0) return "";
+        int len = args.Length == 3 && ToInt(args[2]) is int l ? Math.Min(l, maxLen) : maxLen;
+        return (object?)str.Substring(start - 1, Math.Max(0, len));
+    }
+
+    private static object? EvalInstr(object?[] args)
+    {
+        if (args[0]?.ToString() is string str && args[1]?.ToString() is string substr)
+        {
+            int idx = str.IndexOf(substr, StringComparison.Ordinal);
+            return (object?)(idx >= 0 ? idx + 1 : 0);
+        }
+        return (object?)0;
+    }
+
+    private static object? EvalMinMax(object?[] args, bool isMin)
+    {
+        var a = ToDouble(args[0]);
+        var b = ToDouble(args[1]);
+        if (a is not null && b is not null)
+            return (object?)(isMin ? Math.Min(a.Value, b.Value) : Math.Max(a.Value, b.Value));
+        return args[0];
+    }
+
+    private static object? EvalMod(object?[] args)
+    {
+        var a = ToDouble(args[0]);
+        var b = ToDouble(args[1]);
+        if (a is not null && b is not null && b.Value != 0)
+            return (object?)(a.Value % b.Value);
+        return null;
+    }
+
+    private static object? EvaluateBinaryValueExpression(BinaryExpressionNode binary, Dictionary<string, object> row)
+    {
+        // For arithmetic expressions in SELECT
+        return null;
     }
 
     private static List<Dictionary<string, object>> ApplyOrderBy(List<Dictionary<string, object>> rows, OrderByNode? orderBy)
@@ -1552,12 +1840,27 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             return rows;
         }
 
-        var item = orderBy.Items[0];
-        var ordered = item.IsAscending
-            ? rows.OrderBy(row => GetValue(row, item.Column.ColumnName), Comparer<object?>.Create(CompareValues))
-            : rows.OrderByDescending(row => GetValue(row, item.Column.ColumnName), Comparer<object?>.Create(CompareValues));
+        var comparer = Comparer<object?>.Create(CompareValues);
+        IOrderedEnumerable<Dictionary<string, object>>? ordered = null;
 
-        return [.. ordered];
+        for (int i = 0; i < orderBy.Items.Count; i++)
+        {
+            var item = orderBy.Items[i];
+            if (i == 0)
+            {
+                ordered = item.IsAscending
+                    ? rows.OrderBy(row => GetValue(row, item.Column.ColumnName), comparer)
+                    : rows.OrderByDescending(row => GetValue(row, item.Column.ColumnName), comparer);
+            }
+            else
+            {
+                ordered = item.IsAscending
+                    ? ordered!.ThenBy(row => GetValue(row, item.Column.ColumnName), comparer)
+                    : ordered!.ThenByDescending(row => GetValue(row, item.Column.ColumnName), comparer);
+            }
+        }
+
+        return [.. ordered!];
     }
 
     private static List<Dictionary<string, object>> ApplyWindowing(List<Dictionary<string, object>> rows, int? offset, int? limit)
@@ -1617,6 +1920,16 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             ">=" => CompareValues(leftValue, rightValue) >= 0,
             "<" => CompareValues(leftValue, rightValue) < 0,
             "<=" => CompareValues(leftValue, rightValue) <= 0,
+            "LIKE" => leftValue?.ToString() is string ls && rightValue?.ToString() is string rp && SqlLike(ls, rp),
+            "NOT LIKE" => !(leftValue?.ToString() is string nls && rightValue?.ToString() is string nrp && SqlLike(nls, nrp)),
+            "GLOB" => leftValue?.ToString() is string gs && rightValue?.ToString() is string gp && SqlGlob(gs, gp),
+            "NOT GLOB" => !(leftValue?.ToString() is string ngs && rightValue?.ToString() is string ngp && SqlGlob(ngs, ngp)),
+            "REGEXP" => leftValue?.ToString() is string rs && rightValue?.ToString() is string rpat && System.Text.RegularExpressions.Regex.IsMatch(rs, rpat),
+            "NOT REGEXP" => !(leftValue?.ToString() is string nrs && rightValue?.ToString() is string nrpat && System.Text.RegularExpressions.Regex.IsMatch(nrs, nrpat)),
+            "IS SOME" => leftValue is not null and not DBNull,
+            "IS NONE" => leftValue is null or DBNull,
+            "IS" => SqlParser.AreValuesEqual(leftValue, rightValue),
+            "IS NOT" => !SqlParser.AreValuesEqual(leftValue, rightValue),
             _ => throw new NotSupportedException($"Operator '{binary.Operator}' is not supported in AST WHERE evaluation.")
         };
     }
@@ -1654,6 +1967,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         {
             LiteralNode literal => literal.Value,
             ColumnReferenceNode column => GetValue(row, column.ColumnName),
+            FunctionCallNode func => null, // Function calls in WHERE are handled by EvaluateBinaryExpression
             _ => throw new NotSupportedException($"Expression type '{expression.GetType().Name}' is not supported for value extraction.")
         };
     }
@@ -1716,7 +2030,28 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
     public List<Dictionary<string, object>> VisitHaving(HavingNode node) => ThrowUnsupportedAstVisitor(nameof(HavingNode));
     public List<Dictionary<string, object>> VisitFunctionCall(FunctionCallNode node) => ThrowUnsupportedAstVisitor(nameof(FunctionCallNode));
     public List<Dictionary<string, object>> VisitGraphTraverse(GraphTraverseNode node) => ThrowUnsupportedAstVisitor(nameof(GraphTraverseNode));
+    public List<Dictionary<string, object>> VisitSetOperation(SetOperationNode node) => ThrowUnsupportedAstVisitor(nameof(SetOperationNode));
 
     private static List<Dictionary<string, object>> ThrowUnsupportedAstVisitor(string nodeType) =>
         throw new NotSupportedException($"AST visitor for '{nodeType}' is not implemented in AstExecutor.");
+
+    private static bool SqlGlob(string value, string pattern)
+    {
+        // SQLite GLOB is case-sensitive and uses * and ? wildcards
+        var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".")
+            .Replace("\\[", "[")
+            .Replace("\\]", "]") + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern);
+    }
+
+    private static bool SqlLike(string value, string pattern)
+    {
+        // SQLite LIKE is case-insensitive and uses % and _ wildcards
+        var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+            .Replace("%", ".*")
+            .Replace("_", ".") + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
 }

@@ -55,6 +55,21 @@ public interface ISqlDialect
     bool SupportsWindowFunctions { get; }
 
     /// <summary>
+    /// Gets whether the dialect supports top-level GRAPH_RAG clause.
+    /// </summary>
+    bool SupportsGraphRagClause { get; }
+
+    /// <summary>
+    /// Gets whether the dialect supports OPTIONALLY projection mode.
+    /// </summary>
+    bool SupportsOptionallyProjection { get; }
+
+    /// <summary>
+    /// Gets whether the dialect supports SOME/NONE optional predicates.
+    /// </summary>
+    bool SupportsSomeNonePredicates { get; }
+
+    /// <summary>
     /// Translates a standard SQL function to dialect-specific version.
     /// </summary>
     /// <param name="functionName">The standard function name.</param>
@@ -108,6 +123,15 @@ public class StandardSqlDialect : ISqlDialect
 
     /// <inheritdoc/>
     public virtual bool SupportsWindowFunctions => true;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsGraphRagClause => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsOptionallyProjection => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsSomeNonePredicates => false;
 
     /// <inheritdoc/>
     public virtual string TranslateFunction(string functionName)
@@ -297,6 +321,15 @@ public class SharpCoreDbDialect : SqliteDialect
 
     /// <inheritdoc/>
     public override bool SupportsWindowFunctions => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsGraphRagClause => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsOptionallyProjection => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsSomeNonePredicates => true;
 
     /// <inheritdoc/>
     public override string TranslateFunction(string functionName)

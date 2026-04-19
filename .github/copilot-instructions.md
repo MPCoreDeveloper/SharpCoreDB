@@ -15,7 +15,7 @@
 - Use `xunit.runner.visualstudio` 3.1.5+ for test discovery.
 - If you encounter any project referencing `xunit` (without `.v3`), migrate it to `xunit.v3` immediately.
 - Test runner: `Microsoft.NET.Test.Sdk` 18.3.0+ (latest stable for .NET 10).
-- Prefer targeted, fast test runs instead of broad/long-running full-suite test execution during iterative work.
+- Prefer targeted, fast test runs instead of broad/long-running full-suite test execution during iterative work. Query failed tests directly instead of performing broad test scans, especially when a single hanging test is the bottleneck.
 
 ## Code Style
 - Use specific formatting rules.

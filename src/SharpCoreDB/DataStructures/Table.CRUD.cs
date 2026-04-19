@@ -1171,6 +1171,25 @@ public partial class Table
                     }
                 }
 
+                // ✅ CHECK constraint validation for UPDATE
+                for (int i = 0; i < this.Columns.Count; i++)
+                {
+                    if (i < this.ColumnCheckExpressions.Count && this.ColumnCheckExpressions[i] is not null
+                        && !TypeConverter.EvaluateCheckConstraint(this.ColumnCheckExpressions[i], row, this.ColumnTypes))
+                    {
+                        throw new InvalidOperationException($"CHECK constraint violation for column '{this.Columns[i]}'");
+                    }
+                }
+
+                // Table-level CHECK constraints for UPDATE
+                foreach (var checkExpr in this.TableCheckConstraints)
+                {
+                    if (!TypeConverter.EvaluateCheckConstraint(checkExpr, row, this.ColumnTypes))
+                    {
+                        throw new InvalidOperationException($"Table CHECK constraint violation: {checkExpr}");
+                    }
+                }
+
                 // Serialize updated row
                 int estimatedSize = EstimateRowSize(row);
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
@@ -1352,6 +1371,25 @@ public partial class Table
                             (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
                         {
                             throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                        }
+                    }
+
+                    // CHECK constraint validation
+                    for (int i = 0; i < this.Columns.Count; i++)
+                    {
+                        if (i < this.ColumnCheckExpressions.Count && this.ColumnCheckExpressions[i] is not null
+                            && !TypeConverter.EvaluateCheckConstraint(this.ColumnCheckExpressions[i], row, this.ColumnTypes))
+                        {
+                            throw new InvalidOperationException($"CHECK constraint violation for column '{this.Columns[i]}'");
+                        }
+                    }
+
+                    // Table-level CHECK constraints
+                    foreach (var checkExpr in this.TableCheckConstraints)
+                    {
+                        if (!TypeConverter.EvaluateCheckConstraint(checkExpr, row, this.ColumnTypes))
+                        {
+                            throw new InvalidOperationException($"Table CHECK constraint violation: {checkExpr}");
                         }
                     }
 
@@ -2055,6 +2093,16 @@ public partial class Table
                     (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
                 {
                     throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                }
+            }
+
+            // CHECK constraint validation
+            for (int i = 0; i < this.Columns.Count; i++)
+            {
+                if (i < this.ColumnCheckExpressions.Count && this.ColumnCheckExpressions[i] is not null
+                    && !TypeConverter.EvaluateCheckConstraint(this.ColumnCheckExpressions[i], row, this.ColumnTypes))
+                {
+                    throw new InvalidOperationException($"CHECK constraint violation for column '{this.Columns[i]}'");
                 }
             }
 

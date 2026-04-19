@@ -248,6 +248,17 @@ public partial class Table
         var op = parts[1];
         var value = parts[2].Trim('"').Trim((char)39);
 
+        // Handle multi-word operators: NOT REGEXP, NOT LIKE, NOT IN (4 tokens: col NOT OP val)
+        if (parts.Length >= 4
+            && parts[1].Equals("NOT", StringComparison.OrdinalIgnoreCase)
+            && (parts[2].Equals("REGEXP", StringComparison.OrdinalIgnoreCase)
+                || parts[2].Equals("LIKE", StringComparison.OrdinalIgnoreCase)
+                || parts[2].Equals("IN", StringComparison.OrdinalIgnoreCase)))
+        {
+            op = $"NOT {parts[2].ToUpperInvariant()}";
+            value = parts[3].Trim('"').Trim((char)39);
+        }
+
         if (!row.TryGetValue(columnName, out var rowValue) || rowValue == null)
             return false;
 

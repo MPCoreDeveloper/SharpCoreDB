@@ -124,6 +124,12 @@ public class InsertNode : SqlNode
     /// </summary>
     public SelectNode? SelectStatement { get; set; }
 
+    /// <summary>
+    /// Gets or sets the RETURNING column list.
+    /// When set, the DML statement returns affected rows projected through these columns.
+    /// </summary>
+    public List<string> ReturningColumns { get; set; } = [];
+
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitInsert(this);
 }
@@ -150,6 +156,11 @@ public class UpdateNode : SqlNode
     /// </summary>
     public WhereNode? Where { get; set; }
 
+    /// <summary>
+    /// Gets or sets the RETURNING column list.
+    /// </summary>
+    public List<string> ReturningColumns { get; set; } = [];
+
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitUpdate(this);
 }
@@ -168,6 +179,11 @@ public class DeleteNode : SqlNode
     /// Gets or sets the WHERE clause.
     /// </summary>
     public WhereNode? Where { get; set; }
+
+    /// <summary>
+    /// Gets or sets the RETURNING column list.
+    /// </summary>
+    public List<string> ReturningColumns { get; set; } = [];
 
     /// <inheritdoc/>
     public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitDelete(this);

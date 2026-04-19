@@ -15,7 +15,231 @@ using System.Text.RegularExpressions;
 /// </summary>
 public partial class EnhancedSqlParser
 {
-    private SelectNode ParseSelect()
+    /// <summary>
+    /// Parses a SELECT statement and checks for a trailing set operation (UNION / UNION ALL / INTERSECT / EXCEPT).
+    /// If found, wraps both arms into a <see cref="SetOperationNode"/>.
+    /// </summary>
+    private SqlNode ParseSelectOrSetOperation()
+    {
+        var left = ParseSelect();
+
+        var setOp = TryParseSetOperationType();
+        if (setOp is null)
+        {
+            return left;
+        }
+
+        var right = ParseSelect(stopBeforeOrderBy: true);
+
+        var node = new SetOperationNode
+        {
+            Position = _position,
+            Left = left,
+            Right = right,
+            Operation = setOp.Value,
+        };
+
+        // Outer ORDER BY applies to the combined result
+        if (MatchKeyword("ORDER"))
+        {
+            if (!MatchKeyword("BY"))
+                RecordError("Expected BY after ORDER");
+            else
+                node.OrderBy = ParseOrderBy();
+        }
+
+        // Outer LIMIT/OFFSET applies to the combined result
+        if (MatchKeyword("LIMIT"))
+        {
+            node.Limit = ParseInteger();
+            if (MatchKeyword("OFFSET"))
+                node.Offset = ParseInteger();
+        }
+
+        return node;
+    }
+
+    /// <summary>
+    /// Attempts to consume a set operation keyword. Returns null if not found.
+    /// </summary>
+    private SetOperationType? TryParseSetOperationType()
+    {
+        if (MatchKeyword("UNION"))
+        {
+            return MatchKeyword("ALL") ? SetOperationType.UnionAll : SetOperationType.Union;
+        }
+
+        if (MatchKeyword("INTERSECT"))
+        {
+            return SetOperationType.Intersect;
+        }
+
+        if (MatchKeyword("EXCEPT"))
+        {
+            return SetOperationType.Except;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parses WITH [RECURSIVE] cte_name [(col1, col2, ...)] AS (anchor UNION ALL recursive) outer_query.
+    /// </summary>
+    private SqlNode ParseWithCte()
+    {
+        ConsumeKeyword(); // WITH
+        bool isRecursive = MatchKeyword("RECURSIVE");
+
+        var cteName = ConsumeIdentifier() ?? "";
+
+        // Optional column list
+        List<string> cteColumns = [];
+        if (MatchToken("("))
+        {
+            do
+            {
+                var col = ConsumeIdentifier();
+                if (col is not null)
+                    cteColumns.Add(col);
+            } while (MatchToken(","));
+            if (!MatchToken(")"))
+                RecordError("Expected ) after CTE column list");
+        }
+
+        if (!MatchKeyword("AS"))
+            RecordError("Expected AS after CTE name");
+
+        if (!MatchToken("("))
+            RecordError("Expected ( after AS");
+
+        // Parse anchor SELECT
+        var anchor = ParseSelect(stopBeforeOrderBy: true);
+        SelectNode? recursive = null;
+
+        // Check for UNION ALL (recursive arm)
+        if (MatchKeyword("UNION"))
+        {
+            MatchKeyword("ALL"); // Optional ALL
+            recursive = ParseSelect(stopBeforeOrderBy: true);
+        }
+
+        if (!MatchToken(")"))
+            RecordError("Expected ) after CTE definition");
+
+        // Parse outer query
+        var outer = ParseSelectOrSetOperation();
+
+        return new WithRecursiveNode
+        {
+            Position = _position,
+            CteName = cteName,
+            ColumnNames = cteColumns,
+            IsRecursive = isRecursive,
+            AnchorSelect = anchor,
+            RecursiveSelect = recursive,
+            OuterQuery = outer,
+        };
+    }
+
+    /// <summary>
+    /// Parses EXPLAIN QUERY PLAN SELECT ...
+    /// </summary>
+    private SqlNode ParseExplainQueryPlan()
+    {
+        ConsumeKeyword(); // EXPLAIN
+        MatchKeyword("QUERY");
+        MatchKeyword("PLAN");
+
+        var inner = ParseSelectOrSetOperation();
+        return new ExplainQueryPlanNode
+        {
+            Position = _position,
+            InnerStatement = inner,
+        };
+    }
+
+    /// <summary>
+    /// Parses BEGIN [DEFERRED|IMMEDIATE|EXCLUSIVE] [TRANSACTION].
+    /// </summary>
+    private SqlNode ParseBeginTransaction()
+    {
+        ConsumeKeyword(); // BEGIN
+        var mode = "DEFERRED";
+
+        var next = PeekKeyword()?.ToUpperInvariant();
+        if (next is "IMMEDIATE" or "EXCLUSIVE" or "DEFERRED")
+        {
+            mode = next;
+            ConsumeKeyword();
+        }
+
+        MatchKeyword("TRANSACTION"); // optional
+
+        return new BeginTransactionNode
+        {
+            Position = _position,
+            Mode = mode,
+        };
+    }
+
+    /// <summary>
+    /// Parses SAVEPOINT name.
+    /// </summary>
+    private SqlNode ParseSavepointStatement()
+    {
+        ConsumeKeyword(); // SAVEPOINT
+        var name = ConsumeIdentifier() ?? "";
+        return new SavepointNode
+        {
+            Position = _position,
+            Name = name,
+            Action = SavepointAction.Save,
+        };
+    }
+
+    /// <summary>
+    /// Parses RELEASE [SAVEPOINT] name.
+    /// </summary>
+    private SqlNode ParseReleaseStatement()
+    {
+        ConsumeKeyword(); // RELEASE
+        MatchKeyword("SAVEPOINT"); // optional
+        var name = ConsumeIdentifier() ?? "";
+        return new SavepointNode
+        {
+            Position = _position,
+            Name = name,
+            Action = SavepointAction.Release,
+        };
+    }
+
+    /// <summary>
+    /// Parses ROLLBACK [TO [SAVEPOINT] name].
+    /// </summary>
+    private SqlNode ParseRollbackStatement()
+    {
+        ConsumeKeyword(); // ROLLBACK
+        if (MatchKeyword("TO"))
+        {
+            MatchKeyword("SAVEPOINT"); // optional
+            var name = ConsumeIdentifier() ?? "";
+            return new SavepointNode
+            {
+                Position = _position,
+                Name = name,
+                Action = SavepointAction.RollbackTo,
+            };
+        }
+
+        // Plain ROLLBACK (no savepoint)
+        return new BeginTransactionNode
+        {
+            Position = _position,
+            Mode = "ROLLBACK",
+        };
+    }
+
+    private SelectNode ParseSelect(bool stopBeforeOrderBy = false)
     {
         var node = new SelectNode { Position = _position };
 
@@ -29,9 +253,17 @@ public partial class EnhancedSqlParser
             // Parse columns
             node.Columns = ParseSelectColumns();
 
+            // Parse optional OPTIONALLY keyword after select list
+            if (MatchKeyword("OPTIONALLY"))
+                node.IsOptionalProjection = true;
+
             // Parse FROM clause
             if (MatchKeyword("FROM"))
                 node.From = ParseFrom();
+
+            // Parse optional top-level GRAPH_RAG clause
+            if (MatchKeyword("GRAPH_RAG"))
+                node.GraphRag = ParseGraphRagClause();
 
             // Parse WHERE clause
             if (MatchKeyword("WHERE"))
@@ -50,21 +282,24 @@ public partial class EnhancedSqlParser
             if (MatchKeyword("HAVING"))
                 node.Having = ParseHaving();
 
-            // Parse ORDER BY clause
-            if (MatchKeyword("ORDER"))
+            if (!stopBeforeOrderBy)
             {
-                if (!MatchKeyword("BY"))
-                    RecordError("Expected BY after ORDER");
-                else
-                    node.OrderBy = ParseOrderBy();
-            }
+                // Parse ORDER BY clause
+                if (MatchKeyword("ORDER"))
+                {
+                    if (!MatchKeyword("BY"))
+                        RecordError("Expected BY after ORDER");
+                    else
+                        node.OrderBy = ParseOrderBy();
+                }
 
-            // Parse LIMIT/OFFSET clause
-            if (MatchKeyword("LIMIT"))
-            {
-                node.Limit = ParseInteger();
-                if (MatchKeyword("OFFSET"))
-                    node.Offset = ParseInteger();
+                // Parse LIMIT/OFFSET clause
+                if (MatchKeyword("LIMIT"))
+                {
+                    node.Limit = ParseInteger();
+                    if (MatchKeyword("OFFSET"))
+                        node.Offset = ParseInteger();
+                }
             }
         }
         catch (Exception ex)
@@ -73,6 +308,115 @@ public partial class EnhancedSqlParser
         }
 
         return node;
+    }
+
+    private GraphRagClauseNode ParseGraphRagClause()
+    {
+        var clause = new GraphRagClauseNode { Position = _position };
+
+        string? question = TryConsumeGraphRagQuestionLiteral();
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            RecordError("GRAPH_RAG requires a non-empty string question literal");
+            return clause;
+        }
+
+        clause.Question = question;
+
+        bool continueParsing = true;
+        while (continueParsing)
+        {
+            if (MatchKeyword("LIMIT"))
+            {
+                var limit = ParseInteger();
+                if (limit is null || limit <= 0)
+                    RecordError("GRAPH_RAG LIMIT must be a positive integer");
+                else
+                    clause.Limit = limit;
+
+                continue;
+            }
+
+            if (MatchKeyword("TOP_K"))
+            {
+                var topK = ParseInteger();
+                if (topK is null || topK <= 0)
+                    RecordError("GRAPH_RAG TOP_K must be a positive integer");
+                else
+                    clause.TopK = topK;
+
+                continue;
+            }
+
+            if (MatchKeyword("WITH"))
+            {
+                if (MatchKeyword("CONTEXT"))
+                {
+                    clause.IncludeContext = true;
+                    continue;
+                }
+
+                if (MatchKeyword("SCORE"))
+                {
+                    if (!MatchToken(">"))
+                    {
+                        RecordError("GRAPH_RAG WITH SCORE requires '>' comparator");
+                        continue;
+                    }
+
+                    var scoreLiteral = ParseLiteral();
+                    if (scoreLiteral?.Value is int i)
+                    {
+                        clause.MinScore = i;
+                    }
+                    else if (scoreLiteral?.Value is double d)
+                    {
+                        clause.MinScore = d;
+                    }
+                    else
+                    {
+                        RecordError("GRAPH_RAG WITH SCORE requires numeric literal");
+                    }
+
+                    if (clause.MinScore is < 0 or > 1)
+                    {
+                        RecordError("GRAPH_RAG WITH SCORE must be between 0 and 1");
+                    }
+
+                    continue;
+                }
+
+                RecordError("GRAPH_RAG WITH supports only SCORE > <number> or CONTEXT");
+                continue;
+            }
+
+            continueParsing = false;
+        }
+
+        return clause;
+    }
+
+    private string? TryConsumeGraphRagQuestionLiteral()
+    {
+        var sqlSlice = _sql.Substring(_position);
+
+        // Standard SQL string literal: '...'
+        var standard = Regex.Match(sqlSlice, @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase);
+        if (standard.Success)
+        {
+            _position += standard.Length;
+            return standard.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal);
+        }
+
+        // Sanitized form produced by SQL sanitizer: ''...''
+        var doubled = Regex.Match(sqlSlice, @"^\s*''([^']*(?:''[^']*)*)''", RegexOptions.IgnoreCase);
+        if (doubled.Success)
+        {
+            _position += doubled.Length;
+            return doubled.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal);
+        }
+
+        return null;
     }
 
     private List<ColumnNode> ParseSelectColumns()
@@ -111,11 +455,29 @@ public partial class EnhancedSqlParser
                 return column;
             }
 
+            // Scalar MIN/MAX with 2+ arguments — parse as function expression before aggregate check
+            var scalarMinMaxCheck = Regex.Match(
+                _sql.Substring(_position),
+                @"^\s*(MIN|MAX)\s*\(\s*[a-zA-Z_]\w*\s*,",
+                RegexOptions.IgnoreCase);
+            if (scalarMinMaxCheck.Success)
+            {
+                var funcExpr = ParseFunctionCall();
+                column.Expression = funcExpr;
+                column.Name = funcExpr.FunctionName;
+
+                if (MatchKeyword("AS"))
+                    column.Alias = ConsumeIdentifier();
+
+                return column;
+            }
+
             // Check for aggregate function
             var funcMatch = Regex.Match(
                 _sql.Substring(_position),
                 @"^\s*(COUNT|SUM|AVG|MIN|MAX|STDDEV|STDDEV_SAMP|STDDEV_POP|VAR|VARIANCE|VAR_SAMP|VAR_POP|MEDIAN|PERCENTILE|MODE|CORR|CORRELATION|COVAR|COVARIANCE|COVAR_SAMP|COVAR_POP)\s*\(",
                 RegexOptions.IgnoreCase);
+
             if (funcMatch.Success)
             {
                 column.AggregateFunction = funcMatch.Groups[1].Value.ToUpperInvariant();
@@ -181,7 +543,7 @@ public partial class EnhancedSqlParser
             // Check for window function
             var windowFuncMatch = Regex.Match(
                 _sql.Substring(_position),
-                @"^\s*(ROW_NUMBER|RANK|DENSE_RANK|LAG|LEAD|FIRST_VALUE|LAST_VALUE)\s*\(",
+                @"^\s*(ROW_NUMBER|RANK|DENSE_RANK|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTILE|PERCENT_RANK|CUME_DIST)\s*\(",
                 RegexOptions.IgnoreCase);
             if (windowFuncMatch.Success)
             {
@@ -223,6 +585,25 @@ public partial class EnhancedSqlParser
                             RecordError("Expected integer offset for LAG/LEAD");
                         }
                     }
+                }
+                else if (column.WindowFunction is "NTILE")
+                {
+                    // NTILE takes an integer bucket count
+                    var literal = ParseLiteral();
+                    if (literal?.Value is int n)
+                    {
+                        column.AggregateArgument = n;
+                    }
+                    else
+                    {
+                        RecordError("Expected integer argument for NTILE");
+                    }
+                    column.Name = "";
+                }
+                else if (column.WindowFunction is "PERCENT_RANK" or "CUME_DIST")
+                {
+                    // No arguments
+                    column.Name = "";
                 }
                 else
                 {
@@ -298,6 +679,33 @@ public partial class EnhancedSqlParser
                             });
                         }
                     } while (MatchToken(","));
+                }
+
+                // Parse optional FRAME clause (ROWS BETWEEN ... AND ... / RANGE BETWEEN ... AND ...)
+                if (MatchKeyword("ROWS") || MatchKeyword("RANGE"))
+                {
+                    var frameType = _sql.Substring(_position - 5, 5).Trim().ToUpperInvariant().StartsWith("RANG") ? "RANGE" : "ROWS";
+                    var frameParts = new System.Text.StringBuilder(frameType);
+                    frameParts.Append(' ');
+
+                    if (MatchKeyword("BETWEEN"))
+                    {
+                        frameParts.Append("BETWEEN ");
+                        // Parse start bound
+                        frameParts.Append(ConsumeFrameBound());
+                        frameParts.Append(' ');
+                        if (MatchKeyword("AND"))
+                        {
+                            frameParts.Append("AND ");
+                            frameParts.Append(ConsumeFrameBound());
+                        }
+                    }
+                    else
+                    {
+                        // Single bound like ROWS UNBOUNDED PRECEDING
+                        frameParts.Append(ConsumeFrameBound());
+                    }
+                    column.WindowFrame = frameParts.ToString();
                 }
 
                 if (!MatchToken(")"))

@@ -914,4 +914,119 @@ public class DatabaseTests : IDisposable
         // Assert - No exception thrown means success
         Assert.True(true);
     }
+
+    [Fact]
+    public void Database_ExecuteQuery_InsertReturning_ReturnsInsertedRow()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+
+        // Act
+        var result = db.ExecuteQuery("INSERT INTO users VALUES (1, 'Alice') RETURNING id, name");
+
+        // Assert
+        Assert.Single(result);
+        Assert.Equal(1, result[0]["id"]);
+        Assert.Equal("Alice", result[0]["name"]);
+    }
+
+    [Fact]
+    public void Database_ExecuteQuery_UpdateReturningAll_ReturnsUpdatedRow()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
+
+        // Act
+        var result = db.ExecuteQuery("UPDATE users SET name = 'Bob' WHERE id = 1 RETURNING *");
+
+        // Assert
+        Assert.Single(result);
+        Assert.Equal(1, result[0]["id"]);
+        Assert.Equal("Bob", result[0]["name"]);
+    }
+
+    [Fact]
+    public void Database_ExecuteQuery_DeleteReturning_ReturnsDeletedRow()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE users (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
+
+        // Act
+        var result = db.ExecuteQuery("DELETE FROM users WHERE id = 1 RETURNING id, name");
+
+        // Assert
+        Assert.Single(result);
+        Assert.Equal(1, result[0]["id"]);
+        Assert.Equal("Alice", result[0]["name"]);
+    }
+
+    [Fact]
+    public void Database_InsertIntoSelect_InsertsProjectedRows()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE src (id INTEGER, name TEXT)");
+        db.ExecuteSQL("CREATE TABLE dst (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO src VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO src VALUES (2, 'Bob')");
+
+        // Act
+        db.ExecuteSQL("INSERT INTO dst SELECT id, name FROM src");
+        var rows = db.ExecuteQuery("SELECT id, name FROM dst ORDER BY id");
+
+        // Assert
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(1, rows[0]["id"]);
+        Assert.Equal("Alice", rows[0]["name"]);
+        Assert.Equal(2, rows[1]["id"]);
+        Assert.Equal("Bob", rows[1]["name"]);
+    }
+
+    [Fact]
+    public void Database_SessionFunctions_ChangesAndTotalChanges_ReturnExpectedValues()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE stats (id INTEGER, name TEXT)");
+
+        // Act
+        db.ExecuteSQL("INSERT INTO stats VALUES (1, 'A')");
+        var changesAfterInsert = db.ExecuteQuery("SELECT CHANGES() AS c, TOTAL_CHANGES() AS t");
+
+        db.ExecuteSQL("UPDATE stats SET name = 'B' WHERE id = 1");
+        var changesAfterUpdate = db.ExecuteQuery("SELECT CHANGES() AS c, TOTAL_CHANGES() AS t");
+
+        // Assert
+        Assert.Single(changesAfterInsert);
+        var insertValues = changesAfterInsert[0].Values.Select(v => Convert.ToInt32(v)).ToList();
+        Assert.Contains(1, insertValues);
+        Assert.True(insertValues.Max() >= 1);
+
+        Assert.Single(changesAfterUpdate);
+        var updateValues = changesAfterUpdate[0].Values.Select(v => Convert.ToInt32(v)).ToList();
+        Assert.Contains(1, updateValues);
+        Assert.True(updateValues.Max() >= 2);
+    }
+
+    [Fact]
+    public void Database_SessionFunction_LastInsertRowId_ReturnsLatestId()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE items (id INTEGER, name TEXT)");
+
+        // Act
+        db.ExecuteSQL("INSERT INTO items VALUES (42, 'x')");
+        var result = db.ExecuteQuery("SELECT LAST_INSERT_ROWID() AS rid");
+
+        // Assert
+        Assert.Single(result);
+        var rid = Convert.ToInt64(result[0].Values.First());
+        Assert.Equal(42L, rid);
+    }
 }
