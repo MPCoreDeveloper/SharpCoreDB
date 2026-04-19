@@ -1295,15 +1295,18 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Executes UPDATE statement.
+    /// Executes UPDATE statement with RETURNING clause and change tracking support.
     /// </summary>
     private void ExecuteUpdate(string sql, IWAL? wal)
     {
         if (isReadOnly)
             throw new InvalidOperationException("Cannot update in readonly mode");
 
+        _lastChanges = 0;
+        var returningColumns = TryExtractReturningColumns(sql, out var sqlWithoutReturning);
+
         // Parse UPDATE SQL: UPDATE table SET col=val WHERE condition
-        var updateMatch = UpdateRegex.Match(sql);
+        var updateMatch = UpdateRegex.Match(sqlWithoutReturning);
 
         if (!updateMatch.Success)
             throw new InvalidOperationException($"Invalid UPDATE syntax: {sql}");
@@ -1335,20 +1338,36 @@ public partial class SqlParser
             }
         }
 
+        // Count affected rows before update for change tracking
+        var affectedCount = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false).Count;
+
         table.Update(whereClause, updates);
-        wal?.Log(sql);
+        _lastChanges = affectedCount;
+        _totalChanges += affectedCount;
+
+        // RETURNING: query updated rows after update
+        if (returningColumns is not null)
+        {
+            var updatedRows = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false);
+            _pendingQueryResults = ProjectReturningRows(updatedRows, returningColumns);
+        }
+
+        wal?.Log(sqlWithoutReturning);
     }
 
     /// <summary>
-    /// Executes DELETE statement.
+    /// Executes DELETE statement with RETURNING clause and change tracking support.
     /// </summary>
     private void ExecuteDelete(string sql, IWAL? wal)
     {
         if (isReadOnly)
             throw new InvalidOperationException("Cannot delete in readonly mode");
 
+        _lastChanges = 0;
+        var returningColumns = TryExtractReturningColumns(sql, out var sqlWithoutReturning);
+
         // Parse DELETE SQL: DELETE FROM table WHERE condition
-        var deleteMatch = DeleteRegex.Match(sql);
+        var deleteMatch = DeleteRegex.Match(sqlWithoutReturning);
 
         if (!deleteMatch.Success)
             throw new InvalidOperationException($"Invalid DELETE syntax: {sql}");
@@ -1358,8 +1377,21 @@ public partial class SqlParser
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
         var whereClause = deleteMatch.Groups[2].Value.Trim();
+
+        // Capture rows before deletion for RETURNING and change tracking
+        var affectedRows = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false);
+        var affectedCount = affectedRows.Count;
+
+        if (returningColumns is not null)
+        {
+            _pendingQueryResults = ProjectReturningRows(affectedRows, returningColumns);
+        }
+
         table.Delete(whereClause);
-        wal?.Log(sql);
+        _lastChanges = affectedCount;
+        _totalChanges += affectedCount;
+
+        wal?.Log(sqlWithoutReturning);
     }
 
     /// <summary>
