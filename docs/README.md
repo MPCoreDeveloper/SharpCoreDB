@@ -10,7 +10,7 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.0`)
 - `IMPLEMENTATION_AUDIT_v1.7.0.md` - Repository-wide implementation audit.
 - `../README.md` - Product overview and quick start.
 
-## Core Areas
+## Maintained documentation areas
 
 - `server/` - Server operation, security, APIs, and protocols.
 - `sql/` - SQL dialect capabilities, extensions, and compatibility guidance.
@@ -23,16 +23,22 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.0`)
 - `sync/` - Dotmim.Sync provider usage.
 - `migration/` - Migration and interoperability guides.
 
+## Current package entry points
+
+- Core: `../src/SharpCoreDB/README.md`, `../src/SharpCoreDB/NuGet.README.md`
+- Data access: `../src/SharpCoreDB.Data.Provider/README.md`, `../src/SharpCoreDB.EntityFrameworkCore/README.md`, `../src/SharpCoreDB.EntityFrameworkCore/USAGE.md`, `../src/SharpCoreDB.Extensions/README.md`
+- Analytics and search: `../src/SharpCoreDB.Analytics/README.md`, `../src/SharpCoreDB.VectorSearch/README.md`, `../src/SharpCoreDB.Graph/README.md`, `../src/SharpCoreDB.Graph.Advanced/README.md`
+- Server and clients: `../src/SharpCoreDB.Server/README.md`, `../src/SharpCoreDB.Client/README.md`
+- Optional architecture modules: `../src/SharpCoreDB.EventSourcing/README.md`, `../src/SharpCoreDB.Projections/README.md`, `../src/SharpCoreDB.CQRS/README.md`
+- Optional functional adapters: `../src/SharpCoreDB.Functional/README.md`, `../src/SharpCoreDB.Functional.Dapper/README.md`, `../src/SharpCoreDB.Functional.EntityFrameworkCore/README.md`
+- Additional integrations: `../src/SharpCoreDB.Identity/README.md`, `../src/SharpCoreDB.Serilog.Sinks/README.md`, `../src/SharpCoreDB.Provider.Sync/README.md`
+
 ## SQL extension docs (v1.7.0)
 
 - `sql/SQL_DIALECT_EXTENSIONS_v1.7.0.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
 - `graphrag/GRAPH_RAG_SINGLE_SQL.md` - Single-statement GraphRAG SQL syntax and DI integration.
 - `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.0.md` - Option<T> mapping semantics and usage patterns.
 
-## Package Documentation
+## Cleanup policy
 
-Per-package docs are maintained in `src/*/README.md` and `src/*/NuGet.README.md`, aligned to `v1.7.0`.
-
-## Cleanup Policy
-
-Obsolete phase-status, kickoff, and superseded planning docs are removed during maintenance. Historical snapshots are not canonical product docs.
+Obsolete phase-status, kickoff, duplicate, and superseded planning docs are removed during maintenance. Historical snapshots are not canonical product docs unless they are explicitly linked from `INDEX.md`.

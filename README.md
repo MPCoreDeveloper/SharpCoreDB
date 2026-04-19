@@ -253,11 +253,14 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
 
 - Documentation hub: `docs/INDEX.md`
 - Project docs index: `docs/README.md`
+- Feature matrix: `docs/FEATURE_MATRIX_v1.7.0.md`
 - Server docs: `docs/server/README.md`
 - Server quick start: `docs/server/QUICKSTART.md`
-- Server install/config: `docs/server/INSTALLATION.md`, `docs/server/CONFIGURATION_SCHEMA.md`
-- Security hardening: `docs/server/SECURITY.md`
+- GraphRAG docs: `docs/graphrag/00_START_HERE.md`
+- EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
+- Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
 - Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`, `docs/PROJECT_STATUS.md`
+- Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 
 ---
 

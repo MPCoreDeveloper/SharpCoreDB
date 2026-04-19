@@ -15,18 +15,42 @@
 ## 2. Package Documentation (src)
 
 - `../src/SharpCoreDB/README.md`
+- `../src/SharpCoreDB/NuGet.README.md`
 - `../src/SharpCoreDB.Server/README.md`
+- `../src/SharpCoreDB.Server/NuGet.README.md`
 - `../src/SharpCoreDB.Client/README.md`
+- `../src/SharpCoreDB.Client/NuGet.README.md`
+- `../src/SharpCoreDB.Data.Provider/README.md`
+- `../src/SharpCoreDB.Data.Provider/NuGet.README.md`
+- `../src/SharpCoreDB.EntityFrameworkCore/README.md`
+- `../src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
+- `../src/SharpCoreDB.EntityFrameworkCore/NuGet.README.md`
+- `../src/SharpCoreDB.Extensions/README.md`
+- `../src/SharpCoreDB.Extensions/NuGet.README.md`
 - `../src/SharpCoreDB.Analytics/README.md`
+- `../src/SharpCoreDB.Analytics/NuGet.README.md`
 - `../src/SharpCoreDB.VectorSearch/README.md`
+- `../src/SharpCoreDB.VectorSearch/NuGet.README.md`
 - `../src/SharpCoreDB.Graph/README.md`
+- `../src/SharpCoreDB.Graph/NuGet.README.md`
 - `../src/SharpCoreDB.Graph.Advanced/README.md`
+- `../src/SharpCoreDB.Graph.Advanced/NuGet.README.md`
 - `../src/SharpCoreDB.Distributed/README.md`
+- `../src/SharpCoreDB.Distributed/NuGet.README.md`
 - `../src/SharpCoreDB.Provider.Sync/README.md`
+- `../src/SharpCoreDB.Provider.Sync/NuGet.README.md`
 - `../src/SharpCoreDB.EventSourcing/README.md`
+- `../src/SharpCoreDB.EventSourcing/NuGet.README.md`
 - `../src/SharpCoreDB.Projections/README.md`
+- `../src/SharpCoreDB.Projections/NuGet.README.md`
 - `../src/SharpCoreDB.CQRS/README.md`
+- `../src/SharpCoreDB.CQRS/NuGet.README.md`
 - `../src/SharpCoreDB.Functional/README.md`
+- `../src/SharpCoreDB.Functional.Dapper/README.md`
+- `../src/SharpCoreDB.Functional.EntityFrameworkCore/README.md`
+- `../src/SharpCoreDB.Identity/README.md`
+- `../src/SharpCoreDB.Serilog.Sinks/README.md`
+- `../src/SharpCoreDB.Serilog.Sinks/NuGet.README.md`
 
 ## 3. Server Documentation
 
@@ -55,6 +79,8 @@
 
 - `graphrag/00_START_HERE.md`
 - `graphrag/README.md`
+- `graphrag/GRAPH_RAG_SINGLE_SQL.md`
+- `graphrag/METRICS_AND_OBSERVABILITY_GUIDE.md`
 - `analytics/README.md`
 - `Vectors/README.md`
 - `performance/graphrag-performance-tuning.md`
@@ -68,6 +94,8 @@
 - `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
 - `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
-## Canonical Documentation Rule
+## 7. Documentation Governance
 
-When duplicate or historical status/planning documents exist, the files listed in this index are the canonical references.
+- Files listed in this index are the maintained product documentation set.
+- Historical phase-design notes may remain in feature folders for background context, but they are archival references unless they also appear in this index.
+- Superseded duplicates should be removed instead of linked alongside the canonical files.

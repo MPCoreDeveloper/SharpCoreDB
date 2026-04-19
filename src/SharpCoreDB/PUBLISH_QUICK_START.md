@@ -149,7 +149,7 @@ Build → Configuration Manager → Release
 
 ## 🆘 Hulp Nodig?
 
-- **Documentatie:** Zie `VISUAL_STUDIO_GUIDE.md`
+- **Documentatie:** Zie `README.md`, `NuGet.README.md`, en `../../docs/INDEX.md`
 - **Platform Support:** Zie `PLATFORM_SUPPORT.md`
 - **Issues:** https://github.com/MPCoreDeveloper/SharpCoreDB/issues
 

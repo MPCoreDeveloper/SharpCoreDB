@@ -86,4 +86,44 @@ public sealed class GraphRagSqlProviderTests : IDisposable
         Assert.Equal("7", rows[0]["node_id"].ToString());
         Assert.Equal("0.91", Convert.ToDouble(rows[0]["score"]).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void CanExecute_WithBlankTableName_ShouldReturnFalse(string tableName)
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testPassword") as Database
+            ?? throw new InvalidOperationException("Expected concrete Database instance.");
+        var engine = new GraphRagEngine(db, "edges", "embeddings", 16);
+        var provider = new GraphRagSqlProvider(db, engine);
+
+        // Act
+        var canExecute = provider.CanExecute(tableName);
+
+        // Assert
+        Assert.False(canExecute);
+    }
+
+    [Theory]
+    [InlineData("", "question", 5, 10)]
+    [InlineData("documents", "", 5, 10)]
+    [InlineData("documents", "question", 0, 10)]
+    [InlineData("documents", "question", 5, 0)]
+    public async Task ExecuteAsync_WithInvalidRequestFields_ShouldThrowArgumentException(
+        string tableName,
+        string question,
+        int limit,
+        int topK)
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "testPassword") as Database
+            ?? throw new InvalidOperationException("Expected concrete Database instance.");
+        var engine = new GraphRagEngine(db, "edges", "embeddings", 16);
+        var provider = new GraphRagSqlProvider(db, engine, _ => Enumerable.Repeat(1f, 16).ToArray());
+        var request = new GraphRagRequest(tableName, question, ["*"], limit, topK, 0.5, false);
+
+        // Act / Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.ExecuteAsync(request));
+    }
 }

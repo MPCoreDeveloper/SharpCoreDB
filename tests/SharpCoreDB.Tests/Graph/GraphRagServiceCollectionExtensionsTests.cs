@@ -40,7 +40,43 @@ public sealed class GraphRagServiceCollectionExtensionsTests : IDisposable
     }
 
     [Fact]
-    public void AddSharpCoreDBGraphRagSql_WithInvalidOptions_ShouldThrowArgumentException()
+    public void AddSharpCoreDBGraphRagSql_WithBlankGraphTableName_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+
+        // Act / Assert
+        Assert.Throws<ArgumentException>(() =>
+            services.AddSharpCoreDBGraphRagSql(options =>
+            {
+                options.GraphTableName = " ";
+                options.EmbeddingTableName = "embeddings";
+                options.EmbeddingDimensions = 16;
+            }));
+    }
+
+    [Fact]
+    public void AddSharpCoreDBGraphRagSql_WithoutConcreteDatabaseRegistration_ShouldThrowInvalidOperationException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        services.AddSharpCoreDBGraphRagSql(options =>
+        {
+            options.GraphTableName = "edges";
+            options.EmbeddingTableName = "embeddings";
+            options.EmbeddingDimensions = 16;
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        // Act / Assert
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IGraphRagProvider>());
+    }
+
+    [Fact]
+    public void AddSharpCoreDBGraphRagSql_WithInvalidOptions_ShouldThrowArgumentOutOfRangeException()
     {
         // Arrange
         var services = new ServiceCollection();

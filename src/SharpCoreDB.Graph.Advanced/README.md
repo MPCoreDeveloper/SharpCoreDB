@@ -8,16 +8,16 @@ Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 ## Features
 
 - Community detection: Louvain, Label Propagation, Connected Components
-- Centrality metrics: degree, betweenness, closeness, eigenvector, clustering
+- Centrality metrics: Degree, Betweenness, Closeness, Eigenvector, Clustering
 - Subgraph analysis: K-core, clique, and triangle detection
 - Graph-aware ranking for GraphRAG workflows
 - SQL integration helpers, result caching, and profiling support
 
-## Changes in v1.7.0
+## What's new in v1.7.0
 
-- New advanced graph package delivered in the `v1.7.0` line
-- Documentation consolidated for analytics + GraphRAG scenarios
-- Aligned with `SharpCoreDB.Graph` and `SharpCoreDB.VectorSearch` companion usage
+- Advanced graph analytics package aligned with the `v1.7.0` ecosystem release line
+- Maintained GraphRAG SQL registration guidance for DI-based applications
+- Documentation consolidated around current graph, vector, and observability workflows
 
 ## Installation
 
@@ -25,7 +25,35 @@ Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
 ```
 
-## Documentation
+## Quick start
 
-- `docs/INDEX.md`
-- `docs/graphrag/00_START_HERE.md`
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.Graph.Advanced.SqlIntegration;
+using SharpCoreDB.Interfaces;
+
+var services = new ServiceCollection();
+services.AddSharpCoreDB();
+services.AddSingleton<IDatabase>(sp =>
+    sp.GetRequiredService<DatabaseFactory>().Create("./graph.scdb", "StrongPassword!"));
+
+services.AddSharpCoreDBGraphRagSql(options =>
+{
+    options.GraphTableName = "graph_edges";
+    options.EmbeddingTableName = "document_embeddings";
+    options.EmbeddingDimensions = 16;
+});
+```
+
+## Maintained docs
+
+- `../../docs/graphrag/00_START_HERE.md`
+- `../../docs/graphrag/README.md`
+- `../../docs/graphrag/GRAPH_RAG_SINGLE_SQL.md`
+- `../../docs/graphrag/METRICS_AND_OBSERVABILITY_GUIDE.md`
+- `NuGet.README.md`
+
+## Notes
+
+- Register a concrete `Database`/`IDatabase` before calling `AddSharpCoreDBGraphRagSql(...)`.
+- Keep GraphRAG guidance in the maintained docs above instead of adding phase-specific duplicate package notes.

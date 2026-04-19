@@ -13,6 +13,11 @@ namespace SharpCoreDB.Graph.Advanced.GraphRAG;
 /// Main GraphRAG engine that combines vector search, community detection,
 /// and enhanced ranking for semantic search with graph context.
 /// </summary>
+/// <remarks>
+/// The engine is designed as the maintained orchestration point for the
+/// <c>SharpCoreDB.Graph.Advanced</c> GraphRAG workflow. It coordinates
+/// embedding search, graph loading, cached community analysis, and ranking.
+/// </remarks>
 public class GraphRagEngine
 {
     private readonly Database _database;
@@ -56,6 +61,8 @@ public class GraphRagEngine
     /// <param name="rankingWeights">Weights for combining semantic, topological, and community scores.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Ranked search results with comprehensive context.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="queryEmbedding"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="topK"/> is less than or equal to zero.</exception>
     public async Task<List<EnhancedRanking.RankedResult>> SearchAsync(
         float[] queryEmbedding,
         int topK = 10,
@@ -124,6 +131,7 @@ public class GraphRagEngine
     /// <param name="includeEmbeddings">Whether to include semantic similarity to neighbors.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Comprehensive context information for the node.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxDistance"/> is negative.</exception>
     public async Task<NodeContext> GetNodeContextAsync(
         ulong nodeId,
         int maxDistance = 2,
@@ -179,6 +187,8 @@ public class GraphRagEngine
     /// Initializes the GraphRAG system by creating necessary tables and indexes.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task that completes when initialization finishes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the configured graph table is missing or invalid.</exception>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         // Create embedding table
@@ -197,6 +207,8 @@ public class GraphRagEngine
     /// </summary>
     /// <param name="nodeEmbeddings">Node embeddings to index.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task that completes when the embeddings are persisted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="nodeEmbeddings"/> is null.</exception>
     public async Task IndexEmbeddingsAsync(
         IEnumerable<VectorSearchIntegration.NodeEmbedding> nodeEmbeddings,
         CancellationToken cancellationToken = default)
@@ -248,6 +260,12 @@ public class GraphRagEngine
 /// <summary>
 /// Comprehensive context information for a node.
 /// </summary>
+/// <param name="NodeId">The node identifier for the context result.</param>
+/// <param name="CommunityId">The detected community identifier for the node.</param>
+/// <param name="CommunityMembers">Nodes that belong to the detected community.</param>
+/// <param name="GraphNeighbors">Neighboring nodes discovered through graph traversal.</param>
+/// <param name="SemanticNeighbors">Neighboring nodes ranked by semantic similarity.</param>
+/// <param name="ContextDescription">Human-readable summary of the collected context.</param>
 public readonly record struct NodeContext(
     ulong NodeId,
     ulong CommunityId,
