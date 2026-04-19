@@ -44,6 +44,43 @@ dotnet add package SharpCoreDB.Functional --version 1.7.0
 - `DeleteAsync(...) -> Task<Fin<Unit>>`
 - `CountAsync(...) -> Task<long>`
 
+## Functional SQL Syntax (v1.7.0)
+
+The functional facade supports SQL extensions that map directly to `Option<T>` behavior.
+
+### Example
+
+```sql
+SELECT Id, Name, Email OPTIONALLY FROM Users
+WHERE Email IS SOME;
+```
+
+### Execute from C#
+
+```csharp
+var fdb = database.Functional();
+
+var users = await fdb.ExecuteFunctionalSqlAsync<UserDto>(
+    "SELECT Id, Name, Email OPTIONALLY FROM Users WHERE Email IS SOME");
+```
+
+### Supported keywords
+
+- `OPTIONALLY FROM`
+- `IS SOME`
+- `IS NONE`
+- `MATCH SOME <column>`
+- `MATCH NONE <column>`
+- `UNWRAP <column> AS <alias> [DEFAULT '<value>']`
+
+### Verification tests
+
+```bash
+dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~FunctionalSqlSyntaxTests"
+```
+
+Source: `tests/SharpCoreDB.Functional.Tests/FunctionalSqlSyntaxTests.cs`
+
 ## Chaining example
 
 ```csharp
@@ -57,4 +94,3 @@ var result = await dbf
 result.Match(
     Succ: _ => Console.WriteLine("updated"),
     Fail: err => Console.WriteLine(err.Message));
-```

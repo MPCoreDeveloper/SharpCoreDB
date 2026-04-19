@@ -159,6 +159,62 @@ Database operations have inherently unpredictable data. Foreign keys reference d
 
 ---
 
+## Functional SQL Syntax (v1.7.0)
+
+SharpCoreDB.Functional now supports a functional SQL layer that maps directly to `Option<T>` semantics.
+
+### Example syntax
+
+```sql
+SELECT Id, Name, Email OPTIONALLY FROM Users
+WHERE Email IS SOME;
+```
+
+### Supported functional SQL keywords
+
+| Keyword | Meaning |
+|---|---|
+| `OPTIONALLY FROM` | Returns a `Seq<Option<T>>` result shape from `ExecuteFunctionalSqlAsync<T>` |
+| `IS SOME` | Semantic non-null check (filters out `null`, empty string, and `"NULL"`) |
+| `IS NONE` | Semantic null check (matches `null`, empty string, and `"NULL"`) |
+| `MATCH SOME column` | Alias of `column IS SOME` |
+| `MATCH NONE column` | Alias of `column IS NONE` |
+| `UNWRAP Column AS Alias DEFAULT 'x'` | Projects a value with default fallback metadata |
+
+### C# usage
+
+```csharp
+var functional = db.Functional();
+
+var rows = await functional.ExecuteFunctionalSqlAsync<UserDto>(
+    "SELECT Id, Name, Email OPTIONALLY FROM Users WHERE Email IS SOME");
+
+foreach (var row in rows)
+{
+    var email = row
+        .Map(u => u.Email)
+        .IfNone("no-email");
+
+    Console.WriteLine(email);
+}
+```
+
+### Verify functional SQL behavior yourself
+
+Run the dedicated functional SQL tests:
+
+```bash
+dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~FunctionalSqlSyntaxTests" --verbosity normal
+```
+
+Test source:
+
+- [`tests/SharpCoreDB.Functional.Tests/FunctionalSqlSyntaxTests.cs`](../tests/SharpCoreDB.Functional.Tests/FunctionalSqlSyntaxTests.cs)
+
+This suite validates parser translation, `OPTIONALLY FROM`, `IS SOME` / `IS NONE`, match aliases, unwrap mapping, and end-to-end filtering behavior.
+
+---
+
 ## Verify It Yourself
 
 All claims above are backed by **12 passing tests** you can run right now.

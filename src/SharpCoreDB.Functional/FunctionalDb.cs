@@ -132,6 +132,158 @@ public sealed class FunctionalDb(IDatabase inner)
     }
 
     /// <summary>
+    /// Executes a Functional SQL statement that uses SharpCoreDB's extended syntax.
+    /// Supports <c>OPTIONALLY FROM</c>, <c>IS SOME</c>, <c>IS NONE</c>,
+    /// <c>UNWRAP column AS alias</c>, and <c>MATCH SOME/NONE</c> keywords.
+    /// </summary>
+    /// <typeparam name="T">Row model type.</typeparam>
+    /// <param name="functionalSql">The Functional SQL statement.</param>
+    /// <param name="parameters">Optional query parameters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// When <c>OPTIONALLY FROM</c> is used, returns a sequence of <see cref="Option{T}"/>
+    /// (each row wrapped). Otherwise returns <c>Some</c> rows only.
+    /// </returns>
+    /// <example>
+    /// <code>
+    /// // Get users who have an email, each wrapped in Option
+    /// var users = await fdb.ExecuteFunctionalSqlAsync&lt;UserDto&gt;(
+    ///     "SELECT Id, Name, Email OPTIONALLY FROM Users WHERE Email IS SOME");
+    ///
+    /// foreach (var userOpt in users)
+    /// {
+    ///     var name = userOpt.Map(u => u.Name).IfNone("unknown");
+    /// }
+    /// </code>
+    /// </example>
+    public Task<Seq<Option<T>>> ExecuteFunctionalSqlAsync<T>(
+        string functionalSql,
+        Dictionary<string, object?>? parameters = null,
+        CancellationToken cancellationToken = default)
+        where T : class, new()
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(functionalSql);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var translator = new FunctionalSqlTranslator();
+        var result = translator.Translate(functionalSql);
+
+        var rows = _inner.ExecuteQuery(result.StandardSql, parameters);
+        if (rows.Count == 0)
+        {
+            return Task.FromResult(Seq<Option<T>>.Empty);
+        }
+
+        var list = new List<Option<T>>(rows.Count);
+        foreach (var row in rows)
+        {
+            // Apply UNWRAP defaults: if column is null/empty, substitute default
+            foreach (var unwrap in result.UnwrapMappings)
+            {
+                if (TryGetValueIgnoreCase(row, unwrap.Column, out var val)
+                    && (val is null || (val is string s && string.IsNullOrEmpty(s)))
+                    && unwrap.DefaultValue is not null)
+                {
+                    row[unwrap.Column] = unwrap.DefaultValue;
+                }
+            }
+
+            // Apply post-filter for SOME columns (defense-in-depth beyond SQL translation)
+            if (result.SomeColumns.Count > 0 && !PassesSomeFilter(row, result.SomeColumns))
+            {
+                continue;
+            }
+
+            // Apply post-filter for NONE columns (defense-in-depth beyond SQL translation)
+            if (result.NoneColumns.Count > 0 && !PassesNoneFilter(row, result.NoneColumns))
+            {
+                continue;
+            }
+
+            var mapped = TryMapRow<T>(row);
+            list.Add(mapped);
+        }
+
+        return Task.FromResult(toSeq(list));
+    }
+
+    /// <summary>
+    /// Executes a Functional SQL query returning only successfully mapped rows
+    /// (unwrapped from <c>Option&lt;T&gt;</c>). Convenience method when you want
+    /// a flat sequence instead of <c>Seq&lt;Option&lt;T&gt;&gt;</c>.
+    /// </summary>
+    /// <typeparam name="T">Row model type.</typeparam>
+    /// <param name="functionalSql">The Functional SQL statement.</param>
+    /// <param name="parameters">Optional query parameters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A flat <see cref="Seq{T}"/> of successfully mapped rows.</returns>
+    public async Task<Seq<T>> ExecuteFunctionalSqlUnwrappedAsync<T>(
+        string functionalSql,
+        Dictionary<string, object?>? parameters = null,
+        CancellationToken cancellationToken = default)
+        where T : class, new()
+    {
+        var results = await ExecuteFunctionalSqlAsync<T>(functionalSql, parameters, cancellationToken)
+            .ConfigureAwait(false);
+
+        var list = new List<T>(results.Count);
+        foreach (var opt in results)
+        {
+            opt.IfSome(list.Add);
+        }
+
+        return toSeq(list);
+    }
+
+    private static bool PassesSomeFilter(Dictionary<string, object> row, IReadOnlyList<string> someColumns)
+    {
+        foreach (var col in someColumns)
+        {
+            if (!TryGetValueIgnoreCase(row, col, out var val))
+            {
+                return false;
+            }
+
+            if (IsSemanticNone(val))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool PassesNoneFilter(Dictionary<string, object> row, IReadOnlyList<string> noneColumns)
+    {
+        foreach (var col in noneColumns)
+        {
+            if (!TryGetValueIgnoreCase(row, col, out var val))
+            {
+                continue;
+            }
+
+            if (!IsSemanticNone(val))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsSemanticNone(object? value)
+    {
+        return value switch
+        {
+            null => true,
+            DBNull => true,
+            string s when string.IsNullOrWhiteSpace(s) => true,
+            string s when string.Equals(s, "NULL", StringComparison.OrdinalIgnoreCase) => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Inserts an entity into a table.
     /// </summary>
     /// <typeparam name="T">Entity type.</typeparam>
@@ -378,7 +530,20 @@ public sealed class FunctionalDb(IDatabase inner)
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(targetType);
 
-        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (value == DBNull.Value)
+        {
+            return Nullable.GetUnderlyingType(targetType) is not null || !targetType.IsValueType
+                ? null
+                : throw new InvalidOperationException($"Cannot map DBNull to non-nullable type '{targetType.Name}'.");
+        }
+
+        var nullableUnderlying = Nullable.GetUnderlyingType(targetType);
+        var underlying = nullableUnderlying ?? targetType;
+
+        if (value is string textValue && string.IsNullOrEmpty(textValue) && nullableUnderlying is not null)
+        {
+            return null;
+        }
 
         if (underlying.IsInstanceOfType(value))
         {
