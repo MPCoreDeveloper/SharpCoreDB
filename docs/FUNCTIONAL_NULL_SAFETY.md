@@ -100,12 +100,17 @@ if (rows != null && rows.Count > 0)
 #### Functional (`Option<T>`) — Safe
 
 ```csharp
-// One expression. Compiler ensures you handle absence. Zero exceptions possible.
-var email = (await fdb.GetByIdAsync<UserDto>("Users", 99))
+// Strong-typed table reference and named constants — no magic strings.
+// Compiler ensures you handle absence. Zero exceptions possible.
+var email = (await fdb.GetByIdAsync<UserDto>(Tables.Users, userId))
     .Map(u => u.Email)
-    .Bind(e => string.IsNullOrEmpty(e) ? Option<string>.None : Option<string>.Some(e))
-    .IfNone("no-email");
+    .Bind(Option.FromNullOrEmpty)       // built-in helper, no ternary
+    .IfNone(Defaults.NoEmail);          // named constant, not a magic string
 ```
+
+> **Best practice:** Always use strongly-typed table references (e.g., `Tables.Users`) and named
+> constants (e.g., `Defaults.NoEmail`) instead of raw strings. `Option<T>` composes cleanly with
+> either approach — but strong typing eliminates the "magic string" class of bugs entirely.
 
 #### Error Handling: `Fin<T>` vs Try/Catch
 
@@ -121,7 +126,7 @@ catch (Exception ex)
 }
 
 // Functional — errors as values
-var result = await fdb.InsertAsync("NonExistent", dto);
+var result = await fdb.InsertAsync(Tables.Orders, dto);
 result.Match(
     Succ: _ => Log("ok"),
     Fail: err => Log(err.Message)); // Zero-cost: no exception thrown
@@ -193,7 +198,7 @@ foreach (var row in rows)
 {
     var email = row
         .Map(u => u.Email)
-        .IfNone("no-email");
+        .IfNone(Defaults.NoEmail);
 
     Console.WriteLine(email);
 }

@@ -87,9 +87,9 @@ Source: `tests/SharpCoreDB.Functional.Tests/FunctionalSqlSyntaxTests.cs`
 var dbf = database.Functional();
 
 var result = await dbf
-    .GetByIdAsync<User>("Users", 42, cancellationToken: ct)
+    .GetByIdAsync<User>(Tables.Users, userId, cancellationToken: ct)
     .Map(opt => opt.Map(user => user with { LastSeenUtc = DateTime.UtcNow }))
-    .Map(opt => opt.ToFin("User not found"));
+    .Map(opt => opt.ToFin(Errors.UserNotFound));
 
 result.Match(
     Succ: _ => Console.WriteLine("updated"),

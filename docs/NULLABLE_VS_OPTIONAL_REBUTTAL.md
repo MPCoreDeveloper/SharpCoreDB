@@ -44,9 +44,10 @@ The statement *"runtime data semantics cannot always be fully proven at compile 
 
 ## "But Your Example Is Full of Magic Strings"
 
-A fair critique of the `Option<T>` showcase code:
+A fair critique of an earlier version of the `Option<T>` showcase code:
 
 ```csharp
+// ⚠️ Original example (now updated in docs) — shown here for context
 var email = (await fdb.GetByIdAsync<UserDto>("Users", 99))
     .Map(u => u.Email)
     .Bind(e => string.IsNullOrEmpty(e) ? Option<string>.None : Option<string>.Some(e))
@@ -55,7 +56,7 @@ var email = (await fdb.GetByIdAsync<UserDto>("Users", 99))
 
 > *"What if `"Users"` should be `"User"`? What about `"no-email"` — is that a prefix convention? String-based keys, magic strings, ternaries for the logic you're promoting... This is just runtime errors with extra steps."*
 
-**This critique is valid — and it targets the example, not the concept.** Let's separate the two.
+**This critique was valid — and we've since updated all documentation examples.** But the deeper point is worth addressing: the complaint targets the *example*, not the *concept*. Let's separate the two.
 
 ### What the critique actually proves
 
