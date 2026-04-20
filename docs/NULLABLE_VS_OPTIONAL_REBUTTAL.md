@@ -42,6 +42,73 @@ The argument isn't about *more kinds of absence*. It's about **where** the absen
 
 The statement *"runtime data semantics cannot always be fully proven at compile time"* means exactly this: **the compiler can annotate intent, but it cannot enforce contracts on data it has never seen** (SQL results, JSON payloads, reflection-populated DTOs). `Option<T>` closes that gap by making the proof travel *with the value*.
 
+## "But Your Example Is Full of Magic Strings"
+
+A fair critique of the `Option<T>` showcase code:
+
+```csharp
+var email = (await fdb.GetByIdAsync<UserDto>("Users", 99))
+    .Map(u => u.Email)
+    .Bind(e => string.IsNullOrEmpty(e) ? Option<string>.None : Option<string>.Some(e))
+    .IfNone("no-email");
+```
+
+> *"What if `"Users"` should be `"User"`? What about `"no-email"` — is that a prefix convention? String-based keys, magic strings, ternaries for the logic you're promoting... This is just runtime errors with extra steps."*
+
+**This critique is valid — and it targets the example, not the concept.** Let's separate the two.
+
+### What the critique actually proves
+
+The complaint is about **stringly-typed API design** — and that's a real problem regardless of whether you use `Option<T>` or not. The classic version has the *exact same magic strings*:
+
+```csharp
+// Classic — same magic strings, same problems, PLUS silent nulls
+var rows = db.ExecuteQuery("SELECT * FROM Users WHERE Id = 99");  // "Users" typo? Same risk.
+if (rows.Count > 0)
+{
+    var email = (string)rows[0]["Email"];  // silent null, no compiler help
+    if (!string.IsNullOrEmpty(email))
+        SendEmail(email);
+    else
+        SendEmail("no-email");  // same magic fallback
+}
+```
+
+The magic strings exist because the *database API* is string-based. That's not `Option<T>`'s fault — it's the reality of talking to a schema-less query layer.
+
+### What a properly typed version looks like
+
+The real answer to "I'd expect expressions so they could be compile-time checked" is: **yes, you should, and `Option<T>` composes perfectly with that**:
+
+```csharp
+// Strong-typed table reference — no magic strings
+var email = (await fdb.GetByIdAsync<UserDto>(Tables.Users, userId))
+    .Map(u => u.Email)
+    .Bind(Option.FromNullOrEmpty)   // built-in, no ternary
+    .IfNone(Defaults.NoEmail);      // named constant, not a magic string
+```
+
+Every magic string is now a compile-time symbol. The `Option<T>` chain is unchanged — because **`Option<T>` was never the source of the magic strings**.
+
+### What the critique misses
+
+The original comparison wasn't "this API has perfect ergonomics." It was:
+
+| Failure mode | Classic (NRT) | Option\<T\> |
+|---|---|---|
+| Table name typo (`"Users"` vs `"User"`) | Silent empty result or exception | Silent empty result → `None` **(you must handle it)** |
+| Row missing | `IndexOutOfRangeException` 💥 | `None` |
+| Column null | `NullReferenceException` 💥 | `None` |
+| Forgot to check | Compiles fine, crashes at runtime | Won't compile — `Option<T>` forces a decision |
+
+The table name typo is equally bad in both worlds. But in the classic version you get **three additional unforced crash vectors** that `Option<T>` eliminates.
+
+### The honest summary
+
+The critique correctly identifies that the *showcase example* was sloppy with magic strings. It does **not** invalidate the core claim: `Option<T>` forces you to handle absence at every step, while NRT lets nulls slip through silently. Better examples should use strongly-typed table references and named constants — and `Option<T>` works just as well with those.
+
+---
+
 ## TL;DR
 
 > **"Aren't nullable types just optional types?"**
