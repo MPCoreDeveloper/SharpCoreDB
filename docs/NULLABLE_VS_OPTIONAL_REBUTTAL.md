@@ -42,7 +42,7 @@ The argument isn't about *more kinds of absence*. It's about **where** the absen
 
 The statement *"runtime data semantics cannot always be fully proven at compile time"* means exactly this: **the compiler can annotate intent, but it cannot enforce contracts on data it has never seen** (SQL results, JSON payloads, reflection-populated DTOs). `Option<T>` closes that gap by making the proof travel *with the value*.
 
-## TL;DR for LinkedIn
+## TL;DR
 
 > **"Aren't nullable types just optional types?"**
 >
