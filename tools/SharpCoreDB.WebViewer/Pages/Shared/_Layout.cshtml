@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - SharpCoreDB Web Viewer</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            margin: 0;
+            font-family: Segoe UI, Arial, sans-serif;
+            line-height: 1.5;
+        }
+
+        header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        main {
+            margin: 0 auto;
+            max-width: 1100px;
+            padding: 1.5rem;
+        }
+
+        .muted {
+            opacity: 0.8;
+        }
+
+        .panel {
+            border: 1px solid #4a4a4a;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>SharpCoreDB Web Viewer</strong>
+        <span class="muted">v1.7.0 · Razor Pages</span>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+</body>
+</html>

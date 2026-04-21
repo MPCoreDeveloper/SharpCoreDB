@@ -1,0 +1,39 @@
+@page
+@model SharpCoreDB.WebViewer.Pages.IndexModel
+@{
+    ViewData["Title"] = "Home";
+}
+
+<section class="panel">
+    <h1>Local Web Viewer</h1>
+    <p>Phase 0 scaffold is active for the SharpCoreDB web interface.</p>
+    <p><strong>Endpoint:</strong> @Model.EndpointDisplay</p>
+</section>
+
+<section class="panel">
+    <h2>Next MVP blocks</h2>
+    <ul>
+        <li>Connection workflow (directory / single-file)</li>
+        <li>Table explorer + metadata panels</li>
+        <li>SQL editor and execution result grid</li>
+    </ul>
+</section>
+
+<section class="panel">
+    <h2>Recent Connections</h2>
+    @if (Model.RecentConnections.Count == 0)
+    {
+        <p>No recent connections yet.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var profile in Model.RecentConnections)
+            {
+                <li>
+                    <strong>@profile.Name</strong> · @profile.StorageMode · @profile.Path
+                </li>
+            }
+        </ul>
+    }
+</section>
