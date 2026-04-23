@@ -4,36 +4,512 @@
     ViewData["Title"] = "Home";
 }
 
-<section class="panel">
-    <h1>Local Web Viewer</h1>
-    <p>Phase 0 scaffold is active for the SharpCoreDB web interface.</p>
-    <p><strong>Endpoint:</strong> @Model.EndpointDisplay</p>
+<section class="hero panel">
+    <div>
+        <h1>SharpCoreDB Web Viewer</h1>
+        <p class="muted">Local-first Razor Pages UI for browsing SharpCoreDB securely over <strong>@Model.EndpointDisplay</strong>.</p>
+    </div>
+    <div class="hero-badge">v1.7.0</div>
 </section>
 
-<section class="panel">
-    <h2>Next MVP blocks</h2>
-    <ul>
-        <li>Connection workflow (directory / single-file)</li>
-        <li>Table explorer + metadata panels</li>
-        <li>SQL editor and execution result grid</li>
-    </ul>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <section class="panel status-panel success-panel">
+        <strong>Status</strong>
+        <p>@Model.StatusMessage</p>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <section class="panel status-panel error-panel">
+        <strong>Error</strong>
+        <p>@Model.ErrorMessage</p>
+    </section>
+}
+
+<div class="viewer-grid viewer-grid-top">
+    <section class="panel">
+        <h2>Connect</h2>
+        <form method="post" asp-page-handler="Connect" class="stack-form" autocomplete="off">
+            <div class="form-row">
+                <label asp-for="Connection.Name"></label>
+                <input asp-for="Connection.Name" class="input" />
+            </div>
+
+            <div class="form-row">
+                <label asp-for="Connection.ConnectionMode"></label>
+                <select asp-for="Connection.ConnectionMode" class="input" asp-items="Html.GetEnumSelectList<SharpCoreDB.WebViewer.Models.ViewerConnectionMode>()"></select>
+            </div>
+
+            @if (Model.Connection.ConnectionMode == SharpCoreDB.WebViewer.Models.ViewerConnectionMode.Server)
+            {
+                <div class="connection-mode-panel">
+                    <h3>Server Connection</h3>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.ServerHost"></label>
+                        <input asp-for="Connection.ServerHost" class="input" autocomplete="off" />
+                        <span asp-validation-for="Connection.ServerHost" class="validation"></span>
+                    </div>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.ServerPort"></label>
+                        <input asp-for="Connection.ServerPort" class="input" />
+                        <span asp-validation-for="Connection.ServerPort" class="validation"></span>
+                    </div>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.ServerDatabase"></label>
+                        <input asp-for="Connection.ServerDatabase" class="input" autocomplete="off" />
+                        <span asp-validation-for="Connection.ServerDatabase" class="validation"></span>
+                    </div>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.ServerUsername"></label>
+                        <input asp-for="Connection.ServerUsername" class="input" autocomplete="off" />
+                        <span asp-validation-for="Connection.ServerUsername" class="validation"></span>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input asp-for="Connection.ServerUseSsl" />
+                        <label asp-for="Connection.ServerUseSsl"></label>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input asp-for="Connection.ServerPreferHttp3" />
+                        <label asp-for="Connection.ServerPreferHttp3"></label>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="connection-mode-panel">
+                    <h3>Local Connection</h3>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.LocalDatabasePath"></label>
+                        <input asp-for="Connection.LocalDatabasePath" class="input" spellcheck="false" autocomplete="off" />
+                        <span asp-validation-for="Connection.LocalDatabasePath" class="validation"></span>
+                    </div>
+
+                    <div class="form-row">
+                        <label asp-for="Connection.LocalStorageMode"></label>
+                        <select asp-for="Connection.LocalStorageMode" class="input" asp-items="Html.GetEnumSelectList<SharpCoreDB.WebViewer.Models.DatabaseStorageMode>()"></select>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input asp-for="Connection.LocalReadOnly" />
+                        <label asp-for="Connection.LocalReadOnly"></label>
+                    </div>
+                </div>
+            }
+
+            <div class="form-row">
+                <label asp-for="Connection.Password"></label>
+                <input asp-for="Connection.Password" class="input" autocomplete="new-password" />
+                <span asp-validation-for="Connection.Password" class="validation"></span>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" class="button button-primary">Connect</button>
+                @if (Model.IsConnected)
+                {
+                    <button type="submit" class="button" asp-page-handler="Disconnect" formnovalidate>Disconnect</button>
+                }
+            </div>
+        </form>
+
+        <div class="session-summary">
+            <h3>Session</h3>
+            @if (Model.ActiveSession is null)
+            {
+                <p class="muted">No active database session.</p>
+            }
+            else
+            {
+                <dl class="summary-list">
+                    <div>
+                        <dt>Name</dt>
+                        <dd>@Model.ActiveSession.Name</dd>
+                    </div>
+                    <div>
+                        <dt>Mode</dt>
+                        <dd>@Model.ActiveSession.ConnectionMode</dd>
+                    </div>
+                    @if (Model.ActiveSession.ConnectionMode == SharpCoreDB.WebViewer.Models.ViewerConnectionMode.Server)
+                    {
+                        <div>
+                            <dt>Target</dt>
+                            <dd>@Model.ActiveSession.ServerHost:@Model.ActiveSession.ServerPort/@Model.ActiveSession.ServerDatabase</dd>
+                        </div>
+                        <div>
+                            <dt>User</dt>
+                            <dd>@Model.ActiveSession.ServerUsername</dd>
+                        </div>
+                        <div>
+                            <dt>TLS</dt>
+                            <dd>@(Model.ActiveSession.ServerUseSsl ? "Enabled" : "Disabled")</dd>
+                        </div>
+                    }
+                    else
+                    {
+                        <div>
+                            <dt>Path</dt>
+                            <dd>@Model.ActiveSession.LocalDatabasePath</dd>
+                        </div>
+                        <div>
+                            <dt>Storage</dt>
+                            <dd>@Model.ActiveSession.LocalStorageMode</dd>
+                        </div>
+                        <div>
+                            <dt>Read-only</dt>
+                            <dd>@(Model.ActiveSession.LocalReadOnly ? "Yes" : "No")</dd>
+                        </div>
+                    }
+                </dl>
+            }
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Recent Connections</h2>
+        @if (Model.RecentConnections.Count == 0)
+        {
+            <p class="muted">No recent connections saved yet.</p>
+        }
+        else
+        {
+            <ul class="profile-list">
+                @foreach (var profile in Model.RecentConnections)
+                {
+                    <li>
+                        <div>
+                            <strong>@profile.Name</strong>
+                            <div class="muted small-text">@profile.ConnectionMode · @profile.DisplayTarget</div>
+                        </div>
+                        <form method="post" asp-page-handler="LoadProfile">
+                            <input type="hidden" name="name" value="@profile.Name" />
+                            <input type="hidden" name="target" value="@profile.DisplayTarget" />
+                            <button type="submit" class="button button-small" formnovalidate>Use</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+<div class="viewer-grid viewer-grid-main">
+    <section class="panel explorer-panel">
+        <div class="section-header">
+            <h2>Tables</h2>
+            <span class="muted">@Model.Tables.Count item(s)</span>
+        </div>
+
+        @if (!Model.IsConnected)
+        {
+            <p class="muted">Connect to a database to browse schema metadata.</p>
+        }
+        else if (Model.Tables.Count == 0)
+        {
+            <p class="muted">No tables found in the active database.</p>
+        }
+        else
+        {
+            <ul class="table-list">
+                @foreach (var table in Model.Tables)
+                {
+                    var isSelected = string.Equals(Model.SelectedTable, table, StringComparison.OrdinalIgnoreCase);
+                    <li>
+                        <a asp-page="./Index"
+                           asp-route-selectedTable="@table"
+                           class="table-link @(isSelected ? "selected" : null)">
+                            @table
+                        </a>
+                    </li>
+                }
+            </ul>
+
+            <form method="post" asp-page-handler="PreviewTable" class="preview-form">
+                <button type="submit" class="button button-small" @(string.IsNullOrWhiteSpace(Model.SelectedTable) ? "disabled" : null)>Load preview query</button>
+            </form>
+        }
+    </section>
+
+    <section class="panel metadata-panel">
+        <h2>Metadata</h2>
+        @if (Model.SelectedTableMetadata is null)
+        {
+            <p class="muted">Select a table to inspect its columns, indexes, and triggers.</p>
+        }
+        else
+        {
+            <div class="metadata-grid">
+                <section>
+                    <h3>@Model.SelectedTableMetadata.Name</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Column</th>
+                                <th>Type</th>
+                                <th>Nullable</th>
+                                <th>Hidden</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var column in Model.SelectedTableMetadata.Columns)
+                            {
+                                <tr>
+                                    <td>@column.Name</td>
+                                    <td>@column.DataType</td>
+                                    <td>@(column.IsNullable ? "Yes" : "No")</td>
+                                    <td>@(column.IsHidden ? "Yes" : "No")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h3>Indexes</h3>
+                    @if (Model.SelectedTableMetadata.Indexes.Count == 0)
+                    {
+                        <p class="muted">No indexes found.</p>
+                    }
+                    else
+                    {
+                        <ul class="simple-list">
+                            @foreach (var index in Model.SelectedTableMetadata.Indexes)
+                            {
+                                <li>@index</li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                <section>
+                    <h3>Triggers</h3>
+                    @if (Model.SelectedTableMetadata.Triggers.Count == 0)
+                    {
+                        <p class="muted">No triggers found.</p>
+                    }
+                    else
+                    {
+                        <ul class="simple-list">
+                            @foreach (var trigger in Model.SelectedTableMetadata.Triggers)
+                            {
+                                <li>@trigger</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            </div>
+        }
+    </section>
+</div>
+
+<section class="panel sql-panel">
+    <div class="section-header">
+        <h2>SQL Editor</h2>
+        <span class="muted">Timeout: @Model.QueryTimeoutSeconds second(s) · Result limit: @Model.ResultRowLimit rows</span>
+    </div>
+
+    <div class="transaction-status-panel">
+        <div>
+            <strong>Transaction</strong>
+            @if (Model.IsTransactionActive)
+            {
+                <p class="muted small-text">Active (@Model.ActiveTransaction!.ConnectionMode) since @Model.ActiveTransaction.StartedAtUtc.ToLocalTime().</p>
+            }
+            else
+            {
+                <p class="muted small-text">No active transaction.</p>
+            }
+        </div>
+        <div class="button-row">
+            <form method="post" asp-page-handler="BeginTransaction">
+                <button type="submit" class="button button-small" @(!Model.IsConnected || Model.IsTransactionActive ? "disabled" : null)>Begin</button>
+            </form>
+            <form method="post" asp-page-handler="CommitTransaction">
+                <button type="submit" class="button button-small" @(!Model.IsTransactionActive ? "disabled" : null)>Commit</button>
+            </form>
+            <form method="post" asp-page-handler="RollbackTransaction">
+                <button type="submit" class="button button-small" @(!Model.IsTransactionActive ? "disabled" : null)>Rollback</button>
+            </form>
+        </div>
+    </div>
+
+    <form method="post" asp-page-handler="ExecuteQuery" class="stack-form sql-form">
+        <div class="form-row">
+            <label asp-for="Query.Sql"></label>
+            <textarea asp-for="Query.Sql" class="sql-editor" spellcheck="false"></textarea>
+        </div>
+
+        <div class="form-row query-parameters-row">
+            <label asp-for="Query.ParametersJson"></label>
+            <textarea asp-for="Query.ParametersJson" class="sql-parameters" spellcheck="false" placeholder='{"@@id": 1, "@@name": "Alice"}'></textarea>
+            <p class="muted small-text">Use a JSON object with named parameters (for example: {"@@param1": 1, "@@param2": "value"}).</p>
+        </div>
+
+        <div class="button-row">
+            <button type="submit" class="button button-primary" @(!Model.IsConnected ? "disabled" : null)>Run SQL</button>
+        </div>
+    </form>
 </section>
 
-<section class="panel">
-    <h2>Recent Connections</h2>
-    @if (Model.RecentConnections.Count == 0)
+<div class="viewer-grid viewer-grid-bottom">
+    <section class="panel">
+        <div class="section-header section-header-wrap">
+            <h2>Saved Queries</h2>
+            <span class="scope-pill">Scope: @Model.ActiveTargetDisplay</span>
+            <span class="muted">@Model.SavedQueries.Count item(s)</span>
+        </div>
+
+        <form method="post" asp-page-handler="SaveQuery" class="save-query-form">
+            <div class="form-row">
+                <label asp-for="SaveQueryName">Save as</label>
+                <input asp-for="SaveQueryName" class="input" placeholder="Query name" />
+            </div>
+            <div class="button-row">
+                <button type="submit" class="button button-small" @(!Model.IsConnected ? "disabled" : null)>Save current SQL</button>
+            </div>
+        </form>
+
+        @if (Model.SavedQueries.Count == 0)
+        {
+            <p class="muted">No saved queries yet for this scope.</p>
+        }
+        else
+        {
+            <ul class="saved-query-list">
+                @foreach (var item in Model.SavedQueries)
+                {
+                    <li>
+                        <div>
+                            <strong>@item.Name</strong>
+                            <div class="muted small-text">@item.ConnectionMode · @item.TargetDisplay · used @item.LastUsedUtc.ToLocalTime()</div>
+                        </div>
+                        <div class="button-row">
+                            <form method="post" asp-page-handler="LoadSavedQuery">
+                                <input type="hidden" name="queryId" value="@item.Id" />
+                                <button type="submit" class="button button-small" formnovalidate>Load</button>
+                            </form>
+                            <form method="post" asp-page-handler="DeleteSavedQuery">
+                                <input type="hidden" name="queryId" value="@item.Id" />
+                                <button type="submit" class="button button-small" formnovalidate>Delete</button>
+                            </form>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="section-header section-header-wrap">
+            <h2>Query History</h2>
+            <span class="scope-pill">Scope: @Model.ActiveTargetDisplay</span>
+            <div class="button-row">
+                <form method="post" asp-page-handler="ClearHistory">
+                    <button type="submit" class="button button-small" formnovalidate @(Model.QueryHistory.Count == 0 ? "disabled" : null)>Clear</button>
+                </form>
+            </div>
+        </div>
+
+        @if (Model.QueryHistory.Count == 0)
+        {
+            <p class="muted">No query history yet for this scope.</p>
+        }
+        else
+        {
+            <ul class="query-history-list">
+                @foreach (var item in Model.QueryHistory)
+                {
+                    <li>
+                        <div class="history-title-row">
+                            <strong class="@(item.Succeeded ? "history-success" : "history-failed")">@(item.Succeeded ? "Success" : "Failed")</strong>
+                            <span class="muted small-text">@item.ConnectionMode · @item.TargetDisplay · @item.ExecutedAtUtc.ToLocalTime()</span>
+                        </div>
+                        <pre class="history-preview">@item.SqlPreview</pre>
+                        @if (!string.IsNullOrWhiteSpace(item.StatusMessage))
+                        {
+                            <p class="muted small-text">@item.StatusMessage</p>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+<section class="panel workspace-panel">
+    <div class="section-header section-header-wrap">
+        <h2>Workspace Import/Export</h2>
+        <span class="muted">Saved queries + history backup</span>
+    </div>
+
+    <form method="post" asp-page-handler="ExportWorkspace" class="button-row workspace-actions-row">
+        <button type="submit" class="button button-small" formnovalidate>Export to JSON</button>
+    </form>
+
+    <form method="post" asp-page-handler="ImportWorkspace" class="stack-form workspace-form">
+        <div class="form-row">
+            <label asp-for="ImportWorkspaceJson">Workspace JSON</label>
+            <textarea asp-for="ImportWorkspaceJson" class="workspace-json" spellcheck="false"></textarea>
+        </div>
+        <div class="button-row">
+            <button type="submit" class="button button-small">Import JSON</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel result-panel">
+    <div class="section-header">
+        <h2>Result Grid</h2>
+        @if (Model.HasQueryResult)
+        {
+            <span class="muted">@Model.QueryResult!.ResultRowCount row(s) · @Model.QueryResult.ExecutionTimeMs ms</span>
+        }
+    </div>
+
+    @if (!Model.HasQueryResult)
     {
-        <p>No recent connections yet.</p>
+        <p class="muted">Run a SELECT statement to populate the result grid.</p>
+    }
+    else if (!Model.QueryResult!.HasRows)
+    {
+        <p class="muted">@Model.QueryResult.Summary</p>
     }
     else
     {
-        <ul>
-            @foreach (var profile in Model.RecentConnections)
-            {
-                <li>
-                    <strong>@profile.Name</strong> · @profile.StorageMode · @profile.Path
-                </li>
-            }
-        </ul>
+        @if (Model.QueryResult.Truncated)
+        {
+            <p class="muted">The result set was truncated to @Model.ResultRowLimit row(s).</p>
+        }
+
+        <div class="result-grid-wrapper">
+            <table class="data-table result-grid-table">
+                <thead>
+                    <tr>
+                        @foreach (var column in Model.QueryResult.Columns)
+                        {
+                            <th>@column</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.QueryResult.Rows)
+                    {
+                        <tr>
+                            @foreach (var value in row.Values)
+                            {
+                                <td>@value</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 </section>

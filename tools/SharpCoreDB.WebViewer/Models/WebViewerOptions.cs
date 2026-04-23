@@ -16,4 +16,8 @@ public sealed class WebViewerOptions
     public int ResultRowLimit { get; set; } = 200;
 
     public int MaxRecentConnections { get; set; } = 8;
+
+    public int MaxSavedQueries { get; set; } = 50;
+
+    public int MaxQueryHistoryItems { get; set; } = 100;
 }

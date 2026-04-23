@@ -1,9 +1,9 @@
 namespace SharpCoreDB.WebViewer.Models;
 
 /// <summary>
-/// Represents a saved non-sensitive connection profile for fast reconnect workflows.
+/// Represents the active in-memory browser session state for the web viewer.
 /// </summary>
-public sealed record class ConnectionProfile
+public sealed record class ViewerSessionState
 {
     public required string Name { get; init; }
 
@@ -27,21 +27,11 @@ public sealed record class ConnectionProfile
 
     public string? ServerUsername { get; init; }
 
-    public DateTimeOffset LastUsedUtc { get; init; } = DateTimeOffset.UtcNow;
+    public required string Password { get; init; }
+
+    public DateTimeOffset ConnectedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 
     public string DisplayTarget => ConnectionMode == ViewerConnectionMode.Server
         ? $"{ServerHost}:{ServerPort}/{ServerDatabase}"
         : LocalDatabasePath ?? string.Empty;
-}
-
-public enum ViewerConnectionMode
-{
-    Local = 0,
-    Server = 1
-}
-
-public enum DatabaseStorageMode
-{
-    Directory = 0,
-    SingleFile = 1
 }
