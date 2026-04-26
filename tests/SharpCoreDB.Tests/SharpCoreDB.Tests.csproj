@@ -39,6 +39,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCoreDB\SharpCoreDB.csproj" />
+    <ProjectReference Include="..\..\src\SharpCoreDB.Client\SharpCoreDB.Client.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Functional\SharpCoreDB.Functional.csproj" />
     <ProjectReference Include="..\..\src\SharpCoreDB.Distributed\SharpCoreDB.Distributed.csproj" />
