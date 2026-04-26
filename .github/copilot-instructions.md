@@ -4,8 +4,9 @@
 - Test programs should be located in the `tests` folder and not in the repository root.
 - All project documentation must be written in English. This includes docs, README files, technical specs, implementation plans, and code comments.
 - Provide periodic progress updates while work is ongoing and do not remain stuck on the same point for long stretches.
+- Before considering work ready for commit in this repository, always verify code coverage and confirm the coverage threshold passes.
 - When benchmarking competitor databases (like BLite), document the developer experience (DX) honestly. If a library's API is hard to use, poorly documented, or has mismatches between docs and actual API, note that as a real finding in the benchmark report. User-friendliness and ease of integration matter as much as raw performance numbers.
-- Standardize all documentation/version labels to v1.7.0 ("V 1.70").
+- Standardize all documentation/version labels to the latest version.
 - Continue implementation until the scoped roadmap work is finished without pausing for confirmation.
 - When roadmap issues are completed, explicitly mark the corresponding issue draft documents as resolved/completed so the status is visibly updated in the repository.
 - Validate issue status claims against current open issues and actively work through unresolved issues, ensuring they are not considered done prematurely.

@@ -124,25 +124,49 @@ jobs:
           print("No coverage.cobertura.xml files found.", file=sys.stderr)
           sys.exit(1)
 
-        covered = 0
-        valid = 0
+        line_hits_by_file = {}
         for file in files:
           try:
             root = ET.parse(file).getroot()
             lines_valid = int(root.attrib.get("lines-valid", "0"))
             lines_covered = int(root.attrib.get("lines-covered", "0"))
-            valid += lines_valid
-            covered += lines_covered
             print(f"Coverage input: {file} -> {lines_covered}/{lines_valid}")
+
+            for class_element in root.findall(".//class"):
+              filename = class_element.attrib.get("filename")
+              if not filename:
+                continue
+
+              file_hits = line_hits_by_file.setdefault(filename, {})
+              for line_element in class_element.findall("./lines/line"):
+                number_text = line_element.attrib.get("number")
+                if number_text is None:
+                  continue
+
+                try:
+                  line_number = int(number_text)
+                except ValueError:
+                  continue
+
+                hits = int(line_element.attrib.get("hits", "0"))
+                file_hits[line_number] = max(file_hits.get(line_number, 0), hits)
           except Exception as ex:
             print(f"Skipping unreadable coverage file {file}: {ex}")
 
+        valid = sum(len(file_hits) for file_hits in line_hits_by_file.values())
+        covered = sum(
+          1
+          for file_hits in line_hits_by_file.values()
+          for hits in file_hits.values()
+          if hits > 0
+        )
+
         if valid == 0:
-          print("Coverage reports found but lines-valid is 0.", file=sys.stderr)
+          print("Coverage reports found but no line entries could be merged.", file=sys.stderr)
           sys.exit(1)
 
         percent = (covered / valid) * 100.0
-        print(f"Merged line coverage: {percent:.2f}% (threshold: {threshold:.2f}%)")
+        print(f"Merged unique line coverage: {percent:.2f}% (threshold: {threshold:.2f}%)")
 
         if percent < threshold:
           print("Coverage threshold not met.", file=sys.stderr)

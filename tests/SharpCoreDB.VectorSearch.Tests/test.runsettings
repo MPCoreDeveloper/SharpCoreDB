@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RunSettings>
   <RunConfiguration>
-    <TestSessionTimeout>300000</TestSessionTimeout>
+    <!-- Keep the session timeout above CI blame-hang timeout to avoid false aborts during coverage collection. -->
+    <TestSessionTimeout>1200000</TestSessionTimeout>
     <TestTimeout>120000</TestTimeout>
   </RunConfiguration>
   <DataCollectionRunSettings>
