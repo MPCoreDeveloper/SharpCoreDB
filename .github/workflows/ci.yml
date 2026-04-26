@@ -88,21 +88,21 @@ jobs:
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true
 
     - name: Test SharpCoreDB.Tests
-      run: dotnet test tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m -- RunConfiguration.TestSessionTimeout=600000
+      run: dotnet test tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
       timeout-minutes: 30
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
     - name: Test SharpCoreDB.VectorSearch.Tests
-      run: dotnet test tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.VectorSearch.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m -- RunConfiguration.TestSessionTimeout=600000
+      run: dotnet test tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.VectorSearch.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
       timeout-minutes: 15
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
     - name: Test SharpCoreDB.EntityFrameworkCore.Tests
-      run: dotnet test tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m -- RunConfiguration.TestSessionTimeout=600000
+      run: dotnet test tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
       timeout-minutes: 15
       env:
         CI: "true"

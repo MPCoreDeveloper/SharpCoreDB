@@ -13,6 +13,7 @@
       "src\\SharpCoreDB.Serilog.Sinks\\SharpCoreDB.Serilog.Sinks.csproj",
       "tests\\SharpCoreDB.Tests\\SharpCoreDB.Tests.csproj",
       "tests\\SharpCoreDB.VectorSearch.Tests\\SharpCoreDB.VectorSearch.Tests.csproj",
+      "tests\\SharpCoreDB.EntityFrameworkCore.Tests\\SharpCoreDB.EntityFrameworkCore.Tests.csproj",
       "tools\\SharpCoreDB.Demo\\SharpCoreDB.Demo.csproj"
     ]
   }
