@@ -195,11 +195,14 @@ public partial class Table
                 {
                     hashIndex.Add(row, position);
                 }
-                
-                foreach (var registeredCol in unloadedIndexes)
+
+                if (unloadedIndexes is not null)
                 {
-                    this.staleIndexes.Add(registeredCol);
-                    _indexReadyCache.TryRemove(registeredCol, out _);
+                    foreach (var registeredCol in unloadedIndexes)
+                    {
+                        this.staleIndexes.Add(registeredCol);
+                        _indexReadyCache.TryRemove(registeredCol, out _);
+                    }
                 }
 
                 // 🔥 NEW: Auto-index in B-tree if indexes exist

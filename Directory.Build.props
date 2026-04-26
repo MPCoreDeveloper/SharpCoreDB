@@ -25,23 +25,28 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     
-    <!-- Package metadata (for libraries only) -->
-    <Authors>MPCoreDeveloper</Authors>
-    <Company>MPCoreDeveloper</Company>
-    <Product>SharpCoreDB</Product>
-    <Copyright>Copyright © 2025-2026 MPCoreDeveloper</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB.git</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>database;embedded;nosql;keyvalue;encryption;aes;simd;performance;dotnet10</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>icon.png</PackageIcon>
-    <Description>High-performance embedded database for .NET 10 with AES-256 encryption, SIMD analytics, and B-tree indexes</Description>
+    <!-- Package metadata (for packable projects only) -->
+    <Authors Condition="'$(IsPackable)' == 'true'">MPCoreDeveloper</Authors>
+    <Company Condition="'$(IsPackable)' == 'true'">MPCoreDeveloper</Company>
+    <Product Condition="'$(IsPackable)' == 'true'">SharpCoreDB</Product>
+    <Copyright Condition="'$(IsPackable)' == 'true'">Copyright © 2025-2026 MPCoreDeveloper</Copyright>
+    <PackageLicenseExpression Condition="'$(IsPackable)' == 'true'">MIT</PackageLicenseExpression>
+    <PackageProjectUrl Condition="'$(IsPackable)' == 'true'">https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl Condition="'$(IsPackable)' == 'true'">https://github.com/MPCoreDeveloper/SharpCoreDB.git</RepositoryUrl>
+    <RepositoryType Condition="'$(IsPackable)' == 'true'">git</RepositoryType>
+    <PackageTags Condition="'$(IsPackable)' == 'true'">database;embedded;nosql;keyvalue;encryption;aes;simd;performance;dotnet10</PackageTags>
+    <PackageReadmeFile Condition="'$(IsPackable)' == 'true'">README.md</PackageReadmeFile>
+    <PackageIcon Condition="'$(IsPackable)' == 'true'">icon.png</PackageIcon>
+    <Description Condition="'$(IsPackable)' == 'true'">High-performance embedded database for .NET 10 with AES-256 encryption, SIMD analytics, and B-tree indexes</Description>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
     <UseMicrosoftTestingPlatformRunner>false</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Suppress expected warning when packing non-packable projects in solution-wide pack -->
+    <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
   </PropertyGroup>
 
   <!-- Source Link for debugging -->

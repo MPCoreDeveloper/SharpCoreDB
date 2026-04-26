@@ -75,7 +75,6 @@
 
   <ItemGroup>
     <None Include="NuGet.README.md" Pack="true" PackagePath="/" />
-    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Build all RIDs automatically when packing -->

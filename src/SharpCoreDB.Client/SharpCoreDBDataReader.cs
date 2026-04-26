@@ -73,10 +73,12 @@ public sealed class SharpCoreDBDataReader : DbDataReader
             _currentRowIndex = -1;
         }
 
+        var currentResponse = _currentResponse ?? throw new InvalidOperationException("No current response");
+
         // Move to next row in current response
         _currentRowIndex++;
 
-        if (_currentRowIndex < _currentResponse.Rows.Count)
+        if (_currentRowIndex < currentResponse.Rows.Count)
         {
             return true;
         }

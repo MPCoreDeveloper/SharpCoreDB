@@ -1,6 +1,6 @@
 using System.Data;
 using System.Data.Common;
-using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.DataStructures;
 
@@ -14,8 +14,7 @@ public sealed class SharpCoreDBConnection : DbConnection
 {
     private ConnectionState _state;
     private IDatabase? _database;
-    private IServiceProvider? _serviceProvider;
-    private string? _connectionString;
+    private string _connectionString = string.Empty;
     private string? _dataSource;
     private string? _password;
     private bool _readOnly;
@@ -40,15 +39,16 @@ public sealed class SharpCoreDBConnection : DbConnection
     /// <summary>
     /// Gets or sets the connection string.
     /// </summary>
-    public override string? ConnectionString
+    [AllowNull]
+    public override string ConnectionString
     {
-        get => _connectionString ?? string.Empty;
+        get => _connectionString;
         set
         {
             if (_state != ConnectionState.Closed)
                 throw new InvalidOperationException("Cannot change connection string while connection is open.");
 
-            _connectionString = value;
+            _connectionString = value ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(value))
             {
                 ParseConnectionString(value);
@@ -111,7 +111,7 @@ public sealed class SharpCoreDBConnection : DbConnection
             _database = SharpCoreDBInstancePool.Instance.AcquireInstance(
                 _dataSource,
                 password,
-                _connectionString ?? string.Empty,
+                _connectionString,
                 _readOnly);
 
             _state = ConnectionState.Open;
@@ -165,7 +165,6 @@ public sealed class SharpCoreDBConnection : DbConnection
             }
             
             _database = null;
-            _serviceProvider = null;
             _state = ConnectionState.Closed;
         }
         catch (Exception ex)

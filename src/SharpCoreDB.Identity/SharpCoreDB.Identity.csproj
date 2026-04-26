@@ -36,7 +36,7 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
-    <None Include="SharpCoreDB.jpg" Pack="true" PackagePath="/" Condition="Exists('SharpCoreDB.jpg')" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Link="SharpCoreDB.jpg" />
   </ItemGroup>
 
   <ItemGroup>

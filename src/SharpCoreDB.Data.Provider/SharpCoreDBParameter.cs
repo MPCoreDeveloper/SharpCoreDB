@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB; // for Ulid
 
 namespace SharpCoreDB.Data.Provider;
@@ -59,6 +60,7 @@ public sealed class SharpCoreDBParameter : DbParameter
     /// <summary>
     /// Gets or sets the name of the parameter.
     /// </summary>
+    [AllowNull]
     public override string ParameterName { get; set; } = string.Empty;
 
     /// <summary>
@@ -69,6 +71,7 @@ public sealed class SharpCoreDBParameter : DbParameter
     /// <summary>
     /// Gets or sets the source column name.
     /// </summary>
+    [AllowNull]
     public override string SourceColumn { get; set; } = string.Empty;
 
     /// <summary>

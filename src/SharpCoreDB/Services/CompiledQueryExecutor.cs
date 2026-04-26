@@ -176,7 +176,8 @@ public class CompiledQueryExecutor
         {
             if (plan.ColumnIndices.TryGetValue(column, out var index))
             {
-                projected[column] = indexedRow[index];
+                var value = indexedRow[index];
+                projected[column] = value ?? DBNull.Value;
             }
         }
 

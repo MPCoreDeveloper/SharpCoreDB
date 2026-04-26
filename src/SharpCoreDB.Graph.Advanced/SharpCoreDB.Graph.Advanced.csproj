@@ -27,19 +27,19 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <Deterministic>true</Deterministic>
-    <UseLocalProjectReferences Condition="'$(BuildingInsideVisualStudio)' == 'true' or '$(Configuration)' == 'Debug'">true</UseLocalProjectReferences>
-    <UseLocalProjectReferences Condition="'$(UseLocalProjectReferences)' == ''">false</UseLocalProjectReferences>
+    <UseLocalProjectReferences Condition="'$(UseSharpCoreDBPackage)' == 'true'">false</UseLocalProjectReferences>
+    <UseLocalProjectReferences Condition="'$(UseLocalProjectReferences)' == ''">true</UseLocalProjectReferences>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseLocalProjectReferences)' == 'true'">
-    <!-- IDE and Debug builds: use local project references -->
+    <!-- IDE and local builds: use local project references -->
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
     <ProjectReference Include="..\SharpCoreDB.Graph\SharpCoreDB.Graph.csproj" />
     <ProjectReference Include="..\SharpCoreDB.VectorSearch\SharpCoreDB.VectorSearch.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalProjectReferences)' != 'true'">
-    <!-- Deployed builds: use published NuGet packages -->
+    <!-- Package-based builds: use published NuGet packages -->
     <PackageReference Include="SharpCoreDB" Version="1.7.1" />
     <PackageReference Include="SharpCoreDB.Graph" Version="1.7.1" />
     <PackageReference Include="SharpCoreDB.VectorSearch" Version="1.7.1" />
