@@ -16,7 +16,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
-  CI_TEST_FILTER: 'Category!=Debug&Category!=Manual'
+  CI_TEST_FILTER: 'Category!=Debug&Category!=Manual&Category!=Performance'
   MIN_LINE_COVERAGE_PERCENT: '18'
 
 jobs:

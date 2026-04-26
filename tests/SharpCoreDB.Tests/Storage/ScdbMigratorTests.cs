@@ -124,8 +124,15 @@ public sealed class ScdbMigratorTests : IDisposable
             await source.FlushAsync();
         }
         
+        var progressLock = new Lock();
         var progressReports = new List<MigrationProgress>();
-        var progress = new Progress<MigrationProgress>(p => progressReports.Add(p));
+        var progress = new Progress<MigrationProgress>(p =>
+        {
+            lock (progressLock)
+            {
+                progressReports.Add(p);
+            }
+        });
         
         using var migrator = new ScdbMigrator(_sourceDir, _targetPath);
 
@@ -138,7 +145,12 @@ public sealed class ScdbMigratorTests : IDisposable
         });
 
         // Assert
-        var localReports = progressReports.ToList();
+        List<MigrationProgress> localReports;
+        lock (progressLock)
+        {
+            localReports = [.. progressReports];
+        }
+
         _output.WriteLine($"Progress reports: {localReports.Count}");
         foreach (var p in localReports)
         {

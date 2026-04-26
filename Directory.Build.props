@@ -40,6 +40,10 @@
     <Description>High-performance embedded database for .NET 10 with AES-256 encryption, SIMD analytics, and B-tree indexes</Description>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <UseMicrosoftTestingPlatformRunner>false</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
   <!-- Source Link for debugging -->
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
