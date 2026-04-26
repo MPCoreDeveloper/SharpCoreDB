@@ -1,0 +1,60 @@
+codecov:
+  # Notify Codecov of the expected number of uploads per commit.
+  # 3 test projects run in CI (SharpCoreDB.Tests, VectorSearch.Tests, EntityFrameworkCore.Tests),
+  # all on ubuntu-latest only for coverage, so we expect exactly 3 uploads.
+  max_report_age: off
+
+coverage:
+  precision: 2
+  round: down
+  range: "18...80"
+
+  status:
+    project:
+      default:
+        # Allow up to 2% coverage drop before failing the status check.
+        target: auto
+        threshold: 2%
+        base: auto
+        if_no_uploads: error
+        if_not_found: success
+        if_ci_failed: error
+
+    patch:
+      default:
+        # Require at least 50% of new lines in a PR to be covered.
+        target: 50%
+        threshold: 5%
+        base: auto
+        if_no_uploads: error
+        if_not_found: success
+        if_ci_failed: error
+
+comment:
+  layout: "header, diff, flags, components, tree"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+  hide_project_coverage: false
+
+# Ignore files that should not count toward coverage
+ignore:
+  - "tests/**"
+  - "tools/**"
+  - "**/*.Demo/**"
+  - "**/Benchmarks/**"
+  - "**/benchmarks/**"
+  - "src/SharpCoreDB.AppHost/**"
+  - "**/*Demo*.cs"
+  - "**/*Benchmark*.cs"
+  - "**/*.Designer.cs"
+  - "**/*.g.cs"
+  - "**/*.g.i.cs"
+  - "**/GlobalUsings.cs"
+
+flags:
+  unittests:
+    paths:
+      - src/
+    carryforward: true

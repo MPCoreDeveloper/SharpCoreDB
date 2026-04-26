@@ -1,420 +1,1735 @@
+/* ==========================================================================
+   SharpCoreDB WebViewer — SSMS-Inspired Theme  (v1.7.0)
+   Scoped under .scdb-* to avoid Bootstrap conflicts.
+   Color palette mirrors Visual Studio dark + SSMS chrome.
+   ========================================================================== */
+
+/* ── Reset & base ────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Ensure hidden attribute and utility class both suppress display */
+[hidden] { display: none !important; }
+.scdb-hidden { display: none !important; }
+
 :root {
-    color-scheme: light dark;
-    --bg: #0f172a;
-    --panel: #111827;
-    --border: #334155;
-    --text: #e5e7eb;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
-    --accent-strong: #0ea5e9;
-    --success-bg: rgba(34, 197, 94, 0.12);
-    --success-border: rgba(34, 197, 94, 0.35);
-    --error-bg: rgba(239, 68, 68, 0.12);
-    --error-border: rgba(239, 68, 68, 0.35);
+    /* Chrome colours */
+    --scdb-chrome-bg:        #2d2d30;
+    --scdb-chrome-bg-hover:  #3e3e42;
+    --scdb-chrome-border:    #3f3f46;
+    --scdb-chrome-text:      #cccccc;
+    --scdb-chrome-text-mute: #999999;
+
+    /* Toolbar */
+    --scdb-toolbar-bg:       #3c3c3c;
+    --scdb-toolbar-border:   #555555;
+
+    /* Content area */
+    --scdb-content-bg:       #1e1e1e;
+    --scdb-panel-bg:         #252526;
+    --scdb-panel-border:     #3f3f46;
+
+    /* Editor */
+    --scdb-editor-bg:        #1e1e1e;
+    --scdb-editor-text:      #d4d4d4;
+    --scdb-editor-border:    #3c3c3c;
+    --scdb-editor-font:      Consolas, 'Courier New', 'Lucida Console', monospace;
+    --scdb-editor-size:      13px;
+
+    /* Accent */
+    --scdb-accent:           #007acc;
+    --scdb-accent-hover:     #1c97ea;
+    --scdb-accent-text:      #ffffff;
+
+    /* Status states */
+    --scdb-ok:               #4ec9b0;
+    --scdb-warn:             #dcdcaa;
+    --scdb-error:            #f44747;
+    --scdb-tx:               #ce9178;
+
+    /* Status bar */
+    --scdb-statusbar-bg:         #007acc;   /* SSMS blue connected bar */
+    --scdb-statusbar-bg-discon:  #68217a;   /* SSMS purple disconnected */
+    --scdb-statusbar-text:       #ffffff;
+    --scdb-statusbar-height:     24px;
+
+    /* Menu bar */
+    --scdb-menubar-height:   30px;
+    --scdb-toolbar-height:   32px;
+
+    /* Sidebar (Object Explorer) */
+    --scdb-sidebar-width:    240px;
+    --scdb-sidebar-bg:       #252526;
+    --scdb-sidebar-text:     #cccccc;
+    --scdb-sidebar-hover:    #2a2d2e;
+    --scdb-sidebar-selected: #094771;
+
+    /* Results grid */
+    --scdb-grid-header-bg:   #252526;
+    --scdb-grid-row-even:    #1e1e1e;
+    --scdb-grid-row-odd:     #252526;
+    --scdb-grid-row-hover:   #2a2d2e;
+    --scdb-grid-border:      #3f3f46;
+    --scdb-grid-text:        #d4d4d4;
+
+    /* Right panel (Connection / Saved / History) */
+    --scdb-right-panel-width: 280px;
 }
 
-* {
-    box-sizing: border-box;
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+    --scdb-chrome-bg:        #f0f0f0;
+    --scdb-chrome-bg-hover:  #e0e0e0;
+    --scdb-chrome-border:    #cccccc;
+    --scdb-chrome-text:      #1e1e1e;
+    --scdb-chrome-text-mute: #666666;
+
+    --scdb-toolbar-bg:       #e8e8e8;
+    --scdb-toolbar-border:   #cccccc;
+
+    --scdb-content-bg:       #ffffff;
+    --scdb-panel-bg:         #f5f5f5;
+    --scdb-panel-border:     #d4d4d4;
+
+    --scdb-editor-bg:        #ffffff;
+    --scdb-editor-text:      #000000;
+    --scdb-editor-border:    #cccccc;
+
+    --scdb-statusbar-bg:         #007acc;
+    --scdb-statusbar-bg-discon:  #68217a;
+    --scdb-statusbar-text:       #ffffff;
+
+    --scdb-sidebar-bg:       #f5f5f5;
+    --scdb-sidebar-text:     #1e1e1e;
+    --scdb-sidebar-hover:    #e8e8e8;
+    --scdb-sidebar-selected: #cce5ff;
+
+    --scdb-grid-header-bg:   #f0f0f0;
+    --scdb-grid-row-even:    #ffffff;
+    --scdb-grid-row-odd:     #f9f9f9;
+    --scdb-grid-row-hover:   #e8f4ff;
+    --scdb-grid-border:      #d4d4d4;
+    --scdb-grid-text:        #1e1e1e;
 }
 
-html,
-body {
+/* ── System preference (auto) — applied when data-theme="system" or absent ─ */
+@media (prefers-color-scheme: light) {
+    [data-theme="system"] {
+        --scdb-chrome-bg:        #f0f0f0;
+        --scdb-chrome-bg-hover:  #e0e0e0;
+        --scdb-chrome-border:    #cccccc;
+        --scdb-chrome-text:      #1e1e1e;
+        --scdb-chrome-text-mute: #666666;
+
+        --scdb-toolbar-bg:       #e8e8e8;
+        --scdb-toolbar-border:   #cccccc;
+
+        --scdb-content-bg:       #ffffff;
+        --scdb-panel-bg:         #f5f5f5;
+        --scdb-panel-border:     #d4d4d4;
+
+        --scdb-editor-bg:        #ffffff;
+        --scdb-editor-text:      #000000;
+        --scdb-editor-border:    #cccccc;
+
+        --scdb-statusbar-bg:         #007acc;
+        --scdb-statusbar-bg-discon:  #68217a;
+        --scdb-statusbar-text:       #ffffff;
+
+        --scdb-sidebar-bg:       #f5f5f5;
+        --scdb-sidebar-text:     #1e1e1e;
+        --scdb-sidebar-hover:    #e8e8e8;
+        --scdb-sidebar-selected: #cce5ff;
+
+        --scdb-grid-header-bg:   #f0f0f0;
+        --scdb-grid-row-even:    #ffffff;
+        --scdb-grid-row-odd:     #f9f9f9;
+        --scdb-grid-row-hover:   #e8f4ff;
+        --scdb-grid-border:      #d4d4d4;
+        --scdb-grid-text:        #1e1e1e;
+    }
+}
+
+/* ── Theme toggle button ─────────────────────────────────────────────────── */
+.scdb-theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: 1px solid var(--scdb-chrome-border);
+    border-radius: 4px;
+    color: var(--scdb-chrome-text);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    line-height: 1.6;
+    margin-left: 8px;
+}
+
+.scdb-theme-toggle:hover {
+    background: var(--scdb-chrome-bg-hover);
+}
+
+html, body {
+    height: 100%;
     margin: 0;
-    min-height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: "Segoe UI", Arial, sans-serif;
-    line-height: 1.5;
+    padding: 0;
+    overflow: hidden;   /* prevent body scroll; panels scroll independently */
+    background: var(--scdb-content-bg);
+    color: var(--scdb-editor-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
 }
 
-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.96);
-}
-
-main {
-    margin: 0 auto;
-    max-width: 1280px;
-    padding: 1.5rem;
-}
-
-h1,
-h2,
-h3,
-p {
-    margin-top: 0;
-}
-
-.panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
-}
-
-.hero {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-}
-
-.hero-badge {
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0.4rem 0.8rem;
-    color: var(--accent);
-    font-weight: 600;
-}
-
-.viewer-grid {
+/* ── Shell grid: menubar / toolbar / main / statusbar ────────────────────── */
+.scdb-shell {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1rem;
+    grid-template-rows:
+        var(--scdb-menubar-height)
+        var(--scdb-toolbar-height)
+        1fr
+        var(--scdb-statusbar-height);
+    height: 100vh;
+    overflow: hidden;
 }
 
-.viewer-grid-main {
-    align-items: start;
-}
-
-.stack-form,
-.metadata-grid {
-    display: grid;
-    gap: 0.85rem;
-}
-
-.form-row,
-.section-header,
-.button-row,
-.checkbox-row,
-.profile-list li,
-.summary-list div {
+/* ── Menu bar ────────────────────────────────────────────────────────────── */
+.scdb-menubar {
+    background: var(--scdb-chrome-bg);
+    border-bottom: 1px solid var(--scdb-chrome-border);
     display: flex;
-    gap: 0.75rem;
-}
-
-.form-row,
-.summary-list div {
-    flex-direction: column;
-}
-
-.checkbox-row {
     align-items: center;
+    gap: 0;
+    padding: 0 8px;
+    user-select: none;
+    height: var(--scdb-menubar-height);
 }
 
-.button-row {
-    flex-wrap: wrap;
-}
-
-.section-header-wrap {
-    flex-wrap: wrap;
+.scdb-menubar__brand {
+    display: flex;
     align-items: center;
-}
-
-.scope-pill {
-    border: 1px solid rgba(56, 189, 248, 0.45);
-    color: var(--accent);
-    border-radius: 999px;
-    padding: 0.2rem 0.65rem;
-    font-size: 0.8rem;
+    gap: 6px;
+    padding-right: 16px;
+    border-right: 1px solid var(--scdb-chrome-border);
+    margin-right: 4px;
     white-space: nowrap;
 }
 
-.input,
-.button,
-.table-link,
-.sql-editor,
-.sql-parameters,
-.workspace-json {
-    border-radius: 0.55rem;
+.scdb-menubar__icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
-.input,
-.sql-editor,
-.sql-parameters,
-.workspace-json {
-    width: 100%;
-    padding: 0.7rem 0.8rem;
-    border: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.7);
-    color: var(--text);
+.scdb-menubar__title {
+    color: var(--scdb-chrome-text);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
-.connection-mode-panel {
-    display: grid;
-    gap: 0.85rem;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    border-radius: 0.65rem;
-    padding: 0.85rem;
+.scdb-menubar__version {
+    color: var(--scdb-chrome-text-mute);
+    font-size: 10px;
 }
 
-.connection-mode-panel > h3 {
-    margin: 0;
-    color: var(--accent);
-    font-size: 1rem;
-}
-
-.sql-editor {
-    min-height: 14rem;
-    resize: vertical;
-    font-family: Consolas, "Cascadia Code", monospace;
-    line-height: 1.45;
-    white-space: pre;
-}
-
-.sql-parameters {
-    min-height: 6rem;
-    resize: vertical;
-    font-family: Consolas, "Cascadia Code", monospace;
-    line-height: 1.35;
-}
-
-.workspace-json {
-    min-height: 10rem;
-    resize: vertical;
-    font-family: Consolas, "Cascadia Code", monospace;
-    line-height: 1.35;
-}
-
-.workspace-actions-row {
-    margin-bottom: 0.75rem;
-}
-
-.query-parameters-row {
-    margin-top: 0.25rem;
-}
-
-.transaction-status-panel {
+.scdb-menubar__nav {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 1rem;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    border-radius: 0.65rem;
-    padding: 0.85rem;
-    margin-bottom: 1rem;
+    flex: 1;
 }
 
-.transaction-status-panel > .button-row {
-    margin: 0;
-}
-
-.transaction-status-panel p {
-    margin: 0.25rem 0 0;
-}
-
-.save-query-form {
-    margin-bottom: 1rem;
-}
-
-.saved-query-list,
-.query-history-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.75rem;
-}
-
-.saved-query-list li,
-.query-history-list li {
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 0.65rem;
-    padding: 0.75rem;
-    display: grid;
-    gap: 0.5rem;
-}
-
-.history-title-row {
+.scdb-menubar__item {
+    color: var(--scdb-chrome-text);
+    font-size: 12px;
+    padding: 0 10px;
+    height: var(--scdb-menubar-height);
     display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    align-items: baseline;
+    align-items: center;
+    cursor: default;
+    transition: background 0.1s;
 }
 
-.history-preview {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: Consolas, "Cascadia Code", monospace;
-    font-size: 0.85rem;
+.scdb-menubar__item:hover {
+    background: var(--scdb-chrome-bg-hover);
 }
 
-.history-success {
-    color: #4ade80;
+.scdb-menubar__right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
-.history-failed {
-    color: #f87171;
+.scdb-menubar__endpoint {
+    color: var(--scdb-chrome-text-mute);
+    font-size: 11px;
+    font-family: var(--scdb-editor-font);
+    padding: 0 8px;
 }
 
-.input:focus,
-.sql-editor:focus,
-.sql-parameters:focus,
-.workspace-json:focus {
-    outline: 2px solid rgba(56, 189, 248, 0.35);
-    border-color: var(--accent);
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.scdb-toolbar {
+    background: var(--scdb-toolbar-bg);
+    border-bottom: 1px solid var(--scdb-toolbar-border);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    height: var(--scdb-toolbar-height);
+    flex-shrink: 0;
 }
 
-.button {
-    padding: 0.65rem 0.9rem;
-    border: 1px solid var(--border);
+.scdb-toolbar__btn {
     background: transparent;
-    color: var(--text);
+    border: 1px solid transparent;
+    color: var(--scdb-chrome-text);
+    padding: 2px 10px;
+    font-size: 12px;
     cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.1s, border-color 0.1s;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.button:hover,
-.table-link:hover {
-    border-color: var(--accent);
+.scdb-toolbar__btn:hover {
+    background: var(--scdb-chrome-bg-hover);
+    border-color: var(--scdb-chrome-border);
 }
 
-.button[disabled] {
-    opacity: 0.55;
+.scdb-toolbar__btn--primary {
+    background: var(--scdb-accent);
+    border-color: var(--scdb-accent);
+    color: var(--scdb-accent-text);
+}
+
+.scdb-toolbar__btn--primary:hover {
+    background: var(--scdb-accent-hover);
+    border-color: var(--scdb-accent-hover);
+}
+
+.scdb-toolbar__btn:disabled,
+.scdb-toolbar__btn[disabled] {
+    opacity: 0.4;
     cursor: not-allowed;
 }
 
-.button-primary {
-    background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-    border-color: transparent;
-    color: #04111f;
-    font-weight: 700;
+.scdb-toolbar__separator {
+    width: 1px;
+    height: 24px;
+    background: var(--scdb-toolbar-border);
+    margin: 0 4px;
 }
 
-.button-small {
-    padding: 0.45rem 0.75rem;
-}
-
-.profile-list,
-.table-list,
-.simple-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.profile-list li,
-.table-list li {
-    justify-content: space-between;
+.scdb-toolbar__connection {
+    display: flex;
     align-items: center;
-    border-top: 1px solid rgba(148, 163, 184, 0.15);
-    padding: 0.75rem 0;
+    gap: 5px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-family: var(--scdb-editor-font);
+    border-radius: 2px;
 }
 
-.profile-list li:first-child,
-.table-list li:first-child {
-    border-top: 0;
-    padding-top: 0;
+.scdb-toolbar__conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
-.table-link {
-    display: block;
+.scdb-toolbar__connection--connected  .scdb-toolbar__conn-dot { background: var(--scdb-ok); }
+.scdb-toolbar__connection--disconnected .scdb-toolbar__conn-dot { background: var(--scdb-error); }
+.scdb-toolbar__connection--connected  .scdb-toolbar__conn-label { color: var(--scdb-ok); }
+.scdb-toolbar__connection--disconnected .scdb-toolbar__conn-label { color: var(--scdb-chrome-text-mute); }
+
+/* ── Main content area ───────────────────────────────────────────────────── */
+.scdb-main {
+    display: flex;
+    overflow: hidden;
+    background: var(--scdb-content-bg);
+    height: 100%;   /* fills the 1fr grid row */
+}
+
+.scdb-splitter {
+    flex: 0 0 6px;
+    width: 6px;
+    background: var(--scdb-panel-bg);
+    border-left: 1px solid var(--scdb-panel-border);
+    border-right: 1px solid var(--scdb-panel-border);
+    cursor: col-resize;
+    position: relative;
+}
+
+.scdb-splitter::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.08);
+}
+
+.scdb-splitter:focus-visible {
+    outline: none;
+    background: #2f3f52;
+    box-shadow: inset 0 0 0 1px var(--scdb-accent);
+}
+
+.scdb-resize-active,
+.scdb-resize-active * {
+    cursor: col-resize !important;
+    user-select: none;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+.scdb-statusbar {
+    background: var(--scdb-statusbar-bg);
+    height: var(--scdb-statusbar-height);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* When disconnected the whole bar turns purple like SSMS */
+.scdb-shell:not(:has(.scdb-toolbar__connection--connected)) .scdb-statusbar {
+    background: var(--scdb-statusbar-bg-discon);
+}
+
+.scdb-statusbar__left,
+.scdb-statusbar__right {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+}
+
+.scdb-statusbar__center {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    color: var(--scdb-statusbar-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 8px;
+}
+
+.scdb-statusbar__segment {
+    color: var(--scdb-statusbar-text);
+    font-size: 11px;
+    padding: 0 10px;
+    height: var(--scdb-statusbar-height);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,0.15);
+}
+
+.scdb-statusbar__segment:last-child { border-right: none; }
+.scdb-statusbar__right .scdb-statusbar__segment:first-child { border-left: 1px solid rgba(255,255,255,0.15); }
+
+.scdb-statusbar__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.scdb-statusbar__segment--connected    .scdb-statusbar__dot { background: #7fdb75; }
+.scdb-statusbar__segment--disconnected .scdb-statusbar__dot { background: rgba(255,255,255,0.5); }
+.scdb-statusbar__segment--tx { background: rgba(0,0,0,0.2); }
+
+/* ── Object Explorer sidebar (Phase 2 prep) ──────────────────────────────── */
+.scdb-sidebar {
+    width: var(--scdb-sidebar-width);
+    min-width: var(--scdb-sidebar-width);
+    background: var(--scdb-sidebar-bg);
+    border-right: 1px solid var(--scdb-panel-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.scdb-sidebar__header {
+    background: var(--scdb-chrome-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--scdb-chrome-text-mute);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.scdb-sidebar__body {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.scdb-sidebar__tree {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.scdb-sidebar__tree li {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 12px 3px 20px;
+    color: var(--scdb-sidebar-text);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scdb-sidebar__tree li:hover    { background: var(--scdb-sidebar-hover); }
+.scdb-sidebar__tree li.selected { background: var(--scdb-sidebar-selected); }
+
+.scdb-sidebar__tree-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+/* ── Center workspace ────────────────────────────────────────────────────── */
+.scdb-workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── SQL Editor panel ────────────────────────────────────────────────────── */
+.scdb-editor-panel {
+    background: var(--scdb-editor-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    min-height: 140px;
+    resize: vertical;   /* browser native resize handle */
+    overflow: hidden;
+}
+
+.scdb-editor-textarea {
+    flex: 1;
     width: 100%;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid transparent;
-    color: var(--text);
+    min-height: 0;
+    box-sizing: border-box;
+    background: var(--scdb-editor-bg);
+    color: var(--scdb-chrome-text);
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 8px 10px;
+    font-family: var(--scdb-mono-font, 'Cascadia Code', 'Consolas', monospace);
+    font-size: 13px;
+    line-height: 1.5;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+}
+
+/* The form wrapping the editor textarea must also stretch to fill the panel */
+#form-execute-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.scdb-editor-panel__toolbar {
+    background: var(--scdb-panel-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    flex-shrink: 0;
+}
+
+.scdb-query-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    background: var(--scdb-panel-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-height: 29px;
+}
+
+.scdb-query-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    border-right: 1px solid var(--scdb-panel-border);
+    background: transparent;
+    color: var(--scdb-chrome-text-mute);
+    font-size: 12px;
+    padding: 4px 10px;
+    min-width: 110px;
+    max-width: 240px;
+    cursor: pointer;
+    position: relative;
+}
+
+.scdb-query-tab::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 5px;
+    bottom: 5px;
+    width: 1px;
+    background: rgba(255,255,255,0.06);
+}
+
+.scdb-query-tab.active::after,
+.scdb-query-tab--add::after {
+    display: none;
+}
+
+.scdb-query-tab:hover {
+    background: var(--scdb-sidebar-hover);
+    color: var(--scdb-chrome-text);
+}
+
+.scdb-query-tab.active {
+    background: var(--scdb-editor-bg);
+    color: var(--scdb-chrome-text);
+    border-bottom: 2px solid var(--scdb-accent);
+}
+
+.scdb-query-tab__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 178px;
+}
+
+.scdb-query-tab__close {
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.scdb-query-tab__close:hover {
+    opacity: 1;
+    color: var(--scdb-error);
+}
+
+.scdb-query-tab--add {
+    min-width: 34px;
+    max-width: 34px;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--scdb-ok);
+}
+
+/* ── Results panel ───────────────────────────────────────────────────────── */
+.scdb-results-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--scdb-content-bg);
+}
+
+.scdb-results-tabs {
+    background: var(--scdb-panel-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 8px;
+    flex-shrink: 0;
+    gap: 0;
+}
+
+.scdb-results-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+}
+
+.scdb-results-tab {
+    font-size: 12px;
+    color: var(--scdb-chrome-text-mute);
+    padding: 5px 14px;
+    cursor: pointer;
+    border-top: 2px solid transparent;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+    margin-right: 2px;
+    user-select: none;
+    transition: color 0.1s;
+}
+
+.scdb-results-tab:hover { color: var(--scdb-chrome-text); }
+
+.scdb-results-tab.active {
+    color: var(--scdb-chrome-text);
+    border-top-color: var(--scdb-accent);
+    border-left-color: var(--scdb-panel-border);
+    border-right-color: var(--scdb-panel-border);
+    background: var(--scdb-content-bg);
+    margin-bottom: -1px;
+}
+
+.scdb-results-body {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+}
+
+/* ── Results data grid ───────────────────────────────────────────────────── */
+.scdb-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--scdb-editor-font);
+    font-size: 12px;
+    color: var(--scdb-grid-text);
+}
+
+.scdb-grid thead th {
+    background: var(--scdb-grid-header-bg);
+    color: var(--scdb-chrome-text);
+    font-weight: 600;
+    border-right: 1px solid var(--scdb-grid-border);
+    border-bottom: 2px solid var(--scdb-accent);
+    padding: 5px 10px;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    user-select: none;
+}
+
+.scdb-grid thead th:last-child { border-right: none; }
+
+.scdb-grid tbody tr:nth-child(even) td { background: var(--scdb-grid-row-even); }
+.scdb-grid tbody tr:nth-child(odd)  td { background: var(--scdb-grid-row-odd);  }
+
+.scdb-grid tbody tr:hover td { background: var(--scdb-grid-row-hover); }
+
+.scdb-grid tbody td {
+    padding: 3px 10px;
+    border-right: 1px solid var(--scdb-grid-border);
+    border-bottom: 1px solid var(--scdb-grid-border);
+    vertical-align: top;
+    white-space: nowrap;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scdb-grid tbody td:last-child { border-right: none; }
+
+.scdb-grid__null {
+    color: var(--scdb-chrome-text-mute);
+    font-style: italic;
+}
+
+/* ── Connection panel (right/floating — Phase 2 integrates into sidebar) ─── */
+.scdb-connection-panel {
+    background: var(--scdb-panel-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 3px;
+    padding: 16px;
+}
+
+.scdb-connection-panel__title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--scdb-chrome-text-mute);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--scdb-panel-border);
+}
+
+/* ── Form controls (dark SSMS style) ────────────────────────────────────── */
+.scdb-form-group {
+    margin-bottom: 10px;
+}
+
+.scdb-label {
+    display: block;
+    font-size: 11px;
+    color: var(--scdb-chrome-text-mute);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.scdb-required {
+    color: var(--scdb-error);
+    margin-left: 2px;
+}
+
+.scdb-input,
+.scdb-select,
+.scdb-textarea {
+    width: 100%;
+    background: var(--scdb-editor-bg);
+    color: var(--scdb-editor-text);
+    border: 1px solid var(--scdb-editor-border);
+    border-radius: 2px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.scdb-input:focus,
+.scdb-select:focus,
+.scdb-textarea:focus {
+    border-color: var(--scdb-accent);
+    box-shadow: 0 0 0 1px var(--scdb-accent);
+}
+
+.scdb-input.is-invalid,
+.scdb-select.is-invalid,
+.scdb-textarea.is-invalid {
+    border-color: var(--scdb-error);
+    box-shadow: 0 0 0 1px var(--scdb-error);
+}
+
+.scdb-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
+.scdb-validation-message {
+    color: var(--scdb-error);
+    font-size: 11px;
+    margin-top: 3px;
+    display: block;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.scdb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 14px;
+    font-size: 12px;
+    border: 1px solid var(--scdb-chrome-border);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    white-space: nowrap;
     text-decoration: none;
 }
 
-.table-link.selected {
-    border-color: var(--accent);
-    background: rgba(56, 189, 248, 0.12);
+.scdb-btn--primary {
+    background: var(--scdb-accent);
+    border-color: var(--scdb-accent);
+    color: #fff;
 }
 
-.preview-form {
-    margin-top: 1rem;
+.scdb-btn--primary:hover {
+    background: var(--scdb-accent-hover);
+    border-color: var(--scdb-accent-hover);
+    color: #fff;
 }
 
-.status-panel {
-    border-width: 1px;
+.scdb-btn--secondary {
+    background: var(--scdb-chrome-bg);
+    border-color: var(--scdb-chrome-border);
+    color: var(--scdb-chrome-text);
 }
 
-.success-panel {
-    background: var(--success-bg);
-    border-color: var(--success-border);
+.scdb-btn--secondary:hover {
+    background: var(--scdb-chrome-bg-hover);
 }
 
-.error-panel {
-    background: var(--error-bg);
-    border-color: var(--error-border);
+.scdb-btn--danger {
+    background: transparent;
+    border-color: var(--scdb-error);
+    color: var(--scdb-error);
 }
 
-.summary-list {
-    margin: 0;
+.scdb-btn--danger:hover {
+    background: rgba(244,71,71,0.12);
 }
 
-.summary-list dt {
-    color: var(--muted);
-    font-size: 0.9rem;
+.scdb-btn:disabled,
+.scdb-btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
-.summary-list dd {
-    margin: 0;
-    word-break: break-word;
+/* ── Alert / message banners ─────────────────────────────────────────────── */
+.scdb-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-left: 3px solid transparent;
+    border-radius: 1px;
+    margin-bottom: 8px;
 }
 
-.data-table {
+.scdb-alert--error {
+    background: rgba(244, 71, 71, 0.1);
+    border-left-color: var(--scdb-error);
+    color: #f88;
+}
+
+.scdb-alert--success {
+    background: rgba(78, 201, 176, 0.1);
+    border-left-color: var(--scdb-ok);
+    color: var(--scdb-ok);
+}
+
+.scdb-alert--warn {
+    background: rgba(220, 220, 170, 0.08);
+    border-left-color: var(--scdb-warn);
+    color: var(--scdb-warn);
+}
+
+/* ── Panel tabs (Saved Queries / History) ────────────────────────────────── */
+.scdb-panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--scdb-panel-border);
+    background: var(--scdb-panel-bg);
+    flex-shrink: 0;
+}
+
+.scdb-panel-tab {
+    font-size: 12px;
+    color: var(--scdb-chrome-text-mute);
+    padding: 5px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.1s;
+    user-select: none;
+}
+
+.scdb-panel-tab:hover  { color: var(--scdb-chrome-text); }
+
+.scdb-panel-tab.active {
+    color: var(--scdb-chrome-text);
+    border-bottom-color: var(--scdb-accent);
+}
+
+.scdb-panel-tab__dock-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    font-size: 11px;
+    opacity: 0.6;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+}
+
+.scdb-panel-tab__dock-btn:hover {
+    opacity: 1;
+}
+
+/* ── Three-pane layout additions (Phase 2) ───────────────────────────────
+   .scdb-main contains: sidebar | workspace | right-panel
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Right panel (Connection / Saved / History) */
+
+.scdb-right-panel {
+    width: var(--scdb-right-panel-width);
+    min-width: var(--scdb-right-panel-width);
+    background: var(--scdb-panel-bg);
+    border-left: 1px solid var(--scdb-panel-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.scdb-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* ── Sidebar group header ────────────────────────────────────────────── */
+.scdb-sidebar__group-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--scdb-chrome-text-mute);
+    cursor: pointer;
+    user-select: none;
+    /* button reset */
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    line-height: inherit;
+}
+
+.scdb-sidebar__group-header:hover {
+    background: var(--scdb-sidebar-hover);
+    color: var(--scdb-chrome-text);
+}
+
+.scdb-sidebar__chevron {
+    font-size: 10px;
+    width: 12px;
+    flex-shrink: 0;
+}
+
+/* ── Sidebar column metadata mini-table ──────────────────────────────── */
+.scdb-sidebar__meta {
+    border-top: 1px solid var(--scdb-panel-border);
+    flex-shrink: 0;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.scdb-sidebar__meta-header {
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--scdb-chrome-text-mute);
+    background: var(--scdb-chrome-bg);
+    border-bottom: 1px solid var(--scdb-panel-border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scdb-sidebar__meta-table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 11px;
 }
 
-.data-table th,
-.data-table td {
+.scdb-sidebar__meta-table thead th {
+    background: var(--scdb-grid-header-bg);
+    color: var(--scdb-chrome-text-mute);
+    padding: 3px 8px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--scdb-panel-border);
     text-align: left;
-    padding: 0.65rem;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-    vertical-align: top;
+    position: sticky;
+    top: 0;
 }
 
-.result-grid-wrapper {
-    overflow-x: auto;
+.scdb-sidebar__meta-table tbody td {
+    padding: 2px 8px;
+    border-bottom: 1px solid var(--scdb-grid-border);
+    max-width: 110px;
 }
 
-.result-grid-table {
-    min-width: 100%;
+/* ── Session detail list ─────────────────────────────────────────────── */
+.scdb-session-dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    font-size: 12px;
+    margin: 0;
 }
 
-.result-grid-table td,
-.result-grid-table th {
+.scdb-session-dl dt {
+    color: var(--scdb-chrome-text-mute);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    align-self: center;
     white-space: nowrap;
 }
 
-.sql-panel,
-.result-panel {
-    margin-top: 1rem;
+.scdb-session-dl dd {
+    margin: 0;
+    color: var(--scdb-editor-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.validation {
-    color: #fca5a5;
-    font-size: 0.9rem;
+/* ── Saved query row ─────────────────────────────────────────────────── */
+.scdb-saved-query {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
 }
 
-.muted,
-.small-text {
-    color: var(--muted);
+.scdb-saved-query__load {
+    flex: 1;
+    overflow: hidden;
+    text-align: left;
+    font-size: 12px;
 }
 
-.small-text {
-    font-size: 0.9rem;
+.scdb-saved-query__delete {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    font-size: 11px;
 }
 
-@media (max-width: 720px) {
-    header,
-    .hero,
-    .profile-list li,
-    .transaction-status-panel,
-    .history-title-row {
+/* ── History items ───────────────────────────────────────────────────── */
+.scdb-history-item {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--scdb-grid-border);
+    cursor: pointer;
+    transition: background 0.1s;
+    /* button reset */
+    background: none;
+    border-left: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    display: block;
+}
+
+.scdb-history-item:hover { background: var(--scdb-sidebar-hover); }
+
+.scdb-history-item--error { border-left: 2px solid var(--scdb-error); }
+
+.scdb-history-item__sql {
+    font-size: 11px;
+    color: var(--scdb-editor-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scdb-history-item__meta {
+    display: flex;
+    gap: 8px;
+    font-size: 10px;
+    margin-top: 2px;
+}
+
+/* ── Editor panel resize handle ──────────────────────────────────────── */
+.scdb-editor-panel {
+    min-height: 100px;
+    max-height: 70vh;
+}
+
+.scdb-workspace {
+    position: relative;
+}
+
+/* ── Responsive: hide right panel on narrow viewports ───────────────── */
+@media (max-width: 900px) {
+    .scdb-right-panel { display: none; }
+    #scdb-splitter-right { display: none; }
+    :root { --scdb-sidebar-width: 180px; }
+
+    .scdb-results-actions {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .scdb-sidebar { display: none; }
+    #scdb-splitter-left { display: none; }
+}
+
+/* Command palette, context menu, overlay behavior */
+.scdb-sidebar__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px 10px 10px;
+    border-top: 1px solid var(--scdb-panel-border);
+}
+
+.scdb-sidebar__action {
+    width: 100%;
+    justify-content: center;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.scdb-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+    z-index: 2000;
+}
+
+.scdb-command-palette {
+    width: min(680px, 92vw);
+    background: #1f1f23;
+    border: 1px solid var(--scdb-panel-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.scdb-command-palette__input {
+    border: none;
+    border-bottom: 1px solid var(--scdb-panel-border);
+    border-radius: 0;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-family: var(--scdb-editor-font);
+}
+
+.scdb-command-palette__list {
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.scdb-command-palette__item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    list-style: none;
+}
+
+.scdb-command-palette__label {
+    font-size: 12px;
+    color: var(--scdb-chrome-text);
+    flex: 1;
+}
+
+.scdb-command-palette__item:hover,
+.scdb-command-palette__item.active,
+.scdb-command-palette__item--selected {
+    background: #243243;
+    border-color: #31506b;
+}
+
+.scdb-command-palette__title {
+    font-size: 12px;
+    color: var(--scdb-chrome-text);
+}
+
+.scdb-command-palette__hintline {
+    font-size: 11px;
+    color: var(--scdb-chrome-text-mute);
+}
+
+.scdb-command-palette__hint {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--scdb-chrome-text-mute);
+    border-top: 1px solid var(--scdb-panel-border);
+}
+
+/* ── Snippet dialog (Phase 4) ────────────────────────────────────────── */
+.scdb-snippet-dialog {
+    position: fixed;
+    width: min(600px, 92vw);
+    max-height: 85vh;
+    background: var(--scdb-panel-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 4px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    padding: 0;
+    margin: auto;
+    inset: 0;
+}
+
+.scdb-snippet-dialog[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.scdb-snippet-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.scdb-snippet-dialog__header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--scdb-panel-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.scdb-snippet-dialog__header h3 {
+    color: var(--scdb-chrome-text);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.scdb-snippet-dialog__close {
+    background: none;
+    border: none;
+    color: var(--scdb-chrome-text-mute);
+    cursor: pointer;
+    font-size: 18px;
+    opacity: 0.7;
+    transition: opacity 0.1s;
+}
+
+.scdb-snippet-dialog__close:hover {
+    opacity: 1;
+}
+
+.scdb-snippet-dialog__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.scdb-snippet-dialog__footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--scdb-panel-border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+/* ── Snippet browser (Phase 4) ──────────────────────────────────────── */
+.scdb-snippet-browser {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.scdb-snippet-item {
+    padding: 6px 10px;
+    background: var(--scdb-chrome-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--scdb-chrome-text);
+    transition: background 0.1s, border-color 0.1s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.scdb-snippet-item:hover {
+    background: var(--scdb-chrome-bg-hover);
+    border-color: var(--scdb-accent);
+}
+
+.scdb-snippet-item__name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.scdb-snippet-item__category {
+    font-size: 10px;
+    color: var(--scdb-chrome-text-mute);
+    margin-left: 8px;
+}
+
+.scdb-snippet-item__actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.scdb-snippet-item__btn {
+    background: none;
+    border: none;
+    color: var(--scdb-chrome-text-mute);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    opacity: 0.6;
+    transition: opacity 0.1s;
+}
+
+.scdb-snippet-item__btn:hover {
+    opacity: 1;
+    color: var(--scdb-chrome-text);
+}
+
+/* ── Pagination toolbar (Phase 4) ────────────────────────────────────── */
+.scdb-pagination-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.scdb-pagination-toolbar .scdb-btn {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.scdb-pagination-toolbar input,
+.scdb-pagination-toolbar select {
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+}
+
+@media (max-width: 900px) {
+    .scdb-results-actions {
+        display: none;
+    }
+}
+
+/* ── Responsive adjustments (Phase 4) ────────────────────────────────── */
+@media (max-width: 768px) {
+    .scdb-panel-tabs {
+        flex-wrap: wrap;
+    }
+
+    .scdb-panel-tab {
+        flex: 1;
+        min-width: 80px;
+    }
+
+    .scdb-snippet-dialog {
+        width: 95vw;
+    }
+
+    .scdb-pagination-toolbar {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    main {
-        padding: 1rem;
+    .scdb-pagination-toolbar > div:last-child {
+        width: 100%;
     }
+}
+
+/* ── Accessibility improvements ──────────────────────────────────────── */
+.scdb-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.scdb-panel-tab__dock-btn:focus,
+.scdb-snippet-item__btn:focus,
+.scdb-snippet-dialog__close:focus {
+    outline: 2px solid var(--scdb-accent);
+    outline-offset: -2px;
+}
+
+/* ── Animation tweaks ────────────────────────────────────────────────── */
+.scdb-overlay {
+    animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ── Scrollbar styling (optional, webkit browsers) ────────────────────── */
+.scdb-snippet-browser::-webkit-scrollbar,
+.scdb-panel-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scdb-snippet-browser::-webkit-scrollbar-track,
+.scdb-panel-body::-webkit-scrollbar-track {
+    background: var(--scdb-panel-bg);
+}
+
+.scdb-snippet-browser::-webkit-scrollbar-thumb,
+.scdb-panel-body::-webkit-scrollbar-thumb {
+    background: var(--scdb-chrome-border);
+    border-radius: 4px;
+}
+
+.scdb-snippet-browser::-webkit-scrollbar-thumb:hover,
+.scdb-panel-body::-webkit-scrollbar-thumb:hover {
+    background: var(--scdb-chrome-text-mute);
+}
+
+/* ── Utility classes for inline style cleanup ────────────────────────── */
+
+/* Layout & Display */
+.scdb-toolbar__separator {
+    width: 1px;
+    height: 24px;
+    background: var(--scdb-toolbar-border);
+    margin: 0 4px;
+}
+
+.scdb-float-right { float: right; }
+
+/* Typography */
+.scdb-font-normal { font-weight: normal; }
+.scdb-font-weight-500 { font-weight: 500; }
+.scdb-no-margin { margin: 0; }
+.scdb-truncate-text { text-transform: none; letter-spacing: 0; }
+
+/* Spacing */
+.scdb-mb-2 { margin-bottom: 2px; }
+.scdb-mb-4 { margin-bottom: 4px; }
+.scdb-mb-8 { margin-bottom: 8px; }
+.scdb-mb-10 { margin-bottom: 10px; }
+.scdb-mb-12 { margin-bottom: 12px; }
+.scdb-mb-16 { margin-bottom: 16px; }
+.scdb-mt-4 { margin-top: 4px; }
+.scdb-mt-10 { margin-top: 10px; }
+.scdb-mt-12 { margin-top: 12px; }
+.scdb-mt-8 { margin-top: 8px; }
+.scdb-p-0 { padding: 0; }
+.scdb-p-2 { padding: 2px; }
+.scdb-p-6 { padding: 6px; }
+.scdb-p-8 { padding: 8px; }
+.scdb-p-10 { padding: 10px; }
+.scdb-p-12 { padding: 12px; }
+.scdb-p-14 { padding: 14px; }
+.scdb-p-16 { padding: 16px; }
+
+/* Positioning */
+.scdb-pos-absolute { position: absolute; }
+.scdb-inset-0 { inset: 0; }
+.scdb-top-toolbar { top: calc(var(--scdb-menubar-height) + var(--scdb-toolbar-height) + 4px); }
+.scdb-left-center { left: 50%; }
+.scdb-transform-cx { transform: translateX(-50%); }
+.scdb-z-100 { z-index: 100; }
+.scdb-min-w-320 { min-width: 320px; }
+.scdb-max-w-600 { max-width: 600px; }
+
+/* Alert styling */
+.scdb-alert--overlay {
+    position: absolute;
+    top: calc(var(--scdb-menubar-height) + var(--scdb-toolbar-height) + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    min-width: 320px;
+    max-width: 600px;
+}
+
+.scdb-alert__close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Button & form utilities */
+.scdb-btn-w-100 { width: 100%; }
+.scdb-btn-w-100-gap-6 {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+    overflow: hidden;
+}
+
+.scdb-btn__icon {
+    width: auto;
+    font-size: 14px;
+    color: var(--scdb-ok);
+}
+
+.scdb-form-radio-group {
+    display: flex;
+    gap: 8px;
+}
+
+.scdb-form-radio-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.scdb-form-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.scdb-form-field {
+    margin-top: 4px;
+}
+
+/* Table utilities */
+.scdb-table-action {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.scdb-table-row-num {
+    text-align: center;
+    color: var(--scdb-chrome-text-mute);
+    font-size: 11px;
+}
+
+.scdb-table-header-num {
+    width: 32px;
+    text-align: center;
+    color: var(--scdb-chrome-text-mute);
+}
+
+/* Panel styling */
+.scdb-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.scdb-panel-section {
+    margin-top: 16px;
+    border-top: 1px solid var(--scdb-panel-border);
+    padding-top: 10px;
+}
+
+.scdb-panel-section__title {
+    font-size: 11px;
+}
+
+/* Flexbox utilities */
+.scdb-flex { display: flex; }
+.scdb-flex-ai-center { align-items: center; }
+.scdb-flex-jc-space-between { justify-content: space-between; }
+.scdb-flex-gap-2 { gap: 2px; }
+.scdb-flex-gap-4 { gap: 4px; }
+.scdb-flex-gap-6 { gap: 6px; }
+.scdb-flex-gap-8 { gap: 8px; }
+
+/* Text utilities */
+.scdb-text-xs { font-size: 10px; }
+.scdb-text-sm { font-size: 11px; }
+.scdb-text-12 { font-size: 12px; }
+.scdb-text-14 { font-size: 14px; }
+.scdb-text-white { color: #ffffff; }
+.scdb-text-muted { color: var(--scdb-chrome-text-mute); }
+.scdb-text-error { color: var(--scdb-error); }
+.scdb-text-ok { color: var(--scdb-ok); }
+.scdb-text-pre { white-space: pre-wrap; }
+.scdb-text-ellipsis { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+
+/* Margin utilities */
+.scdb-ml-4 { margin-left: 4px; }
+
+/* Whitespace utilities */
+.scdb-ws-nowrap { white-space: nowrap; }
+
+/* ── Form inline (replaces style="display:contents") ────────────────────── */
+.scdb-form-inline { display: contents; }
+
+/* ── Editor toolbar end group ────────────────────────────────────────────── */
+.scdb-editor-panel__toolbar-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scdb-shortcut-hint {
+    font-size: 11px;
+    color: var(--scdb-chrome-text-mute);
+}
+
+/* ── Tab count badge ─────────────────────────────────────────────────────── */
+.scdb-tab-count {
+    font-size: 10px;
+    color: var(--scdb-chrome-text-mute);
+    margin-left: 4px;
+}
+
+/* ── Results grid row number column ──────────────────────────────────────── */
+.scdb-grid__row-num-col {
+    width: 32px;
+    text-align: center;
+    color: var(--scdb-chrome-text-mute);
+}
+
+.scdb-grid__row-num {
+    text-align: center;
+    color: var(--scdb-chrome-text-mute);
+    font-size: 11px;
+}
+
+/* ── Results empty state ─────────────────────────────────────────────────── */
+.scdb-results-empty {
+    padding: 16px;
+    color: var(--scdb-chrome-text-mute);
+    font-size: 12px;
+}
+
+/* ── Messages body ───────────────────────────────────────────────────────── */
+.scdb-messages-body {
+    padding: 10px 14px;
+}
+
+.scdb-messages-pre {
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+/* ── Pagination toolbar ──────────────────────────────────────────────────── */
+.scdb-pagination-toolbar {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--scdb-panel-border);
+    background: var(--scdb-panel-bg);
+    flex-shrink: 0;
+}
+
+/* ── Panel tab flex layout ───────────────────────────────────────────────── */
+.scdb-panel-tab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+/* ── Compact button variant ──────────────────────────────────────────────── */
+.scdb-btn--compact {
+    padding: 1px 8px;
+    font-size: 11px;
 }

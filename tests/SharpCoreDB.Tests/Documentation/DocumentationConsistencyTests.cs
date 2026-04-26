@@ -33,7 +33,7 @@ public sealed class DocumentationConsistencyTests
         foreach (var file in files)
         {
             var content = File.ReadAllText(file);
-            Assert.Contains("1.7.0", content, StringComparison.Ordinal);
+            Assert.Contains("1.7.1", content, StringComparison.Ordinal);
         }
     }
 

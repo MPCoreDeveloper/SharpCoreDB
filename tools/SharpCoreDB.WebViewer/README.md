@@ -1,4 +1,4 @@
-# SharpCoreDB WebViewer v1.7.0
+# SharpCoreDB WebViewer v1.7.1
 
 SharpCoreDB WebViewer is a local-first Razor Pages application for inspecting and operating SharpCoreDB databases with secure defaults.
 
@@ -130,3 +130,4 @@ dotnet run --project tools/SharpCoreDB.WebViewer/SharpCoreDB.WebViewer.csproj
 - Use strong database/server passwords.
 - Prefer scoped saved queries per target to avoid accidental cross-environment execution.
 - Clear history periodically if it may contain sensitive statement previews.
+

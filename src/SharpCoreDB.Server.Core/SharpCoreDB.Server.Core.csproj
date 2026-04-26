@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Server.Core</AssemblyName>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Description>Core server infrastructure for SharpCoreDB network server</Description>
 
     <!-- NuGet Package Properties -->
@@ -26,7 +26,7 @@
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.7.0: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.7.1: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -57,3 +57,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -1,12 +1,20 @@
-# SharpCoreDB.EntityFrameworkCore v1.7.0
+# SharpCoreDB.EntityFrameworkCore v1.7.1
 
 **Entity Framework Core Provider for SharpCoreDB**
 
 Full EF Core integration with SharpCoreDB's encryption and performance for modern .NET applications.
 
-## ✨ What's New in v1.7.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.7.0
+## Patch updates in v1.7.1
+
+- ✅ Fixed EF Core materialization for aliased and quoted SELECT columns by normalizing DataReader column names and fallback value resolution.
+- ✅ Added targeted regression tests for aliased and qualified column lookup behavior.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
+
+## ✨ What's New in v1.7.1
+
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.1
 - ✅ Entity Framework Core integration
 - ✅ Enterprise distributed features support
 - ✅ Zero breaking changes
@@ -49,12 +57,13 @@ var users = await context.Users.Where(u => u.IsActive).ToListAsync();
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.1
 ```
 
-**Requires:** SharpCoreDB v1.7.0+, EntityFrameworkCore v8.0+
+**Requires:** SharpCoreDB v1.7.1+, EntityFrameworkCore v8.0+
 
 ---
 
-**Version:** 1.7.0 | **Status:** ✅ Production Ready
+**Version:** 1.7.1 | **Status:** ✅ Production Ready
+
 

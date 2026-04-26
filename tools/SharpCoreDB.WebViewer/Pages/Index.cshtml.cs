@@ -116,7 +116,7 @@ public sealed class IndexModel(
             Query = CreateDefaultQuery();
             return RedirectToPage();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
             await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
@@ -156,7 +156,7 @@ public sealed class IndexModel(
             var state = await _transactionService.BeginAsync(User?.Identity?.Name, HttpContext.RequestAborted).ConfigureAwait(false);
             StatusMessage = $"Transaction started ({state.ConnectionMode}).";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
         }
@@ -178,7 +178,7 @@ public sealed class IndexModel(
             await _transactionService.CommitAsync(HttpContext.RequestAborted).ConfigureAwait(false);
             StatusMessage = "Transaction committed.";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
         }
@@ -200,7 +200,7 @@ public sealed class IndexModel(
             await _transactionService.RollbackAsync(HttpContext.RequestAborted).ConfigureAwait(false);
             StatusMessage = "Transaction rolled back.";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
         }
@@ -381,7 +381,7 @@ public sealed class IndexModel(
             await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
             return Page();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
             await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
@@ -465,7 +465,7 @@ public sealed class IndexModel(
                 StatusMessage = $"{QueryResult.Summary} Schema metadata reloaded.";
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ErrorMessage = ex.Message;
             await AppendHistoryAsync(success: false, statusMessage: ex.Message, HttpContext.RequestAborted).ConfigureAwait(false);
@@ -530,6 +530,7 @@ public sealed class IndexModel(
 
             Tables = [];
             SelectedTableMetadata = null;
+            SetLayoutViewData();
             return;
         }
 
@@ -559,6 +560,7 @@ public sealed class IndexModel(
             {
                 SelectedTable = null;
                 SelectedTableMetadata = null;
+                SetLayoutViewData();
                 return;
             }
 
@@ -576,6 +578,31 @@ public sealed class IndexModel(
             ErrorMessage ??= ex.Message;
             Tables = [];
             SelectedTableMetadata = null;
+        }
+
+        SetLayoutViewData();
+    }
+
+    /// <summary>
+    /// Populates ViewData keys consumed by _Layout.cshtml chrome (menu bar, toolbar, status bar).
+    /// Must be called after all model properties are set.
+    /// </summary>
+    private void SetLayoutViewData()
+    {
+        ViewData["Title"] = "Query";
+        ViewData["IsConnected"] = IsConnected;
+        ViewData["ActiveTarget"] = IsConnected ? ActiveTargetDisplay : null;
+        ViewData["IsTransactionActive"] = IsTransactionActive;
+        ViewData["EndpointDisplay"] = EndpointDisplay;
+
+        if (QueryResult?.Rows is not null)
+        {
+            ViewData["RowCount"] = QueryResult.Rows.Count;
+        }
+
+        if (!string.IsNullOrWhiteSpace(StatusMessage))
+        {
+            ViewData["StatusMessage"] = StatusMessage;
         }
     }
 
@@ -719,9 +746,17 @@ public sealed class IndexModel(
                 ModelState.AddModelError($"{nameof(Connection)}.{nameof(Connection.ServerPort)}", "Server port must be between 1 and 65535.");
             }
         }
-        else if (string.IsNullOrWhiteSpace(Connection.LocalDatabasePath))
+        else
         {
-            ModelState.AddModelError($"{nameof(Connection)}.{nameof(Connection.LocalDatabasePath)}", "Database path is required.");
+            if (string.IsNullOrWhiteSpace(Connection.LocalDatabasePath))
+            {
+                ModelState.AddModelError($"{nameof(Connection)}.{nameof(Connection.LocalDatabasePath)}", "Database path is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(Connection.Password))
+            {
+                ModelState.AddModelError($"{nameof(Connection)}.{nameof(Connection.Password)}", "Password is required.");
+            }
         }
     }
 

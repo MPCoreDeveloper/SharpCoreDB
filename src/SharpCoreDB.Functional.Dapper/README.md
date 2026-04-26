@@ -2,8 +2,14 @@
 
 Dapper adapter for `SharpCoreDB.Functional`.
 
-**Version:** `v1.7.0`  
+**Version:** `v1.7.1`  
 **Package:** `SharpCoreDB.Functional.Dapper`
+
+
+## Patch updates in v1.7.1
+
+- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
 
@@ -13,19 +19,20 @@ Dapper adapter for `SharpCoreDB.Functional`.
 - `Task<Seq<T>>` for sequence-based query results
 - Entry points for `IDbConnection` and `IDatabase` integration
 
-## Changes in v1.7.0
+## Changes in v1.7.1
 
-- Functional Dapper adapter introduced in `v1.7.0`
+- Functional Dapper adapter introduced in `v1.7.1`
 - Documentation aligned to optional modular architecture
 - Keeps production dependencies flowing through transitive package references
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.1
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.Functional/README.md`
+

@@ -101,6 +101,13 @@ jobs:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
+    - name: Test SharpCoreDB.EntityFrameworkCore.Tests
+      run: dotnet test tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m -- RunConfiguration.TestSessionTimeout=600000
+      timeout-minutes: 15
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
     - name: Validate coverage threshold
       if: matrix.os == 'ubuntu-latest'
       shell: python3 {0}
@@ -158,6 +165,8 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        disable_search: false
+        verbose: true
 
   pack:
     name: Pack NuGet Packages
@@ -175,9 +184,56 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
-        
+
+    - name: Discover packable projects
+      id: discover-packable
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        projects=()
+        while IFS= read -r -d '' project; do
+          is_packable="$(dotnet msbuild "$project" -nologo -getProperty:IsPackable | tr -d '\r')"
+          package_id="$(dotnet msbuild "$project" -nologo -getProperty:PackageId | tr -d '\r')"
+
+          if [ "$is_packable" = "true" ] && [ -n "$package_id" ]; then
+            projects+=("$project")
+            echo "✅ Packable: $project ($package_id)"
+          else
+            echo "⏭️ Skipped: $project (IsPackable=$is_packable, PackageId=$package_id)"
+          fi
+        done < <(find ./src -name '*.csproj' -print0)
+
+        if [ ${#projects[@]} -eq 0 ]; then
+          echo "❌ No packable projects found under ./src"
+          exit 1
+        fi
+
+        {
+          echo "packable_projects<<EOF"
+          printf '%s\n' "${projects[@]}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "📦 Discovered ${#projects[@]} packable project(s)."
+
     - name: Pack NuGet packages
-      run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true --configfile NuGet.Config
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        mkdir -p ./artifacts
+
+        while IFS= read -r project; do
+          [ -n "$project" ] || continue
+          echo "📦 Packing $project"
+          dotnet pack "$project" \
+            --configuration Release \
+            --output ./artifacts \
+            /p:ContinuousIntegrationBuild=true \
+            /p:UseLocalProjectReferences=true \
+            --configfile NuGet.Config
+        done <<< "${{ steps.discover-packable.outputs.packable_projects }}"
       
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

@@ -1,13 +1,13 @@
 # SharpCoreDB Analytics Engine
 
-**Version:** 1.7.0  
+**Version:** 1.7.1  
 **Status:** Production Ready ✅
 
-## v1.7.0 changes
+## v1.7.1 changes
 
-- Package line synchronized to `v1.7.0`
+- Package line synchronized to `v1.7.1`
 - Analytics docs aligned with the current 100+ aggregate + window-function scope
-- Inherits core reliability improvements from SharpCoreDB v1.7.0 (metadata/parser paths)
+- Inherits core reliability improvements from SharpCoreDB v1.7.1 (metadata/parser paths)
 
 ## Overview
 
@@ -32,7 +32,7 @@ The SharpCoreDB Analytics Engine provides high-performance data aggregation, win
 ### Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.7.0
+dotnet add package SharpCoreDB.Analytics --version 1.7.1
 ```
 
 ### Basic Aggregation
@@ -297,7 +297,7 @@ var running = await database.QueryAsync(
 ```
 
 ### FILTER on Window Functions
-✅ **Supported since v1.7.0** — FILTER clause applies to window functions, filtering the window frame before calculation.
+✅ **Supported since v1.7.1** — FILTER clause applies to window functions, filtering the window frame before calculation.
 
 ```csharp
 // Row numbers only for active employees
@@ -354,12 +354,12 @@ var filtered = await database.QueryAsync(
 );
 ```
 
-Current support and known gaps are tracked in `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.7.0.md`.
+Current support and known gaps are tracked in `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.7.1.md`.
 
 ### HAVING
 Filters grouped results (WHERE applies before GROUP BY, HAVING after).
 
-✅ **Supported since v1.7.0** — HAVING predicates can reference aggregate aliases defined in SELECT.
+✅ **Supported since v1.7.1** — HAVING predicates can reference aggregate aliases defined in SELECT.
 
 ```csharp
 // Find categories with total revenue > 100
@@ -383,7 +383,7 @@ var popularItems = await database.QueryAsync(
 ```
 
 ### Arithmetic expressions inside aggregates
-✅ **Supported since v1.7.0** — aggregate arguments accept arithmetic expressions such as `price * qty`, `a + b`, `a - b / c`.
+✅ **Supported since v1.7.1** — aggregate arguments accept arithmetic expressions such as `price * qty`, `a + b`, `a - b / c`.
 
 ```csharp
 // Total revenue: SUM(price * quantity)
@@ -393,7 +393,7 @@ var revenue = await database.QueryAsync(
 ```
 
 ### FILTER with JOIN queries
-✅ **Supported since v1.7.0** — FILTER clause works on both single-table and JOIN-backed aggregate queries.
+✅ **Supported since v1.7.1** — FILTER clause works on both single-table and JOIN-backed aggregate queries.
 
 ```csharp
 // Active payroll per department (JOIN + FILTER + GROUP BY)
@@ -671,4 +671,5 @@ var gaps = await database.QueryAsync(
 
 ---
 
-**Last Updated:** February 19, 2026 | Phase: 9.2 Complete
+**Last Updated:** April 26, 2026 | Phase: 9.2 Complete
+

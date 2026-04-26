@@ -1,10 +1,16 @@
-# SharpCoreDB.Provider.Sync v1.7.0
+# SharpCoreDB.Provider.Sync v1.7.1
 
 **Dotmim.Sync Provider for SharpCoreDB**
 
 Bidirectional synchronization with SQL Server, PostgreSQL, MySQL, and SQLite - Phase 10.1 complete with enterprise conflict resolution.
 
-## ✨ What's New in v1.7.0
+
+## Patch updates in v1.7.1
+
+- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
+
+## ✨ What's New in v1.7.1
 
 - ✅ Phase 10.1 complete: Dotmim.Sync provider
 - ✅ Bidirectional sync with SQL Server, PostgreSQL, MySQL, SQLite
@@ -61,11 +67,12 @@ Console.WriteLine($"Synced {result.TotalChangesDownloaded} changes from cloud");
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.Sync --version 1.7.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.7.1
 ```
 
-**Requires:** SharpCoreDB v1.7.0+, Dotmim.Sync.Core v1.3.0+
+**Requires:** SharpCoreDB v1.7.1+, Dotmim.Sync.Core v1.3.0+
 
 ---
 
-**Version:** 1.7.0 | **Status:** ✅ Production Ready | **Phase:** 10.1 Complete
+**Version:** 1.7.1 | **Status:** ✅ Production Ready | **Phase:** 10.1 Complete
+

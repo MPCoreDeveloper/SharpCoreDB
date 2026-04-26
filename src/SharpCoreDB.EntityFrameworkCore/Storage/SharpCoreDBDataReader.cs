@@ -31,18 +31,19 @@ public class SharpCoreDBDataReader : DbDataReader
     /// <param name="results">The query results.</param>
     public SharpCoreDBDataReader(List<Dictionary<string, object>> results)
     {
-        ArgumentNullException.ThrowIfNull(results); // ? C# 14
-        
+        ArgumentNullException.ThrowIfNull(results);
+
         _rows = results;
-        _columnNames = results.FirstOrDefault()?.Keys.ToList() ?? [];
         _columnTypes = [];
-        
-        // Infer column types from first row
-        if (results.Count > 0)
+
+        var firstRow = results.FirstOrDefault();
+        _columnNames = BuildNormalizedColumnNames(firstRow);
+
+        if (firstRow is not null)
         {
             foreach (var col in _columnNames)
             {
-                var value = results[0][col];
+                var value = ResolveColumnValue(firstRow, col);
                 _columnTypes[col] = value?.GetType() ?? typeof(object);
             }
         }
@@ -182,11 +183,18 @@ public class SharpCoreDBDataReader : DbDataReader
     /// <inheritdoc />
     public override int GetOrdinal(string name)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name); // ? C# 14
-        var index = _columnNames.IndexOf(name);
-        if (index < 0)
-            throw new IndexOutOfRangeException($"Column '{name}' not found.");
-        return index;
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var normalizedName = NormalizeColumnName(name);
+        for (int i = 0; i < _columnNames.Count; i++)
+        {
+            if (string.Equals(_columnNames[i], normalizedName, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        throw new IndexOutOfRangeException($"Column '{name}' not found.");
     }
 
     /// <inheritdoc />
@@ -201,9 +209,7 @@ public class SharpCoreDBDataReader : DbDataReader
     {
         var name = GetName(ordinal);
         var row = CurrentRow;
-        
-        if (!row.TryGetValue(name, out var value))
-            return DBNull.Value;
+        var value = ResolveColumnValue(row, name);
 
         return value ?? DBNull.Value;
     }
@@ -211,8 +217,8 @@ public class SharpCoreDBDataReader : DbDataReader
     /// <inheritdoc />
     public override int GetValues(object[] values)
     {
-        ArgumentNullException.ThrowIfNull(values); // ? C# 14
-        
+        ArgumentNullException.ThrowIfNull(values);
+
         var count = Math.Min(values.Length, FieldCount);
         for (int i = 0; i < count; i++)
         {
@@ -229,7 +235,7 @@ public class SharpCoreDBDataReader : DbDataReader
     }
 
     /// <inheritdoc />
-    public override bool NextResult() => false; // SharpCoreDB doesn't support multiple result sets
+    public override bool NextResult() => false;
 
     /// <inheritdoc />
     public override bool Read()
@@ -266,5 +272,60 @@ public class SharpCoreDBDataReader : DbDataReader
             Close();
         }
         base.Dispose(disposing);
+    }
+
+    private static List<string> BuildNormalizedColumnNames(Dictionary<string, object>? firstRow)
+    {
+        if (firstRow is null || firstRow.Count == 0)
+        {
+            return [];
+        }
+
+        var names = new List<string>(firstRow.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in firstRow.Keys)
+        {
+            var normalized = NormalizeColumnName(key);
+            if (seen.Add(normalized))
+            {
+                names.Add(normalized);
+            }
+        }
+
+        return names;
+    }
+
+    private static object? ResolveColumnValue(Dictionary<string, object> row, string normalizedName)
+    {
+        if (row.TryGetValue(normalizedName, out var value))
+        {
+            return value;
+        }
+
+        foreach (var (key, candidate) in row)
+        {
+            if (string.Equals(NormalizeColumnName(key), normalizedName, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeColumnName(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var normalized = name.Trim();
+        var lastDot = normalized.LastIndexOf('.');
+        if (lastDot >= 0 && lastDot < normalized.Length - 1)
+        {
+            normalized = normalized[(lastDot + 1)..];
+        }
+
+        normalized = normalized.Trim('"', '[', ']', '`');
+        return normalized;
     }
 }

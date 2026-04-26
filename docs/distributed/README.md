@@ -1,13 +1,13 @@
 # SharpCoreDB.Distributed Documentation
 
-**Version line:** `v1.7.0`
+**Version line:** `v1.7.1`
 
-## v1.7.0 changes
+## v1.7.1 changes
 
-- Distributed package/docs synchronized to `v1.7.0`
+- Distributed package/docs synchronized to `v1.7.1`
 - Replication + transaction primitives aligned with current implementation
 - Documentation aligned with multi-master/vector-clock and 2PC-focused architecture
-- Cross-reference added to `../FEATURE_MATRIX_v1.7.0.md`
+- Cross-reference added to `../FEATURE_MATRIX_v1.7.1.md`
 
 ## Overview
 
@@ -352,3 +352,4 @@ For issues and questions:
 - [GitHub Issues](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
 - [Documentation](https://github.com/MPCoreDeveloper/SharpCoreDB/tree/master/docs)
 - [Contributing Guide](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CONTRIBUTING.md)
+

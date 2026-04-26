@@ -1,4 +1,4 @@
-# SharpCoreDB Multi-Tenant SaaS Reference Sample v1.7.0
+# SharpCoreDB Multi-Tenant SaaS Reference Sample v1.7.1
 
 This reference sample demonstrates a database-per-tenant SaaS deployment with runtime tenant provisioning, scoped JWT access, tenant quotas, tenant encryption keys, and security audit inspection.
 
@@ -43,3 +43,4 @@ flowchart LR
 - The sample uses REST for readability. The same tenant model applies to gRPC and WebSocket/Binary paths.
 - Replace example secrets and certificate paths before any non-local use.
 - Keep database-per-tenant as the default recommendation. Shared-database mode remains optional.
+

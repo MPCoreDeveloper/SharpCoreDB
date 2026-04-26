@@ -2,6 +2,12 @@
 
 This directory contains examples demonstrating how to use @sharpcoredb/client to connect to and interact with SharpCoreDB Server.
 
+
+## Patch updates in v1.7.1
+
+- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
+
 ## Features demonstrated
 
 - Server connection and query execution
@@ -9,9 +15,9 @@ This directory contains examples demonstrating how to use @sharpcoredb/client to
 - Connection pooling patterns
 - Error handling and latency checks
 
-## Changes in v1.7.0
+## Changes in v1.7.1
 
-- Example docs aligned to the current `v1.7.0` server/client release line
+- Example docs aligned to the current `v1.7.1` server/client release line
 - References updated for gRPC-first server usage
 
 ## Prerequisites
@@ -162,3 +168,4 @@ const pool = await createPool('your-server', 5001, {
 - Read the main [README.md](../README.md) for API reference
 - Check [test files](../tests/) for more usage examples
 - Visit [SharpCoreDB documentation](https://sharpcoredb.com/docs) for advanced topics
+

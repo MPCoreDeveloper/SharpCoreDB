@@ -11,7 +11,7 @@
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
 
     <PackageId>SharpCoreDB.Projections</PackageId>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Projections</Product>
@@ -24,7 +24,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v1.7.0: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.7.1: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -44,7 +44,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB.EventSourcing\SharpCoreDB.EventSourcing.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
-    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -57,3 +57,4 @@
   </ItemGroup>
 
 </Project>
+

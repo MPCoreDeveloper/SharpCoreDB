@@ -31,7 +31,11 @@ builder.Services.AddNetSecureHeadersStrictAPlus(options =>
         StyleSrcElem = CspSelf,
         ImgSrc = $"{CspSelf} data:",
         FontSrc = CspSelf,
-        ConnectSrc = CspSelf
+        ConnectSrc = CspSelf,
+        // Trusted Types blocks innerHTML/document.write DOM manipulation used by our vanilla JS.
+        // Disable both directives; we enforce XSS safety through strict CSP nonce + strict-dynamic instead.
+        RequireTrustedTypesFor = string.Empty,
+        TrustedTypes = string.Empty
     };
 });
 builder.Services.AddSharpCoreDB();

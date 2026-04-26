@@ -27,18 +27,12 @@ public class SharpCoreDBDatabaseProvider : IDatabase
     /// <inheritdoc />
     public int SaveChanges(IList<IUpdateEntry> entries)
     {
-        // EF Core's update pipeline handles the actual execution through
-        // our registered IModificationCommandBatchFactory and IRelationalConnection
-        // This method is called by EF Core after batching, so we just return the count
         return entries.Count;
     }
 
     /// <inheritdoc />
     public async Task<int> SaveChangesAsync(IList<IUpdateEntry> entries, CancellationToken cancellationToken = default)
     {
-        // EF Core's update pipeline handles the actual execution through
-        // our registered IModificationCommandBatchFactory and IRelationalConnection
-        // This method is called by EF Core after batching, so we just return the count
         await Task.CompletedTask;
         return entries.Count;
     }
@@ -46,36 +40,66 @@ public class SharpCoreDBDatabaseProvider : IDatabase
     /// <inheritdoc />
     public Func<QueryContext, TResult> CompileQuery<TResult>(Expression query, bool async)
     {
-        // Compile LINQ query expression to executable function
-        // EF Core's query pipeline handles the actual translation via our SharpCoreDBQuerySqlGenerator
-        // This method is typically used for compiled query caching
-        // Returning a delegate that re-evaluates the query each time
-        return (QueryContext context) =>
+        ArgumentNullException.ThrowIfNull(query);
+
+        var compiled = TryCompileQuery<TResult>(query);
+        if (compiled is null)
         {
-            // The query pipeline will translate the expression to SQL via our generators
-            // and execute it through the relational infrastructure
-            // This is a simplified implementation - EF Core handles the heavy lifting
-            return default(TResult)!;
-        };
+            throw new NotSupportedException("Unable to compile the provided EF Core query expression for SharpCoreDB.");
+        }
+
+        return compiled;
     }
 
     /// <inheritdoc />
     public Expression<Func<QueryContext, TResult>> CompileQueryExpression<TResult>(Expression query, bool async)
     {
-        // Transform query expression for execution
-        // EF Core's query pipeline processes this through our SharpCoreDBQuerySqlGenerator
-        // Return the expression as-is - the query compiler will handle it
-        var parameter = Expression.Parameter(typeof(QueryContext), "context");
+        ArgumentNullException.ThrowIfNull(query);
 
-        // For simple expressions, wrap in a lambda
-        if (query is LambdaExpression lambda)
+        if (TryCreateQueryLambda<TResult>(query) is { } lambda)
         {
-            return (Expression<Func<QueryContext, TResult>>)lambda;
+            return lambda;
         }
 
-        // Otherwise create a new lambda with QueryContext parameter
-        var body = Expression.Convert(query, typeof(TResult));
-        return Expression.Lambda<Func<QueryContext, TResult>>(body, parameter);
+        throw new NotSupportedException("Unable to create a compiled EF Core query expression for SharpCoreDB.");
     }
 
+    private static Func<QueryContext, TResult>? TryCompileQuery<TResult>(Expression query)
+    {
+        if (TryCreateQueryLambda<TResult>(query) is { } lambda)
+        {
+            return lambda.Compile();
+        }
+
+        return null;
+    }
+
+    private static Expression<Func<QueryContext, TResult>>? TryCreateQueryLambda<TResult>(Expression query)
+    {
+        if (query is Expression<Func<QueryContext, TResult>> typedLambda)
+        {
+            return typedLambda;
+        }
+
+        if (query is LambdaExpression lambda)
+        {
+            if (lambda.Parameters.Count != 1 || lambda.Parameters[0].Type != typeof(QueryContext))
+            {
+                return null;
+            }
+
+            var body = lambda.ReturnType == typeof(TResult)
+                ? lambda.Body
+                : Expression.Convert(lambda.Body, typeof(TResult));
+
+            return Expression.Lambda<Func<QueryContext, TResult>>(body, lambda.Parameters[0]);
+        }
+
+        var contextParameter = Expression.Parameter(typeof(QueryContext), "context");
+        var directBody = query.Type == typeof(TResult)
+            ? query
+            : Expression.Convert(query, typeof(TResult));
+
+        return Expression.Lambda<Func<QueryContext, TResult>>(directBody, contextParameter);
+    }
 }

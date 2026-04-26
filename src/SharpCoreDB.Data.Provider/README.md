@@ -5,7 +5,7 @@
 
   **ADO.NET Data Provider for SharpCoreDB**
 
-  **Version:** 1.7.0  
+  **Version:** 1.7.1  
   **Status:** Production Ready ✅
 
   [![NuGet Version](https://img.shields.io/nuget/v/SharpCoreDB.Data.Provider)](https://www.nuget.org/packages/SharpCoreDB.Data.Provider)
@@ -17,6 +17,12 @@
 </div>
 
 ---
+
+
+## Patch updates in v1.7.1
+
+- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Overview
 
@@ -35,9 +41,9 @@ Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encryp
 
 ---
 
-## Changes in v1.7.0
+## Changes in v1.7.1
 
-- Package version standardized to `v1.7.0`
+- Package version standardized to `v1.7.1`
 - Documentation refreshed to align with current provider behavior
 - Inherits core metadata durability and parser reliability fixes
 
@@ -46,7 +52,7 @@ Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encryp
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.7.0
+dotnet add package SharpCoreDB.Data.Provider --version 1.7.1
 ```
 
 **Requirements:** .NET 10.0+
@@ -240,4 +246,5 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** February 19, 2026 | Version 1.7.0
+**Last Updated:** April 26, 2026 | Version 1.7.1
+

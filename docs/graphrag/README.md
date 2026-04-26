@@ -1,6 +1,6 @@
 # GraphRAG — Advanced Graph Analytics for SharpCoreDB
 
-**Status:** ✅ Production Ready (`v1.7.0`)  
+**Status:** ✅ Production Ready (`v1.7.1`)  
 **Primary package:** `SharpCoreDB.Graph.Advanced`  
 **Companion packages:** `SharpCoreDB.Graph`, `SharpCoreDB.VectorSearch`
 
@@ -10,13 +10,13 @@
 
 GraphRAG in SharpCoreDB combines semantic vector retrieval with graph analytics for context-aware ranking and discovery.
 
-The current `v1.7.0` line is centered on these maintained building blocks:
+The current `v1.7.1` line is centered on these maintained building blocks:
 
 - `SharpCoreDB.Graph.Advanced` for graph-aware ranking, community detection, centrality metrics, subgraph analysis, SQL integration, caching, and profiling support.
 - `SharpCoreDB.Graph` for traversal, A* pathfinding, and graph query execution primitives.
 - `SharpCoreDB.VectorSearch` for embeddings storage, similarity search, and semantic retrieval workflows.
 
-For package-level mapping, see `../FEATURE_MATRIX_v1.7.0.md`.
+For package-level mapping, see `../FEATURE_MATRIX_v1.7.1.md`.
 
 ---
 
@@ -49,9 +49,9 @@ For package-level mapping, see `../FEATURE_MATRIX_v1.7.0.md`.
 ## Quick start
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
-dotnet add package SharpCoreDB.Graph --version 1.7.0
-dotnet add package SharpCoreDB.VectorSearch --version 1.7.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.1
+dotnet add package SharpCoreDB.Graph --version 1.7.1
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.1
 ```
 
 ```csharp
@@ -97,5 +97,6 @@ GraphRAG behavior is covered by targeted tests in the SharpCoreDB test suite, in
 - `00_START_HERE.md`
 - `GRAPH_RAG_SINGLE_SQL.md`
 - `METRICS_AND_OBSERVABILITY_GUIDE.md`
-- `../FEATURE_MATRIX_v1.7.0.md`
+- `../FEATURE_MATRIX_v1.7.1.md`
 - `../../src/SharpCoreDB.Graph.Advanced/README.md`
+

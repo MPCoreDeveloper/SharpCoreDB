@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RunSettings>
   <RunConfiguration>
-    <!-- Safety net: abort entire test session after 5 minutes to prevent VS Test Explorer hangs -->
     <TestSessionTimeout>300000</TestSessionTimeout>
-    <!-- Abort individual test host if unresponsive for 2 minutes -->
     <TestTimeout>120000</TestTimeout>
   </RunConfiguration>
   <DataCollectionRunSettings>

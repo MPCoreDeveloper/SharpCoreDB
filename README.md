@@ -53,7 +53,7 @@ Use it when you need:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.0
+dotnet add package SharpCoreDB --version 1.7.1
 ```
 
 ```csharp
@@ -81,15 +81,15 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.7.0
-dotnet add package SharpCoreDB.Client --version 1.7.0
+dotnet add package SharpCoreDB.Server --version 1.7.1
+dotnet add package SharpCoreDB.Client --version 1.7.1
 ```
 
 ---
 
-## v1.7.0 highlights
+## v1.7.1 highlights
 
-- Synchronized package release across the ecosystem (`1.7.0`)
+- Synchronized package release across the ecosystem (`1.7.1`)
 - New **`SharpCoreDB.Graph.Advanced`** package (community detection, centrality, subgraph analysis, graph-aware ranking)
 - Optional functional package family:
   - `SharpCoreDB.Functional`
@@ -199,47 +199,47 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,000+ tests passing**
-- **100% backward compatible** across the v1.7.0 release line
-- Zero breaking changes intended from v1.5.0 to v1.7.0
+- **100% backward compatible** across the v1.7.1 release line
+- Zero breaking changes intended from v1.5.0 to v1.7.1
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.7.0)
+## Available NuGet packages (v1.7.1)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.7.0
+dotnet add package SharpCoreDB --version 1.7.1
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.7.0
-dotnet add package SharpCoreDB.Client --version 1.7.0
+dotnet add package SharpCoreDB.Server --version 1.7.1
+dotnet add package SharpCoreDB.Client --version 1.7.1
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.7.0
-dotnet add package SharpCoreDB.VectorSearch --version 1.7.0
-dotnet add package SharpCoreDB.Graph --version 1.7.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.0
-dotnet add package SharpCoreDB.Distributed --version 1.7.0
-dotnet add package SharpCoreDB.Provider.Sync --version 1.7.0
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.0
-dotnet add package SharpCoreDB.Extensions --version 1.7.0
+dotnet add package SharpCoreDB.Analytics --version 1.7.1
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.1
+dotnet add package SharpCoreDB.Graph --version 1.7.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.1
+dotnet add package SharpCoreDB.Distributed --version 1.7.1
+dotnet add package SharpCoreDB.Provider.Sync --version 1.7.1
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.1
+dotnet add package SharpCoreDB.Extensions --version 1.7.1
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.7.0
-dotnet add package SharpCoreDB.Projections --version 1.7.0
-dotnet add package SharpCoreDB.CQRS --version 1.7.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.1
+dotnet add package SharpCoreDB.Projections --version 1.7.1
+dotnet add package SharpCoreDB.CQRS --version 1.7.1
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.7.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
+dotnet add package SharpCoreDB.Functional --version 1.7.1
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.1
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.1
 ```
 
 ---
 
-## What’s new in v1.7.0
+## What’s new in v1.7.1
 
 - Unified package versioning across the full SharpCoreDB family
 - New advanced GraphRAG package: `SharpCoreDB.Graph.Advanced`
@@ -253,13 +253,13 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.0
 
 - Documentation hub: `docs/INDEX.md`
 - Project docs index: `docs/README.md`
-- Feature matrix: `docs/FEATURE_MATRIX_v1.7.0.md`
+- Feature matrix: `docs/FEATURE_MATRIX_v1.7.1.md`
 - Server docs: `docs/server/README.md`
 - Server quick start: `docs/server/QUICKSTART.md`
 - GraphRAG docs: `docs/graphrag/00_START_HERE.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
 - Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
-- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`, `docs/PROJECT_STATUS.md`
+- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.1.md`, `docs/PROJECT_STATUS.md`
 - Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 
 ---
@@ -277,5 +277,6 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 ---
 
 **Made with ❤️ for the .NET community**
+
 
 

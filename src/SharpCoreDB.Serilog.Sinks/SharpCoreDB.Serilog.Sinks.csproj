@@ -7,11 +7,11 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>SharpCoreDB.Serilog.Sinks</PackageId>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Serilog.Sinks</Product>
-    <Description>A Serilog sink for SharpCoreDB - a lightweight, encrypted, file-based database. Features efficient batch logging with AES-256-GCM encryption, AppendOnly storage engine for maximum write speed, and full async support. Compatible with SharpCoreDB 1.7.0+.</Description>
+    <Description>A Serilog sink for SharpCoreDB - a lightweight, encrypted, file-based database. Features efficient batch logging with AES-256-GCM encryption, AppendOnly storage engine for maximum write speed, and full async support. Compatible with SharpCoreDB 1.7.1+.</Description>
     <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
@@ -24,7 +24,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.7.0: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.7.1: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,7 +38,7 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.7.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -56,3 +56,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -3,25 +3,137 @@
     var cspNonce = Context.GetCspNonce();
 }
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="csp-nonce" content="@cspNonce" />
-    <title>@ViewData["Title"] - SharpCoreDB Web Viewer</title>
+    <title>@ViewData["Title"] — SharpCoreDB WebViewer</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @* Blocking script: apply saved theme before first paint to avoid flash *@
+    <script nonce="@cspNonce">
+        (function () {
+            var t = localStorage.getItem('scdb-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
 </head>
-<body>
-    <header>
-        <strong>SharpCoreDB Web Viewer</strong>
-        <span class="muted">v1.7.0 · Razor Pages</span>
+<body class="scdb-shell">
+
+    @* ═══════════════════════════════════════════
+       MENU BAR  (SSMS-style flat top chrome)
+    ═══════════════════════════════════════════ *@
+    <header class="scdb-menubar" role="banner">
+        <div class="scdb-menubar__brand">
+            <svg class="scdb-menubar__icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2" y="3"  width="16" height="3" rx="1" fill="#4ec9b0" />
+                <rect x="2" y="8"  width="10" height="2" rx="1" fill="#9cdcfe" />
+                <rect x="2" y="12" width="13" height="2" rx="1" fill="#9cdcfe" />
+                <rect x="2" y="16" width="8"  height="2" rx="1" fill="#9cdcfe" />
+            </svg>
+            <span class="scdb-menubar__title">SharpCoreDB WebViewer</span>
+            <span class="scdb-menubar__version">v1.7.0</span>
+        </div>
+
+        <nav class="scdb-menubar__nav" aria-label="Application menu">
+            <span class="scdb-menubar__item">File</span>
+            <span class="scdb-menubar__item">Edit</span>
+            <span class="scdb-menubar__item">View</span>
+            <span class="scdb-menubar__item">Query</span>
+            <span class="scdb-menubar__item">Tools</span>
+            <span class="scdb-menubar__item">Help</span>
+        </nav>
+
+        <div class="scdb-menubar__right">
+            <span class="scdb-menubar__endpoint" title="Listening endpoint">
+                @ViewData["EndpointDisplay"]
+            </span>
+            <button type="button" id="scdb-theme-toggle" class="scdb-theme-toggle"
+                    title="Toggle theme (Dark / Light / System)" data-action="cycle-theme"
+                    aria-label="Toggle theme">
+                <span id="scdb-theme-icon">🌙</span>
+                <span id="scdb-theme-label">Dark</span>
+            </button>
+        </div>
     </header>
-    <main>
+
+    @* ═══════════════════════════════════════════
+       TOOLBAR  (connection indicator + page toolbar slot)
+    ═══════════════════════════════════════════ *@
+    <div class="scdb-toolbar" role="toolbar" aria-label="Quick actions">
+        @{
+            bool isConnected = ViewData["IsConnected"] is true;
+            string connClass = isConnected ? "scdb-toolbar__connection--connected"
+                                           : "scdb-toolbar__connection--disconnected";
+            string connLabel = isConnected
+                ? (ViewData["ActiveTarget"]?.ToString() ?? "Connected")
+                : "Not connected";
+        }
+        <div class="scdb-toolbar__connection @connClass" title="@connLabel">
+            <span class="scdb-toolbar__conn-dot" aria-hidden="true"></span>
+            <span class="scdb-toolbar__conn-label scdb-mono">@connLabel</span>
+        </div>
+
+        <div class="scdb-toolbar__separator"></div>
+
+        @RenderSection("Toolbar", required: false)
+    </div>
+
+    @* ═══════════════════════════════════════════
+       MAIN CONTENT
+    ═══════════════════════════════════════════ *@
+    <main class="scdb-main" role="main" id="scdb-main-content">
         @RenderBody()
     </main>
-    <script>
-        document.documentElement.dataset.cspNonce = "@cspNonce";
-    </script>
+
+    @* ═══════════════════════════════════════════
+       STATUS BAR  (SSMS-style sticky bottom chrome)
+    ═══════════════════════════════════════════ *@
+    <footer class="scdb-statusbar" role="contentinfo" aria-label="Status bar">
+        <div class="scdb-statusbar__left">
+            @if (isConnected)
+            {
+                <span class="scdb-statusbar__segment scdb-statusbar__segment--connected" title="Active connection">
+                    <span class="scdb-statusbar__dot" aria-hidden="true"></span>
+                    Connected
+                </span>
+                @if (ViewData["ActiveTarget"] is string target && !string.IsNullOrWhiteSpace(target))
+                {
+                    <span class="scdb-statusbar__segment scdb-mono" title="Active database">@target</span>
+                }
+                @if (ViewData["IsTransactionActive"] is true)
+                {
+                    <span class="scdb-statusbar__segment scdb-statusbar__segment--tx" title="Transaction active">TXN</span>
+                }
+            }
+            else
+            {
+                <span class="scdb-statusbar__segment scdb-statusbar__segment--disconnected">
+                    <span class="scdb-statusbar__dot" aria-hidden="true"></span>
+                    Not connected
+                </span>
+            }
+        </div>
+
+        <div class="scdb-statusbar__center" id="scdb-statusbar-msg">
+            @if (ViewData["StatusMessage"] is string sm && !string.IsNullOrWhiteSpace(sm))
+            {
+                @sm
+            }
+        </div>
+
+        <div class="scdb-statusbar__right">
+            @if (ViewData["RowCount"] is int rc)
+            {
+                <span class="scdb-statusbar__segment" title="Result row count">@rc rows</span>
+            }
+            @if (ViewData["ElapsedMs"] is long ms)
+            {
+                <span class="scdb-statusbar__segment scdb-mono" title="Query execution time">@ms ms</span>
+            }
+            <span class="scdb-statusbar__segment scdb-mono" title="Server endpoint">@ViewData["EndpointDisplay"]</span>
+        </div>
+    </footer>
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
