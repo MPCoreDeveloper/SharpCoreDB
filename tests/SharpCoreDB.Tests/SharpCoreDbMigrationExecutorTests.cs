@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
+using System.IO;
 using FluentMigrator;
 using FluentMigrator.Expressions;
 using FluentMigrator.Model;
@@ -8,12 +9,14 @@ using FluentMigrator.Runner;
 using FluentMigrator.Runner.Initialization;
 using FluentMigrator.Runner.Processors;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using SharpCoreDB.Extensions.Extensions;
 using SharpCoreDB.Extensions.Processor;
 using SharpCoreDB.Extensions.Runner;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB;
 
 namespace SharpCoreDB.Tests;
 
@@ -1282,5 +1285,120 @@ public sealed class SharpCoreDbMigrationExecutorTests
         public override void ResetDbType()
         {
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Issue #227 — end-to-end regression: embedded IDatabase single-file mode
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Minimal migration used by Issue227IntegrationTests.
+/// Mirrors the table a user would create in their own project.
+/// </summary>
+[Migration(1, "Create Products table")]
+public sealed class Issue227_CreateProducts : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.Table("Products")
+            .WithColumn("Id").AsInt64().PrimaryKey().NotNullable()
+            .WithColumn("Name").AsString(200).NotNullable()
+            .WithColumn("Price").AsDecimal().NotNullable();
+    }
+
+    public override void Down()
+    {
+        Delete.Table("Products");
+    }
+}
+
+/// <summary>
+/// Reproduces the exact procedure reported in issue #227:
+/// 1. Create a .NET 10 project with SharpCoreDB.Extensions
+/// 2. Register an embedded IDatabase (single-file mode)
+/// 3. Call services.AddSharpCoreDBFluentMigrator(runner => runner.AddSQLite())
+/// 4. Call migrationRunner.MigrateUp()
+/// Previously threw: InvalidOperationException: Invalid CREATE TABLE syntax
+/// </summary>
+public sealed class Issue227IntegrationTests : IDisposable
+{
+    private readonly string _dbPath;
+
+    public Issue227IntegrationTests()
+    {
+        _dbPath = Path.Combine(Path.GetTempPath(), $"issue227_{Guid.NewGuid():N}.scdb");
+    }
+
+    public void Dispose()
+    {
+        try { if (File.Exists(_dbPath)) File.Delete(_dbPath); } catch { /* ignore */ }
+    }
+
+    [Fact]
+    public void MigrateUp_WithEmbeddedSingleFileDatabase_DoesNotThrowInvalidCreateTableSyntax()
+    {
+        // Arrange — reproduce the user's exact setup from issue #227
+        var dbOptions = DatabaseOptions.CreateSingleFileDefault();
+
+        var bootstrapServices = new ServiceCollection();
+        bootstrapServices.AddSharpCoreDB();
+        var bootstrapProvider = bootstrapServices.BuildServiceProvider();
+        var factory = bootstrapProvider.GetRequiredService<DatabaseFactory>();
+        var database = factory.CreateWithOptions(_dbPath, "test-password", dbOptions);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+        services.AddSingleton(database);
+        services.AddSharpCoreDBFluentMigrator(runner =>
+            runner
+                .AddSQLite()
+                .ScanIn(typeof(Issue227_CreateProducts).Assembly)
+                .For.Migrations());
+
+        using var provider = services.BuildServiceProvider();
+        var migrationRunner = provider.GetRequiredService<IMigrationRunner>();
+
+        // Act & Assert — must not throw InvalidOperationException: Invalid CREATE TABLE syntax
+        var ex = Record.Exception(() => migrationRunner.MigrateUp());
+        Assert.Null(ex);
+
+        // Verify the migration was recorded in the version table
+        var appliedMigrations = database.ExecuteQuery("SELECT * FROM __SharpMigrations");
+        Assert.NotNull(appliedMigrations);
+        Assert.True(appliedMigrations.Count >= 1,
+            "Expected at least one applied migration recorded in __SharpMigrations.");
+    }
+
+    [Fact]
+    public void MigrateUp_WithEmbeddedSingleFileDatabase_CreatesUserTable()
+    {
+        // Arrange
+        var dbOptions = DatabaseOptions.CreateSingleFileDefault();
+
+        var bootstrapServices = new ServiceCollection();
+        bootstrapServices.AddSharpCoreDB();
+        var bootstrapProvider = bootstrapServices.BuildServiceProvider();
+        var factory = bootstrapProvider.GetRequiredService<DatabaseFactory>();
+        var database = factory.CreateWithOptions(_dbPath, "test-password", dbOptions);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+        services.AddSingleton(database);
+        services.AddSharpCoreDBFluentMigrator(runner =>
+            runner
+                .AddSQLite()
+                .ScanIn(typeof(Issue227_CreateProducts).Assembly)
+                .For.Migrations());
+
+        using var provider = services.BuildServiceProvider();
+        var migrationRunner = provider.GetRequiredService<IMigrationRunner>();
+
+        // Act
+        migrationRunner.MigrateUp();
+
+        // Assert — Products table is queryable after migration
+        var result = database.ExecuteQuery("SELECT * FROM Products");
+        Assert.NotNull(result);
     }
 }

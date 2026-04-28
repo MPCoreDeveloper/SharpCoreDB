@@ -1,6 +1,19 @@
-# Storage Mode Guidance — v1.7.0
+# Storage Mode Guidance — v1.7.2
 
 **Applies to:** SharpCoreDB v1.7.0+ (.NET 10 / C# 14)
+
+---
+
+> ⚠️ **Important: `.scdb` Single-File Mode Has SQL Limitations**
+>
+> This document covers storage engine modes (Columnar vs Page-Based) within a database.
+> It does **not** cover the separate distinction between **Directory mode** (`Database` class)
+> and **Single-File mode** (`SingleFileDatabase`, `.scdb` files).
+>
+> Single-file mode uses a **regex-based SQL parser** that does **not** support JOIN, subqueries,
+> GROUP BY, DELETE without WHERE, or other advanced SQL features.
+>
+> → See [`SINGLE_FILE_SQL_LIMITATIONS.md`](SINGLE_FILE_SQL_LIMITATIONS.md) for the full matrix.
 
 ---
 

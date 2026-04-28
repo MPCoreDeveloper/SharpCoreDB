@@ -28,6 +28,8 @@ public partial class SqlParser
             throw new InvalidOperationException("Cannot create table in readonly mode");
         }
 
+        ArgumentNullException.ThrowIfNull(_tableFactory);
+
         // Detect IF NOT EXISTS clause (same pattern as ExecuteDropTable)
         bool ifNotExists = false;
         string tableName;
@@ -352,27 +354,26 @@ public partial class SqlParser
                 $"File '{dataFilePath}' has {fileInfo.Length} bytes instead of 0.");
         }
         
-        // Create brand new table with clean state
-        var table = new Table(this.storage, this.isReadOnly, this.config)
-        {
-            Name = tableName,
-            Columns = columns,
-            ColumnTypes = columnTypes,
-            IsAuto = isAuto,
-            PrimaryKeyIndex = primaryKeyIndex,
-            HasInternalRowId = hasInternalRowId,  // ✅ AUTO-ROWID: Track internal _rowid
-            DataFile = dataFilePath,
-            StorageMode = storageMode,
-            IsNotNull = isNotNull,
-            DefaultValues = defaultValues,
-            UniqueConstraints = uniqueConstraints,
-            ForeignKeys = foreignKeys,  // Added for Phase 1.2
-            DefaultExpressions = defaultExpressions,
-            ColumnCheckExpressions = columnCheckExpressions,
-            TableCheckConstraints = tableCheckConstraints,
-            ColumnCollations = columnCollations,  // ✅ COLLATE Phase 2
-            ColumnLocaleNames = columnLocaleNames   // ✅ Phase 9
-        };
+        // Create brand new table with clean state — use the factory so the storage coupling
+        // is contained to the factory implementation rather than spread through DDL logic.
+        var table = (Table)_tableFactory.CreateTable(tableName, this.isReadOnly, this.config);
+        table.Name = tableName;
+        table.Columns = columns;
+        table.ColumnTypes = columnTypes;
+        table.IsAuto = isAuto;
+        table.PrimaryKeyIndex = primaryKeyIndex;
+        table.HasInternalRowId = hasInternalRowId;  // ✅ AUTO-ROWID: Track internal _rowid
+        table.DataFile = dataFilePath;
+        table.StorageMode = storageMode;
+        table.IsNotNull = isNotNull;
+        table.DefaultValues = defaultValues;
+        table.UniqueConstraints = uniqueConstraints;
+        table.ForeignKeys = foreignKeys;  // Added for Phase 1.2
+        table.DefaultExpressions = defaultExpressions;
+        table.ColumnCheckExpressions = columnCheckExpressions;
+        table.TableCheckConstraints = tableCheckConstraints;
+        table.ColumnCollations = columnCollations;  // ✅ COLLATE Phase 2
+        table.ColumnLocaleNames = columnLocaleNames;   // ✅ Phase 9
 
         // ✅ COLLATE Phase 4: Initialize Primary Key BTree Index with correct collation
         if (primaryKeyIndex >= 0)
@@ -477,6 +478,7 @@ public partial class SqlParser
         var tableNameRaw = parts[onIdx + 1];
         var parenIdx = tableNameRaw.IndexOf('(');
         var tableName = parenIdx >= 0 ? tableNameRaw.Substring(0, parenIdx) : tableNameRaw;
+        tableName = tableName.Trim('"', '[', ']', '`', '\'');
         
         if (!this.tables.ContainsKey(tableName))
         {
@@ -685,7 +687,7 @@ public partial class SqlParser
     /// </summary>
     private void ExecuteAlterTable(string[] parts, string sql, IWAL? wal)
     {
-        var tableName = parts[2];
+        var tableName = parts[2].Trim('"', '[', ']', '`', '\'');
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
         

@@ -88,10 +88,21 @@ public partial class SqlParser
         }
         
         string tableName = tableNameBuilder.ToString().Trim();
-        
+
         // Remove any trailing punctuation (like parenthesis, comma, etc.)
         tableName = tableName.TrimEnd(')', ',', ';');
-        
+
+        // Strip SQL identifier quotes: "name", [name], `name`
+        if (tableName.Length >= 2)
+        {
+            if ((tableName[0] == '"' && tableName[^1] == '"') ||
+                (tableName[0] == '[' && tableName[^1] == ']') ||
+                (tableName[0] == '`' && tableName[^1] == '`'))
+            {
+                tableName = tableName[1..^1];
+            }
+        }
+
         return string.IsNullOrEmpty(tableName) ? null : tableName;
     }
 

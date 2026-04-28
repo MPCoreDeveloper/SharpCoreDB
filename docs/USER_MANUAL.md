@@ -110,6 +110,16 @@ SharpCoreDB supports multiple storage engines optimized for different workloads:
 
 Default: **PageBased** (switch via `DatabaseOptions`)
 
+> ⚠️ **Single-File mode (`.scdb`) SQL limitations**
+>
+> When using `.scdb` single-file storage (`StorageMode.SingleFile` / `SingleFileDatabase`),
+> SharpCoreDB uses a **regex-based SQL parser** instead of the full query engine.
+> Features like JOIN, GROUP BY, subqueries, DELETE without WHERE, and aggregates are **not supported**.
+>
+> → See [`docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`](storage/SINGLE_FILE_SQL_LIMITATIONS.md) for the complete matrix.
+>
+> All SQL features below apply to **Directory mode** (`Database` class, `.db` folder) only.
+
 ### Encryption
 
 All data is encrypted at rest with **AES-256-GCM**:
@@ -436,6 +446,8 @@ db.ExecuteQuery("SELECT * FROM users WHERE email IS NOT NULL");
 ```
 
 #### JOIN Operations
+
+> ⚠️ **Directory mode only.** JOINs are **not supported** in `.scdb` single-file mode.
 
 ```csharp
 // INNER JOIN

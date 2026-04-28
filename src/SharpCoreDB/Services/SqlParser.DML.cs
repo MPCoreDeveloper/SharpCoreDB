@@ -20,9 +20,9 @@ using System.Text.RegularExpressions;
 /// </summary>
 public partial class SqlParser
 {
-    private static readonly Regex UpdateRegex = new(@"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+    private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
-    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
     /// Internal method to execute a SQL statement.

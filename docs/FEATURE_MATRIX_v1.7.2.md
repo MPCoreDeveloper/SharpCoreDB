@@ -2,6 +2,14 @@
 
 This page consolidates the major SharpCoreDB capabilities by package for quick discovery.
 
+> ⚠️ **Single-File mode SQL limitations**
+>
+> Features marked below apply to **Directory mode** (`Database` class, `.db` folder) unless otherwise noted.
+> `.scdb` single-file mode (`SingleFileDatabase`) uses a **regex-based SQL parser** and does **not** support
+> JOIN, GROUP BY, subqueries, aggregates, DELETE without WHERE, and other advanced SQL.
+>
+> → Full matrix: [`docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`](storage/SINGLE_FILE_SQL_LIMITATIONS.md)
+
 ## Core platform
 
 | Package | Purpose | Key capabilities in v1.7.2 |

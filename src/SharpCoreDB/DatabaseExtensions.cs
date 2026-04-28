@@ -130,10 +130,23 @@ public class DatabaseFactory(IServiceProvider services)
 /// Database implementation for single-file (.scdb) storage.
 /// Wraps SingleFileStorageProvider and provides IDatabase interface.
 /// <para>
-/// <b>⚠️ LEGACY:</b> This class uses regex-based SQL parsing with limited support.
-/// It does NOT support ORDER BY, LIMIT, JOIN, subqueries, or aggregate functions.
-/// For full SQL support, use the <see cref="Database"/> class (directory mode) which
-/// routes through <c>SqlParser.ExecuteSelectQuery</c>.
+/// <b>⚠️ SQL LIMITATIONS:</b> This class uses a <b>regex-based SQL parser</b>, not the full <c>SqlParser</c> engine.
+/// The following SQL features are <b>not supported</b>:
+/// <list type="bullet">
+///   <item>JOIN (INNER, LEFT, RIGHT, FULL OUTER, CROSS)</item>
+///   <item>GROUP BY / HAVING</item>
+///   <item>Subqueries</item>
+///   <item>Aggregate functions (COUNT, SUM, AVG, MIN, MAX)</item>
+///   <item>LIMIT / OFFSET</item>
+///   <item>DELETE without WHERE clause</item>
+///   <item>UPDATE without WHERE clause</item>
+///   <item>Multi-row INSERT</item>
+///   <item>ALTER TABLE</item>
+/// </list>
+/// For full SQL support use the <see cref="Database"/> class (directory mode) which routes through <c>SqlParser</c>.
+/// </para>
+/// <para>
+/// See <c>docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md</c> for the complete support matrix.
 /// </para>
 /// </summary>
 internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposable
@@ -147,6 +160,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     private readonly Dictionary<string, CachedQueryPlan> _preparedPlans = new(StringComparer.Ordinal);
     private readonly Lock _batchUpdateLock = new();
     private bool _isBatchUpdateActive;
+
+    // Shared SqlParser for DML + SELECT in single-file mode.`r`n    // DDL (CREATE / DROP TABLE) is intentionally handled by the regex path in this class because`r`n    // SqlParser.DDL.cs operates on directory-mode Table instances and is not compatible with`r`n    // SingleFileTable.
+    private Services.SqlParser? _sqlParser;
 
     public SingleFileDatabase(IStorageProvider storageProvider, string dbPath, string masterPassword, DatabaseOptions options)
     {
@@ -168,6 +184,19 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     
     public long GetLastInsertRowId() => _lastInsertRowId;
     internal void SetLastInsertRowId(long rowId) => _lastInsertRowId = rowId;
+
+    /// <summary>
+    /// Returns (or lazily creates) the shared <see cref="Services.SqlParser"/> that handles DML and SELECT statements for this single-file database.
+    /// </summary>
+    private Services.SqlParser GetSqlParser()
+    {
+        return _sqlParser ??= new Services.SqlParser(
+            _tables,
+            _dbPath,
+            isReadOnly: _options.IsReadOnly,
+            queryCache: _queryCache,
+            config: _options.DatabaseConfig);
+    }
 
     /// <inheritdoc />
     public bool TryGetTable(string tableName, out ITable table)
@@ -300,7 +329,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         return Task.CompletedTask;
     }
 
-    [Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support (no ORDER BY, LIMIT, JOIN, subqueries). For full SQL support, use the Database class which routes through SqlParser.")]
+    [Obsolete("SingleFileDatabase.ExecuteQuery routes DML/SELECT through SqlParser. DDL (CREATE/DROP TABLE) uses a regex path with full compatibility for standard syntax. For advanced DDL features (STORAGE mode, complex indexes), prefer the directory-mode Database class.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
         var upperSql = sql.Trim().ToUpperInvariant();
@@ -330,7 +359,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
     }
 
-    [Obsolete("SingleFileDatabase uses regex-based SQL parsing with limited support. For full SQL support, use the Database class which routes through SqlParser.")]
+    [Obsolete("SingleFileDatabase.ExecuteQuery routes DML/SELECT through SqlParser. DDL (CREATE/DROP TABLE) uses a regex path. For advanced DDL features prefer the directory-mode Database class.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt) 
         => ExecuteQuery(sql, parameters);
 
@@ -584,9 +613,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
     private void ExecuteCreateTableInternal(string sql)
     {
-        // ✅ Support IF NOT EXISTS
+        // ✅ Support IF NOT EXISTS and quoted table names (e.g. "__SharpMigrations")
         var ifNotExistsRegex = new Regex(
-            @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.*)\)",
+            @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?\s*\((.*)\)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
         var match = ifNotExistsRegex.Match(sql);
@@ -613,7 +642,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         var primaryKeyIndex = -1;
 
         var colIndex = 0;
-        foreach (var colDef in columnDefs.Split(','))
+        // ✅ Use quote-aware splitting to handle DEFAULT values containing commas
+        foreach (var colDef in SplitColumnDefinitions(columnDefs))
         {
             var trimmed = colDef.Trim();
             var upper = trimmed.ToUpperInvariant();
@@ -625,9 +655,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             }
 
             // Handle table-level PRIMARY KEY(col) — extract column name and mark it
+            // ✅ Support quoted column names: PRIMARY KEY ("Version")
             if (upper.StartsWith("PRIMARY KEY"))
             {
-                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*(\w+)\s*\)", RegexOptions.IgnoreCase);
+                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
                 if (pkMatch.Success)
                 {
                     var pkColName = pkMatch.Groups[1].Value;
@@ -644,7 +675,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             if (parts.Length < 2)
                 continue;
 
-            var colName = parts[0];
+            // ✅ Strip surrounding quotes from column names (e.g. "Version" → Version)
+            var colName = parts[0].Trim('"', '`', '[', ']', '\'');
             var typeStr = parts[1].ToUpperInvariant();
 
             columns.Add(colName);
@@ -708,6 +740,87 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         _tableDirectoryManager.Flush();
     }
 
+    /// <summary>
+    /// Splits a SQL column definition string by commas, respecting quoted strings, brackets, and parentheses.
+    /// Handles DEFAULT values containing commas inside string literals correctly.
+    /// </summary>
+    private static List<string> SplitColumnDefinitions(string definitions)
+    {
+        var items = new List<string>();
+        var current = new System.Text.StringBuilder();
+        int depth = 0;
+        bool inSingleQuotes = false;
+        bool inDoubleQuotes = false;
+        bool inBrackets = false;
+        bool inBackticks = false;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            char c = definitions[i];
+
+            if (c == '\'' && !inDoubleQuotes && !inBrackets && !inBackticks)
+            {
+                // Handle escaped single quote ''
+                if (inSingleQuotes && i + 1 < definitions.Length && definitions[i + 1] == '\'')
+                {
+                    current.Append(c);
+                    current.Append(definitions[++i]);
+                    continue;
+                }
+                inSingleQuotes = !inSingleQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '"' && !inSingleQuotes && !inBrackets && !inBackticks)
+            {
+                inDoubleQuotes = !inDoubleQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '[' && !inSingleQuotes && !inDoubleQuotes && !inBackticks)
+            {
+                inBrackets = true;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == ']' && inBrackets)
+            {
+                inBrackets = false;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '`' && !inSingleQuotes && !inDoubleQuotes && !inBrackets)
+            {
+                inBackticks = !inBackticks;
+                current.Append(c);
+                continue;
+            }
+
+            if (!inSingleQuotes && !inDoubleQuotes && !inBrackets && !inBackticks)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (c == ',' && depth == 0)
+                {
+                    var item = current.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(item)) items.Add(item);
+                    current.Clear();
+                    continue;
+                }
+            }
+
+            current.Append(c);
+        }
+
+        var last = current.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(last)) items.Add(last);
+        return items;
+    }
+
     private static unsafe void SetColumnName(ref ColumnDefinitionEntry entry, string name)
     {
         var nameBytes = Encoding.UTF8.GetBytes(name);
@@ -720,113 +833,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
     }
 
-    [Obsolete("Regex-based DML parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDMLInternal(string sql, Dictionary<string, object?>? parameters)
     {
-        var upperSql = sql.Trim().ToUpperInvariant();
-        
-        if (upperSql.StartsWith("INSERT"))
-        {
-            ExecuteInsertInternal(sql);
-        }
-        else if (upperSql.StartsWith("UPDATE"))
-        {
-            ExecuteUpdateInternal(sql);
-        }
-        else if (upperSql.StartsWith("DELETE"))
-        {
-            ExecuteDeleteInternal(sql);
-        }
-        else if (upperSql.StartsWith("SELECT"))
-        {
-            ExecuteQuery(sql, parameters ?? new Dictionary<string, object?>());
-        }
-    }
-
-    [Obsolete("Regex-based INSERT parsing. Migrate to SqlParser-based execution for full SQL support.")]
-    private void ExecuteInsertInternal(string sql)
-    {
-        var regex = new Regex(
-            @"INSERT\s+INTO\s+(\w+)\s*(?:\((.*?)\))?\s*VALUES\s*\((.*?)\)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        
-        var match = regex.Match(sql);
-        if (!match.Success)
-        {
-            throw new InvalidOperationException($"Invalid INSERT syntax: {sql}");
-        }
-
-        var tableName = match.Groups[1].Value.Trim();
-        var columnNames = string.IsNullOrWhiteSpace(match.Groups[2].Value) 
-            ? null
-            : match.Groups[2].Value.Split(',').Select(c => c.Trim()).ToList();
-        var values = match.Groups[3].Value.Split(',').Select(v => v.Trim()).ToList();
-        
-        if (!_tables.TryGetValue(tableName, out var table))
-        {
-            throw new InvalidOperationException($"Table '{tableName}' not found");
-        }
-
-        var row = new Dictionary<string, object>();
-        
-        if (columnNames == null)
-        {
-            // No column list provided: use table columns in order
-            for (int i = 0; i < table.Columns.Count && i < values.Count; i++)
-            {
-                var value = ParseValue(values[i]);
-                row[table.Columns[i]] = value;
-            }
-        }
+        var parser = GetSqlParser();
+        if (parameters is { Count: > 0 })
+            parser.Execute(sql, parameters);
         else
-        {
-            // Column list provided
-            for (int i = 0; i < columnNames.Count && i < values.Count; i++)
-            {
-                var value = ParseValue(values[i]);
-                row[columnNames[i]] = value;
-            }
-        }
-        
-        table.Insert(row);
+            parser.Execute(sql);
     }
-
-    [Obsolete("Regex-based UPDATE parsing. Migrate to SqlParser-based execution for full SQL support.")]
-    private void ExecuteUpdateInternal(string sql)
-    {
-        var regex = new Regex(
-            @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        
-        var match = regex.Match(sql);
-        if (!match.Success)
-        {
-            throw new InvalidOperationException($"Invalid UPDATE syntax: {sql}");
-        }
-
-        var tableName = match.Groups[1].Value.Trim();
-        var setClause = match.Groups[2].Value.Trim();
-        var whereClause = match.Groups[3].Value.Trim();
-        
-        if (!_tables.TryGetValue(tableName, out var table))
-        {
-            throw new InvalidOperationException($"Table '{tableName}' not found");
-        }
-
-        var updates = new Dictionary<string, object>();
-        foreach (var assignment in setClause.Split(','))
-        {
-            var parts = assignment.Split('=');
-            if (parts.Length == 2)
-            {
-                updates[parts[0].Trim()] = ParseValue(parts[1].Trim());
-            }
-        }
-        
-        table.Update($"WHERE {whereClause}", updates);
-    }
-
-    [Obsolete("Regex-based DROP TABLE parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDropTableInternal(string sql)
     {
         // Support both quoted and unquoted table names: DROP TABLE IF EXISTS "users_tracking"
@@ -857,11 +871,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
     }
 
-    [Obsolete("Regex-based DELETE parsing. Migrate to SqlParser-based execution for full SQL support.")]
     private void ExecuteDeleteInternal(string sql)
     {
         var regex = new Regex(
-            @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
+            @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
         
         var match = regex.Match(sql);
@@ -881,50 +894,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         table.Delete(whereClause);
     }
 
-    [Obsolete("Regex-based SELECT with limited SQL support (no ORDER BY, LIMIT, JOIN, subqueries). Migrate to SqlParser-based execution.")]
     private List<Dictionary<string, object>> ExecuteSelectInternal(string sql, Dictionary<string, object?>? parameters)
     {
-        // ✅ FIX: Updated regex to properly handle ORDER BY clause
-        var regex = new Regex(
-            @"SELECT\s+(.*?)\s+FROM\s+(\w+)\s*(?:WHERE\s+(.*?))?(?:\s+ORDER\s+BY\s+(.*))?$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
-        var match = regex.Match(sql);
-        if (!match.Success)
-        {
-            throw new InvalidOperationException($"Invalid SELECT syntax: {sql}");
-        }
-
-        var columns = match.Groups[1].Value.Trim();
-        var tableName = match.Groups[2].Value.Trim();
-        var whereClause = match.Groups[3].Value.Trim();
-        var orderByClause = match.Groups[4].Value.Trim();
-
-        if (!_tables.TryGetValue(tableName, out var table))
-        {
-            throw new InvalidOperationException($"Table '{tableName}' not found");
-        }
-
-        var rows = table.Select();
-
-        if (!string.IsNullOrWhiteSpace(whereClause))
-        {
-            rows = rows.Where(row => EvaluateWhereClause(row, whereClause)).ToList();
-        }
-
-        // ✅ FIX: Apply ORDER BY if present
-        if (!string.IsNullOrWhiteSpace(orderByClause))
-        {
-            var orderByParts = orderByClause.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            var orderByColumn = orderByParts[0].Trim();
-            var isAscending = orderByParts.Length < 2 || !orderByParts[1].Equals("DESC", StringComparison.OrdinalIgnoreCase);
-
-            rows = isAscending
-                ? rows.OrderBy(row => row.TryGetValue(orderByColumn, out var value) ? value : null).ToList()
-                : rows.OrderByDescending(row => row.TryGetValue(orderByColumn, out var value) ? value : null).ToList();
-        }
-
-        return rows;
+        var parser = GetSqlParser();
+        return parser.ExecuteQuery(sql, parameters);
     }
 
     private bool EvaluateWhereClause(Dictionary<string, object> row, string whereClause)

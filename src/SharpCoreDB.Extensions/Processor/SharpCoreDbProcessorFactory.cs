@@ -35,6 +35,8 @@ public sealed class SharpCoreDbProcessorFactory(
         }
 
         var processor = new SharpCoreDbProcessor(connectionString, _processorOptions.Value, _executor);
+        // Ensure the version table exists so FluentMigrator can record applied migrations.
+        // This is idempotent (CREATE TABLE IF NOT EXISTS) and safe to run on every processor creation.
         SharpCoreDbMigrationExecutor.EnsureVersionTable(_executor);
         return processor;
     }

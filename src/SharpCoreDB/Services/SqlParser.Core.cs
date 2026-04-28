@@ -6,6 +6,7 @@ namespace SharpCoreDB.Services;
 
 using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.Storage;
 
 /// <summary>
 /// Simple SQL parser and executor - Core class with fields and interface implementation.
@@ -44,6 +45,45 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private readonly bool isReadOnly = isReadOnly;
     private readonly QueryCache? queryCache = queryCache;
     private readonly DatabaseConfig? config = config;
+
+    // Wraps storage in a factory so DDL can create tables without being hard-coupled to IStorage.
+    // Set once in the primary constructor; the DML-only constructor leaves this null (DDL will throw).
+    private readonly ITableFactory _tableFactory = new DirectoryTableFactory(storage);
+
+    /// <summary>
+    /// Creates a <see cref="SqlParser"/> backed by an explicit <see cref="ITableFactory"/>.
+    /// This constructor supports full DDL (CREATE/DROP TABLE) using whatever storage the factory
+    /// provides — for example a <c>SingleFileTableFactory</c> for <c>.scdb</c> databases.
+    /// </summary>
+    /// <param name="tables">The live table dictionary shared with the owning database.</param>
+    /// <param name="dbPath">Database path (used for error messages and index file paths).</param>
+    /// <param name="tableFactory">Factory used to create new tables during DDL execution.</param>
+    /// <param name="isReadOnly">Whether the database is opened read-only.</param>
+    /// <param name="queryCache">Optional shared query cache.</param>
+    /// <param name="config">Optional database configuration.</param>
+    internal SqlParser(Dictionary<string, ITable> tables, string dbPath, ITableFactory tableFactory, bool isReadOnly = false, QueryCache? queryCache = null, DatabaseConfig? config = null)
+        : this(tables, dbPath, (IStorage)null!, isReadOnly, queryCache, config)
+    {
+        // Override the directory-mode factory set by the primary constructor with the provided one.
+        _tableFactory = tableFactory ?? throw new ArgumentNullException(nameof(tableFactory));
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SqlParser"/> that can execute DML and SELECT statements against an
+    /// existing table dictionary.  DDL operations (CREATE/DROP TABLE) are not supported via this
+    /// constructor because no storage provider is available to persist new table files.
+    /// </summary>
+    /// <param name="tables">The populated table dictionary (e.g. from <see cref="SingleFileDatabase"/>).</param>
+    /// <param name="dbPath">Database path (used for error messages and index file paths).</param>
+    /// <param name="isReadOnly">Whether the database is opened read-only.</param>
+    /// <param name="queryCache">Optional shared query cache.</param>
+    /// <param name="config">Optional database configuration.</param>
+    internal SqlParser(Dictionary<string, ITable> tables, string dbPath, bool isReadOnly = false, QueryCache? queryCache = null, DatabaseConfig? config = null)
+        : this(tables, dbPath, (IStorage)null!, isReadOnly, queryCache, config)
+    {
+        // No factory: DDL is not available without a storage provider.
+        _tableFactory = null!;
+    }
 
     /// <summary>
     /// Number of rows changed by the last DML statement (for CHANGES() function).
