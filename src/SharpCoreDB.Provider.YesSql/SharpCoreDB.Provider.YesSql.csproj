@@ -8,7 +8,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.YesSql</PackageId>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.YesSql</Product>
@@ -50,9 +50,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" Condition="'$(TargetFramework)' == 'net8.0'" />
 
     <!-- SharpCoreDB dependencies -->
-    <PackageReference Include="SharpCoreDB" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Extensions" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Extensions" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">

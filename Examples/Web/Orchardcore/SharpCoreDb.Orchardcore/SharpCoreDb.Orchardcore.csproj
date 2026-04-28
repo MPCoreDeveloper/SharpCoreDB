@@ -35,9 +35,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.0" />
-    <PackageReference Include="SharpCoreDB.Provider.YesSql" Version="1.7.0" />
-    <PackageReference Include="SharpCoreDB" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.7.2" />
+    <PackageReference Include="SharpCoreDB.Provider.YesSql" Version="1.7.2" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.2" />
   </ItemGroup>
 
   <ItemGroup>

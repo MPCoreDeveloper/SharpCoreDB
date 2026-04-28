@@ -1,17 +1,17 @@
 # 🔍 SharpCoreDB Vector Search & Storage
 
-> **Status:** ✅ **PRODUCTION READY** — v1.7.1  
+> **Status:** ✅ **PRODUCTION READY** — v1.7.2  
 > **Module:** `SharpCoreDB.VectorSearch` (optional, separate NuGet)  
 > **Features:** HNSW indexes, quantization, distance metrics, GraphRAG integration paths  
 > **Performance:** 50-100x faster than SQLite vector search  
 > **Requirements:** .NET 10, C# 14  
 > **Breaking Changes:** None — backward compatible
 
-## v1.7.1 changes
+## v1.7.2 changes
 
-- Package/docs synchronized to `v1.7.1`
+- Package/docs synchronized to `v1.7.2`
 - Vector workflows aligned with `SharpCoreDB.Graph.Advanced` GraphRAG guidance
-- Inherits core metadata/parser reliability improvements from SharpCoreDB v1.7.1
+- Inherits core metadata/parser reliability improvements from SharpCoreDB v1.7.2
 
 ---
 
@@ -74,10 +74,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.7.1
+dotnet add package SharpCoreDB --version 1.7.2
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 1.7.1
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.2
 ```
 
 ### 2. Register Vector Search

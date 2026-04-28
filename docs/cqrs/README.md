@@ -1,4 +1,4 @@
-# SharpCoreDB.CQRS Guide (v1.7.1)
+# SharpCoreDB.CQRS Guide (v1.7.2)
 
 This guide documents the optional `SharpCoreDB.CQRS` package and how to use it with SharpCoreDB Event Sourcing.
 
@@ -21,9 +21,9 @@ At a package level, `SharpCoreDB.CQRS` is responsible for:
 
 `SharpCoreDB.CQRS` does not persist event streams and it does not execute projections. Those responsibilities stay in `SharpCoreDB.EventSourcing` and `SharpCoreDB.Projections`.
 
-## v1.7.1 Highlights
+## v1.7.2 Highlights
 
-The `1.7.1` synchronized release keeps the CQRS docs aligned with the shipped package surface: persistent outbox storage, retry and dead-letter metadata, the hosted outbox worker, and the aggregate-to-outbox bridge are all included in the documented baseline.
+The `1.7.2` synchronized release keeps the CQRS docs aligned with the shipped package surface: persistent outbox storage, retry and dead-letter metadata, the hosted outbox worker, and the aggregate-to-outbox bridge are all included in the documented baseline.
 
 ## Quickstart
 
@@ -54,7 +54,7 @@ Non-goals:
 ## 2. Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.7.1
+dotnet add package SharpCoreDB.CQRS --version 1.7.2
 ```
 
 ---

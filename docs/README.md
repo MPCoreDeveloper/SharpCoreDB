@@ -1,13 +1,13 @@
 # SharpCoreDB Documentation
 
-This folder contains the maintained documentation set for SharpCoreDB (`v1.7.1`).
+This folder contains the maintained documentation set for SharpCoreDB (`v1.7.2`).
 
 ## Start Here
 
 - `INDEX.md` - Canonical documentation index.
-- `FEATURE_MATRIX_v1.7.1.md` - Consolidated feature coverage by package.
+- `FEATURE_MATRIX_v1.7.2.md` - Consolidated feature coverage by package.
 - `PROJECT_STATUS.md` - Current project status and upcoming roadmap TODOs.
-- `IMPLEMENTATION_AUDIT_v1.7.1.md` - Repository-wide implementation audit.
+- `IMPLEMENTATION_AUDIT_v1.7.2.md` - Repository-wide implementation audit.
 - `../README.md` - Product overview and quick start.
 
 ## Maintained documentation areas
@@ -33,11 +33,11 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.1`)
 - Optional functional adapters: `../src/SharpCoreDB.Functional/README.md`, `../src/SharpCoreDB.Functional.Dapper/README.md`, `../src/SharpCoreDB.Functional.EntityFrameworkCore/README.md`
 - Additional integrations: `../src/SharpCoreDB.Identity/README.md`, `../src/SharpCoreDB.Serilog.Sinks/README.md`, `../src/SharpCoreDB.Provider.Sync/README.md`
 
-## SQL extension docs (v1.7.1)
+## SQL extension docs (v1.7.2)
 
-- `sql/SQL_DIALECT_EXTENSIONS_v1.7.1.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
+- `sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
 - `graphrag/GRAPH_RAG_SINGLE_SQL.md` - Single-statement GraphRAG SQL syntax and DI integration.
-- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.1.md` - Option<T> mapping semantics and usage patterns.
+- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md` - Option<T> mapping semantics and usage patterns.
 
 ## Cleanup policy
 

@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Client.Protocol</AssemblyName>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Description>Client-side protocol implementation for SharpCoreDB (gRPC, binary)</Description>
 
     <!-- NuGet Package Properties -->

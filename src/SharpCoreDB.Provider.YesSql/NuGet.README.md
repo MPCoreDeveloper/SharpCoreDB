@@ -1,18 +1,18 @@
-# SharpCoreDB.Provider.YesSql v1.7.1
+# SharpCoreDB.Provider.YesSql v1.7.2
 
 **YesSql Provider for SharpCoreDB**
 
 YesSql ORM integration with SharpCoreDB's encryption and performance for document-oriented patterns.
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.7.1
+## ✨ What's New in v1.7.2
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.7.1
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.2
 - ✅ YesSql provider integration
 - ✅ Enterprise features support
 - ✅ Zero breaking changes
@@ -32,13 +32,13 @@ YesSql ORM integration with SharpCoreDB's encryption and performance for documen
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.YesSql --version 1.7.1
+dotnet add package SharpCoreDB.Provider.YesSql --version 1.7.2
 ```
 
-**Requires:** SharpCoreDB v1.7.1+, YesSql.Core v5.4.7+
+**Requires:** SharpCoreDB v1.7.2+, YesSql.Core v5.4.7+
 
 ---
 
-**Version:** 1.7.1 | **Status:** ✅ Production Ready
+**Version:** 1.7.2 | **Status:** ✅ Production Ready
 
 

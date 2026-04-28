@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Server.Protocol</AssemblyName>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Description>Network protocol definitions for SharpCoreDB server (gRPC, binary, HTTP)</Description>
 
     <!-- NuGet Package Properties -->

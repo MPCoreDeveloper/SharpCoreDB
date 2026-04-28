@@ -11,7 +11,7 @@
     <!-- This is a GUI viewer tool, not a NuGet package -->
     <IsPackable>false</IsPackable>
     
-    <Version>1.0.7</Version>
+    <Version>1.7.2</Version>
     <PackageId>SharpCoreDB.Viewer</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
@@ -37,10 +37,10 @@
 
   <ItemGroup>
     <!-- Avalonia UI -->
-    <PackageReference Include="Avalonia" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.1" />
+    <PackageReference Include="Avalonia" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.2" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.14" Condition="'$(Configuration)' == 'Debug'" />
     
     <!-- MVVM -->

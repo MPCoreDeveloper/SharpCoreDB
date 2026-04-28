@@ -6,7 +6,7 @@
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.7.0</Version>
+    <Version>1.7.2</Version>
     <IsPackable>false</IsPackable>
     <UseLocalSharpCoreDbSources Condition="'$(UseLocalSharpCoreDbSources)' == '' and Exists('..\..\..\src\SharpCoreDB.EventSourcing\SharpCoreDB.EventSourcing.csproj')">true</UseLocalSharpCoreDbSources>
     <UseLocalSharpCoreDbSources Condition="'$(UseLocalSharpCoreDbSources)' == ''">false</UseLocalSharpCoreDbSources>
@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.0" />
+    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Distributed</PackageId>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Distributed</Product>
@@ -52,7 +52,7 @@
 
   <ItemGroup>
     <!-- Production: use NuGet package -->
-    <PackageReference Include="SharpCoreDB" Version="1.7.1" Condition="'$(Configuration)' == 'Release'" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.2" Condition="'$(Configuration)' == 'Release'" />
   </ItemGroup>
 
   <ItemGroup>

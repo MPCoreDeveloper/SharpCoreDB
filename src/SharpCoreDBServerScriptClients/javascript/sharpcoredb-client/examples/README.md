@@ -3,9 +3,9 @@
 This directory contains examples demonstrating how to use @sharpcoredb/client to connect to and interact with SharpCoreDB Server.
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features demonstrated
@@ -15,9 +15,9 @@ This directory contains examples demonstrating how to use @sharpcoredb/client to
 - Connection pooling patterns
 - Error handling and latency checks
 
-## Changes in v1.7.1
+## Changes in v1.7.2
 
-- Example docs aligned to the current `v1.7.1` server/client release line
+- Example docs aligned to the current `v1.7.2` server/client release line
 - References updated for gRPC-first server usage
 
 ## Prerequisites

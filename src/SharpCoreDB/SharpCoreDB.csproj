@@ -31,7 +31,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>

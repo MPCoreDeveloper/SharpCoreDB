@@ -1,12 +1,12 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v1.7.1`)
+**Status:** Active documentation set (`v1.7.2`)
 
 ## 1. Project Entry Points
 
 - `../README.md`
 - `README.md`
-- `FEATURE_MATRIX_v1.7.1.md`
+- `FEATURE_MATRIX_v1.7.2.md`
 - `PROJECT_STATUS.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
@@ -80,8 +80,8 @@
 - `scdb/PRODUCTION_GUIDE.md`
 - `serialization/README.md`
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
-- `storage/QUICK_REFERENCE_v1.7.1.md`
-- `storage/METADATA_IMPROVEMENTS_v1.7.1.md`
+- `storage/QUICK_REFERENCE_v1.7.2.md`
+- `storage/METADATA_IMPROVEMENTS_v1.7.2.md`
 
 ## 6. Engine Implementation Notes
 
@@ -108,8 +108,8 @@
 - `sync/README.md`
 - `migration/README.md`
 - `migration/MIGRATION_GUIDE.md`
-- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.1.md`
-- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.1.md`
+- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md`
+- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md`
 
 ## 9. Functional Programming & Null Safety
 

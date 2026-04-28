@@ -426,58 +426,49 @@ public sealed class ColumnStoreTests
         Console.WriteLine("?        COLUMNAR vs LINQ - PERFORMANCE COMPARISON           ?");
         Console.WriteLine("??????????????????????????????????????????????????????????????");
 
-        // Warm up both
+        // Warm up both - including all operations used in the test
         _ = employees.Sum(e => e.Age);
         _ = columnStore.Sum<int>("Age");
+        _ = employees.Average(e => e.Age);
+        _ = columnStore.Average("Age");
+        _ = employees.Min(e => e.Age);
+        _ = columnStore.Min<int>("Age");
+        _ = employees.Max(e => e.Age);
+        _ = columnStore.Max<int>("Age");
 
-        // Test 1: SUM
-        var linqSw = Stopwatch.StartNew();
-        var linqSum = employees.Sum(e => e.Age);
-        linqSw.Stop();
+        // Test 1: SUM (best of 5 runs for stable measurement)
+        var (linqSumMs, linqSum) = MeasureBestExecution(() => employees.Sum(e => e.Age), 5);
+        var (columnSumMs, columnSum) = MeasureBestExecution(() => columnStore.Sum<int>("Age"), 5);
 
-        var columnSw = Stopwatch.StartNew();
-        var columnSum = columnStore.Sum<int>("Age");
-        columnSw.Stop();
-
-        var sumSpeedup = linqSw.Elapsed.TotalMilliseconds / columnSw.Elapsed.TotalMilliseconds;
+        var sumSpeedup = linqSumMs / columnSumMs;
 
         Console.WriteLine($"\n?? SUM(Age) on 10k records:");
-        Console.WriteLine($"   LINQ:     {linqSw.Elapsed.TotalMilliseconds:F3}ms");
-        Console.WriteLine($"   Columnar: {columnSw.Elapsed.TotalMilliseconds:F3}ms");
+        Console.WriteLine($"   LINQ:     {linqSumMs:F3}ms");
+        Console.WriteLine($"   Columnar: {columnSumMs:F3}ms");
         Console.WriteLine($"   Speedup:  {sumSpeedup:F2}x faster! ?");
 
-        // Test 2: AVERAGE
-        linqSw.Restart();
-        var linqAvg = employees.Average(e => e.Age);
-        linqSw.Stop();
+        // Test 2: AVERAGE (best of 5 runs for stable measurement)
+        var (linqAvgMs, linqAvg) = MeasureBestExecution(() => employees.Average(e => e.Age), 5);
+        var (columnAvgMs, columnAvg) = MeasureBestExecution(() => columnStore.Average("Age"), 5);
 
-        columnSw.Restart();
-        var columnAvg = columnStore.Average("Age");
-        columnSw.Stop();
-
-        var avgSpeedup = linqSw.Elapsed.TotalMilliseconds / columnSw.Elapsed.TotalMilliseconds;
+        var avgSpeedup = linqAvgMs / columnAvgMs;
 
         Console.WriteLine($"\n?? AVG(Age) on 10k records:");
-        Console.WriteLine($"   LINQ:     {linqSw.Elapsed.TotalMilliseconds:F3}ms");
-        Console.WriteLine($"   Columnar: {columnSw.Elapsed.TotalMilliseconds:F3}ms");
+        Console.WriteLine($"   LINQ:     {linqAvgMs:F3}ms");
+        Console.WriteLine($"   Columnar: {columnAvgMs:F3}ms");
         Console.WriteLine($"   Speedup:  {avgSpeedup:F2}x faster! ?");
 
-        // Test 3: MIN + MAX
-        linqSw.Restart();
-        var linqMin = employees.Min(e => e.Age);
-        var linqMax = employees.Max(e => e.Age);
-        linqSw.Stop();
+        // Test 3: MIN + MAX (best of 5 runs)
+        var (linqMinMaxMs, (linqMin, linqMax)) = MeasureBestExecution(
+            () => (employees.Min(e => e.Age), employees.Max(e => e.Age)), 5);
+        var (columnMinMaxMs, (columnMin, columnMax)) = MeasureBestExecution(
+            () => (columnStore.Min<int>("Age"), columnStore.Max<int>("Age")), 5);
 
-        columnSw.Restart();
-        var columnMin = columnStore.Min<int>("Age");
-        var columnMax = columnStore.Max<int>("Age");
-        columnSw.Stop();
-
-        var minMaxSpeedup = linqSw.Elapsed.TotalMilliseconds / columnSw.Elapsed.TotalMilliseconds;
+        var minMaxSpeedup = linqMinMaxMs / columnMinMaxMs;
 
         Console.WriteLine($"\n?? MIN+MAX(Age) on 10k records:");
-        Console.WriteLine($"   LINQ:     {linqSw.Elapsed.TotalMilliseconds:F3}ms");
-        Console.WriteLine($"   Columnar: {columnSw.Elapsed.TotalMilliseconds:F3}ms");
+        Console.WriteLine($"   LINQ:     {linqMinMaxMs:F3}ms");
+        Console.WriteLine($"   Columnar: {columnMinMaxMs:F3}ms");
         Console.WriteLine($"   Speedup:  {minMaxSpeedup:F2}x faster! ?");
 
         Console.WriteLine($"\n??????????????????????????????????????????????????????????????");

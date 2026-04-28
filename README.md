@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
   <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="180"/>
 
 # SharpCoreDB
@@ -53,7 +53,7 @@ Use it when you need:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.1
+dotnet add package SharpCoreDB --version 1.7.2
 ```
 
 ```csharp
@@ -81,23 +81,23 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.7.1
-dotnet add package SharpCoreDB.Client --version 1.7.1
+dotnet add package SharpCoreDB.Server --version 1.7.2
+dotnet add package SharpCoreDB.Client --version 1.7.2
 ```
 
 ---
 
-## v1.7.1 highlights
+## v1.7.2 highlights
 
-- Synchronized package release across the ecosystem (`1.7.1`)
-- New **`SharpCoreDB.Graph.Advanced`** package (community detection, centrality, subgraph analysis, graph-aware ranking)
-- Optional functional package family:
-  - `SharpCoreDB.Functional`
-  - `SharpCoreDB.Functional.Dapper`
-  - `SharpCoreDB.Functional.EntityFrameworkCore`
-- Event Sourcing / Projections / CQRS guidance strengthened for production workflows
-- SQL lexer/parser and compiled-query parameter fixes
-- Durability and reopen-path improvements (metadata flush/reliability)
+- Synchronized package release across the full ecosystem (`1.7.2`)
+- **Auto-ROWID**: tables without a `PRIMARY KEY` now get a hidden `_rowid` (ULID) column — SQLite-compatible rowid pattern
+- **GRAPH_RAG SQL clause**: new top-level `GRAPH_RAG` SELECT syntax with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, and `TOP_K`
+- **OPTIONALLY projection mode**: new `OPTIONALLY` keyword enables `Option<T>` mapping in ADO.NET readers
+- **IS SOME / IS NONE predicates**: new null-safety predicates supported in parser and runtime
+- **SIMD hot-loop optimization**: all 16 columnar aggregate methods use `Vector256.LoadUnsafe` — tighter codegen on AVX2
+- **Major Viewer update**: multi-tab query editor, typed table designer (includes ULID/GUID), 6-language UI (EN/DE/FR/ES/IT/NL), server connection support
+- **FluentMigrator default alignment**: `AddSharpCoreDBFluentMigrator()` defaults to SQLite-compatible mode for both generator and processor
+- `Microsoft.Extensions.Logging.Abstractions` updated to **10.0.7** across all packages
 - **2,000+ tests passing**, **zero breaking changes intended**, **100% backward compatible**
 
 ---
@@ -199,53 +199,56 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,000+ tests passing**
-- **100% backward compatible** across the v1.7.1 release line
-- Zero breaking changes intended from v1.5.0 to v1.7.1
+- **100% backward compatible** across the v1.7.2 release line
+- Zero breaking changes intended from v1.5.0 to v1.7.2
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.7.1)
+## Available NuGet packages (v1.7.2)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.7.1
+dotnet add package SharpCoreDB --version 1.7.2
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.7.1
-dotnet add package SharpCoreDB.Client --version 1.7.1
+dotnet add package SharpCoreDB.Server --version 1.7.2
+dotnet add package SharpCoreDB.Client --version 1.7.2
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.7.1
-dotnet add package SharpCoreDB.VectorSearch --version 1.7.1
-dotnet add package SharpCoreDB.Graph --version 1.7.1
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.1
-dotnet add package SharpCoreDB.Distributed --version 1.7.1
-dotnet add package SharpCoreDB.Provider.Sync --version 1.7.1
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.1
-dotnet add package SharpCoreDB.Extensions --version 1.7.1
+dotnet add package SharpCoreDB.Analytics --version 1.7.2
+dotnet add package SharpCoreDB.VectorSearch --version 1.7.2
+dotnet add package SharpCoreDB.Graph --version 1.7.2
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.2
+dotnet add package SharpCoreDB.Distributed --version 1.7.2
+dotnet add package SharpCoreDB.Provider.Sync --version 1.7.2
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.2
+dotnet add package SharpCoreDB.Extensions --version 1.7.2
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.7.1
-dotnet add package SharpCoreDB.Projections --version 1.7.1
-dotnet add package SharpCoreDB.CQRS --version 1.7.1
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.2
+dotnet add package SharpCoreDB.Projections --version 1.7.2
+dotnet add package SharpCoreDB.CQRS --version 1.7.2
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.7.1
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.1
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.1
+dotnet add package SharpCoreDB.Functional --version 1.7.2
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.2
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.2
 ```
 
 ---
 
-## What’s new in v1.7.1
+## What’s new in v1.7.2
 
-- Unified package versioning across the full SharpCoreDB family
-- New advanced GraphRAG package: `SharpCoreDB.Graph.Advanced`
-- Maturity improvements for optional Event Sourcing / Projections / CQRS workflows
-- Reliability and startup/durability fixes in core engine metadata handling
-- Expanded validation with new functional adapter test coverage
+- **Auto-ROWID support**: hidden `_rowid` (ULID) on tables without an explicit primary key - mirrors SQLite rowid semantics
+- **GRAPH_RAG SQL clause**: first-class `GRAPH_RAG` SELECT syntax for graph-augmented retrieval pipelines
+- **OPTIONALLY** and **IS SOME / IS NONE**: new SQL keywords for `Option<T>`-aware null-safety patterns
+- **SIMD columnar engine**: `Vector256.LoadUnsafe` across all 16 aggregate hot paths - eliminates Span allocation in AVX2 loops
+- **SharpCoreDB.Viewer** major update: Avalonia UI revamp with multi-tab editor, typed table designer (ULID/GUID), multilingual UI (EN/DE/FR/ES/IT/NL), server-mode connection
+- **FluentMigrator**: `AddSharpCoreDBFluentMigrator()` defaults both generator and processor to SQLite-compatible mode
+- `Microsoft.Extensions.Logging.Abstractions` bumped to **10.0.7** for all packages
+- Bug fixes: `IS NULL/IS NOT NULL` unification, parser `COALESCE()` support, LINQ Convert/ConvertChecked, PAGE_BASED mixed-predicate filtering
 
 ---
 
@@ -253,13 +256,13 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.1
 
 - Documentation hub: `docs/INDEX.md`
 - Project docs index: `docs/README.md`
-- Feature matrix: `docs/FEATURE_MATRIX_v1.7.1.md`
+- Feature matrix: `docs/FEATURE_MATRIX_v1.7.2.md`
 - Server docs: `docs/server/README.md`
 - Server quick start: `docs/server/QUICKSTART.md`
 - GraphRAG docs: `docs/graphrag/00_START_HERE.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
 - Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
-- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.1.md`, `docs/PROJECT_STATUS.md`
+- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.2.md`, `docs/PROJECT_STATUS.md`
 - Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 
 ---

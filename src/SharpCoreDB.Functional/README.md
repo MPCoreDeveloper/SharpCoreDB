@@ -2,13 +2,13 @@
 
 Functional facade for `SharpCoreDB`.
 
-**Version:** `v1.7.1`  
+**Version:** `v1.7.2`  
 **Package:** `SharpCoreDB.Functional`
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -18,16 +18,16 @@ Functional facade for `SharpCoreDB`.
 - Functional query/command style extensions over `Database` and `IDatabase`
 - Works as base module for Dapper and EF Core functional adapters
 
-## Changes in v1.7.1
+## Changes in v1.7.2
 
-- Functional package introduced and aligned to `v1.7.1`
+- Functional package introduced and aligned to `v1.7.2`
 - Documentation aligned with modular adapter ecosystem
 - Maintains optional architecture with transitive dependency flow
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.7.1
+dotnet add package SharpCoreDB.Functional --version 1.7.2
 ```
 
 ## Related packages
@@ -50,7 +50,7 @@ dotnet add package SharpCoreDB.Functional --version 1.7.1
 - `DeleteAsync(...) -> Task<Fin<Unit>>`
 - `CountAsync(...) -> Task<long>`
 
-## Functional SQL Syntax (v1.7.1)
+## Functional SQL Syntax (v1.7.2)
 
 The functional facade supports SQL extensions that map directly to `Option<T>` behavior.
 

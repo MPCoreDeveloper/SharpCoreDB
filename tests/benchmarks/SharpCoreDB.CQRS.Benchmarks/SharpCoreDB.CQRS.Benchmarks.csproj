@@ -9,7 +9,7 @@
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <Version>1.7.0</Version>
+    <Version>1.7.2</Version>
     <AssemblyTitle>SharpCoreDB.CQRS.Benchmarks</AssemblyTitle>
     <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
     <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
@@ -19,7 +19,7 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.203" />
   </ItemGroup>
 
   <ItemGroup>

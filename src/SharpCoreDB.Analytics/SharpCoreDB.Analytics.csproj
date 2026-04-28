@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Analytics</PackageId>
@@ -30,7 +30,7 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

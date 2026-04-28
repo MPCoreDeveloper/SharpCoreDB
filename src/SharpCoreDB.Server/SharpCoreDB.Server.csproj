@@ -19,7 +19,7 @@
     <AssemblyName>sharpcoredb-server</AssemblyName>
     <Product>SharpCoreDB Network Server</Product>
     <Description>SharpCoreDB network database server with gRPC and HTTP support</Description>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>

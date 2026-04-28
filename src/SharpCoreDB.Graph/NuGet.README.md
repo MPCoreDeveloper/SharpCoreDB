@@ -3,9 +3,9 @@
 This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Documentation
@@ -16,15 +16,15 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Graph v1.7.1
+# SharpCoreDB.Graph v1.7.2
 
 **Lightweight Graph Traversal Engine**
 
 A* pathfinding and graph algorithms **30-50% faster than alternatives** with pure managed C# 14 code.
 
-## ✨ What's New in v1.7.1
+## ✨ What's New in v1.7.2
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.7.1
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.2
 - ✅ Phase 6 complete: A* pathfinding with 30-50% improvement
 - ✅ Lightweight graph traversal
 - ✅ NativeAOT compatible
@@ -54,13 +54,13 @@ A* pathfinding and graph algorithms **30-50% faster than alternatives** with pur
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph --version 1.7.1
+dotnet add package SharpCoreDB.Graph --version 1.7.2
 ```
 
-**Requires:** SharpCoreDB v1.7.1+
+**Requires:** SharpCoreDB v1.7.2+
 
 ---
 
-**Version:** 1.7.1 | **Status:** ✅ Production Ready | **Phase:** 6 Complete
+**Version:** 1.7.2 | **Status:** ✅ Production Ready | **Phase:** 6 Complete
 
 

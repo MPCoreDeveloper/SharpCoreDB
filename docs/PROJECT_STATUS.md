@@ -1,12 +1,12 @@
 # SharpCoreDB Project Status
 
-**Version:** 1.7.0  
+**Version:** 1.7.2  
 **Status:** ✅ Production Ready (Core .NET packages) / ⚠️ SDK parity in progress  
-**Last Updated:** April 6, 2026
+**Last Updated:** April 28, 2026
 
 ## Current Status
 
-SharpCoreDB core .NET packages are release-labeled on `1.7.0` and build successfully, including:
+SharpCoreDB core .NET packages are release-labeled on `1.7.2` and build successfully, including:
 
 - `SharpCoreDB`
 - `SharpCoreDB.Server`
@@ -25,9 +25,9 @@ A repository-wide scan was performed for partial implementation markers (`TODO`,
 
 Detailed findings are documented in:
 
-- `docs/IMPLEMENTATION_AUDIT_v1.7.0.md`
+- `docs/IMPLEMENTATION_AUDIT_v1.7.2.md`
 
-## FluentMigrator Status in v1.7.0
+## FluentMigrator Status in v1.7.2
 
 - Embedded mode integration: available
 - gRPC migration mode integration: available

@@ -1,11 +1,11 @@
-# SharpCoreDB.EventSourcing v1.7.1
+# SharpCoreDB.EventSourcing v1.7.2
 
 Event store primitives for `SharpCoreDB`.
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -16,15 +16,15 @@ Event store primitives for `SharpCoreDB`.
 - Snapshot persistence and snapshot-aware loading
 - Optional upcasting pipeline for schema evolution
 
-## Changes in v1.7.1
+## Changes in v1.7.2
 
-- Package/docs synchronized to `v1.7.1`
+- Package/docs synchronized to `v1.7.2`
 - Production guidance clarified for snapshots and replay workflows
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 1.7.1
+dotnet add package SharpCoreDB.EventSourcing --version 1.7.2
 ```
 
 ## Documentation

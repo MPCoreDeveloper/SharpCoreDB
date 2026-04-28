@@ -3,9 +3,9 @@
 This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Documentation
@@ -16,15 +16,15 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Analytics v1.7.1
+# SharpCoreDB.Analytics v1.7.2
 
 **Advanced Analytics Engine for SharpCoreDB**
 
 Unlock enterprise-grade analytics with 100+ aggregate functions, window functions, and statistical analysis tools - **150-680x faster than SQLite**.
 
-## ✨ What's New in v1.7.1
+## ✨ What's New in v1.7.2
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.7.1
+- ✅ Inherits metadata improvements from SharpCoreDB v1.7.2
 - ✅ Phase 9 complete: 100+ aggregate and window functions
 - ✅ Statistical functions: STDDEV, VARIANCE, PERCENTILE, CORRELATION
 - ✅ SIMD-accelerated computations
@@ -54,13 +54,13 @@ Unlock enterprise-grade analytics with 100+ aggregate functions, window function
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.7.1
+dotnet add package SharpCoreDB.Analytics --version 1.7.2
 ```
 
-**Requires:** SharpCoreDB v1.7.1+
+**Requires:** SharpCoreDB v1.7.2+
 
 ---
 
-**Version:** 1.7.1 | **Status:** ✅ Production Ready | **Phase:** 9 Complete
+**Version:** 1.7.2 | **Status:** ✅ Production Ready | **Phase:** 9 Complete
 
 

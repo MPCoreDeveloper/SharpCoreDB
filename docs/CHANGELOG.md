@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-04-28
+
 ### Added
 - **SIMD LoadUnsafe Optimization**: All 16 columnar SIMD aggregate methods (`SumInt32`, `SumInt64`, `SumDouble`, `MinInt32`, `MinInt64`, `MinDouble`, `MaxInt32`, `MaxInt64` — both single-threaded and parallel variants) now use `Vector256.LoadUnsafe(ref data[i])` instead of `Vector256.Create(data.AsSpan(i))`. This eliminates per-iteration `Span<T>` construction and bounds checking overhead in SIMD hot loops, yielding tighter codegen on AVX2 hardware.
 - **Auto-ROWID**: Tables created without an explicit `PRIMARY KEY` now receive a hidden `_rowid` column (ULID type, auto-generated). Follows the SQLite rowid pattern — invisible in `SELECT *`, visible when explicitly queried via `SELECT _rowid, ...`. See [`docs/features/AUTO_ROWID.md`](features/AUTO_ROWID.md) for full documentation.
@@ -19,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GRAPH_RAG SQL clause**: New top-level `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, and `TOP_K` options, plus provider-based execution integration via `IGraphRagProvider`.
 - **OPTIONALLY SQL projection mode**: New `OPTIONALLY` keyword after SELECT list enabling `Option<T>` mapping in ADO.NET readers, integrated with `SharpCoreDB.Functional`.
 - **SOME/NONE predicates**: New `IS SOME` and `IS NONE` predicates (and NOT variants) supported in parser and runtime evaluators.
+- **Major Avalonia UI Viewer update**: SharpCoreDB.Viewer now ships a significantly upgraded Avalonia UI with multi-tab query editor, typed table designer dropdown (including ULID and GUID), multi-language support (EN/DE/FR/ES/IT/NL), and network SharpCoreDB server connection support.
+- **FluentMigrator default alignment**: `AddSharpCoreDBFluentMigrator()` now defaults both FluentMigrator generator and processor to SQLite-compatible mode, preventing SQL mismatches between the generator and processor.
+- **`Microsoft.Extensions.Logging.Abstractions` bumped to 10.0.7** across all packages.
 
 ### Fixed
 - Unified `IS NULL` / `IS NOT NULL` behavior across runtime scan, join-helper, and compiled predicate paths.
@@ -33,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated project documentation and status reports to reflect current implementation and validation baseline.
 - Explicitly documented the remaining deferred single-file parameterized `ExecuteCompiled` disposal deadlock path.
 - **Performance test hardening**: `ColumnStore_Average_10kRecords_Under2ms` now runs 10 iterations and asserts the best (minimum) time, with an additional warmup call. This eliminates false failures caused by concurrent test execution, GC pauses, or OS scheduling jitter.
+- Ecosystem-wide package version synchronization on `1.7.2`.
+
+## [1.7.1] - 2026-04-15
+
+### Added
+- Synchronized package release across the entire ecosystem (`1.7.1`).
+- Release automation now publishes all packable SharpCoreDB packages in CI/CD.
+
+### Changed
+- Aligned package metadata and version references to the synchronized `1.7.1` release line.
 
 ## [1.7.0] - 2026-04-06
 

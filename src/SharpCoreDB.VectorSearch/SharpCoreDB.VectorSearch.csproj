@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.VectorSearch</PackageId>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>
@@ -51,7 +51,7 @@
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
     
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.7.1" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

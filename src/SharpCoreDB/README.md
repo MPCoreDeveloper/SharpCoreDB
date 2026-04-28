@@ -5,15 +5,15 @@
   
   High-performance encrypted embedded + network-capable database engine for .NET 10.
 
-  **Version:** `v1.7.1`  
+  **Version:** `v1.7.2`  
   **Package:** `SharpCoreDB`
 
 ---
 
 
-## Patch updates in v1.7.1
+## Patch updates in v1.7.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -26,9 +26,9 @@
 
 ---
 
-## Changes in v1.7.1
+## Changes in v1.7.2
 
-- Synchronized ecosystem release to `v1.7.1`
+- Synchronized ecosystem release to `v1.7.2`
 - SQL lexer/parser fixes for parameterized compiled-query execution
 - Metadata durability improvements (flush/reopen reliability)
 - Backward-compatible Brotli metadata support
@@ -39,7 +39,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.1
+dotnet add package SharpCoreDB --version 1.7.2
 ```
 
 ---
@@ -67,7 +67,7 @@ MIT License - Free for commercial and personal use. See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** April 26, 2026 | Version: 1.7.1
+**Last Updated:** April 26, 2026 | Version: 1.7.2
 
 *Made with ❤️ by the SharpCoreDB team*
 

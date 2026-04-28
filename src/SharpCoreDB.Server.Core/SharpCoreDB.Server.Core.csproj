@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Server.Core</AssemblyName>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
     <Description>Core server infrastructure for SharpCoreDB network server</Description>
 
     <!-- NuGet Package Properties -->

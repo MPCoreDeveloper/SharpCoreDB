@@ -2,11 +2,11 @@
 
 `SharpCoreDB.Provider.Sync` is the Dotmim.Sync provider for SharpCoreDB.
 
-**Version line:** `v1.7.1`
+**Version line:** `v1.7.2`
 
-## v1.7.1 changes
+## v1.7.2 changes
 
-- Sync provider documentation aligned to `v1.7.1`
+- Sync provider documentation aligned to `v1.7.2`
 - Clarified provider feature coverage for change tracking, metadata, and DI integration
 - Linked package-level docs to centralized feature matrix and docs index
 

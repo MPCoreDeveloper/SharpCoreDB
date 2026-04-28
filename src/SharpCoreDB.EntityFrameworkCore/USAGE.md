@@ -1,6 +1,6 @@
 # SharpCoreDB.EntityFrameworkCore - Usage Guide
 
-**Version:** `v1.7.1`  
+**Version:** `v1.7.2`  
 **Target:** `.NET 10` / `C# 14`
 
 This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
@@ -8,7 +8,7 @@ This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.1
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.2
 dotnet add package Microsoft.EntityFrameworkCore.Design
 ```
 
