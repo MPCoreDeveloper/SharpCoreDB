@@ -17,6 +17,7 @@ public sealed class SharpCoreDbProcessor(
     SharpCoreDbMigrationExecutor executor) : IMigrationProcessor
 {
     private readonly SharpCoreDbMigrationExecutor _executor = executor;
+    private readonly bool _useSqliteSyntax = HasSqliteSyntaxSwitch(options.ProviderSwitches);
 
     /// <summary>
     /// Gets strongly typed processor options.
@@ -165,6 +166,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(CreateSchemaExpression expression)
     {
+        if (!string.IsNullOrWhiteSpace(expression.SchemaName) && _useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("CREATE SCHEMA", "SQLite-style engines do not support named schemas.");
+        }
+
         if (!string.IsNullOrWhiteSpace(expression.SchemaName))
         {
             Execute($"CREATE SCHEMA IF NOT EXISTS {QuoteIdentifier(expression.SchemaName)}");
@@ -174,6 +180,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(DeleteSchemaExpression expression)
     {
+        if (!string.IsNullOrWhiteSpace(expression.SchemaName) && _useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("DROP SCHEMA", "SQLite-style engines do not support named schemas.");
+        }
+
         if (!string.IsNullOrWhiteSpace(expression.SchemaName))
         {
             Execute($"DROP SCHEMA IF EXISTS {QuoteIdentifier(expression.SchemaName)}");
@@ -192,6 +203,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(AlterColumnExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... ALTER COLUMN", "Recreate the table and copy data to change column definitions.");
+        }
+
         var columnSql = BuildColumnDefinition(expression.Column);
         Execute($"ALTER TABLE {QuoteIdentifier(expression.TableName)} ALTER COLUMN {columnSql}");
     }
@@ -200,9 +216,13 @@ public sealed class SharpCoreDbProcessor(
     public void Process(CreateTableExpression expression)
     {
         var columns = expression.Columns.Select(BuildColumnDefinition).ToList();
-        var primaryKeyColumns = expression.Columns.Where(c => c.IsPrimaryKey).Select(c => QuoteIdentifier(c.Name)).ToList();
+        var hasIdentityColumn = expression.Columns.Any(c => c.IsIdentity);
+        var primaryKeyColumns = expression.Columns
+            .Where(c => c.IsPrimaryKey && !c.IsIdentity)
+            .Select(c => QuoteIdentifier(c.Name))
+            .ToList();
 
-        if (primaryKeyColumns.Count > 0)
+        if (!hasIdentityColumn && primaryKeyColumns.Count > 0)
         {
             columns.Add($"PRIMARY KEY ({string.Join(", ", primaryKeyColumns)})");
         }
@@ -241,6 +261,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(CreateForeignKeyExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY", "Define foreign keys in CREATE TABLE statements or recreate the table.");
+        }
+
         var foreignKey = expression.ForeignKey;
         var fkColumns = string.Join(", ", foreignKey.ForeignColumns.Select(QuoteIdentifier));
         var pkColumns = string.Join(", ", foreignKey.PrimaryColumns.Select(QuoteIdentifier));
@@ -251,6 +276,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(DeleteForeignKeyExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... DROP CONSTRAINT", "Recreate the table to remove foreign keys.");
+        }
+
         var foreignKey = expression.ForeignKey;
         Execute($"ALTER TABLE {QuoteIdentifier(foreignKey.ForeignTable)} DROP CONSTRAINT {QuoteIdentifier(foreignKey.Name)}");
     }
@@ -297,6 +327,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(AlterDefaultConstraintExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... ALTER COLUMN ... SET DEFAULT", "Recreate the table to change default constraints.");
+        }
+
         Execute($"ALTER TABLE {QuoteIdentifier(expression.TableName)} ALTER COLUMN {QuoteIdentifier(expression.ColumnName)} SET DEFAULT {FormatValue(expression.DefaultValue)}");
     }
 
@@ -355,6 +390,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(CreateSequenceExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("CREATE SEQUENCE", "Use INTEGER PRIMARY KEY columns instead of standalone sequences.");
+        }
+
         var sequence = expression.Sequence;
         var start = sequence.StartWith ?? 1;
         var increment = sequence.Increment ?? 1;
@@ -364,12 +404,22 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(DeleteSequenceExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("DROP SEQUENCE", "SQLite-style engines do not support standalone sequences.");
+        }
+
         Execute($"DROP SEQUENCE IF EXISTS {QuoteIdentifier(expression.SequenceName)}");
     }
 
     /// <inheritdoc />
     public void Process(CreateConstraintExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... ADD CONSTRAINT", "Define primary key and unique constraints in CREATE TABLE statements or recreate the table.");
+        }
+
         var constraint = expression.Constraint;
         var columns = string.Join(", ", constraint.Columns.Select(QuoteIdentifier));
 
@@ -391,6 +441,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(DeleteConstraintExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... DROP CONSTRAINT", "Recreate the table to remove constraints.");
+        }
+
         var constraint = expression.Constraint;
         Execute($"ALTER TABLE {QuoteIdentifier(constraint.TableName)} DROP CONSTRAINT {QuoteIdentifier(constraint.ConstraintName)}");
     }
@@ -398,6 +453,11 @@ public sealed class SharpCoreDbProcessor(
     /// <inheritdoc />
     public void Process(DeleteDefaultConstraintExpression expression)
     {
+        if (_useSqliteSyntax)
+        {
+            throw CreateUnsupportedSqliteOperationException("ALTER TABLE ... ALTER COLUMN ... DROP DEFAULT", "Recreate the table to remove default constraints.");
+        }
+
         Execute($"ALTER TABLE {QuoteIdentifier(expression.TableName)} ALTER COLUMN {QuoteIdentifier(expression.ColumnName)} DROP DEFAULT");
     }
 
@@ -413,10 +473,25 @@ public sealed class SharpCoreDbProcessor(
             return objectDict.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
+        if (row is IEnumerable<KeyValuePair<string, object?>> nullablePairs)
+        {
+            return nullablePairs.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (row is IEnumerable<KeyValuePair<string, object>> pairs)
+        {
+            return pairs.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
         var valuesProperty = row.GetType().GetProperty("Values");
         if (valuesProperty?.GetValue(row) is IDictionary<string, object?> rowValues)
         {
             return new Dictionary<string, object?>(rowValues, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (valuesProperty?.GetValue(row) is IDictionary<string, object> objectRowValues)
+        {
+            return objectRowValues.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
         throw new NotSupportedException($"Unsupported data row type '{row.GetType().FullName}'.");
@@ -451,10 +526,6 @@ public sealed class SharpCoreDbProcessor(
         {
             builder.Append(" PRIMARY KEY AUTOINCREMENT");
         }
-        else if (column.IsPrimaryKey)
-        {
-            builder.Append(" PRIMARY KEY");
-        }
 
         if (column.IsUnique)
         {
@@ -466,7 +537,7 @@ public sealed class SharpCoreDbProcessor(
             builder.Append(" NOT NULL");
         }
 
-        if (column.DefaultValue is not null)
+        if (column.DefaultValue is not null && column.DefaultValue is not ColumnDefinition.UndefinedDefaultValue)
         {
             builder.Append(" DEFAULT ");
             builder.Append(FormatValue(column.DefaultValue));
@@ -506,9 +577,48 @@ public sealed class SharpCoreDbProcessor(
             DateTimeOffset dateTimeOffset => $"'{dateTimeOffset:O}'",
             Guid guid => $"'{guid:D}'",
             byte[] bytes => $"X'{Convert.ToHexString(bytes)}'",
+            SystemMethods systemMethod => FormatSystemMethod(systemMethod),
+            Enum enumValue => FormatEnumValue(enumValue),
             IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
             _ => $"'{EscapeSql(value.ToString() ?? string.Empty)}'"
         };
+    }
+
+    private static string FormatEnumValue(Enum value)
+    {
+        var underlyingType = Enum.GetUnderlyingType(value.GetType());
+        var numericValue = Convert.ChangeType(value, underlyingType, CultureInfo.InvariantCulture);
+        return Convert.ToString(numericValue, CultureInfo.InvariantCulture) ?? "0";
+    }
+
+    private static string FormatSystemMethod(SystemMethods value)
+    {
+        return value.ToString() switch
+        {
+            "CurrentDateTime" or "CurrentUTCDateTime" => "CURRENT_TIMESTAMP",
+            "CurrentDate" => "CURRENT_DATE",
+            "CurrentTime" => "CURRENT_TIME",
+            _ => throw new NotSupportedException($"System method '{value}' is not supported by the SharpCoreDB migration processor.")
+        };
+    }
+
+    private static bool HasSqliteSyntaxSwitch(string? providerSwitches)
+    {
+        if (string.IsNullOrWhiteSpace(providerSwitches))
+        {
+            return false;
+        }
+
+        return providerSwitches.Split([';', ','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Any(static part => part.Equals("sqlite", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("syntax=sqlite", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("dialect=sqlite", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("compatibility=sqlite", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static NotSupportedException CreateUnsupportedSqliteOperationException(string operation, string details)
+    {
+        return new NotSupportedException($"{operation} is not supported by the SharpCoreDB migration processor when SQLite syntax compatibility is enabled. {details}");
     }
 
     private static string EscapeSql(string value) => value.Replace("'", "''", StringComparison.Ordinal);

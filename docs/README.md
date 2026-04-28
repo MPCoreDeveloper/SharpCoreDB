@@ -6,7 +6,7 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.1`)
 
 - `INDEX.md` - Canonical documentation index.
 - `FEATURE_MATRIX_v1.7.1.md` - Consolidated feature coverage by package.
-- `PROJECT_STATUS.md` - Current project status.
+- `PROJECT_STATUS.md` - Current project status and upcoming roadmap TODOs.
 - `IMPLEMENTATION_AUDIT_v1.7.1.md` - Repository-wide implementation audit.
 - `../README.md` - Product overview and quick start.
 
@@ -42,4 +42,5 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.1`)
 ## Cleanup policy
 
 Obsolete phase-status, kickoff, duplicate, and superseded planning docs are removed during maintenance. Historical snapshots are not canonical product docs unless they are explicitly linked from `INDEX.md`.
+
 

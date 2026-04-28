@@ -45,3 +45,10 @@ Detailed findings are documented in:
 - ✅ `#123` DatabaseRegistry runtime attach/detach APIs — completed and closed.
 - ✅ `#122` Runtime tenant database provisioning APIs (gRPC + REST) — completed and closed.
 - ✅ `#121` Tenant catalog in master database for SaaS lifecycle metadata — completed and closed.
+
+## Roadmap / TODO (v1.7.2)
+
+- [ ] **Single-file metadata parity:** Make `SingleFileDatabase` explicitly implement `IMetadataProvider` to align metadata discovery behavior with directory-mode `Database`.
+  - **Why:** some consumers probe metadata with `db is IMetadataProvider`; explicit implementation improves compatibility and predictability.
+  - **Scope:** keep `IDatabase.GetTables()` / `GetColumns()` as canonical path, add explicit `IMetadataProvider` contract on single-file runtime type.
+  - **Acceptance:** probing via `IMetadataProvider` works consistently for both directory and single-file databases.

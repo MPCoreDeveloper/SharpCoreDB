@@ -106,6 +106,11 @@ public static class SharpCoreDBFluentMigratorExtensions
             {
                 options.ConnectionString = "sharpcoredb://embedded";
             }
+
+            if (string.IsNullOrWhiteSpace(options.ProviderSwitches))
+            {
+                options.ProviderSwitches = "syntax=sqlite";
+            }
         });
 
         return builder;

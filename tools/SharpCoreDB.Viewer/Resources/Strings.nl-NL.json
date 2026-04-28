@@ -139,5 +139,14 @@
   "DiagnosticsImportTooltip": "Een eerder geëxporteerde diagnostische snapshot laden uit een JSON-bestand",
   "DiagnosticsImported": "Geïmporteerde snapshot bekijken: {0}",
   "DiagnosticsImportedNotice": "Geïmporteerde snapshot — beheersacties zijn niet beschikbaar.",
-  "ErrorImportFailed": "Importeren mislukt: {0}"
+  "ErrorImportFailed": "Importeren mislukt: {0}",
+  "DatabaseObjects": "Database-objecten",
+  "ObjectFilterPlaceholder": "Filter tabellen/views...",
+  "PreviewObject": "Object bekijken",
+  "NoObjectSelected": "Selecteer een tabel of view om metadata te bekijken.",
+  "ObjectTypeTable": "Tabel",
+  "ObjectTypeView": "View",
+  "ObjectMetadataSummary": "{1} '{0}': {2} kolom(men), {3} index(en), {4} trigger(s)",
+  "ObjectMetadataLoadFailed": "Laden van objectmetadata mislukt: {0}",
+  "ErrorObjectLoadFailed": "Laden van database-objecten mislukt: {0}"
 }

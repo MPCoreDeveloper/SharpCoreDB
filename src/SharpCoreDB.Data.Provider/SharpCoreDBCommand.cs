@@ -229,61 +229,47 @@ public sealed class SharpCoreDBCommand : DbCommand
 #if DEBUG
                 System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Detected table list query");
                 System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Database type: {db.GetType().Name}");
-                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] IMetadataProvider: {db is IMetadataProvider}");
 #endif
-                
-                // Redirect to IMetadataProvider.GetTables()
-                if (db is IMetadataProvider metadata)
-                {
-                    var tables = metadata.GetTables();
-                    
+
+                var tables = db.GetTables();
+
 #if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] GetTables() returned {tables?.Count ?? 0} tables");
+                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] GetTables() returned {tables?.Count ?? 0} tables");
 #endif
-                    
-                    // Convert to the format expected by SQLite queries
-                    var results = new List<Dictionary<string, object>>();
-                    
-                    if (tables != null && tables.Count > 0)
+
+                var results = new List<Dictionary<string, object>>();
+
+                if (tables != null && tables.Count > 0)
+                {
+                    foreach (var table in tables)
                     {
-                        foreach (var table in tables)
+#if DEBUG
+                        System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Table: {table.Name}, Type: {table.Type}");
+#endif
+                        results.Add(new Dictionary<string, object>
                         {
-#if DEBUG
-                            System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Table: {table.Name}, Type: {table.Type}");
-#endif
-                            results.Add(new Dictionary<string, object>
-                            {
-                                ["name"] = table.Name ?? string.Empty,
-                                ["type"] = table.Type ?? "TABLE"
-                            });
-                        }
+                            ["name"] = table.Name ?? string.Empty,
+                            ["type"] = table.Type ?? "TABLE"
+                        });
                     }
-                    
-#if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Returning {results.Count} rows");
-#endif
-                    
-                    // Return empty result set if no tables (this is valid - new database)
-                    return new SharpCoreDBDataReader(results, behavior);
                 }
-                else
-                {
+
 #if DEBUG
-                    System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] ERROR: Database does not implement IMetadataProvider!");
+                System.Diagnostics.Debug.WriteLine($"[ExecuteSystemTableQuery] Returning {results.Count} rows");
 #endif
-                }
+
+                return new SharpCoreDBDataReader(results, behavior);
             }
-            
+
             // Check if this is a column list query (pragma_table_info or similar)
             if (commandTextUpper.Contains("PRAGMA") || commandTextUpper.Contains("TABLE_INFO"))
             {
-                // Extract table name from query (simplified parsing)
                 var tableName = ExtractTableNameFromPragma(CommandText!);
-                
-                if (!string.IsNullOrEmpty(tableName) && db is IMetadataProvider metadata)
+
+                if (!string.IsNullOrEmpty(tableName))
                 {
-                    var columns = metadata.GetColumns(tableName);
-                    
+                    var columns = db.GetColumns(tableName);
+
                     var results = new List<Dictionary<string, object>>();
                     foreach (var column in columns)
                     {
@@ -297,7 +283,7 @@ public sealed class SharpCoreDBCommand : DbCommand
                             ["pk"] = 0
                         });
                     }
-                    
+
                     return new SharpCoreDBDataReader(results, behavior);
                 }
             }

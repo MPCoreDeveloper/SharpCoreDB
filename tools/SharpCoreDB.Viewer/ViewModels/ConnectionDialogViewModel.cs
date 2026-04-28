@@ -80,27 +80,28 @@ public partial class ConnectionDialogViewModel : ViewModelBase
             ShowFormatSelector = true;
             return;
         }
-        
+
+        var trimmed = value.Trim().Trim('"');
+
         // Auto-detect format from extension
-        if (value.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
+        if (trimmed.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
         {
             SelectedFormat = DatabaseFormatType.SingleFile;
             ShowFormatSelector = false;
         }
-        else if (File.Exists(value))
+        else if (Path.HasExtension(trimmed) && !Directory.Exists(trimmed))
         {
-            // File without .scdb extension = invalid
-            ShowFormatSelector = true;
+            // Any file-like path is treated as single-file target
+            SelectedFormat = DatabaseFormatType.SingleFile;
+            ShowFormatSelector = false;
         }
-        else if (Directory.Exists(value))
+        else if (Directory.Exists(trimmed))
         {
-            // Existing directory = directory format
             SelectedFormat = DatabaseFormatType.Directory;
             ShowFormatSelector = false;
         }
         else
         {
-            // New path - allow format selection
             ShowFormatSelector = true;
         }
     }
@@ -242,8 +243,7 @@ public partial class ConnectionDialogViewModel : ViewModelBase
     private async Task Connect()
     {
         ErrorMessage = string.Empty;
-        
-        // Validate inputs
+
         if (string.IsNullOrWhiteSpace(DatabasePath))
         {
             ErrorMessage = _localization["ErrorDatabasePathRequired"];
@@ -260,45 +260,35 @@ public partial class ConnectionDialogViewModel : ViewModelBase
 
         try
         {
-            // Detect format and create connection string
-            var isSingleFile = DatabasePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase) ||
+            var pathInput = DatabasePath.Trim().Trim('"');
+            var isSingleFile = pathInput.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase) ||
+                               (Path.HasExtension(pathInput) && !Directory.Exists(pathInput)) ||
                                SelectedFormat == DatabaseFormatType.SingleFile;
-            
-            var isNewDatabase = !Directory.Exists(DatabasePath) && !File.Exists(DatabasePath);
-            
-            // Ensure correct extension for new single-file databases
-            if (isNewDatabase && isSingleFile && !DatabasePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
+
+            string normalizedPath;
+            if (isSingleFile)
             {
-                DatabasePath += ".scdb";
+                normalizedPath = NormalizeSingleFilePath(pathInput);
+                var parentDirectory = Path.GetDirectoryName(normalizedPath);
+                if (!string.IsNullOrWhiteSpace(parentDirectory))
+                {
+                    Directory.CreateDirectory(parentDirectory);
+                }
             }
-            
-            if (isNewDatabase)
+            else
             {
-                if (isSingleFile)
-                {
-                    // Create parent directory if needed
-                    var directory = Path.GetDirectoryName(DatabasePath);
-                    if (!string.IsNullOrEmpty(directory))
-                    {
-                        Directory.CreateDirectory(directory);
-                    }
-                }
-                else
-                {
-                    // Create directory for new database
-                    Directory.CreateDirectory(DatabasePath);
-                }
+                normalizedPath = NormalizeDirectoryPath(pathInput);
+                Directory.CreateDirectory(normalizedPath);
             }
 
-            // Create connection string with storage mode
+            DatabasePath = normalizedPath;
+
             var storageMode = isSingleFile ? "SingleFile" : "Directory";
             var connectionString = $"Path={DatabasePath};Password={Password};StorageMode={storageMode}";
 
-            // Create and test connection
             var connection = new SharpCoreDBConnection(connectionString);
             await connection.OpenAsync().ConfigureAwait(true);
 
-            // Success!
             Connection = connection;
             IsConnected = true;
             _settingsService.SaveRecentConnection(DatabasePath, storageMode);
@@ -306,40 +296,87 @@ public partial class ConnectionDialogViewModel : ViewModelBase
         }
         catch (SharpCoreDBException ex)
         {
-            // Check if error is related to password/decryption
-            if (ex.Message.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
-                ex.Message.Contains("password", StringComparison.OrdinalIgnoreCase) ||
-                (ex.InnerException?.Message.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (ex.InnerException?.Message.Contains("password", StringComparison.OrdinalIgnoreCase) ?? false))
+            var detailed = GetDetailedErrorMessage(ex);
+            if (detailed.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
+                detailed.Contains("password", StringComparison.OrdinalIgnoreCase))
             {
                 ErrorMessage = _localization["ErrorIncorrectPassword"];
             }
             else
             {
-                ErrorMessage = _localization.Format("ErrorConnectionFailed", ex.Message);
+                ErrorMessage = _localization.Format("ErrorConnectionFailed", detailed);
             }
+
             IsConnected = false;
         }
         catch (Exception ex)
         {
-            // Check inner exceptions for password-related errors
-            var errorMessage = ex.InnerException?.Message ?? ex.Message;
-            
-            if (errorMessage.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
-                errorMessage.Contains("password", StringComparison.OrdinalIgnoreCase))
+            var detailed = GetDetailedErrorMessage(ex);
+            if (detailed.Contains("decrypt", StringComparison.OrdinalIgnoreCase) ||
+                detailed.Contains("password", StringComparison.OrdinalIgnoreCase))
             {
                 ErrorMessage = _localization["ErrorIncorrectPassword"];
             }
             else
             {
-                ErrorMessage = _localization.Format("ErrorConnectionFailed", errorMessage);
+                ErrorMessage = _localization.Format("ErrorConnectionFailed", detailed);
             }
+
             IsConnected = false;
         }
         finally
         {
             IsConnecting = false;
         }
+    }
+
+    private static string NormalizeSingleFilePath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var trimmed = path.Trim().Trim('"');
+        var fullPath = Path.GetFullPath(trimmed);
+
+        if (!fullPath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
+        {
+            fullPath = Path.ChangeExtension(fullPath, ".scdb");
+        }
+
+        return fullPath;
+    }
+
+    private static string NormalizeDirectoryPath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var trimmed = path.Trim().Trim('"');
+        var fullPath = Path.GetFullPath(trimmed);
+
+        if (Path.HasExtension(fullPath))
+        {
+            throw new InvalidOperationException("Directory mode requires a folder path, not a file name. Use .scdb for single-file databases.");
+        }
+
+        return fullPath;
+    }
+
+    private static string GetDetailedErrorMessage(Exception ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+
+        var messages = new List<string>();
+        var current = ex;
+        while (current is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(current.Message))
+            {
+                messages.Add(current.Message.Trim());
+            }
+
+            current = current.InnerException!;
+        }
+
+        return messages.Count == 0 ? "Unknown error." : string.Join(" -> ", messages.Distinct(StringComparer.Ordinal));
     }
 
     [RelayCommand]
