@@ -39,6 +39,13 @@
                     <PathIcon Data="{StaticResource SettingsIcon}"/>
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem Header="Help">
+                <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource InfoIcon}"/>
+                </MenuItem.Icon>
+                <MenuItem Header="SQL Syntax Reference" Click="OnOpenSqlSyntaxReferenceClicked"/>
+                <MenuItem Header="User Manual" Click="OnOpenUserManualClicked"/>
+            </MenuItem>
         </Menu>
 
         <!-- Top Toolbar -->
@@ -125,6 +132,21 @@
                 <!-- Left Panel: Database Explorer -->
                 <Border Grid.Column="0" 
                         BorderThickness="0,0,1,0">
+                    <Border.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="New">
+                                <MenuItem Header="New Table..." Click="OnOpenCreateTableDialogClicked"/>
+                                <MenuItem Header="New Table from Template..." Click="OnOpenCreateTableFromTemplateClicked"/>
+                            </MenuItem>
+                            <MenuItem Header="Import">
+                                <MenuItem Header="CSV to New Table..." Click="OnImportCsvToNewTableClicked"/>
+                            </MenuItem>
+                            <Separator/>
+                            <MenuItem Header="Maintenance">
+                                <MenuItem Header="Refresh" Command="{Binding RefreshTablesCommand}"/>
+                            </MenuItem>
+                        </ContextMenu>
+                    </Border.ContextMenu>
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" 
                                     Orientation="Horizontal" 
@@ -135,17 +157,49 @@
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
-                        <ListBox ItemsSource="{Binding Tables}"
-                                 Margin="5">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
+
+                        <TreeView ItemsSource="{Binding ExplorerNodes}"
+                                  SelectedItem="{Binding SelectedExplorerNode}"
+                                  Margin="5">
+                            <TreeView.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="New">
+                                        <MenuItem Header="New Table..." Click="OnOpenCreateTableDialogClicked"/>
+                                        <MenuItem Header="New Table from Template..." Click="OnOpenCreateTableFromTemplateClicked"/>
+                                    </MenuItem>
+                                    <MenuItem Header="Import">
+                                        <MenuItem Header="CSV to New Table..." Click="OnImportCsvToNewTableClicked"/>
+                                    </MenuItem>
+                                    <Separator/>
+                                    <MenuItem Header="Maintenance">
+                                        <MenuItem Header="Refresh" Command="{Binding RefreshTablesCommand}"/>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </TreeView.ContextMenu>
+                            <TreeView.ItemTemplate>
+                                <TreeDataTemplate ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="5">
                                         <PathIcon Data="{StaticResource TableIcon}" Width="14" Height="14"/>
-                                        <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center"/>
+                                        <StackPanel.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Preview" Click="OnPreviewTableClicked"/>
+                                                <MenuItem Header="Select Top N" Click="OnSelectTopNTableClicked"/>
+                                                <MenuItem Header="Script" Click="OnScriptTableClicked"/>
+                                                <Separator/>
+                                                <MenuItem Header="Insert (SQL Template)" Click="OnInsertTemplateClicked"/>
+                                                <MenuItem Header="Update (SQL Template)" Click="OnUpdateTemplateClicked"/>
+                                                <MenuItem Header="Delete (SQL Template)" Click="OnDeleteTemplateClicked"/>
+                                                <Separator/>
+                                                <MenuItem Header="Open Design Table" Click="OnOpenDesignTableClicked"/>
+                                                <MenuItem Header="Rename" Click="OnRenameTableClicked"/>
+                                                <MenuItem Header="Drop Table" Click="OnDropTableClicked"/>
+                                            </ContextMenu>
+                                        </StackPanel.ContextMenu>
                                     </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                </TreeDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
                     </DockPanel>
                 </Border>
 
@@ -193,6 +247,34 @@
                             <TextBlock Text="{loc:Localize QueryResults}"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ResultMode}"
+                                       Opacity="0.75"
+                                       VerticalAlignment="Center"/>
+                            <Button Command="{Binding PreviewSelectedTableCommand}" IsEnabled="{Binding IsConnected}">
+                                <TextBlock Text="Preview"/>
+                            </Button>
+                            <Button Command="{Binding EnableResultEditingCommand}" IsEnabled="{Binding HasResults}">
+                                <TextBlock Text="Edit"/>
+                            </Button>
+                            <Button Command="{Binding AddResultRowCommand}" IsEnabled="{Binding IsResultEditable}">
+                                <TextBlock Text="Add"/>
+                            </Button>
+                            <Button Command="{Binding SaveSelectedResultRowCommand}" IsEnabled="{Binding IsResultEditable}">
+                                <TextBlock Text="Save"/>
+                            </Button>
+                            <Button Command="{Binding DeleteSelectedResultRowCommand}" IsEnabled="{Binding IsResultEditable}">
+                                <TextBlock Text="Delete"/>
+                            </Button>
+                            <Separator Width="1" Margin="6,0"/>
+                            <Button Command="{Binding PreviousResultPageCommand}" IsEnabled="{Binding CanGoPreviousPage}">
+                                <TextBlock Text="Prev"/>
+                            </Button>
+                            <Button Command="{Binding NextResultPageCommand}" IsEnabled="{Binding CanGoNextPage}">
+                                <TextBlock Text="Next"/>
+                            </Button>
+                            <Button Command="{Binding RefreshCurrentPreviewPageCommand}" IsEnabled="{Binding IsConnected}">
+                                <TextBlock Text="Refresh"/>
+                            </Button>
                         </StackPanel>
                         
                         <!-- Show placeholder when no results -->
@@ -211,9 +293,10 @@
                         
                         <!-- DataGrid MUST be last child in DockPanel to fill available space -->
                         <DataGrid ItemsSource="{Binding QueryResults}"
+                                  SelectedItem="{Binding SelectedResultRow}"
                                   IsVisible="True"
                                   AutoGenerateColumns="False"
-                                  IsReadOnly="True"
+                                  IsReadOnly="{Binding !IsResultEditable}"
                                   GridLinesVisibility="All"
                                   BorderThickness="1"
                                   Margin="10,0,10,10"

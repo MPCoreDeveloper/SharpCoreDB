@@ -2,6 +2,8 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using FluentMigrator;
+using FluentMigrator.Expressions;
+using FluentMigrator.Model;
 using FluentMigrator.Runner;
 using FluentMigrator.Runner.Initialization;
 using FluentMigrator.Runner.Processors;
@@ -18,6 +20,7 @@ namespace SharpCoreDB.Tests;
 public sealed class SharpCoreDbMigrationExecutorTests
 {
     private const string GrpcConnectionString = "Server=localhost;Port=5001;Database=master;SSL=false;Username=admin;Password=test";
+    private const string SqliteProviderSwitch = "syntax=sqlite";
 
     [Fact]
     public void ExecuteSql_WhenCustomExecutorRegistered_UsesCustomExecutorBeforeFallbacks()
@@ -40,6 +43,91 @@ public sealed class SharpCoreDbMigrationExecutorTests
         // Assert
         customExecutor.Verify(x => x.ExecuteSql("CREATE TABLE audit (id INT)"), Times.Once);
         Assert.Empty(fallbackConnection.ExecutedNonQuerySql);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigrator_WhenCalled_DefaultsProcessorOptionsToSqliteSyntax()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton<DbConnection>(new FakeDbConnection());
+        services.AddSharpCoreDBFluentMigrator();
+
+        // Act
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<IOptionsSnapshot<ProcessorOptions>>().Value;
+
+        // Assert
+        Assert.Equal(SqliteProviderSwitch, options.ProviderSwitches);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigrator_WhenProviderSwitchesAlreadyConfigured_PreservesExplicitValue()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton<DbConnection>(new FakeDbConnection());
+        services.AddSharpCoreDBFluentMigrator();
+        services.Configure<ProcessorOptions>(options => options.ProviderSwitches = "syntax=postgresql");
+
+        // Act
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<IOptionsSnapshot<ProcessorOptions>>().Value;
+
+        // Assert
+        Assert.Equal("syntax=postgresql", options.ProviderSwitches);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigrator_WhenResolvingProcessor_DoesNotEmitUndefinedDefaultOrDuplicatePrimaryKeyForSharpMigrationsTable()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var services = new ServiceCollection();
+        services.AddSingleton<DbConnection>(connection);
+        services.AddSharpCoreDBFluentMigrator();
+
+        // Act
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        _ = scope.ServiceProvider.GetRequiredService<IMigrationProcessor>();
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.DoesNotContain("UndefinedDefaultValue", sql, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(sql, "PRIMARY KEY"));
+        Assert.Contains("CREATE TABLE IF NOT EXISTS __SharpMigrations", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddSharpCoreDBFluentMigrator_WhenUsingDefaultSqliteCompatibility_RejectsSqliteUnsupportedAlterColumn()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton<DbConnection>(new FakeDbConnection());
+        services.AddSharpCoreDBFluentMigrator();
+
+        // Act
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var processor = scope.ServiceProvider.GetRequiredService<IMigrationProcessor>();
+        var expression = new AlterColumnExpression
+        {
+            TableName = "Users",
+            Column = new ColumnDefinition
+            {
+                Name = "Name",
+                Type = DbType.String,
+                IsNullable = false
+            }
+        };
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -598,6 +686,363 @@ public sealed class SharpCoreDbMigrationExecutorTests
 
         // Assert
         Assert.Throws<ArgumentException>(action);
+    }
+
+    [Fact]
+    public void ProcessorCreateTable_WhenPrimaryKeyHasUndefinedDefault_DoesNotEmitSentinelOrDuplicatePrimaryKey()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new CreateTableExpression
+        {
+            TableName = "__SharpMigrations",
+            Columns =
+            [
+                new ColumnDefinition
+                {
+                    Name = "Version",
+                    Type = DbType.Int64,
+                    IsPrimaryKey = true,
+                    IsNullable = false,
+                    DefaultValue = new ColumnDefinition.UndefinedDefaultValue()
+                }
+            ]
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.DoesNotContain("UndefinedDefaultValue", sql, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(sql, "PRIMARY KEY"));
+        Assert.Contains("PRIMARY KEY (\"Version\")", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateTable_WhenIdentityColumnPresent_UsesInlinePrimaryKeyOnly()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new CreateTableExpression
+        {
+            TableName = "Users",
+            Columns =
+            [
+                new ColumnDefinition
+                {
+                    Name = "Id",
+                    Type = DbType.Int64,
+                    IsIdentity = true,
+                    IsPrimaryKey = true,
+                    IsNullable = false
+                },
+                new ColumnDefinition
+                {
+                    Name = "Name",
+                    Type = DbType.String,
+                    IsNullable = false
+                }
+            ]
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("\"Id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL", sql, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(sql, "PRIMARY KEY"));
+    }
+
+    [Fact]
+    public void ProcessorInsertData_WhenEnumValueProvided_EmitsUnderlyingNumericLiteral()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new InsertDataExpression
+        {
+            TableName = "Users"
+        };
+        expression.Rows.Add(new InsertionDataDefinition
+        {
+            new KeyValuePair<string, object>("Status", TestStatus.Active)
+        });
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("VALUES (1)", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateSchema_WhenSchemaProvidedWithoutSqliteSyntax_ExecutesSql()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new CreateSchemaExpression { SchemaName = "app" };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("CREATE SCHEMA IF NOT EXISTS \"app\"", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateSchema_WhenSchemaProvidedWithSqliteSyntax_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource(SqliteProviderSwitch);
+        var expression = new CreateSchemaExpression { SchemaName = "app" };
+
+        // Act
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorAlterColumn_WhenCalledWithoutSqliteSyntax_ExecutesSql()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new AlterColumnExpression
+        {
+            TableName = "Users",
+            Column = new ColumnDefinition
+            {
+                Name = "Name",
+                Type = DbType.String,
+                IsNullable = false
+            }
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("ALTER TABLE \"Users\" ALTER COLUMN \"Name\" TEXT NOT NULL", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorAlterColumn_WhenCalledWithSqliteSyntax_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource(SqliteProviderSwitch);
+        var expression = new AlterColumnExpression
+        {
+            TableName = "Users",
+            Column = new ColumnDefinition
+            {
+                Name = "Name",
+                Type = DbType.String,
+                IsNullable = false
+            }
+        };
+
+        // Act
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateForeignKey_WhenCalledWithoutSqliteSyntax_ExecutesSql()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new CreateForeignKeyExpression
+        {
+            ForeignKey = new ForeignKeyDefinition
+            {
+                Name = "FK_Users_Roles",
+                ForeignTable = "Users",
+                ForeignColumns = ["RoleId"],
+                PrimaryTable = "Roles",
+                PrimaryColumns = ["Id"]
+            }
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("ADD CONSTRAINT \"FK_Users_Roles\" FOREIGN KEY (\"RoleId\") REFERENCES \"Roles\" (\"Id\")", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateForeignKey_WhenCalledWithSqliteSyntax_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource(SqliteProviderSwitch);
+        var expression = new CreateForeignKeyExpression
+        {
+            ForeignKey = new ForeignKeyDefinition
+            {
+                Name = "FK_Users_Roles",
+                ForeignTable = "Users",
+                ForeignColumns = ["RoleId"],
+                PrimaryTable = "Roles",
+                PrimaryColumns = ["Id"]
+            }
+        };
+
+        // Act
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateSequence_WhenCalledWithoutSqliteSyntax_ExecutesSql()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        var expression = new CreateSequenceExpression
+        {
+            Sequence = new SequenceDefinition
+            {
+                Name = "seq_users"
+            }
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("CREATE SEQUENCE \"seq_users\" START WITH 1 INCREMENT BY 1", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorCreateSequence_WhenCalledWithSqliteSyntax_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource(SqliteProviderSwitch);
+        var expression = new CreateSequenceExpression
+        {
+            Sequence = new SequenceDefinition
+            {
+                Name = "seq_users"
+            }
+        };
+
+        // Act
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorDeleteDefaultConstraint_WhenCalledWithoutSqliteSyntax_ExecutesSql()
+    {
+        // Arrange
+        var connection = new FakeDbConnection();
+        var processor = CreateProcessorWithConnection(connection);
+        DeleteDefaultConstraintExpression expression = new()
+        {
+            TableName = "Users",
+            ColumnName = "Name"
+        };
+
+        // Act
+        processor.Process(expression);
+
+        // Assert
+        var sql = Assert.Single(connection.ExecutedNonQuerySql);
+        Assert.Contains("ALTER TABLE \"Users\" ALTER COLUMN \"Name\" DROP DEFAULT", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessorDeleteDefaultConstraint_WhenCalledWithSqliteSyntax_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var processor = CreateProcessorWithoutExecutionSource(SqliteProviderSwitch);
+        DeleteDefaultConstraintExpression expression = new()
+        {
+            TableName = "Users",
+            ColumnName = "Name"
+        };
+
+        // Act
+        var action = () => processor.Process(expression);
+
+        // Assert
+        var exception = Assert.Throws<NotSupportedException>(action);
+        Assert.Contains("SQLite syntax compatibility", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithConnection(DbConnection connection, string providerSwitches = "")
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(connection);
+
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(providerSwitches), executor);
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithoutExecutionSource(string providerSwitches = "")
+    {
+        var services = new ServiceCollection();
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(providerSwitches), executor);
+    }
+
+    private static ProcessorOptions CreateProcessorOptions(string providerSwitches = "")
+    {
+        return new ProcessorOptions
+        {
+            PreviewOnly = false,
+            ProviderSwitches = providerSwitches,
+            Timeout = null,
+        };
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        var count = 0;
+        var index = 0;
+        while ((index = source.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
+
+    private enum TestStatus
+    {
+        Unknown = 0,
+        Active = 1
     }
 
     private static SharpCoreDbProcessor CreateProcessorWithCustomExecutor(ISharpCoreDbMigrationSqlExecutor customExecutor)

@@ -36,6 +36,24 @@ Dapper ORM integration and ASP.NET Core health check extensions for SharpCoreDB.
 - **Dependency Injection**: Seamless DI integration
 - **Connection Pooling**: Built-in connection management
 - **Query Caching**: Automatic query plan caching
+- **FluentMigrator**: Defaults to SQLite-compatible migration processing for `AddSharpCoreDBFluentMigrator()`
+
+## FluentMigrator Default Behavior
+
+When you register FluentMigrator with:
+
+```csharp
+services.AddSharpCoreDBFluentMigrator();
+```
+
+the extension now aligns both sides of the pipeline by default:
+
+- FluentMigrator uses the `sqlite` generator
+- the SharpCoreDB processor defaults `ProviderSwitches` to `syntax=sqlite`
+
+This ensures SQLite-incompatible migration operations fail fast with clear errors instead of producing mismatched SQL behavior.
+
+To opt into a different syntax mode, configure `ProcessorOptions.ProviderSwitches` explicitly after registration.
 
 ## 💻 Quick Example
 
@@ -71,5 +89,6 @@ dotnet add package SharpCoreDB.Extensions --version 1.7.1
 ---
 
 **Version:** 1.7.1 | **Status:** ✅ Production Ready
+
 
 

@@ -139,5 +139,14 @@
   "DiagnosticsImportTooltip": "Einen zuvor exportierten Diagnosesnapshot aus einer JSON-Datei laden",
   "DiagnosticsImported": "Importierten Snapshot anzeigen: {0}",
   "DiagnosticsImportedNotice": "Importierter Snapshot — Verwaltungsaktionen sind nicht verfügbar.",
-  "ErrorImportFailed": "Import fehlgeschlagen: {0}"
+  "ErrorImportFailed": "Import fehlgeschlagen: {0}",
+  "DatabaseObjects": "Datenbankobjekte",
+  "ObjectFilterPlaceholder": "Tabellen/Views filtern...",
+  "PreviewObject": "Objektvorschau",
+  "NoObjectSelected": "Wählen Sie eine Tabelle oder View aus, um Metadaten anzuzeigen.",
+  "ObjectTypeTable": "Tabelle",
+  "ObjectTypeView": "View",
+  "ObjectMetadataSummary": "{1} '{0}': {2} Spalte(n), {3} Index(e), {4} Trigger",
+  "ObjectMetadataLoadFailed": "Objektmetadaten konnten nicht geladen werden: {0}",
+  "ErrorObjectLoadFailed": "Datenbankobjekte konnten nicht geladen werden: {0}"
 }

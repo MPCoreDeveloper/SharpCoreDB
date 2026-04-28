@@ -21,10 +21,42 @@ For embedded mode, migrations execute directly against a registered local:
 - `IDatabase` (preferred)
 - `DbConnection` (fallback)
 
+### What syntax mode does `AddSharpCoreDBFluentMigrator()` use by default?
+
+`AddSharpCoreDBFluentMigrator()` now defaults FluentMigrator to a SQLite-compatible pipeline unless you explicitly override it.
+
+By default:
+
+- FluentMigrator generator id is set to `sqlite`
+- processor `ProviderSwitches` is set to `syntax=sqlite` when no explicit syntax mode was supplied
+
+This aligns SQL generation with processor validation so SQLite-incompatible operations fail fast instead of producing mismatched runtime SQL.
+
+Examples of operations rejected in the default mode include:
+
+- `ALTER TABLE ... ALTER COLUMN`
+- `CREATE SEQUENCE`
+- `ALTER TABLE ... ADD CONSTRAINT`
+- `ALTER TABLE ... DROP CONSTRAINT`
+
 If this was the point of confusion, start here first:
 
 - [FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.1.md)
 - [FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.1.md)
+
+### How do I override the default syntax mode?
+
+Configure `ProcessorOptions.ProviderSwitches` after calling `AddSharpCoreDBFluentMigrator()`.
+
+```csharp
+services.AddSharpCoreDBFluentMigrator();
+services.Configure<ProcessorOptions>(options =>
+{
+    options.ProviderSwitches = "syntax=postgresql";
+});
+```
+
+Explicitly configured provider switches are preserved.
 
 ---
 

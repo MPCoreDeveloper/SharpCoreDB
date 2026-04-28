@@ -33,10 +33,46 @@ Convenience extensions package for `SharpCoreDB`.
 - Repository/bulk utility helpers for common workflows
 - Extension points for developer productivity in .NET applications
 
+## FluentMigrator
+
+`AddSharpCoreDBFluentMigrator()` uses FluentMigrator's SQLite generator by default and now also defaults the processor to SQLite syntax compatibility.
+
+This means SQLite-specific migration restrictions are enforced automatically for the standard registration path, which matches the generated SQL dialect and avoids unsupported DDL slipping through at runtime.
+
+```csharp
+services.AddSharpCoreDB();
+services.AddSingleton<DatabaseFactory>();
+services.AddSingleton<IDatabase>();
+services.AddSharpCoreDBFluentMigrator();
+```
+
+### Default behavior
+
+With the default registration:
+
+- FluentMigrator generator id defaults to `sqlite`
+- processor `ProviderSwitches` defaults to `syntax=sqlite`
+- SQLite-incompatible operations such as `ALTER COLUMN`, `CREATE SEQUENCE`, and `ALTER TABLE ... ADD CONSTRAINT` are rejected with a clear `NotSupportedException`
+
+### Override behavior
+
+If you need a different syntax mode, configure `ProcessorOptions.ProviderSwitches` explicitly after registration.
+
+```csharp
+services.AddSharpCoreDBFluentMigrator();
+services.Configure<ProcessorOptions>(options =>
+{
+    options.ProviderSwitches = "syntax=postgresql";
+});
+```
+
+Explicit configuration is preserved and is not overwritten by the extension.
+
 ## Changes in v1.7.1
 
 - Package/docs synchronized to `v1.7.1`
 - Guidance updated for optional migration/health scenarios
+- FluentMigrator now defaults to SQLite syntax compatibility when using `AddSharpCoreDBFluentMigrator()`
 - Inherits core reliability improvements from SharpCoreDB v1.7.1
 
 ## Installation
