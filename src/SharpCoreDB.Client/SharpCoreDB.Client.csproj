@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Client</AssemblyName>
-    <Version>1.7.2</Version>
+    <Version>1.8.0</Version>
     <Description>.NET client library for SharpCoreDB network server (ADO.NET-like API)</Description>
     
     <!-- NuGet packaging -->
@@ -42,7 +42,7 @@
     <ProjectReference Include="..\SharpCoreDB.Client.Protocol\SharpCoreDB.Client.Protocol.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
 
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB.Client.Protocol" Version="1.7.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Client.Protocol" Version="1.8.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
 

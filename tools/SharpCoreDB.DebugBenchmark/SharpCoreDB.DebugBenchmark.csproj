@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>14.0</LangVersion>
     <IsPackable>false</IsPackable>
-    <Version>1.7.2</Version>
+    <Version>1.8.0</Version>
     <PackageId>SharpCoreDB.DebugBenchmark</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>

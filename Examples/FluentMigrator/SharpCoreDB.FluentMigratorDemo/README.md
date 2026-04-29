@@ -7,7 +7,7 @@ This example demonstrates using [FluentMigrator](https://fluentmigrator.github.i
 - Registering `SharpCoreDB` and `FluentMigrator` side-by-side via DI
 - Running schema migrations against a `.scdb` file (no server required)
 - Handling of **quoted identifiers** — FluentMigrator generates SQL like  
-  `CREATE TABLE IF NOT EXISTS "Products" ("Id" INTEGER NOT NULL, ...)` which SharpCoreDB parses correctly as of v1.7.2
+  `CREATE TABLE IF NOT EXISTS "Products" ("Id" INTEGER NOT NULL, ...)` which SharpCoreDB parses correctly as of v1.8.0
 - Rollback and re-apply of migrations
 - Querying migrated + seeded data
 

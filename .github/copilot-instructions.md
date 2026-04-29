@@ -43,6 +43,7 @@
 - For the SharpCoreDB WebViewer, keep the implementation secure-by-default and, when integrating SafeWebCore, use the strict A+ settings/profile. Support both local database connections and network SharpCoreDB server connections, aiming to expose broad feature coverage from available SharpCoreDB NuGet capabilities.
 - For the table designer, provide a typed dropdown with all types supported by SharpCoreDB, explicitly including ULID and GUID.
 - Distinguish native SharpCoreDB syntax from PostgreSQL syntax and SQLite syntax; only apply SQLite-specific engine restrictions when SQLite syntax is explicitly relevant.
+- Use the full SqlParser for DDL in SingleFileDatabase to support advanced features like those in FluentMigrator.
 
 ## Asynchronous Programming Guidelines
 - When fixing cancellation token handling in parallel async methods that use `Parallel.ForEachAsync`, always wrap the parallel operation in a try-catch block to properly propagate `OperationCanceledException`. The `CancellationToken` passed to `ParallelOptions` will cause an `OperationCanceledException` to be thrown from `Parallel.ForEachAsync`, and this must be caught and re-thrown to ensure proper cancellation propagation to calling code.

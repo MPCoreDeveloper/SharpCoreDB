@@ -11,7 +11,7 @@
     <!-- This is a demo app, not a NuGet package -->
     <IsPackable>false</IsPackable>
     
-    <Version>1.7.2</Version>
+    <Version>1.8.0</Version>
     <PackageId>SharpCoreDB.Demo</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>

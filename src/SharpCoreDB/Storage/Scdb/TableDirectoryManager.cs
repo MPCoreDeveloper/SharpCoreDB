@@ -116,9 +116,6 @@ internal sealed class TableDirectoryManager : IDisposable
             PrimaryKeyIndexOffset = 0, // Will be set when PK index is created
             RecordCount = 0,
             ColumnCount = (uint)columnDefinitions.Count,
-            PrimaryKeyIndex = table.PrimaryKeyIndex,
-            StorageMode = 0, // Default to Columnar
-            Flags = (byte)TableFlags.None,
             HashIndexCount = (uint)indexDefinitions.Count(d => d.IndexType == 0),
             BTreeIndexCount = (uint)indexDefinitions.Count(d => d.IndexType == 1),
             ColumnDefsOffset = 0, // Will be set after storing column defs
@@ -542,3 +539,4 @@ internal sealed class TableDirectoryManager : IDisposable
         return Encoding.UTF8.GetString(span);
     }
 }
+

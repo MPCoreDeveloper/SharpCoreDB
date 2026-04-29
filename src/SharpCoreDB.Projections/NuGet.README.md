@@ -1,11 +1,11 @@
-# SharpCoreDB.Projections v1.7.2
+# SharpCoreDB.Projections v1.8.0
 
 Projection primitives for `SharpCoreDB.EventSourcing`.
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -16,15 +16,15 @@ Projection primitives for `SharpCoreDB.EventSourcing`.
 - Hosted worker orchestration
 - OpenTelemetry-ready projection metrics
 
-## Changes in v1.7.2
+## Changes in v1.8.0
 
-- Package/docs synchronized to `v1.7.2`
+- Package/docs synchronized to `v1.8.0`
 - Durable checkpointing and worker guidance clarified
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Projections --version 1.7.2
+dotnet add package SharpCoreDB.Projections --version 1.8.0
 ```
 
 ## Documentation

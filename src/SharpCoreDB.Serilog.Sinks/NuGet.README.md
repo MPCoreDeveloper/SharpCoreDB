@@ -1,18 +1,18 @@
-# SharpCoreDB.Serilog.Sinks v1.7.2
+# SharpCoreDB.Serilog.Sinks v1.8.0
 
 **Serilog Sink for SharpCoreDB**
 
 Efficient batch logging to SharpCoreDB with AES-256-GCM encryption and AppendOnly storage for maximum write speed.
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.7.2
+## ✨ What's New in v1.8.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.7.2
+- ✅ Inherits metadata improvements from SharpCoreDB v1.8.0
 - ✅ Efficient batch logging
 - ✅ Enterprise encryption
 - ✅ Production ready
@@ -49,13 +49,13 @@ Log.Error(ex, "An error occurred");
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Serilog.Sinks --version 1.7.2
+dotnet add package SharpCoreDB.Serilog.Sinks --version 1.8.0
 ```
 
-**Requires:** SharpCoreDB v1.7.2+, Serilog v2.13+
+**Requires:** SharpCoreDB v1.8.0+, Serilog v2.13+
 
 ---
 
-**Version:** 1.7.2 | **Status:** ✅ Production Ready
+**Version:** 1.8.0 | **Status:** ✅ Production Ready
 
 

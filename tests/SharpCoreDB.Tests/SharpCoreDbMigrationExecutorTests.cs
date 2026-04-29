@@ -1360,7 +1360,7 @@ public sealed class Issue227IntegrationTests : IDisposable
         var migrationRunner = provider.GetRequiredService<IMigrationRunner>();
 
         // Act & Assert — must not throw InvalidOperationException: Invalid CREATE TABLE syntax
-        var ex = Record.Exception(() => migrationRunner.MigrateUp());
+        var ex = Record.Exception(() => migrationRunner.MigrateUp(1));
         Assert.Null(ex);
 
         // Verify the migration was recorded in the version table
@@ -1395,10 +1395,237 @@ public sealed class Issue227IntegrationTests : IDisposable
         var migrationRunner = provider.GetRequiredService<IMigrationRunner>();
 
         // Act
-        migrationRunner.MigrateUp();
+        migrationRunner.MigrateUp(1);
 
-        // Assert — Products table is queryable after migration
-        var result = database.ExecuteQuery("SELECT * FROM Products");
-        Assert.NotNull(result);
+        // Assert — table created by migration is queryable with quoted identifiers
+        database.ExecuteSQL("INSERT INTO \"Products\" (\"Id\", \"Name\", \"Price\") VALUES (1, 'Alice', 9.99)");
+        var result = database.ExecuteQuery("SELECT \"Id\", \"Name\", \"Price\" FROM \"Products\"");
+        Assert.Single(result);
+        Assert.Equal("Alice", result[0]["Name"]?.ToString());
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithCustomExecutor(ISharpCoreDbMigrationSqlExecutor customExecutor)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(customExecutor);
+
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(), executor);
+    }
+
+    private static SharpCoreDbProcessor CreateProcessorWithoutExecutionSource()
+    {
+        var services = new ServiceCollection();
+        var provider = services.BuildServiceProvider();
+        var executor = new SharpCoreDbMigrationExecutor(provider);
+
+        return new SharpCoreDbProcessor("sharpcoredb://test", CreateProcessorOptions(), executor);
+    }
+
+    private static ProcessorOptions CreateProcessorOptions()
+    {
+        return new ProcessorOptions
+        {
+            PreviewOnly = false,
+            ProviderSwitches = string.Empty,
+            Timeout = null,
+        };
+    }
+}
+
+/// <summary>
+/// End-to-end FluentMigrator regression tests for issue #221 unsupported SQLite DDL families.
+/// These tests validate fail-fast behavior through IMigrationRunner, not only direct processor calls.
+/// </summary>
+public sealed class Issue221UnsupportedDdlIntegrationTests : IDisposable
+{
+    private readonly string _dbPath;
+
+    public Issue221UnsupportedDdlIntegrationTests()
+    {
+        _dbPath = Path.Combine(Path.GetTempPath(), $"issue221_{Guid.NewGuid():N}.scdb");
+    }
+
+    public void Dispose()
+    {
+        try { if (File.Exists(_dbPath)) File.Delete(_dbPath); } catch { /* ignore */ }
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedAlterColumn_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221110);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedSchemaOperation_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221120);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedForeignKeyOperation_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221130);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedSequenceOperation_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221140);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedConstraintOperation_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221150);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MigrateUpTo_UnsupportedDefaultConstraintOperation_ThrowsNotSupportedException()
+    {
+        var ex = RunMigrateUpToAndCaptureException(221160);
+        var notSupported = Assert.IsType<NotSupportedException>(ex);
+        Assert.Contains("SQLite syntax compatibility", notSupported.Message, StringComparison.Ordinal);
+    }
+
+    private Exception RunMigrateUpToAndCaptureException(long targetVersion)
+    {
+        var dbOptions = DatabaseOptions.CreateSingleFileDefault();
+
+        var bootstrapServices = new ServiceCollection();
+        bootstrapServices.AddSharpCoreDB();
+        var bootstrapProvider = bootstrapServices.BuildServiceProvider();
+        var factory = bootstrapProvider.GetRequiredService<DatabaseFactory>();
+        var database = factory.CreateWithOptions(_dbPath, "test-password", dbOptions);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+        services.AddSingleton(database);
+        services.AddSharpCoreDBFluentMigrator(runner =>
+            runner
+                .AddSQLite()
+                .ScanIn(typeof(Issue221_BaseSchema).Assembly)
+                .For.Migrations());
+
+        using var provider = services.BuildServiceProvider();
+        var migrationRunner = provider.GetRequiredService<IMigrationRunner>();
+
+        return Record.Exception(() => migrationRunner.MigrateUp(targetVersion))
+            ?? throw new Xunit.Sdk.XunitException("Expected migration to throw NotSupportedException, but no exception was thrown.");
+    }
+}
+
+[Migration(221100, "Issue #221 base schema")]
+public sealed class Issue221_BaseSchema : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.Table("Roles")
+            .WithColumn("Id").AsInt64().PrimaryKey().NotNullable()
+            .WithColumn("Name").AsString(100).NotNullable();
+
+        Create.Table("Users")
+            .WithColumn("Id").AsInt64().PrimaryKey().NotNullable()
+            .WithColumn("Name").AsString(100).NotNullable().WithDefaultValue("unknown")
+            .WithColumn("RoleId").AsInt64().Nullable();
+    }
+
+    public override void Down()
+    {
+        Delete.Table("Users");
+        Delete.Table("Roles");
+    }
+}
+
+[Migration(221110, "Issue #221 unsupported ALTER COLUMN")]
+public sealed class Issue221_UnsupportedAlterColumn : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Alter.Table("Users").AlterColumn("Name").AsString(200).NotNullable();
+    }
+
+    public override void Down()
+    {
+    }
+}
+
+[Migration(221120, "Issue #221 unsupported CREATE SCHEMA")]
+public sealed class Issue221_UnsupportedCreateSchema : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.Schema("app");
+    }
+
+    public override void Down()
+    {
+    }
+}
+
+[Migration(221130, "Issue #221 unsupported CREATE FOREIGN KEY")]
+public sealed class Issue221_UnsupportedCreateForeignKey : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.ForeignKey("FK_Users_Roles")
+            .FromTable("Users").ForeignColumn("RoleId")
+            .ToTable("Roles").PrimaryColumn("Id");
+    }
+
+    public override void Down()
+    {
+    }
+}
+
+[Migration(221140, "Issue #221 unsupported CREATE SEQUENCE")]
+public sealed class Issue221_UnsupportedCreateSequence : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.Sequence("seq_users");
+    }
+
+    public override void Down()
+    {
+    }
+}
+
+[Migration(221150, "Issue #221 unsupported CREATE CONSTRAINT")]
+public sealed class Issue221_UnsupportedCreateConstraint : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Create.UniqueConstraint("UQ_Users_Name").OnTable("Users").Column("Name");
+    }
+
+    public override void Down()
+    {
+    }
+}
+
+[Migration(221160, "Issue #221 unsupported DELETE DEFAULT CONSTRAINT")]
+public sealed class Issue221_UnsupportedDeleteDefaultConstraint : global::FluentMigrator.Migration
+{
+    public override void Up()
+    {
+        Delete.DefaultConstraint().OnTable("Users").OnColumn("Name");
+    }
+
+    public override void Down()
+    {
     }
 }

@@ -1,11 +1,11 @@
-# SharpCoreDB.Server v1.7.2
+# SharpCoreDB.Server v1.8.0
 
 Network database server package for `SharpCoreDB`.
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -16,16 +16,16 @@ Network database server package for `SharpCoreDB`.
 - Multi-database hosting and production operations hooks
 - Health checks, metrics, and deployment options (Docker/services)
 
-## Changes in v1.7.2
+## Changes in v1.8.0
 
-- Package/docs synchronized to `v1.7.2`
+- Package/docs synchronized to `v1.8.0`
 - Server documentation updated to current production feature set
 - Client/SDK references aligned with current ecosystem packages
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.7.2
+dotnet add package SharpCoreDB.Server --version 1.8.0
 ```
 
 ## Documentation

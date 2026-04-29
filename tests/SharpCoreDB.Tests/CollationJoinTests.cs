@@ -388,6 +388,8 @@ public sealed class CollationJoinTests
         public void TrackColumnUsage(string columnName) { }
         public void TrackAllColumnsUsage() { }
         public void AddColumn(ColumnDefinition columnDef) => throw new NotImplementedException();
+        public void DropColumn(string columnName) => throw new NotImplementedException();
+        public void RenameColumn(string oldName, string newName) => throw new NotImplementedException();
         public void Flush() { }
         public long GetCachedRowCount() => 0;
         public void RefreshRowCount() { }

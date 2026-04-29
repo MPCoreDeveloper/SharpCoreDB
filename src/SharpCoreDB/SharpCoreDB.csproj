@@ -31,13 +31,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>1.7.2</Version>
+    <Version>1.8.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.7.1: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.8.0: Synchronized release with the latest SharpCoreDB features, fixes, and documentation updates.</PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

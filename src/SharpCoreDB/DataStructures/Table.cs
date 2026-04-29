@@ -442,6 +442,35 @@ public partial class Table : ITable, IDisposable
         // For now, just schema changes
     }
 
+    /// <inheritdoc />
+    public void DropColumn(string columnName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
+        var idx = Columns.FindIndex(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0)
+            throw new InvalidOperationException($"Column '{columnName}' does not exist in table '{Name}'.");
+
+        if (idx == PrimaryKeyIndex)
+            throw new InvalidOperationException($"Cannot drop primary key column '{columnName}'.");
+
+        Columns.RemoveAt(idx);
+        ColumnTypes.RemoveAt(idx);
+        if (idx < IsAuto.Count) IsAuto.RemoveAt(idx);
+        if (idx < IsNotNull.Count) IsNotNull.RemoveAt(idx);
+        if (idx < DefaultValues.Count) DefaultValues.RemoveAt(idx);
+        if (idx < DefaultExpressions.Count) DefaultExpressions.RemoveAt(idx);
+        if (idx < ColumnCheckExpressions.Count) ColumnCheckExpressions.RemoveAt(idx);
+        if (idx < ColumnCollations.Count) ColumnCollations.RemoveAt(idx);
+        if (idx < ColumnLocaleNames.Count) ColumnLocaleNames.RemoveAt(idx);
+
+        if (PrimaryKeyIndex > idx)
+            PrimaryKeyIndex--;
+
+        UniqueConstraints.RemoveAll(uc => uc.Any(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase)));
+        ForeignKeys.RemoveAll(fk => fk.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>
     /// Parses a string data type to DataType enum.
     /// </summary>

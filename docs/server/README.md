@@ -2,9 +2,9 @@
 
 SharpCoreDB Server turns SharpCoreDB into a **real network database server** for .NET 10.
 
-**Version line:** `v1.7.2`
+**Version line:** `v1.8.0`
 
-## v1.7.2 highlights
+## v1.8.0 highlights
 
 - gRPC-first server runtime over HTTPS (HTTP/2 + HTTP/3)
 - Multi-database hosting with system-database security model
@@ -22,7 +22,7 @@ In server mode, SharpCoreDB runs as a network service instead of an in-process e
 
 ## Start Here
 
-- `../FEATURE_MATRIX_v1.7.2.md` — package feature coverage
+- `../FEATURE_MATRIX_v1.8.0.md` — package feature coverage
 - `QUICKSTART.md` — first server startup in minutes
 - `INSTALLATION.md` — platform-specific installation and service setup
 - `CONFIGURATION_SCHEMA.md` — full server configuration reference

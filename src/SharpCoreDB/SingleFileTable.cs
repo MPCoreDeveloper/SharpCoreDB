@@ -25,7 +25,7 @@ using System.Runtime.InteropServices;
 /// Table implementation for single-file storage.
 /// Uses an in-memory cache with explicit flush to the storage provider.
 /// </summary>
-public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable
+public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable, ITableSchemaApplicator
 {
     private readonly IStorageProvider _storageProvider = storageProvider ?? throw new ArgumentNullException(nameof(storageProvider));
     private readonly Lock _tableLock = new();
@@ -638,6 +638,109 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         {
             FlushCache();
         }
+    }
+
+    /// <inheritdoc />
+    public void DropColumn(string columnName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
+        EnsureCacheLoaded();
+
+        lock (_tableLock)
+        {
+            var idx = Columns.FindIndex(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0)
+                throw new InvalidOperationException($"Column '{columnName}' does not exist in table '{Name}'.");
+
+            // Cannot drop the primary key column
+            if (idx == PrimaryKeyIndex)
+                throw new InvalidOperationException($"Cannot drop primary key column '{columnName}'.");
+
+            // Update schema lists
+            Columns.RemoveAt(idx);
+            ColumnTypes.RemoveAt(idx);
+            if (idx < IsAuto.Count) IsAuto.RemoveAt(idx);
+            if (idx < IsNotNull.Count) IsNotNull.RemoveAt(idx);
+            if (idx < DefaultValues.Count) DefaultValues.RemoveAt(idx);
+            if (idx < DefaultExpressions.Count) DefaultExpressions.RemoveAt(idx);
+            if (idx < ColumnCheckExpressions.Count) ColumnCheckExpressions.RemoveAt(idx);
+            if (idx < ColumnCollations.Count) ColumnCollations.RemoveAt(idx);
+            if (idx < ColumnLocaleNames.Count) ColumnLocaleNames.RemoveAt(idx);
+
+            // Adjust primary key index
+            if (PrimaryKeyIndex > idx)
+                PrimaryKeyIndex--;
+
+            // Remove the column from all cached rows
+            foreach (var row in _rowCache)
+            {
+                var actualKey = row.Keys.FirstOrDefault(k => k.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+                if (actualKey is not null)
+                    row.Remove(actualKey);
+            }
+
+            // Remove from unique constraints
+            UniqueConstraints.RemoveAll(uc => uc.Any(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase)));
+
+            // Remove from foreign keys
+            ForeignKeys.RemoveAll(fk => fk.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+
+            _isDirty = true;
+        }
+
+        if (AutoFlush)
+            FlushCache();
+    }
+
+    /// <inheritdoc />
+    public void RenameColumn(string oldName, string newName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(oldName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        EnsureCacheLoaded();
+
+        lock (_tableLock)
+        {
+            var idx = Columns.FindIndex(c => c.Equals(oldName, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0)
+                throw new InvalidOperationException($"Column '{oldName}' does not exist in table '{Name}'.");
+
+            if (Columns.Any(c => c.Equals(newName, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Column '{newName}' already exists in table '{Name}'.");
+
+            Columns[idx] = newName;
+
+            // Rename key in all cached rows
+            foreach (var row in _rowCache)
+            {
+                var actualKey = row.Keys.FirstOrDefault(k => k.Equals(oldName, StringComparison.OrdinalIgnoreCase));
+                if (actualKey is not null)
+                {
+                    var val = row[actualKey];
+                    row.Remove(actualKey);
+                    row[newName] = val;
+                }
+            }
+
+            // Update unique constraints
+            foreach (var uc in UniqueConstraints)
+            {
+                for (int i = 0; i < uc.Count; i++)
+                    if (uc[i].Equals(oldName, StringComparison.OrdinalIgnoreCase))
+                        uc[i] = newName;
+            }
+
+            // Update foreign keys
+            foreach (var fk in ForeignKeys.Where(fk => fk.ColumnName.Equals(oldName, StringComparison.OrdinalIgnoreCase)))
+                fk.ColumnName = newName;
+
+            _isDirty = true;
+        }
+
+        if (AutoFlush)
+            FlushCache();
     }
 
     /// <inheritdoc />

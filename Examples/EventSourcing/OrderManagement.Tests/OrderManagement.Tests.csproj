@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.7.2" />
+    <PackageReference Include="SharpCoreDB.EventSourcing" Version="1.8.0" />
   </ItemGroup>
 
   <!-- Include OrderManagement source files as links -->

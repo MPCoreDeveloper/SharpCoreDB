@@ -1,13 +1,13 @@
-# SharpCoreDB v1.7.2 - Production Database Engine
+# SharpCoreDB v1.8.0 - Production Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
 
-## What's New in v1.7.2
+## What's New in v1.8.0
 
-### v1.7.1 to v1.7.2
+### v1.7.2 to v1.8.0
 
 - **Auto-ROWID**: Tables without an explicit `PRIMARY KEY` get a hidden `_rowid` column (ULID). SQLite rowid semantics.
 - **GRAPH_RAG SQL clause**: New `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, `TOP_K`.
@@ -19,8 +19,8 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - `Microsoft.Extensions.Logging.Abstractions` bumped to **10.0.7**.
 - Bug fixes: IS NULL/IS NOT NULL unification, COALESCE() in SELECT, LINQ Convert, German locale matching, PAGE_BASED mixed-predicate scan.
 
-### 🔄 Synchronized 1.7.2 Release
-- **Unified Package Versioning** - Core, server, analytics, graph, event sourcing, projections, CQRS, and functional companion packages now ship on the same `1.7.2` release line
+### 🔄 Synchronized 1.8.0 Release
+- **Unified Package Versioning** - Core, server, analytics, graph, event sourcing, projections, CQRS, and functional companion packages now ship on the same `1.8.0` release line
 - **Documentation Refresh** - Installation guidance and package docs were updated to match the current feature and fix set
 - **Optional Package Maturity** - Event Sourcing, Projections, and CQRS docs now highlight durable snapshots, checkpointing, persistent outbox support, retry handling, and hosted workers
 
@@ -65,7 +65,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 
 This package installs the core database engine. Extensions available:
 
-**Functional Programming (NEW in v1.7.2):**
+**Functional Programming (NEW in v1.8.0):**
 - **SharpCoreDB.Functional** - Functional façade with `Option<T>`, `Fin<T>`, and `Seq<T>`-style APIs
 - **SharpCoreDB.Functional.Dapper** - Functional Dapper adapter module
 - **SharpCoreDB.Functional.EntityFrameworkCore** - Functional EF Core adapter module
@@ -171,16 +171,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.2
+dotnet add package SharpCoreDB --version 1.8.0
 ```
 
-**Optional companion packages introduced or highlighted in v1.7.2:**
+**Optional companion packages introduced or highlighted in v1.8.0:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.7.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.2
+dotnet add package SharpCoreDB.Functional --version 1.8.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.8.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.8.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
 ```
 
 ## 🔄 Upgrade from v1.3.5
@@ -188,7 +188,7 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.2
 **100% backward compatible** - No breaking changes!
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.2
+dotnet add package SharpCoreDB --version 1.8.0
 ```
 
 Your existing databases work as-is. New metadata is automatically compressed.
@@ -207,7 +207,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.7.2 (April 26, 2026)  
+**Latest Version:** 1.8.0 (April 26, 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,468+ (100% passing)  
 **Status:** ✅ Production Ready

@@ -2,13 +2,13 @@
 
 Network database server package for `SharpCoreDB`.
 
-**Version:** `v1.7.2`  
+**Version:** `v1.8.0`  
 **Package:** `SharpCoreDB.Server`
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -18,16 +18,16 @@ Network database server package for `SharpCoreDB`.
 - JWT auth, RBAC, TLS 1.2+, optional mTLS
 - Multi-database hosting and production operations support
 
-## Changes in v1.7.2
+## Changes in v1.8.0
 
-- Package/docs synchronized to `v1.7.2`
+- Package/docs synchronized to `v1.8.0`
 - Documentation aligned to production server capabilities
 - Companion client/SDK guidance updated for current release line
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.7.2
+dotnet add package SharpCoreDB.Server --version 1.8.0
 ```
 
 ## Documentation

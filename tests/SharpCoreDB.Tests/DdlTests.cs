@@ -386,4 +386,78 @@ public class DdlTests : IDisposable
         Assert.Single(results);
         Assert.Equal("Original", results[0]["value"]);
     }
+
+    // ==================== ALTER TABLE RENAME COLUMN TESTS ====================
+
+    [Fact]
+    public void AlterTable_RenameColumn_UpdatesColumnNameInSchema()
+    {
+        // Arrange
+        this.db.ExecuteSQL("CREATE TABLE employees (emp_id INTEGER PRIMARY KEY, emp_name TEXT)");
+        this.db.ExecuteSQL("INSERT INTO employees VALUES (1, 'Alice')");
+
+        // Act
+        this.db.ExecuteSQL("ALTER TABLE employees RENAME COLUMN emp_name TO full_name");
+
+        // Assert — renamed column is selectable
+        var results = this.db.ExecuteQuery("SELECT full_name FROM employees");
+        Assert.Single(results);
+        Assert.Equal("Alice", results[0]["full_name"]?.ToString());
+    }
+
+    [Fact]
+    public void AlterTable_RenameColumn_OldColumnNameNoLongerAccessible()
+    {
+        // Arrange
+        this.db.ExecuteSQL("CREATE TABLE products (id INTEGER PRIMARY KEY, desc TEXT)");
+        this.db.ExecuteSQL("INSERT INTO products VALUES (1, 'Widget')");
+
+        // Act
+        this.db.ExecuteSQL("ALTER TABLE products RENAME COLUMN desc TO description");
+
+        // Assert — schema has new name, old name gone
+        var results = this.db.ExecuteQuery("SELECT * FROM products");
+        Assert.Single(results);
+        Assert.True(results[0].ContainsKey("description"));
+        Assert.False(results[0].ContainsKey("desc"));
+    }
+
+    // ==================== ALTER TABLE DROP COLUMN TESTS ====================
+
+    [Fact]
+    public void AlterTable_DropColumn_RemovesColumnFromSchema()
+    {
+        // Arrange
+        this.db.ExecuteSQL("CREATE TABLE orders (order_id INTEGER PRIMARY KEY, item TEXT, temp_note TEXT)");
+        this.db.ExecuteSQL("INSERT INTO orders VALUES (1, 'Gear', 'ignore')");
+
+        // Act
+        this.db.ExecuteSQL("ALTER TABLE orders DROP COLUMN temp_note");
+
+        // Assert — dropped column absent from results
+        var results = this.db.ExecuteQuery("SELECT * FROM orders");
+        Assert.Single(results);
+        Assert.False(results[0].ContainsKey("temp_note"));
+        Assert.Equal("Gear", results[0]["item"]?.ToString());
+    }
+
+    [Fact]
+    public void AlterTable_DropColumn_PreservesRemainingData()
+    {
+        // Arrange
+        this.db.ExecuteSQL("CREATE TABLE logs (id INTEGER PRIMARY KEY, msg TEXT, debug TEXT)");
+        this.db.ExecuteBatchSQL([
+            "INSERT INTO logs VALUES (1, 'start', 'x')",
+            "INSERT INTO logs VALUES (2, 'stop', 'y')"
+        ]);
+
+        // Act
+        this.db.ExecuteSQL("ALTER TABLE logs DROP COLUMN debug");
+
+        // Assert — other columns intact
+        var results = this.db.ExecuteQuery("SELECT id, msg FROM logs ORDER BY id");
+        Assert.Equal(2, results.Count);
+        Assert.Equal("start", results[0]["msg"]?.ToString());
+        Assert.Equal("stop", results[1]["msg"]?.ToString());
+    }
 }

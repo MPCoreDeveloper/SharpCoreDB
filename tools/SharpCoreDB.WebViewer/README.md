@@ -1,4 +1,4 @@
-# SharpCoreDB WebViewer v1.7.1
+# SharpCoreDB WebViewer v1.8.0
 
 SharpCoreDB WebViewer is a local-first Razor Pages application for inspecting and operating SharpCoreDB databases with secure defaults.
 

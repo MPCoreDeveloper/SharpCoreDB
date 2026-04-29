@@ -41,8 +41,8 @@ Examples of operations rejected in the default mode include:
 
 If this was the point of confusion, start here first:
 
-- [FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md)
-- [FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md)
+- [FluentMigrator - Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)
+- [FluentMigrator - Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)
 
 ### How do I override the default syntax mode?
 
@@ -62,7 +62,7 @@ Explicitly configured provider switches are preserved.
 
 ## 🎯 Migration Guides
 
-### **[FluentMigrator — Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md)** ✅ v1.7.2
+### **[FluentMigrator - Embedded Mode](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)** ✅ Current
 **Detailed guide for local/in-process schema migrations with SharpCoreDB.Extensions**
 
 **Best for:**
@@ -77,7 +77,7 @@ Explicitly configured provider switches are preserved.
 - `__SharpMigrations` version-table behavior
 - Troubleshooting and production checklist
 
-### **[FluentMigrator — Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md)** ✅ v1.7.2
+### **[FluentMigrator - Server Mode](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)** ✅ Current
 **Detailed guide for server deployments: in-process host and remote gRPC migration execution**
 
 **Best for:**
@@ -127,12 +127,12 @@ Explicitly configured provider switches are preserved.
 
 ### Scenario 1: FluentMigrator in Embedded Mode
 **Goal:** Run schema migrations locally in app/service process  
-**Guide:** [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md)  
+**Guide:** [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md)  
 **Benefit:** Minimal operational complexity, direct engine execution
 
 ### Scenario 2: FluentMigrator in Server Mode
 **Goal:** Run schema migrations for server deployments (hosted or remote over gRPC)  
-**Guide:** [FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md)  
+**Guide:** [FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)  
 **Benefit:** Deployment-pipeline friendly and secure remote orchestration
 
 ### Scenario 3: Migrate Vector Search from SQLite
@@ -187,13 +187,28 @@ Explicitly configured provider switches are preserved.
 
 | Document | Purpose | Audience | Read Time |
 |----------|---------|----------|-----------|
-| [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.2.md) | Embedded migration architecture and operations | Developers/Architects | 10-15 min |
-| [FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.2.md) | Server migration architecture (host + gRPC) | DevOps/Architects | 12-18 min |
+| [FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md](./FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md) | Embedded migration architecture and operations | Developers/Architects | 10-15 min |
+| [FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md) | Server migration architecture (host + gRPC) | DevOps/Architects | 12-18 min |
 | [SQLITE_VECTORS_TO_SHARPCORE.md](./SQLITE_VECTORS_TO_SHARPCORE.md) | Vector migration (9 steps) | DevOps/Architects | 15-20 min |
 | [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) | Storage format migration | DevOps | 10-15 min |
 | [../USER_MANUAL.md](../USER_MANUAL.md) | General database usage | Developers | 30-40 min |
 | [../Vectors/README.md](../Vectors/README.md) | Vector API & features | Developers | 20-30 min |
 | [../features/PHASE7_JOIN_COLLATIONS.md](../features/PHASE7_JOIN_COLLATIONS.md) | JOIN & collation support | Developers | 10-15 min |
+
+---
+
+## Known reliability fixes (v1.8 line)
+
+The following migration reliability issues are addressed and regression-covered:
+
+- **Issue #221** - SharpCoreDbProcessor SQL generation and compatibility alignment:
+  - no `UndefinedDefaultValue` sentinel leakage into generated SQL
+  - no duplicate `PRIMARY KEY` generation during version-table creation
+  - SQLite-incompatible DDL operations fail fast in default SQLite compatibility mode with clear `NotSupportedException`
+- **Issue #227** - quoted identifier compatibility in single-file mode:
+  - quoted table/column identifiers in `CREATE TABLE` / `DROP TABLE` / table-level PK paths are handled in `.scdb` mode
+
+Integration and regression tests for these behaviors are maintained in `tests/SharpCoreDB.Tests/SharpCoreDbMigrationExecutorTests.cs` and `tests/SharpCoreDB.Tests/SingleFileTests.cs`.
 
 ---
 

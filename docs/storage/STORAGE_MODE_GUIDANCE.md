@@ -4,16 +4,17 @@
 
 ---
 
-> ⚠️ **Important: `.scdb` Single-File Mode Has SQL Limitations**
+> ⚠️ **Note: Single-File vs Directory mode**
 >
 > This document covers storage engine modes (Columnar vs Page-Based) within a database.
 > It does **not** cover the separate distinction between **Directory mode** (`Database` class)
 > and **Single-File mode** (`SingleFileDatabase`, `.scdb` files).
 >
-> Single-file mode uses a **regex-based SQL parser** that does **not** support JOIN, subqueries,
-> GROUP BY, DELETE without WHERE, or other advanced SQL features.
+> Both modes share the same `SqlParser` engine for DML and SELECT, and both support the same
+> core DDL operations (`CREATE TABLE`, `DROP TABLE`, `ALTER TABLE ADD/DROP/RENAME COLUMN`,
+> `CREATE INDEX`, `DROP INDEX`).
 >
-> → See [`SINGLE_FILE_SQL_LIMITATIONS.md`](SINGLE_FILE_SQL_LIMITATIONS.md) for the full matrix.
+> → See [`SINGLE_FILE_SQL_LIMITATIONS.md`](SINGLE_FILE_SQL_LIMITATIONS.md) for the full feature matrix.
 
 ---
 

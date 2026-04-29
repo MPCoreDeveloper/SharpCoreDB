@@ -23,7 +23,6 @@ public sealed class TableDirectoryManagerTests
 
                 var table = new Mock<ITable>(MockBehavior.Strict);
                 table.SetupGet(t => t.Name).Returns("orders");
-                table.SetupGet(t => t.PrimaryKeyIndex).Returns(0);
 
                 var columns = new List<ColumnDefinitionEntry>
                 {

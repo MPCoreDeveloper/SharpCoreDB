@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
   <img src="https://raw.githubusercontent.com/MPCoreDeveloper/SharpCoreDB/master/SharpCoreDB.jpg" alt="SharpCoreDB Logo" width="180"/>
 
 # SharpCoreDB
@@ -53,7 +53,7 @@ Use it when you need:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.7.2
+dotnet add package SharpCoreDB --version 1.8.0
 ```
 
 ```csharp
@@ -81,22 +81,27 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.7.2
-dotnet add package SharpCoreDB.Client --version 1.7.2
+dotnet add package SharpCoreDB.Server --version 1.8.0
+dotnet add package SharpCoreDB.Client --version 1.8.0
 ```
 
 ---
 
-## v1.7.2 highlights
+## v1.8.0 highlights
 
-- Synchronized package release across the full ecosystem (`1.7.2`)
-- **Auto-ROWID**: tables without a `PRIMARY KEY` now get a hidden `_rowid` (ULID) column — SQLite-compatible rowid pattern
+- Synchronized package release across the full ecosystem (`1.8.0`)
+- **Auto-ROWID**: tables without a `PRIMARY KEY` now get a hidden `_rowid` (ULID) column - SQLite-compatible rowid pattern
 - **GRAPH_RAG SQL clause**: new top-level `GRAPH_RAG` SELECT syntax with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, and `TOP_K`
 - **OPTIONALLY projection mode**: new `OPTIONALLY` keyword enables `Option<T>` mapping in ADO.NET readers
 - **IS SOME / IS NONE predicates**: new null-safety predicates supported in parser and runtime
-- **SIMD hot-loop optimization**: all 16 columnar aggregate methods use `Vector256.LoadUnsafe` — tighter codegen on AVX2
+- **SIMD hot-loop optimization**: all 16 columnar aggregate methods use `Vector256.LoadUnsafe` - tighter codegen on AVX2
 - **Major Viewer update**: multi-tab query editor, typed table designer (includes ULID/GUID), 6-language UI (EN/DE/FR/ES/IT/NL), server connection support
-- **FluentMigrator default alignment**: `AddSharpCoreDBFluentMigrator()` defaults to SQLite-compatible mode for both generator and processor
+- **FluentMigrator reliability fixes**:
+  - default SQLite-compatible generator + processor alignment in `AddSharpCoreDBFluentMigrator()`
+  - no `UndefinedDefaultValue` leakage in generated SQL
+  - no duplicate `PRIMARY KEY` generation for version table creation
+  - SQLite-incompatible DDL now fails fast with clear `NotSupportedException` in default compatibility mode
+- **Single-file parser compatibility fixes**: quoted identifiers in `CREATE TABLE` / `DROP TABLE` / table-level PK paths are covered and validated
 - `Microsoft.Extensions.Logging.Abstractions` updated to **10.0.7** across all packages
 - **2,000+ tests passing**, **zero breaking changes intended**, **100% backward compatible**
 
@@ -199,47 +204,47 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,000+ tests passing**
-- **100% backward compatible** across the v1.7.2 release line
-- Zero breaking changes intended from v1.5.0 to v1.7.2
+- **100% backward compatible** across the v1.8.0 release line
+- Zero breaking changes intended from v1.5.0 to v1.8.0
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.7.2)
+## Available NuGet packages (v1.8.0)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.7.2
+dotnet add package SharpCoreDB --version 1.8.0
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.7.2
-dotnet add package SharpCoreDB.Client --version 1.7.2
+dotnet add package SharpCoreDB.Server --version 1.8.0
+dotnet add package SharpCoreDB.Client --version 1.8.0
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.7.2
-dotnet add package SharpCoreDB.VectorSearch --version 1.7.2
-dotnet add package SharpCoreDB.Graph --version 1.7.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.7.2
-dotnet add package SharpCoreDB.Distributed --version 1.7.2
-dotnet add package SharpCoreDB.Provider.Sync --version 1.7.2
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.7.2
-dotnet add package SharpCoreDB.Extensions --version 1.7.2
+dotnet add package SharpCoreDB.Analytics --version 1.8.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.8.0
+dotnet add package SharpCoreDB.Graph --version 1.8.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
+dotnet add package SharpCoreDB.Distributed --version 1.8.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.8.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.8.0
+dotnet add package SharpCoreDB.Extensions --version 1.8.0
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.7.2
-dotnet add package SharpCoreDB.Projections --version 1.7.2
-dotnet add package SharpCoreDB.CQRS --version 1.7.2
+dotnet add package SharpCoreDB.EventSourcing --version 1.8.0
+dotnet add package SharpCoreDB.Projections --version 1.8.0
+dotnet add package SharpCoreDB.CQRS --version 1.8.0
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.7.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.7.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.2
+dotnet add package SharpCoreDB.Functional --version 1.8.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.8.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.8.0
 ```
 
 ---
 
-## What’s new in v1.7.2
+## What’s new in v1.8.0
 
 - **Auto-ROWID support**: hidden `_rowid` (ULID) on tables without an explicit primary key - mirrors SQLite rowid semantics
 - **GRAPH_RAG SQL clause**: first-class `GRAPH_RAG` SELECT syntax for graph-augmented retrieval pipelines
@@ -260,9 +265,11 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.7.2
 - Server docs: `docs/server/README.md`
 - Server quick start: `docs/server/QUICKSTART.md`
 - GraphRAG docs: `docs/graphrag/00_START_HERE.md`
+- SQL dialect extensions: `docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`
+- Migration docs: `docs/migration/README.md`
+- Single-file SQL support and limits: `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
 - Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
-- Implementation audit and status: `docs/IMPLEMENTATION_AUDIT_v1.7.2.md`, `docs/PROJECT_STATUS.md`
 - Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 
 ---

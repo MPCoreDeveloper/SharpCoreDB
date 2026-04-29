@@ -1,13 +1,13 @@
 # SharpCoreDB Documentation
 
-This folder contains the maintained documentation set for SharpCoreDB (`v1.7.2`).
+This folder contains the maintained documentation set for SharpCoreDB (`v1.8.0`).
 
 ## Start Here
 
 - `INDEX.md` - Canonical documentation index.
 - `FEATURE_MATRIX_v1.7.2.md` - Consolidated feature coverage by package.
 - `PROJECT_STATUS.md` - Current project status and upcoming roadmap TODOs.
-- `IMPLEMENTATION_AUDIT_v1.7.2.md` - Repository-wide implementation audit.
+- `CHANGELOG.md` - Release notes and notable behavior changes.
 - `../README.md` - Product overview and quick start.
 
 ## Maintained documentation areas
@@ -33,11 +33,18 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.7.2`)
 - Optional functional adapters: `../src/SharpCoreDB.Functional/README.md`, `../src/SharpCoreDB.Functional.Dapper/README.md`, `../src/SharpCoreDB.Functional.EntityFrameworkCore/README.md`
 - Additional integrations: `../src/SharpCoreDB.Identity/README.md`, `../src/SharpCoreDB.Serilog.Sinks/README.md`, `../src/SharpCoreDB.Provider.Sync/README.md`
 
-## SQL extension docs (v1.7.2)
+## SQL extension docs
 
 - `sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
 - `graphrag/GRAPH_RAG_SINGLE_SQL.md` - Single-statement GraphRAG SQL syntax and DI integration.
-- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md` - Option<T> mapping semantics and usage patterns.
+- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.8.0.md` - Option<T> mapping semantics and usage patterns.
+
+## Migration and compatibility docs
+
+- `migration/README.md` - FluentMigrator and migration scenarios overview.
+- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md` - Embedded migration setup and lifecycle.
+- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md` - In-process and remote server migration setup.
+- `storage/SINGLE_FILE_SQL_LIMITATIONS.md` - Single-file SQL support matrix and parser behavior details.
 
 ## Cleanup policy
 

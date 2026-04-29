@@ -2,13 +2,13 @@
 
 CQRS and outbox primitives for `SharpCoreDB`.
 
-**Version:** `v1.7.2`  
+**Version:** `v1.8.0`  
 **Package:** `SharpCoreDB.CQRS`
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -19,16 +19,16 @@ CQRS and outbox primitives for `SharpCoreDB`.
 - In-memory and persistent SharpCoreDB-backed outbox stores
 - Retry/dead-letter-capable outbox dispatch services and hosted workers
 
-## Changes in v1.7.2
+## Changes in v1.8.0
 
-- Package/docs synchronized to `v1.7.2`
+- Package/docs synchronized to `v1.8.0`
 - Outbox persistence + retry/dead-letter guidance improved
 - Integration alignment with EventSourcing/Projections companion packages
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.7.2
+dotnet add package SharpCoreDB.CQRS --version 1.8.0
 ```
 
 ## Related packages

@@ -485,4 +485,136 @@ public class SingleFileTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    [Fact]
+    public void AlterTable_RenameColumn_UpdatesRowData()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE items (id INTEGER, old_name TEXT)");
+            db.ExecuteBatchSQL(["INSERT INTO items VALUES (1, 'alpha')", "INSERT INTO items VALUES (2, 'beta')"]);
+
+            // Act
+            db.ExecuteSQL("ALTER TABLE items RENAME COLUMN old_name TO new_name");
+
+            // Assert — renamed column is queryable
+            var results = db.ExecuteQuery("SELECT new_name FROM items ORDER BY id");
+            Assert.Equal(2, results.Count);
+            Assert.Equal("alpha", results[0]["new_name"]?.ToString());
+            Assert.Equal("beta", results[1]["new_name"]?.ToString());
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void AlterTable_DropColumn_RemovesColumnFromRows()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE products (id INTEGER, name TEXT, temp_col TEXT)");
+            db.ExecuteBatchSQL(["INSERT INTO products VALUES (1, 'widget', 'x')", "INSERT INTO products VALUES (2, 'gadget', 'y')"]);
+
+            // Act
+            db.ExecuteSQL("ALTER TABLE products DROP COLUMN temp_col");
+
+            // Assert — remaining column still readable; dropped column absent
+            var results = db.ExecuteQuery("SELECT id, name FROM products ORDER BY id");
+            Assert.Equal(2, results.Count);
+            Assert.Equal("widget", results[0]["name"]?.ToString());
+            Assert.DoesNotContain("temp_col", results[0].Keys);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CreateIndex_And_DropIndex_UpdatesIndexRegistry()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE orders (id INTEGER, customer TEXT)");
+
+            // Act — create index
+            db.ExecuteSQL("CREATE INDEX idx_customer ON orders (customer)");
+
+            // Assert — index visible via sqlite_master
+            var after = db.ExecuteQuery("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_customer'");
+            Assert.Single(after);
+
+            // Act — drop index
+            db.ExecuteSQL("DROP INDEX idx_customer");
+
+            // Assert — index gone
+            var gone = db.ExecuteQuery("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_customer'");
+            Assert.Empty(gone);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void PragmaTableInfo_ReturnsColumnMetadata()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE employees (emp_id INTEGER PRIMARY KEY, emp_name TEXT NOT NULL)");
+
+            // Act
+            var info = db.ExecuteQuery("PRAGMA table_info(employees)");
+
+            // Assert
+            Assert.Equal(2, info.Count);
+            var names = info.Select(r => r["name"]?.ToString()).ToList();
+            Assert.Contains("emp_id", names);
+            Assert.Contains("emp_name", names);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void AlterTable_AddColumn_AppendsNewColumn()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE users (id INTEGER, username TEXT)");
+            db.ExecuteSQL("INSERT INTO users VALUES (1, 'alice')");
+
+            // Act
+            db.ExecuteSQL("ALTER TABLE users ADD COLUMN email TEXT");
+
+            // Assert — new column present in schema probe
+            var info = db.ExecuteQuery("PRAGMA table_info(users)");
+            var names = info.Select(r => r["name"]?.ToString()).ToList();
+            Assert.Contains("email", names);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
 }

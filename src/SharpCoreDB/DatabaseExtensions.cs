@@ -160,6 +160,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     private readonly Dictionary<string, CachedQueryPlan> _preparedPlans = new(StringComparer.Ordinal);
     private readonly Lock _batchUpdateLock = new();
     private bool _isBatchUpdateActive;
+    private readonly Dictionary<string, IndexRegistryEntry> _indexRegistry = new(StringComparer.OrdinalIgnoreCase);
 
     // Shared SqlParser for DML + SELECT in single-file mode.`r`n    // DDL (CREATE / DROP TABLE) is intentionally handled by the regex path in this class because`r`n    // SqlParser.DDL.cs operates on directory-mode Table instances and is not compatible with`r`n    // SingleFileTable.
     private Services.SqlParser? _sqlParser;
@@ -349,9 +350,23 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
                 }
             ];
         }
-        else if (upperSql.Contains("SELECT"))
+
+        // PRAGMA table_info(tableName) — used by FluentMigrator ColumnExists / DefaultValueExists
+        var pragmaMatch = Regex.Match(sql.Trim(), @"^PRAGMA\s+table_info\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+        if (pragmaMatch.Success)
         {
-            // ✅ FIX: Bind parameters before executing SELECT to support parameterized queries
+            return ExecutePragmaTableInfo(pragmaMatch.Groups[1].Value);
+        }
+
+        // sqlite_master index queries — used by FluentMigrator IndexExists
+        if (upperSql.Contains("SQLITE_MASTER") || upperSql.Contains("SQLITE_SCHEMA"))
+        {
+            return ExecuteSqliteMasterQuery(sql);
+        }
+
+        if (upperSql.Contains("SELECT"))
+        {
+            // Bind parameters before executing SELECT to support parameterized queries
             var boundSql = BindPreparedSql(sql, parameters);
             return ExecuteSelectInternal(boundSql, parameters);
         }
@@ -590,9 +605,22 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             return;
         }
 
-        // CREATE INDEX / DROP INDEX are handled at the storage level
-        if (upperSql.StartsWith("CREATE INDEX") || upperSql.StartsWith("DROP INDEX"))
+        // CREATE INDEX / DROP INDEX — track in-memory so IndexExists() queries work
+        if (upperSql.StartsWith("CREATE UNIQUE INDEX") || upperSql.StartsWith("CREATE INDEX"))
         {
+            ExecuteCreateIndexInternal(sql);
+            return;
+        }
+
+        if (upperSql.StartsWith("DROP INDEX"))
+        {
+            ExecuteDropIndexInternal(sql);
+            return;
+        }
+
+        if (upperSql.StartsWith("ALTER TABLE"))
+        {
+            ExecuteAlterTableInternal(sql);
             return;
         }
 
@@ -641,6 +669,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         var isUnique = new List<bool>();
         var primaryKeyIndex = -1;
 
+        var foreignKeys = new List<ForeignKeyConstraint>();
+        var uniqueConstraints = new List<List<string>>();
+        var columnCheckExpressions = new List<string?>();
+        var tableCheckConstraints = new List<string>();
+
         var colIndex = 0;
         // ✅ Use quote-aware splitting to handle DEFAULT values containing commas
         foreach (var colDef in SplitColumnDefinitions(columnDefs))
@@ -649,8 +682,24 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var upper = trimmed.ToUpperInvariant();
 
             // Skip table-level constraints (FOREIGN KEY, CHECK, PRIMARY KEY as table constraint)
-            if (upper.StartsWith("FOREIGN KEY") || upper.StartsWith("CHECK"))
+            if (upper.StartsWith("CHECK"))
             {
+                continue;
+            }
+
+            // Handle table-level FOREIGN KEY
+            if (upper.StartsWith("FOREIGN KEY"))
+            {
+                var fkMatch = Regex.Match(trimmed, @"FOREIGN\s+KEY\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)\s+REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+                if (fkMatch.Success)
+                {
+                    foreignKeys.Add(new ForeignKeyConstraint
+                    {
+                        ColumnName = fkMatch.Groups[1].Value,
+                        ReferencedTable = fkMatch.Groups[2].Value,
+                        ReferencedColumn = fkMatch.Groups[3].Value
+                    });
+                }
                 continue;
             }
 
@@ -658,15 +707,34 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             // ✅ Support quoted column names: PRIMARY KEY ("Version")
             if (upper.StartsWith("PRIMARY KEY"))
             {
-                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase);
                 if (pkMatch.Success)
                 {
-                    var pkColName = pkMatch.Groups[1].Value;
+                    var pkColsStr = pkMatch.Groups[1].Value;
+                    var pkCols = pkColsStr.Split(',').Select(c => c.Trim().Trim('"', '`', '[', ']', '\'')).ToArray();
+                    if (pkCols.Length > 1)
+                    {
+                        throw new NotSupportedException("Composite primary keys are not supported in single-file mode.");
+                    }
+                    var pkColName = pkCols[0];
                     var idx = columns.FindIndex(c => c.Equals(pkColName, StringComparison.OrdinalIgnoreCase));
                     if (idx >= 0)
                     {
                         primaryKeyIndex = idx;
                     }
+                }
+                continue;
+            }
+
+            // Handle table-level UNIQUE (col1, col2, ...)
+            if (upper.StartsWith("UNIQUE"))
+            {
+                var uniqueMatch = Regex.Match(trimmed, @"UNIQUE\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase);
+                if (uniqueMatch.Success)
+                {
+                    var colsStr = uniqueMatch.Groups[1].Value;
+                    var cols = colsStr.Split(',').Select(c => c.Trim().Trim('"', '`', '[', ']', '\'')).ToList();
+                    uniqueConstraints.Add(cols);
                 }
                 continue;
             }
@@ -700,6 +768,43 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var notNull = upper.Contains("NOT NULL") || isPrimary; // PRIMARY KEY implies NOT NULL
             var unique = upper.Contains("UNIQUE") || isPrimary; // PRIMARY KEY implies UNIQUE
 
+            // Check for column-level FOREIGN KEY
+            var fkIndex = upper.IndexOf("REFERENCES", StringComparison.OrdinalIgnoreCase);
+            if (fkIndex >= 0)
+            {
+                var fkPart = trimmed.Substring(fkIndex);
+                var fkMatch = Regex.Match(fkPart, @"REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+                if (fkMatch.Success)
+                {
+                    foreignKeys.Add(new ForeignKeyConstraint
+                    {
+                        ColumnName = colName,
+                        ReferencedTable = fkMatch.Groups[1].Value,
+                        ReferencedColumn = fkMatch.Groups[2].Value
+                    });
+                }
+            }
+
+            // Check for column-level CHECK
+            var checkIndex = upper.IndexOf("CHECK", StringComparison.OrdinalIgnoreCase);
+            if (checkIndex >= 0)
+            {
+                var checkPart = trimmed.Substring(checkIndex);
+                var checkMatch = Regex.Match(checkPart, @"CHECK\s*\(\s*(.+?)\s*\)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (checkMatch.Success)
+                {
+                    columnCheckExpressions.Add(checkMatch.Groups[1].Value.Trim());
+                }
+                else
+                {
+                    columnCheckExpressions.Add(null);
+                }
+            }
+            else
+            {
+                columnCheckExpressions.Add(null);
+            }
+
             isAuto.Add(autoInc);
             isNotNull.Add(notNull);
             isUnique.Add(unique);
@@ -713,6 +818,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         var table = new SingleFileTable(tableName, columns, columnTypes, primaryKeyIndex, isNotNull, isAuto, _storageProvider);
+        table.ForeignKeys = foreignKeys;
+        table.ColumnCheckExpressions = columnCheckExpressions;
+        table.TableCheckConstraints = tableCheckConstraints;
+        table.UniqueConstraints = uniqueConstraints;
         _tables[tableName] = table;
 
         // Register table schema with the directory manager so it persists on disk
@@ -870,6 +979,165 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             _tableDirectoryManager.Flush();
         }
     }
+
+    private void ExecuteCreateIndexInternal(string sql)
+    {
+        // CREATE [UNIQUE] INDEX [IF NOT EXISTS] indexName ON tableName (columns)
+        var m = Regex.Match(sql,
+            @"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?\s+ON\s+[""'`\[]?(\w+)[""'`\]]?\s*\(([^)]+)\)",
+            RegexOptions.IgnoreCase);
+        if (!m.Success) return;
+
+        var indexName = m.Groups[1].Value;
+        var tableName = m.Groups[2].Value;
+        var unique = Regex.IsMatch(sql, @"CREATE\s+UNIQUE\s+INDEX", RegexOptions.IgnoreCase);
+
+        _indexRegistry[indexName] = new IndexRegistryEntry(indexName, tableName, unique);
+    }
+
+    private void ExecuteDropIndexInternal(string sql)
+    {
+        // DROP INDEX [IF EXISTS] indexName
+        var m = Regex.Match(sql,
+            @"DROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?",
+            RegexOptions.IgnoreCase);
+        if (m.Success)
+            _indexRegistry.Remove(m.Groups[1].Value);
+    }
+
+    private void ExecuteAlterTableInternal(string sql)
+    {
+        // ALTER TABLE tableName RENAME TO newName
+        var renameTo = Regex.Match(sql,
+            @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+RENAME\s+TO\s+[""'`\[]?(\w+)[""'`\]]?",
+            RegexOptions.IgnoreCase);
+        if (renameTo.Success)
+        {
+            var oldName = renameTo.Groups[1].Value;
+            var newName = renameTo.Groups[2].Value;
+            if (_tables.TryGetValue(oldName, out var tbl))
+            {
+                _tables.Remove(oldName);
+                _tables[newName] = tbl;
+            }
+            return;
+        }
+
+        // ALTER TABLE tableName RENAME COLUMN oldCol TO newCol
+        var renameCol = Regex.Match(sql,
+            @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+RENAME\s+COLUMN\s+[""'`\[]?(\w+)[""'`\]]?\s+TO\s+[""'`\[]?(\w+)[""'`\]]?",
+            RegexOptions.IgnoreCase);
+        if (renameCol.Success)
+        {
+            var tableName = renameCol.Groups[1].Value;
+            var oldCol = renameCol.Groups[2].Value;
+            var newCol = renameCol.Groups[3].Value;
+            if (_tables.TryGetValue(tableName, out var tbl))
+                tbl.RenameColumn(oldCol, newCol);
+            return;
+        }
+
+        // ALTER TABLE tableName ADD [COLUMN] colName TYPE ...
+        var addCol = Regex.Match(sql,
+            @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+ADD\s+(?:COLUMN\s+)?[""'`\[]?(\w+)[""'`\]]?\s+(\w+)",
+            RegexOptions.IgnoreCase);
+        if (addCol.Success)
+        {
+            var tableName = addCol.Groups[1].Value;
+            var colName = addCol.Groups[2].Value;
+            var typeStr = addCol.Groups[3].Value.ToUpperInvariant();
+            var dataType = typeStr switch
+            {
+                "INT" or "INTEGER" => DataType.Integer,
+                "BIGINT" or "LONG" => DataType.Long,
+                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
+                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
+                "DECIMAL" or "NUMERIC" => DataType.Decimal,
+                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
+                "BLOB" => DataType.Blob,
+                "BOOLEAN" or "BOOL" => DataType.Boolean,
+                "GUID" or "UUID" => DataType.Guid,
+                _ => DataType.String
+            };
+            if (_tables.TryGetValue(tableName, out var tbl))
+            {
+                tbl.AddColumn(new ColumnDefinition { Name = colName, DataType = dataType.ToString() });
+            }
+            return;
+        }
+
+        // ALTER TABLE tableName DROP [COLUMN] colName
+        var dropCol = Regex.Match(sql,
+            @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+DROP\s+(?:COLUMN\s+)?[""'`\[]?(\w+)[""'`\]]?",
+            RegexOptions.IgnoreCase);
+        if (dropCol.Success)
+        {
+            var tableName = dropCol.Groups[1].Value;
+            var colName = dropCol.Groups[2].Value;
+            if (_tables.TryGetValue(tableName, out var tbl))
+                tbl.DropColumn(colName);
+            return;
+        }
+    }
+
+    private List<Dictionary<string, object>> ExecutePragmaTableInfo(string tableName)
+    {
+        var result = new List<Dictionary<string, object>>();
+        if (!_tables.TryGetValue(tableName, out var table))
+            return result;
+
+        for (int i = 0; i < table.Columns.Count; i++)
+        {
+            var colName = table.Columns[i];
+            var dataType = i < table.ColumnTypes.Count ? table.ColumnTypes[i] : DataType.String;
+            var notNull = i < table.IsNotNull.Count && table.IsNotNull[i];
+            var isPk = table.PrimaryKeyIndex == i;
+            var dflt = (object?)null;
+            if (table.DefaultValues is { Count: > 0 } && i < table.DefaultValues.Count)
+                dflt = table.DefaultValues[i];
+
+            result.Add(new Dictionary<string, object>
+            {
+                ["cid"] = i,
+                ["name"] = colName,
+                ["type"] = DataTypeToSqlName(dataType),
+                ["notnull"] = notNull ? 1 : 0,
+                ["dflt_value"] = dflt ?? DBNull.Value,
+                ["pk"] = isPk ? 1 : 0
+            });
+        }
+
+        return result;
+    }
+
+    private List<Dictionary<string, object>> ExecuteSqliteMasterQuery(string sql)
+    {
+        // Only handle: SELECT ... FROM sqlite_master WHERE type = 'index' AND name = '...'
+        var nameMatch = Regex.Match(sql, @"name\s*=\s*'([^']+)'", RegexOptions.IgnoreCase);
+        if (!nameMatch.Success)
+            return [];
+
+        var indexName = nameMatch.Groups[1].Value;
+        if (_indexRegistry.TryGetValue(indexName, out var entry))
+        {
+            return [new Dictionary<string, object> { ["name"] = entry.Name, ["tbl_name"] = entry.TableName, ["type"] = "index" }];
+        }
+
+        return [];
+    }
+
+    private static string DataTypeToSqlName(DataType dt) => dt switch
+    {
+        DataType.Integer => "INTEGER",
+        DataType.Long => "BIGINT",
+        DataType.Real => "REAL",
+        DataType.Decimal => "DECIMAL",
+        DataType.DateTime => "DATETIME",
+        DataType.Blob => "BLOB",
+        DataType.Boolean => "BOOLEAN",
+        DataType.Guid => "TEXT",
+        _ => "TEXT"
+    };
 
     private void ExecuteDeleteInternal(string sql)
     {
@@ -1124,3 +1392,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         return parameters;
     }
 }
+
+/// <summary>
+/// Tracks a created index in the single-file database for IndexExists() queries.
+/// </summary>
+internal sealed record IndexRegistryEntry(string Name, string TableName, bool IsUnique);

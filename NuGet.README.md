@@ -11,7 +11,7 @@
 
 ## 🚀 Overview
 
-**SharpCoreDB.Graph.Advanced** (v2.0.0) extends SharpCoreDB with advanced graph analytics capabilities:
+**SharpCoreDB.Graph.Advanced** (v1.8.0) extends SharpCoreDB with advanced graph analytics capabilities:
 
 - ✅ **Community Detection**: Louvain, Label Propagation, Connected Components
 - ✅ **Centrality Metrics**: Degree, Betweenness, Closeness, Eigenvector
@@ -35,21 +35,21 @@
 
 ```bash
 # Install SharpCoreDB core
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 1.8.0
 
 # Install graph extensions
-dotnet add package SharpCoreDB.Graph --version 2.0.0
+dotnet add package SharpCoreDB.Graph --version 1.8.0
 
 # Install advanced analytics (includes GraphRAG)
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
 
 # Optional: Vector search for GraphRAG
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.8.0
 ```
 
 **Requirements:**
 - .NET 10.0+
-- SharpCoreDB 2.0.0+
+- SharpCoreDB 1.8.0+
 
 ---
 

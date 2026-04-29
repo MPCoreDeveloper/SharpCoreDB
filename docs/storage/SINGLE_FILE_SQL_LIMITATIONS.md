@@ -1,11 +1,11 @@
-# SingleFileDatabase SQL Limitations
+# SingleFileDatabase SQL Support
 
-**Applies to:** SharpCoreDB v1.8.x — `.scdb` single-file mode (`StorageMode.SingleFile`)
+**Applies to:** SharpCoreDB v1.8.x+ — `.scdb` single-file mode (`StorageMode.SingleFile`)
 
-> **TL;DR:** `SingleFileDatabase` uses the full `SqlParser` engine for **DML and SELECT** statements.
-> **DDL** (`CREATE TABLE` / `DROP TABLE`) uses an internal regex path because the directory-mode DDL engine
-> operates on `Table` instances that are not compatible with `SingleFileTable`.
-> For advanced DDL features (storage modes, COLUMNAR, complex indexes) use the **Directory mode** (`Database` class).
+> **TL;DR:** Both `SingleFileDatabase` (`.scdb`) and `Database` (directory mode) share the same
+> `SqlParser` engine for DML and SELECT. DDL in single-file mode uses an internal regex path that
+> now covers the same core operations as directory mode, including `ALTER TABLE` with
+> `ADD COLUMN`, `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO`, `CREATE INDEX`, and `DROP INDEX`.
 
 ---
 
@@ -16,44 +16,49 @@ SharpCoreDB exposes one `IDatabase` interface with two concrete implementations:
 | Class | Mode | File extension | SQL engine (DML/SELECT) | SQL engine (DDL) |
 |---|---|---|---|---|
 | `Database` | Directory | `.db` folder | `SqlParser` — full featured | `SqlParser.DDL.cs` |
-| `SingleFileDatabase` | Single-file | `.scdb` | `SqlParser` (shared, v1.8+) | Regex path in `SingleFileDatabase` |
+| `SingleFileDatabase` | Single-file | `.scdb` | `SqlParser` (shared) | Regex path in `DatabaseExtensions.cs` |
 
-### Why the DDL split?
-
-`SqlParser.DDL.cs` creates tables by calling `ITableFactory.CreateTable(...)` and then sets
-directory-mode `Table` properties (`DataFile`, `StorageMode`, `InitializeStorageEngine()`, etc.).
-`SingleFileTable` has a different lifecycle managed by `SingleFileStorageProvider` and
-`TableDirectoryManager` and is incompatible with that post-creation setup flow.
-
-DDL operations in single-file mode are therefore handled by `ExecuteCreateTableInternal` and
-`ExecuteDropTableInternal` inside `SingleFileDatabase`, which register schema changes correctly
-with the `.scdb` file format.
+Both modes support the same DDL feature set for `CREATE TABLE`, `DROP TABLE`, `ALTER TABLE`,
+`CREATE INDEX`, and `DROP INDEX`. The only DDL statements not yet supported in single-file mode
+are `CREATE VIEW`, `CREATE TRIGGER`, and `STORAGE = COLUMNAR` hints (directory-mode only).
 
 ---
 
 ## SQL Support Matrix
 
-### DDL (CREATE / DROP)
+### DDL (CREATE / DROP / ALTER)
 
-| Statement | Supported | Notes |
-|---|---|---|
-| `CREATE TABLE` | ✅ | Quoted identifiers supported (v1.7.2+) |
-| `CREATE TABLE IF NOT EXISTS` | ✅ | |
-| `DROP TABLE` | ✅ | Quoted identifiers supported (v1.7.2+) |
-| `DROP TABLE IF EXISTS` | ✅ | |
-| `CREATE INDEX` | ⚠️ silently ignored | No-op — returns without error |
-| `DROP INDEX` | ⚠️ silently ignored | No-op — returns without error |
-| `CREATE TRIGGER` | ⚠️ silently ignored | No-op — returns without error |
-| `DROP TRIGGER` | ⚠️ silently ignored | No-op — returns without error |
-| `CREATE VIEW` | ❌ | Throws `InvalidOperationException` |
-| `ALTER TABLE` | ❌ | Throws `InvalidOperationException` |
-| Column types | ✅ | INTEGER, TEXT, REAL, DECIMAL, DATETIME, BLOB, BOOLEAN, LONG, GUID/UUID |
-| `PRIMARY KEY`, `NOT NULL`, `AUTOINCREMENT` | ✅ | |
-| `UNIQUE` column constraint | ✅ | |
-| `DEFAULT` with comma-containing expressions | ✅ | Quote-aware splitter (v1.7.2+) |
-| `FOREIGN KEY` | ⚠️ silently parsed/skipped | No enforcement |
-| `CHECK` constraint | ⚠️ silently parsed/skipped | No enforcement |
-| `STORAGE = COLUMNAR` | ❌ | DDL regex path does not support storage mode hints |
+| Statement | Single-File | Directory | Notes |
+|---|---|---|---|
+| `CREATE TABLE` | ✅ | ✅ | Quoted identifiers supported |
+| `CREATE TABLE IF NOT EXISTS` | ✅ | ✅ | |
+| `DROP TABLE` | ✅ | ✅ | Quoted identifiers supported |
+| `DROP TABLE IF EXISTS` | ✅ | ✅ | |
+| `CREATE INDEX` | ✅ | ✅ | Tracked for `IndexExists()` probes |
+| `CREATE UNIQUE INDEX` | ✅ | ✅ | |
+| `DROP INDEX` | ✅ | ✅ | |
+| `ALTER TABLE ... RENAME TO` | ✅ | ✅ | |
+| `ALTER TABLE ... ADD COLUMN` | ✅ | ✅ | |
+| `ALTER TABLE ... RENAME COLUMN ... TO` | ✅ | ✅ | Updates schema and row data |
+| `ALTER TABLE ... DROP COLUMN` | ✅ | ✅ | Updates schema and row data |
+| `CREATE TRIGGER` | ⚠️ silently ignored | ✅ | |
+| `DROP TRIGGER` | ⚠️ silently ignored | ✅ | |
+| `CREATE VIEW` | ❌ not supported | ✅ | |
+| `STORAGE = COLUMNAR` | ❌ not supported | ✅ | Directory mode only |
+| Column types | ✅ | ✅ | INTEGER, TEXT, REAL, DECIMAL, DATETIME, BLOB, BOOLEAN, LONG, GUID/UUID, ULID |
+| `PRIMARY KEY`, `NOT NULL`, `AUTOINCREMENT` | ✅ | ✅ | |
+| `UNIQUE` column constraint | ✅ | ✅ | |
+| `DEFAULT` with comma-containing expressions | ✅ | ✅ | Quote-aware splitter |
+| `FOREIGN KEY` | ⚠️ parsed, not enforced | ⚠️ parsed, not enforced | |
+| `CHECK` constraint | ⚠️ parsed, not enforced | ⚠️ parsed, not enforced | |
+
+### Schema Introspection (FluentMigrator / migration tools)
+
+| Query | Single-File | Directory | Notes |
+|---|---|---|---|
+| `PRAGMA table_info(tableName)` | ✅ | ✅ | Returns column metadata |
+| `SELECT ... FROM sqlite_master WHERE type='index'` | ✅ | ✅ | Index existence checks |
+| `sqlite_schema` alias | ✅ | ✅ | Synonym for `sqlite_master` |
 
 ### DML — INSERT / UPDATE / DELETE
 
@@ -110,14 +115,22 @@ All SELECT is routed through the shared `SqlParser`:
 
 ## Practical Impact: FluentMigrator
 
-FluentMigrator generates SQL that `SingleFileDatabase` can handle for all typical migrations:
+All typical FluentMigrator migration operations work identically against both modes:
 
-| FluentMigrator operation | Works in `.scdb`? |
-|---|---|
-| `Create.Table(...)` | ✅ (quoted identifiers supported v1.7.2+) |
-| `Delete.Table(...)` | ✅ |
-| `Insert.IntoTable(...).Row(...)` | ✅ |
-| `Update.Table(...).Set(...).Where(...)` | ✅ |
+| FluentMigrator operation | Works in `.scdb`? | Works in `.db`? |
+|---|---|---|
+| `Create.Table(...)` | ✅ | ✅ |
+| `Delete.Table(...)` | ✅ | ✅ |
+| `Create.Index(...)` | ✅ | ✅ |
+| `Delete.Index(...)` | ✅ | ✅ |
+| `Alter.Table(...).AddColumn(...)` | ✅ | ✅ |
+| `Alter.Table(...).AlterColumn(...)` | ✅ | ✅ |
+| `Rename.Column(...).OnTable(...)` | ✅ | ✅ |
+| `Insert.IntoTable(...).Row(...)` | ✅ | ✅ |
+| `Update.Table(...).Set(...).Where(...)` | ✅ | ✅ |
+| `Delete.FromTable(...)` | ✅ | ✅ |
+| `Create.ForeignKey(...)` | ⚠️ parsed, not enforced | ⚠️ parsed, not enforced |
+| Version table creation (`__SharpMigrations`) | ✅ | ✅ |
 | `Delete.FromTable(...).Row(...)` | ✅ |
 | `Delete.FromTable(...)` (no condition) | ✅ (v1.8+ via SqlParser) |
 | `Create.Index(...)` | ⚠️ silently ignored |
@@ -129,37 +142,37 @@ FluentMigrator generates SQL that `SingleFileDatabase` can handle for all typica
 ## Choosing the Right Mode
 
 ```
-Need advanced DDL (COLUMNAR storage mode, complex CREATE INDEX, ALTER TABLE)?
+Need COLUMNAR storage mode, Triggers, or Views?
     → Use Directory mode (Database class, .db folder)
 
-Need encrypted portable single-file storage with full DML/SELECT support?
+Need encrypted portable single-file storage?
     → Use SingleFile mode (SingleFileDatabase, .scdb)
-    → Full INSERT/UPDATE/DELETE/SELECT via SqlParser
-    → Standard CREATE TABLE / DROP TABLE via regex (all common DDL supported)
+    → Full DDL parity with directory mode for all common operations
+    → Full INSERT/UPDATE/DELETE/SELECT via shared SqlParser
 ```
 
 ### Directory mode
 
 ```csharp
-// Full SqlParser for DDL + DML + SELECT
 var db = factory.Create("myapp", "password");  // creates myapp/ folder
-var results = db.ExecuteQuery("SELECT u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id");
+db.ExecuteSQL("ALTER TABLE users RENAME COLUMN name TO full_name");
+db.ExecuteSQL("ALTER TABLE users DROP COLUMN temp_col");
 ```
 
 ### Single-file mode
 
 ```csharp
-// Full SqlParser for DML/SELECT; regex DDL for CREATE/DROP TABLE
 var db = factory.CreateWithOptions("myapp.scdb", "password", DatabaseOptions.CreateSingleFileDefault());
 
-// All of these work in single-file mode (v1.8+):
+// All of these work identically in single-file mode:
 db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
-db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')");
-db.ExecuteSQL("UPDATE users SET name = 'Alicia' WHERE id = 1");
-db.ExecuteSQL("DELETE FROM users WHERE id = 2");
+db.ExecuteSQL("ALTER TABLE users ADD COLUMN email TEXT");
+db.ExecuteSQL("ALTER TABLE users RENAME COLUMN name TO full_name");
+db.ExecuteSQL("ALTER TABLE users DROP COLUMN email");
+db.ExecuteSQL("CREATE INDEX idx_name ON users (full_name)");
 
-var results = db.ExecuteQuery("SELECT * FROM users WHERE name LIKE 'A%' ORDER BY id LIMIT 10");
-var joined  = db.ExecuteQuery("SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id");
+var results = db.ExecuteQuery("SELECT * FROM users WHERE full_name LIKE 'A%' ORDER BY id LIMIT 10");
+var joined  = db.ExecuteQuery("SELECT u.full_name, o.total FROM users u JOIN orders o ON u.id = o.user_id");
 ```
 
 ---
@@ -179,28 +192,27 @@ var joined  = db.ExecuteQuery("SELECT u.name, o.total FROM users u JOIN orders o
 
 ```
 SingleFileDatabase.ExecuteSQL(sql)
-  ├── CREATE TABLE  ──→  ExecuteCreateTableInternal()  (regex, registers with TableDirectoryManager)
-  ├── DROP TABLE    ──→  ExecuteDropTableInternal()     (regex, removes from TableDirectoryManager)
-  ├── CREATE/DROP INDEX/TRIGGER  ──→  silently ignored
-  └── everything else  ──→  ExecuteDMLInternal()
-                                └──→  GetSqlParser()  ──→  Services.SqlParser (shared engine)
-                                                           (INSERT / UPDATE / DELETE / SELECT)
+  ├── CREATE TABLE          ──→  ExecuteCreateTableInternal()     (regex, registers schema)
+  ├── DROP TABLE            ──→  ExecuteDropTableInternal()        (regex, removes schema)
+  ├── CREATE/DROP INDEX     ──→  ExecuteCreate/DropIndexInternal() (tracked in _indexRegistry)
+  ├── ALTER TABLE           ──→  ExecuteAlterTableInternal()       (delegates to ITable methods)
+  └── everything else       ──→  ExecuteDMLInternal()
+                                  └──→  SqlParser (shared DML/SELECT engine)
+
+Database.ExecuteSQL(sql)   [directory mode]
+  └── SqlParser (full DDL + DML + SELECT, including CREATE VIEW/TRIGGER, COLUMNAR storage)
 ```
 
-The `Services.SqlParser` used here is the DML-only constructor variant
-(`SqlParser(tables, dbPath, isReadOnly, queryCache, config)`), which has `_tableFactory = null`
-and will throw `ArgumentNullException` if DDL is routed to it — by design.
-
-A factory-aware constructor (`SqlParser(tables, dbPath, ITableFactory, ...)`) also exists and can be
-used by future implementations that bridge a compatible `SingleFileTableFactory` once the
-`Table`/`SingleFileTable` storage lifecycle is unified.
+Both implementations delegate column mutations (`ADD COLUMN`, `DROP COLUMN`, `RENAME COLUMN`)
+through the shared `ITable` interface so schema changes are handled consistently regardless of
+storage backend.
 
 ---
 
 ## See Also
 
-- [`docs/storage/STORAGE_MODE_GUIDANCE.md`](STORAGE_MODE_GUIDANCE.md) — choosing between Columnar and Page-Based within a mode
-- [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md) — full SQL dialect for Directory mode
+- [`docs/storage/STORAGE_MODE_GUIDANCE.md`](STORAGE_MODE_GUIDANCE.md) — Columnar vs Page-Based storage within a database
+- [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md) — full SQL dialect reference
 - [`Examples/FluentMigrator/`](../../Examples/FluentMigrator/) — working FluentMigrator + SingleFileDatabase demo
 
 ---

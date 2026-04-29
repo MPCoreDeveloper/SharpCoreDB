@@ -96,6 +96,8 @@ internal sealed class FakeGraphTable : ITable
     public bool HasBTreeIndex(string columnName) => false;
     public void Flush() { }
     public void AddColumn(ColumnDefinition columnDef) { }
+    public void DropColumn(string columnName) { }
+    public void RenameColumn(string oldName, string newName) { }
     public void SetMetadata(string key, object value) { }
     public object? GetMetadata(string key) => null;
     public bool RemoveMetadata(string key) => false;

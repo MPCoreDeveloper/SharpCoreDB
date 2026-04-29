@@ -356,6 +356,21 @@ public interface ITable
     void AddColumn(ColumnDefinition columnDef);
 
     /// <summary>
+    /// Drops a column from the table schema and removes its data from all rows.
+    /// Used for ALTER TABLE DROP COLUMN operations.
+    /// </summary>
+    /// <param name="columnName">The name of the column to drop (case-insensitive).</param>
+    void DropColumn(string columnName);
+
+    /// <summary>
+    /// Renames a column in the table schema.
+    /// Used for ALTER TABLE RENAME COLUMN operations.
+    /// </summary>
+    /// <param name="oldName">The current column name (case-insensitive).</param>
+    /// <param name="newName">The new column name.</param>
+    void RenameColumn(string oldName, string newName);
+
+    /// <summary>
     /// Sets an extensible metadata value on this table.
     /// Used by optional features such as vector indexes.
     /// </summary>

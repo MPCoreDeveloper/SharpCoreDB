@@ -1,4 +1,4 @@
-# Tool Compatibility Smoke Procedure v1.7.2
+# Tool Compatibility Smoke Procedure v1.8.0
 
 This folder contains repeatable assets for validating external tool compatibility against SharpCoreDB Server.
 
@@ -25,4 +25,4 @@ For each tool/version, record:
 - query execution outcome
 - limitations and workarounds
 
-Update `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.2.md` after each certification run.
+Update `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.8.0.md` after each certification run.

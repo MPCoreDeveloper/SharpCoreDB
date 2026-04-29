@@ -2,13 +2,13 @@
 
 YesSql provider integration for `SharpCoreDB`.
 
-**Version:** `v1.7.2`  
+**Version:** `v1.8.0`  
 **Package:** `SharpCoreDB.Provider.YesSql`
 
 
-## Patch updates in v1.7.2
+## Patch updates in v1.8.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.7.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -19,9 +19,9 @@ YesSql provider integration for `SharpCoreDB`.
 - Uses SharpCoreDB encryption and performance characteristics
 - .NET 10 compatible provider components
 
-## Changes in v1.7.2
+## Changes in v1.8.0
 
-- Package/docs standardized to `v1.7.2`
+- Package/docs standardized to `v1.8.0`
 - Documentation refreshed around provider role and usage
 - Inherits SharpCoreDB core reliability/parser improvements
 - No intended breaking changes from v1.5.0
@@ -29,7 +29,7 @@ YesSql provider integration for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.YesSql --version 1.7.2
+dotnet add package SharpCoreDB.Provider.YesSql --version 1.8.0
 ```
 
 ## Documentation

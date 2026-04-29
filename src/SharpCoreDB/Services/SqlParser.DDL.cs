@@ -788,8 +788,36 @@ public partial class SqlParser
             // Add column to table
             table.AddColumn(columnDef);
 
-            // Mark metadata as dirty for persistence
-            // Note: Database.ExecuteSQL will handle SaveMetadata
+            wal?.Log(sql);
+        }
+        else if (parts.Length > 5 && parts[3].ToUpper() == "RENAME" && parts[4].ToUpper() == "COLUMN")
+        {
+            // ALTER TABLE t RENAME COLUMN old TO new
+            var toIndex = Array.FindIndex(parts, 5, p => p.ToUpper() == "TO");
+            if (toIndex < 0 || toIndex + 1 >= parts.Length)
+                throw new InvalidOperationException($"Unsupported ALTER TABLE operation: {string.Join(" ", parts.Skip(3))}");
+
+            var oldCol = parts[toIndex - 1].Trim('"', '[', ']', '`', '\'');
+            var newCol = parts[toIndex + 1].Trim('"', '[', ']', '`', '\'');
+
+            table.RenameColumn(oldCol, newCol);
+
+            wal?.Log(sql);
+        }
+        else if (parts.Length > 4 && parts[3].ToUpper() == "DROP" && parts[4].ToUpper() == "COLUMN")
+        {
+            // ALTER TABLE t DROP COLUMN colName
+            // Optionally skip IF EXISTS
+            int colPartIndex = 5;
+            if (parts.Length > 6 && parts[5].ToUpper() == "IF" && parts[6].ToUpper() == "EXISTS")
+                colPartIndex = 7;
+
+            if (colPartIndex >= parts.Length)
+                throw new InvalidOperationException($"Unsupported ALTER TABLE operation: {string.Join(" ", parts.Skip(3))}");
+
+            var colName = parts[colPartIndex].Trim('"', '[', ']', '`', '\'');
+
+            table.DropColumn(colName);
 
             wal?.Log(sql);
         }

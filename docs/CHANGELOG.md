@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-04-29
+
+### Changed
+- Synchronized repository versioning for the 1.8.0 release across .NET packages, script clients, and README/NuGet documentation.
+
 ## [1.7.2] - 2026-04-28
 
 ### Added
