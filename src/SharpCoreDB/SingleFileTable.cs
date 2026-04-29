@@ -489,7 +489,27 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 return;
             }
 
-            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(stream);
+            // Read the stream into bytes and trim trailing null bytes
+            using var memoryStream = new MemoryStream();
+            stream.CopyTo(memoryStream);
+            var jsonBytes = memoryStream.ToArray();
+            
+            // Trim trailing null bytes
+            var endIndex = jsonBytes.Length;
+            while (endIndex > 0 && jsonBytes[endIndex - 1] == 0)
+            {
+                endIndex--;
+            }
+            
+            if (endIndex == 0)
+            {
+                _rowCache = [];
+                _cacheLoaded = true;
+                return;
+            }
+            
+            var trimmedJsonBytes = jsonBytes.AsSpan(0, endIndex);
+            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes);
             _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
             _cacheLoaded = true;
         }
