@@ -10,8 +10,9 @@ using SharpCoreDB.Interfaces;
 using SharpCoreDB.Optimizations;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage;
+using SharpCoreDB.Storage.Hybrid;
 using SharpCoreDB.Storage.Scdb;
-using System;
+using StorageModeHybrid = SharpCoreDB.Storage.Hybrid.StorageMode;using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -101,40 +102,59 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     public string Name { get; set; } = tableName;
 
     /// <inheritdoc />
-    public List<string> Columns { get; private set; } = [];
+    public List<string> Columns { get; set; } = [];
 
     /// <inheritdoc />
-    public List<DataType> ColumnTypes { get; private set; } = [];
+    public List<DataType> ColumnTypes { get; set; } = [];
 
     /// <inheritdoc />
     public string DataFile { get; set; } = storageProvider.RootPath;
 
     /// <inheritdoc />
-    public int PrimaryKeyIndex { get; private set; } = -1;
+    public int PrimaryKeyIndex { get; set; } = -1;
 
     /// <inheritdoc />
-    public bool HasInternalRowId => false;
+    public bool HasInternalRowId { get; set; }
 
     /// <inheritdoc />
-    public List<bool> IsAuto { get; } = [];
+    /// <remarks>Single-file tables store this for schema compatibility with the shared DDL path;
+    /// the actual value does not affect storage engine behaviour.</remarks>
+    public StorageModeHybrid StorageMode { get; set; } = StorageModeHybrid.Columnar;
 
     /// <inheritdoc />
-    public List<bool> IsNotNull { get; } = [];
+    /// <remarks>Single-file tables do not use a standalone B-tree PK index;
+    /// the setter is accepted but the value is unused at runtime.</remarks>
+    public IIndex<string, long> Index { get; set; } = new NullIndex();
 
     /// <inheritdoc />
-    public List<object?> DefaultValues { get; } = [];
+    public List<string?> DefaultExpressions { get; set; } = [];
 
     /// <inheritdoc />
-    public List<ForeignKeyConstraint> ForeignKeys { get; } = [];
+    public List<string?> ColumnCheckExpressions { get; set; } = [];
 
     /// <inheritdoc />
-    public List<List<string>> UniqueConstraints { get; } = [];
+    public List<string> TableCheckConstraints { get; set; } = [];
 
     /// <inheritdoc />
-    public List<CollationType> ColumnCollations { get; } = [];
+    public List<bool> IsAuto { get; set; } = [];
 
     /// <inheritdoc />
-    public List<string?> ColumnLocaleNames { get; } = [];
+    public List<bool> IsNotNull { get; set; } = [];
+
+    /// <inheritdoc />
+    public List<object?> DefaultValues { get; set; } = [];
+
+    /// <inheritdoc />
+    public List<ForeignKeyConstraint> ForeignKeys { get; set; } = [];
+
+    /// <inheritdoc />
+    public List<List<string>> UniqueConstraints { get; set; } = [];
+
+    /// <inheritdoc />
+    public List<CollationType> ColumnCollations { get; set; } = [];
+
+    /// <inheritdoc />
+    public List<string?> ColumnLocaleNames { get; set; } = [];
 
     /// <summary>
     /// Gets or sets whether changes are automatically flushed to disk after each operation.
@@ -552,6 +572,42 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     public void Flush() => FlushCache();
 
     /// <inheritdoc />
+    /// <remarks>No-op for single-file tables: the storage provider handles all I/O.</remarks>
+    public void InitializeStorageEngine() { }
+
+    /// <inheritdoc />
+    /// <remarks>Single-file tables have no named index registry; always returns false.</remarks>
+    public bool HasIndex(string nameOrColumn) => false;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Applies a DDL-parsed schema to this single-file table.
+    /// The data file path and storage-engine-specific fields (StorageMode, Index) are
+    /// stored for schema completeness but do not affect runtime behaviour since
+    /// the storage provider manages all persistence.
+    /// </remarks>
+    public void ApplySchema(TableSchemaDefinition schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        Columns = schema.Columns;
+        ColumnTypes = schema.ColumnTypes;
+        IsAuto = schema.IsAuto;
+        PrimaryKeyIndex = schema.PrimaryKeyIndex;
+        HasInternalRowId = schema.HasInternalRowId;
+        DataFile = schema.DataFilePath;
+        StorageMode = schema.StorageMode;
+        IsNotNull = schema.IsNotNull;
+        DefaultValues = schema.DefaultValues;
+        UniqueConstraints = schema.UniqueConstraints;
+        ForeignKeys = schema.ForeignKeys;
+        DefaultExpressions = schema.DefaultExpressions;
+        ColumnCheckExpressions = schema.ColumnCheckExpressions;
+        TableCheckConstraints = schema.TableCheckConstraints;
+        ColumnCollations = schema.ColumnCollations;
+        ColumnLocaleNames = schema.ColumnLocaleNames;
+    }
+
+    /// <inheritdoc />
     public void AddColumn(ColumnDefinition columnDef)
     {
         ArgumentNullException.ThrowIfNull(columnDef);
@@ -812,5 +868,25 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
 
         return doubleValue;
+    }
+
+    /// <summary>
+    /// No-op index implementation used by <see cref="SingleFileTable"/> to satisfy the
+    /// <see cref="ITable.Index"/> contract. Single-file tables do not use a standalone
+    /// B-tree PK index; the storage provider manages data directly.
+    /// </summary>
+    private sealed class NullIndex : IIndex<string, long>
+    {
+        /// <inheritdoc />
+        public void Insert(string key, long value) { }
+
+        /// <inheritdoc />
+        public (bool Found, long Value) Search(string key) => (false, 0);
+
+        /// <inheritdoc />
+        public bool Delete(string key) => false;
+
+        /// <inheritdoc />
+        public void Clear() { }
     }
 }

@@ -356,34 +356,32 @@ public partial class SqlParser
         
         // Create brand new table with clean state — use the factory so the storage coupling
         // is contained to the factory implementation rather than spread through DDL logic.
-        var table = (Table)_tableFactory.CreateTable(tableName, this.isReadOnly, this.config);
-        table.Name = tableName;
-        table.Columns = columns;
-        table.ColumnTypes = columnTypes;
-        table.IsAuto = isAuto;
-        table.PrimaryKeyIndex = primaryKeyIndex;
-        table.HasInternalRowId = hasInternalRowId;  // ✅ AUTO-ROWID: Track internal _rowid
-        table.DataFile = dataFilePath;
-        table.StorageMode = storageMode;
-        table.IsNotNull = isNotNull;
-        table.DefaultValues = defaultValues;
-        table.UniqueConstraints = uniqueConstraints;
-        table.ForeignKeys = foreignKeys;  // Added for Phase 1.2
-        table.DefaultExpressions = defaultExpressions;
-        table.ColumnCheckExpressions = columnCheckExpressions;
-        table.TableCheckConstraints = tableCheckConstraints;
-        table.ColumnCollations = columnCollations;  // ✅ COLLATE Phase 2
-        table.ColumnLocaleNames = columnLocaleNames;   // ✅ Phase 9
+        var table = _tableFactory.CreateTable(tableName, this.isReadOnly, this.config);
 
-        // ✅ COLLATE Phase 4: Initialize Primary Key BTree Index with correct collation
-        if (primaryKeyIndex >= 0)
+        // Populate all schema fields via a single ApplySchema call.
+        // This works for both directory-mode (Table) and single-file (SingleFileTable) without
+        // any cast to a concrete type.
+        table.ApplySchema(new TableSchemaDefinition
         {
-            var pkCollation = primaryKeyIndex < columnCollations.Count 
-                ? columnCollations[primaryKeyIndex] 
-                : CollationType.Binary;
-            table.Index = new BTree<string, long>(pkCollation);
-        }
+            Columns = columns,
+            ColumnTypes = columnTypes,
+            IsAuto = isAuto,
+            PrimaryKeyIndex = primaryKeyIndex,
+            HasInternalRowId = hasInternalRowId,
+            DataFilePath = dataFilePath,
+            StorageMode = storageMode,
+            IsNotNull = isNotNull,
+            DefaultValues = defaultValues,
+            UniqueConstraints = uniqueConstraints,
+            ForeignKeys = foreignKeys,
+            DefaultExpressions = defaultExpressions,
+            ColumnCheckExpressions = columnCheckExpressions,
+            TableCheckConstraints = tableCheckConstraints,
+            ColumnCollations = columnCollations,
+            ColumnLocaleNames = columnLocaleNames,
+        });
 
+        table.Name = tableName;
         this.tables[tableName] = table;
 
         // ✅ CRITICAL: Initialize storage engine IMMEDIATELY after creating table
@@ -499,7 +497,7 @@ public partial class SqlParser
         // Check both index name and column name using the new HasIndex method
         var table = this.tables[tableName];
         
-        if (ifNotExists && (table is Table concreteTable) && concreteTable.HasIndex(indexName))
+        if (ifNotExists && table.HasIndex(indexName))
         {
             return; // Silently skip - index already exists
         }

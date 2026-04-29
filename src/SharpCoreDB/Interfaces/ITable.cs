@@ -4,6 +4,8 @@
 // </copyright>
 namespace SharpCoreDB.Interfaces;
 
+using SharpCoreDB.Storage.Hybrid;
+
 /// <summary>
 /// Interface for a database table.
 /// </summary>
@@ -86,6 +88,66 @@ public interface ITable
     /// ✅ Phase 9: Parallel list to <see cref="ColumnCollations"/>.
     /// </summary>
     List<string?> ColumnLocaleNames { get; }
+
+    // ── DDL lifecycle members ───────────────────────────────────────────────
+    // These have default implementations so existing test fakes that implement
+    // ITable for read-only purposes do not need to be updated.
+
+    /// <summary>
+    /// Gets or sets the storage engine mode for this table.
+    /// Directory-mode tables use <see cref="StorageMode.Columnar"/> or <see cref="StorageMode.PageBased"/>.
+    /// Single-file tables default to <see cref="StorageMode.Columnar"/> and the value is schema-only.
+    /// </summary>
+    StorageMode StorageMode { get => StorageMode.Columnar; set { } }
+
+    /// <summary>
+    /// Gets or sets the primary key B-tree index.
+    /// Directory-mode tables use a full BTree; single-file tables use a no-op implementation.
+    /// </summary>
+    IIndex<string, long> Index { get => NullIndex.Instance; set { } }
+
+    /// <summary>
+    /// Gets or sets per-column DEFAULT expressions (SQL expression strings).
+    /// </summary>
+    List<string?> DefaultExpressions { get => []; set { } }
+
+    /// <summary>
+    /// Gets or sets per-column CHECK constraint expressions.
+    /// </summary>
+    List<string?> ColumnCheckExpressions { get => []; set { } }
+
+    /// <summary>
+    /// Gets or sets table-level CHECK constraint expressions.
+    /// </summary>
+    List<string> TableCheckConstraints { get => []; set { } }
+
+    /// <summary>
+    /// Initializes (or re-initializes) the underlying storage engine for this table.
+    /// For directory-mode tables this opens or creates the columnar/page-based file.
+    /// For single-file tables this is a no-op (storage is managed by the provider).
+    /// </summary>
+    void InitializeStorageEngine() { }
+
+    /// <summary>
+    /// Returns true if an index (by name or column name) exists on this table.
+    /// Used by <c>CREATE INDEX IF NOT EXISTS</c> to avoid duplicate creation.
+    /// Single-file tables without a real index registry always return false.
+    /// </summary>
+    /// <param name="nameOrColumn">Index name or column name to check.</param>
+    /// <returns>True if the index exists.</returns>
+    bool HasIndex(string nameOrColumn) => false;
+
+    /// <summary>
+    /// Applies the given <paramref name="schema"/> definition to this table instance.
+    /// Called by <c>SqlParser.ExecuteCreateTable</c> after the factory creates the table
+    /// object but before it is registered or its storage is initialised.
+    /// The default implementation is a no-op; concrete classes override this to populate
+    /// their internal schema fields without requiring individual property setters on the interface.
+    /// </summary>
+    /// <param name="schema">The full schema definition produced by DDL parsing.</param>
+    void ApplySchema(TableSchemaDefinition schema) { }
+
+    // ── Insert ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Inserts a row into the table.
@@ -242,7 +304,7 @@ public interface ITable
     /// This prevents stale/corrupt index data from being read after DDL operations.
     /// </summary>
     void ClearAllIndexes();
-    
+
     /// <summary>
     /// Gets the cached row count (O(1) operation).
     /// Returns -1 if cache is not initialized.
@@ -279,7 +341,7 @@ public interface ITable
     /// <param name="columnName">The column name.</param>
     /// <returns>True if B-tree index exists.</returns>
     bool HasBTreeIndex(string columnName);
-    
+
     /// <summary>
     /// Flushes all pending writes to disk.
     /// Ensures INSERT/UPDATE/DELETE operations are persisted.
@@ -314,4 +376,19 @@ public interface ITable
     /// <param name="key">The metadata key.</param>
     /// <returns>True if the entry was removed.</returns>
     bool RemoveMetadata(string key);
+
+    // ── Private helper singleton ─────────────────────────────────────────────
+
+    /// <summary>
+    /// No-op <see cref="IIndex{TKey,TValue}"/> singleton returned by the default
+    /// <see cref="Index"/> property implementation.
+    /// </summary>
+    private sealed class NullIndex : IIndex<string, long>
+    {
+        internal static readonly NullIndex Instance = new();
+        public void Insert(string key, long value) { }
+        public (bool Found, long Value) Search(string key) => (false, 0);
+        public bool Delete(string key) => false;
+        public void Clear() { }
+    }
 }

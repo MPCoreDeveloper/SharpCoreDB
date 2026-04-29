@@ -362,6 +362,43 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
+    /// <summary>
+    /// Applies a parsed DDL schema to this table instance.
+    /// Called by <c>SqlParser.ExecuteCreateTable</c> to bulk-set all schema properties
+    /// in a single call, removing the need for individual property setters on <see cref="ITable"/>.
+    /// </summary>
+    /// <param name="schema">The schema definition from DDL parsing.</param>
+    public void ApplySchema(TableSchemaDefinition schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        Columns = schema.Columns;
+        ColumnTypes = schema.ColumnTypes;
+        IsAuto = schema.IsAuto;
+        PrimaryKeyIndex = schema.PrimaryKeyIndex;
+        HasInternalRowId = schema.HasInternalRowId;
+        DataFile = schema.DataFilePath;
+        StorageMode = schema.StorageMode;
+        IsNotNull = schema.IsNotNull;
+        DefaultValues = schema.DefaultValues;
+        UniqueConstraints = schema.UniqueConstraints;
+        ForeignKeys = schema.ForeignKeys;
+        DefaultExpressions = schema.DefaultExpressions;
+        ColumnCheckExpressions = schema.ColumnCheckExpressions;
+        TableCheckConstraints = schema.TableCheckConstraints;
+        ColumnCollations = schema.ColumnCollations;
+        ColumnLocaleNames = schema.ColumnLocaleNames;
+
+        // Initialise primary key B-tree with correct collation
+        if (PrimaryKeyIndex >= 0)
+        {
+            var pkCollation = PrimaryKeyIndex < ColumnCollations.Count
+                ? ColumnCollations[PrimaryKeyIndex]
+                : CollationType.Binary;
+            Index = new BTree<string, long>(pkCollation);
+        }
+    }
+
+    /// <summary>
     /// Adds a new column to the table schema.
     /// Used for ALTER TABLE ADD COLUMN operations.
     /// </summary>
