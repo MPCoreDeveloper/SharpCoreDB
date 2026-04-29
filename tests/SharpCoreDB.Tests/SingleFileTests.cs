@@ -342,4 +342,147 @@ public class SingleFileTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    /// <summary>
+    /// JOIN tests — single-file SELECT is routed through the shared SqlParser,
+    /// so all join variants already work. These tests lock in that behaviour.
+    /// </summary>
+    [Fact]
+    public void ExecuteQuery_InnerJoin_ReturnsMatchingRows()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, amount REAL)");
+            db.ExecuteSQL("CREATE TABLE customers (customer_id INTEGER, name TEXT)");
+            db.ExecuteBatchSQL([
+                "INSERT INTO customers VALUES (1, 'Alice')",
+                "INSERT INTO customers VALUES (2, 'Bob')",
+                "INSERT INTO orders VALUES (10, 1, 99.50)",
+                "INSERT INTO orders VALUES (11, 1, 45.00)",
+                "INSERT INTO orders VALUES (12, 2, 200.00)"
+            ]);
+
+            // Act
+            var results = db.ExecuteQuery(
+                "SELECT orders.order_id, customers.name FROM orders " +
+                "INNER JOIN customers ON orders.customer_id = customers.customer_id");
+
+            // Assert — all three orders have a matching customer
+            Assert.Equal(3, results.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ExecuteQuery_LeftJoin_IncludesUnmatchedLeftRows()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE products (product_id INTEGER, name TEXT)");
+            db.ExecuteSQL("CREATE TABLE reviews (review_id INTEGER, product_id INTEGER, score INTEGER)");
+            db.ExecuteBatchSQL([
+                "INSERT INTO products VALUES (1, 'Widget')",
+                "INSERT INTO products VALUES (2, 'Gadget')",
+                "INSERT INTO reviews VALUES (100, 1, 5)"
+                // product 2 has no review
+            ]);
+
+            // Act
+            var results = db.ExecuteQuery(
+                "SELECT products.name, reviews.score FROM products " +
+                "LEFT JOIN reviews ON products.product_id = reviews.product_id");
+
+            // Assert — both products appear; Gadget row has NULL score
+            Assert.Equal(2, results.Count);
+            var gadget = results.First(r => r["name"]?.ToString() == "Gadget");
+            // SQL NULL is represented as DBNull.Value in dictionary results
+            Assert.True(gadget["score"] is null or DBNull);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ExecuteQuery_Join_WithWhereFilter_ReturnsFilteredRows()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE emp (emp_id INTEGER, dept_id INTEGER, name TEXT)");
+            db.ExecuteSQL("CREATE TABLE dept (dept_id INTEGER, dept_name TEXT)");
+            db.ExecuteBatchSQL([
+                "INSERT INTO dept VALUES (1, 'Engineering')",
+                "INSERT INTO dept VALUES (2, 'Marketing')",
+                "INSERT INTO emp VALUES (1, 1, 'Alice')",
+                "INSERT INTO emp VALUES (2, 1, 'Bob')",
+                "INSERT INTO emp VALUES (3, 2, 'Carol')"
+            ]);
+
+            // Act — only Engineering employees
+            var results = db.ExecuteQuery(
+                "SELECT emp.name, dept.dept_name FROM emp " +
+                "INNER JOIN dept ON emp.dept_id = dept.dept_id " +
+                "WHERE dept.dept_name = 'Engineering'");
+
+            // Assert
+            Assert.Equal(2, results.Count);
+            Assert.All(results, r => Assert.Equal("Engineering", r["dept_name"]?.ToString()));
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ExecuteQuery_ThreeTableJoin_ReturnsCorrectRows()
+    {
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = _factory.CreateWithOptions(_testFilePath, "test_password", options);
+
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE authors (author_id INTEGER, author_name TEXT)");
+            db.ExecuteSQL("CREATE TABLE books (book_id INTEGER, author_id INTEGER, title TEXT)");
+            db.ExecuteSQL("CREATE TABLE sales (sale_id INTEGER, book_id INTEGER, qty INTEGER)");
+            db.ExecuteBatchSQL([
+                "INSERT INTO authors VALUES (1, 'Tolkien')",
+                "INSERT INTO books VALUES (10, 1, 'The Hobbit')",
+                "INSERT INTO books VALUES (11, 1, 'LOTR')",
+                "INSERT INTO sales VALUES (100, 10, 5)",
+                "INSERT INTO sales VALUES (101, 11, 12)"
+            ]);
+
+            // Act
+            var results = db.ExecuteQuery(
+                "SELECT authors.author_name, books.title, sales.qty FROM authors " +
+                "INNER JOIN books ON authors.author_id = books.author_id " +
+                "INNER JOIN sales ON books.book_id = sales.book_id");
+
+            // Assert — both books sold by Tolkien appear
+            Assert.Equal(2, results.Count);
+            Assert.All(results, r => Assert.Equal("Tolkien", r["author_name"]?.ToString()));
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
 }
