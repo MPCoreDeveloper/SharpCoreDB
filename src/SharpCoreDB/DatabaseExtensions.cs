@@ -682,14 +682,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             columns.Add(colName);
             columnTypes.Add(typeStr switch
             {
-                "INT" or "INTEGER" or "BIGINT" => DataType.Integer,
+                "INT" or "INTEGER" => DataType.Integer,
+                "BIGINT" or "LONG" => DataType.Long,
                 "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
                 "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
                 "DECIMAL" or "NUMERIC" => DataType.Decimal,
                 "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
                 "BLOB" => DataType.Blob,
                 "BOOLEAN" or "BOOL" => DataType.Boolean,
-                "LONG" => DataType.Long,
                 "GUID" or "UUID" => DataType.Guid,
                 _ => DataType.String
             });
