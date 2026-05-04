@@ -23,7 +23,7 @@
     </PackageReference>
 
     <!-- ASP.NET Core test host for in-process gRPC server -->
-    <PackageReference Include="Grpc.AspNetCore" Version="2.76.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
   </ItemGroup>
 
   <ItemGroup>
