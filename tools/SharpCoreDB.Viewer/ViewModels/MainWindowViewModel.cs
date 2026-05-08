@@ -19,7 +19,12 @@ public enum ResultMode
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly LocalizationService _localization = LocalizationService.Instance;
-    private readonly List<string> _allTables = [];
+    public LocalizationService Localization => _localization;
+    
+    private List<string> _allTables = [];
+    private List<string> _allViews = [];
+    private List<string> _allProcedures = [];
+    private List<string> _allTriggers = [];
 
     [ObservableProperty]
     private string _title = "SharpCoreDB Viewer";
@@ -111,13 +116,28 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _pageSize = 200;
 
     [ObservableProperty]
-    private string _selectTopNText = "100";
+    private string _selectTopNText = "200";
 
     [ObservableProperty]
     private int _currentOffset;
 
     [ObservableProperty]
     private long _currentPreviewTotalRows;
+
+    [ObservableProperty]
+    private ExplorerNode? _selectedObject;
+
+    [ObservableProperty]
+    private string _newProcedureName = string.Empty;
+
+    [ObservableProperty]
+    private string _newProcedureBody = string.Empty;
+
+    [ObservableProperty]
+    private string _newTriggerName = string.Empty;
+
+    [ObservableProperty]
+    private string _newTriggerBody = string.Empty;
 
     [ObservableProperty]
     private string _newTableName = string.Empty;
@@ -132,10 +152,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!int.TryParse(SelectTopNText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
         {
-            return 100;
+            return 200;
         }
 
-        return Math.Clamp(value, 1, 10_000);
+        // Cap at 5000 to prevent UI from freezing on large tables
+        return Math.Clamp(value, 1, 5_000);
     }
 
     /// <summary>
@@ -181,6 +202,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedExplorerNodeChanged(ExplorerNode? value)
     {
+        // Keep SelectedObject in sync so commands that check SelectedObject
+        // (ScriptSelectedObject, DropSelectedObject) work when triggered from context menus
+        SelectedObject = value;
+
         if (value is null)
         {
             return;
@@ -208,8 +233,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _nextResultPageCommand?.NotifyCanExecuteChanged();
     }
 
-    [RelayCommand]
-    private void Disconnect()
+    public void Disconnect()
     {
         CloseActiveConnection();
         IsConnected = false;
@@ -411,9 +435,10 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        if (!IsValidSqlIdentifier(NewTableName))
+        var trimmedName = NewTableName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedName))
         {
-            StatusMessage = "Invalid table name. Use letters, digits and underscore only.";
+            StatusMessage = "Table name cannot be empty.";
             return;
         }
 
@@ -425,14 +450,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var trimmedName = NewTableName.Trim();
             if (_allTables.Any(t => string.Equals(t, trimmedName, StringComparison.OrdinalIgnoreCase)))
             {
                 StatusMessage = $"Table '{trimmedName}' already exists.";
                 return;
             }
 
-            var createSql = $"CREATE TABLE IF NOT EXISTS {trimmedName} ({NewTableColumnsDefinition});";
+            // Quote the table name to support any valid identifier
+            var escapedName = trimmedName.Replace("\"", "\"\"", StringComparison.Ordinal);
+            var createSql = $"CREATE TABLE IF NOT EXISTS \"{escapedName}\" ({NewTableColumnsDefinition});";
             using var command = new SharpCoreDBCommand(createSql, ActiveConnection);
             await command.ExecuteNonQueryAsync().ConfigureAwait(true);
 
@@ -521,13 +547,13 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        if (!IsValidSqlIdentifier(RenameTableName))
+        var newName = RenameTableName.Trim();
+        if (string.IsNullOrWhiteSpace(newName))
         {
-            StatusMessage = "Invalid new table name. Use letters, digits and underscore only.";
+            StatusMessage = "New table name cannot be empty.";
             return;
         }
 
-        var newName = RenameTableName.Trim();
         if (string.Equals(newName, SelectedTable, StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -1029,59 +1055,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task LoadTablesAsync()
     {
-        if (ActiveConnection is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var loadedTables = new List<string>();
-
-            using (var command = new SharpCoreDBCommand("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", ActiveConnection))
-            using (var reader = await command.ExecuteReaderAsync().ConfigureAwait(true))
-            {
-                while (await reader.ReadAsync().ConfigureAwait(true))
-                {
-                    var tableName = reader.GetString(0);
-                    if (!string.IsNullOrWhiteSpace(tableName))
-                    {
-                        loadedTables.Add(tableName);
-                    }
-                }
-            }
-
-            if (loadedTables.Count == 0)
-            {
-                var schema = ActiveConnection.GetSchema("Tables");
-                foreach (DataRow row in schema.Rows)
-                {
-                    var tableName = row["TABLE_NAME"]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(tableName))
-                    {
-                        loadedTables.Add(tableName);
-                    }
-                }
-            }
-
-            _allTables.Clear();
-            foreach (var table in loadedTables.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static t => t, StringComparer.OrdinalIgnoreCase))
-            {
-                _allTables.Add(table);
-            }
-
-            ApplyTableFilter(TableFilterText);
-            await RebuildExplorerNodesAsync().ConfigureAwait(true);
-
-            if (SelectedTable is null || !_allTables.Contains(SelectedTable, StringComparer.OrdinalIgnoreCase))
-            {
-                SelectedTable = Tables.FirstOrDefault();
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = _localization.Format("ErrorTableLoadFailed", ex.Message);
-        }
+        await LoadSchemaAsync().ConfigureAwait(true);
     }
 
     private async Task RebuildExplorerNodesAsync()
@@ -1162,7 +1136,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                using var selectCommand = new SharpCoreDBCommand($"SELECT * FROM {tableRef}", ActiveConnection);
+                // LIMIT 1: we only need column names, not data
+                using var selectCommand = new SharpCoreDBCommand($"SELECT * FROM {tableRef} LIMIT 1", ActiveConnection);
                 using var reader = await selectCommand.ExecuteReaderAsync().ConfigureAwait(true);
                 for (var i = 0; i < reader.FieldCount; i++)
                 {
@@ -1190,12 +1165,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var isSingleFile = string.Equals(ActiveConnection.DbInstance?.StorageMode.ToString(), "SingleFile", StringComparison.OrdinalIgnoreCase);
             var tableRef = BuildTableReference(SelectedTable);
 
-            QueryText = isSingleFile
-                ? $"SELECT * FROM {tableRef};"
-                : $"SELECT rowid AS __rowid__, * FROM {tableRef} LIMIT {PageSize} OFFSET {CurrentOffset};";
+            // Always use LIMIT/OFFSET for paging, regardless of storage mode
+            QueryText = $"SELECT rowid AS __rowid__, * FROM {tableRef} LIMIT {PageSize} OFFSET {CurrentOffset};";
 
             using var command = new SharpCoreDBCommand(QueryText, ActiveConnection);
             using var reader = await command.ExecuteReaderAsync().ConfigureAwait(true);
@@ -1223,15 +1196,6 @@ public partial class MainWindowViewModel : ViewModelBase
             if (columnNames.Count > 0)
             {
                 GenerateDataGridColumns(columnNames);
-            }
-
-            if (isSingleFile)
-            {
-                CurrentPreviewTotalRows = QueryResults.Count;
-                CanGoPreviousPage = false;
-                CanGoNextPage = false;
-                StatusMessage = $"Rows: {QueryResults.Count}";
-                return;
             }
 
             using var countCommand = new SharpCoreDBCommand($"SELECT COUNT(*) FROM {tableRef}", ActiveConnection);
@@ -1448,5 +1412,237 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         return messages.Count == 0 ? "Unknown error." : string.Join(" -> ", messages.Distinct(StringComparer.Ordinal));
+    }
+
+    [RelayCommand]
+    private async Task CreateNewProcedure()
+    {
+        if (ActiveConnection is null)
+        {
+            StatusMessage = _localization["NotConnected"];
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewProcedureName) || string.IsNullOrWhiteSpace(NewProcedureBody))
+        {
+            StatusMessage = "Procedure name and body cannot be empty.";
+            return;
+        }
+
+        if (!IsValidSqlIdentifier(NewProcedureName.Trim()))
+        {
+            StatusMessage = "Invalid procedure name. Use letters, digits and underscore only.";
+            return;
+        }
+
+        try
+        {
+            using var command = new SharpCoreDBCommand(NewProcedureBody, ActiveConnection);
+            await command.ExecuteNonQueryAsync().ConfigureAwait(true);
+
+            NewProcedureName = string.Empty;
+            NewProcedureBody = string.Empty;
+            await LoadSchemaAsync().ConfigureAwait(true);
+            StatusMessage = $"Procedure '{NewProcedureName}' created.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = _localization.Format("ErrorQueryFailed", GetDetailedErrorMessage(ex));
+        }
+    }
+
+    [RelayCommand]
+    private async Task CreateNewTrigger()
+    {
+        if (ActiveConnection is null)
+        {
+            StatusMessage = _localization["NotConnected"];
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewTriggerName) || string.IsNullOrWhiteSpace(NewTriggerBody))
+        {
+            StatusMessage = "Trigger name and body cannot be empty.";
+            return;
+        }
+
+        if (!IsValidSqlIdentifier(NewTriggerName.Trim()))
+        {
+            StatusMessage = "Invalid trigger name. Use letters, digits and underscore only.";
+            return;
+        }
+
+        try
+        {
+            using var command = new SharpCoreDBCommand(NewTriggerBody, ActiveConnection);
+            await command.ExecuteNonQueryAsync().ConfigureAwait(true);
+
+            NewTriggerName = string.Empty;
+            NewTriggerBody = string.Empty;
+            await LoadSchemaAsync().ConfigureAwait(true);
+            StatusMessage = $"Trigger '{NewTriggerName}' created.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = _localization.Format("ErrorQueryFailed", GetDetailedErrorMessage(ex));
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanScriptSelectedObject))]
+    private async Task ScriptSelectedObject()
+    {
+        if (ActiveConnection is null || SelectedObject is null || SelectedObject.NodeType == ExplorerNodeType.Folder || SelectedObject.NodeType == ExplorerNodeType.Column)
+        {
+            return;
+        }
+
+        try
+        {
+            var objectType = SelectedObject.NodeType switch
+            {
+                ExplorerNodeType.Table => "table",
+                ExplorerNodeType.View => "view",
+                ExplorerNodeType.Procedure => "procedure",
+                ExplorerNodeType.Trigger => "trigger",
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(objectType))
+            {
+                return;
+            }
+
+            var escapedName = SelectedObject.Name.Replace("'", "''", StringComparison.Ordinal);
+            using var command = new SharpCoreDBCommand($"SELECT sql FROM sqlite_master WHERE type='{objectType}' AND name='{escapedName}' LIMIT 1;", ActiveConnection);
+            var result = await command.ExecuteScalarAsync().ConfigureAwait(true);
+            QueryText = result?.ToString() ?? string.Empty;
+            StatusMessage = string.IsNullOrWhiteSpace(QueryText)
+                ? "No script found."
+                : $"{objectType} script loaded in editor.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = _localization.Format("ErrorQueryFailed", ex.Message);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanDropSelectedObject))]
+    private async Task DropSelectedObject()
+    {
+        if (ActiveConnection is null || SelectedObject is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string dropStatement;
+            string objectType;
+
+            switch (SelectedObject.NodeType)
+            {
+                case ExplorerNodeType.Table:
+                    objectType = "table";
+                    var escapedTable = SelectedObject.Name.Replace("\"", "\"\"", StringComparison.Ordinal);
+                    dropStatement = $"DROP TABLE IF EXISTS \"{escapedTable}\";";
+                    break;
+                case ExplorerNodeType.View:
+                    objectType = "view";
+                    var escapedView = SelectedObject.Name.Replace("\"", "\"\"", StringComparison.Ordinal);
+                    dropStatement = $"DROP VIEW IF EXISTS \"{escapedView}\";";
+                    break;
+                case ExplorerNodeType.Procedure:
+                    objectType = "procedure";
+                    // SQLite doesn't have DROP PROCEDURE, so we'll just show a message
+                    StatusMessage = "SQLite does not support dropping procedures.";
+                    return;
+                case ExplorerNodeType.Trigger:
+                    objectType = "trigger";
+                    var escapedTrigger = SelectedObject.Name.Replace("\"", "\"\"", StringComparison.Ordinal);
+                    dropStatement = $"DROP TRIGGER IF EXISTS \"{escapedTrigger}\";";
+                    break;
+                default:
+                    StatusMessage = "Cannot drop this type of object.";
+                    return;
+            }
+
+            using var command = new SharpCoreDBCommand(dropStatement, ActiveConnection);
+            await command.ExecuteNonQueryAsync().ConfigureAwait(true);
+
+            StatusMessage = $"{objectType} '{SelectedObject.Name}' dropped.";
+            SelectedObject = null;
+            await LoadSchemaAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = _localization.Format("ErrorQueryFailed", GetDetailedErrorMessage(ex));
+        }
+    }
+
+    private bool CanScriptSelectedObject() => SelectedObject != null && SelectedObject.NodeType != ExplorerNodeType.Folder && SelectedObject.NodeType != ExplorerNodeType.Column;
+
+    private bool CanDropSelectedObject() => SelectedObject != null && (SelectedObject.NodeType == ExplorerNodeType.Table || SelectedObject.NodeType == ExplorerNodeType.View || SelectedObject.NodeType == ExplorerNodeType.Procedure || SelectedObject.NodeType == ExplorerNodeType.Trigger);
+
+    public async Task LoadSchemaAsync()
+    {
+        if (ActiveConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ExplorerNodes.Clear();
+            _allTables.Clear();
+            _allViews.Clear();
+            _allProcedures.Clear();
+            _allTriggers.Clear();
+
+            // Load tables
+            using var tableCommand = new SharpCoreDBCommand("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;", ActiveConnection);
+            using var tableReader = await tableCommand.ExecuteReaderAsync().ConfigureAwait(true);
+            while (await tableReader.ReadAsync().ConfigureAwait(true))
+            {
+                var tableName = tableReader.GetString(0);
+                _allTables.Add(tableName);
+                ExplorerNodes.Add(new ExplorerNode { NodeType = ExplorerNodeType.Table, Name = tableName });
+            }
+
+            // Load views
+            using var viewCommand = new SharpCoreDBCommand("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name;", ActiveConnection);
+            using var viewReader = await viewCommand.ExecuteReaderAsync().ConfigureAwait(true);
+            while (await viewReader.ReadAsync().ConfigureAwait(true))
+            {
+                var viewName = viewReader.GetString(0);
+                _allViews.Add(viewName);
+                ExplorerNodes.Add(new ExplorerNode { NodeType = ExplorerNodeType.View, Name = viewName });
+            }
+
+            // Load procedures (if any)
+            using var procCommand = new SharpCoreDBCommand("SELECT name FROM sqlite_master WHERE type='procedure' ORDER BY name;", ActiveConnection);
+            using var procReader = await procCommand.ExecuteReaderAsync().ConfigureAwait(true);
+            while (await procReader.ReadAsync().ConfigureAwait(true))
+            {
+                var procName = procReader.GetString(0);
+                _allProcedures.Add(procName);
+                ExplorerNodes.Add(new ExplorerNode { NodeType = ExplorerNodeType.Procedure, Name = procName });
+            }
+
+            // Load triggers
+            using var triggerCommand = new SharpCoreDBCommand("SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name;", ActiveConnection);
+            using var triggerReader = await triggerCommand.ExecuteReaderAsync().ConfigureAwait(true);
+            while (await triggerReader.ReadAsync().ConfigureAwait(true))
+            {
+                var triggerName = triggerReader.GetString(0);
+                _allTriggers.Add(triggerName);
+                ExplorerNodes.Add(new ExplorerNode { NodeType = ExplorerNodeType.Trigger, Name = triggerName });
+            }
+
+            ApplyTableFilter(TableFilterText);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = _localization.Format("ErrorQueryFailed", GetDetailedErrorMessage(ex));
+        }
     }
 }

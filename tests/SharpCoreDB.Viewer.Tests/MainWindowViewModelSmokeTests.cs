@@ -34,7 +34,7 @@ public sealed class MainWindowViewModelSmokeTests
             CanGoPreviousPage = true
         };
 
-        viewModel.DisconnectCommand.Execute(null);
+        viewModel.Disconnect();
 
         Assert.False(viewModel.IsConnected);
         Assert.False(viewModel.IsResultEditable);
@@ -174,7 +174,7 @@ public sealed class MainWindowViewModelSmokeTests
                 Assert.Contains("PersistUsers", viewModel.Tables);
             }
 
-            viewModel.DisconnectCommand.Execute(null);
+            viewModel.Disconnect();
 
             using (var reconnect = new SharpCoreDBConnection(connectionString))
             {

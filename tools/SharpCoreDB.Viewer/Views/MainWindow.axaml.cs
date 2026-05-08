@@ -14,6 +14,7 @@ using System.Globalization;
 using Avalonia.Platform.Storage;
 using System.Diagnostics;
 using System.Data;
+using Avalonia.Media;
 
 namespace SharpCoreDB.Viewer.Views;
 
@@ -35,6 +36,14 @@ public partial class MainWindow : Window
             DataContext = null;
             DataContext = currentContext;
         };
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.Disconnect();
+        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -342,7 +351,8 @@ public partial class MainWindow : Window
         var tableName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
         if (string.IsNullOrWhiteSpace(tableName))
         {
-            return;
+            viewModel.StatusMessage = "Table name is required.";
+            // return;
         }
 
         viewModel.SelectedTable = tableName;
@@ -395,318 +405,35 @@ public partial class MainWindow : Window
         await OpenTableDesignerDialogAsync(tableName).ConfigureAwait(true);
     }
 
-    private async Task OpenTableDesignerDialogAsync(string? initialTableName)
+    private async void OnOpenCreateProcedureDialogClicked(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        var tableName = initialTableName ?? string.Empty;
-
-        var panel = new StackPanel
+        if (viewModel.CreateNewProcedureCommand.CanExecute(null))
         {
-            Spacing = 8,
-            Margin = new Thickness(10)
-        };
-
-        var nameBox = new TextBox
-        {
-            Watermark = "Table name",
-            Text = tableName,
-            IsEnabled = string.IsNullOrWhiteSpace(initialTableName)
-        };
-
-        var rows = new ObservableCollection<TableDesignerColumnRow>();
-
-        if (!string.IsNullOrWhiteSpace(initialTableName) && viewModel.ActiveConnection is not null)
-        {
-            await LoadDesignerRowsForTableAsync(viewModel.ActiveConnection, initialTableName, rows).ConfigureAwait(true);
+            await viewModel.CreateNewProcedureCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
-
-        if (rows.Count == 0)
-        {
-            rows.Add(new TableDesignerColumnRow { Name = "Id", Type = "INTEGER", IsNullable = false, IsPrimaryKey = true });
-            rows.Add(new TableDesignerColumnRow { Name = "Name", Type = "TEXT", IsNullable = false, IsPrimaryKey = false });
-        }
-
-        var supportedTypes = new[]
-        {
-            "INTEGER",
-            "BIGINT",
-            "TEXT",
-            "REAL",
-            "BLOB",
-            "BOOLEAN",
-            "DATETIME",
-            "LONG",
-            "DECIMAL",
-            "ULID",
-            "GUID",
-            "ROWREF",
-            "VECTOR"
-        };
-
-        var grid = new DataGrid
-        {
-            AutoGenerateColumns = false,
-            Height = 190,
-            ItemsSource = rows,
-            CanUserReorderColumns = false,
-            CanUserResizeColumns = true
-        };
-
-        grid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Name",
-            Binding = new Avalonia.Data.Binding(nameof(TableDesignerColumnRow.Name)) { Mode = Avalonia.Data.BindingMode.TwoWay },
-            Width = new DataGridLength(2, DataGridLengthUnitType.Star)
-        });
-
-        var typeTemplateColumn = new DataGridTemplateColumn
-        {
-            Header = "Type",
-            Width = new DataGridLength(2, DataGridLengthUnitType.Star)
-        };
-
-        typeTemplateColumn.CellTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<TableDesignerColumnRow>((row, _) =>
-        {
-            var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-            text.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding(nameof(TableDesignerColumnRow.Type)));
-            return text;
-        });
-
-        typeTemplateColumn.CellEditingTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<TableDesignerColumnRow>((row, _) =>
-        {
-            var combo = new ComboBox
-            {
-                ItemsSource = supportedTypes,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                MinWidth = 120,
-                SelectedItem = string.IsNullOrWhiteSpace(row.Type) ? "TEXT" : row.Type.ToUpperInvariant(),
-                IsDropDownOpen = true
-            };
-
-            combo.Bind(
-                ComboBox.SelectedItemProperty,
-                new Avalonia.Data.Binding(nameof(TableDesignerColumnRow.Type))
-                {
-                    Mode = Avalonia.Data.BindingMode.TwoWay,
-                    UpdateSourceTrigger = Avalonia.Data.UpdateSourceTrigger.PropertyChanged
-                });
-
-            combo.SelectionChanged += (_, _) =>
-            {
-                if (combo.SelectedItem is string selected)
-                {
-                    row.Type = selected;
-                }
-            };
-
-            combo.AttachedToVisualTree += (_, _) =>
-            {
-                combo.Focus();
-                combo.IsDropDownOpen = true;
-            };
-
-            return combo;
-        });
-
-        grid.Columns.Add(typeTemplateColumn);
-
-        grid.Columns.Add(new DataGridCheckBoxColumn
-        {
-            Header = "Nullable",
-            Binding = new Avalonia.Data.Binding(nameof(TableDesignerColumnRow.IsNullable)) { Mode = Avalonia.Data.BindingMode.TwoWay },
-            Width = new DataGridLength(1, DataGridLengthUnitType.Star)
-        });
-
-        grid.Columns.Add(new DataGridCheckBoxColumn
-        {
-            Header = "Primary Key",
-            Binding = new Avalonia.Data.Binding(nameof(TableDesignerColumnRow.IsPrimaryKey)) { Mode = Avalonia.Data.BindingMode.TwoWay },
-            Width = new DataGridLength(1, DataGridLengthUnitType.Star)
-        });
-
-        var buttonPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        var addColumnButton = new Button { Content = "Add Column", MinWidth = 100 };
-        var removeColumnButton = new Button { Content = "Remove Selected", MinWidth = 120 };
-        var createButton = new Button { Content = "Create", MinWidth = 90 };
-
-        buttonPanel.Children.Add(addColumnButton);
-        buttonPanel.Children.Add(removeColumnButton);
-        buttonPanel.Children.Add(createButton);
-
-        panel.Children.Add(new TextBlock { Text = "Design new table" });
-        panel.Children.Add(nameBox);
-        panel.Children.Add(grid);
-        panel.Children.Add(buttonPanel);
-
-        var dialog = new Window
-        {
-            Title = "Open Design Table",
-            Width = 780,
-            Height = 420,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = panel
-        };
-
-        addColumnButton.Click += (_, _) => rows.Add(new TableDesignerColumnRow { Type = "TEXT", IsNullable = true });
-
-        removeColumnButton.Click += (_, _) =>
-        {
-            if (grid.SelectedItem is TableDesignerColumnRow selected)
-            {
-                rows.Remove(selected);
-            }
-        };
-
-        createButton.Click += async (_, _) =>
-        {
-            var tableNameText = nameBox.Text?.Trim() ?? string.Empty;
-            var columnSql = BuildColumnsSqlFromDesigner(rows);
-            if (string.IsNullOrWhiteSpace(tableNameText) || string.IsNullOrWhiteSpace(columnSql))
-            {
-                viewModel.StatusMessage = "Table name and at least one valid column are required.";
-                return;
-            }
-
-            var previousName = viewModel.NewTableName;
-            var previousColumns = viewModel.NewTableColumnsDefinition;
-
-            viewModel.NewTableName = tableNameText;
-            viewModel.NewTableColumnsDefinition = columnSql;
-
-            if (viewModel.CreateNewTableCommand.CanExecute(null))
-            {
-                await viewModel.CreateNewTableCommand.ExecuteAsync(null).ConfigureAwait(true);
-
-                if (string.Equals(viewModel.SelectedTable, tableNameText, StringComparison.OrdinalIgnoreCase))
-                {
-                    dialog.Close();
-                }
-                else
-                {
-                    viewModel.NewTableName = previousName;
-                    viewModel.NewTableColumnsDefinition = previousColumns;
-                }
-            }
-        };
-
-        await dialog.ShowDialog(this);
     }
 
-    private async void OnDropTableClicked(object? sender, RoutedEventArgs e)
+    private async void OnOpenCreateTriggerDialogClicked(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        var tableName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
-        if (string.IsNullOrWhiteSpace(tableName))
+        if (viewModel.CreateNewTriggerCommand.CanExecute(null))
         {
-            return;
-        }
-
-        var confirm = await ConfirmDropByTypingAsync(tableName).ConfigureAwait(true);
-        if (!confirm)
-        {
-            return;
-        }
-
-        if (viewModel.DropSelectedTableCommand.CanExecute(tableName))
-        {
-            await viewModel.DropSelectedTableCommand.ExecuteAsync(tableName).ConfigureAwait(true);
+            await viewModel.CreateNewTriggerCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
     }
 
     private async void OnOpenCreateTableFromTemplateClicked(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainWindowViewModel viewModel)
-        {
-            return;
-        }
-
-        var panel = new StackPanel
-        {
-            Spacing = 8,
-            Margin = new Thickness(10)
-        };
-
-        var templateCombo = new ComboBox
-        {
-            ItemsSource = new[] { "Basic (Id, Name)", "Audit (Id, Name, CreatedAt, UpdatedAt)", "Graph Edge (FromNode, ToNode)" },
-            SelectedIndex = 0
-        };
-
-        var nameBox = new TextBox
-        {
-            Watermark = "Table name"
-        };
-
-        var buttonPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        var create = new Button { Content = "Create", MinWidth = 80 };
-        var cancel = new Button { Content = "Cancel", MinWidth = 80 };
-
-        buttonPanel.Children.Add(create);
-        buttonPanel.Children.Add(cancel);
-
-        panel.Children.Add(new TextBlock { Text = "Choose a table template" });
-        panel.Children.Add(templateCombo);
-        panel.Children.Add(nameBox);
-        panel.Children.Add(buttonPanel);
-
-        var dialog = new Window
-        {
-            Title = "New Table from Template",
-            Width = 460,
-            Height = 230,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = panel
-        };
-
-        create.Click += async (_, _) =>
-        {
-            var tableName = nameBox.Text?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(tableName))
-            {
-                viewModel.StatusMessage = "Table name is required.";
-                return;
-            }
-
-            var selectedTemplate = templateCombo.SelectedItem?.ToString() ?? "Basic (Id, Name)";
-            viewModel.NewTableName = tableName;
-            viewModel.NewTableColumnsDefinition = selectedTemplate switch
-            {
-                "Audit (Id, Name, CreatedAt, UpdatedAt)" => "Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL, CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL",
-                "Graph Edge (FromNode, ToNode)" => "FromNode ROWREF NOT NULL, ToNode ROWREF NOT NULL",
-                _ => "Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL"
-            };
-
-            if (viewModel.CreateNewTableCommand.CanExecute(null))
-            {
-                await viewModel.CreateNewTableCommand.ExecuteAsync(null).ConfigureAwait(true);
-            }
-
-            dialog.Close();
-        };
-
-        cancel.Click += (_, _) => dialog.Close();
-
-        await dialog.ShowDialog(this);
+        await OpenTableDesignerDialogAsync(null).ConfigureAwait(true);
     }
 
     private async void OnImportCsvToNewTableClicked(object? sender, RoutedEventArgs e)
@@ -718,301 +445,74 @@ public partial class MainWindow : Window
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Select CSV file",
+            Title = "Select CSV File",
             AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("CSV") { Patterns = ["*.csv"] },
-                FilePickerFileTypes.All
-            ]
-        }).ConfigureAwait(true);
+            FileTypeFilter = [new FilePickerFileType("CSV Files") { Patterns = ["*.csv"] }]
+        });
 
-        var file = files.FirstOrDefault();
-        var filePath = file?.TryGetLocalPath();
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        if (files.Count == 0)
         {
             return;
         }
 
-        string[] lines;
-        try
-        {
-            lines = await File.ReadAllLinesAsync(filePath).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            viewModel.StatusMessage = $"Failed to read CSV: {ex.Message}";
-            return;
-        }
-
-        if (lines.Length == 0)
-        {
-            viewModel.StatusMessage = "CSV file is empty.";
-            return;
-        }
-
-        var headers = lines[0].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (headers.Length == 0)
-        {
-            viewModel.StatusMessage = "CSV header is invalid.";
-            return;
-        }
-
-        var suggestedName = Path.GetFileNameWithoutExtension(filePath);
-        var tableName = await PromptForTextAsync("Import CSV", "Table name:", suggestedName).ConfigureAwait(true);
-        if (string.IsNullOrWhiteSpace(tableName))
+        var path = files[0].TryGetLocalPath();
+        if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
 
-        var sanitizedColumns = headers
-            .Select(h => string.Concat(h.Where(c => char.IsLetterOrDigit(c) || c == '_')))
-            .Select(h => string.IsNullOrWhiteSpace(h) ? "Column" : h)
-            .Select((h, i) => i == 0 ? h : (h == headers[0] ? $"{h}_{i}" : h))
-            .ToList();
-
-        var uniqueColumns = new List<string>();
-        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var column in sanitizedColumns)
+        var tableName = await PromptForTextAsync("Import CSV", "Table name to create:", System.IO.Path.GetFileNameWithoutExtension(path)).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(tableName) || viewModel.ActiveConnection is null)
         {
-            if (!seen.TryAdd(column, 1))
-            {
-                seen[column]++;
-                uniqueColumns.Add($"{column}_{seen[column]}");
-            }
-            else
-            {
-                uniqueColumns.Add(column);
-            }
+            return;
         }
-
-        var createCols = string.Join(", ", uniqueColumns.Select(c => $"\"{c.Replace("\"", "\"\"", StringComparison.Ordinal)}\" TEXT NULL"));
-        string escapedTable = tableName.Trim().Replace("\"", "\"\"");
 
         try
         {
-            using var createCmd = new SharpCoreDBCommand($"CREATE TABLE \"{escapedTable}\" ({createCols});", viewModel.ActiveConnection!);
-            await createCmd.ExecuteNonQueryAsync().ConfigureAwait(true);
-
-            for (var i = 1; i < lines.Length; i++)
+            var lines = await System.IO.File.ReadAllLinesAsync(path).ConfigureAwait(true);
+            if (lines.Length == 0)
             {
-                if (string.IsNullOrWhiteSpace(lines[i]))
-                {
-                    continue;
-                }
-
-                var values = lines[i].Split(',', StringSplitOptions.None);
-                var valueSql = new List<string>(uniqueColumns.Count);
-                for (var j = 0; j < uniqueColumns.Count; j++)
-                {
-                    var raw = j < values.Length ? values[j].Trim() : string.Empty;
-                    if (string.IsNullOrEmpty(raw))
-                    {
-                        valueSql.Add("NULL");
-                        continue;
-                    }
-
-                    var escaped = raw.Replace("'", "''", StringComparison.Ordinal);
-                    valueSql.Add($"'{escaped}'");
-                }
-
-                var insertSql = $"INSERT INTO \"{escapedTable}\" ({string.Join(", ", uniqueColumns.Select(c => $"\"{c.Replace("\"", "\"\"", StringComparison.Ordinal)}\""))}) VALUES ({string.Join(", ", valueSql)});";
-                using var insertCmd = new SharpCoreDBCommand(insertSql, viewModel.ActiveConnection!);
-                await insertCmd.ExecuteNonQueryAsync().ConfigureAwait(true);
+                viewModel.StatusMessage = "CSV file is empty.";
+                return;
             }
 
-            await viewModel.RefreshTablesCommand.ExecuteAsync(null).ConfigureAwait(true);
-            viewModel.SelectedTable = tableName.Trim();
-            viewModel.StatusMessage = $"CSV imported into table '{viewModel.SelectedTable}'.";
+            var headers = lines[0].Split(',');
+            var columnsSql = string.Join(", ", headers.Select(h => $"\"{h.Trim().Replace("\"", "\"\"", StringComparison.Ordinal)}\" TEXT"));
+            var createSql = $"CREATE TABLE \"{tableName}\" ({columnsSql})";
+
+            if (viewModel.ExecuteQueryCommand.CanExecute(createSql))
+            {
+                await viewModel.ExecuteQueryCommand.ExecuteAsync(createSql).ConfigureAwait(true);
+            }
+
+            var insertStatements = new List<string>();
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                var values = lines[i].Split(',');
+                var valuesSql = string.Join(", ", values.Select(v => $"'{v.Trim().Replace("'", "''", StringComparison.Ordinal)}'"));
+                insertStatements.Add($"INSERT INTO \"{tableName}\" VALUES ({valuesSql})");
+            }
+
+            foreach (var stmt in insertStatements)
+            {
+                if (viewModel.ExecuteQueryCommand.CanExecute(stmt))
+                {
+                    await viewModel.ExecuteQueryCommand.ExecuteAsync(stmt).ConfigureAwait(true);
+                }
+            }
+
+            if (viewModel.RefreshTablesCommand.CanExecute(null))
+            {
+                viewModel.RefreshTablesCommand.Execute(null);
+            }
+
+            viewModel.StatusMessage = $"Imported CSV to table '{tableName}'.";
         }
         catch (Exception ex)
         {
             viewModel.StatusMessage = $"CSV import failed: {ex.Message}";
         }
-    }
-
-    private async Task<bool> ConfirmDropByTypingAsync(string tableName)
-    {
-        var panel = new StackPanel
-        {
-            Spacing = 10,
-            Margin = new Thickness(10)
-        };
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"Type the table name '{tableName}' to confirm drop.",
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap
-        });
-
-        var input = new TextBox
-        {
-            Watermark = "Type table name to confirm"
-        };
-
-        var buttonPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        var drop = new Button { Content = "Drop", MinWidth = 80 };
-        var cancel = new Button { Content = "Cancel", MinWidth = 80 };
-
-        buttonPanel.Children.Add(drop);
-        buttonPanel.Children.Add(cancel);
-
-        panel.Children.Add(input);
-        panel.Children.Add(buttonPanel);
-
-        var dialog = new Window
-        {
-            Title = "Confirm Drop Table",
-            Width = 470,
-            Height = 200,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = panel
-        };
-
-        drop.Click += (_, _) => dialog.Close(string.Equals(input.Text?.Trim(), tableName, StringComparison.Ordinal));
-        cancel.Click += (_, _) => dialog.Close(false);
-
-        return await dialog.ShowDialog<bool>(this).ConfigureAwait(true);
-    }
-
-    private async Task<string?> PromptForTextAsync(string title, string prompt, string initialValue)
-    {
-        var panel = new StackPanel
-        {
-            Spacing = 8,
-            Margin = new Thickness(10)
-        };
-
-        var promptBlock = new TextBlock { Text = prompt };
-        var input = new TextBox { Text = initialValue };
-
-        var buttonPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        var ok = new Button { Content = "OK", MinWidth = 80 };
-        var cancel = new Button { Content = "Cancel", MinWidth = 80 };
-
-        buttonPanel.Children.Add(ok);
-        buttonPanel.Children.Add(cancel);
-
-        panel.Children.Add(promptBlock);
-        panel.Children.Add(input);
-        panel.Children.Add(buttonPanel);
-
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 420,
-            Height = 170,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = panel
-        };
-
-        ok.Click += (_, _) => dialog.Close(input.Text);
-        cancel.Click += (_, _) => dialog.Close(null);
-
-        return await dialog.ShowDialog<string?>(this).ConfigureAwait(true);
-    }
-
-    private async void OnInsertTemplateClicked(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainWindowViewModel viewModel)
-        {
-            return;
-        }
-
-        var tableName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
-        if (viewModel.GenerateInsertTemplateCommand.CanExecute(tableName))
-        {
-            await viewModel.GenerateInsertTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
-        }
-    }
-
-    private async void OnUpdateTemplateClicked(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainWindowViewModel viewModel)
-        {
-            return;
-        }
-
-        var tableName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
-        if (viewModel.GenerateUpdateTemplateCommand.CanExecute(tableName))
-        {
-            await viewModel.GenerateUpdateTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
-        }
-    }
-
-    private async void OnDeleteTemplateClicked(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainWindowViewModel viewModel)
-        {
-            return;
-        }
-
-        var tableName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
-        if (viewModel.GenerateDeleteTemplateCommand.CanExecute(tableName))
-        {
-            await viewModel.GenerateDeleteTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
-        }
-    }
-
-    private static string? ResolveTableNameFromContextMenu(object? sender)
-    {
-        if (sender is not MenuItem menuItem)
-        {
-            return null;
-        }
-
-        if (menuItem.DataContext is string directName)
-        {
-            return directName;
-        }
-
-        if (menuItem.DataContext is ExplorerNode node)
-        {
-            if (node.NodeType == ExplorerNodeType.Table)
-            {
-                return node.Name;
-            }
-
-            return node.TableName;
-        }
-
-        var visualParent = menuItem.GetVisualParent();
-        while (visualParent is not null)
-        {
-            if (visualParent is StyledElement styledElement)
-            {
-                if (styledElement.DataContext is string tableName)
-                {
-                    return tableName;
-                }
-
-                if (styledElement.DataContext is ExplorerNode parentNode)
-                {
-                    if (parentNode.NodeType == ExplorerNodeType.Table)
-                    {
-                        return parentNode.Name;
-                    }
-
-                    return parentNode.TableName;
-                }
-            }
-
-            visualParent = visualParent.GetVisualParent();
-        }
-
-        return null;
     }
 
     private async void OnPreviewTableClicked(object? sender, RoutedEventArgs e)
@@ -1029,214 +529,398 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string BuildColumnsSqlFromDesigner(IEnumerable<TableDesignerColumnRow> rows)
+    private async void OnScriptObjectClicked(object? sender, RoutedEventArgs e)
     {
-        var parts = new List<string>();
-
-        foreach (var row in rows)
+        if (DataContext is not MainWindowViewModel viewModel)
         {
-            var columnName = row.Name?.Trim() ?? string.Empty;
-            if (!IsValidSqlIdentifier(columnName))
-            {
-                continue;
-            }
-
-            var columnType = string.IsNullOrWhiteSpace(row.Type) ? "TEXT" : row.Type.Trim().ToUpperInvariant();
-
-            var builder = new StringBuilder();
-            builder.Append(columnName).Append(' ').Append(columnType);
-
-            if (!row.IsNullable)
-            {
-                builder.Append(" NOT NULL");
-            }
-
-            if (row.IsPrimaryKey)
-            {
-                builder.Append(" PRIMARY KEY");
-                if (columnType.Contains("INT", StringComparison.Ordinal))
-                {
-                    builder.Append(" AUTOINCREMENT");
-                }
-            }
-
-            parts.Add(builder.ToString());
+            return;
         }
 
-        return string.Join(", ", parts);
+        var node = ResolveExplorerNodeFromContextMenu(sender);
+        if (node is not null)
+        {
+            viewModel.SelectedExplorerNode = node;
+        }
+
+        if (viewModel.ScriptSelectedObjectCommand.CanExecute(null))
+        {
+            await viewModel.ScriptSelectedObjectCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
-    private static bool IsValidSqlIdentifier(string identifier)
+    private async void OnInsertTemplateClicked(object? sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(identifier))
+        if (DataContext is not MainWindowViewModel viewModel)
         {
-            return false;
+            return;
         }
 
-        return System.Text.RegularExpressions.Regex.IsMatch(
-            identifier,
-            "^[A-Za-z_][A-Za-z0-9_]*$",
-            System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-            TimeSpan.FromSeconds(1));
+        var tableName = ResolveTableNameFromContextMenu(sender);
+        if (viewModel.GenerateInsertTemplateCommand.CanExecute(tableName))
+        {
+            await viewModel.GenerateInsertTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnUpdateTemplateClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var tableName = ResolveTableNameFromContextMenu(sender);
+        if (viewModel.GenerateUpdateTemplateCommand.CanExecute(tableName))
+        {
+            await viewModel.GenerateUpdateTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnDeleteTemplateClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var tableName = ResolveTableNameFromContextMenu(sender);
+        if (viewModel.GenerateDeleteTemplateCommand.CanExecute(tableName))
+        {
+            await viewModel.GenerateDeleteTemplateCommand.ExecuteAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnRenameObjectClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var node = ResolveExplorerNodeFromContextMenu(sender);
+        if (node is not null)
+        {
+            viewModel.SelectedExplorerNode = node;
+        }
+
+        var objectName = ResolveTableNameFromContextMenu(sender) ?? viewModel.SelectedTable;
+        if (string.IsNullOrWhiteSpace(objectName))
+        {
+            return;
+        }
+
+        var newName = await PromptForTextAsync("Rename", $"New name for '{objectName}':", objectName).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return;
+        }
+
+        viewModel.RenameTableName = newName.Trim();
+        if (viewModel.RenameSelectedTableCommand.CanExecute(objectName))
+        {
+            await viewModel.RenameSelectedTableCommand.ExecuteAsync(objectName).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnDropObjectClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var node = ResolveExplorerNodeFromContextMenu(sender);
+        if (node is not null)
+        {
+            viewModel.SelectedExplorerNode = node;
+        }
+
+        var objectName = ResolveTableNameFromContextMenu(sender);
+        if (string.IsNullOrWhiteSpace(objectName))
+        {
+            return;
+        }
+
+        var confirm = await ConfirmDropByTypingAsync(objectName).ConfigureAwait(true);
+        if (!confirm)
+        {
+            return;
+        }
+
+        if (viewModel.DropSelectedObjectCommand.CanExecute(null))
+        {
+            await viewModel.DropSelectedObjectCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
     private void OnOpenSqlSyntaxReferenceClicked(object? sender, RoutedEventArgs e)
     {
-        OpenDocumentationFile(Path.Combine("docs", "viewer", "SQL_SYNTAX_REFERENCE.md"), "SQL syntax reference");
+        Process.Start(new ProcessStartInfo("https://sharpcoredb.com/docs/sql-syntax") { UseShellExecute = true });
     }
 
     private void OnOpenUserManualClicked(object? sender, RoutedEventArgs e)
     {
-        OpenDocumentationFile(Path.Combine("docs", "USER_MANUAL.md"), "User manual");
+        Process.Start(new ProcessStartInfo("https://sharpcoredb.com/docs") { UseShellExecute = true });
     }
 
-    private void OpenDocumentationFile(string relativeDocPath, string displayName)
+    private static ExplorerNode? ResolveExplorerNodeFromContextMenu(object? sender)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativeDocPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-
-        var fullDocPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", relativeDocPath));
-
-        if (!File.Exists(fullDocPath))
+        if (sender is not MenuItem menuItem)
         {
-            if (DataContext is MainWindowViewModel missingViewModel)
+            return null;
+        }
+
+        if (menuItem.DataContext is ExplorerNode node)
+        {
+            return node;
+        }
+
+        var visualParent = menuItem.GetVisualParent();
+        while (visualParent is not null)
+        {
+            if (visualParent is StyledElement styledElement && styledElement.DataContext is ExplorerNode parentNode)
             {
-                missingViewModel.StatusMessage = $"{displayName} not found: {fullDocPath}";
+                return parentNode;
             }
 
-            return;
+            visualParent = visualParent.GetVisualParent();
         }
 
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fullDocPath,
-                UseShellExecute = true
-            };
-
-            Process.Start(psi);
-
-            if (DataContext is MainWindowViewModel successViewModel)
-            {
-                successViewModel.StatusMessage = $"Opened {displayName}.";
-            }
-        }
-        catch (Exception ex)
-        {
-            if (DataContext is MainWindowViewModel errorViewModel)
-            {
-                errorViewModel.StatusMessage = $"Failed to open {displayName}: {ex.Message}";
-            }
-        }
-    }
-
-    private static async Task LoadDesignerRowsForTableAsync(
-        SharpCoreDBConnection connection,
-        string tableName,
-        ObservableCollection<TableDesignerColumnRow> rows)
-    {
-        var escapedTable = tableName.Replace("'", "''", StringComparison.Ordinal);
-        using var command = new SharpCoreDBCommand($"PRAGMA table_info('{escapedTable}')", connection);
-        using var reader = await command.ExecuteReaderAsync().ConfigureAwait(true);
-
-        while (await reader.ReadAsync().ConfigureAwait(true))
-        {
-            var name = reader.GetValue(1)?.ToString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-
-            var type = reader.GetValue(2)?.ToString() ?? "TEXT";
-            var notNull = string.Equals(reader.GetValue(3)?.ToString(), "1", StringComparison.Ordinal);
-            var isPk = string.Equals(reader.GetValue(5)?.ToString(), "1", StringComparison.Ordinal);
-
-            rows.Add(new TableDesignerColumnRow
-            {
-                Name = name,
-                Type = NormalizeDesignerType(type),
-                IsNullable = !notNull,
-                IsPrimaryKey = isPk
-            });
-        }
-    }
-
-    private static string NormalizeDesignerType(string type)
-    {
-        if (string.IsNullOrWhiteSpace(type))
-        {
-            return "TEXT";
-        }
-
-        var upper = type.ToUpperInvariant();
-        if (upper.StartsWith("VECTOR", StringComparison.Ordinal))
-        {
-            return "VECTOR";
-        }
-
-        return upper;
+        return null;
     }
 
     private enum ColumnEditorKind
     {
-        Text = 0,
-        Boolean = 1,
-        Number = 2,
-        DateTime = 3
+        Text,
+        Number,
+        DateTime,
+        Boolean
     }
 
     private static ColumnEditorKind InferColumnEditorKind(MainWindowViewModel? viewModel, int index)
     {
-        if (viewModel is null)
-        {
-            return ColumnEditorKind.Text;
-        }
-
-        foreach (var row in viewModel.QueryResults)
-        {
-            if (row.Values is null || index < 0 || index >= row.Values.Length)
-            {
-                continue;
-            }
-
-            var value = row.Values[index];
-            if (value is null || value == DBNull.Value)
-            {
-                continue;
-            }
-
-            if (value is bool)
-            {
-                return ColumnEditorKind.Boolean;
-            }
-
-            if (value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
-            {
-                return ColumnEditorKind.Number;
-            }
-
-            if (value is DateTime or DateTimeOffset)
-            {
-                return ColumnEditorKind.DateTime;
-            }
-
-            if (value is string textValue)
-            {
-                if (decimal.TryParse(textValue, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
-                {
-                    return ColumnEditorKind.Number;
-                }
-
-                if (DateTime.TryParse(textValue, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out _))
-                {
-                    return ColumnEditorKind.DateTime;
-                }
-            }
-
-            break;
-        }
-
+        if (viewModel is null) return ColumnEditorKind.Text;
+        var columnName = viewModel.ResultColumns[index];
+        var sampleValue = viewModel.QueryResults.Count > 0
+            ? viewModel.QueryResults[0].GetValue(columnName, viewModel.ResultColumns)
+            : null;
+        if (sampleValue is bool) return ColumnEditorKind.Boolean;
+        if (sampleValue is DateTime or DateTimeOffset) return ColumnEditorKind.DateTime;
+        if (sampleValue is int or long or decimal or double or float) return ColumnEditorKind.Number;
         return ColumnEditorKind.Text;
+    }
+
+    private static string? ResolveTableNameFromContextMenu(object? sender)
+    {
+        if (sender is not MenuItem menuItem)
+        {
+            return null;
+        }
+        if (menuItem.DataContext is string directName)
+        {
+            return directName;
+        }
+        if (menuItem.DataContext is ExplorerNode node)
+        {
+            return node.NodeType == ExplorerNodeType.Table ? node.Name : node.TableName;
+        }
+        var visualParent = menuItem.GetVisualParent();
+        while (visualParent is not null)
+        {
+            if (visualParent is StyledElement styledElement)
+            {
+                if (styledElement.DataContext is string tableName)
+                {
+                    return tableName;
+                }
+                if (styledElement.DataContext is ExplorerNode parentNode)
+                {
+                    return parentNode.NodeType == ExplorerNodeType.Table ? parentNode.Name : parentNode.TableName;
+                }
+            }
+            visualParent = visualParent.GetVisualParent();
+        }
+        return null;
+    }
+
+    private async Task<string?> PromptForTextAsync(string title, string prompt, string? initialValue = null)
+    {
+        var panel = new StackPanel { Spacing = 10, Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock { Text = prompt, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        var input = new TextBox { Text = initialValue, Watermark = "Enter text" };
+        var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        var ok = new Button { Content = "OK", MinWidth = 80 };
+        var cancel = new Button { Content = "Cancel", MinWidth = 80 };
+        buttonPanel.Children.Add(ok);
+        buttonPanel.Children.Add(cancel);
+        panel.Children.Add(input);
+        panel.Children.Add(buttonPanel);
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 180,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = panel
+        };
+        string? result = null;
+        ok.Click += (_, _) => { result = input.Text; dialog.Close(); };
+        cancel.Click += (_, _) => dialog.Close();
+        await dialog.ShowDialog(this).ConfigureAwait(true);
+        return result;
+    }
+
+    private async Task<bool> ConfirmDropByTypingAsync(string tableName)
+    {
+        var panel = new StackPanel { Spacing = 10, Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock { Text = $"Type the table name '{tableName}' to confirm drop.", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        var input = new TextBox { Watermark = "Type table name to confirm" };
+        var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        var drop = new Button { Content = "Drop", MinWidth = 80 };
+        var cancel = new Button { Content = "Cancel", MinWidth = 80 };
+        buttonPanel.Children.Add(drop);
+        buttonPanel.Children.Add(cancel);
+        panel.Children.Add(input);
+        panel.Children.Add(buttonPanel);
+        var dialog = new Window
+        {
+            Title = "Confirm Drop Table",
+            Width = 470,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = panel
+        };
+        bool confirmed = false;
+        drop.Click += (_, _) => { confirmed = string.Equals(input.Text?.Trim(), tableName, StringComparison.Ordinal); dialog.Close(); };
+        cancel.Click += (_, _) => dialog.Close();
+        await dialog.ShowDialog(this).ConfigureAwait(true);
+        return confirmed;
+    }
+
+    private async Task<List<TableDesignerColumnRow>> LoadDesignerRowsForTableAsync(SharpCoreDBConnection connection, string tableName, List<TableDesignerColumnRow> rows)
+    {
+        rows.Clear();
+        using var command = new SharpCoreDBCommand($"PRAGMA table_info('{tableName}')", connection);
+        using var reader = await command.ExecuteReaderAsync().ConfigureAwait(true);
+        while (await reader.ReadAsync().ConfigureAwait(true))
+        {
+            rows.Add(new TableDesignerColumnRow
+            {
+                Name = reader.GetString(1),
+                Type = reader.GetString(2),
+                IsPrimaryKey = reader.GetBoolean(5)
+            });
+        }
+        return rows;
+    }
+
+    private static string BuildColumnSql(TableDesignerColumnRow row)
+    {
+        var sql = $"\"{row.Name.Replace("\"", "\"\"", StringComparison.Ordinal)}\" {row.Type.ToUpperInvariant()}";
+        if (row.IsPrimaryKey) sql += " PRIMARY KEY";
+        return sql;
+    }
+
+    private static List<string> BuildRecreateTableSql(string tableName, List<TableDesignerColumnRow> rows)
+    {
+        var tempName = $"{tableName}_temp";
+        var columnsSql = string.Join(", ", rows.Select(BuildColumnSql));
+        var columnsList = string.Join(", ", rows.Select(r => $"\"{r.Name.Replace("\"", "\"\"", StringComparison.Ordinal)}\""));
+        return [
+            $"CREATE TABLE {tempName} ({columnsSql})",
+            $"INSERT INTO {tempName} ({columnsList}) SELECT {columnsList} FROM {tableName}",
+            $"DROP TABLE {tableName}",
+            $"ALTER TABLE {tempName} RENAME TO {tableName}"
+        ];
+    }
+
+    private static string BuildColumnsSqlFromDesigner(List<TableDesignerColumnRow> rows)
+    {
+        return string.Join(", ", rows.Select(BuildColumnSql));
+    }
+
+    private async Task OpenTableDesignerDialogAsync(string? tableName)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var isNew = string.IsNullOrWhiteSpace(tableName);
+        var rows = new System.Collections.ObjectModel.ObservableCollection<TableDesignerColumnRow>();
+
+        if (!isNew && viewModel.ActiveConnection is not null)
+        {
+            var list = new List<TableDesignerColumnRow>();
+            await LoadDesignerRowsForTableAsync(viewModel.ActiveConnection, tableName!, list).ConfigureAwait(true);
+            foreach (var r in list) rows.Add(r);
+        }
+
+        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(12) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = isNew ? "Create New Table" : $"Design Table: {tableName}",
+            FontWeight = Avalonia.Media.FontWeight.Bold
+        });
+
+        var nameBox = new TextBox { Watermark = "Table name", Text = isNew ? string.Empty : tableName };
+        if (!isNew) nameBox.IsEnabled = false;
+        panel.Children.Add(nameBox);
+
+        var grid = new DataGrid
+        {
+            ItemsSource = rows,
+            AutoGenerateColumns = false,
+            Height = 240
+        };
+        grid.Columns.Add(new DataGridTextColumn { Header = "Name", Binding = new Avalonia.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Type", Binding = new Avalonia.Data.Binding("Type"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridCheckBoxColumn { Header = "PK", Binding = new Avalonia.Data.Binding("IsPrimaryKey"), Width = new DataGridLength(60) });
+        panel.Children.Add(grid);
+
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        var saveBtn = new Button { Content = isNew ? "Create" : "Save", MinWidth = 80 };
+        var cancelBtn = new Button { Content = "Cancel", MinWidth = 80 };
+        btnPanel.Children.Add(saveBtn);
+        btnPanel.Children.Add(cancelBtn);
+        panel.Children.Add(btnPanel);
+
+        var dialog = new Window
+        {
+            Title = isNew ? "Create Table" : "Design Table",
+            Width = 520,
+            Height = 400,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = panel
+        };
+
+        saveBtn.Click += async (_, _) =>
+        {
+            var name = nameBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(BuildColumnsSqlFromDesigner([.. rows]))) return;
+
+            if (isNew)
+            {
+                var sql = $"CREATE TABLE \"{name}\" ({BuildColumnsSqlFromDesigner([.. rows])})";
+                if (viewModel.ExecuteQueryCommand.CanExecute(sql))
+                    await viewModel.ExecuteQueryCommand.ExecuteAsync(sql).ConfigureAwait(true);
+            }
+            else
+            {
+                foreach (var stmt in BuildRecreateTableSql(tableName!, [.. rows]))
+                {
+                    if (viewModel.ExecuteQueryCommand.CanExecute(stmt))
+                        await viewModel.ExecuteQueryCommand.ExecuteAsync(stmt).ConfigureAwait(true);
+                }
+            }
+
+            if (viewModel.RefreshTablesCommand.CanExecute(null))
+                viewModel.RefreshTablesCommand.Execute(null);
+
+            dialog.Close();
+        };
+
+        cancelBtn.Click += (_, _) => dialog.Close();
+        await dialog.ShowDialog(this).ConfigureAwait(true);
     }
 }

@@ -5,7 +5,11 @@ namespace SharpCoreDB.Viewer.Models;
 public enum ExplorerNodeType
 {
     Table = 0,
-    Column = 1
+    Column = 1,
+    View = 2,
+    Procedure = 3,
+    Trigger = 4,
+    Folder = 5
 }
 
 public sealed class ExplorerNode

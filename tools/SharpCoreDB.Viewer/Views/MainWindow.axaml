@@ -69,7 +69,7 @@
                                    FontSize="12"/>
                     </StackPanel>
                 </Button>
-                <Button Command="{Binding DisconnectCommand}"
+                <!-- <Button Command="{Binding DisconnectCommand}"
                         IsEnabled="{Binding IsConnected}"
                         MinWidth="110"
                         Height="30"
@@ -81,7 +81,7 @@
                                    VerticalAlignment="Center"
                                    FontSize="12"/>
                     </StackPanel>
-                </Button>
+                </Button> -->
                 <Separator Width="1" Margin="6,6"/>
                 <Button Command="{Binding ExecuteQueryCommand}"
                         IsEnabled="{Binding IsConnected}"
@@ -136,6 +136,8 @@
                         <ContextMenu>
                             <MenuItem Header="New">
                                 <MenuItem Header="New Table..." Click="OnOpenCreateTableDialogClicked"/>
+                                <MenuItem Header="New Procedure..." Click="OnOpenCreateProcedureDialogClicked"/>
+                                <MenuItem Header="New Trigger..." Click="OnOpenCreateTriggerDialogClicked"/>
                                 <MenuItem Header="New Table from Template..." Click="OnOpenCreateTableFromTemplateClicked"/>
                             </MenuItem>
                             <MenuItem Header="Import">
@@ -165,6 +167,8 @@
                                 <ContextMenu>
                                     <MenuItem Header="New">
                                         <MenuItem Header="New Table..." Click="OnOpenCreateTableDialogClicked"/>
+                                        <MenuItem Header="New Procedure..." Click="OnOpenCreateProcedureDialogClicked"/>
+                                        <MenuItem Header="New Trigger..." Click="OnOpenCreateTriggerDialogClicked"/>
                                         <MenuItem Header="New Table from Template..." Click="OnOpenCreateTableFromTemplateClicked"/>
                                     </MenuItem>
                                     <MenuItem Header="Import">
@@ -183,17 +187,17 @@
                                         <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center"/>
                                         <StackPanel.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Preview" Click="OnPreviewTableClicked"/>
-                                                <MenuItem Header="Select Top N" Click="OnSelectTopNTableClicked"/>
-                                                <MenuItem Header="Script" Click="OnScriptTableClicked"/>
+                                                <MenuItem Header="Preview" Click="OnPreviewTableClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
+                                                <MenuItem Header="Select Top N" Click="OnSelectTopNTableClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
+                                                <MenuItem Header="Script" Click="OnScriptObjectClicked"/>
                                                 <Separator/>
-                                                <MenuItem Header="Insert (SQL Template)" Click="OnInsertTemplateClicked"/>
-                                                <MenuItem Header="Update (SQL Template)" Click="OnUpdateTemplateClicked"/>
-                                                <MenuItem Header="Delete (SQL Template)" Click="OnDeleteTemplateClicked"/>
+                                                <MenuItem Header="Insert (SQL Template)" Click="OnInsertTemplateClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
+                                                <MenuItem Header="Update (SQL Template)" Click="OnUpdateTemplateClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
+                                                <MenuItem Header="Delete (SQL Template)" Click="OnDeleteTemplateClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
                                                 <Separator/>
-                                                <MenuItem Header="Open Design Table" Click="OnOpenDesignTableClicked"/>
-                                                <MenuItem Header="Rename" Click="OnRenameTableClicked"/>
-                                                <MenuItem Header="Drop Table" Click="OnDropTableClicked"/>
+                                                <MenuItem Header="Open Design" Click="OnOpenDesignTableClicked" IsVisible="{Binding NodeType, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Table}"/>
+                                                <MenuItem Header="Rename" Click="OnRenameObjectClicked"/>
+                                                <MenuItem Header="Drop" Click="OnDropObjectClicked"/>
                                             </ContextMenu>
                                         </StackPanel.ContextMenu>
                                     </StackPanel>
