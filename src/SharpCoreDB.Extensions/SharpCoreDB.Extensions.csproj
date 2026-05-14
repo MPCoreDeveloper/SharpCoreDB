@@ -44,7 +44,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.72" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.8" />
     <PackageReference Include="FluentMigrator" Version="8.0.1" PrivateAssets="all" />
     <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" PrivateAssets="all" />
     <PackageReference Include="FluentMigrator.Runner.Core" Version="8.0.1" PrivateAssets="all" />
@@ -99,7 +99,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.18.0" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.203" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
   </ItemGroup>
 

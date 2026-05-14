@@ -29,7 +29,7 @@
     </PackageReference>
 
     <!-- Assertions & Mocking -->
-    <PackageReference Include="FluentAssertions" Version="8.9.0" />
+    <PackageReference Include="FluentAssertions" Version="8.10.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
 
     <!-- Sync Dependencies -->
@@ -53,8 +53,8 @@
     <ProjectReference Include="..\..\src\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.203" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>
 
 </Project>
