@@ -43,7 +43,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.72" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.8" />
     <PackageReference Include="FluentMigrator" Version="8.0.1" PrivateAssets="all" />
     <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" PrivateAssets="all" />

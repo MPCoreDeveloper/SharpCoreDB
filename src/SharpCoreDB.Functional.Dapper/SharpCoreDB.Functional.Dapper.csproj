@@ -30,7 +30,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.72" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="SharpCoreDB.Functional" Version="1.8.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
     <PackageReference Include="SharpCoreDB.Extensions" Version="1.8.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
