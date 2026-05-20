@@ -79,4 +79,16 @@ public sealed class SharpCoreDBDataReaderTests
         // Assert
         Assert.Equal(0, ordinal);
     }
+
+    [Fact]
+    public void Read_WithEmptyResults_ShouldReturnFalse()
+    {
+        // Arrange
+        var results = new List<Dictionary<string, object>>();
+        using var reader = new SharpCoreDBDataReader(results);
+
+        // Act & Assert
+        Assert.False(reader.Read());
+        Assert.Equal(0, reader.FieldCount);
+    }
 }

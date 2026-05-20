@@ -579,8 +579,16 @@ public class SharpCoreDBCommand : DbCommand
         foreach (SharpCoreDBParameter param in DbParameterCollection)
         {
             var value = param.Value;
-            // DateTime/DateTimeOffset are converted to ISO-8601 strings by the
-            // ValueConverter registered in SharpCoreDBModelCustomizer.
+
+            // Normalize temporal parameters to ISO-8601 text so comparisons against
+            // TEXT-backed DateTime columns are deterministic across OS/culture/runner.
+            value = value switch
+            {
+                DateTime dt => dt.ToUniversalTime().ToString("o"),
+                DateTimeOffset dto => dto.UtcDateTime.ToString("o"),
+                _ => value
+            };
+
             parameters[param.ParameterName.TrimStart('@', ':')] = value;
         }
         return parameters;
