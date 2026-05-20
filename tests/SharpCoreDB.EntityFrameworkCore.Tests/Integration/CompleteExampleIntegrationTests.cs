@@ -157,12 +157,12 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
         using var context = CreateContext();
         await context.Database.EnsureCreatedAsync();
         context.Blogs.AddRange(
-            new TestBlog { Title = "Old Blog", Url = "https://old.com", CreatedAt = DateTime.UtcNow.AddDays(-30) },
-            new TestBlog { Title = "New Blog", Url = "https://new.com", CreatedAt = DateTime.UtcNow.AddDays(-5) });
+            new TestBlog { Title = "Old Blog", Url = "https://old.com", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new TestBlog { Title = "New Blog", Url = "https://new.com", CreatedAt = new DateTime(2025, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
         await context.SaveChangesAsync();
 
         // Act
-        var cutoff = DateTime.UtcNow.AddDays(-15);
+        var cutoff = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
         var recent = await context.Blogs
             .Where(b => b.CreatedAt > cutoff)
             .ToListAsync();
