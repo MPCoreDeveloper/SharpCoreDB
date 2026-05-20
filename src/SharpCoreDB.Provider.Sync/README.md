@@ -2,13 +2,13 @@
 
 Dotmim.Sync provider package for `SharpCoreDB`.
 
-**Version:** `v1.8.0`  
+**Version:** `v1.9.0`  
 **Package:** `SharpCoreDB.Provider.Sync`
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -18,20 +18,22 @@ Dotmim.Sync provider package for `SharpCoreDB`.
 - Sync metadata/schema support for SharpCoreDB
 - Builder/adaptor abstractions for sync pipelines
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Package/docs synchronized to `v1.8.0`
+- Package/docs synchronized to `v1.9.0`
 - Documentation aligned with current provider components
 - Guidance updated for modern sync and local-first scenarios
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.Sync --version 1.8.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.Provider.Sync/NuGet.README.md`
+
+
 

@@ -2,13 +2,13 @@
 
 Entity Framework Core adapter for `SharpCoreDB.Functional`.
 
-**Version:** `v1.8.0`  
+**Version:** `v1.9.0`  
 **Package:** `SharpCoreDB.Functional.EntityFrameworkCore`
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -19,20 +19,22 @@ Entity Framework Core adapter for `SharpCoreDB.Functional`.
 - `Task<Seq<T>>` for sequence-based query results
 - Complements `SharpCoreDB.EntityFrameworkCore` provider usage
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Functional EF Core adapter introduced in `v1.8.0`
+- Functional EF Core adapter introduced in `v1.9.0`
 - Documentation aligned with modular functional package family
 - Keeps dependencies optional and transitive through package references
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.8.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.Functional/README.md`
+
+
 

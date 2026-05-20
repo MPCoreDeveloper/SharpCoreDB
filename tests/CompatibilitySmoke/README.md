@@ -1,7 +1,7 @@
 # SharpCoreDB Compatibility Smoke Tests
 
 **Location:** `tests/CompatibilitySmoke/`  
-**Version:** v1.8.0  
+**Version:** v1.9.0  
 **Purpose:** Validate protocol handshake, simple query, and metadata discovery against a live SharpCoreDB Server instance.
 
 ---
@@ -191,4 +191,5 @@ The smoke tests run automatically in CI via `.github/workflows/compatibility-smo
 | `smoke-data/` | Generated test database files (gitignored) |
 | `smoke-logs/` | Generated server logs (gitignored) |
 | `smoke-results.json` | Latest test results JSON (gitignored) |
+
 

@@ -1,4 +1,4 @@
-# SharpCoreDB.CrudApp (v1.8.0)
+# SharpCoreDB.CrudApp (v1.9.0)
 
 `SharpCoreDB.CrudApp` is an ASP.NET Core MVC (.NET 10) showcase for:
 
@@ -74,4 +74,5 @@ The app deletes the existing `.scdb` file, recreates schema, and reseeds the adm
 
 - This sample is optimized for local demo and developer onboarding.
 - For production, harden secret handling, add CSRF/security auditing policies, and implement richer authorization policies/roles.
+
 

@@ -65,8 +65,8 @@ git push origin feature/new-feature
 grep -r "<Version>" src/ --include="*.csproj"
 
 # Edit each one:
-# OLD: <Version>1.7.0</Version>
-# NEW: <Version>1.8.0</Version>
+# OLD: <Version>X.Y.Z</Version>
+# NEW: <Version>1.9.0</Version>
 
 # STEP 3: Test Everything Locally
 dotnet clean
@@ -76,13 +76,13 @@ dotnet test --configuration Release --no-build
 
 # STEP 4: Commit & Push
 git add .
-git commit -m "Release v1.8.0"
+git commit -m "Release v1.9.0"
 git push origin master
 # 🚀 CI/CD automatically publishes!
 
 # STEP 5: Create GitHub Release
-gh release create v1.8.0 \
-  --title "SharpCoreDB v1.8.0" \
+gh release create v1.9.0 \
+  --title "SharpCoreDB v1.9.0" \
   --notes "$(cat RELEASE_NOTES.md)"
 
 # STEP 6: Verify on NuGet
@@ -473,3 +473,4 @@ Your CI/CD is working well if:
 **Created**: 2025-01-28  
 **Last Updated**: 2025-01-28  
 **Status**: Production Ready
+

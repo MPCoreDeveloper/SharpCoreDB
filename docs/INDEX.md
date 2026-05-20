@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v1.8.0`)
+**Status:** Active documentation set (`v1.9.0`)
 
 ## 1. Project Entry Points
 
@@ -134,3 +134,4 @@
 - Historical phase-design notes remain in `internals/` for background context.
 - Superseded duplicates are removed instead of linked alongside canonical files.
 - All documentation is in English only.
+

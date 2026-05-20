@@ -5,13 +5,13 @@
 
   **Dapper Integration · Health Checks · Repository Pattern · Bulk Operations · Performance Monitoring · FluentMigrator**
 
-  **Version:** 1.8.0  
+  **Version:** 1.9.0  
   **Status:** Production Ready ✅
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![C#](https://img.shields.io/badge/C%23-14-blueviolet.svg)](https://learn.microsoft.com/dotnet/csharp/)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.8.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.9.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
 
 </div>
 
@@ -20,9 +20,9 @@
 Convenience extensions package for `SharpCoreDB`.
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -68,21 +68,23 @@ services.Configure<ProcessorOptions>(options =>
 
 Explicit configuration is preserved and is not overwritten by the extension.
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Package/docs synchronized to `v1.8.0`
+- Package/docs synchronized to `v1.9.0`
 - Guidance updated for optional migration/health scenarios
 - FluentMigrator now defaults to SQLite syntax compatibility when using `AddSharpCoreDBFluentMigrator()`
-- Inherits core reliability improvements from SharpCoreDB v1.8.0
+- Inherits core reliability improvements from SharpCoreDB v1.9.0
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 1.8.0
+dotnet add package SharpCoreDB.Extensions --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.Extensions/NuGet.README.md`
+
+
 

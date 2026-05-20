@@ -2,13 +2,13 @@
 
 Advanced analytics extension for `SharpCoreDB`.
 
-**Version:** `v1.8.0`  
+**Version:** `v1.9.0`  
 **Package:** `SharpCoreDB.Analytics`
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -19,21 +19,23 @@ Advanced analytics extension for `SharpCoreDB`.
 - Time-series and OLAP-oriented helpers
 - SIMD-friendly execution for high-throughput analytics workloads
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Package version synchronized to `v1.8.0`
+- Package version synchronized to `v1.9.0`
 - Analytics docs aligned with production feature set
-- Inherits core durability/parser improvements from SharpCoreDB v1.8.0
+- Inherits core durability/parser improvements from SharpCoreDB v1.9.0
 - No intended breaking changes from v1.5.0
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.8.0
+dotnet add package SharpCoreDB.Analytics --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `docs/analytics/README.md`
+
+
 

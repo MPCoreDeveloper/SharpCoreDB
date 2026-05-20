@@ -9,7 +9,7 @@
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <Version>1.8.0</Version>
+    <Version>1.9.0</Version>
     <AssemblyTitle>SharpCoreDB.CQRS.Benchmarks</AssemblyTitle>
     <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
     <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
@@ -27,3 +27,4 @@
   </ItemGroup>
 
 </Project>
+

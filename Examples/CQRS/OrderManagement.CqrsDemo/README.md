@@ -1,4 +1,4 @@
-# Order Management - Explicit CQRS Demo (v1.8.0)
+# Order Management - Explicit CQRS Demo (v1.9.0)
 
 This demo shows an explicit **CQRS-only** flow with `SharpCoreDB.CQRS`.
 It is intentionally different from the Event Sourcing sample in `Examples/EventSourcing/OrderManagement`.
@@ -70,4 +70,5 @@ dotnet run
 
 The Event Sourcing demos already explain event-stream-first design.
 This project exists to make the **pure CQRS separation** explicit and easy to compare side-by-side.
+
 

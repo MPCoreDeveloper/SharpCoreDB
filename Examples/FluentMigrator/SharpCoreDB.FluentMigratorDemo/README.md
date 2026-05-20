@@ -7,7 +7,7 @@ This example demonstrates using [FluentMigrator](https://fluentmigrator.github.i
 - Registering `SharpCoreDB` and `FluentMigrator` side-by-side via DI
 - Running schema migrations against a `.scdb` file (no server required)
 - Handling of **quoted identifiers** — FluentMigrator generates SQL like  
-  `CREATE TABLE IF NOT EXISTS "Products" ("Id" INTEGER NOT NULL, ...)` which SharpCoreDB parses correctly as of v1.8.0
+  `CREATE TABLE IF NOT EXISTS "Products" ("Id" INTEGER NOT NULL, ...)` which SharpCoreDB parses correctly as of v1.9.0
 - Rollback and re-apply of migrations
 - Querying migrated + seeded data
 
@@ -53,3 +53,4 @@ runner.MigrateUp();
 - The `__SharpMigrations` version table is created automatically by FluentMigrator via the processor — no manual pre-creation needed.
 - `StorageMode` is `SingleFile` — no directory, no separate page files.
 - Encryption is disabled in this demo for simplicity; enable via `DatabaseOptions.CreateSingleFileDefault(enableEncryption: true, encryptionKey: "...")`.
+

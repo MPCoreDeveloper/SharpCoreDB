@@ -1,18 +1,18 @@
-# SharpCoreDB.Data.Provider v1.8.0
+# SharpCoreDB.Data.Provider v1.9.0
 
 **ADO.NET Data Provider for SharpCoreDB**
 
 Complete ADO.NET provider enabling standard database connectivity patterns with SharpCoreDB's encryption and performance.
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.8.0
+## ✨ What's New in v1.9.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.8.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.9.0
 - ✅ Enterprise connectivity features
 - ✅ Full ADO.NET compatibility
 - ✅ Zero breaking changes
@@ -53,13 +53,15 @@ while (reader.Read())
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.8.0
+dotnet add package SharpCoreDB.Data.Provider --version 1.9.0
 ```
 
-**Requires:** SharpCoreDB v1.8.0+
+**Requires:** SharpCoreDB v1.9.0+
 
 ---
 
-**Version:** 1.8.0 | **Status:** ✅ Production Ready
+**Version:** 1.9.0 | **Status:** ✅ Production Ready
+
+
 
 

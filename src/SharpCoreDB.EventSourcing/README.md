@@ -19,16 +19,16 @@ to the synchronized 1.9.0 release line.
 - Snapshot persistence and snapshot-aware aggregate loading
 - Optional upcasting pipeline support
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Package/docs synchronized to `v1.8.0`
+- Package/docs synchronized to `v1.9.0`
 - Snapshot and replay guidance clarified for production workflows
 - Persistent and in-memory parity documented as first-class support
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 1.8.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.0
 ```
 
 ## Related packages
@@ -40,4 +40,5 @@ dotnet add package SharpCoreDB.EventSourcing --version 1.8.0
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.EventSourcing/NuGet.README.md`
+
 

@@ -1,11 +1,11 @@
-# SharpCoreDB.Graph.Advanced v1.8.0
+# SharpCoreDB.Graph.Advanced v1.9.0
 
 Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -16,19 +16,21 @@ Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 - Graph-aware semantic ranking and profiling helpers
 - SQL integration for graph analytics workflows
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Advanced package delivered as part of the synchronized `v1.8.0` release
+- Advanced package delivered as part of the synchronized `v1.9.0` release
 - Documentation aligned for GraphRAG + analytics usage patterns
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `docs/graphrag/00_START_HERE.md`
+
+
 

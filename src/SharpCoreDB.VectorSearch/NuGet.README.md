@@ -1,18 +1,18 @@
-# SharpCoreDB.VectorSearch v1.8.0
+# SharpCoreDB.VectorSearch v1.9.0
 
 **SIMD-Accelerated Vector Similarity Search**
 
 Semantic search and similarity matching **50-100x faster than SQLite** using HNSW indexing and SIMD acceleration.
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.8.0
+## ✨ What's New in v1.9.0
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.8.0
+- ✅ Inherits metadata improvements from SharpCoreDB v1.9.0
 - ✅ Phase 8 complete: HNSW-accelerated semantic search
 - ✅ 50-100x faster than SQLite
 - ✅ NativeAOT compatible
@@ -50,13 +50,15 @@ Semantic search and similarity matching **50-100x faster than SQLite** using HNS
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.VectorSearch --version 1.8.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.0
 ```
 
-**Requires:** SharpCoreDB v1.8.0+
+**Requires:** SharpCoreDB v1.9.0+
 
 ---
 
-**Version:** 1.8.0 | **Status:** ✅ Production Ready | **Phase:** 8 Complete
+**Version:** 1.9.0 | **Status:** ✅ Production Ready | **Phase:** 8 Complete
+
+
 
 

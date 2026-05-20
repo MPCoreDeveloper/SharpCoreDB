@@ -1,17 +1,17 @@
 # 🔍 SharpCoreDB Vector Search & Storage
 
-> **Status:** ✅ **PRODUCTION READY** — v1.8.0  
+> **Status:** ✅ **PRODUCTION READY** — v1.9.0  
 > **Module:** `SharpCoreDB.VectorSearch` (optional, separate NuGet)  
 > **Features:** HNSW indexes, quantization, distance metrics, GraphRAG integration paths  
 > **Performance:** 50-100x faster than SQLite vector search  
 > **Requirements:** .NET 10, C# 14  
 > **Breaking Changes:** None — backward compatible
 
-## v1.8.0 changes
+## v1.9.0 changes
 
-- Package/docs synchronized to `v1.8.0`
+- Package/docs synchronized to `v1.9.0`
 - Vector workflows aligned with `SharpCoreDB.Graph.Advanced` GraphRAG guidance
-- Inherits core metadata/parser reliability improvements from SharpCoreDB v1.8.0
+- Inherits core metadata/parser reliability improvements from SharpCoreDB v1.9.0
 
 ---
 
@@ -74,10 +74,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.8.0
+dotnet add package SharpCoreDB --version 1.9.0
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 1.8.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.0
 ```
 
 ### 2. Register Vector Search
@@ -424,4 +424,5 @@ A: Check your insert statements. NULLs are not indexed and won't appear in dista
 - [Vector Performance Tuning](PERFORMANCE_TUNING.md)
 - [SQLite → SharpCoreDB Migration](../migration/SQLITE_VECTORS_TO_SHARPCORE.md)
 - [SharpCoreDB User Manual](../USER_MANUAL.md)
+
 

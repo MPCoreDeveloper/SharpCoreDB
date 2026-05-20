@@ -1,11 +1,11 @@
-# SharpCoreDB.CQRS v1.8.0
+# SharpCoreDB.CQRS v1.9.0
 
 CQRS and outbox primitives for `SharpCoreDB`.
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -16,19 +16,21 @@ CQRS and outbox primitives for `SharpCoreDB`.
 - In-memory/persistent outbox stores
 - Retry/dead-letter-capable outbox dispatch worker support
 
-## Changes in v1.8.0
+## Changes in v1.9.0
 
-- Package/docs synchronized to `v1.8.0`
+- Package/docs synchronized to `v1.9.0`
 - Outbox reliability guidance expanded (retry + dead-letter + worker flow)
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.8.0
+dotnet add package SharpCoreDB.CQRS --version 1.9.0
 ```
 
 ## Documentation
 
 - `docs/INDEX.md`
 - `src/SharpCoreDB.CQRS/README.md`
+
+
 

@@ -199,47 +199,47 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,000+ tests passing**
-- **100% backward compatible** across the v1.8.0 release line
-- Zero breaking changes intended from v1.5.0 to v1.8.0
+- **100% backward compatible** across the v1.9.0 release line
+- Zero breaking changes intended from v1.5.0 to v1.9.0
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.8.0)
+## Available NuGet packages (v1.9.0)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.8.0
+dotnet add package SharpCoreDB --version 1.9.0
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.8.0
-dotnet add package SharpCoreDB.Client --version 1.8.0
+dotnet add package SharpCoreDB.Server --version 1.9.0
+dotnet add package SharpCoreDB.Client --version 1.9.0
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.8.0
-dotnet add package SharpCoreDB.VectorSearch --version 1.8.0
-dotnet add package SharpCoreDB.Graph --version 1.8.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
-dotnet add package SharpCoreDB.Distributed --version 1.8.0
-dotnet add package SharpCoreDB.Provider.Sync --version 1.8.0
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.8.0
-dotnet add package SharpCoreDB.Extensions --version 1.8.0
+dotnet add package SharpCoreDB.Analytics --version 1.9.0
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.0
+dotnet add package SharpCoreDB.Graph --version 1.9.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.0
+dotnet add package SharpCoreDB.Distributed --version 1.9.0
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.0
+dotnet add package SharpCoreDB.Extensions --version 1.9.0
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.8.0
-dotnet add package SharpCoreDB.Projections --version 1.8.0
-dotnet add package SharpCoreDB.CQRS --version 1.8.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.0
+dotnet add package SharpCoreDB.Projections --version 1.9.0
+dotnet add package SharpCoreDB.CQRS --version 1.9.0
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.8.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.8.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.8.0
+dotnet add package SharpCoreDB.Functional --version 1.9.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.0
 ```
 
 ---
 
-## What’s new in v1.8.0
+## What’s new in v1.9.0
 
 - **Auto-ROWID support**: hidden `_rowid` (ULID) on tables without an explicit primary key - mirrors SQLite rowid semantics
 - **GRAPH_RAG SQL clause**: first-class `GRAPH_RAG` SELECT syntax for graph-augmented retrieval pipelines
@@ -282,6 +282,7 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 ---
 
 **Made with ❤️ for the .NET community**
+
 
 
 

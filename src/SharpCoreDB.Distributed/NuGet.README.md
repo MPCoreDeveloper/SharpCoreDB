@@ -2,13 +2,13 @@
 
 **Distributed Database Extension for SharpCoreDB**
 
-[![NuGet](https://img.shields.io/badge/NuGet-1.8.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Distributed)
+[![NuGet](https://img.shields.io/badge/NuGet-1.9.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Distributed)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-## Patch updates in v1.8.0
+## Patch updates in v1.9.0
 
-- ✅ Aligned package metadata and version references to the synchronized 1.8.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Overview
@@ -121,13 +121,13 @@ await distributedDb.ExecuteAsync(
 
 MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) for details.
 
-# SharpCoreDB.Distributed v1.8.0
+# SharpCoreDB.Distributed v1.9.0
 
 **Enterprise Distributed Database Features**
 
 Multi-master replication, distributed transactions, and automatic sharding - Phase 10 complete with sub-100ms replication latency.
 
-## ✨ What's New in v1.8.0
+## ✨ What's New in v1.9.0
 
 - ✅ Phase 10.2: Multi-master replication with vector clocks
 - ✅ Phase 10.3: Distributed transactions with 2PC protocol
@@ -168,12 +168,14 @@ Multi-master replication, distributed transactions, and automatic sharding - Pha
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Distributed --version 1.8.0
+dotnet add package SharpCoreDB.Distributed --version 1.9.0
 ```
 
-**Requires:** SharpCoreDB v1.8.0+
+**Requires:** SharpCoreDB v1.9.0+
 
 ---
 
-**Version:** 1.8.0 | **Status:** ✅ Production Ready | **Phase:** 10 Complete
+**Version:** 1.9.0 | **Status:** ✅ Production Ready | **Phase:** 10 Complete
+
+
 

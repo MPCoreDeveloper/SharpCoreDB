@@ -2,11 +2,11 @@
 
 `SharpCoreDB.Provider.Sync` is the Dotmim.Sync provider for SharpCoreDB.
 
-**Version line:** `v1.8.0`
+**Version line:** `v1.9.0`
 
-## v1.8.0 changes
+## v1.9.0 changes
 
-- Sync provider documentation aligned to `v1.8.0`
+- Sync provider documentation aligned to `v1.9.0`
 - Clarified provider feature coverage for change tracking, metadata, and DI integration
 - Linked package-level docs to centralized feature matrix and docs index
 
@@ -157,4 +157,5 @@ dotnet test tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Test
 Phase 4 delivered complete test infrastructure, scenario coverage, performance benchmarks, and error-path validation.
 
 The sync provider is ready for full-system validation runs and release hardening.
+
 

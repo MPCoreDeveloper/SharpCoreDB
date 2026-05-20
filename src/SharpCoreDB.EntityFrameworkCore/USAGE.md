@@ -1,6 +1,6 @@
 # SharpCoreDB.EntityFrameworkCore - Usage Guide
 
-**Version:** `v1.8.0`  
+**Version:** `v1.9.0`  
 **Target:** `.NET 10` / `C# 14`
 
 This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
@@ -8,7 +8,7 @@ This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.8.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.0
 dotnet add package Microsoft.EntityFrameworkCore.Design
 ```
 
@@ -100,3 +100,4 @@ Data Source=<path>;Password=<password>;Pooling=true
 - `NuGet.README.md`
 - `../../docs/INDEX.md`
 - `../../docs/FEATURE_MATRIX_v1.7.0.md`
+

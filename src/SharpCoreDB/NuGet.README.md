@@ -7,7 +7,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 
 ## What's New in v1.9.0
 
-### v1.8.0 to v1.9.0
+### v1.9.0 to v1.9.0
 
 - **Auto-ROWID**: Tables without an explicit `PRIMARY KEY` get a hidden `_rowid` column (ULID). SQLite rowid semantics.
 - **GRAPH_RAG SQL clause**: New `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, `TOP_K`.
@@ -65,7 +65,7 @@ now ship on the same `1.9.0` release line
 
 This package installs the core database engine. Extensions available:
 
-**Functional Programming (NEW in v1.8.0):**
+**Functional Programming (NEW in v1.9.0):**
 - **SharpCoreDB.Functional** - Functional façade with `Option<T>`, `Fin<T>`, and `Seq<T>`-style APIs
 - **SharpCoreDB.Functional.Dapper** - Functional Dapper adapter module
 - **SharpCoreDB.Functional.EntityFrameworkCore** - Functional EF Core adapter module
@@ -171,16 +171,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.8.0
+dotnet add package SharpCoreDB --version 1.9.0
 ```
 
-**Optional companion packages introduced or highlighted in v1.8.0:**
+**Optional companion packages introduced or highlighted in v1.9.0:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.8.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.8.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.8.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
+dotnet add package SharpCoreDB.Functional --version 1.9.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.0
 ```
 
 ## 🔄 Upgrade from v1.3.5
@@ -188,7 +188,7 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.8.0
 **100% backward compatible** - No breaking changes!
 
 ```bash
-dotnet add package SharpCoreDB --version 1.8.0
+dotnet add package SharpCoreDB --version 1.9.0
 ```
 
 Your existing databases work as-is. New metadata is automatically compressed.
@@ -207,9 +207,11 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.8.0 (April 26, 2026)  
+**Latest Version:** 1.9.0 (April 26, 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,468+ (100% passing)  
 **Status:** ✅ Production Ready
+
+
 
 
