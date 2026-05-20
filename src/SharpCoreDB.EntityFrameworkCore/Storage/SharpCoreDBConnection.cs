@@ -75,6 +75,20 @@ public class SharpCoreDBConnection : DbConnection
         _state = ConnectionState.Closed;
     }
 
+    /// <summary>
+    /// Forces the connection to release its current Database instance.
+    /// Used aggressively by the EF transaction to ensure the next operation
+    /// gets a fresh Database that sees the committed/rolled-back storage state.
+    /// </summary>
+    internal void ResetDatabaseInstance()
+    {
+        if (_database is not null && _pool is not null)
+        {
+            _pool.ReturnDatabase(_database);
+            _database = null;
+        }
+    }
+
     /// <inheritdoc />
     public override void Open()
     {

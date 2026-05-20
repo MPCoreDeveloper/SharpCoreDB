@@ -132,6 +132,10 @@ public sealed partial class SqlToStringVisitor
             : _dialect.QuoteIdentifier(node.ColumnName);
 
     /// <inheritdoc/>
+    protected override string VisitParameterCore(ParameterNode node) =>
+        "@" + node.ParameterName; // Simple parameter formatting for debugging / logging
+
+    /// <inheritdoc/>
     protected override string VisitInExpressionCore(InExpressionNode node)
     {
         var expr = node.Expression?.Accept(this) ?? "NULL";

@@ -172,6 +172,14 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
                 // Build CREATE TABLE SQL
                 var sql = BuildCreateTableSql(entityType);
 
+                // DEBUG: Log CREATE TABLE
+                try
+                {
+                    System.IO.File.AppendAllText("D:\\create_table.log",
+                        $"[{DateTime.Now:HH:mm:ss.fff}] {sql}\n");
+                }
+                catch { }
+
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&
                     sharpConnection.DbInstance != null)
@@ -191,6 +199,15 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
     {
         await _connection.OpenAsync(cancellationToken);
 
+        // DEBUG: Log connection info
+        try
+        {
+            var path = _connection.DbConnection is SharpCoreDBConnection sc ? sc.DataSource : "unknown";
+            System.IO.File.AppendAllText("D:\\create_table.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] Creating tables for: {path}\n");
+        }
+        catch { }
+
         try
         {
             // Create tables for each entity type in the model
@@ -202,6 +219,14 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
 
                 // Build CREATE TABLE SQL
                 var sql = BuildCreateTableSql(entityType);
+
+                // DEBUG: Log CREATE TABLE
+                try
+                {
+                    System.IO.File.AppendAllText("D:\\create_table.log",
+                        $"[{DateTime.Now:HH:mm:ss.fff}] {sql}\n");
+                }
+                catch { }
 
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&

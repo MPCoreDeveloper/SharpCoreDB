@@ -195,6 +195,33 @@ public class SharpCoreDBQuerySqlGenerator : QuerySqlGenerator
         return sqlBinaryExpression;
     }
 
+    /// <inheritdoc />
+    protected override Expression VisitSqlConstant(SqlConstantExpression sqlConstantExpression)
+    {
+        // Harden DateTime handling: if a DateTime constant slips through without the
+        // ValueConverter (e.g. in some query paths), convert it to ISO-8601 string.
+        if (sqlConstantExpression.Value is DateTime dt)
+        {
+            var iso = dt.ToUniversalTime().ToString("o");
+            Sql.Append($"'{iso}'");
+            return sqlConstantExpression;
+        }
+
+        if (sqlConstantExpression.Value is DateTimeOffset dto)
+        {
+            var iso = dto.UtcDateTime.ToString("o");
+            Sql.Append($"'{iso}'");
+            return sqlConstantExpression;
+        }
+
+        return base.VisitSqlConstant(sqlConstantExpression);
+    }
+
+    // DateTime comparisons are supported via the standard binary visitor above.
+    // DateTime values are stored/retrieved using TEXT (ISO-8601) + ValueConverter,
+    // exactly like the official SQLite provider and LiteDB.
+    // in-memory and persisted scenarios (including UTC-normalized DateTime values).
+
     /// <summary>
     /// Gets the operator string for the given binary expression.
     /// </summary>

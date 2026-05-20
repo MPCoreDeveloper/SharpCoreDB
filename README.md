@@ -53,7 +53,7 @@ Use it when you need:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.8.0
+dotnet add package SharpCoreDB --version 1.9.0
 ```
 
 ```csharp
@@ -81,23 +81,18 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.8.0
-dotnet add package SharpCoreDB.Client --version 1.8.0
+dotnet add package SharpCoreDB.Server --version 1.9.0
+dotnet add package SharpCoreDB.Client --version 1.9.0
 ```
 
 ---
 
-## v1.8.0 highlights
+## v1.9.0 highlights
 
-- Synchronized package release across the full ecosystem (`1.8.0`)
-- **Auto-ROWID**: tables without a `PRIMARY KEY` now get a hidden `_rowid` (ULID) column - SQLite-compatible rowid pattern
-- **GRAPH_RAG SQL clause**: new top-level `GRAPH_RAG` SELECT syntax with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, and `TOP_K`
-- **OPTIONALLY projection mode**: new `OPTIONALLY` keyword enables `Option<T>` mapping in ADO.NET readers
-- **IS SOME / IS NONE predicates**: new null-safety predicates supported in parser and runtime
-- **SIMD hot-loop optimization**: all 16 columnar aggregate methods use `Vector256.LoadUnsafe` - tighter codegen on AVX2
-- **Major Viewer update**: multi-tab query editor, typed table designer (includes ULID/GUID), 6-language UI (EN/DE/FR/ES/IT/NL), server connection support
-- **FluentMigrator reliability fixes**:
-  - default SQLite-compatible generator + processor alignment in `AddSharpCoreDBFluentMigrator()`
+- Version standardization to 1.9.0 across all packages, NuGet metadata, and documentation
+- EF Core provider fully validated: 93/93 tests passing (CRUD, transactions, relationships, projections, migrations, A*/BFS/DFS graph traversal)
+- Build and core test suite confirmed stable for release
+- Continued synchronization of optional modules (Event Sourcing, CQRS, Projections, Analytics)
   - no `UndefinedDefaultValue` leakage in generated SQL
   - no duplicate `PRIMARY KEY` generation for version table creation
   - SQLite-incompatible DDL now fails fast with clear `NotSupportedException` in default compatibility mode

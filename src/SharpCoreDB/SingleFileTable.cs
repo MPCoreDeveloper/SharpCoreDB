@@ -24,6 +24,7 @@ using System.Runtime.InteropServices;
 /// <summary>
 /// Table implementation for single-file storage.
 /// Uses an in-memory cache with explicit flush to the storage provider.
+/// ✅ CRITICAL FIX: Transaction-aware cache to support proper rollback semantics.
 /// </summary>
 public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable, ITableSchemaApplicator
 {
@@ -34,6 +35,10 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private bool _cacheLoaded;
     private bool _isDirty;
     private long _nextId = 1;
+
+    // ✅ Transaction-aware cache snapshot for rollback support
+    private List<Dictionary<string, object>>? _transactionSnapshot;
+    private bool _isInTransaction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SingleFileTable"/> class from table metadata.
@@ -46,7 +51,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         PrimaryKeyIndex = metadata.PrimaryKeyIndex;
         LoadSchemaFromProvider(tableName);
-        InitializeColumnMetadata();
+        // ✅ REMOVED: InitializeColumnMetadata() — LoadSchemaFromProvider now handles IsAuto/IsNotNull
     }
 
     /// <summary>
@@ -174,7 +179,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             _isDirty = true;
         }
 
-        if (AutoFlush)
+        // ✅ CRITICAL FIX: Only flush if not in transaction
+        if (AutoFlush && !_isInTransaction)
         {
             FlushCache();
         }
@@ -202,7 +208,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             _isDirty = true;
         }
 
-        if (AutoFlush)
+        // ✅ CRITICAL FIX: Only flush if not in transaction
+        if (AutoFlush && !_isInTransaction)
         {
             FlushCache();
         }
@@ -288,7 +295,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             }
         }
 
-        if (AutoFlush && _isDirty)
+        // ✅ CRITICAL FIX: Only flush if not in transaction
+        if (AutoFlush && _isDirty && !_isInTransaction)
         {
             FlushCache();
         }
@@ -330,7 +338,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             }
         }
 
-        if (AutoFlush && _isDirty)
+        // ✅ CRITICAL FIX: Only flush if not in transaction
+        if (AutoFlush && _isDirty && !_isInTransaction)
         {
             FlushCache();
         }
@@ -362,7 +371,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             _isDirty = true;
         }
 
-        if (AutoFlush)
+        // ✅ CRITICAL FIX: Only flush if not in transaction
+        if (AutoFlush && !_isInTransaction)
         {
             FlushCache();
         }
@@ -402,6 +412,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // Write using WriteBlockAsync to properly track data length
         _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Forces a reload of the row cache from storage, discarding any in-memory state.
+    /// This is used after transaction commit/rollback to ensure queries see the persisted state.
+    /// </summary>
+    public void ReloadFromStorage()
+    {
+        lock (_tableLock)
+        {
+            _cacheLoaded = false;
+            _rowCache.Clear();
+            _isDirty = false;
+            EnsureCacheLoaded();
+        }
     }
 
     /// <inheritdoc />
@@ -525,15 +550,26 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         var columnDefs = provider.TableDirectoryManager.GetColumnDefinitions(tableName);
         var columns = new List<string>(columnDefs.Count);
         var types = new List<DataType>(columnDefs.Count);
+        var isAuto = new List<bool>(columnDefs.Count);
+        var isNotNull = new List<bool>(columnDefs.Count);
 
         foreach (var entry in columnDefs)
         {
             columns.Add(GetColumnName(entry));
             types.Add((DataType)entry.DataType);
+            isAuto.Add((entry.Flags & (uint)ColumnFlags.AutoIncrement) != 0);
+            isNotNull.Add((entry.Flags & (uint)ColumnFlags.NotNull) != 0);
+
+            if ((entry.Flags & (uint)ColumnFlags.PrimaryKey) != 0)
+            {
+                PrimaryKeyIndex = columns.Count - 1;
+            }
         }
 
         Columns = columns;
         ColumnTypes = types;
+        IsAuto = isAuto;
+        IsNotNull = isNotNull;
     }
 
     private void InitializeColumnMetadata()
@@ -554,6 +590,73 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
     }
 
+    /// <summary>
+    /// ✅ CRITICAL FIX: Begins a table-level transaction by creating a snapshot of the current cache.
+    /// This allows rollback to restore the pre-transaction state.
+    /// </summary>
+    internal void BeginTransaction()
+    {
+        lock (_tableLock)
+        {
+            if (_isInTransaction)
+            {
+                throw new InvalidOperationException($"Table {Name} is already in a transaction");
+            }
+
+            EnsureCacheLoaded();
+            // Deep copy the cache so rollback can restore the exact state
+            _transactionSnapshot = _rowCache.Select(row => new Dictionary<string, object>(row)).ToList();
+            _isInTransaction = true;
+        }
+    }
+
+    /// <summary>
+    /// ✅ CRITICAL FIX: Commits the transaction by flushing changes to storage and clearing the snapshot.
+    /// </summary>
+    internal void CommitTransaction()
+    {
+        lock (_tableLock)
+        {
+            if (!_isInTransaction)
+            {
+                throw new InvalidOperationException($"Table {Name} is not in a transaction");
+            }
+
+            // Flush all pending changes to storage
+            if (_isDirty)
+            {
+                FlushCache();
+            }
+
+            _transactionSnapshot = null;
+            _isInTransaction = false;
+        }
+    }
+
+    /// <summary>
+    /// ✅ CRITICAL FIX: Rolls back the transaction by restoring the cache from the snapshot.
+    /// </summary>
+    internal void RollbackTransaction()
+    {
+        lock (_tableLock)
+        {
+            if (!_isInTransaction)
+            {
+                throw new InvalidOperationException($"Table {Name} is not in a transaction");
+            }
+
+            // Restore the cache to the snapshot state
+            if (_transactionSnapshot is not null)
+            {
+                _rowCache = _transactionSnapshot.Select(row => new Dictionary<string, object>(row)).ToList();
+            }
+
+            _transactionSnapshot = null;
+            _isInTransaction = false;
+            _isDirty = false; // Clear dirty flag since we discarded changes
+        }
+    }
+
     private void ApplyDefaults(Dictionary<string, object> row)
     {
         for (int i = 0; i < Columns.Count; i++)
@@ -561,7 +664,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             var col = Columns[i];
             if (!row.ContainsKey(col))
             {
-                if (IsAuto.Count > i && IsAuto[i])
+                // Check IsAuto flag, with fallback to PrimaryKeyIndex for AUTO PK columns
+                bool shouldAuto = (IsAuto.Count > i && IsAuto[i]) ||
+                                  (i == PrimaryKeyIndex && PrimaryKeyIndex >= 0);
+
+                if (shouldAuto)
                 {
                     row[col] = GenerateAutoValue(ColumnTypes[i]);
                 }
@@ -609,6 +716,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     public void ApplySchema(TableSchemaDefinition schema)
     {
         ArgumentNullException.ThrowIfNull(schema);
+
         Columns = schema.Columns;
         ColumnTypes = schema.ColumnTypes;
         IsAuto = schema.IsAuto;

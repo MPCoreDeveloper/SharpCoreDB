@@ -288,6 +288,7 @@ public class BlogDbContext(DbContextOptions<BlogDbContext> options) : DbContext(
         {
             entity.ToTable("Blogs");
             entity.HasKey(e => e.BlogId);
+            entity.Property(e => e.BlogId).ValueGeneratedOnAdd();
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Url).IsRequired();
             entity.HasIndex(e => e.Url).IsUnique();
@@ -304,6 +305,7 @@ public class BlogDbContext(DbContextOptions<BlogDbContext> options) : DbContext(
         {
             entity.ToTable("Posts");
             entity.HasKey(e => e.PostId);
+            entity.Property(e => e.PostId).ValueGeneratedOnAdd();
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Content).IsRequired();
         });

@@ -25,7 +25,7 @@ public class SharpCoreDBDbTransaction : DbTransaction
         _connection = connection;
         _isolationLevel = isolationLevel;
 
-        // Start batch update for deferred index rebuilding and WAL batching
+        // Use IDatabase.BeginBatchUpdate() which works for both Database and SingleFileDatabase
         var db = _connection.DbInstance;
         if (db is not null && !db.IsBatchUpdateActive)
         {
@@ -50,6 +50,7 @@ public class SharpCoreDBDbTransaction : DbTransaction
         var db = _connection.DbInstance;
         if (db is not null && db.IsBatchUpdateActive)
         {
+            // Use IDatabase.EndBatchUpdate() which works for both Database and SingleFileDatabase
             db.EndBatchUpdate();
             db.Flush();
         }
@@ -66,6 +67,7 @@ public class SharpCoreDBDbTransaction : DbTransaction
         var db = _connection.DbInstance;
         if (db is not null && db.IsBatchUpdateActive)
         {
+            // Use IDatabase.CancelBatchUpdate() which works for both Database and SingleFileDatabase
             db.CancelBatchUpdate();
         }
     }

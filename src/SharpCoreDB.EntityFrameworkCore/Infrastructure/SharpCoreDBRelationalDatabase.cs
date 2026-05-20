@@ -1,26 +1,25 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.EntityFrameworkCore.Storage.Internal;
 using Microsoft.EntityFrameworkCore.Update;
 using SharpCoreDB.EntityFrameworkCore.Storage;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace SharpCoreDB.EntityFrameworkCore.Infrastructure;
 
 /// <summary>
-/// Database provider implementation for SharpCoreDB.
-/// Follows the standard EF Core relational provider pattern (same as SQLite).
+/// The actual database implementation for SharpCoreDB.
+/// Contains SaveChanges logic, key propagation, and DML execution.
+/// Follows the same pattern as SqliteRelationalDatabase / RelationalDatabase.
 /// </summary>
-public class SharpCoreDBDatabaseProvider : RelationalDatabase
+public class SharpCoreDBRelationalDatabase : RelationalDatabase
 {
     private readonly IRelationalConnection _connection;
 
-    public SharpCoreDBDatabaseProvider(
-        DatabaseDependencies databaseDependencies,
-        RelationalDatabaseDependencies relationalDatabaseDependencies,
+    public SharpCoreDBRelationalDatabase(
+        DatabaseDependencies dependencies,
+        RelationalDatabaseDependencies relationalDependencies,
         IRelationalConnection connection)
-        : base(databaseDependencies, relationalDatabaseDependencies)
+        : base(dependencies, relationalDependencies)
     {
         _connection = connection;
     }
@@ -33,17 +32,8 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
         foreach (var entry in entries)
             ExecuteUpdateEntry(entry);
 
-        // ✅ FIX: Only flush when NOT inside an explicit transaction.
-        // Inside a transaction, defer flush so Rollback() can cancel unflushed writes.
-        // After commit, the transaction's own Commit() calls Flush().
-        if (_connection.DbConnection is SharpCoreDBConnection conn)
-        {
-            var isInTransaction = conn.DbInstance?.IsBatchUpdateActive ?? false;
-            if (!isInTransaction)
-            {
-                conn.DbInstance?.Flush();
-            }
-        }
+        if (_connection.DbConnection is SharpCoreDBConnection c && !(c.DbInstance?.IsBatchUpdateActive ?? false))
+            c.DbInstance?.Flush();
 
         return entries.Count;
     }
@@ -53,25 +43,11 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
         if (_connection.DbConnection.State != System.Data.ConnectionState.Open)
             await _connection.OpenAsync(cancellationToken);
 
-        System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
-            $"[{DateTime.Now:HH:mm:ss.fff}] SaveChangesAsync: Processing {entries.Count} entries\n");
-
         foreach (var entry in entries)
             ExecuteUpdateEntry(entry);
 
-        // ✅ FIX: Only flush when NOT inside an explicit transaction.
-        // Inside a transaction, defer flush so Rollback() can cancel unflushed writes.
-        // After commit, the transaction's own Commit() calls Flush().
-        if (_connection.DbConnection is SharpCoreDBConnection conn)
-        {
-            var isInTransaction = conn.DbInstance?.IsBatchUpdateActive ?? false;
-            System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
-                $"[{DateTime.Now:HH:mm:ss.fff}] SaveChangesAsync: IsInTransaction = {isInTransaction}\n");
-            if (!isInTransaction)
-            {
-                conn.DbInstance?.Flush();
-            }
-        }
+        if (_connection.DbConnection is SharpCoreDBConnection c && !(c.DbInstance?.IsBatchUpdateActive ?? false))
+            c.DbInstance?.Flush();
 
         return entries.Count;
     }
@@ -113,8 +89,8 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
             // DEBUG: Log INSERT SQL
             try
             {
-                System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] INSERT: {sql}\n");
+                System.IO.File.AppendAllText("D:\\ef_insert.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] INSERT SQL: {sql}\n");
             }
             catch { }
 
@@ -123,6 +99,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
             if (skippedAutoKeyProp != null)
             {
                 var rowId = conn.DbInstance.GetLastInsertRowId();
+
                 if (rowId <= 0)
                 {
                     try
@@ -131,8 +108,11 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
                         if (rows.Count > 0 && rows[0].TryGetValue("rowid", out var val) && val != null)
                             rowId = Convert.ToInt64(val);
                     }
-                    catch { }
+                    catch
+                    {
+                    }
                 }
+
                 if (rowId > 0)
                     entry.SetStoreGeneratedValue(skippedAutoKeyProp, Convert.ChangeType(rowId, skippedAutoKeyProp.ClrType));
             }
@@ -143,7 +123,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
             var whereClauses = new List<string>();
             foreach (var prop in entry.EntityType.GetProperties())
             {
-                // ✅ FIX: Remove quotes from column names
+                // ✅ FIX: Remove quotes from column names - SharpCoreDB parser doesn't handle them
                 var col = prop.GetColumnName();
                 if (prop.IsPrimaryKey())
                     whereClauses.Add($"{col} = {FormatSqlValue(entry.GetCurrentValue(prop))}");
@@ -152,14 +132,14 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
             }
             if (setClauses.Count == 0 || whereClauses.Count == 0) return;
 
-            // ✅ FIX: Remove quotes from table name
+            // ✅ FIX: Remove quotes from table name - SharpCoreDB parser doesn't handle them
             var sql = $"UPDATE {tableName} SET {string.Join(", ", setClauses)} WHERE {string.Join(" AND ", whereClauses)}";
 
             // DEBUG: Log UPDATE SQL
             try
             {
-                System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] UPDATE: {sql}\n");
+                System.IO.File.AppendAllText("D:\\ef_update.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] UPDATE SQL: {sql}\n");
             }
             catch { }
 
@@ -170,19 +150,20 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
             var whereClauses = new List<string>();
             foreach (var prop in entry.EntityType.FindPrimaryKey()?.Properties ?? [])
             {
-                // ✅ FIX: Remove quotes from column names
-                whereClauses.Add($"{prop.GetColumnName()} = {FormatSqlValue(entry.GetCurrentValue(prop))}");
+                // ✅ FIX: Remove quotes from column names - SharpCoreDB parser doesn't handle them
+                var colName = prop.GetColumnName();
+                whereClauses.Add($"{colName} = {FormatSqlValue(entry.GetCurrentValue(prop))}");
             }
             if (whereClauses.Count == 0) return;
 
-            // ✅ FIX: Remove quotes from table name
+            // ✅ FIX: Remove quotes from table name - SharpCoreDB parser doesn't handle them
             var sql = $"DELETE FROM {tableName} WHERE {string.Join(" AND ", whereClauses)}";
 
             // DEBUG: Log DELETE SQL
             try
             {
-                System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] DELETE: {sql}\n");
+                System.IO.File.AppendAllText("D:\\ef_delete.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] DELETE SQL: {sql}\n");
             }
             catch { }
 
@@ -209,4 +190,3 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
         _ => value.ToString()!
     };
 }
-

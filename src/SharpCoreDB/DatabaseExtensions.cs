@@ -333,8 +333,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     [Obsolete("SingleFileDatabase.ExecuteQuery routes DML/SELECT through SqlParser. DDL (CREATE/DROP TABLE) uses a regex path with full compatibility for standard syntax. For advanced DDL features (STORAGE mode, complex indexes), prefer the directory-mode Database class.")]
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
+        System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+            $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteQuery: {sql.Substring(0, Math.Min(100, sql.Length))}\n");
+
         var upperSql = sql.Trim().ToUpperInvariant();
-        
+
         if (upperSql.Contains("FROM STORAGE") || upperSql.Contains("FROM[STORAGE]"))
         {
             var stats = GetStorageStatistics();
@@ -368,7 +371,22 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         {
             // Bind parameters before executing SELECT to support parameterized queries
             var boundSql = BindPreparedSql(sql, parameters);
-            return ExecuteSelectInternal(boundSql, parameters);
+            var results = ExecuteSelectInternal(boundSql, parameters);
+            System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteQuery returned {results.Count} rows");
+            if (results.Count > 0 && results[0].Count > 0)
+            {
+                var firstRow = results[0];
+                var firstKey = firstRow.Keys.First();
+                var firstValue = firstRow[firstKey];
+                System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                    $", first row first value: key={firstKey}, value={firstValue}\n");
+            }
+            else
+            {
+                System.IO.File.AppendAllText(@"D:\sfd_batch.log", "\n");
+            }
+            return results;
         }
 
         throw new NotSupportedException($"Query not supported in single-file mode: {sql}");
@@ -397,6 +415,18 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
                 throw new InvalidOperationException("Batch update is already active");
             }
 
+            System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                $"[{DateTime.Now:HH:mm:ss.fff}] BeginBatchUpdate: Starting transaction\n");
+
+            // ✅ CRITICAL FIX: Begin transaction on all tables before starting storage transaction
+            foreach (var table in _tables.Values)
+            {
+                if (table is SingleFileTable sft)
+                {
+                    sft.BeginTransaction();
+                }
+            }
+
             _storageProvider.BeginTransaction();
             _isBatchUpdateActive = true;
         }
@@ -413,12 +443,57 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
             try
             {
+                System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                    $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: Committing transaction, table count = {_tables.Count}\n");
+
+                // ✅ CRITICAL FIX: Commit all tables BEFORE committing storage transaction
+                // This flushes pending changes to storage
+                foreach (var table in _tables.Values)
+                {
+                    if (table is SingleFileTable sft)
+                    {
+                        System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                            $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: Committing table {sft.Name}\n");
+                        sft.CommitTransaction();
+                    }
+                }
+
                 _storageProvider.CommitTransactionAsync().GetAwaiter().GetResult();
                 _tableDirectoryManager.Flush();
+
+                System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                    $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: Transaction committed, reloading {_tables.Count} tables\n");
+
+                // ✅ After commit, force-reload all table caches from storage
+                // so subsequent queries see the committed data
+                foreach (var table in _tables.Values)
+                {
+                    if (table is SingleFileTable sft)
+                    {
+                        System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                            $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: Reloading table {sft.Name}, current rows = {sft.GetCachedRowCount()}\n");
+                        sft.ReloadFromStorage();
+                        System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                            $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: After reload table {sft.Name}, rows = {sft.GetCachedRowCount()}\n");
+                    }
+                }
+
                 _isBatchUpdateActive = false;
             }
             catch
             {
+                System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                    $"[{DateTime.Now:HH:mm:ss.fff}] EndBatchUpdate: ERROR during commit, rolling back\n");
+
+                // Rollback all tables
+                foreach (var table in _tables.Values)
+                {
+                    if (table is SingleFileTable sft)
+                    {
+                        sft.RollbackTransaction();
+                    }
+                }
+
                 _storageProvider.RollbackTransaction();
                 _isBatchUpdateActive = false;
                 throw;
@@ -433,6 +508,21 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             if (!_isBatchUpdateActive)
             {
                 throw new InvalidOperationException("No active batch update to cancel");
+            }
+
+            System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                $"[{DateTime.Now:HH:mm:ss.fff}] CancelBatchUpdate: Rolling back transaction\n");
+
+            // ✅ CRITICAL FIX: Rollback all tables BEFORE rolling back storage transaction
+            // This restores the cache to pre-transaction state
+            foreach (var table in _tables.Values)
+            {
+                if (table is SingleFileTable sft)
+                {
+                    System.IO.File.AppendAllText(@"D:\sfd_batch.log", 
+                        $"[{DateTime.Now:HH:mm:ss.fff}] CancelBatchUpdate: Rolling back table {sft.Name}\n");
+                    sft.RollbackTransaction();
+                }
             }
 
             _storageProvider.RollbackTransaction();

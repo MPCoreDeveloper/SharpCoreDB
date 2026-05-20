@@ -46,6 +46,12 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private readonly QueryCache? queryCache = queryCache;
     private readonly DatabaseConfig? config = config;
 
+    /// <summary>
+    /// The owning Database instance. Set by Database after parser creation so that
+    /// DDL-created tables can be wired with the database reference for last_insert_rowid tracking.
+    /// </summary>
+    internal Database? Database { get; set; }
+
     // Wraps storage in a factory so DDL can create tables without being hard-coupled to IStorage.
     // Set once in the primary constructor; the DML-only constructor leaves this null (DDL will throw).
     private readonly ITableFactory _tableFactory = new DirectoryTableFactory(storage);
@@ -128,15 +134,9 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             originalSql = sql;
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        // ✅ FIXED: Removed security warning - it was incorrectly triggering for prepared statements
-        // The warning was triggering after parameter binding created a new SQL string
-        // Prepared statements with parameters are SAFE and should not show warnings
-        
-        // Note: Sanitization still applied as defense-in-depth, but no warning logged
-        else
-        {
-            sql = SqlParser.SanitizeSql(sql);
-        }
+        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
+        // For queries without parameters, we trust the input SQL as-is
+        // SQL injection protection should be handled at the application layer via parameterized queries
 
         // Use query cache if available
         string cacheKey = originalSql ?? sql;
@@ -147,7 +147,7 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             // Cache the structure - for parameterized queries, still track cache hits
             this.queryCache.GetOrAdd(cacheKey, key =>
             {
-                var parsedParts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var parsedParts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
                 return new QueryCache.CachedQuery
                 {
                     Sql = cacheKey,
@@ -156,11 +156,11 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
                 };
             });
             // Always parse the bound SQL since it contains the actual values
-            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
         else
         {
-            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
         
         this.ExecuteInternal(sql, parts, wal);
@@ -179,10 +179,9 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        else
-        {
-            sql = SqlParser.SanitizeSql(sql);
-        }
+        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
+        // For queries without parameters, we trust the input SQL as-is
+        // SQL injection protection should be handled at the application layer via parameterized queries
 
         this.ExecuteInternal(sql, plan.Parts, wal);
     }
@@ -199,12 +198,12 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        else
-        {
-            sql = SqlParser.SanitizeSql(sql);
-        }
+        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
+        // For queries without parameters, we trust the input SQL as-is
+        // SQL injection protection should be handled at the application layer via parameterized queries
 
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
+        var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         return this.ExecuteQueryInternal(sql, parts);
     }
 
@@ -221,12 +220,13 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        else
-        {
-            sql = SqlParser.SanitizeSql(sql);
-        }
+        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
+        // For queries without parameters, we trust the input SQL as-is
+        // SQL injection protection should be handled at the application layer via parameterized queries
+        // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
+        // EF Core and other callers may pass SQL with newlines, which must be tokenized properly.
 
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         return this.ExecuteQueryInternal(sql, parts, noEncrypt);
     }
 
@@ -246,12 +246,13 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             // Parameters change the SQL text — must recompute parts
             sql = SqlParser.BindParameters(plan.Sql, parameters);
-            parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
         else
         {
-            // No parameters — reuse cached parts (skip re-tokenization)
-            sql = SqlParser.SanitizeSql(plan.Sql);
+            // No parameters — reuse cached SQL and parts as-is
+            // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
+            sql = plan.Sql;
             parts = plan.Parts;
         }
 

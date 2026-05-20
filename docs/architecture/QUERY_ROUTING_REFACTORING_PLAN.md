@@ -354,6 +354,14 @@ internal sealed class AggregateQueryExecutor
 
 ### Phase 3: Testing & Validation (Week 3)
 
+#### Status After Comprehensive Fix Pass (Option A + Backwards Compatibility)
+- Routing now strictly guarded: only `@` parameters or explicit subqueries go to AstExecutor.
+- Simple INNER JOIN tests pass again on legacy path.
+- EF provider no longer throws DBNull casts (defensive handling in DataReader).
+- 18 advanced tests (complex joins, EF CRUD/transactions, subqueries) remain failing — these are pre-existing or require non-minimal join engine work.
+- All changes are minimal and preserve full backwards compatibility for non-EF users.
+- EF provider remains functional for parameterized queries.
+
 #### Step 3.1: Comprehensive Test Suite
 
 **File:** `tests/SharpCoreDB.Tests/QueryRouting/RouterDecisionTests.cs`

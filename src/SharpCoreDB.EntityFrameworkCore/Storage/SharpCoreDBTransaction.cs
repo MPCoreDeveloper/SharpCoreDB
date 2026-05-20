@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Data.Common;
 
@@ -7,8 +8,10 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Represents a transaction for SharpCoreDB that wraps EF Core transaction semantics.
+/// Implements <see cref="IInfrastructure{DbTransaction}"/> so EF Core relational
+/// command execution can retrieve the underlying <see cref="DbTransaction"/>.
 /// </summary>
-public class SharpCoreDBTransaction : IDbContextTransaction
+public class SharpCoreDBTransaction : IDbContextTransaction, IInfrastructure<DbTransaction>
 {
     private readonly IRelationalConnection _connection;
     private readonly DbTransaction _dbTransaction;
@@ -32,6 +35,13 @@ public class SharpCoreDBTransaction : IDbContextTransaction
 
     /// <inheritdoc />
     public Guid TransactionId { get; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Exposes the underlying <see cref="DbTransaction"/> so EF Core relational
+    /// infrastructure can associate commands with this transaction.
+    /// </remarks>
+    DbTransaction IInfrastructure<DbTransaction>.Instance => _dbTransaction;
 
     /// <inheritdoc />
     public void Commit()

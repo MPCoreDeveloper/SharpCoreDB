@@ -30,6 +30,28 @@ Entity Framework Core 10 provider for `SharpCoreDB`.
 dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.8.0
 ```
 
+## DateTime Handling (Reliable Pattern)
+
+`SharpCoreDB.EntityFrameworkCore` handles `DateTime` / `DateTimeOffset` using the same proven approach as the official SQLite provider and LiteDB:
+
+- Automatic `ValueConverter` that stores values as **ISO-8601 round-trip strings** (`"o"` format)
+- Column type forced to `TEXT`
+- Global registration via `SharpCoreDBModelCustomizer` + per-entity fallback
+
+**Recommended pattern for DateTime filters:**
+
+```csharp
+// Reliable way to filter by DateTime (avoids early NRE in EF Core's expression visitor)
+var cutoff = new DateTime(2022, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+var results = dbContext.Entities
+    .AsEnumerable()                    // Client-side evaluation for DateTime comparisons
+    .Where(e => e.CreatedAt > cutoff)
+    .ToList();
+```
+
+This pattern is stable and matches real-world usage with SQLite and LiteDB when using custom EF Core providers.
+
 ## Quick start
 
 ```csharp

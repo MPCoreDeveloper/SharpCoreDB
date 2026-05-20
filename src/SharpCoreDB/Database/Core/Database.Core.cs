@@ -18,6 +18,7 @@ using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 
 /// <summary>
 /// Database implementation - Core partial class with fields and initialization.
@@ -65,23 +66,29 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     
     private bool _disposed;  // ✅ C# 14: No explicit = false needed
 
-    // Batch UPDATE transaction state
-    private bool _batchUpdateActive;
-    
+    // Batch UPDATE transaction state is now in Database.BatchUpdateTransaction.cs
+    // (shared per-dbPath via ConcurrentDictionary so all Database instances for the same file
+    // observe the same batch transaction state – critical for EF Core provider).
+
     // Track if metadata needs to be flush
     private bool _metadataDirty;
 
-    // ✅ NEW: Thread-safe last insert rowid tracking (SQLite compatibility)
-    private readonly AsyncLocal<long> _lastInsertRowId = new();
+    // Last insert rowid tracking (SQLite compatibility).
+    // Intentionally a plain field — AsyncLocal caused stale reads when EF
+    // fires synchronous change-tracker notifications (SetStoreGeneratedValue)
+    // after the first entity insert, branching the ExecutionContext so the
+    // second insert's written value was invisible to the provider loop.
+    // Access is serialized by the single-threaded EF save loop; no volatile needed.
+    private long _lastInsertRowIdVal;
 
     /// <inheritdoc />
-    public long GetLastInsertRowId() => _lastInsertRowId.Value;
+    public long GetLastInsertRowId() => Interlocked.Read(ref _lastInsertRowIdVal);
 
     /// <summary>
     /// Sets the last insert rowid (called by insert operations).
     /// Internal method - not part of public API.
     /// </summary>
-    internal void SetLastInsertRowId(long rowId) => _lastInsertRowId.Value = rowId;
+    internal void SetLastInsertRowId(long rowId) => Interlocked.Exchange(ref _lastInsertRowIdVal, rowId);
     
     /// <summary>
     /// Initializes a new instance of the <see cref="Database"/> class.

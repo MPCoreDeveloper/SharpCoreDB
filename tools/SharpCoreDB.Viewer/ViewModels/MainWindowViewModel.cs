@@ -152,11 +152,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!int.TryParse(SelectTopNText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
         {
-            return 200;
+            return 100;
         }
 
-        // Cap at 5000 to prevent UI from freezing on large tables
-        return Math.Clamp(value, 1, 5_000);
+        return Math.Clamp(value, 1, 10_000);
     }
 
     /// <summary>

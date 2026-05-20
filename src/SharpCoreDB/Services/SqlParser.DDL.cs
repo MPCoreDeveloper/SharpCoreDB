@@ -384,6 +384,10 @@ public partial class SqlParser
         table.Name = tableName;
         this.tables[tableName] = table;
 
+        // ✅ NEW: Wire database reference so Table.Insert can call SetLastInsertRowId / RecordBatchInsert
+        // This enables correct generated-key propagation for EF Core and SQLite-compatible last_insert_rowid()
+        (table as Table)?.SetDatabase(this.Database);
+
         // ✅ CRITICAL: Initialize storage engine IMMEDIATELY after creating table
         // This ensures the engine is ready before any INSERT/SELECT operations
         table.InitializeStorageEngine();

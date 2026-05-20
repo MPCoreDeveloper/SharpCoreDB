@@ -38,6 +38,7 @@ public static class SharpCoreDBServiceCollectionExtensions
         var builder = new EntityFrameworkRelationalServicesBuilder(serviceCollection)
             .TryAdd<LoggingDefinitions, SharpCoreDBLoggingDefinitions>()
             .TryAdd<IDatabaseProvider, SharpCoreDBDatabaseProviderService>()
+            .TryAdd<Microsoft.EntityFrameworkCore.Storage.IDatabase, SharpCoreDBDatabaseProvider>() // ✅ Custom IDatabase with SaveChanges + simplified CompileQuery
             .TryAdd<IDatabaseCreator, SharpCoreDBDatabaseCreator>()
             .TryAdd<IRelationalConnection, SharpCoreDBRelationalConnection>()
             .TryAdd<IRelationalTypeMappingSource, SharpCoreDBTypeMappingSource>()

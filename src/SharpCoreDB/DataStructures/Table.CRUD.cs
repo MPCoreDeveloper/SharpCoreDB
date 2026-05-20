@@ -32,6 +32,19 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
+        // DEBUG
+        if (this.Name == "Blogs")
+        {
+            try
+            {
+                System.IO.File.AppendAllText("D:\\table_insert_debug.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] Table.Insert called for Blogs\n" +
+                    $"  row.Keys={string.Join(", ", row.Keys)}\n" +
+                    $"  Table.Columns={string.Join(", ", this.Columns)}\n");
+            }
+            catch { }
+        }
+
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         var columnIndexCache = GetColumnIndexCache();
         
@@ -40,10 +53,32 @@ public partial class Table
             var col = this.Columns[i];
             if (!row.TryGetValue(col, out var val) || (this.IsAuto[i] && (val is null or DBNull)))
             {
+                // DEBUG
+                if (col == "BlogId")
+                {
+                    try
+                    {
+                        System.IO.File.AppendAllText("D:\\auto_debug.log",
+                            $"[{DateTime.Now:HH:mm:ss.fff}] BlogId missing/null: IsAuto[{i}]={this.IsAuto[i]}, ColumnType={this.ColumnTypes[i]}\n");
+                    }
+                    catch { }
+                }
+
                 // ✅ AUTO-ROWID: Also auto-generate when the key exists but value is null/DBNull.
                 if (this.IsAuto[i])
                 {
                     row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
+
+                    // DEBUG
+                    if (col == "BlogId")
+                    {
+                        try
+                        {
+                            System.IO.File.AppendAllText("D:\\auto_debug.log",
+                                $"[{DateTime.Now:HH:mm:ss.fff}] Generated BlogId={row[col]}\n");
+                        }
+                        catch { }
+                    }
                 }
                 else if (this.DefaultExpressions[i] is not null)
                 {
@@ -72,9 +107,17 @@ public partial class Table
         // ✅ NOT NULL validation (outside lock)
         for (int i = 0; i < this.Columns.Count; i++)
         {
-            if (this.IsNotNull[i] && (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
+            // Use TryGetValue to avoid KeyNotFoundException for missing columns
+            if (this.IsNotNull[i])
             {
-                throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                if (!row.TryGetValue(this.Columns[i], out var value) || value == null || value == DBNull.Value)
+                {
+                    // Allow auto-increment columns to be missing (they'll be generated above)
+                    if (!this.IsAuto[i])
+                    {
+                        throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                    }
+                }
             }
         }
 
@@ -180,8 +223,26 @@ public partial class Table
                 var engine = GetOrCreateStorageEngine();
                 long position = engine.Insert(Name, rowData);
 
-                // ✅ NEW: Track last_insert_rowid() for SQLite compatibility
-                _database?.SetLastInsertRowId(position);
+                // ✅ NEW: Track last_insert_rowid() for SQLite compatibility.
+                // Store the auto-generated PRIMARY KEY value (not the storage position),
+                // so that GetLastInsertRowId() returns the entity's actual PK after insert.
+                if (this.PrimaryKeyIndex >= 0 && row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pkForRowId)
+                    && pkForRowId is not null && pkForRowId != DBNull.Value)
+                {
+                    var pkLong = pkForRowId switch
+                    {
+                        int i => (long)i,
+                        long l => l,
+                        _ => position
+                    };
+                    _database?.SetLastInsertRowId(pkLong);
+                    // Track this insert (with storage position) so CancelBatchUpdate can reliably delete it
+                    _database?.RecordBatchInsert(this.Name ?? string.Empty, pkForRowId, position);
+                }
+                else
+                {
+                    _database?.SetLastInsertRowId(position);
+                }
 
                 // Update indexes (under lock)
                 if (this.PrimaryKeyIndex >= 0)

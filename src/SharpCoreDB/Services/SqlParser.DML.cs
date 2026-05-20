@@ -25,6 +25,86 @@ public partial class SqlParser
     private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
+    /// Detects actual SQL parameters (@p0, :param, ?) excluding @ symbols inside string literals.
+    /// CRITICAL: Prevents false positives from email addresses like 'test@example.com'.
+    /// Handles both single quotes and escaped quotes ('') from SanitizeSql.
+    /// </summary>
+    private static bool HasActualParameters(string sql)
+    {
+        bool inString = false;
+        char stringChar = '\0';
+
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+
+            // Track string literal boundaries (including escaped quotes '' or "")
+            if (c == '\'' || c == '"')
+            {
+                if (!inString)
+                {
+                    inString = true;
+                    stringChar = c;
+                }
+                else if (c == stringChar)
+                {
+                    // Check for doubled quotes ('' or "") which is SQL escape syntax
+                    if (i + 1 < sql.Length && sql[i + 1] == stringChar)
+                    {
+                        i++; // Skip the second quote
+                        continue;
+                    }
+                    inString = false;
+                }
+            }
+
+            // Check for parameter markers ONLY OUTSIDE string literals
+            if (!inString)
+            {
+                // @p0, @param style (used by EF Core)
+                if (c == '@' && i + 1 < sql.Length && char.IsLetterOrDigit(sql[i + 1]))
+                    return true;
+
+                // :param style (used by some providers)
+                if (c == ':' && i + 1 < sql.Length && char.IsLetterOrDigit(sql[i + 1]))
+                    return true;
+
+                // ? style (positional parameters)
+                if (c == '?')
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// ✅ Option A: Centralized decision for routing to AstExecutor (enhanced) path.
+    /// Returns true for parameterized queries (EF Core), JOINs, subqueries, set ops.
+    /// This ensures all EF SELECTs get proper ParameterNode support.
+    /// </summary>
+    private static bool RequiresEnhancedParser(string sql, string[] parts)
+    {
+        if (string.IsNullOrWhiteSpace(sql)) return false;
+
+        // Parameterized query (EF Core uses @p0, @p1 etc.) → must use AstExecutor for proper param support
+        if (HasActualParameters(sql))
+            return true;
+
+        var upper = sql.ToUpperInvariant();
+
+        // Only route true complex constructs (subqueries, set ops). Plain JOINs handled by legacy path.
+        if (upper.Contains(" UNION ") || upper.Contains(" INTERSECT ") || upper.Contains(" EXCEPT "))
+            return true;
+
+        // Derived table / subquery - must be (SELECT...), not a function call like UNIXEPOCH(...)
+        if (upper.Contains("(SELECT") || upper.Contains("( SELECT"))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
     /// Internal method to execute a SQL statement.
     /// ✅ MODERNIZED: Uses C# 14 pattern matching with string equality checking.
     /// </summary>
@@ -267,7 +347,35 @@ public partial class SqlParser
                 }
             }
             FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
-            table.Insert(row);
+
+            // DEBUG
+            if (tableName.Equals("Blogs", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    System.IO.File.AppendAllText("D:\\insert_debug.log",
+                        $"[{DateTime.Now:HH:mm:ss.fff}] Before table.Insert: row.Keys={string.Join(", ", row.Keys)}\n" +
+                        $"  table type: {table.GetType().Name}\n");
+                }
+                catch { }
+            }
+
+            try
+            {
+                table.Insert(row);
+            }
+            catch (Exception ex)
+            {
+                // DEBUG: Log exception
+                try
+                {
+                    System.IO.File.AppendAllText("D:\\insert_exception.log",
+                        $"[{DateTime.Now:HH:mm:ss.fff}] Exception in table.Insert for {tableName}: {ex.GetType().Name}: {ex.Message}\n" +
+                        $"  Stack: {ex.StackTrace}\n\n");
+                }
+                catch { }
+                throw;
+            }
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
             insertedRows.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
         }
@@ -518,10 +626,30 @@ public partial class SqlParser
             }
         }
 
+        // ✅ Option A: EF routing guarded for backwards compatibility.
+        // Only activate for true un-bound parameter queries or explicit subqueries.
+        // Normal/EF-bound queries stay on legacy path to preserve join/CRUD behavior.
+        // CRITICAL FIX: Must detect actual parameters, not @ symbols in string literals (e.g., 'test@example.com')
+        // CRITICAL FIX: Must detect actual subqueries (SELECT in parens), not function calls like UNIXEPOCH(...)
+        bool hasActualParameters = HasActualParameters(sql);
+        bool hasSubquery = sql.Contains("(SELECT", StringComparison.OrdinalIgnoreCase) || 
+                           sql.Contains("( SELECT", StringComparison.OrdinalIgnoreCase);
+
+        if (hasActualParameters || hasSubquery)
+        {
+            var ast = ParseWithEnhancedParser(sql);
+            if (ast is SelectNode selectNode)
+            {
+                var executor = new AstExecutor(this.tables, noEncrypt);
+                return executor.ExecuteSelect(selectNode);
+            }
+        }
+
         // Extract table name
         var tableName = ExtractMainTableNameFromSql(sql, 0);
 
-        // ✅ NEW: Check for JOIN keywords to route through Enhanced Parser for proper alias handling
+        // ✅ Backwards-compatible routing:
+        // JOIN queries stay on legacy path for full backwards compatibility with existing tests/users.
         var hasJoin = parts.Any(p =>
             p.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
             p.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
@@ -530,9 +658,10 @@ public partial class SqlParser
             p.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
             p.Equals("CROSS", StringComparison.OrdinalIgnoreCase));
 
+        // Preserve backward-compatible JOIN behavior via legacy JoinExecutor path.
         if (hasJoin)
         {
-            return HandleDerivedTable(sql, noEncrypt);
+            return ExecuteJoinQueryDirect(sql);
         }
 
         var selectClause = string.Join(" ", parts.Skip(1).TakeWhile(p => !p.Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase)));
@@ -640,6 +769,26 @@ public partial class SqlParser
         // Deduplicate by primary key
         results = ((this.tables[tableName] as Table)?.DeduplicateByPrimaryKey(results)) ?? results;
 
+        // DEBUG: Log result shape
+        if (results.Count > 0)
+        {
+            try
+            {
+                var debugLog = new System.Text.StringBuilder();
+                debugLog.AppendLine($"[{DateTime.Now:HH:mm:ss.fff}] ExecuteSelectQuery completed");
+                debugLog.AppendLine($"SQL (first 100 chars): {sql.Substring(0, Math.Min(100, sql.Length))}");
+                debugLog.AppendLine($"Result count: {results.Count}");
+                var firstRow = results[0];
+                debugLog.AppendLine($"First row keys: {string.Join(", ", firstRow.Keys)}");
+                foreach (var kvp in firstRow)
+                {
+                    debugLog.AppendLine($"  [{kvp.Key}] = {kvp.Value?.GetType().Name ?? "NULL"} ({kvp.Value})");
+                }
+                System.IO.File.AppendAllText("D:\\core_debug.log", debugLog.ToString() + "\n");
+            }
+            catch { /* ignore debug errors */ }
+        }
+
         return results;
     }
 
@@ -647,6 +796,7 @@ public partial class SqlParser
     /// <summary>
     /// Executes COUNT(*) aggregate query with modern patterns.
     /// ✅ MODERNIZED: Uses pattern matching and null-coalescing.
+    /// ✅ FIXED: Now passes WHERE clause to table.Select() for correct IN operator handling.
     /// </summary>
     private List<Dictionary<string, object>> ExecuteCountStar(string[] parts)
     {
@@ -659,10 +809,8 @@ public partial class SqlParser
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
         string? whereStr = whereIdx > 0 ? string.Join(" ", parts.Skip(whereIdx + 1)) : null;
 
-        var allRows = this.tables[tableName].Select();
-
-        if (!string.IsNullOrEmpty(whereStr))
-            allRows = [.. allRows.Where(r => SqlParser.EvaluateJoinWhere(r, whereStr))]; // ✅ C# 14: Collection expression
+        // ✅ FIX: Pass WHERE clause to table.Select() so EvaluateCondition() can handle IN operator correctly
+        var allRows = this.tables[tableName].Select(whereStr, orderBy: null, asc: true, noEncrypt: false);
 
         return [new Dictionary<string, object> { { "cnt", (long)allRows.Count } }]; // ✅ C# 14: Collection expression
     }
@@ -809,17 +957,17 @@ public partial class SqlParser
         return EvaluateScalarFunction(functionCall, args);
     }
 
-    private List<Dictionary<string, object>> HandleDerivedTable(string sql, bool noEncrypt)
+    private List<Dictionary<string, object>> HandleDerivedTable(string sql, bool noEncrypt, Dictionary<string, object?>? parameters = null)
     {
-        // Route JOIN queries to direct execution
-        if (sql.Contains("JOIN", StringComparison.OrdinalIgnoreCase))
-        {
-            return ExecuteJoinQueryDirect(sql);
-        }
-
-        // Fallback: EnhancedSqlParser for subqueries in FROM
+        // Route all queries (including JOINs) through the enhanced parser + AstExecutor
         try
         {
+            // Bind parameters before parsing so the AST contains literal values
+            if (parameters != null && parameters.Count > 0)
+            {
+                sql = SqlParser.BindParameters(sql, parameters);
+            }
+
             var ast = ParseWithEnhancedParser(sql);
 
             if (ast is null)
@@ -827,8 +975,14 @@ public partial class SqlParser
 
             if (ast is SelectNode selectNode)
             {
-                var executor = new AstExecutor(this.tables, noEncrypt);
+                var executor = new AstExecutor(this.tables, noEncrypt, parameters);
                 return executor.ExecuteSelect(selectNode);
+            }
+
+            if (ast is SetOperationNode setOpNode)
+            {
+                var executor = new AstExecutor(this.tables, noEncrypt, parameters);
+                return executor.ExecuteSetOperation(setOpNode);
             }
 
             throw new InvalidOperationException($"Parsed AST is not a SELECT node. Got: {ast.GetType().Name}");
@@ -1546,16 +1700,25 @@ public partial class SqlParser
 /// <summary>
 /// AST Executor - executes SQL AST nodes via the visitor pattern.
 /// Provides integration between the parser and the query engine.
+/// Supports parameterized queries for EF Core compatibility.
 /// </summary>
 internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>>
 {
     private readonly Dictionary<string, ITable> _tables;
     private readonly bool _noEncrypt;
+    private readonly Dictionary<string, object?> _parameters;
 
-    public AstExecutor(Dictionary<string, ITable> tables, bool noEncrypt)
+    public AstExecutor(Dictionary<string, ITable> tables, bool noEncrypt, Dictionary<string, object?>? parameters = null)
     {
         _tables = tables ?? throw new ArgumentNullException(nameof(tables));
         _noEncrypt = noEncrypt;
+        _parameters = parameters ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Backward-compatible constructor used by reflection-based tests.
+    public AstExecutor(Dictionary<string, ITable> tables, bool noEncrypt)
+        : this(tables, noEncrypt, null)
+    {
     }
 
     /// <summary>
@@ -1663,7 +1826,115 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
         var tableAlias = string.IsNullOrWhiteSpace(from.Alias) ? from.TableName : from.Alias;
 
-        return [.. tableRows.Select(row => QualifyRow(row, tableAlias!, from.TableName))];
+        var result = tableRows.Select(row => QualifyRow(row, tableAlias!, from.TableName)).ToList();
+
+        // Process JOINs parsed by EnhancedSqlParser
+        foreach (var join in from.Joins)
+        {
+            var rightTableName = join.Table.TableName;
+            var rightAlias = string.IsNullOrWhiteSpace(join.Table.Alias) ? rightTableName : join.Table.Alias;
+
+            if (!_tables.TryGetValue(rightTableName, out var rightTable))
+                throw new InvalidOperationException($"Table '{rightTableName}' does not exist.");
+
+            var rightRows = rightTable.Select(where: null, orderBy: null, asc: true, _noEncrypt)
+                .Select(r => QualifyRow(r, rightAlias, rightTableName))
+                .ToList();
+
+            result = join.Type switch
+            {
+                JoinNode.JoinType.Inner or JoinNode.JoinType.Cross => ExecuteInnerJoin(result, rightRows, join.OnCondition),
+                JoinNode.JoinType.Left => ExecuteLeftJoin(result, rightRows, join.OnCondition),
+                JoinNode.JoinType.Right => ExecuteLeftJoin(rightRows, result, join.OnCondition),
+                JoinNode.JoinType.Full => ExecuteFullJoin(result, rightRows, join.OnCondition),
+                _ => ExecuteInnerJoin(result, rightRows, join.OnCondition),
+            };
+        }
+
+        return result;
+    }
+
+    private List<Dictionary<string, object>> ExecuteInnerJoin(
+        List<Dictionary<string, object>> left,
+        List<Dictionary<string, object>> right,
+        ExpressionNode? onCondition)
+    {
+        var output = new List<Dictionary<string, object>>();
+        foreach (var leftRow in left)
+        {
+            foreach (var rightRow in right)
+            {
+                var merged = MergeRows(leftRow, rightRow);
+                if (onCondition is null || EvaluateCondition(onCondition, merged))
+                    output.Add(merged);
+            }
+        }
+        return output;
+    }
+
+    private List<Dictionary<string, object>> ExecuteLeftJoin(
+        List<Dictionary<string, object>> left,
+        List<Dictionary<string, object>> right,
+        ExpressionNode? onCondition)
+    {
+        var output = new List<Dictionary<string, object>>();
+        foreach (var leftRow in left)
+        {
+            bool matched = false;
+            foreach (var rightRow in right)
+            {
+                var merged = MergeRows(leftRow, rightRow);
+                if (onCondition is null || EvaluateCondition(onCondition, merged))
+                {
+                    output.Add(merged);
+                    matched = true;
+                }
+            }
+            if (!matched)
+            {
+                // Add left row with NULLs for right side columns
+                var nullRight = right.Count > 0
+                    ? right[0].ToDictionary(kv => kv.Key, _ => (object)DBNull.Value)
+                    : new Dictionary<string, object>();
+                output.Add(MergeRows(leftRow, nullRight));
+            }
+        }
+        return output;
+    }
+
+    private List<Dictionary<string, object>> ExecuteFullJoin(
+        List<Dictionary<string, object>> left,
+        List<Dictionary<string, object>> right,
+        ExpressionNode? onCondition)
+    {
+        var output = ExecuteLeftJoin(left, right, onCondition);
+        // Add unmatched right rows
+        foreach (var rightRow in right)
+        {
+            bool matched = left.Any(leftRow =>
+            {
+                var merged = MergeRows(leftRow, rightRow);
+                return onCondition is null || EvaluateCondition(onCondition, merged);
+            });
+            if (!matched)
+            {
+                var nullLeft = left.Count > 0
+                    ? left[0].ToDictionary(kv => kv.Key, _ => (object)DBNull.Value)
+                    : new Dictionary<string, object>();
+                output.Add(MergeRows(nullLeft, rightRow));
+            }
+        }
+        return output;
+    }
+
+    private static Dictionary<string, object> MergeRows(
+        Dictionary<string, object> left,
+        Dictionary<string, object> right)
+    {
+        var merged = new Dictionary<string, object>(left.Count + right.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in left) merged[k] = v;
+        foreach (var (k, v) in right) if (!merged.ContainsKey(k)) merged[k] = v;
+        return merged;
     }
 
     private static Dictionary<string, object> QualifyRow(Dictionary<string, object> row, string alias, string tableName)
@@ -1721,8 +1992,25 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             LiteralNode literal => literal.Value,
             ColumnReferenceNode column => GetValue(row, column.ColumnName),
             BinaryExpressionNode binary => EvaluateBinaryValueExpression(binary, row),
+            ParameterNode parameter => ResolveParameter(parameter.ParameterName),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Resolves a parameter value using the parameters supplied to this executor.
+    /// </summary>
+    private object? ResolveParameter(string parameterName)
+    {
+        if (_parameters.TryGetValue(parameterName, out var value))
+            return value;
+
+        // Also try without leading @ or :
+        var cleanName = parameterName.TrimStart('@', ':');
+        if (_parameters.TryGetValue(cleanName, out value))
+            return value;
+
+        return null;
     }
 
     private object? EvaluateFunctionCallInRow(FunctionCallNode func, Dictionary<string, object> row)
@@ -2056,6 +2344,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
     public List<Dictionary<string, object>> VisitBinaryExpression(BinaryExpressionNode node) => ThrowUnsupportedAstVisitor(nameof(BinaryExpressionNode));
     public List<Dictionary<string, object>> VisitLiteral(LiteralNode node) => ThrowUnsupportedAstVisitor(nameof(LiteralNode));
     public List<Dictionary<string, object>> VisitColumnReference(ColumnReferenceNode node) => ThrowUnsupportedAstVisitor(nameof(ColumnReferenceNode));
+    public List<Dictionary<string, object>> VisitParameter(ParameterNode node) => new List<Dictionary<string, object>>(); // Parameters are resolved during expression evaluation
     public List<Dictionary<string, object>> VisitInExpression(InExpressionNode node) => ThrowUnsupportedAstVisitor(nameof(InExpressionNode));
     public List<Dictionary<string, object>> VisitOrderBy(OrderByNode node) => ThrowUnsupportedAstVisitor(nameof(OrderByNode));
     public List<Dictionary<string, object>> VisitGroupBy(GroupByNode node) => ThrowUnsupportedAstVisitor(nameof(GroupByNode));

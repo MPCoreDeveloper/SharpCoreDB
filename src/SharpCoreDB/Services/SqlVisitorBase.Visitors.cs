@@ -83,6 +83,15 @@ public abstract partial class SqlVisitorBase<TResult>
     protected abstract TResult VisitColumnReferenceCore(ColumnReferenceNode node);
 
     /// <inheritdoc/>
+    public virtual TResult VisitParameter(ParameterNode node) =>
+        SafeVisit(() => VisitParameterCore(node), "PARAMETER", node);
+
+    /// <summary>
+    /// Core implementation of PARAMETER visit.
+    /// </summary>
+    protected abstract TResult VisitParameterCore(ParameterNode node);
+
+    /// <inheritdoc/>
     public virtual TResult VisitInExpression(InExpressionNode node) =>
         SafeVisit(() => VisitInExpressionCore(node), "IN EXPRESSION", node);
 

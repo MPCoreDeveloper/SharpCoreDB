@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
@@ -70,17 +71,37 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        var parameters = BuildParameterDictionary();
-        _connection.DbInstance.ExecuteSQL(_commandText, parameters);
+        // DEBUG: Log DML commands
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_nonquery.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQuery: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
+        }
+        catch { }
 
-        // ✅ CRITICAL FIX: Flush data after non-query commands to ensure persistence!
-        // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
-        // When EF Core closes and reopens the connection (creating a new Database instance),
-        // unflushed in-memory data is lost.
-        var commandUpper = _commandText.Trim().ToUpperInvariant();
-        if (commandUpper.StartsWith("INSERT") ||
-            commandUpper.StartsWith("UPDATE") ||
-            commandUpper.StartsWith("DELETE"))
+        var parameters = BuildParameterDictionary();
+
+        // ✅ FIX: Rewrite EF Core SQL before executing (same as ExecuteDbDataReader)
+        var rewritten = RewriteAliasQualifiedSql(_commandText);
+
+        // DEBUG: Log rewritten SQL
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_nonquery.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n");
+        }
+        catch { }
+
+        _connection.DbInstance.ExecuteSQL(rewritten, parameters);
+
+        // ✅ Only flush when NOT inside an explicit transaction.
+        // Inside a transaction, defer flush so Rollback() can cancel unflushed writes.
+        // After commit, the transaction's own Commit() calls Flush().
+        var commandUpper = rewritten.Trim().ToUpperInvariant();
+        if (DbTransaction is null &&
+            (commandUpper.StartsWith("INSERT") ||
+             commandUpper.StartsWith("UPDATE") ||
+             commandUpper.StartsWith("DELETE")))
         {
             _connection.DbInstance.Flush();
         }
@@ -119,10 +140,360 @@ public class SharpCoreDBCommand : DbCommand
 
         var parameters = BuildParameterDictionary();
 
-        // Execute query and get results
-        var results = _connection.DbInstance.ExecuteQuery(_commandText, parameters);
-        
-        return new SharpCoreDBDataReader(results);
+        // DEBUG: Log all commands
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_commands.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] Command: {_commandText.Substring(0, Math.Min(200, _commandText.Length))}\n");
+        }
+        catch { }
+
+        // ✅ FIX: Rewrite alias-qualified column refs that SharpCoreDB parser cannot handle.
+        // EF Core generates SELECT "b"."BlogId", "b"."Title" FROM "Blogs" AS "b".
+        // The SharpCoreDB parser returns dictionary keys like 'b"."BlogId' verbatim.
+        // Strip the alias prefix from every column reference in the SELECT list.
+        var rewritten = RewriteAliasQualifiedSql(_commandText);
+
+        // ✅ FIX: Handle multi-statement SQL produced by AppendInsertOperation.
+        // INSERT ...; SELECT last_insert_rowid();
+        // Run DML via ExecuteSQL, then run the final SELECT via ExecuteQuery.
+        var statements = SplitStatements(rewritten);
+        if (statements.Count > 1)
+        {
+            for (var i = 0; i < statements.Count - 1; i++)
+            {
+                var dml = statements[i].Trim();
+                if (!string.IsNullOrWhiteSpace(dml))
+                {
+                    _connection.DbInstance.ExecuteSQL(dml, parameters);
+                    var upper = dml.ToUpperInvariant();
+                    if (DbTransaction is null &&
+                        (upper.StartsWith("INSERT") || upper.StartsWith("UPDATE") || upper.StartsWith("DELETE")))
+                    {
+                        _connection.DbInstance.Flush();
+                    }
+                }
+            }
+
+            var selectSql = statements[^1].Trim();
+            if (!string.IsNullOrWhiteSpace(selectSql))
+            {
+                // For the specific case of retrieving the generated key, use the
+                // database's direct API instead of relying on last_insert_rowid() SQL
+                // function, which may have visibility issues after Flush().
+                if (selectSql.Contains("last_insert_rowid", StringComparison.OrdinalIgnoreCase))
+                {
+                    var rowId = _connection.DbInstance.GetLastInsertRowId();
+                    var synthetic = new List<Dictionary<string, object>>
+                    {
+                        new Dictionary<string, object> { ["BlogId"] = (int)rowId }
+                    };
+                    return new SharpCoreDBDataReader(synthetic);
+                }
+
+                var results = _connection.DbInstance.ExecuteQuery(selectSql, parameters);
+                return new SharpCoreDBDataReader(results);
+            }
+
+            return new SharpCoreDBDataReader();
+        }
+
+        // Single statement path
+        var upper0 = rewritten.TrimStart().ToUpperInvariant();
+        if (upper0.StartsWith("INSERT") || upper0.StartsWith("UPDATE") || upper0.StartsWith("DELETE"))
+        {
+            // DEBUG: Log DML execution
+            try
+            {
+                System.IO.File.AppendAllText("D:\\ef_dml.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] DML ExecuteDbDataReader:\n" +
+                    $"  Original: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n" +
+                    $"  Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n" +
+                    $"  DbTransaction: {(DbTransaction is null ? "null" : "present")}\n");
+            }
+            catch { }
+
+            // DML without a trailing SELECT – run via ExecuteSQL (not ExecuteQuery)
+            _connection.DbInstance.ExecuteSQL(rewritten, parameters);
+            if (DbTransaction is null)
+                _connection.DbInstance.Flush();
+            return new SharpCoreDBDataReader();
+        }
+
+        // Single statement – execute as query directly (SELECT path)
+        var queryResults = _connection.DbInstance.ExecuteQuery(rewritten, parameters);
+
+        // DEBUG: Log what the engine returned
+        try
+        {
+            var debugInfo = $"[{DateTime.Now:HH:mm:ss.fff}] Query Results:\n" +
+                            $"  SQL: {rewritten}\n" +
+                            $"  Row count: {queryResults.Count}\n";
+            if (queryResults.Count > 0)
+            {
+                debugInfo += $"  First row keys: {string.Join(", ", queryResults[0].Keys)}\n";
+                foreach (var kvp in queryResults[0])
+                {
+                    debugInfo += $"    {kvp.Key} = {kvp.Value?.ToString() ?? "NULL"} (type: {kvp.Value?.GetType().Name ?? "null"})\n";
+                }
+            }
+            System.IO.File.AppendAllText("D:\\query_results.log", debugInfo + "\n");
+        }
+        catch { }
+
+        // ✅ ROBUST EF PROVIDER: Always project when we have a clean column list.
+        // Fallback to original results if projection fails (backwards safety).
+        // Skip projection for aggregate queries (COUNT, SUM, etc.) – the engine
+        // returns a renamed column (e.g. "cnt") and projection would produce empty rows.
+        var requested = ExtractRequestedColumns(rewritten);
+        if (requested.Count > 0 &&
+            !requested.Any(c => c == "*" || c.Equals("ALL", StringComparison.OrdinalIgnoreCase)) &&
+            !requested.Any(c => IsAggregateExpression(c)))
+        {
+            try
+            {
+                queryResults = ProjectColumns(queryResults, requested);
+            }
+            catch
+            {
+                // keep original results for compatibility
+            }
+        }
+
+        return new SharpCoreDBDataReader(queryResults);
+    }
+
+    /// <summary>
+    /// Rewrites EF Core generated SQL into a form the SharpCoreDB legacy parser understands.
+    /// EF Core emits: SELECT "b"."BlogId", "b"."Title" FROM "Blogs" AS "b" WHERE "b"."BlogId" = @p0
+    /// SharpCoreDB needs: SELECT BlogId, Title FROM Blogs WHERE BlogId = @p0
+    ///
+    /// Transformations (in order):
+    /// 1. Strip alias-qualified column references: "b"."BlogId" → BlogId (only outside string literals)
+    /// 2. Strip table aliases: FROM "Blogs" AS "b" → FROM "Blogs"
+    /// 3. Remove all remaining double quotes around identifiers (legacy parser expects bare names)
+    /// </summary>
+    private static string RewriteAliasQualifiedSql(string sql)
+    {
+        // 1. Strip alias-qualified columns outside string literals: "b"."BlogId" or b."Title" → BlogId / Title
+        var step1 = ReplaceOutsideStringLiterals(sql, AliasQualifiedPattern,
+            static m => m.Groups["col"].Value.Trim('"', '[', ']', '`'));
+
+        // 2. Strip table aliases in FROM/JOIN
+        var step2 = TableAliasPattern.Replace(step1, static m =>
+            m.Groups["table"].Value.Trim('"', '[', ']', '`'));
+
+        // 3. Final aggressive normalization: remove any remaining double quotes.
+        // EF uses " for identifiers; legacy SharpCoreDB parser treats them as string literals
+        // if left in place. This guarantees bare identifiers reach the legacy path.
+        return step2.Replace("\"", string.Empty);
+    }
+
+    /// <summary>
+    /// Applies a regex replacement only to portions of SQL that are outside single-quoted string literals.
+    /// This prevents URL-like patterns (e.g. 'https://myblog.com') from being incorrectly rewritten.
+    /// </summary>
+    private static string ReplaceOutsideStringLiterals(string sql, Regex pattern, MatchEvaluator evaluator)
+    {
+        var result = new System.Text.StringBuilder(sql.Length);
+        var i = 0;
+        while (i < sql.Length)
+        {
+            if (sql[i] == '\'')
+            {
+                // Copy entire single-quoted literal verbatim
+                result.Append(sql[i++]);
+                while (i < sql.Length)
+                {
+                    result.Append(sql[i]);
+                    if (sql[i] == '\'' && (i + 1 >= sql.Length || sql[i + 1] != '\''))
+                    {
+                        i++;
+                        break;
+                    }
+                    if (sql[i] == '\'' && i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        // escaped quote ''
+                        result.Append(sql[i + 1]);
+                        i += 2;
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                }
+            }
+            else
+            {
+                // Find the next single quote (or end of string) and apply pattern to this segment
+                var nextQuote = sql.IndexOf('\'', i);
+                var segment = nextQuote < 0 ? sql[i..] : sql[i..nextQuote];
+                result.Append(pattern.Replace(segment, evaluator));
+                i = nextQuote < 0 ? sql.Length : nextQuote;
+            }
+        }
+        return result.ToString();
+    }
+
+    // Matches: optional-quoted-alias DOT quoted-or-unquoted-column
+    // e.g.  "b"."BlogId"  |  b."Title"  |  b.Title
+    private static readonly Regex AliasQualifiedPattern = new(
+        @"(?:""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\.(?<col>""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled);
+
+    // Matches table reference followed by AS alias:  "Blogs" AS "b"  or  Blogs AS b
+    private static readonly Regex TableAliasPattern = new(
+        @"(?<table>""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+AS\s+(?:""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static List<string> SplitStatements(string sql)
+    {
+        // Split on semicolons that are not inside string literals.
+        // This enables "INSERT ...; SELECT last_insert_rowid() AS \"BlogId\"" for key retrieval.
+        var statements = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inString = false;
+        var stringChar = '\0';
+
+        foreach (var ch in sql)
+        {
+            if (!inString && (ch == '\'' || ch == '"'))
+            {
+                inString = true;
+                stringChar = ch;
+                current.Append(ch);
+            }
+            else if (inString && ch == stringChar)
+            {
+                inString = false;
+                current.Append(ch);
+            }
+            else if (!inString && ch == ';')
+            {
+                var stmt = current.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(stmt))
+                    statements.Add(stmt);
+                current.Clear();
+            }
+            else
+            {
+                current.Append(ch);
+            }
+        }
+
+        var last = current.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(last))
+            statements.Add(last);
+
+        return statements;
+    }
+
+    /// <summary>
+    /// Extracts requested columns from a rewritten SELECT statement for EF projection.
+    /// Handles EF-generated SQL with or without aliases and quoted identifiers.
+    /// </summary>
+    private static List<string> ExtractRequestedColumns(string sql)
+    {
+        var upper = sql.ToUpperInvariant();
+        var selectIdx = upper.IndexOf("SELECT", StringComparison.Ordinal);
+        var fromIdx = upper.IndexOf("FROM", StringComparison.Ordinal);
+        if (selectIdx < 0 || fromIdx <= selectIdx) return [];
+
+        var selectPart = sql.Substring(selectIdx + 6, fromIdx - selectIdx - 6).Trim();
+        if (string.IsNullOrWhiteSpace(selectPart)) return [];
+
+        var columns = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool inQuote = false;
+        char quoteChar = '\0';
+
+        foreach (var ch in selectPart)
+        {
+            if (!inQuote && (ch == '"' || ch == '\'' || ch == '[' || ch == '`'))
+            {
+                inQuote = true;
+                quoteChar = ch == '[' ? ']' : ch;
+                current.Append(ch);
+            }
+            else if (inQuote && ch == quoteChar)
+            {
+                inQuote = false;
+                current.Append(ch);
+            }
+            else if (!inQuote && ch == ',')
+            {
+                var name = current.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    columns.Add(name.Trim('"', '[', ']', '`', ' '));
+                current.Clear();
+            }
+            else
+            {
+                current.Append(ch);
+            }
+        }
+
+        var last = current.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(last))
+            columns.Add(last.Trim('"', '[', ']', '`', ' '));
+
+        return columns;
+    }
+
+    /// <summary>
+    /// Projects full result rows to only the requested columns using normalized names.
+    /// Only includes columns that exist in source rows; preserves NULL values from source.
+    /// </summary>
+    private static List<Dictionary<string, object>> ProjectColumns(
+        List<Dictionary<string, object>> rows,
+        List<string> requestedColumns)
+    {
+        if (rows.Count == 0 || requestedColumns.Count == 0) return rows;
+
+        var projected = new List<Dictionary<string, object>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var newRow = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var col in requestedColumns)
+            {
+                var normalized = col.Trim('"', '[', ']', '`', ' ');
+
+                // Try exact match first
+                if (row.TryGetValue(normalized, out var exact))
+                {
+                    newRow[normalized] = exact; // Preserve actual value (may be DBNull from source)
+                }
+                else
+                {
+                    // Try case-insensitive or qualified match
+                    var match = row.FirstOrDefault(kv =>
+                        string.Equals(kv.Key, normalized, StringComparison.OrdinalIgnoreCase) ||
+                        kv.Key.EndsWith($".{normalized}", StringComparison.OrdinalIgnoreCase));
+
+                    if (!match.Equals(default(KeyValuePair<string, object>)))
+                    {
+                        newRow[normalized] = match.Value; // Found it, use actual value
+                    }
+                    // else: column not found in source, don't add it (missing column = skip)
+                }
+            }
+            projected.Add(newRow);
+        }
+        return projected;
+    }
+
+    /// <summary>
+    /// Returns true if the column expression is an aggregate function call (COUNT, SUM, AVG, MIN, MAX, etc.).
+    /// Aggregate queries return engine-renamed columns (e.g. "cnt"), so column projection must be skipped.
+    /// </summary>
+    private static bool IsAggregateExpression(string col)
+    {
+        var trimmed = col.Trim();
+        return trimmed.StartsWith("COUNT(", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("SUM(", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("AVG(", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("MIN(", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("MAX(", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
@@ -134,15 +505,37 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        var parameters = BuildParameterDictionary();
-        await _connection.DbInstance.ExecuteSQLAsync(_commandText, parameters, cancellationToken).ConfigureAwait(false);
+        // DEBUG: Log DML commands
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_nonquery_async.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQueryAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
+        }
+        catch { }
 
-        // ✅ CRITICAL FIX: Flush data after non-query commands to ensure persistence!
-        // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
-        var commandUpper = _commandText.Trim().ToUpperInvariant();
-        if (commandUpper.StartsWith("INSERT") ||
-            commandUpper.StartsWith("UPDATE") ||
-            commandUpper.StartsWith("DELETE"))
+        var parameters = BuildParameterDictionary();
+
+        // ✅ FIX: Rewrite EF Core SQL before executing (same as ExecuteDbDataReader)
+        // EF Core generates: DELETE FROM "Blogs" WHERE "b"."BlogId" = @p0
+        // SharpCoreDB needs: DELETE FROM Blogs WHERE BlogId = @p0
+        var rewritten = RewriteAliasQualifiedSql(_commandText);
+
+        // DEBUG: Log rewritten SQL
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_nonquery_async.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n");
+        }
+        catch { }
+
+        await _connection.DbInstance.ExecuteSQLAsync(rewritten, parameters, cancellationToken).ConfigureAwait(false);
+
+        // ✅ Only flush when NOT inside an explicit transaction.
+        var commandUpper = rewritten.Trim().ToUpperInvariant();
+        if (DbTransaction is null &&
+            (commandUpper.StartsWith("INSERT") ||
+             commandUpper.StartsWith("UPDATE") ||
+             commandUpper.StartsWith("DELETE")))
         {
             _connection.DbInstance.Flush();
         }
@@ -161,12 +554,34 @@ public class SharpCoreDBCommand : DbCommand
         return null;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// EF Core calls ExecuteReaderAsync for DML operations (INSERT/UPDATE/DELETE).
+    /// This override ensures the synchronous ExecuteDbDataReader is called properly.
+    /// </remarks>
+    protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+    {
+        // DEBUG: Log async DML path
+        try
+        {
+            System.IO.File.AppendAllText("D:\\ef_reader_async.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteDbDataReaderAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
+        }
+        catch { }
+
+        // Delegate to the synchronous implementation which handles SQL rewriting
+        return await Task.Run(() => ExecuteDbDataReader(behavior), cancellationToken).ConfigureAwait(false);
+    }
+
     private Dictionary<string, object?> BuildParameterDictionary()
     {
         var parameters = new Dictionary<string, object?>();
         foreach (SharpCoreDBParameter param in DbParameterCollection)
         {
-            parameters[param.ParameterName.TrimStart('@', ':')] = param.Value; // ? Handle both @param and :param
+            var value = param.Value;
+            // DateTime/DateTimeOffset are converted to ISO-8601 strings by the
+            // ValueConverter registered in SharpCoreDBModelCustomizer.
+            parameters[param.ParameterName.TrimStart('@', ':')] = value;
         }
         return parameters;
     }

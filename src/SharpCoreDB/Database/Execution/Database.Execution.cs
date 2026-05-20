@@ -27,7 +27,11 @@ public partial class Database
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private SqlParser GetSharedSqlParser()
     {
-        _sharedSqlParser ??= new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+        if (_sharedSqlParser is null)
+        {
+            _sharedSqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            _sharedSqlParser.Database = this;
+        }
 
         // Optional GRAPH_RAG provider wiring from DI (zero overhead if not registered)
         var graphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
@@ -43,13 +47,13 @@ public partial class Database
     public void ExecuteSQL(string sql)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
-        
+
         SqlQueryValidator.ValidateQuery(
             sql, 
             null, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
-        
+
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
@@ -108,13 +112,22 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
-        
+
+        // DEBUG: Log all SQL commands
+        try
+        {
+            System.IO.File.AppendAllText("D:\\db_executesql.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteSQL: {sql.Substring(0, Math.Min(300, sql.Length))}\n" +
+                $"  Params: {string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"))}\n");
+        }
+        catch { }
+
         SqlQueryValidator.ValidateQuery(
             sql, 
             parameters, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
-        
+
         var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
@@ -381,8 +394,12 @@ public partial class Database
         }
         
         // ✅ Fallback: Lazy-initialize shared SqlParser (thread-safe via Interlocked)
-        _sharedSqlParser ??= new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-        
+        if (_sharedSqlParser is null)
+        {
+            _sharedSqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            _sharedSqlParser.Database = this;
+        }
+
         return _sharedSqlParser.ExecuteQuery(stmt.Plan, parameters ?? []);
     }
 

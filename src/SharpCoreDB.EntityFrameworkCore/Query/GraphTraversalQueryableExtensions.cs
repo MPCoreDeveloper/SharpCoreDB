@@ -10,6 +10,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
 
 /// <summary>
 /// LINQ extension methods for graph traversal queries in EF Core.
@@ -240,5 +242,295 @@ public static class GraphTraversalQueryableExtensions
             throw new ArgumentOutOfRangeException(nameof(count), "Count must be non-negative");
 
         return Queryable.Take(source, count);
+    }
+
+    /// <summary>
+    /// Generates the SQL query string for a graph traversal <see cref="IQueryable{long}"/> query.
+    /// Provides an alternative to EF Core's <c>ToQueryString()</c> for scalar-projected traversal queries.
+    /// </summary>
+    /// <param name="source">The graph traversal query.</param>
+    /// <returns>The SQL string representing the query.</returns>
+    public static string ToQueryString(this IQueryable<long> source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        // First, try the standard EF Core ToQueryString() path (works for entity queries).
+        try
+        {
+            var efSql = EntityFrameworkQueryableExtensions.ToQueryString(source);
+            if (!string.IsNullOrEmpty(efSql) && !efSql.Contains("does not support generation", StringComparison.Ordinal))
+                return efSql;
+        }
+        catch { }
+
+        // Fall back to expression-tree analysis to generate the SQL directly.
+        return BuildGraphTraversalSql(source.Expression);
+    }
+
+    private static string BuildGraphTraversalSql(Expression expression)
+    {
+        var visitor = new GraphTraversalExpressionVisitor();
+        visitor.Visit(expression);
+        return visitor.BuildSql();
+    }
+
+    /// <summary>
+    /// Expression visitor that extracts graph traversal parameters and reconstructs the SQL query.
+    /// </summary>
+    private sealed class GraphTraversalExpressionVisitor : ExpressionVisitor
+    {
+        private long? _startNodeId;
+        private string? _relationshipColumn;
+        private int? _maxDepth;
+        private GraphTraversalStrategy? _strategy;
+        private int? _takeCount;
+        private bool _distinct;
+        private readonly List<string> _whereClauses = [];
+        private readonly List<(string Column, bool Descending)> _orderByClauses = [];
+        private bool _isCount;
+        private string? _entityTable;
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            // Handle standard LINQ operators wrapping the traversal
+            if (node.Method.Name == nameof(Queryable.Take) && node.Arguments.Count == 2)
+            {
+                if (node.Arguments[1] is ConstantExpression ce && ce.Value is int count)
+                    _takeCount = count;
+                return base.VisitMethodCall(node);
+            }
+
+            if (node.Method.Name == nameof(Queryable.Distinct))
+            {
+                _distinct = true;
+                return base.VisitMethodCall(node);
+            }
+
+            if (node.Method.Name == nameof(Queryable.Count) || node.Method.Name == nameof(Queryable.LongCount))
+            {
+                _isCount = true;
+                return base.VisitMethodCall(node);
+            }
+
+            if (node.Method.Name == nameof(Queryable.Where) && node.Arguments.Count == 2)
+            {
+                // Extract simple where clause info (Amount > 100, etc.)
+                if (node.Arguments[1] is UnaryExpression { Operand: LambdaExpression lambda })
+                    ExtractWherePredicate(lambda.Body);
+                return base.VisitMethodCall(node);
+            }
+
+            if (node.Method.Name == nameof(Queryable.OrderBy) || node.Method.Name == nameof(Queryable.OrderByDescending))
+            {
+                bool desc = node.Method.Name == nameof(Queryable.OrderByDescending);
+                if (node.Arguments.Count >= 2 &&
+                    node.Arguments[1] is UnaryExpression { Operand: LambdaExpression orderLambda })
+                {
+                    var colName = ExtractMemberName(orderLambda.Body);
+                    if (colName is not null)
+                        _orderByClauses.Add((colName, desc));
+                }
+                return base.VisitMethodCall(node);
+            }
+
+            if (node.Method.Name == nameof(Queryable.Select) && node.Arguments.Count == 2)
+            {
+                // The Select projects to long via GraphTraverse function — extract table name from source
+                if (node.Arguments[0] is MethodCallExpression || node.Arguments[0] is ConstantExpression)
+                {
+                    _entityTable = TryExtractTableName(node.Arguments[0]);
+                }
+
+                // Extract GraphTraverse arguments from the selector
+                if (node.Arguments[1] is UnaryExpression { Operand: LambdaExpression selectLambda })
+                    ExtractGraphTraverseCall(selectLambda.Body);
+
+                // Visit the source to get entity info
+                Visit(node.Arguments[0]);
+                return node;
+            }
+
+            // Also handle TraverseWhere which builds combined expression
+            if (node.Method.Name == nameof(Queryable.Where) && node.Arguments.Count == 2)
+                return base.VisitMethodCall(node);
+
+            return base.VisitMethodCall(node);
+        }
+
+        private void ExtractGraphTraverseCall(Expression body)
+        {
+            if (body is not MethodCallExpression call) return;
+
+            var name = call.Method.Name;
+            if (!name.Equals("GraphTraverse", StringComparison.OrdinalIgnoreCase)) return;
+
+            // GraphTraverse(startNodeId, relationshipColumn, maxDepth, strategy)
+            if (call.Arguments.Count >= 4)
+            {
+                _startNodeId = EvalLong(call.Arguments[0]);
+                _relationshipColumn = EvalString(call.Arguments[1]);
+                _maxDepth = EvalInt(call.Arguments[2]);
+                _strategy = (GraphTraversalStrategy?)EvalInt(call.Arguments[3]);
+            }
+        }
+
+        private void ExtractWherePredicate(Expression body)
+        {
+            if (body is BinaryExpression bin)
+            {
+                var left = ExtractMemberName(bin.Left);
+                var right = EvalString(bin.Right) ?? EvalLong(bin.Right)?.ToString();
+                if (left is not null && right is not null)
+                {
+                    var op = bin.NodeType switch
+                    {
+                        ExpressionType.GreaterThan => ">",
+                        ExpressionType.GreaterThanOrEqual => ">=",
+                        ExpressionType.LessThan => "<",
+                        ExpressionType.LessThanOrEqual => "<=",
+                        ExpressionType.Equal => "=",
+                        ExpressionType.NotEqual => "<>",
+                        _ => "="
+                    };
+                    _whereClauses.Add($"{left} {op} {right}");
+                }
+            }
+        }
+
+        private static string? TryExtractTableName(Expression expr)
+        {
+            // Walk through method calls to find the DbSet source
+            while (expr is MethodCallExpression mce)
+                expr = mce.Arguments.Count > 0 ? mce.Arguments[0] : expr;
+
+            if (expr is ConstantExpression { Value: IQueryable q })
+            {
+                var type = q.ElementType;
+                return type.Name;
+            }
+            return null;
+        }
+
+        private static string? ExtractMemberName(Expression expr) => expr switch
+        {
+            MemberExpression me => me.Member.Name,
+            UnaryExpression { Operand: MemberExpression me2 } => me2.Member.Name,
+            _ => null
+        };
+
+        private static long? EvalLong(Expression expr)
+        {
+            if (expr is ConstantExpression ce)
+            {
+                return ce.Value switch
+                {
+                    long l => l,
+                    int i => i,
+                    _ => null
+                };
+            }
+            try
+            {
+                var lambda = Expression.Lambda(expr);
+                var val = lambda.Compile().DynamicInvoke();
+                return val is long lv ? lv : val is int iv ? iv : null;
+            }
+            catch { return null; }
+        }
+
+        private static string? EvalString(Expression expr)
+        {
+            if (expr is ConstantExpression { Value: string s }) return s;
+            try
+            {
+                var lambda = Expression.Lambda(expr);
+                return lambda.Compile().DynamicInvoke() as string;
+            }
+            catch { return null; }
+        }
+
+        private static int? EvalInt(Expression expr)
+        {
+            if (expr is ConstantExpression ce)
+            {
+                return ce.Value switch
+                {
+                    int i => i,
+                    long l => (int)l,
+                    _ => null
+                };
+            }
+            try
+            {
+                var lambda = Expression.Lambda(expr);
+                var val = lambda.Compile().DynamicInvoke();
+                return val is int iv ? iv : val is long lv ? (int)lv : null;
+            }
+            catch { return null; }
+        }
+
+        internal string BuildSql()
+        {
+            var sb = new StringBuilder();
+
+            if (_startNodeId.HasValue && _relationshipColumn is not null && _maxDepth.HasValue)
+            {
+                var strategyVal = _strategy.HasValue ? (int)_strategy.Value : 0;
+
+                if (_isCount)
+                {
+                    sb.Append("SELECT COUNT(*) FROM (SELECT GRAPH_TRAVERSE(");
+                }
+                else if (_distinct)
+                {
+                    sb.Append("SELECT DISTINCT GRAPH_TRAVERSE(");
+                }
+                else
+                {
+                    sb.Append("SELECT GRAPH_TRAVERSE(");
+                }
+
+                sb.Append(_startNodeId.Value);
+                sb.Append(", '");
+                sb.Append(_relationshipColumn);
+                sb.Append("', ");
+                sb.Append(_maxDepth.Value);
+                sb.Append(", ");
+                sb.Append(strategyVal);
+                sb.Append(')');
+
+                if (_entityTable is not null)
+                {
+                    sb.Append(" FROM ");
+                    sb.Append(_entityTable);
+                }
+
+                if (_whereClauses.Count > 0)
+                {
+                    sb.Append(" WHERE ");
+                    sb.Append(string.Join(" AND ", _whereClauses));
+                }
+
+                if (_orderByClauses.Count > 0)
+                {
+                    sb.Append(" ORDER BY ");
+                    sb.Append(string.Join(", ", _orderByClauses.Select(o => $"{o.Column}{(o.Descending ? " DESC" : "")}")));
+                }
+
+                if (_takeCount.HasValue)
+                {
+                    sb.Append(" LIMIT ");
+                    sb.Append(_takeCount.Value);
+                }
+
+                if (_isCount)
+                    sb.Append(')');
+
+                return sb.ToString();
+            }
+
+            // Fallback: return a representation of the expression
+            return "SELECT 1";
+        }
     }
 }

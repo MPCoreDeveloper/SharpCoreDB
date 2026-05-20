@@ -10,6 +10,7 @@
 
 namespace SharpCoreDB;
 
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
 /// <summary>
@@ -32,6 +33,46 @@ using System.Runtime.CompilerServices;
 /// </summary>
 public partial class Database
 {
+    /// <summary>
+    /// Shared batch transaction state keyed by normalized database path.
+    /// This ensures that when EF Core (or any caller) obtains different Database instances
+    /// for the same physical .scdb file (via connection pooling or per-operation creation),
+    /// they all observe the same batch transaction state.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, BatchTransactionState> _batchStates = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets or creates the shared batch state for this database path.
+    /// </summary>
+    private BatchTransactionState GetBatchState()
+    {
+        var key = System.IO.Path.GetFullPath(_dbPath ?? string.Empty);
+        return _batchStates.GetOrAdd(key, _ => new BatchTransactionState());
+    }
+
+    /// <summary>
+    /// Internal mutable state for a single database's batch transaction.
+    /// </summary>
+    private sealed class BatchTransactionState
+    {
+        public bool IsActive;
+        public readonly Dictionary<string, List<(object PrimaryKey, long StoragePosition)>> InsertedRows 
+            = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Back-compat: expose the active flag via the shared state
+    private bool _batchUpdateActive
+    {
+        get => GetBatchState().IsActive;
+        set => GetBatchState().IsActive = value;
+    }
+
+    /// <summary>
+    /// Records of rows inserted during batch mode (PK + storage position).
+    /// </summary>
+    private Dictionary<string, List<(object PrimaryKey, long StoragePosition)>> _batchInsertedRows 
+        => GetBatchState().InsertedRows;
+
     /// <summary>
     /// Begins a batch UPDATE transaction.
     /// All index updates are deferred until EndBatchUpdate().
@@ -56,7 +97,102 @@ public partial class Database
             }
 
             storage.BeginTransaction();
+            _batchInsertedRows.Clear();
             _batchUpdateActive = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts only the storage-level transaction without enabling full batch index deferral.
+    /// Used by the EF provider for reliable transactional behavior while preserving
+    /// the full optimization for direct Database.BeginBatchUpdate() callers.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void BeginStorageTransactionOnly()
+    {
+        lock (_walLock)
+        {
+            // DEBUG: Log transaction begin
+            try
+            {
+                var key = System.IO.Path.GetFullPath(_dbPath ?? string.Empty);
+                System.IO.File.AppendAllText("D:\\db_transaction.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: path={_dbPath}, key={key}, isActive={_batchUpdateActive}, hashCode={this.GetHashCode()}\n");
+            }
+            catch { }
+
+            if (_batchUpdateActive)
+                throw new InvalidOperationException("Batch update already active.");
+
+            if (isReadOnly)
+                throw new InvalidOperationException("Cannot begin transaction in readonly mode");
+
+            storage.BeginTransaction();
+            _batchInsertedRows.Clear();
+            _batchUpdateActive = true;
+
+            // DEBUG: Log after setting active
+            try
+            {
+                System.IO.File.AppendAllText("D:\\db_transaction.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: After set, isActive={_batchUpdateActive}\n");
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Commits a storage-only transaction (used by EF provider).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void CommitStorageTransaction()
+    {
+        lock (_walLock)
+        {
+            if (!_batchUpdateActive)
+                return;
+
+            storage.CommitAsync().GetAwaiter().GetResult();
+            _batchUpdateActive = false;
+        }
+    }
+
+    /// <summary>
+    /// Rolls back a storage-only transaction (used by EF provider).
+    /// Deletes recorded inserted rows by storage position first for reliable rollback.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RollbackStorageTransaction()
+    {
+        lock (_walLock)
+        {
+            if (!_batchUpdateActive)
+                return;
+
+            // Delete inserted rows using recorded storage positions before rollback
+            foreach (var table in tables.Values)
+            {
+                if (table is Table t &&
+                    _batchInsertedRows.TryGetValue(t.Name ?? string.Empty, out var insertedRows) &&
+                    insertedRows.Count > 0)
+                {
+                    foreach (var (pk, position) in insertedRows)
+                    {
+                        try
+                        {
+                            // Use robust helper (index + logical cleanup)
+                            t.RemovePrimaryKeyForRollback(pk);
+                        }
+                        catch
+                        {
+                            t.ClearLogicalRowsForRollback();
+                        }
+                    }
+                }
+            }
+
+            storage.Rollback();
+            _batchUpdateActive = false;
         }
     }
 
@@ -76,8 +212,12 @@ public partial class Database
             {
                 storage.CommitAsync().GetAwaiter().GetResult();
 
+                // Ensure data pages are flushed before index rebuild so subsequent
+                // queries (including those after connection close) see the committed inserts.
+                this.Flush();
+
                 Dictionary<Table, HashSet<string>> dirtyIndexesByTable = [];  // ✅ C# 14: collection expression
-                
+
                 foreach (var table in tables.Values)
                 {
                     if (table is Table t)
@@ -123,6 +263,31 @@ public partial class Database
 
             try
             {
+                // First, delete any rows we inserted during this batch using recorded storage positions.
+                // This is more reliable than relying on storage.Rollback() alone.
+                foreach (var table in tables.Values)
+                {
+                    if (table is Table t)
+                    {
+                        if (_batchInsertedRows.TryGetValue(t.Name ?? string.Empty, out var insertedRows) && insertedRows.Count > 0)
+                        {
+                            foreach (var (pk, position) in insertedRows)
+                            {
+                                try
+                                {
+                                    // Use the robust helper which handles index + logical cleanup
+                                    t.RemovePrimaryKeyForRollback(pk);
+                                }
+                                catch
+                                {
+                                    t.ClearLogicalRowsForRollback();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Now perform the storage-level rollback.
                 storage.Rollback();
 
                 foreach (var table in tables.Values)
@@ -130,9 +295,18 @@ public partial class Database
                     if (table is Table t)
                     {
                         t.CancelBatchUpdateMode();
+
+                        // Final aggressive reset to ensure clean state.
+                        try
+                        {
+                            t.ClearLogicalRowsForRollback();
+                            t.InitializeStorageEngine();
+                        }
+                        catch { }
                     }
                 }
 
+                _batchInsertedRows.Clear();
                 _batchUpdateActive = false;
             }
             catch
@@ -150,5 +324,22 @@ public partial class Database
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _batchUpdateActive;
+    }
+
+    /// <summary>
+    /// Records that a row with the given primary key was inserted during the current batch.
+    /// Called by Table during insert when batch mode is active.
+    /// </summary>
+    internal void RecordBatchInsert(string tableName, object primaryKey, long storagePosition)
+    {
+        if (!_batchUpdateActive || primaryKey == null)
+            return;
+
+        if (!_batchInsertedRows.TryGetValue(tableName, out var rows))
+        {
+            rows = new List<(object, long)>();
+            _batchInsertedRows[tableName] = rows;
+        }
+        rows.Add((primaryKey, storagePosition));
     }
 }

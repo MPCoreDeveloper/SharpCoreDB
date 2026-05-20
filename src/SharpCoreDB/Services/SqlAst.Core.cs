@@ -49,6 +49,9 @@ public interface ISqlVisitor<out TResult>
     /// <summary>Visits a column reference node.</summary>
     TResult VisitColumnReference(ColumnReferenceNode node);
 
+    /// <summary>Visits a parameter node.</summary>
+    TResult VisitParameter(ParameterNode node);
+
     /// <summary>Visits an IN expression node.</summary>
     TResult VisitInExpression(InExpressionNode node);
 

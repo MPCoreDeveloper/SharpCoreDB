@@ -185,8 +185,7 @@ public class SharpCoreDBMigrationsSqlGenerator : MigrationsSqlGenerator
 
     /// <inheritdoc />
     /// <summary>
-    /// Generates column definition SQL with support for COLLATE clause.
-    /// ✅ EF Core COLLATE Phase 1: Emits COLLATE clause in migrations.
+    /// Generates column definition SQL with support for COLLATE clause and AUTOINCREMENT.
     /// </summary>
     protected override void ColumnDefinition(AddColumnOperation operation, IModel? model, MigrationCommandListBuilder builder)
     {
@@ -206,6 +205,14 @@ public class SharpCoreDBMigrationsSqlGenerator : MigrationsSqlGenerator
         if (!operation.IsNullable)
         {
             builder.Append(" NOT NULL");
+        }
+
+        // Support for server-generated integer keys (matches SQLite behavior)
+        // We add AUTOINCREMENT for all integer/long columns (the model customizer
+        // ensures only PKs get ValueGeneratedOnAdd, so this is safe).
+        if (operation.ClrType == typeof(int) || operation.ClrType == typeof(long))
+        {
+            builder.Append(" AUTOINCREMENT");
         }
 
         if (operation.DefaultValue != null)

@@ -543,13 +543,15 @@ public sealed class SharpCoreDBCommand : DbCommand
 
     private Dictionary<string, object?> BuildParameterDictionary()
     {
-        return new Dictionary<string, object?>(
-            _parameters.Cast<SharpCoreDBParameter>()
-                .Select(param => new KeyValuePair<string, object?>(
-                    param.ParameterName?.TrimStart('@') ?? string.Empty,
-                    param.Value
-                ))
-        );
+        var dict = new Dictionary<string, object?>();
+        foreach (var p in _parameters.Cast<SharpCoreDBParameter>())
+        {
+            var name = p.ParameterName?.TrimStart('@') ?? string.Empty;
+            var value = p.Value;
+            // DateTime values are converted via ValueConverter in the EF model customizer.
+            dict[name] = value;
+        }
+        return dict;
     }
 
     /// <summary>

@@ -155,6 +155,20 @@ public class ColumnNode : SqlNode
 }
 
 /// <summary>
+/// Represents a parameter reference (e.g. @p0, :p1, ?).
+/// </summary>
+public class ParameterNode : ExpressionNode
+{
+    /// <summary>
+    /// Gets or sets the parameter name (without @ or : prefix).
+    /// </summary>
+    public string ParameterName { get; set; } = string.Empty;
+
+    /// <inheritdoc/>
+    public override TResult Accept<TResult>(ISqlVisitor<TResult> visitor) => visitor.VisitParameter(this);
+}
+
+/// <summary>
 /// Represents a FROM clause with optional JOINs.
 /// ✅ C# 14: Collection expression.
 /// </summary>

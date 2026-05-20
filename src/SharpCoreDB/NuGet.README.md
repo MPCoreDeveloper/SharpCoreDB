@@ -1,13 +1,13 @@
-# SharpCoreDB v1.8.0 - Production Database Engine
+# SharpCoreDB v1.9.0 - Production Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
 
-## What's New in v1.8.0
+## What's New in v1.9.0
 
-### v1.7.2 to v1.8.0
+### v1.8.0 to v1.9.0
 
 - **Auto-ROWID**: Tables without an explicit `PRIMARY KEY` get a hidden `_rowid` column (ULID). SQLite rowid semantics.
 - **GRAPH_RAG SQL clause**: New `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, `TOP_K`.
@@ -19,8 +19,8 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - `Microsoft.Extensions.Logging.Abstractions` bumped to **10.0.7**.
 - Bug fixes: IS NULL/IS NOT NULL unification, COALESCE() in SELECT, LINQ Convert, German locale matching, PAGE_BASED mixed-predicate scan.
 
-### 🔄 Synchronized 1.8.0 Release
-- **Unified Package Versioning** - Core, server, analytics, graph, event sourcing, projections, CQRS, and functional companion packages now ship on the same `1.8.0` release line
+### 🔄 Synchronized 1.9.0 Release
+now ship on the same `1.9.0` release line
 - **Documentation Refresh** - Installation guidance and package docs were updated to match the current feature and fix set
 - **Optional Package Maturity** - Event Sourcing, Projections, and CQRS docs now highlight durable snapshots, checkpointing, persistent outbox support, retry handling, and hosted workers
 

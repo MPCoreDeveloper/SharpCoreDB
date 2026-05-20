@@ -286,7 +286,7 @@ public partial class Table : ITable, IDisposable
     /// Sets the database instance for last_insert_rowid() tracking.
     /// </summary>
     /// <param name="database">The database instance.</param>
-    public void SetDatabase(Database database) => _database = database;
+    public void SetDatabase(object? database) => _database = database as Database;
 
     /// <summary>
     /// Sets the auto-compaction threshold for columnar storage.

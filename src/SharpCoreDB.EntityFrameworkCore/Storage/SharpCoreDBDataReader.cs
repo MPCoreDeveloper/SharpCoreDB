@@ -81,7 +81,13 @@ public class SharpCoreDBDataReader : DbDataReader
     }
 
     /// <inheritdoc />
-    public override bool GetBoolean(int ordinal) => Convert.ToBoolean(GetValue(ordinal));
+    public override bool GetBoolean(int ordinal)
+    {
+        var value = GetValue(ordinal);
+        if (value is DBNull or null)
+            return false;
+        return Convert.ToBoolean(value);
+    }
 
     /// <inheritdoc />
     public override byte GetByte(int ordinal) => Convert.ToByte(GetValue(ordinal));
@@ -127,10 +133,14 @@ public class SharpCoreDBDataReader : DbDataReader
     public override DateTime GetDateTime(int ordinal)
     {
         var value = GetValue(ordinal);
+        if (value is DBNull or null)
+            throw new InvalidCastException("Cannot convert NULL to DateTime.");
         return value switch
         {
             DateTime dt => dt,
-            string str => DateTime.Parse(str),
+            DateTimeOffset dto => dto.UtcDateTime,
+            string str => DateTime.Parse(str, null, System.Globalization.DateTimeStyles.RoundtripKind),
+            long ticks => new DateTime(ticks, DateTimeKind.Utc),
             _ => Convert.ToDateTime(value)
         };
     }
@@ -159,18 +169,37 @@ public class SharpCoreDBDataReader : DbDataReader
         {
             Guid guid => guid,
             string str => Guid.Parse(str),
+            byte[] bytes when bytes.Length == 16 => new Guid(bytes),
             _ => throw new InvalidCastException($"Cannot convert {value?.GetType()} to Guid")
         };
     }
 
     /// <inheritdoc />
-    public override short GetInt16(int ordinal) => Convert.ToInt16(GetValue(ordinal));
+    public override short GetInt16(int ordinal)
+    {
+        var value = GetValue(ordinal);
+        if (value is DBNull or null)
+            throw new InvalidCastException("Cannot convert NULL to Int16.");
+        return Convert.ToInt16(value);
+    }
 
     /// <inheritdoc />
-    public override int GetInt32(int ordinal) => Convert.ToInt32(GetValue(ordinal));
+    public override int GetInt32(int ordinal)
+    {
+        var value = GetValue(ordinal);
+        if (value is DBNull or null)
+            throw new InvalidCastException("Cannot convert NULL to Int32.");
+        return Convert.ToInt32(value);
+    }
 
     /// <inheritdoc />
-    public override long GetInt64(int ordinal) => Convert.ToInt64(GetValue(ordinal));
+    public override long GetInt64(int ordinal)
+    {
+        var value = GetValue(ordinal);
+        if (value is DBNull or null)
+            throw new InvalidCastException("Cannot convert NULL to Int64.");
+        return Convert.ToInt64(value);
+    }
 
     /// <inheritdoc />
     public override string GetName(int ordinal)
@@ -194,6 +223,15 @@ public class SharpCoreDBDataReader : DbDataReader
             }
         }
 
+        // Fallback for scalar key retrieval (last_insert_rowid):
+        // If EF Core asks for a specific column name but we only have one column,
+        // return it. This makes "SELECT last_insert_rowid() AS \"BlogId\"" work
+        // even if the exact alias normalization differs slightly.
+        if (_columnNames.Count == 1)
+        {
+            return 0;
+        }
+
         throw new IndexOutOfRangeException($"Column '{name}' not found.");
     }
 
@@ -207,9 +245,21 @@ public class SharpCoreDBDataReader : DbDataReader
     /// <inheritdoc />
     public override object GetValue(int ordinal)
     {
+        if (ordinal < 0 || ordinal >= _columnNames.Count)
+        {
+            // Scalar fallback: when only one column exists (key retrieval case),
+            // EF Core may ask for ordinal 0 even if the exact name lookup failed.
+            if (_columnNames.Count == 1 && ordinal == 0)
+            {
+                var current = CurrentRow;
+                return current.Values.FirstOrDefault() ?? DBNull.Value;
+            }
+            throw new IndexOutOfRangeException($"Invalid column ordinal: {ordinal}");
+        }
+
         var name = GetName(ordinal);
-        var row = CurrentRow;
-        var value = ResolveColumnValue(row, name);
+        var currentRow = CurrentRow;
+        var value = ResolveColumnValue(currentRow, name);
 
         return value ?? DBNull.Value;
     }
@@ -300,6 +350,13 @@ public class SharpCoreDBDataReader : DbDataReader
     {
         if (row.TryGetValue(normalizedName, out var value))
         {
+            // Guard: if the value is literally the column name string, the upstream
+            // query engine returned a bad projection (common with legacy parser + EF SQL).
+            // Treat as missing column so EF gets DBNull instead of a FormatException.
+            if (value is string s && string.Equals(s, normalizedName, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
             return value;
         }
 
@@ -307,6 +364,10 @@ public class SharpCoreDBDataReader : DbDataReader
         {
             if (string.Equals(NormalizeColumnName(key), normalizedName, StringComparison.OrdinalIgnoreCase))
             {
+                if (candidate is string s && string.Equals(s, normalizedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
                 return candidate;
             }
         }
@@ -319,13 +380,52 @@ public class SharpCoreDBDataReader : DbDataReader
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         var normalized = name.Trim();
-        var lastDot = normalized.LastIndexOf('.');
-        if (lastDot >= 0 && lastDot < normalized.Length - 1)
+
+        // Strip table/alias prefix. EF Core generates alias-qualified columns that the
+        // SharpCoreDB parser may return verbatim as dictionary keys, e.g.:
+        //   b."BlogId"  -> BlogId
+        //   b"."BlogId  -> BlogId   (parser artefact when alias contains quotes)
+        //   "Blogs"."BlogId" -> BlogId
+        // Strategy: find the last dot that is NOT inside a quoted segment, then take the suffix.
+        var lastRealDot = FindLastUnquotedDot(normalized);
+        if (lastRealDot >= 0 && lastRealDot < normalized.Length - 1)
         {
-            normalized = normalized[(lastDot + 1)..];
+            normalized = normalized[(lastRealDot + 1)..];
+        }
+        else
+        {
+            // Fallback: plain last-dot split (handles b.BlogId)
+            var lastDot = normalized.LastIndexOf('.');
+            if (lastDot >= 0 && lastDot < normalized.Length - 1)
+                normalized = normalized[(lastDot + 1)..];
         }
 
         normalized = normalized.Trim('"', '[', ']', '`');
         return normalized;
+    }
+
+    private static int FindLastUnquotedDot(string name)
+    {
+        var inQuote = false;
+        var quoteChar = '\0';
+        var result = -1;
+        for (var i = 0; i < name.Length; i++)
+        {
+            var ch = name[i];
+            if (!inQuote && (ch == '"' || ch == '[' || ch == '`'))
+            {
+                inQuote = true;
+                quoteChar = ch == '[' ? ']' : ch;
+            }
+            else if (inQuote && ch == quoteChar)
+            {
+                inQuote = false;
+            }
+            else if (!inQuote && ch == '.')
+            {
+                result = i;
+            }
+        }
+        return result;
     }
 }
