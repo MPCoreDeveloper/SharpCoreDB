@@ -548,7 +548,16 @@ public sealed class SharpCoreDBCommand : DbCommand
         {
             var name = p.ParameterName?.TrimStart('@') ?? string.Empty;
             var value = p.Value;
-            // DateTime values are converted via ValueConverter in the EF model customizer.
+
+            // Normalize Guid to canonical string for reliable round-tripping,
+            // especially when used as foreign keys. Matches the handling in the
+            // EF Core command for consistency across the stack.
+            value = value switch
+            {
+                Guid g => g.ToString("D"),
+                _ => value
+            };
+
             dict[name] = value;
         }
         return dict;

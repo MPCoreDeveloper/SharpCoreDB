@@ -81,8 +81,24 @@ public class SharpCoreDBCommand : DbCommand
 
         var parameters = BuildParameterDictionary();
 
-        // ✅ FIX: Rewrite EF Core SQL before executing (same as ExecuteDbDataReader)
         var rewritten = RewriteAliasQualifiedSql(_commandText);
+
+        // DETAILED DIAGNOSTIC for Guid relationship DML issues (Company/Vacancy)
+        if (rewritten.Contains("Vacancies", StringComparison.OrdinalIgnoreCase) ||
+            rewritten.Contains("Companies", StringComparison.OrdinalIgnoreCase) ||
+            rewritten.Contains("CompanyId", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var paramDump = string.Join(", ", parameters.Select(kv => $"{kv.Key}={kv.Value?.GetType().Name}:{kv.Value}"));
+                System.IO.File.AppendAllText("D:\\ef_relationship_dml.log",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] DML for relationship table\n" +
+                    $"  Original: {_commandText}\n" +
+                    $"  Rewritten: {rewritten}\n" +
+                    $"  Parameters: {paramDump}\n\n");
+            }
+            catch { }
+        }
 
         // DEBUG: Log rewritten SQL
         try
@@ -214,6 +230,20 @@ public class SharpCoreDBCommand : DbCommand
             catch { }
 
             // DML without a trailing SELECT – run via ExecuteSQL (not ExecuteQuery)
+
+            // === DEEP DIAGNOSTIC — LOG EVERY DML (especially for relationship troubleshooting) ===
+            try
+            {
+                var paramDump = string.Join(" | ", parameters.Select(kv => $"{kv.Key}={kv.Value}"));
+                System.IO.File.AppendAllText("D:\\ef_deep_dml.log",
+                    $"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] === DML EXECUTED ===\n" +
+                    $"ORIGINAL:\n{_commandText}\n\n" +
+                    $"REWRITTEN:\n{rewritten}\n\n" +
+                    $"PARAMETERS:\n{paramDump}\n" +
+                    $"================================\n");
+            }
+            catch { }
+
             _connection.DbInstance.ExecuteSQL(rewritten, parameters);
             if (DbTransaction is null)
                 _connection.DbInstance.Flush();
@@ -245,10 +275,22 @@ public class SharpCoreDBCommand : DbCommand
         // Fallback to original results if projection fails (backwards safety).
         // Skip projection for aggregate queries (COUNT, SUM, etc.) – the engine
         // returns a renamed column (e.g. "cnt") and projection would produce empty rows.
+        //
+        // IMPORTANT: For split-include child queries (common with Guid PK/FK navigation materialization),
+        // we are more conservative. EF Core's shaper often relies on extra correlation columns
+        // (e.g. the parent's Id) that may not be in the top-level requested list after alias stripping.
+        // In those cases we prefer the full engine results to avoid ordinal mismatches in the DataReader.
         var requested = ExtractRequestedColumns(rewritten);
+        bool looksLikeIncludeChildQuery = rewritten.Contains("CompanyId", StringComparison.OrdinalIgnoreCase) ||
+                                          rewritten.Contains("Vacancies", StringComparison.OrdinalIgnoreCase) ||
+                                          rewritten.Contains("WHERE", StringComparison.OrdinalIgnoreCase) && 
+                                          (rewritten.Contains("Id = @", StringComparison.OrdinalIgnoreCase) || 
+                                           rewritten.Contains("Id=@", StringComparison.OrdinalIgnoreCase));
+
         if (requested.Count > 0 &&
             !requested.Any(c => c == "*" || c.Equals("ALL", StringComparison.OrdinalIgnoreCase)) &&
-            !requested.Any(c => IsAggregateExpression(c)))
+            !requested.Any(c => IsAggregateExpression(c)) &&
+            !looksLikeIncludeChildQuery)
         {
             try
             {
@@ -520,11 +562,16 @@ public class SharpCoreDBCommand : DbCommand
         // SharpCoreDB needs: DELETE FROM Blogs WHERE BlogId = @p0
         var rewritten = RewriteAliasQualifiedSql(_commandText);
 
-        // DEBUG: Log rewritten SQL
+        // === DEEP DIAGNOSTIC — NON-QUERY DML PATH ===
         try
         {
-            System.IO.File.AppendAllText("D:\\ef_nonquery_async.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n");
+            var paramDump = string.Join(" | ", parameters.Select(kv => $"{kv.Key}={kv.Value}"));
+            System.IO.File.AppendAllText("D:\\ef_deep_dml.log",
+                $"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] === NON-QUERY DML (ExecuteNonQueryAsync) ===\n" +
+                $"ORIGINAL:\n{_commandText}\n\n" +
+                $"REWRITTEN:\n{rewritten}\n\n" +
+                $"PARAMS: {paramDump}\n" +
+                $"====================================\n");
         }
         catch { }
 
@@ -580,12 +627,16 @@ public class SharpCoreDBCommand : DbCommand
         {
             var value = param.Value;
 
-            // Normalize temporal parameters to ISO-8601 text so comparisons against
-            // TEXT-backed DateTime columns are deterministic across OS/culture/runner.
+            // Normalize temporal + Guid parameters.
+            // Guids must be converted to a canonical string because the underlying
+            // SharpCoreDB engine + storage layer does not reliably round-trip raw
+            // Guid objects when used as foreign keys (unlike integer keys).
+            // This is the root cause of the "Guid FKs not visible after Include" bug.
             value = value switch
             {
                 DateTime dt => dt.ToUniversalTime().ToString("o"),
                 DateTimeOffset dto => dto.UtcDateTime.ToString("o"),
+                Guid g => g.ToString("D"),           // Canonical format for reliability
                 _ => value
             };
 

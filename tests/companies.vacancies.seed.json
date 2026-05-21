@@ -1,0 +1,72 @@
+{
+  "companies": [
+    {
+      "name": "Delta Logistics",
+      "address": "Stationsplein 1, Rotterdam",
+      "vacancies": [
+        {
+          "title": "Backend Developer",
+          "description": "Build and maintain robust REST APIs.",
+          "isActive": true
+        },
+        {
+          "title": "Project Coordinator",
+          "description": "Coordinate delivery timelines and communication.",
+          "isActive": false
+        },
+        {
+          "title": "DevOps Engineer",
+          "description": "Implement CI/CD pipelines and manage cloud infrastructure.",
+          "isActive": true
+        },
+        {
+          "title": "Frontend Developer",
+          "description": "Create responsive and user-friendly web interfaces.",
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Nordic Retail",
+      "address": "Ringlaan 24, Gent",
+      "vacancies": [
+        {
+          "title": "Data Analyst",
+          "description": "Analyze sales and customer behavior data.",
+          "isActive": true
+        },
+        {
+          "title": "Marketing Specialist",
+          "description": "Develop and execute marketing campaigns.",
+          "isActive": true
+        },
+        {
+          "title": "Store Manager",
+          "description": "Oversee daily operations of the retail store.",
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "TechNova",
+      "address": "Innovatieweg 10, Eindhoven",
+      "vacancies": [
+        {
+          "title": "AI Researcher",
+          "description": "Conduct research on cutting-edge AI technologies.",
+          "isActive": true
+        },
+        {
+          "title": "Software Tester",
+          "description": "Ensure software quality through rigorous testing.",
+          "isActive": true
+        },
+        {
+          "title": "Product Manager",
+          "description": "Define product vision and roadmap.",
+          "isActive": true
+        }
+      ]
+    }
+  ]
+}

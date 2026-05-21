@@ -29,6 +29,16 @@ public class SharpCoreDBUpdateSqlGenerator : UpdateSqlGenerator
         var writeOperations = command.ColumnModifications.Where(c => c.IsWrite).ToList();
         var readOperations = command.ColumnModifications.Where(c => c.IsRead).ToList();
 
+        // DEEP DIAGNOSTIC: Log every insert generation (unconditional for troubleshooting)
+        try
+        {
+            var cols = string.Join(", ", writeOperations.Select(o => $"{o.ColumnName}={(o.Value == null ? "NULL" : o.Value.GetType().Name + ":" + o.Value)}"));
+            System.IO.File.AppendAllText("D:\\ef_update_sqlgen.log",
+                $"[{DateTime.Now:HH:mm:ss.fff}] AppendInsertOperation Table={command.TableName} Pos={commandPosition}\n" +
+                $"  WriteColumns: {cols}\n\n");
+        }
+        catch { }
+
         // ✅ FIX: SharpCoreDB does not support RETURNING clauses.
         // Pass an empty read-operations list so the base class emits a plain INSERT
         // without a RETURNING clause, then append SELECT last_insert_rowid() to

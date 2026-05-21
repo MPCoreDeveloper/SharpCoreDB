@@ -20,6 +20,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F8B5E3A4-1C2D-4E5F-8B9A-1D2E3F4A5B6C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}"
+	ProjectSection(SolutionItems) = preProject
+		tests\companies.vacancies.seed.json = tests\companies.vacancies.seed.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E}"
 EndProject

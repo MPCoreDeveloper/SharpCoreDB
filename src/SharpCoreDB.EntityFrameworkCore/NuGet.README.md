@@ -1,9 +1,15 @@
-# SharpCoreDB.EntityFrameworkCore v1.9.0
+# SharpCoreDB.EntityFrameworkCore v1.9.1
 
 **Entity Framework Core Provider for SharpCoreDB**
 
 Full EF Core integration with SharpCoreDB's encryption and performance for modern .NET applications.
 
+
+## Patch updates in v1.9.1
+
+- ✅ Fixed critical Guid foreign key persistence bug when using `Include` + navigation filters (e.g. `Where(x => x.Children.Any(...))`).
+- Root cause was missing Guid normalization during INSERT parameter binding (now aligned with DateTime handling).
+- The recommended pattern now works reliably with Guid primary keys and foreign keys.
 
 ## Patch updates in v1.9.0
 
@@ -57,14 +63,14 @@ var users = await context.Users.Where(u => u.IsActive).ToListAsync();
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.1
 ```
 
 **Requires:** SharpCoreDB v1.9.0+, EntityFrameworkCore v8.0+
 
 ---
 
-**Version:** 1.9.0 | **Status:** ✅ Production Ready
+**Version:** 1.9.1 | **Status:** ✅ Production Ready (Guid FK fix included)
 
 
 

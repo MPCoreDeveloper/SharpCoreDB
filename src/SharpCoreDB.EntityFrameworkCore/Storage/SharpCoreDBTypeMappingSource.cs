@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Reflection;
 
 namespace SharpCoreDB.EntityFrameworkCore.Storage;
@@ -10,6 +11,16 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 /// </summary>
 public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
 {
+    // Custom Guid mapping that always stores Guids as canonical strings (D format).
+    // This is critical for reliable INSERT/UPDATE of Guid PKs and FKs (CompanyId etc.)
+    // in a text-oriented engine. The converter ensures .NET Guid <-> string roundtrips correctly
+    // on both read and write paths.
+    private static readonly ValueConverter<Guid, string> _guidConverter =
+        new(v => v.ToString("D"), v => Guid.Parse(v));
+
+    private static readonly RelationalTypeMapping _guidMapping =
+        new StringTypeMapping("TEXT", System.Data.DbType.String);
+
     private static readonly Dictionary<Type, RelationalTypeMapping> _typeMappings = new()
     {
         [typeof(int)] = new IntTypeMapping("INTEGER"),
@@ -24,7 +35,6 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
         [typeof(TimeSpan)] = new TimeSpanTypeMapping("TEXT"),
         [typeof(DateOnly)] = new DateOnlyTypeMapping("TEXT"),
         [typeof(TimeOnly)] = new TimeOnlyTypeMapping("TEXT"),
-        [typeof(Guid)] = new GuidTypeMapping("GUID"),
         [typeof(byte[])] = new ByteArrayTypeMapping("BLOB"),
         [typeof(byte)] = new ByteTypeMapping("INTEGER"),
         [typeof(short)] = new ShortTypeMapping("INTEGER"),
@@ -63,7 +73,7 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
                 "REAL" => new DoubleTypeMapping("REAL"),
                 "DECIMAL" => new DecimalTypeMapping("DECIMAL"),
                 "DATETIME" => new DateTimeTypeMapping("DATETIME"),
-                "GUID" => new GuidTypeMapping("GUID"),
+                "GUID" => _guidMapping,
                 "ULID" => new StringTypeMapping("ULID", System.Data.DbType.String),
                 "BLOB" => new ByteArrayTypeMapping("BLOB"),
                 "FLOAT" => new FloatTypeMapping("REAL"),
@@ -96,6 +106,11 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     /// <inheritdoc />
     public override RelationalTypeMapping? FindMapping(Type type)
     {
+        if (type == typeof(Guid))
+        {
+            return _guidMapping;
+        }
+
         if (_typeMappings.TryGetValue(type, out var mapping))
         {
             return mapping;

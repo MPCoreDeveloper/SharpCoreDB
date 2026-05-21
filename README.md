@@ -53,7 +53,7 @@ Use it when you need:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.0
+dotnet add package SharpCoreDB --version 1.9.1
 ```
 
 ```csharp
@@ -81,16 +81,18 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.0
-dotnet add package SharpCoreDB.Client --version 1.9.0
+dotnet add package SharpCoreDB.Server --version 1.9.1
+dotnet add package SharpCoreDB.Client --version 1.9.1
 ```
 
 ---
 
-## v1.9.0 highlights
+## v1.9.1 highlights
 
-- Version standardization to 1.9.0 across all packages, NuGet metadata, and documentation
-- EF Core provider fully validated: 93/93 tests passing (CRUD, transactions, relationships, projections, migrations, A*/BFS/DFS graph traversal)
+- **Entity Framework Core Provider**: Full Guid-keyed entity CRUD support with reliable two-query pattern for relationships
+- **New EF Core Demo**: Runnable console app (`Examples/SharpCoreDB.EFCoreCrudDemo`) demonstrating complete company/vacancy CRUD workflow
+- Version standardization to 1.9.1 across all packages, NuGet metadata, and documentation
+- EF Core provider fully validated: 22/22 integration tests passing (CRUD, transactions, relationships, Guid entities)
 - Build and core test suite confirmed stable for release
 - Continued synchronization of optional modules (Event Sourcing, CQRS, Projections, Analytics)
   - no `UndefinedDefaultValue` leakage in generated SQL
@@ -199,56 +201,55 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,000+ tests passing**
-- **100% backward compatible** across the v1.9.0 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.0
+- **100% backward compatible** across the v1.9.1 release line
+- Zero breaking changes intended from v1.5.0 to v1.9.1
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.0)
+## Available NuGet packages (v1.9.1)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.0
+dotnet add package SharpCoreDB --version 1.9.1
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.0
-dotnet add package SharpCoreDB.Client --version 1.9.0
+dotnet add package SharpCoreDB.Server --version 1.9.1
+dotnet add package SharpCoreDB.Client --version 1.9.1
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.0
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.0
-dotnet add package SharpCoreDB.Graph --version 1.9.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.0
-dotnet add package SharpCoreDB.Distributed --version 1.9.0
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.0
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.0
-dotnet add package SharpCoreDB.Extensions --version 1.9.0
+dotnet add package SharpCoreDB.Analytics --version 1.9.1
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.1
+dotnet add package SharpCoreDB.Graph --version 1.9.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.1
+dotnet add package SharpCoreDB.Distributed --version 1.9.1
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.1
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.1
+dotnet add package SharpCoreDB.Extensions --version 1.9.1
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.0
-dotnet add package SharpCoreDB.Projections --version 1.9.0
-dotnet add package SharpCoreDB.CQRS --version 1.9.0
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.1
+dotnet add package SharpCoreDB.Projections --version 1.9.1
+dotnet add package SharpCoreDB.CQRS --version 1.9.1
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.0
+dotnet add package SharpCoreDB.Functional --version 1.9.1
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.1
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.1
 ```
 
 ---
 
-## What’s new in v1.9.0
+## What’s new in v1.9.1
 
-- **Auto-ROWID support**: hidden `_rowid` (ULID) on tables without an explicit primary key - mirrors SQLite rowid semantics
-- **GRAPH_RAG SQL clause**: first-class `GRAPH_RAG` SELECT syntax for graph-augmented retrieval pipelines
-- **OPTIONALLY** and **IS SOME / IS NONE**: new SQL keywords for `Option<T>`-aware null-safety patterns
-- **SIMD columnar engine**: `Vector256.LoadUnsafe` across all 16 aggregate hot paths - eliminates Span allocation in AVX2 loops
-- **SharpCoreDB.Viewer** major update: Avalonia UI revamp with multi-tab editor, typed table designer (ULID/GUID), multilingual UI (EN/DE/FR/ES/IT/NL), server-mode connection
-- **FluentMigrator**: `AddSharpCoreDBFluentMigrator()` defaults both generator and processor to SQLite-compatible mode
-- `Microsoft.Extensions.Logging.Abstractions` bumped to **10.0.7** for all packages
-- Bug fixes: `IS NULL/IS NOT NULL` unification, parser `COALESCE()` support, LINQ Convert/ConvertChecked, PAGE_BASED mixed-predicate filtering
+- **Entity Framework Core Provider**: Full Guid-keyed entity support with stable CRUD (insert/update/select/delete) and reliable two-query relationship materialization pattern for `Company`/`Vacancy` style scenarios
+- **New runnable EF Core demo**: `Examples/SharpCoreDB.EFCoreCrudDemo` – complete console application demonstrating end-to-end CRUD on the companies/vacancies seed dataset using the recommended repository pattern
+- **Complete v1.9.1 release alignment**: Every project `<Version>`, every internal `PackageReference`, and every `PackageReleaseNotes` updated to 1.9.1 across 25+ packages so NuGet pack/publish produces correct artifacts
+- **Documentation standardization**: Root `README.md` + all 25 component `README.md` files updated to current release with correct package examples and highlights
+- EF Core integration tests: 22/22 passing (including full end-to-end seed CRUD with Guid primary keys and relationships)
+- All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
+- Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
 ---
 

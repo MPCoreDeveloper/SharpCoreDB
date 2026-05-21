@@ -212,6 +212,18 @@ app.Run();
             }
             Console.WriteLine();
         }
+
+        // CORRECT server-side filter (replaces the common anti-pattern of
+        // ToListAsync + client .Where(x => x.Vacancies/Products.Any(...)) ).
+        // EF Core translates .Where(...Any) + filtered Include to efficient SQL.
+        var activeOnly = await context.Categories
+            .Include(c => c.Products.Where(p => p.IsActive))
+            .AsNoTracking()
+            .Where(c => c.Products.Any(p => p.IsActive))
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+        Console.WriteLine($"? Categories with >=1 active product: {activeOnly.Count}");
     }
 }
 

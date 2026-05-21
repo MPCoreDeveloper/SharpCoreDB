@@ -3,9 +3,9 @@
 Examples for the Python SharpCoreDB client.
 
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.1
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.1 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features demonstrated

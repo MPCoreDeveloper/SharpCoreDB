@@ -2,13 +2,13 @@
 
 Graph traversal and pathfinding extension for `SharpCoreDB`.
 
-**Version:** `v1.9.0`  
+**Version:** `v1.9.1`  
 **Package:** `SharpCoreDB.Graph`
 
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.1
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.1 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
