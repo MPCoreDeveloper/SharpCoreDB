@@ -471,6 +471,7 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
         var dbPath = $"./test_dt_{Guid.NewGuid():N}.scdb";
         var options = new DbContextOptionsBuilder<TestBlogDbContext>()
             .UseSharpCoreDB($"Data Source={dbPath};Password=TestPassword123;Cache=Shared")
+            .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning))
             .Options;
 
         using var writeContext = new TestBlogDbContext(options);
