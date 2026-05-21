@@ -42,6 +42,8 @@ comment:
 ignore:
   - "tests/**"
   - "tools/**"
+  - "Examples/**"
+  - "**/Examples/**"
   - "**/*.Demo/**"
   - "**/Benchmarks/**"
   - "**/benchmarks/**"
