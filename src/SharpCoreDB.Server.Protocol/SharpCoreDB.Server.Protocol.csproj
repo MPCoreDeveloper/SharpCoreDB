@@ -32,7 +32,7 @@
   <ItemGroup>
     <!-- gRPC & Protobuf (latest stable for .NET 10) -->
     <PackageReference Include="Grpc.Core.Api" Version="2.80.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.80.0" PrivateAssets="All" />
+    <PackageReference Include="Grpc.Tools" Version="2.81.0" PrivateAssets="All" />
     <PackageReference Include="Google.Protobuf" Version="3.35.0" />
     
     <!-- Include .proto files -->
