@@ -49,11 +49,10 @@ For complete production installation instructions, see `INSTALLATION.md`.
 
 ## Eventing and Stream Model
 
-- `EVENT_SOURCING_RFC.md`
 - `EVENT_STREAM_MODEL_FINAL.md`
 
 ## Maintenance Note
 
-Superseded phase plans, kickoff notes, and completion status reports were removed to keep server documentation focused on current operational guidance.
+Superseded phase plans, kickoff notes, RFC documents, and completion status reports have been removed to keep server documentation focused on current operational guidance. Event sourcing is now available via the `SharpCoreDB.EventSourcing` package.
 
 

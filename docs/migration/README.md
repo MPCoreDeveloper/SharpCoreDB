@@ -193,7 +193,7 @@ Explicitly configured provider switches are preserved.
 | [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) | Storage format migration | DevOps | 10-15 min |
 | [../USER_MANUAL.md](../USER_MANUAL.md) | General database usage | Developers | 30-40 min |
 | [../Vectors/README.md](../Vectors/README.md) | Vector API & features | Developers | 20-30 min |
-| [../features/PHASE7_JOIN_COLLATIONS.md](../features/PHASE7_JOIN_COLLATIONS.md) | JOIN & collation support | Developers | 10-15 min |
+| [../collation/COLLATION_GUIDE.md](../collation/COLLATION_GUIDE.md) | JOIN & collation support | Developers | 10-15 min |
 
 ---
 
@@ -304,7 +304,7 @@ A: Verify source data is not being modified. Retry migration.
 ## 🔗 Related Documentation
 
 - [Vector Search Feature Guide](../Vectors/README.md)
-- [Phase 7: JOIN Operations](../features/PHASE7_JOIN_COLLATIONS.md)
+- [JOIN & Collation Support](../collation/COLLATION_GUIDE.md)
 - [SharpCoreDB User Manual](../USER_MANUAL.md)
 - [Project Status](../PROJECT_STATUS.md)
 

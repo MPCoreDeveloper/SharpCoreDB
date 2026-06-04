@@ -661,7 +661,6 @@ SELECT 'Café' = 'cafe' COLLATE UNICODE;  -- TRUE (full normalization)
 
 ## See Also
 
-- [Phase 7: JOIN Collations](../features/PHASE7_JOIN_COLLATIONS.md)
 - [EF Core Integration](../EFCORE_COLLATE_COMPLETE.md)
 - [Collation Performance Tests](../benchmarks/Phase5_CollationQueryPerformanceBenchmark.cs)
 

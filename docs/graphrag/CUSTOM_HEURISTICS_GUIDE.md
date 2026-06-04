@@ -536,7 +536,6 @@ var spatialResult = spatialPathfinder.FindPath(table, start, goal, "next", 10, c
 ## 📖 Further Reading
 
 - **GraphRAG Documentation:** `docs/graphrag/README.md`
-- **Phase 6 Design:** `docs/graphrag/PHASE6_DESIGN.md`
 - **A* Algorithm:** [Wikipedia](https://en.wikipedia.org/wiki/A*_search_algorithm)
 - **Heuristic Functions:** [Stanford CS221](https://stanford.edu/~shervine/teaching/cs-221/)
 

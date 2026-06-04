@@ -25,13 +25,8 @@ This page is the entry point for active GraphRAG documentation (`v1.7.0`).
 
 ## Archival technical background
 
-The following phase-design notes are retained only for historical design context and are not the maintained starting point for feature documentation:
-
-- `PHASE4_DESIGN.md`
-- `PHASE5_1_FEATURE_GUIDE.md`
-- `PHASE6_DESIGN.md`
-- `PHASE6_3_DESIGN.md`
+Obsolete phase-design notes have been archived. Refer to the current implementation documentation above for feature details.
 
 ## Notes
 
-Historical kickoff, status, and duplicate progress notes should be removed during documentation maintenance instead of being added to the canonical reading path.
+Historical kickoff, status, and duplicate progress notes have been removed during documentation maintenance to keep only the canonical reading path.

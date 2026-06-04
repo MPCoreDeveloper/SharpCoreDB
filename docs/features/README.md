@@ -8,7 +8,7 @@ Welcome to SharpCoreDB documentation! Here you'll find comprehensive guides for 
 
 ### Database Features
 
-#### [Phase 7: JOIN Operations with Collation Support](./PHASE7_JOIN_COLLATIONS.md)
+#### JOIN Operations with Collation Support
 **Status:** ✅ **Production Ready**  
 **Highlights:**
 - ✅ INNER, LEFT, RIGHT, FULL, CROSS JOINs
@@ -17,10 +17,7 @@ Welcome to SharpCoreDB documentation! Here you'll find comprehensive guides for 
 - ✅ Multi-column JOINs
 - ✅ Automatic collation resolution
 
-**Quick Links:**
-- [Usage Examples](./PHASE7_JOIN_COLLATIONS.md#usage-examples)
-- [Collation Resolution Rules](./PHASE7_JOIN_COLLATIONS.md#collation-resolution-rules)
-- [Performance Impact](./PHASE7_JOIN_COLLATIONS.md#performance-impact)
+See [Collation Guide](../collation/COLLATION_GUIDE.md) for complete documentation.
 
 #### Collation Support (All Phases)
 **Status:** ✅ **Complete (Phases 1-7)**
@@ -147,9 +144,9 @@ Welcome to SharpCoreDB documentation! Here you'll find comprehensive guides for 
 4. **Performance:** [Tuning Guide](../Vectors/PERFORMANCE_TUNING.md)
 
 ### Using JOINs & Collations?
-1. **How it works:** [Phase 7 Guide](./PHASE7_JOIN_COLLATIONS.md)
-2. **Examples:** [Usage Examples](./PHASE7_JOIN_COLLATIONS.md#usage-examples)
-3. **Rules:** [Collation Resolution](./PHASE7_COLLATIONS.md#collation-resolution-rules)
+1. **How it works:** [Collation Guide](../collation/COLLATION_GUIDE.md)
+2. **Examples:** [SQL Examples](../collation/COLLATION_GUIDE.md#examples)
+3. **Rules:** [Collation Resolution](../collation/COLLATION_GUIDE.md#collation-resolution)
 
 ### Migrating from Another Database?
 1. **From SQLite:** [Vectors Migration](../migration/SQLITE_VECTORS_TO_SHARPCORE.md)
