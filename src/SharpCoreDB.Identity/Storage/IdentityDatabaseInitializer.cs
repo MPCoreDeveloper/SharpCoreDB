@@ -31,14 +31,16 @@ public sealed class IdentityDatabaseInitializer(SharpCoreIdentityOptions options
         {
             $"CREATE TABLE IF NOT EXISTS {users} (Id TEXT PRIMARY KEY, UserName TEXT NOT NULL, NormalizedUserName TEXT NOT NULL, Email TEXT, NormalizedEmail TEXT, EmailConfirmed INTEGER NOT NULL, PasswordHash TEXT NOT NULL, SecurityStamp TEXT NOT NULL, ConcurrencyStamp TEXT NOT NULL, PhoneNumber TEXT, PhoneNumberConfirmed INTEGER NOT NULL, TwoFactorEnabled INTEGER NOT NULL, LockoutEnd TEXT, LockoutEnabled INTEGER NOT NULL, AccessFailedCount INTEGER NOT NULL, FullName TEXT, BirthDate TEXT, IsActive INTEGER NOT NULL)",
             $"CREATE TABLE IF NOT EXISTS {roles} (Id TEXT PRIMARY KEY, Name TEXT NOT NULL, NormalizedName TEXT NOT NULL, ConcurrencyStamp TEXT NOT NULL)",
-            $"CREATE TABLE IF NOT EXISTS {userRoles} (UserId TEXT NOT NULL, RoleId TEXT NOT NULL, PRIMARY KEY (UserId, RoleId))",
+            $"CREATE TABLE IF NOT EXISTS {userRoles} (Id TEXT PRIMARY KEY, UserId TEXT NOT NULL, RoleId TEXT NOT NULL, UNIQUE(UserId, RoleId))",
             $"CREATE TABLE IF NOT EXISTS {userClaims} (Id TEXT PRIMARY KEY, UserId TEXT NOT NULL, ClaimType TEXT NOT NULL, ClaimValue TEXT)",
-            $"CREATE TABLE IF NOT EXISTS {userLogins} (LoginProvider TEXT NOT NULL, ProviderKey TEXT NOT NULL, ProviderDisplayName TEXT, UserId TEXT NOT NULL, PRIMARY KEY (LoginProvider, ProviderKey))",
+            $"CREATE TABLE IF NOT EXISTS {userLogins} (Id TEXT PRIMARY KEY, LoginProvider TEXT NOT NULL, ProviderKey TEXT NOT NULL, ProviderDisplayName TEXT, UserId TEXT NOT NULL, UNIQUE(LoginProvider, ProviderKey))",
             $"CREATE TABLE IF NOT EXISTS {roleClaims} (Id TEXT PRIMARY KEY, RoleId TEXT NOT NULL, ClaimType TEXT NOT NULL, ClaimValue TEXT)",
             $"CREATE UNIQUE INDEX IF NOT EXISTS IX_{users}_NormalizedUserName ON {users}(NormalizedUserName)",
             $"CREATE UNIQUE INDEX IF NOT EXISTS IX_{users}_NormalizedEmail ON {users}(NormalizedEmail)",
             $"CREATE UNIQUE INDEX IF NOT EXISTS IX_{roles}_NormalizedName ON {roles}(NormalizedName)",
+            $"CREATE INDEX IF NOT EXISTS IX_{userRoles}_UserId ON {userRoles}(UserId)",
             $"CREATE INDEX IF NOT EXISTS IX_{userRoles}_RoleId ON {userRoles}(RoleId)",
+            $"CREATE INDEX IF NOT EXISTS IX_{userLogins}_UserId ON {userLogins}(UserId)",
             $"CREATE INDEX IF NOT EXISTS IX_{userClaims}_UserId ON {userClaims}(UserId)",
             $"CREATE INDEX IF NOT EXISTS IX_{roleClaims}_RoleId ON {roleClaims}(RoleId)"
         };

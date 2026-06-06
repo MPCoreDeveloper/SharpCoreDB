@@ -632,8 +632,10 @@ public partial class SqlParser
         // CRITICAL FIX: Must detect actual parameters, not @ symbols in string literals (e.g., 'test@example.com')
         // CRITICAL FIX: Must detect actual subqueries (SELECT in parens), not function calls like UNIXEPOCH(...)
         bool hasActualParameters = HasActualParameters(sql);
-        bool hasSubquery = sql.Contains("(SELECT", StringComparison.OrdinalIgnoreCase) || 
-                           sql.Contains("( SELECT", StringComparison.OrdinalIgnoreCase);
+        bool hasSubquery = System.Text.RegularExpressions.Regex.IsMatch(
+            sql,
+            @"\(\s*SELECT\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
         if (hasActualParameters || hasSubquery)
         {
@@ -1144,16 +1146,21 @@ public partial class SqlParser
             }
             else
             {
-                // No alias - use bare column name as output
-                var bare = ExtractBareColumn(trimmed);
-                projections.Add((trimmed, bare));
+                // No alias:
+                // - Keep qualified column names (o.Id, o1.Id) to preserve ordinals for
+                //   EF include materialization with duplicate key names.
+                // - For unqualified expressions, keep the bare column name.
+                var outputName = trimmed.Contains('.', StringComparison.Ordinal)
+                    ? trimmed.Trim('`', '"', '[', ']')
+                    : ExtractBareColumn(trimmed);
+                projections.Add((trimmed, outputName));
             }
         }
 
         var result = new List<Dictionary<string, object>>(rows.Count);
         foreach (var row in rows)
         {
-            var projected = new Dictionary<string, object>(projections.Count);
+            var projected = new Dictionary<string, object>(projections.Count, StringComparer.OrdinalIgnoreCase);
             foreach (var (sourceExpr, outputName) in projections)
             {
                 var val = FindValue(row, sourceExpr);
@@ -1167,52 +1174,87 @@ public partial class SqlParser
 
     /// <summary>
     /// Builds a condition evaluator from an ON clause like "p.order_id = o.id".
-    /// Orientation-agnostic: tries both column mappings since SQL allows either side.
+    /// Supports composite key joins with conjunctions, e.g.
+    /// "o.TenantId = o1.TenantId AND o.OrderNumber = o1.OrderNumber".
+    /// Orientation-agnostic: each predicate is evaluated in both left/right directions.
     /// </summary>
     private static Func<Dictionary<string, object>, Dictionary<string, object>, bool> BuildOnCondition(string onClause)
     {
-        var eqParts = onClause.Split('=');
-        if (eqParts.Length != 2)
+        var predicates = System.Text.RegularExpressions.Regex
+            .Split(onClause, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Select(static part => part.Trim())
+            .Where(static part => part.Length > 0)
+            .Select(part =>
+            {
+                var eqParts = part.Split('=', 2);
+                if (eqParts.Length != 2)
+                    throw new InvalidOperationException($"Invalid ON clause: {onClause}");
+
+                var exprA = eqParts[0].Trim();
+                var exprB = eqParts[1].Trim();
+                return (exprA, exprB, colA: ExtractBareColumn(exprA), colB: ExtractBareColumn(exprB));
+            })
+            .ToList();
+
+        if (predicates.Count == 0)
             throw new InvalidOperationException($"Invalid ON clause: {onClause}");
-
-        var exprA = eqParts[0].Trim();
-        var exprB = eqParts[1].Trim();
-
-        string colA = ExtractBareColumn(exprA);
-        string colB = ExtractBareColumn(exprB);
 
         return (leftRow, rightRow) =>
         {
-            // Try full qualified names first (e.g., "o.id") to avoid ambiguity in chained joins
-            // Orientation 1: exprA from left, exprB from right
-            var lVal = FindValue(leftRow, exprA);
-            var rVal = FindValue(rightRow, exprB);
+            foreach (var (exprA, exprB, colA, colB) in predicates)
+            {
+                bool matched = false;
 
-            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
-                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
+                // Orientation 1: exprA from left, exprB from right
+                var lVal = FindValue(leftRow, exprA);
+                var rVal = FindValue(rightRow, exprB);
+                if (lVal is not null and not DBNull && rVal is not null and not DBNull &&
+                    string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal))
+                {
+                    matched = true;
+                }
 
-            // Orientation 2: exprB from left, exprA from right
-            lVal = FindValue(leftRow, exprB);
-            rVal = FindValue(rightRow, exprA);
+                // Orientation 2: exprB from left, exprA from right
+                if (!matched)
+                {
+                    lVal = FindValue(leftRow, exprB);
+                    rVal = FindValue(rightRow, exprA);
+                    if (lVal is not null and not DBNull && rVal is not null and not DBNull &&
+                        string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal))
+                    {
+                        matched = true;
+                    }
+                }
 
-            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
-                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
+                // Bare-column fallback orientation 1
+                if (!matched)
+                {
+                    lVal = FindValue(leftRow, colA);
+                    rVal = FindValue(rightRow, colB);
+                    if (lVal is not null and not DBNull && rVal is not null and not DBNull &&
+                        string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal))
+                    {
+                        matched = true;
+                    }
+                }
 
-            // Fallback: try bare column names for simple (non-chained) joins
-            lVal = FindValue(leftRow, colA);
-            rVal = FindValue(rightRow, colB);
+                // Bare-column fallback orientation 2
+                if (!matched)
+                {
+                    lVal = FindValue(leftRow, colB);
+                    rVal = FindValue(rightRow, colA);
+                    if (lVal is not null and not DBNull && rVal is not null and not DBNull &&
+                        string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal))
+                    {
+                        matched = true;
+                    }
+                }
 
-            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
-                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
+                if (!matched)
+                    return false;
+            }
 
-            lVal = FindValue(leftRow, colB);
-            rVal = FindValue(rightRow, colA);
-
-            if (lVal is not null and not DBNull && rVal is not null and not DBNull)
-                return string.Equals(lVal.ToString(), rVal.ToString(), StringComparison.Ordinal);
-
-            // No match found in any orientation
-            return false;
+            return true;
         };
     }
 
@@ -1225,17 +1267,43 @@ public partial class SqlParser
 
     private static object? FindValue(Dictionary<string, object> row, string key)
     {
-        if (row.TryGetValue(key, out var v)) return v;
+        if (row.TryGetValue(key, out var v))
+            return v;
+
         // Try bare column name
         var bare = ExtractBareColumn(key);
-        if (row.TryGetValue(bare, out v)) return v;
-        // Try all keys ending with .col
-        foreach (var kvp in row)
+        if (row.TryGetValue(bare, out v))
+            return v;
+
+        // Try all keys ending with .col and pick best candidate.
+        var suffixMatches = row
+            .Where(kv => kv.Key.EndsWith("." + bare, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (suffixMatches.Count == 0)
+            return null;
+
+        // If caller requested a qualified key (alias.col), prefer candidates that
+        // use the same qualifier; otherwise prefer the last match to avoid always
+        // taking the left table's duplicate key in JOIN projections.
+        var dotIndex = key.LastIndexOf('.');
+        if (dotIndex > 0)
         {
-            if (kvp.Key.EndsWith("." + bare, StringComparison.OrdinalIgnoreCase))
-                return kvp.Value;
+            var requestedQualifier = key[..dotIndex].Trim('`', '"', '[', ']');
+            for (var i = suffixMatches.Count - 1; i >= 0; i--)
+            {
+                var candidateKey = suffixMatches[i].Key;
+                var candidateDot = candidateKey.LastIndexOf('.');
+                if (candidateDot > 0)
+                {
+                    var candidateQualifier = candidateKey[..candidateDot].Trim('`', '"', '[', ']');
+                    if (string.Equals(candidateQualifier, requestedQualifier, StringComparison.OrdinalIgnoreCase))
+                        return suffixMatches[i].Value;
+                }
+            }
         }
-        return null;
+
+        return suffixMatches[^1].Value;
     }
 
     private static bool IsJoinKeyword(string word) =>
@@ -1727,13 +1795,31 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
     /// </summary>
     public List<Dictionary<string, object>> ExecuteSelect(SelectNode selectNode)
     {
+        return ExecuteSelect(selectNode, outerRow: null);
+    }
+
+    private List<Dictionary<string, object>> ExecuteSelect(SelectNode selectNode, Dictionary<string, object>? outerRow)
+    {
         ArgumentNullException.ThrowIfNull(selectNode);
 
         var sourceRows = ResolveSourceRows(selectNode.From, selectNode.Columns);
 
         if (selectNode.Where?.Condition is not null)
         {
-            sourceRows = [.. sourceRows.Where(row => EvaluateCondition(selectNode.Where.Condition, row))];
+            sourceRows = [.. sourceRows.Where(row =>
+            {
+                if (outerRow is null)
+                    return EvaluateCondition(selectNode.Where.Condition, row);
+
+                var evaluationRow = new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase);
+                foreach (var (key, value) in outerRow)
+                {
+                    if (!evaluationRow.ContainsKey(key))
+                        evaluationRow[key] = value;
+                }
+
+                return EvaluateCondition(selectNode.Where.Condition, evaluationRow);
+            })];
         }
 
         if (selectNode.IsDistinct)
@@ -1920,7 +2006,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             {
                 var nullLeft = left.Count > 0
                     ? left[0].ToDictionary(kv => kv.Key, _ => (object)DBNull.Value)
-                    : new Dictionary<string, object>();
+                    : [];
                 output.Add(MergeRows(nullLeft, rightRow));
             }
         }
@@ -1971,10 +2057,20 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                 }
                 else
                 {
-                    value = GetValue(row, column.Name);
+                    value = !string.IsNullOrWhiteSpace(column.TableAlias)
+                        ? GetValue(row, new ColumnReferenceNode
+                        {
+                            TableAlias = column.TableAlias,
+                            ColumnName = column.Name
+                        })
+                        : GetValue(row, column.Name);
                 }
 
-                var outputName = string.IsNullOrWhiteSpace(column.Alias) ? column.Name : column.Alias;
+                var outputName = !string.IsNullOrWhiteSpace(column.Alias)
+                    ? column.Alias!
+                    : !string.IsNullOrWhiteSpace(column.TableAlias)
+                        ? $"{column.TableAlias}.{column.Name}"
+                        : column.Name;
                 output[outputName] = value!;
             }
 
@@ -2169,14 +2265,14 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             if (i == 0)
             {
                 ordered = item.IsAscending
-                    ? rows.OrderBy(row => GetValue(row, item.Column.ColumnName), comparer)
-                    : rows.OrderByDescending(row => GetValue(row, item.Column.ColumnName), comparer);
+                    ? rows.OrderBy(row => GetValue(row, item.Column), comparer)
+                    : rows.OrderByDescending(row => GetValue(row, item.Column), comparer);
             }
             else
             {
                 ordered = item.IsAscending
-                    ? ordered!.ThenBy(row => GetValue(row, item.Column.ColumnName), comparer)
-                    : ordered!.ThenByDescending(row => GetValue(row, item.Column.ColumnName), comparer);
+                    ? ordered!.ThenBy(row => GetValue(row, item.Column), comparer)
+                    : ordered!.ThenByDescending(row => GetValue(row, item.Column), comparer);
             }
         }
 
@@ -2206,9 +2302,19 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         {
             BinaryExpressionNode binary => EvaluateBinaryExpression(binary, row),
             InExpressionNode inExpression => EvaluateInExpression(inExpression, row),
-            LiteralNode literal => literal.Value is bool booleanValue && booleanValue,
+            SubqueryExpressionNode subqueryExpression => EvaluateSubqueryExpression(subqueryExpression, row),
+            ColumnReferenceNode column => IsTruthy(GetValue(row, column)),
+            LiteralNode literal => IsTruthy(literal.Value),
             _ => throw new NotSupportedException($"Expression type '{condition.GetType().Name}' is not supported in AST WHERE evaluation.")
         };
+    }
+
+    private bool EvaluateSubqueryExpression(SubqueryExpressionNode subqueryExpression, Dictionary<string, object> outerRow)
+    {
+        // EXISTS(subquery) semantics: true when subquery yields at least one row.
+        // Pass outer row so correlated predicates can resolve outer references.
+        var subqueryRows = ExecuteSelect(subqueryExpression.Query, outerRow);
+        return subqueryRows.Count > 0;
     }
 
     private bool EvaluateBinaryExpression(BinaryExpressionNode binary, Dictionary<string, object> row)
@@ -2261,7 +2367,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
         if (inExpr.Subquery is not null)
         {
-            var subqueryRows = ExecuteSelect(inExpr.Subquery);
+            var subqueryRows = ExecuteSelect(inExpr.Subquery, row);
             foreach (var subRow in subqueryRows)
             {
                 if (subRow.Count == 0)
@@ -2281,12 +2387,13 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         return inExpr.IsNot ? !matched : matched;
     }
 
-    private static object? EvaluateValue(ExpressionNode expression, Dictionary<string, object> row)
+    private object? EvaluateValue(ExpressionNode expression, Dictionary<string, object> row)
     {
         return expression switch
         {
             LiteralNode literal => literal.Value,
-            ColumnReferenceNode column => GetValue(row, column.ColumnName),
+            ColumnReferenceNode column => GetValue(row, column),
+            ParameterNode parameter => ResolveParameter(parameter.ParameterName),
             FunctionCallNode func => null, // Function calls in WHERE are handled by EvaluateBinaryExpression
             _ => throw new NotSupportedException($"Expression type '{expression.GetType().Name}' is not supported for value extraction.")
         };
@@ -2301,6 +2408,20 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
         var match = row.FirstOrDefault(kv => kv.Key.EndsWith($".{columnName}", StringComparison.OrdinalIgnoreCase));
         return match.Equals(default(KeyValuePair<string, object>)) ? null : match.Value;
+    }
+
+    private static object? GetValue(Dictionary<string, object> row, ColumnReferenceNode column)
+    {
+        // Most specific first: alias-qualified key.
+        if (!string.IsNullOrWhiteSpace(column.TableAlias))
+        {
+            var qualified = $"{column.TableAlias}.{column.ColumnName}";
+            if (row.TryGetValue(qualified, out var qualifiedValue))
+                return qualifiedValue;
+        }
+
+        // Fallback to unqualified resolution.
+        return GetValue(row, column.ColumnName);
     }
 
     private static int CompareValues(object? left, object? right)

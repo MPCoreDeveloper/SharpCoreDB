@@ -281,16 +281,12 @@ public class SharpCoreDBCommand : DbCommand
         // (e.g. the parent's Id) that may not be in the top-level requested list after alias stripping.
         // In those cases we prefer the full engine results to avoid ordinal mismatches in the DataReader.
         var requested = ExtractRequestedColumns(rewritten);
-        bool looksLikeIncludeChildQuery = rewritten.Contains("CompanyId", StringComparison.OrdinalIgnoreCase) ||
-                                          rewritten.Contains("Vacancies", StringComparison.OrdinalIgnoreCase) ||
-                                          rewritten.Contains("WHERE", StringComparison.OrdinalIgnoreCase) && 
-                                          (rewritten.Contains("Id = @", StringComparison.OrdinalIgnoreCase) || 
-                                           rewritten.Contains("Id=@", StringComparison.OrdinalIgnoreCase));
+        bool looksLikeRelationshipMaterializationQuery = IsLikelyRelationshipMaterializationQuery(rewritten, requested);
 
         if (requested.Count > 0 &&
             !requested.Any(c => c == "*" || c.Equals("ALL", StringComparison.OrdinalIgnoreCase)) &&
             !requested.Any(c => IsAggregateExpression(c)) &&
-            !looksLikeIncludeChildQuery)
+            !looksLikeRelationshipMaterializationQuery)
         {
             try
             {
@@ -307,28 +303,14 @@ public class SharpCoreDBCommand : DbCommand
 
     /// <summary>
     /// Rewrites EF Core generated SQL into a form the SharpCoreDB legacy parser understands.
-    /// EF Core emits: SELECT "b"."BlogId", "b"."Title" FROM "Blogs" AS "b" WHERE "b"."BlogId" = @p0
-    /// SharpCoreDB needs: SELECT BlogId, Title FROM Blogs WHERE BlogId = @p0
-    ///
-    /// Transformations (in order):
-    /// 1. Strip alias-qualified column references: "b"."BlogId" → BlogId (only outside string literals)
-    /// 2. Strip table aliases: FROM "Blogs" AS "b" → FROM "Blogs"
-    /// 3. Remove all remaining double quotes around identifiers (legacy parser expects bare names)
+    /// We keep aliases and qualification intact (critical for joins, composite keys, and
+    /// correlated subqueries) and only remove double quotes around identifiers.
     /// </summary>
     private static string RewriteAliasQualifiedSql(string sql)
     {
-        // 1. Strip alias-qualified columns outside string literals: "b"."BlogId" or b."Title" → BlogId / Title
-        var step1 = ReplaceOutsideStringLiterals(sql, AliasQualifiedPattern,
-            static m => m.Groups["col"].Value.Trim('"', '[', ']', '`'));
-
-        // 2. Strip table aliases in FROM/JOIN
-        var step2 = TableAliasPattern.Replace(step1, static m =>
-            m.Groups["table"].Value.Trim('"', '[', ']', '`'));
-
-        // 3. Final aggressive normalization: remove any remaining double quotes.
-        // EF uses " for identifiers; legacy SharpCoreDB parser treats them as string literals
-        // if left in place. This guarantees bare identifiers reach the legacy path.
-        return step2.Replace("\"", string.Empty);
+        // Remove identifier quotes outside string literals while preserving alias-qualified
+        // expressions like c.Id = v.CompanyId.
+        return ReplaceOutsideStringLiterals(sql, IdentifierDoubleQuotePattern, static _ => string.Empty);
     }
 
     /// <summary>
@@ -377,16 +359,8 @@ public class SharpCoreDBCommand : DbCommand
         return result.ToString();
     }
 
-    // Matches: optional-quoted-alias DOT quoted-or-unquoted-column
-    // e.g.  "b"."BlogId"  |  b."Title"  |  b.Title
-    private static readonly Regex AliasQualifiedPattern = new(
-        @"(?:""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\.(?<col>""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)",
-        RegexOptions.Compiled);
-
-    // Matches table reference followed by AS alias:  "Blogs" AS "b"  or  Blogs AS b
-    private static readonly Regex TableAliasPattern = new(
-        @"(?<table>""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+AS\s+(?:""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // Matches a single double-quote for identifier de-quoting.
+    private static readonly Regex IdentifierDoubleQuotePattern = new("\"", RegexOptions.Compiled);
 
     private static List<string> SplitStatements(string sql)
     {
@@ -536,6 +510,35 @@ public class SharpCoreDBCommand : DbCommand
                trimmed.StartsWith("AVG(", StringComparison.OrdinalIgnoreCase) ||
                trimmed.StartsWith("MIN(", StringComparison.OrdinalIgnoreCase) ||
                trimmed.StartsWith("MAX(", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Detects query shapes that likely belong to EF Core relationship/include materialization.
+    /// These query paths can rely on correlation columns and strict ordinals, so column projection
+    /// should be skipped to avoid losing columns needed by the shaper.
+    /// </summary>
+    private static bool IsLikelyRelationshipMaterializationQuery(string sql, List<string> requestedColumns)
+    {
+        if (requestedColumns.Count == 0)
+            return false;
+
+        var loweredSql = sql.ToLowerInvariant();
+        var hasJoin = loweredSql.Contains(" join ", StringComparison.Ordinal);
+        var hasInSubquery = loweredSql.Contains(" in (select ", StringComparison.Ordinal);
+        var hasOrderBy = loweredSql.Contains(" order by ", StringComparison.Ordinal);
+
+        var normalizedColumns = requestedColumns
+            .Select(static c => c.Trim().Trim('"', '[', ']', '`').ToLowerInvariant())
+            .ToList();
+
+        var hasIdColumn = normalizedColumns.Any(static c => c == "id" || c.EndsWith(".id", StringComparison.Ordinal));
+        var hasForeignKeyColumn = normalizedColumns.Any(static c => c.EndsWith("id", StringComparison.Ordinal) && c != "id");
+
+        // Common EF include/split materialization shapes:
+        // - query includes key + FK columns
+        // - query uses JOIN or IN (SELECT ...) to correlate parent/child rows
+        // - query often has deterministic ORDER BY over key columns
+        return (hasJoin || hasInSubquery || hasOrderBy) && hasIdColumn && hasForeignKeyColumn;
     }
 
     /// <inheritdoc />

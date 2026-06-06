@@ -37,7 +37,7 @@ public sealed class SharpCoreDbPasswordHasher(SharpCoreIdentityOptions options)
             _ => throw new InvalidOperationException("Unsupported PBKDF2 algorithm.")
         };
 
-        return string.Join('$', algorithmToken, _options.Password.IterationCount, Convert.ToBase64String(salt), Convert.ToBase64String(hash));
+        return string.Join('$', algorithmToken, _options.Password.IterationCount, EncodeToken(salt), EncodeToken(hash));
     }
 
     /// <summary>
@@ -71,8 +71,8 @@ public sealed class SharpCoreDbPasswordHasher(SharpCoreIdentityOptions options)
 
         try
         {
-            var salt = Convert.FromBase64String(parts[2]);
-            var expectedHash = Convert.FromBase64String(parts[3]);
+            var salt = DecodeToken(parts[2]);
+            var expectedHash = DecodeToken(parts[3]);
             var actualHash = Rfc2898DeriveBytes.Pbkdf2(providedPassword, salt, iterations, algorithm, expectedHash.Length);
             return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
         }
@@ -90,6 +90,31 @@ public sealed class SharpCoreDbPasswordHasher(SharpCoreIdentityOptions options)
             SharpCorePbkdf2Algorithm.Sha512 => HashAlgorithmName.SHA512,
             _ => throw new InvalidOperationException("Unsupported PBKDF2 algorithm.")
         };
+    }
+
+    private static string EncodeToken(byte[] bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private static byte[] DecodeToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new FormatException("Hash token cannot be empty.");
+        }
+
+        var normalized = token.Replace('-', '+').Replace('_', '/');
+        var padding = normalized.Length % 4;
+        if (padding is > 0)
+        {
+            normalized = normalized.PadRight(normalized.Length + (4 - padding), '=');
+        }
+
+        return Convert.FromBase64String(normalized);
     }
 
     private void ValidateHashingOptions()

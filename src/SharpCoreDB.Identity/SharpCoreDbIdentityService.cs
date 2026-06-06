@@ -24,6 +24,7 @@ public sealed class SharpCoreDbIdentityService(
     private readonly SharpCoreDbTokenProvider _tokenProvider = new(options);
     private readonly ILogger<SharpCoreDbIdentityService> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SharpCoreDbIdentityService>.Instance;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _isInitialized;
 
     /// <summary>
@@ -37,33 +38,46 @@ public sealed class SharpCoreDbIdentityService(
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         ValidatePassword(password);
 
-        var normalizedUserName = _options.Normalize(user.UserName);
-        var normalizedEmail = string.IsNullOrWhiteSpace(user.Email) ? null : _options.Normalize(user.Email);
-
-        if (await FindByNameAsync(user.UserName, cancellationToken).ConfigureAwait(false) is not null)
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            throw new InvalidOperationException($"User '{user.UserName}' already exists.");
-        }
+            var normalizedUserName = SharpCoreIdentityOptions.Normalize(user.UserName);
+            var normalizedEmail = string.IsNullOrWhiteSpace(user.Email) ? null : SharpCoreIdentityOptions.Normalize(user.Email);
 
-        if (normalizedEmail is not null && await FindByEmailAsync(user.Email!, cancellationToken).ConfigureAwait(false) is not null)
+            var existingByName = await QueryAsync($"SELECT Id FROM {_options.UsersTableName} WHERE NormalizedUserName = {SqlString(normalizedUserName)}", cancellationToken).ConfigureAwait(false);
+            if (existingByName.Count > 0)
+            {
+                throw new InvalidOperationException($"User '{user.UserName}' already exists.");
+            }
+
+            if (normalizedEmail is not null)
+            {
+                var existingByEmail = await QueryAsync($"SELECT Id FROM {_options.UsersTableName} WHERE NormalizedEmail = {SqlString(normalizedEmail)}", cancellationToken).ConfigureAwait(false);
+                if (existingByEmail.Count > 0)
+                {
+                    throw new InvalidOperationException($"Email '{user.Email}' is already in use.");
+                }
+            }
+
+            user.Id = user.Id == Guid.Empty ? Guid.NewGuid() : user.Id;
+            user.NormalizedUserName = normalizedUserName;
+            user.NormalizedEmail = normalizedEmail;
+            user.PasswordHash = _passwordHasher.HashPassword(password);
+            user.SecurityStamp = string.IsNullOrWhiteSpace(user.SecurityStamp) ? Guid.NewGuid().ToString("N") : user.SecurityStamp;
+            user.ConcurrencyStamp = Guid.NewGuid().ToString("N");
+            user.LockoutEnabled = _options.Lockout.AllowedForNewUsers && user.LockoutEnabled;
+
+            var sql = $"INSERT INTO {_options.UsersTableName} (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount, FullName, BirthDate, IsActive) VALUES ({SqlString(user.Id.ToString("D"))}, {SqlString(user.UserName)}, {SqlString(user.NormalizedUserName)}, {SqlString(user.Email)}, {SqlString(user.NormalizedEmail)}, {SqlBool(user.EmailConfirmed)}, {SqlString(user.PasswordHash)}, {SqlString(user.SecurityStamp)}, {SqlString(user.ConcurrencyStamp)}, {SqlString(user.PhoneNumber)}, {SqlBool(user.PhoneNumberConfirmed)}, {SqlBool(user.TwoFactorEnabled)}, {SqlString(user.LockoutEnd?.ToString("O"))}, {SqlBool(user.LockoutEnabled)}, {user.AccessFailedCount}, {SqlString(user.FullName)}, {SqlString(user.BirthDate?.ToString("O"))}, {SqlBool(user.IsActive)})";
+
+            await _database.ExecuteSQLAsync(sql, cancellationToken).ConfigureAwait(false);
+            _database.Flush();
+
+            return user;
+        }
+        finally
         {
-            throw new InvalidOperationException($"Email '{user.Email}' is already in use.");
+            _writeGate.Release();
         }
-
-        user.Id = user.Id == Guid.Empty ? Guid.NewGuid() : user.Id;
-        user.NormalizedUserName = normalizedUserName;
-        user.NormalizedEmail = normalizedEmail;
-        user.PasswordHash = _passwordHasher.HashPassword(password);
-        user.SecurityStamp = string.IsNullOrWhiteSpace(user.SecurityStamp) ? Guid.NewGuid().ToString("N") : user.SecurityStamp;
-        user.ConcurrencyStamp = Guid.NewGuid().ToString("N");
-        user.LockoutEnabled = user.LockoutEnabled || _options.Lockout.AllowedForNewUsers;
-
-        var sql = $"INSERT INTO {_options.UsersTableName} (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount, FullName, BirthDate, IsActive) VALUES ({SqlString(user.Id.ToString("D"))}, {SqlString(user.UserName)}, {SqlString(user.NormalizedUserName)}, {SqlString(user.Email)}, {SqlString(user.NormalizedEmail)}, {SqlBool(user.EmailConfirmed)}, {SqlString(user.PasswordHash)}, {SqlString(user.SecurityStamp)}, {SqlString(user.ConcurrencyStamp)}, {SqlString(user.PhoneNumber)}, {SqlBool(user.PhoneNumberConfirmed)}, {SqlBool(user.TwoFactorEnabled)}, {SqlString(user.LockoutEnd?.ToString("O"))}, {SqlBool(user.LockoutEnabled)}, {user.AccessFailedCount}, {SqlString(user.FullName)}, {SqlString(user.BirthDate?.ToString("O"))}, {SqlBool(user.IsActive)})";
-
-        await _database.ExecuteSQLAsync(sql, cancellationToken).ConfigureAwait(false);
-        _database.Flush();
-
-        return user;
     }
 
     /// <summary>
@@ -89,7 +103,7 @@ public sealed class SharpCoreDbIdentityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-        var normalizedUserName = _options.Normalize(userName);
+        var normalizedUserName = SharpCoreIdentityOptions.Normalize(userName);
         var rows = await QueryAsync($"SELECT * FROM {_options.UsersTableName} WHERE NormalizedUserName = {SqlString(normalizedUserName)}", cancellationToken).ConfigureAwait(false);
         return rows.Count == 0 ? null : MapUser(rows[0]);
     }
@@ -102,7 +116,7 @@ public sealed class SharpCoreDbIdentityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-        var normalizedEmail = _options.Normalize(email);
+        var normalizedEmail = SharpCoreIdentityOptions.Normalize(email);
         var rows = await QueryAsync($"SELECT * FROM {_options.UsersTableName} WHERE NormalizedEmail = {SqlString(normalizedEmail)}", cancellationToken).ConfigureAwait(false);
         return rows.Count == 0 ? null : MapUser(rows[0]);
     }
@@ -142,6 +156,7 @@ public sealed class SharpCoreDbIdentityService(
 
         await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET PasswordHash = {SqlString(user.PasswordHash)}, SecurityStamp = {SqlString(user.SecurityStamp)}, ConcurrencyStamp = {SqlString(user.ConcurrencyStamp)} WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
         _database.Flush();
+        _database.ForceSave();
         return true;
     }
 
@@ -158,21 +173,30 @@ public sealed class SharpCoreDbIdentityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(roleName);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        var normalizedRoleName = _options.Normalize(roleName);
-        var roleRows = await QueryAsync($"SELECT * FROM {_options.RolesTableName} WHERE NormalizedName = {SqlString(normalizedRoleName)}", cancellationToken).ConfigureAwait(false);
-
-        var role = roleRows.Count == 0
-            ? await CreateRoleAsync(roleName, normalizedRoleName, cancellationToken).ConfigureAwait(false)
-            : MapRole(roleRows[0]);
-
-        var assignment = await QueryAsync($"SELECT * FROM {_options.UserRolesTableName} WHERE UserId = {SqlString(userId.ToString("D"))} AND RoleId = {SqlString(role.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
-        if (assignment.Count > 0)
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return;
-        }
+            var normalizedRoleName = SharpCoreIdentityOptions.Normalize(roleName);
+            var roleRows = await QueryAsync($"SELECT * FROM {_options.RolesTableName} WHERE NormalizedName = {SqlString(normalizedRoleName)}", cancellationToken).ConfigureAwait(false);
 
-        await _database.ExecuteSQLAsync($"INSERT INTO {_options.UserRolesTableName} (UserId, RoleId) VALUES ({SqlString(userId.ToString("D"))}, {SqlString(role.Id.ToString("D"))})", cancellationToken).ConfigureAwait(false);
-        _database.Flush();
+            var role = roleRows.Count == 0
+                ? await CreateRoleAsync(roleName, normalizedRoleName, cancellationToken).ConfigureAwait(false)
+                : MapRole(roleRows[0]);
+
+            var assignment = await QueryAsync($"SELECT * FROM {_options.UserRolesTableName} WHERE UserId = {SqlString(userId.ToString("D"))} AND RoleId = {SqlString(role.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
+            if (assignment.Count > 0)
+            {
+                return;
+            }
+
+            var userRoleId = Ulid.NewUlid().ToString();
+            await _database.ExecuteSQLAsync($"INSERT INTO {_options.UserRolesTableName} (Id, UserId, RoleId) VALUES ({SqlString(userRoleId)}, {SqlString(userId.ToString("D"))}, {SqlString(role.Id.ToString("D"))})", cancellationToken).ConfigureAwait(false);
+            _database.Flush();
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     /// <summary>
@@ -188,7 +212,7 @@ public sealed class SharpCoreDbIdentityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(roleName);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        var normalizedRoleName = _options.Normalize(roleName);
+        var normalizedRoleName = SharpCoreIdentityOptions.Normalize(roleName);
         var roleRows = await QueryAsync($"SELECT * FROM {_options.RolesTableName} WHERE NormalizedName = {SqlString(normalizedRoleName)}", cancellationToken).ConfigureAwait(false);
         if (roleRows.Count == 0)
         {
@@ -317,6 +341,7 @@ public sealed class SharpCoreDbIdentityService(
 
         await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET PasswordHash = {SqlString(user.PasswordHash)}, SecurityStamp = {SqlString(user.SecurityStamp)}, ConcurrencyStamp = {SqlString(user.ConcurrencyStamp)} WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
         _database.Flush();
+        _database.ForceSave();
         return true;
     }
 
@@ -328,47 +353,59 @@ public sealed class SharpCoreDbIdentityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
-        var user = await FindByNameAsync(userName, cancellationToken).ConfigureAwait(false);
-        if (user is null)
-        {
-            return SharpCoreSignInResult.Failed;
-        }
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!user.IsActive)
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return SharpCoreSignInResult.NotAllowed;
-        }
+            var normalizedUserName = SharpCoreIdentityOptions.Normalize(userName);
+            var userRows = await QueryAsync($"SELECT * FROM {_options.UsersTableName} WHERE NormalizedUserName = {SqlString(normalizedUserName)}", cancellationToken).ConfigureAwait(false);
+            if (userRows.Count == 0)
+            {
+                return SharpCoreSignInResult.Failed;
+            }
 
-        var now = DateTimeOffset.UtcNow;
-        if (user.LockoutEnabled && user.LockoutEnd is not null && user.LockoutEnd > now)
-        {
-            return SharpCoreSignInResult.LockedOut;
-        }
+            var user = MapUser(userRows[0]);
+            if (!user.IsActive)
+            {
+                return SharpCoreSignInResult.NotAllowed;
+            }
 
-        if (_passwordHasher.VerifyHashedPassword(user.PasswordHash, password))
-        {
-            await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET AccessFailedCount = 0, LockoutEnd = NULL WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
+            var now = DateTimeOffset.UtcNow;
+            if (user.LockoutEnabled && user.LockoutEnd is not null && user.LockoutEnd > now)
+            {
+                return SharpCoreSignInResult.LockedOut;
+            }
+
+            if (_passwordHasher.VerifyHashedPassword(user.PasswordHash, password))
+            {
+                await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET AccessFailedCount = 0, LockoutEnd = NULL WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
+                _database.Flush();
+                return user.EmailConfirmed ? SharpCoreSignInResult.Success : SharpCoreSignInResult.NotAllowed;
+            }
+
+            if (!lockoutOnFailure || !user.LockoutEnabled)
+            {
+                return SharpCoreSignInResult.Failed;
+            }
+
+            var failedCount = user.AccessFailedCount + 1;
+            DateTimeOffset? lockoutEnd = null;
+            if (failedCount >= _options.Lockout.MaxFailedAccessAttempts)
+            {
+                lockoutEnd = now + _options.Lockout.DefaultLockoutTimeSpan;
+                failedCount = 0;
+            }
+
+            await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET AccessFailedCount = {failedCount}, LockoutEnd = {SqlString(lockoutEnd?.ToString("O"))} WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
             _database.Flush();
-            return user.EmailConfirmed ? SharpCoreSignInResult.Success : SharpCoreSignInResult.NotAllowed;
-        }
 
-        if (!lockoutOnFailure || !user.LockoutEnabled)
+            return lockoutEnd is null ? SharpCoreSignInResult.Failed : SharpCoreSignInResult.LockedOut;
+        }
+        finally
         {
-            return SharpCoreSignInResult.Failed;
+            _writeGate.Release();
         }
-
-        var failedCount = user.AccessFailedCount + 1;
-        DateTimeOffset? lockoutEnd = null;
-        if (failedCount >= _options.Lockout.MaxFailedAccessAttempts)
-        {
-            lockoutEnd = now + _options.Lockout.DefaultLockoutTimeSpan;
-            failedCount = 0;
-        }
-
-        await _database.ExecuteSQLAsync($"UPDATE {_options.UsersTableName} SET AccessFailedCount = {failedCount}, LockoutEnd = {SqlString(lockoutEnd?.ToString("O"))} WHERE Id = {SqlString(user.Id.ToString("D"))}", cancellationToken).ConfigureAwait(false);
-        _database.Flush();
-
-        return lockoutEnd is null ? SharpCoreSignInResult.Failed : SharpCoreSignInResult.LockedOut;
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 public sealed class SharpCoreIdentityOptions
 {
     /// <summary>Gets or sets password policy options.</summary>
-    public SharpCorePasswordOptions Password { get; set; } = new();
+    public SharpCorePasswordOptions Password { get; set; } = new() { RequiredLength = 14 };
 
     /// <summary>Gets or sets lockout policy options.</summary>
     public SharpCoreLockoutOptions Lockout { get; set; } = new();
@@ -17,27 +17,27 @@ public sealed class SharpCoreIdentityOptions
     public SharpCoreTokenOptions Tokens { get; set; } = new();
 
     /// <summary>Gets or sets the users table name.</summary>
-    public string UsersTableName { get; set; } = "sc_identity_users";
+    public string UsersTableName { get; set; } = "Users";
 
     /// <summary>Gets or sets the roles table name.</summary>
-    public string RolesTableName { get; set; } = "sc_identity_roles";
+    public string RolesTableName { get; set; } = "Roles";
 
     /// <summary>Gets or sets the user roles table name.</summary>
-    public string UserRolesTableName { get; set; } = "sc_identity_user_roles";
+    public string UserRolesTableName { get; set; } = "UserRoles";
 
     /// <summary>Gets or sets the user claims table name.</summary>
-    public string UserClaimsTableName { get; set; } = "sc_identity_user_claims";
+    public string UserClaimsTableName { get; set; } = "UserClaims";
 
     /// <summary>Gets or sets the user logins table name.</summary>
-    public string UserLoginsTableName { get; set; } = "sc_identity_user_logins";
+    public string UserLoginsTableName { get; set; } = "UserLogins";
 
     /// <summary>Gets or sets the role claims table name.</summary>
-    public string RoleClaimsTableName { get; set; } = "sc_identity_role_claims";
+    public string RoleClaimsTableName { get; set; } = "RoleClaims";
 
     /// <summary>
     /// Normalizes names and emails for unique lookup consistency.
     /// </summary>
-    public string Normalize(string value) => value.Trim().ToUpperInvariant();
+    public static  string Normalize(string value) => value.Trim().ToUpperInvariant();
 }
 
 /// <summary>
@@ -46,7 +46,7 @@ public sealed class SharpCoreIdentityOptions
 public sealed class SharpCorePasswordOptions
 {
     /// <summary>Gets or sets the required password length.</summary>
-    public int RequiredLength { get; set; } = 8;
+    public int RequiredLength { get; set; } = 14;
 
     /// <summary>Gets or sets whether non-alphanumeric chars are required.</summary>
     public bool RequireNonAlphanumeric { get; set; } = true;

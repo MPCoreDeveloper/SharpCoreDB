@@ -119,6 +119,12 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             if (node.IsLeaf)
             {
                 int insertPos = FindInsertIndex(node, key);
+                if (insertPos < node.keysCount && CompareKeys(key, node.keysArray[insertPos]) == 0)
+                {
+                    node.valuesArray[insertPos] = value;
+                    return;
+                }
+
                 InsertKeyValue(node, insertPos, key, value);
                 return;
             }

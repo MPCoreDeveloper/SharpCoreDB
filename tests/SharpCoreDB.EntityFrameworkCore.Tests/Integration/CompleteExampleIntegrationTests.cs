@@ -18,12 +18,14 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
     private readonly string _dbPath;
     private readonly string _guidDbPath;
     private readonly string _companyDbPath;
+    private readonly string _compositeDbPath;
 
     public CompleteExampleIntegrationTests()
     {
         _dbPath = $"./test_blog_{Guid.NewGuid():N}.scdb";
         _guidDbPath = $"./test_guid_{Guid.NewGuid():N}.scdb";
         _companyDbPath = $"./test_company_{Guid.NewGuid():N}.scdb";
+        _compositeDbPath = $"./test_composite_{Guid.NewGuid():N}.scdb";
 
         var services = new ServiceCollection();
         services.AddDbContext<TestBlogDbContext>(options =>
@@ -35,6 +37,9 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
         services.AddDbContext<TestCompanyVacancyDbContext>(options =>
             options.UseSharpCoreDB($"Data Source={_companyDbPath};Password=TestPassword123;Cache=Shared")
                    .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
+        services.AddDbContext<TestCompositeDbContext>(options =>
+            options.UseSharpCoreDB($"Data Source={_compositeDbPath};Password=TestPassword123;Cache=Shared")
+                   .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
 
         _serviceProvider = services.BuildServiceProvider();
     }
@@ -42,7 +47,7 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
     public void Dispose()
     {
         (_serviceProvider as IDisposable)?.Dispose();
-        foreach (var path in new[] { _dbPath, _guidDbPath, _companyDbPath })
+        foreach (var path in new[] { _dbPath, _guidDbPath, _companyDbPath, _compositeDbPath })
         {
             try
             {
@@ -58,6 +63,9 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
 
     private TestCompanyVacancyDbContext CreateCompanyContext() =>
         _serviceProvider.GetRequiredService<TestCompanyVacancyDbContext>();
+
+    private TestCompositeDbContext CreateCompositeContext() =>
+        _serviceProvider.GetRequiredService<TestCompositeDbContext>();
 
     // -------------------------------------------------------------------------
     // Basic CRUD
@@ -530,36 +538,63 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
     [Fact]
     public async Task GuidKeys_IdealIncludeAndAnyPattern_NowWorks()
     {
-        // NOTE: The exact one-liner Include + server-side .Any() over a Guid-keyed collection
-        // navigation is still limited in the current EF Core provider (split materialization +
-        // column ordinal / alias handling for child readers). This test verifies the *desired
-        // public semantics* using the reliable two-query pattern that the rest of the
-        // CompanyVacancyRepository and other tests rely on.
         using var context = CreateCompanyContext();
         await context.Database.EnsureCreatedAsync();
 
-        var company = new TestCompany { Id = Guid.NewGuid(), Name = "Fixed Corp" };
-        context.Companies.Add(company);
+        var companyWithActive = new TestCompany { Id = Guid.NewGuid(), Name = "Fixed Corp" };
+        var companyWithoutActive = new TestCompany { Id = Guid.NewGuid(), Name = "Inactive Corp" };
 
+        context.Companies.AddRange(companyWithActive, companyWithoutActive);
         context.Vacancies.AddRange(
-            new TestVacancy { Id = Guid.NewGuid(), Title = "Active", IsActive = true,  CompanyId = company.Id },
-            new TestVacancy { Id = Guid.NewGuid(), Title = "Inactive", IsActive = false, CompanyId = company.Id }
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Active", IsActive = true, CompanyId = companyWithActive.Id },
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Inactive", IsActive = false, CompanyId = companyWithActive.Id },
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Only Inactive", IsActive = false, CompanyId = companyWithoutActive.Id }
         );
 
         await context.SaveChangesAsync();
 
-        // Reliable equivalent that delivers the same contract today
-        var companies = await context.Companies.AsNoTracking().ToListAsync();
-        var allVacancies = await context.Vacancies.AsNoTracking().ToListAsync();
-
-        var byCompany = allVacancies.GroupBy(v => v.CompanyId).ToDictionary(g => g.Key, g => g.ToList());
-        foreach (var c in companies)
-            c.Vacancies = byCompany.TryGetValue(c.Id, out var l) ? l : [];
-
-        var result = companies.Where(c => c.Vacancies.Any(v => v.IsActive)).ToList();
+        var result = await context.Companies
+            .AsNoTracking()
+            .Include(x => x.Vacancies)
+            .Where(x => x.Vacancies.Any(v => v.IsActive))
+            .OrderBy(x => x.Name)
+            .ToListAsync();
 
         Assert.Single(result);
         Assert.Equal("Fixed Corp", result[0].Name);
+        Assert.Equal(2, result[0].Vacancies.Count);
+        Assert.Single(result[0].Vacancies.Where(v => v.IsActive));
+    }
+
+    [Fact]
+    public async Task GuidKeys_IdealIncludeAndAnyPattern_AsSplitQuery_NowWorks()
+    {
+        using var context = CreateCompanyContext();
+        await context.Database.EnsureCreatedAsync();
+
+        var companyWithActive = new TestCompany { Id = Guid.NewGuid(), Name = "Split Active Corp" };
+        var companyWithoutActive = new TestCompany { Id = Guid.NewGuid(), Name = "Split Inactive Corp" };
+
+        context.Companies.AddRange(companyWithActive, companyWithoutActive);
+        context.Vacancies.AddRange(
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Split Active", IsActive = true, CompanyId = companyWithActive.Id },
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Split Inactive", IsActive = false, CompanyId = companyWithActive.Id },
+            new TestVacancy { Id = Guid.NewGuid(), Title = "Split Only Inactive", IsActive = false, CompanyId = companyWithoutActive.Id }
+        );
+
+        await context.SaveChangesAsync();
+
+        var result = await context.Companies
+            .AsNoTracking()
+            .Include(x => x.Vacancies)
+            .AsSplitQuery()
+            .Where(x => x.Vacancies.Any(v => v.IsActive))
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        Assert.Single(result);
+        Assert.Equal("Split Active Corp", result[0].Name);
+        Assert.Equal(2, result[0].Vacancies.Count);
         Assert.Single(result[0].Vacancies.Where(v => v.IsActive));
     }
 
@@ -828,19 +863,79 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
         context.Companies.AddRange(c1, c2);
         await context.SaveChangesAsync();
 
-        // Ideal client-side pattern (Include + in-memory filter)
-        var allWithIncludes = await context.Companies
-            .Include(x => x.Vacancies)
+        // Ideal server-side filter pattern with Include
+        var activeOnly = await context.Companies
             .AsNoTracking()
+            .Include(x => x.Vacancies)
+            .Where(x => x.Vacancies.Any(v => v.IsActive))
             .OrderBy(x => x.Name)
             .ToListAsync();
 
-        var activeOnly = allWithIncludes
-            .Where(x => x.Vacancies.Any(v => v.IsActive))
-            .ToList();
-
         Assert.Equal(2, activeOnly.Count);
         Assert.All(activeOnly, c => Assert.True(c.Vacancies.Any(v => v.IsActive)));
+    }
+
+    [Fact]
+    public async Task CompositeKey_IncludeAndNavigationFilter_ShouldReturnMatchingParents()
+    {
+        using var context = CreateCompositeContext();
+        await context.Database.EnsureCreatedAsync();
+
+        var order1 = new TestOrder { TenantId = 1, OrderNumber = "ORD-001", Name = "Order 1" };
+        var order2 = new TestOrder { TenantId = 1, OrderNumber = "ORD-002", Name = "Order 2" };
+
+        context.Orders.AddRange(order1, order2);
+        context.OrderLines.AddRange(
+            new TestOrderLine { TenantId = 1, OrderNumber = "ORD-001", LineNumber = 1, IsActive = true, Product = "P1" },
+            new TestOrderLine { TenantId = 1, OrderNumber = "ORD-001", LineNumber = 2, IsActive = false, Product = "P2" },
+            new TestOrderLine { TenantId = 1, OrderNumber = "ORD-002", LineNumber = 1, IsActive = false, Product = "P3" }
+        );
+
+        await context.SaveChangesAsync();
+
+        var result = await context.Orders
+            .AsNoTracking()
+            .Include(x => x.Lines)
+            .Where(x => x.Lines.Any(l => l.IsActive))
+            .OrderBy(x => x.OrderNumber)
+            .ToListAsync();
+
+        Assert.Single(result);
+        Assert.Equal("ORD-001", result[0].OrderNumber);
+        Assert.Equal(2, result[0].Lines.Count);
+        Assert.Single(result[0].Lines.Where(l => l.IsActive));
+    }
+
+    [Fact]
+    public async Task CompositeKey_IncludeAndNavigationFilter_AsSplitQuery_ShouldReturnMatchingParents()
+    {
+        using var context = CreateCompositeContext();
+        await context.Database.EnsureCreatedAsync();
+
+        var order1 = new TestOrder { TenantId = 2, OrderNumber = "SPL-001", Name = "Split Order 1" };
+        var order2 = new TestOrder { TenantId = 2, OrderNumber = "SPL-002", Name = "Split Order 2" };
+
+        context.Orders.AddRange(order1, order2);
+        context.OrderLines.AddRange(
+            new TestOrderLine { TenantId = 2, OrderNumber = "SPL-001", LineNumber = 1, IsActive = true, Product = "SP1" },
+            new TestOrderLine { TenantId = 2, OrderNumber = "SPL-001", LineNumber = 2, IsActive = false, Product = "SP2" },
+            new TestOrderLine { TenantId = 2, OrderNumber = "SPL-002", LineNumber = 1, IsActive = false, Product = "SP3" }
+        );
+
+        await context.SaveChangesAsync();
+
+        var result = await context.Orders
+            .AsNoTracking()
+            .Include(x => x.Lines)
+            .AsSplitQuery()
+            .Where(x => x.Lines.Any(l => l.IsActive))
+            .OrderBy(x => x.OrderNumber)
+            .ToListAsync();
+
+        Assert.Single(result);
+        Assert.Equal("SPL-001", result[0].OrderNumber);
+        Assert.Equal(2, result[0].Lines.Count);
+        Assert.Single(result[0].Lines.Where(l => l.IsActive));
     }
 }
 
@@ -1021,6 +1116,69 @@ public class TestCompanyVacancyDbContext(DbContextOptions<TestCompanyVacancyDbCo
             // Force Guid -> string for reliable INSERT/UPDATE of FK and PK
             entity.Property(e => e.Id).HasConversion<string>();
             entity.Property(e => e.CompanyId).HasConversion<string>();
+        });
+    }
+}
+
+public class TestOrder
+{
+    public int TenantId { get; set; }
+
+    [Required, MaxLength(64)]
+    public string OrderNumber { get; set; } = string.Empty;
+
+    [Required, MaxLength(200)]
+    public string Name { get; set; } = string.Empty;
+
+    public ICollection<TestOrderLine> Lines { get; set; } = [];
+}
+
+public class TestOrderLine
+{
+    public int TenantId { get; set; }
+
+    [Required, MaxLength(64)]
+    public string OrderNumber { get; set; } = string.Empty;
+
+    public int LineNumber { get; set; }
+
+    [Required, MaxLength(200)]
+    public string Product { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; }
+
+    public TestOrder? Order { get; set; }
+}
+
+public class TestCompositeDbContext(DbContextOptions<TestCompositeDbContext> options) : DbContext(options)
+{
+    public DbSet<TestOrder> Orders => Set<TestOrder>();
+    public DbSet<TestOrderLine> OrderLines => Set<TestOrderLine>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<TestOrder>(entity =>
+        {
+            entity.ToTable("Orders");
+            entity.HasKey(e => new { e.TenantId, e.OrderNumber });
+            entity.Property(e => e.OrderNumber).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+
+            entity.HasMany(e => e.Lines)
+                .WithOne(e => e.Order)
+                .HasForeignKey(e => new { e.TenantId, e.OrderNumber })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TestOrderLine>(entity =>
+        {
+            entity.ToTable("OrderLines");
+            entity.HasKey(e => new { e.TenantId, e.OrderNumber, e.LineNumber });
+            entity.Property(e => e.OrderNumber).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Product).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.IsActive).HasColumnType("INTEGER");
         });
     }
 }

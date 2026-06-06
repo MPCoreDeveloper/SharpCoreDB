@@ -1497,6 +1497,7 @@ public partial class Table
                             if (this.PrimaryKeyIndex >= 0)
                             {
                                 var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                this.Index.Delete(pkVal);
                                 this.Index.Insert(pkVal, newPosition);
                             }
 

@@ -144,7 +144,7 @@ public sealed class SharpCoreCrudDatabaseService(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var normalizedAdmin = _identityOptions.Normalize("admin");
+        var normalizedAdmin = SharpCoreIdentityOptions.Normalize("admin");
         var usersTable = _identityOptions.UsersTableName;
         var existingAdmin = database.ExecuteQuery($"SELECT Id FROM {usersTable} WHERE NormalizedUserName = '{EscapeSql(normalizedAdmin)}'");
 
@@ -153,12 +153,12 @@ public sealed class SharpCoreCrudDatabaseService(
             return;
         }
 
-        var passwordHash = _passwordHasher.HashPassword("Admin123!");
+        var passwordHash = _passwordHasher.HashPassword("AdminPassword123!");
         var userId = Guid.NewGuid();
         var securityStamp = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
         var concurrencyStamp = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
 
-        var statement = $"INSERT INTO {usersTable} (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount, FullName, BirthDate, IsActive) VALUES ('{userId:D}', 'admin', '{EscapeSql(normalizedAdmin)}', 'admin@localhost', '{EscapeSql(_identityOptions.Normalize("admin@localhost"))}', 1, '{EscapeSql(passwordHash)}', '{securityStamp}', '{concurrencyStamp}', NULL, 0, 0, NULL, 1, 0, 'System Administrator', '2000-01-01', 1)";
+        var statement = $"INSERT INTO {usersTable} (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash, SecurityStamp, ConcurrencyStamp, PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount, FullName, BirthDate, IsActive) VALUES ('{userId:D}', 'admin', '{EscapeSql(normalizedAdmin)}', 'admin@localhost', '{EscapeSql(SharpCoreIdentityOptions.Normalize("admin@localhost"))}', 1, '{EscapeSql(passwordHash)}', '{securityStamp}', '{concurrencyStamp}', NULL, 0, 0, NULL, 1, 0, 'System Administrator', '2000-01-01', 1)";
 
         await database.ExecuteBatchSQLAsync([statement], cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Seeded development admin user with username 'admin'.");
