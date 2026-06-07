@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v1.9.1`)
+**Status:** Active documentation set (`v1.9.2`)
 
 ## 1. Project Entry Points
 

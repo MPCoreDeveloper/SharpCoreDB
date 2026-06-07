@@ -1127,7 +1127,7 @@ public partial class SqlParser
     {
         // Parse column expressions
         var columns = selectClause.Split(',');
-        var projections = new List<(string sourceExpr, string outputName)>();
+        var projections = new List<(string sourceExpr, string bareName, string? qualifier, string? explicitAlias)>();
 
         foreach (var col in columns)
         {
@@ -1142,30 +1142,52 @@ public partial class SqlParser
             {
                 var expr = asMatch.Groups[1].Value.Trim();
                 var alias = asMatch.Groups[2].Value.Trim();
-                projections.Add((expr, alias));
+                var qualifier = expr.Contains('.', StringComparison.Ordinal)
+                    ? expr[..expr.LastIndexOf('.')].Trim('`', '"', '[', ']')
+                    : null;
+                projections.Add((
+                    sourceExpr: expr,
+                    bareName: ExtractBareColumn(expr),
+                    qualifier,
+                    explicitAlias: alias));
             }
             else
             {
-                // No alias:
-                // - Keep qualified column names (o.Id, o1.Id) to preserve ordinals for
-                //   EF include materialization with duplicate key names.
-                // - For unqualified expressions, keep the bare column name.
-                var outputName = trimmed.Contains('.', StringComparison.Ordinal)
-                    ? trimmed.Trim('`', '"', '[', ']')
-                    : ExtractBareColumn(trimmed);
-                projections.Add((trimmed, outputName));
+                // SQL-compatible default: unaliased column expressions project to bare column name.
+                // Example: SELECT c.name => output key "name".
+                var qualifier = trimmed.Contains('.', StringComparison.Ordinal)
+                    ? trimmed[..trimmed.LastIndexOf('.')].Trim('`', '"', '[', ']')
+                    : null;
+                projections.Add((
+                    sourceExpr: trimmed,
+                    bareName: ExtractBareColumn(trimmed),
+                    qualifier,
+                    explicitAlias: null));
             }
         }
+
+        ProjectionKeyNameNormalizer.ThrowIfExplicitAliasCollisions(
+            projections.Select(static p => p.explicitAlias));
+
+        var outputNameCounts = ProjectionKeyNameNormalizer.BuildDuplicateCounts(
+            projections.Where(static p => string.IsNullOrWhiteSpace(p.explicitAlias)).Select(static p => p.bareName));
 
         var result = new List<Dictionary<string, object>>(rows.Count);
         foreach (var row in rows)
         {
             var projected = new Dictionary<string, object>(projections.Count, StringComparer.OrdinalIgnoreCase);
-            foreach (var (sourceExpr, outputName) in projections)
+            foreach (var (sourceExpr, bareName, qualifier, explicitAlias) in projections)
             {
+                var outputName = ProjectionKeyNameNormalizer.ResolveOutputName(
+                    bareName,
+                    qualifier,
+                    explicitAlias,
+                    outputNameCounts);
+
                 var val = FindValue(row, sourceExpr);
                 projected[outputName] = val ?? DBNull.Value;
             }
+
             result.Add(projected);
         }
 
@@ -1270,9 +1292,12 @@ public partial class SqlParser
         if (row.TryGetValue(key, out var v))
             return v;
 
-        // Try bare column name
+        var dotIndex = key.LastIndexOf('.');
+        var isQualifiedKey = dotIndex > 0;
+
+        // Try bare column name only for unqualified lookups.
         var bare = ExtractBareColumn(key);
-        if (row.TryGetValue(bare, out v))
+        if (!isQualifiedKey && row.TryGetValue(bare, out v))
             return v;
 
         // Try all keys ending with .col and pick best candidate.
@@ -1283,11 +1308,11 @@ public partial class SqlParser
         if (suffixMatches.Count == 0)
             return null;
 
-        // If caller requested a qualified key (alias.col), prefer candidates that
-        // use the same qualifier; otherwise prefer the last match to avoid always
-        // taking the left table's duplicate key in JOIN projections.
-        var dotIndex = key.LastIndexOf('.');
-        if (dotIndex > 0)
+        // If caller requested a qualified key (alias.col), only accept a match
+        // with the same qualifier. Do NOT fall back to another alias' column with
+        // the same bare name (e.g. c0.Id for requested v.Id), which creates phantom
+        // child rows for LEFT JOIN include materialization.
+        if (isQualifiedKey)
         {
             var requestedQualifier = key[..dotIndex].Trim('`', '"', '[', ']');
             for (var i = suffixMatches.Count - 1; i >= 0; i--)
@@ -1301,6 +1326,8 @@ public partial class SqlParser
                         return suffixMatches[i].Value;
                 }
             }
+
+            return null;
         }
 
         return suffixMatches[^1].Value;
@@ -1765,6 +1792,82 @@ public partial class SqlParser
     }
 }
 
+internal static class ProjectionKeyNameNormalizer
+{
+    internal static IReadOnlyDictionary<string, int> BuildDuplicateCounts(IEnumerable<string> names)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in names)
+        {
+            var normalized = NormalizeIdentifier(name);
+            if (normalized.Length == 0)
+            {
+                continue;
+            }
+
+            counts[normalized] = counts.TryGetValue(normalized, out var existing)
+                ? existing + 1
+                : 1;
+        }
+
+        return counts;
+    }
+
+    internal static void ThrowIfExplicitAliasCollisions(IEnumerable<string?> explicitAliases)
+    {
+        var collisions = explicitAliases
+            .Where(alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(NormalizeIdentifier)
+            .Where(normalized => normalized.Length > 0)
+            .GroupBy(normalized => normalized, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        if (collisions.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate explicit column alias(es) detected: {string.Join(", ", collisions)}. " +
+                "Each projected column alias must be unique.");
+        }
+    }
+
+    internal static string ResolveOutputName(
+        string baseName,
+        string? qualifier,
+        string? explicitAlias,
+        IReadOnlyDictionary<string, int> duplicateCounts)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitAlias))
+        {
+            return NormalizeIdentifier(explicitAlias);
+        }
+
+        var normalizedBaseName = NormalizeIdentifier(baseName);
+        var normalizedQualifier = NormalizeIdentifier(qualifier);
+
+        if (duplicateCounts.TryGetValue(normalizedBaseName, out var count)
+            && count > 1
+            && normalizedQualifier.Length > 0)
+        {
+            return $"{normalizedQualifier}.{normalizedBaseName}";
+        }
+
+        return normalizedBaseName;
+    }
+
+    internal static string NormalizeIdentifier(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return string.Empty;
+        }
+
+        return identifier.Trim().Trim('`', '"', '[', ']');
+    }
+}
+
 /// <summary>
 /// AST Executor - executes SQL AST nodes via the visitor pattern.
 /// Provides integration between the parser and the query engine.
@@ -1883,9 +1986,20 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                 return rows;
             }
 
-            return [.. rows.Select(row => row.ToDictionary(
-                static kv => kv.Key.Contains('.') ? kv.Key : kv.Key,
-                static kv => kv.Value))];
+            return [.. rows.Select(row =>
+            {
+                var qualified = new Dictionary<string, object>(row.Count * 2, StringComparer.OrdinalIgnoreCase);
+                foreach (var (key, value) in row)
+                {
+                    var dot = key.LastIndexOf('.');
+                    var bare = dot >= 0 && dot < key.Length - 1 ? key[(dot + 1)..] : key;
+                    bare = bare.Trim('`', '"', '[', ']');
+                    qualified[$"{alias}.{bare}"] = value;
+                    qualified[bare] = value;
+                }
+
+                return qualified;
+            })];
         }
 
         if (!_tables.TryGetValue(from.TableName, out var table))
@@ -1927,10 +2041,15 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                 .Select(r => QualifyRow(r, rightAlias, rightTableName))
                 .ToList();
 
+            // Build a null-template for unmatched LEFT/FULL join rows even when the right side
+            // has zero rows, so projection of right alias columns (e.g. v.Id) resolves to NULL
+            // instead of incorrectly falling back to left-side bare columns.
+            var rightNullTemplate = BuildQualifiedNullTemplate(rightTable, rightAlias, rightTableName);
+
             result = join.Type switch
             {
                 JoinNode.JoinType.Inner or JoinNode.JoinType.Cross => ExecuteInnerJoin(result, rightRows, join.OnCondition),
-                JoinNode.JoinType.Left => ExecuteLeftJoin(result, rightRows, join.OnCondition),
+                JoinNode.JoinType.Left => ExecuteLeftJoin(result, rightRows, join.OnCondition, rightNullTemplate),
                 JoinNode.JoinType.Right => ExecuteLeftJoin(rightRows, result, join.OnCondition),
                 JoinNode.JoinType.Full => ExecuteFullJoin(result, rightRows, join.OnCondition),
                 _ => ExecuteInnerJoin(result, rightRows, join.OnCondition),
@@ -1961,7 +2080,8 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
     private List<Dictionary<string, object>> ExecuteLeftJoin(
         List<Dictionary<string, object>> left,
         List<Dictionary<string, object>> right,
-        ExpressionNode? onCondition)
+        ExpressionNode? onCondition,
+        Dictionary<string, object>? rightNullTemplate = null)
     {
         var output = new List<Dictionary<string, object>>();
         foreach (var leftRow in left)
@@ -1981,7 +2101,9 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                 // Add left row with NULLs for right side columns
                 var nullRight = right.Count > 0
                     ? right[0].ToDictionary(kv => kv.Key, _ => (object)DBNull.Value)
-                    : new Dictionary<string, object>();
+                    : rightNullTemplate is not null
+                        ? rightNullTemplate.ToDictionary(kv => kv.Key, _ => (object)DBNull.Value)
+                        : [];
                 output.Add(MergeRows(leftRow, nullRight));
             }
         }
@@ -2037,12 +2159,32 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         return qualified;
     }
 
+    private static Dictionary<string, object> BuildQualifiedNullTemplate(ITable table, string alias, string tableName)
+    {
+        var template = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var columnName in table.Columns)
+        {
+            template[columnName] = DBNull.Value;
+            template[$"{alias}.{columnName}"] = DBNull.Value;
+            template[$"{tableName}.{columnName}"] = DBNull.Value;
+        }
+
+        return template;
+    }
+
     private List<Dictionary<string, object>> ApplyProjection(List<Dictionary<string, object>> rows, List<ColumnNode> columns)
     {
         if (columns.Count == 0 || columns.Any(static c => c.IsWildcard))
         {
             return [.. rows.Select(static row => new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase))];
         }
+
+        ProjectionKeyNameNormalizer.ThrowIfExplicitAliasCollisions(
+            columns.Select(c => c.Alias));
+
+        var outputNameCounts = ProjectionKeyNameNormalizer.BuildDuplicateCounts(
+            columns.Where(c => string.IsNullOrWhiteSpace(c.Alias)).Select(c => c.Name));
 
         var projected = new List<Dictionary<string, object>>(rows.Count);
         foreach (var row in rows)
@@ -2066,11 +2208,12 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                         : GetValue(row, column.Name);
                 }
 
-                var outputName = !string.IsNullOrWhiteSpace(column.Alias)
-                    ? column.Alias!
-                    : !string.IsNullOrWhiteSpace(column.TableAlias)
-                        ? $"{column.TableAlias}.{column.Name}"
-                        : column.Name;
+                var outputName = ProjectionKeyNameNormalizer.ResolveOutputName(
+                    column.Name,
+                    column.TableAlias,
+                    column.Alias,
+                    outputNameCounts);
+
                 output[outputName] = value!;
             }
 
@@ -2086,7 +2229,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         {
             FunctionCallNode func => EvaluateFunctionCallInRow(func, row),
             LiteralNode literal => literal.Value,
-            ColumnReferenceNode column => GetValue(row, column.ColumnName),
+            ColumnReferenceNode column => GetValue(row, column),
             BinaryExpressionNode binary => EvaluateBinaryValueExpression(binary, row),
             ParameterNode parameter => ResolveParameter(parameter.ParameterName),
             _ => null
@@ -2415,12 +2558,35 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         // Most specific first: alias-qualified key.
         if (!string.IsNullOrWhiteSpace(column.TableAlias))
         {
-            var qualified = $"{column.TableAlias}.{column.ColumnName}";
+            var requestedAlias = column.TableAlias.Trim('`', '"', '[', ']');
+            var requestedColumn = column.ColumnName.Trim('`', '"', '[', ']');
+            var qualified = $"{requestedAlias}.{requestedColumn}";
+
             if (row.TryGetValue(qualified, out var qualifiedValue))
                 return qualifiedValue;
+
+            // Robust qualifier-aware fallback: allow exact alias match with normalized keys only.
+            // Do NOT fall back to bare column keys for qualified requests (prevents cross-alias bleed).
+            foreach (var (key, value) in row)
+            {
+                var dot = key.LastIndexOf('.');
+                if (dot <= 0 || dot >= key.Length - 1)
+                    continue;
+
+                var keyAlias = key[..dot].Trim('`', '"', '[', ']');
+                var keyColumn = key[(dot + 1)..].Trim('`', '"', '[', ']');
+
+                if (string.Equals(keyAlias, requestedAlias, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(keyColumn, requestedColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    return value;
+                }
+            }
+
+            return null;
         }
 
-        // Fallback to unqualified resolution.
+        // Unqualified resolution.
         return GetValue(row, column.ColumnName);
     }
 

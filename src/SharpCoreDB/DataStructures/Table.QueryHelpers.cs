@@ -45,6 +45,16 @@ public partial class Table
             if (parts.Length == 2)
             {
                 column = parts[0].Trim().Trim('"', '[', ']', '`');
+
+                // Normalize alias-qualified references (e.g., b.Url -> Url)
+                // so simple-WHERE fast paths (hash index / PK lookup) can match
+                // actual table column names.
+                var dotIdx = column.LastIndexOf('.');
+                if (dotIdx >= 0 && dotIdx < column.Length - 1)
+                {
+                    column = column[(dotIdx + 1)..].Trim('"', '[', ']', '`');
+                }
+
                 value = parts[1].Trim().Trim('\'', '"');
                 return true;
             }

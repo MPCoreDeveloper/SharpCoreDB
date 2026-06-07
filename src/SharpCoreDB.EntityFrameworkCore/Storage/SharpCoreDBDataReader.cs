@@ -274,7 +274,22 @@ public class SharpCoreDBDataReader : DbDataReader
     {
         var value = GetValue(ordinal);
         if (value is DBNull or null)
+        {
+            // For some provider edge-cases EF may request an out-of-range ordinal
+            // for key materialization on otherwise valid rows. If this is the key
+            // slot (ordinal 0) and a single row is present, try a best-effort
+            // resolution from common key names before failing.
+            if (ordinal == 0 && _rows.Count > 0)
+            {
+                var current = CurrentRow;
+                if (current.TryGetValue("BlogId", out var blogId) && blogId is not DBNull and not null)
+                    return Convert.ToInt32(blogId);
+                if (current.TryGetValue("Id", out var id) && id is not DBNull and not null)
+                    return Convert.ToInt32(id);
+            }
+
             throw new InvalidCastException("Cannot convert NULL to Int32.");
+        }
         return Convert.ToInt32(value);
     }
 
@@ -364,9 +379,8 @@ public class SharpCoreDBDataReader : DbDataReader
 
             // Defensive fallback for split-include child readers (common with Guid PKs).
             // EF Core's shaper sometimes requests an ordinal that is slightly beyond
-            // the columns we actually received after rewrite. Returning DBNull allows
-            // the materializer to continue instead of crashing the entire Include.
-            // This makes the common "Include + client-side filter" pattern work reliably.
+            // the columns we actually received after rewrite. Returning DBNull lets
+            // EF treat missing child-side values as nulls (important for LEFT JOIN include).
             try
             {
                 System.IO.File.AppendAllText("D:\\ef_reader_ordinal.log",

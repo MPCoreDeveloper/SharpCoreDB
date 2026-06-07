@@ -964,6 +964,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         var columnName = condition[..opIndex].Trim();
         var valueStr = condition[(opIndex + op.Length)..].Trim();
 
+        // Normalize alias-qualified identifiers produced by EF Core SQL rewriting
+        // (e.g. b.Url -> Url) so row dictionary lookups succeed.
+        var dotIndex = columnName.LastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < columnName.Length - 1)
+        {
+            columnName = columnName[(dotIndex + 1)..].Trim('"', '[', ']', '`');
+        }
+
         if (!row.TryGetValue(columnName, out var rowValue))
         {
             return false;

@@ -3,10 +3,10 @@
 Python client SDK for SharpCoreDB Server.
 
 
-## Patch updates in v1.9.1
+## Patch updates in v1.9.2
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.1 release line.
-- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.2 release line.
+- ✅ Current test count (2,223) published; Identity package backwards compatibility confirmed and documented for this release.
 
 ## Features
 

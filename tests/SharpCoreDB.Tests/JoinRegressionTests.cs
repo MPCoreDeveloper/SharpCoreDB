@@ -254,9 +254,167 @@ public sealed class JoinRegressionTests : IDisposable
 
         // Assert
         Assert.Single(results);
-        
+
         Assert.Equal("Alice", results[0]["name"].ToString());
         Assert.Equal("1", results[0]["order_id"].ToString());
+        Assert.Equal(100.00m, (decimal)results[0]["amount"]); // Compare decimal values directly, culture-independent
+        Assert.False(results[0].ContainsKey("p.amount"), "Did not expect qualified key 'p.amount'.");
+    }
+
+    /// <summary>
+    /// REGRESSION TEST: Unaliased qualified column should project to bare column name.
+    /// Prevents KeyNotFound on results["name"] for SELECT c.name joins.
+    /// </summary>
+    [Fact]
+    public void JoinProjection_UnaliasedQualifiedColumn_MustUseBareName()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "test123");
+        db.ExecuteSQL("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)");
+        db.ExecuteSQL("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER)");
+
+        db.ExecuteSQL("INSERT INTO customers VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO orders VALUES (10, 1)");
+
+        // Act
+        var results = db.ExecuteQuery(@"
+            SELECT c.name
+            FROM customers c
+            INNER JOIN orders o ON o.customer_id = c.id
+        ");
+
+        // Assert
+        Assert.Single(results);
+        Assert.True(results[0].ContainsKey("name"), "Expected bare key 'name'.");
+        Assert.False(results[0].ContainsKey("c.name"), "Did not expect qualified key 'c.name'.");
+        Assert.Equal("Alice", results[0]["name"].ToString());
+    }
+
+    /// <summary>
+    /// REGRESSION TEST: Duplicate unaliased column names must remain uniquely addressable.
+    /// For SELECT o.id, p.id we keep qualified keys to avoid collisions.
+    /// </summary>
+    [Fact]
+    public void JoinProjection_DuplicateUnaliasedColumns_MustRemainUnique()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "test123");
+        db.ExecuteSQL("CREATE TABLE orders (id INTEGER PRIMARY KEY)");
+        db.ExecuteSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY, order_id INTEGER)");
+
+        db.ExecuteSQL("INSERT INTO orders VALUES (1)");
+        db.ExecuteSQL("INSERT INTO payments VALUES (2, 1)");
+
+        // Act
+        var results = db.ExecuteQuery(@"
+            SELECT o.id, p.id
+            FROM orders o
+            INNER JOIN payments p ON p.order_id = o.id
+        ");
+
+        // Assert
+        Assert.Single(results);
+        Assert.True(results[0].ContainsKey("o.id"), "Expected qualified key 'o.id'.");
+        Assert.True(results[0].ContainsKey("p.id"), "Expected qualified key 'p.id'.");
+        Assert.Equal("1", results[0]["o.id"].ToString());
+        Assert.Equal("2", results[0]["p.id"].ToString());
+    }
+
+    /// <summary>
+    /// REGRESSION TEST: Parameterized JOIN path (AstExecutor) should match legacy projection naming.
+    /// Unaliased qualified columns should use bare keys; duplicate names remain qualified.
+    /// </summary>
+    [Fact]
+    public void JoinProjection_ParameterizedPath_MustMatchLegacyProjectionNames()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "test123");
+        db.ExecuteSQL("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)");
+        db.ExecuteSQL("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER)");
+        db.ExecuteSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY, order_id INTEGER)");
+
+        db.ExecuteSQL("INSERT INTO customers VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO orders VALUES (10, 1)");
+        db.ExecuteSQL("INSERT INTO payments VALUES (20, 10)");
+
+        // Act - parameters force AstExecutor route in ExecuteSelectQuery
+        var results = db.ExecuteQuery(@"
+            SELECT c.name, o.id, p.id
+            FROM customers c
+            INNER JOIN orders o ON o.customer_id = c.id
+            INNER JOIN payments p ON p.order_id = o.id
+            WHERE c.id = @id
+        ", new Dictionary<string, object?> { ["id"] = 1 });
+
+        // Assert
+        Assert.Single(results);
+
+        // Unaliased qualified unique column -> bare name
+        Assert.True(results[0].ContainsKey("name"), "Expected bare key 'name'.");
+        Assert.False(results[0].ContainsKey("c.name"), "Did not expect qualified key 'c.name'.");
+        Assert.Equal("Alice", results[0]["name"].ToString());
+
+        // Duplicate unaliased names must remain unique via qualified keys
+        Assert.True(results[0].ContainsKey("o.id"), "Expected qualified key 'o.id'.");
+        Assert.True(results[0].ContainsKey("p.id"), "Expected qualified key 'p.id'.");
+        Assert.Equal("10", results[0]["o.id"].ToString());
+        Assert.Equal("20", results[0]["p.id"].ToString());
+    }
+
+    /// <summary>
+    /// REGRESSION TEST: Explicit alias collisions must throw.
+    /// Enforces strict projection key uniqueness across both engines.
+    /// </summary>
+    [Fact]
+    public void JoinProjection_ExplicitAliasCollision_MustThrow()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "test123");
+        db.ExecuteSQL("CREATE TABLE orders (id INTEGER PRIMARY KEY)");
+        db.ExecuteSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY, order_id INTEGER)");
+
+        db.ExecuteSQL("INSERT INTO orders VALUES (10)");
+        db.ExecuteSQL("INSERT INTO payments VALUES (20, 10)");
+
+        // Act / Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => db.ExecuteQuery(@"
+            SELECT o.id AS same_key, p.id AS same_key
+            FROM orders o
+            INNER JOIN payments p ON p.order_id = o.id
+        "));
+
+        Assert.Contains("Duplicate explicit column alias", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("same_key", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// REGRESSION TEST: Parameterized JOIN path must also throw on explicit alias collisions.
+    /// Ensures AstExecutor projection enforces the same strict alias policy.
+    /// </summary>
+    [Fact]
+    public void JoinProjection_ParameterizedPath_ExplicitAliasCollision_MustThrow()
+    {
+        // Arrange
+        var db = _factory.Create(_testDbPath, "test123");
+        db.ExecuteSQL("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)");
+        db.ExecuteSQL("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER)");
+        db.ExecuteSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY, order_id INTEGER)");
+
+        db.ExecuteSQL("INSERT INTO customers VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO orders VALUES (10, 1)");
+        db.ExecuteSQL("INSERT INTO payments VALUES (20, 10)");
+
+        // Act / Assert - @id forces AstExecutor route
+        var ex = Assert.Throws<InvalidOperationException>(() => db.ExecuteQuery(@"
+            SELECT o.id AS same_key, p.id AS same_key
+            FROM customers c
+            INNER JOIN orders o ON o.customer_id = c.id
+            INNER JOIN payments p ON p.order_id = o.id
+            WHERE c.id = @id
+        ", new Dictionary<string, object?> { ["id"] = 1 }));
+
+        Assert.Contains("Duplicate explicit column alias", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("same_key", ex.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

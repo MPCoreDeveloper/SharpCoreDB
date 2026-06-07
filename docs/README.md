@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation
 
-This folder contains the maintained documentation set for SharpCoreDB (`v1.9.1`).
+This folder contains the maintained documentation set for SharpCoreDB (`v1.9.2`).
 
 ## Start Here
 

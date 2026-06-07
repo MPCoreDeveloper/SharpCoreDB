@@ -601,7 +601,7 @@ public sealed class CompleteExampleIntegrationTests : IDisposable
     // -------------------------------------------------------------------------
     // Extensive Guid + Relationship CRUD tests (requested for release validation)
     //
-    // ROADMAP (v1.9.1):
+    // ROADMAP (v1.9.1; version sync and prep completed in 1.9.2):
     //   Option B (custom IModificationCommandBatch for proper Guid relationship writes)
     //   is planned for a future version. For now we use the proven reliable pattern
     //   (separate queries + manual navigation wiring) which is what CompanyVacancyRepository

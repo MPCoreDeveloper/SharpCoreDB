@@ -329,20 +329,25 @@ public class SharpCoreDBCommand : DbCommand
                 result.Append(sql[i++]);
                 while (i < sql.Length)
                 {
-                    result.Append(sql[i]);
-                    if (sql[i] == '\'' && (i + 1 >= sql.Length || sql[i + 1] != '\''))
-                    {
-                        i++;
-                        break;
-                    }
+                    // Handle escaped quotes first
                     if (sql[i] == '\'' && i + 1 < sql.Length && sql[i + 1] == '\'')
                     {
-                        // escaped quote ''
+                        // Escaped quote '' – append both and skip ahead
+                        result.Append(sql[i]);
                         result.Append(sql[i + 1]);
                         i += 2;
                     }
+                    else if (sql[i] == '\'')
+                    {
+                        // Closing quote – append it and break
+                        result.Append(sql[i]);
+                        i++;
+                        break;
+                    }
                     else
                     {
+                        // Regular character inside the string
+                        result.Append(sql[i]);
                         i++;
                     }
                 }
@@ -474,24 +479,72 @@ public class SharpCoreDBCommand : DbCommand
             {
                 var normalized = col.Trim('"', '[', ']', '`', ' ');
 
-                // Try exact match first
+                // EF Core frequently requests alias-qualified columns (e.g. b.BlogId)
+                // while engine rows expose bare names (e.g. BlogId).
+                var dotIdx = normalized.LastIndexOf('.');
+                var bare = dotIdx >= 0 && dotIdx < normalized.Length - 1
+                    ? normalized[(dotIdx + 1)..].Trim('"', '[', ']', '`', ' ')
+                    : normalized;
+
+                // Try exact match first (qualified or bare)
                 if (row.TryGetValue(normalized, out var exact))
                 {
                     newRow[normalized] = exact; // Preserve actual value (may be DBNull from source)
+                    continue;
                 }
-                else
-                {
-                    // Try case-insensitive or qualified match
-                    var match = row.FirstOrDefault(kv =>
-                        string.Equals(kv.Key, normalized, StringComparison.OrdinalIgnoreCase) ||
-                        kv.Key.EndsWith($".{normalized}", StringComparison.OrdinalIgnoreCase));
 
-                    if (!match.Equals(default(KeyValuePair<string, object>)))
-                    {
-                        newRow[normalized] = match.Value; // Found it, use actual value
-                    }
-                    // else: column not found in source, don't add it (missing column = skip)
+                var isQualifiedRequest = dotIdx >= 0;
+
+                // For qualified requests (e.g. v.Id), avoid blindly falling back to bare Id
+                // when qualified keys exist in the row; otherwise child columns can be
+                // populated from parent values in LEFT JOIN no-match rows.
+                var hasAnyQualifiedForBare = row.Keys.Any(k =>
+                    k.EndsWith($".{bare}", StringComparison.OrdinalIgnoreCase));
+
+                if (!string.Equals(bare, normalized, StringComparison.OrdinalIgnoreCase) &&
+                    row.TryGetValue(bare, out var bareExact) &&
+                    (!isQualifiedRequest || !hasAnyQualifiedForBare))
+                {
+                    newRow[normalized] = bareExact;
+                    continue;
                 }
+
+                // Try case-insensitive or qualified match
+                var match = row.FirstOrDefault(kv =>
+                    string.Equals(kv.Key, normalized, StringComparison.OrdinalIgnoreCase) ||
+                    (!isQualifiedRequest && string.Equals(kv.Key, bare, StringComparison.OrdinalIgnoreCase)) ||
+                    kv.Key.EndsWith($".{normalized}", StringComparison.OrdinalIgnoreCase) ||
+                    kv.Key.EndsWith($".{bare}", StringComparison.OrdinalIgnoreCase));
+
+                if (!match.Equals(default(KeyValuePair<string, object>)))
+                {
+                    // For qualified requests, only accept exact qualifier matches.
+                    if (isQualifiedRequest)
+                    {
+                        var qualifier = normalized[..dotIdx];
+                        var candidateKey = match.Key;
+                        var candidateDot = candidateKey.LastIndexOf('.');
+                        if (candidateDot > 0)
+                        {
+                            var candidateQualifier = candidateKey[..candidateDot];
+                            if (!string.Equals(candidateQualifier, qualifier, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            // Candidate is bare key; accept only if no qualified candidates exist.
+                            if (hasAnyQualifiedForBare)
+                            {
+                                continue;
+                            }
+                        }
+                    }
+
+                    newRow[normalized] = match.Value; // Found it, use actual value
+                }
+                // else: column not found in source, don't add it (missing column = skip)
             }
             projected.Add(newRow);
         }

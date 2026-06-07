@@ -41,7 +41,7 @@ Entity Framework Core 10 provider for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.1
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.2
 ```
 
 ## DateTime Handling (Reliable Pattern)
