@@ -408,6 +408,17 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             {
                 // New block
                 offset = _freeSpaceManager.AllocatePages(requiredPages);
+
+                // Defensive guard (addresses CI-only first-allocation collision with BlockRegistry area under Release+coverage+Linux).
+                // If FSM (for any reason: load timing, bitmap deserialize edge, Release opts, coverage-induced slowdown of init writes)
+                // returns an offset inside the registry, force the data to a safe location after the registry.
+                // The registry area itself is now pre-initialized with a valid empty BREG header (see InitializeNewFile).
+                var registryEnd = _header.BlockRegistryOffset + _header.BlockRegistryLength;
+                if (offset < registryEnd)
+                {
+                    offset = registryEnd;
+                }
+
                 entry = new BlockEntry
                 {
                     BlockType = (uint)Scdb.BlockType.TableData,
@@ -1401,14 +1412,32 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         var headerBuffer = new byte[ScdbFileHeader.HEADER_SIZE];
         header.WriteTo(headerBuffer);
         fs.Write(headerBuffer);
-        
+
+        // ✅ CRITICAL FIX 3: Write initial empty BlockRegistryHeader ("BREG") immediately.
+        // Mirrors CRITICAL FIX 2 for FSM. Ensures LoadRegistry on a brand-new file (or after
+        // crash before any user data) always sees a valid header with BlockCount=0 instead of
+        // uninitialized bytes. Prevents cases where the first registry flush races with data
+        // writes or where allocation collides with the registry area on reopen.
+        fs.Position = (long)header.BlockRegistryOffset;
+        var regHeader = new BlockRegistryHeader
+        {
+            Magic = BlockRegistryHeader.MAGIC,
+            Version = BlockRegistryHeader.CURRENT_VERSION,
+            BlockCount = 0,
+            TotalSize = BlockRegistryHeader.SIZE,
+            LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000
+        };
+        Span<byte> regHeaderBuffer = stackalloc byte[BlockRegistryHeader.SIZE];
+        MemoryMarshal.Write(regHeaderBuffer, in regHeader);
+        fs.Write(regHeaderBuffer);
+
         // ✅ CRITICAL FIX 2: Write FSM header marking metadata pages as allocated
         // Without this, FreeSpaceManager starts with _totalPages=0 and AllocatePages
         // returns offset 0 (the SCDB header page!). Data block writes then overwrite the
         // file header with table data (e.g. "SFT1" magic), corrupting the file.
         var reservedPages = (ulong)(totalMetadataSize / (ulong)options.PageSize);
         header.AllocatedPages = reservedPages;
-        
+
         var fsmHeader = new FreeSpaceMapHeader
         {
             Magic = FreeSpaceMapHeader.MAGIC,

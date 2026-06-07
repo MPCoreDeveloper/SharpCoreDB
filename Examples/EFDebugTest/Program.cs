@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
 var dbPath = "./test_debug.scdb";

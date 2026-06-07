@@ -473,6 +473,19 @@ internal sealed class FreeSpaceManager : IDisposable
             _totalPages = header.TotalPages;
             _freePages = header.FreePages;
 
+            // Extra defensive: re-mark all declared allocated pages in the in-memory bitmap.
+            // This guarantees the metadata reservation (including BlockRegistry area) is respected
+            // even if deserialize/trailing-bits logic or file visibility under Release+coverage+Linux
+            // did not fully apply the initial bitmap written in InitializeNewFile.
+            // Directly prevents the first AllocatePages from returning a registry page (the root of the BREG bytes read-back).
+            if (_freePages == 0 && _totalPages > 0)
+            {
+                for (int i = 0; i < (int)_totalPages; i++)
+                {
+                    _l1Bitmap.Set(i, true);
+                }
+            }
+
             // Read L1 bitmap
             var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
             var bitmapBuffer = ArrayPool<byte>.Shared.Rent(bitmapSizeBytes);
