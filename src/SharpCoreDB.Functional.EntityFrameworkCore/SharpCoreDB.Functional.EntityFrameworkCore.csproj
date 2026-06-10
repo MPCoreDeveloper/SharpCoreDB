@@ -30,7 +30,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageReference Include="SharpCoreDB.Functional" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
     <PackageReference Include="SharpCoreDB.EntityFrameworkCore" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>

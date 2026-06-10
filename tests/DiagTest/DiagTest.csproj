@@ -9,7 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />

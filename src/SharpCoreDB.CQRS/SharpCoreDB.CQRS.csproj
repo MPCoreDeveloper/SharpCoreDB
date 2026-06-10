@@ -44,8 +44,8 @@
       via SharpCoreDB.CQRS.Dispatch. Hosting and Logging abstractions are still needed here
       for the outbox background worker and logging.
     -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
     <PackageReference Include="SharpDispatch" Version="1.0.1" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>

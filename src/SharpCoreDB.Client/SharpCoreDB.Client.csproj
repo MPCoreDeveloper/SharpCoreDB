@@ -34,7 +34,7 @@
     <PackageReference Include="Google.Protobuf" Version="3.35.0" />
     
     <!-- Connection pooling -->
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>

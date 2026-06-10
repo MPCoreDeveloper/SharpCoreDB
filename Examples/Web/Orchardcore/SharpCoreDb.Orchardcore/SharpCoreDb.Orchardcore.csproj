@@ -23,9 +23,9 @@
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
     <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="MimeKit" Version="4.17.0" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.6.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.8" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
+    <PackageReference Include="AWSSDK.Core" Version="4.0.8.1" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' == 'true'">
