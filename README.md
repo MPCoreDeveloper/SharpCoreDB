@@ -12,6 +12,7 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10-blue?style=for-the-badge)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational?style=for-the-badge)](#)
+[![Roadmap](https://img.shields.io/badge/Roadmap-View%20Plan-blueviolet?style=for-the-badge)](./ROADMAP.md)
 </div>
 
 ---
@@ -271,6 +272,7 @@ dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.2
 
 ## Important documentation links
 
+- **Roadmap:** [`ROADMAP.md`](./ROADMAP.md) — shipped features, near-term plans, and long-term vision
 - Documentation hub: `docs/INDEX.md`
 - Project docs index: `docs/README.md`
 - Feature matrix: `docs/FEATURE_MATRIX_v1.7.2.md`
