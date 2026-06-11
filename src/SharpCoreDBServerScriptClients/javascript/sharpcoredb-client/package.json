@@ -54,7 +54,7 @@
     "node": ">=16.0.0"
   },
   "dependencies": {
-    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.7.0",
     "axios": "^1.6.0",
     "ws": "^8.14.0",
