@@ -15,8 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.4.3" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.4.5" />
     <PackageReference Include="KubernetesClient" Version="19.0.2" />
+    <!-- Explicit override for vulnerable transitive MessagePack brought by KubernetesClient + Aspire/StreamJsonRpc (>=2.5.302 required) -->
+    <PackageReference Include="MessagePack" Version="2.5.302" />
   </ItemGroup>
 
   <ItemGroup>

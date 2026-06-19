@@ -35,8 +35,10 @@
     <!-- Sync Dependencies -->
     <PackageReference Include="Dotmim.Sync.Core" Version="1.3.0" />
     <PackageReference Include="Dotmim.Sync.Sqlite" Version="1.3.0" />
-    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
-    
+    <!-- NOTE: We deliberately do NOT reference System.Data.SQLite.Core (Legacy+CriticalBugs).
+         Dotmim.Sync.Sqlite may still pull Stub.System.Data.SQLite internally.
+         We force modern Microsoft.Data.Sqlite + safe SQLitePCLRaw below. -->
+
     <PackageReference Include="SharpCoreDB" Version="1.9.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
     <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.9.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
@@ -53,7 +55,9 @@
     <ProjectReference Include="..\..\src\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Modern, non-vulnerable SQLite stack (we refuse System.Data.SQLite.Core 1.0.119) -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>
 

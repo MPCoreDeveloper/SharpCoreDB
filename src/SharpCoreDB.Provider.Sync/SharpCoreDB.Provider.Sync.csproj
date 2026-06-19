@@ -51,6 +51,12 @@
     <!-- Dependency Injection -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+
+    <!-- Belt-and-suspenders: Force modern safe SQLite stack.
+         Dotmim.Sync.Sqlite may transitively bring older System.Data.SQLite bits.
+         We prefer Microsoft.Data.Sqlite + safe SQLitePCLRaw.bundle. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 
   <!-- Reference local SharpCoreDB when not using NuGet packages -->
