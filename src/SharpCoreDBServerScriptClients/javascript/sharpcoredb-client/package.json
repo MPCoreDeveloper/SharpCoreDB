@@ -57,7 +57,7 @@
     "@grpc/grpc-js": "^1.9.0",
     "@grpc/proto-loader": "^0.7.0",
     "axios": "^1.6.0",
-    "ws": "^8.14.0",
+    "ws": "^8.21.0",
     "google-protobuf": "^3.21.0"
   },
   "devDependencies": {
