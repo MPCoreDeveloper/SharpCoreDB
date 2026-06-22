@@ -25,7 +25,7 @@
     <PackageReference Include="MimeKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.8.1" />
+    <PackageReference Include="AWSSDK.Core" Version="4.0.9.6" />
 
     <!-- Force safer / newer identity and data clients where OrchardCore pulls older ones -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
