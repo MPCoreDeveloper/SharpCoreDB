@@ -36,13 +36,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
   
     <!-- Reference published SharpCoreDB NuGet package instead of project reference for deployment -->
     <!-- For development, use ProjectReference; for NuGet, use PackageReference -->
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Graph" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Graph" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
@@ -64,7 +64,7 @@
        The same DLL works on all platforms. Per-RID runtimes/ folders are only
        needed for native code. The standard lib/net10.0/ layout is correct. -->
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

@@ -31,10 +31,10 @@
 
   <ItemGroup>
     <!-- gRPC & Protobuf (latest stable) -->
-    <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
-    <PackageReference Include="Grpc.Tools" Version="2.81.1" PrivateAssets="All" />
-    
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+
     <!-- Include .proto files (shared with server) -->
     <Protobuf Include="..\SharpCoreDB.Server.Protocol\Protos\*.proto" GrpcServices="Client" Link="Protos\%(Filename)%(Extension)" />
   </ItemGroup>
@@ -45,9 +45,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

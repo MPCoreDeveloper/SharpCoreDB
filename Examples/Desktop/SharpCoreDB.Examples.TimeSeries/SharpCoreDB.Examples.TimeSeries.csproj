@@ -16,18 +16,18 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB" Version="1.9.0" />
-    <PackageReference Include="SharpCoreDB.Serilog.Sinks" Version="1.9.0" />
+    <PackageReference Include="SharpCoreDB" />
+    <PackageReference Include="SharpCoreDB.Serilog.Sinks" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog" Version="4.3.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
-    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.9" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

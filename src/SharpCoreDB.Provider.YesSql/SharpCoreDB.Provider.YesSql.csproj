@@ -40,19 +40,20 @@
 
   <ItemGroup>
     <!-- YesSql Core for abstractions -->
-    <PackageReference Include="YesSql.Core" Version="5.4.7" />
-    
+    <PackageReference Include="YesSql.Core" />
+
     <!-- Use Sqlite provider as base (most compatible with SharpCoreDB) -->
-    <PackageReference Include="YesSql.Provider.Sqlite" Version="5.4.7" />
-    
+    <PackageReference Include="YesSql.Provider.Sqlite" />
+
     <!-- DI for OrchardCore integration -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <!-- net10 path uses CPM; net8 path keeps explicit older pin for legacy TFM compatibility -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Condition="'$(TargetFramework)' == 'net8.0'" />
 
     <!-- SharpCoreDB dependencies -->
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Extensions" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Extensions" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
@@ -64,9 +65,7 @@
     <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
-  </ItemGroup>
+
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -116,9 +115,9 @@
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <!-- Explicit override: forces newer non-vulnerable SQLitePCLRaw bundle (YesSql + Microsoft.Data.Sqlite pull vulnerable 2.1.11) -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll')" />
     
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-arm64\SharpCoreDB.Provider.YesSql.dll')" />

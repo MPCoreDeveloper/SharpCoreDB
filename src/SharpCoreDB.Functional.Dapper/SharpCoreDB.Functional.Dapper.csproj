@@ -30,9 +30,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.79" />
-    <PackageReference Include="SharpCoreDB.Functional" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Extensions" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="SharpCoreDB.Functional" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Extensions" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
@@ -46,7 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

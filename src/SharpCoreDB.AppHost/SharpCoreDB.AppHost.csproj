@@ -1,4 +1,10 @@
 <Project>
+  <!-- Aspire SDK requires special handling: disable CPM and SourceLink -->
+  <PropertyGroup>
+    <EnableSourceLink>false</EnableSourceLink>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
   <Sdk Name="Aspire.AppHost.Sdk" Version="13.2.0" />
 
   <PropertyGroup>
@@ -15,19 +21,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.4.5" />
+    <!-- Aspire implicit packages must have inline versions when CPM is repo-wide -->
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageReference Include="Aspire.Hosting.Orchestration.win-x64" Version="13.4.6" />
+    <PackageReference Include="Aspire.Dashboard.Sdk.win-x64" Version="13.4.6" />
     <PackageReference Include="KubernetesClient" Version="19.0.2" />
     <!-- Explicit override for vulnerable transitive MessagePack brought by KubernetesClient + Aspire/StreamJsonRpc (>=2.5.302 required) -->
-    <PackageReference Include="MessagePack" Version="2.5.302" />
+    <PackageReference Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Reference to server project -->
     <ProjectReference Include="..\SharpCoreDB.Server\SharpCoreDB.Server.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>
 
 </Project>

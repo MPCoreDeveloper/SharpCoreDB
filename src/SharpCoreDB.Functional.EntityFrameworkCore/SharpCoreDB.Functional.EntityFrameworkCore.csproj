@@ -30,9 +30,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
-    <PackageReference Include="SharpCoreDB.Functional" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.EntityFrameworkCore" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="SharpCoreDB.Functional" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.EntityFrameworkCore" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
@@ -46,7 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

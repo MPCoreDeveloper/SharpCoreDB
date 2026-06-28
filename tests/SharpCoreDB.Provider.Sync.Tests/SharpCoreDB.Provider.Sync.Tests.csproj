@@ -17,30 +17,30 @@
 
   <ItemGroup>
     <!-- Testing frameworks -->
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
-    <PackageReference Include="xunit.v3" Version="3.2.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" >
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="10.0.1">
+    <PackageReference Include="coverlet.collector" >
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
 
     <!-- Assertions & Mocking -->
-    <PackageReference Include="FluentAssertions" Version="8.10.0" />
-    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Moq" />
 
     <!-- Sync Dependencies -->
-    <PackageReference Include="Dotmim.Sync.Core" Version="1.3.0" />
-    <PackageReference Include="Dotmim.Sync.Sqlite" Version="1.3.0" />
+    <PackageReference Include="Dotmim.Sync.Core" />
+    <PackageReference Include="Dotmim.Sync.Sqlite" />
     <!-- NOTE: We deliberately do NOT reference System.Data.SQLite.Core (Legacy+CriticalBugs).
          Dotmim.Sync.Sqlite may still pull Stub.System.Data.SQLite internally.
          We force modern Microsoft.Data.Sqlite + safe SQLitePCLRaw below. -->
 
-    <PackageReference Include="SharpCoreDB" Version="1.9.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.9.0" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <!-- Reference local SharpCoreDB when not using NuGet packages -->
@@ -56,9 +56,9 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Modern, non-vulnerable SQLite stack (we refuse System.Data.SQLite.Core 1.0.119) -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    
   </ItemGroup>
 
 </Project>

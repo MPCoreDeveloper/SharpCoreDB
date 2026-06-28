@@ -49,13 +49,9 @@
   <ItemGroup>
     <!-- Development: use project reference -->
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
-    
-    <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-  </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <!-- Packaging: use NuGet package reference -->
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
 </Project>

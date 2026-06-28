@@ -44,11 +44,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

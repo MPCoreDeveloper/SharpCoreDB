@@ -31,14 +31,14 @@
 
   <ItemGroup>
     <!-- Core dependencies (.NET 10 - latest stable) -->
-    <PackageReference Include="Grpc.Core.Api" Version="2.80.0" />
+    <PackageReference Include="Grpc.Core.Api" />
 
     <!-- ASP.NET Core abstractions (IHttpContextAccessor for gRPC interceptor mTLS) -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
 
     <!-- Security (latest stable for .NET 10 - updated to non-deprecated) -->
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.19.1" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 
   <ItemGroup>
@@ -53,7 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

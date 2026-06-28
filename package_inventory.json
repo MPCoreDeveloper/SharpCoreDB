@@ -1,0 +1,1913 @@
+{
+  "version": 1,
+  "parameters": "",
+  "projects": [
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB/SharpCoreDB.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Logging",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.ObjectPool",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Extensions/SharpCoreDB.Extensions.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Azure.Identity",
+              "requestedVersion": "1.21.0",
+              "resolvedVersion": "1.21.0"
+            },
+            {
+              "id": "Dapper",
+              "requestedVersion": "2.1.79",
+              "resolvedVersion": "2.1.79"
+            },
+            {
+              "id": "FluentMigrator",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner.Core",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.Diagnostics.HealthChecks",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Identity.Client",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.Identity.Client.Extensions.Msal",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Protocols",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Protocols.OpenIdConnect",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Tokens",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "System.IdentityModel.Tokens.Jwt",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Data.Provider/SharpCoreDB.Data.Provider.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.EntityFrameworkCore/SharpCoreDB.EntityFrameworkCore.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.EntityFrameworkCore",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.EntityFrameworkCore.Relational",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Serilog.Sinks/SharpCoreDB.Serilog.Sinks.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "4.3.1",
+              "resolvedVersion": "4.3.1"
+            },
+            {
+              "id": "Serilog.Sinks.PeriodicBatching",
+              "requestedVersion": "5.0.0",
+              "resolvedVersion": "5.0.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "FluentMigrator",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner.Core",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner.SQLite",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Moq",
+              "requestedVersion": "4.20.72",
+              "resolvedVersion": "4.20.72"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "BenchmarkDotNet",
+              "requestedVersion": "0.15.8",
+              "resolvedVersion": "0.15.8"
+            },
+            {
+              "id": "BenchmarkDotNet.Diagnostics.Windows",
+              "requestedVersion": "0.15.8",
+              "resolvedVersion": "0.15.8"
+            },
+            {
+              "id": "Bogus",
+              "requestedVersion": "35.6.5",
+              "resolvedVersion": "35.6.5"
+            },
+            {
+              "id": "LiteDB",
+              "requestedVersion": "5.0.21",
+              "resolvedVersion": "5.0.21"
+            },
+            {
+              "id": "Markdig",
+              "requestedVersion": "1.3.2",
+              "resolvedVersion": "1.3.2"
+            },
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers",
+              "requestedVersion": "18.7.37220.1",
+              "resolvedVersion": "18.7.37220.1"
+            },
+            {
+              "id": "ScottPlot",
+              "requestedVersion": "5.1.58",
+              "resolvedVersion": "5.1.58"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Profiling/SharpCoreDB.Profiling.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.Viewer/SharpCoreDB.Viewer.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Avalonia",
+              "requestedVersion": "12.0.4",
+              "resolvedVersion": "12.0.4"
+            },
+            {
+              "id": "Avalonia.Controls.DataGrid",
+              "requestedVersion": "12.0.0",
+              "resolvedVersion": "12.0.0"
+            },
+            {
+              "id": "Avalonia.Desktop",
+              "requestedVersion": "12.0.4",
+              "resolvedVersion": "12.0.4"
+            },
+            {
+              "id": "Avalonia.Diagnostics",
+              "requestedVersion": "11.3.17",
+              "resolvedVersion": "11.3.17"
+            },
+            {
+              "id": "Avalonia.Fonts.Inter",
+              "requestedVersion": "12.0.4",
+              "resolvedVersion": "12.0.4"
+            },
+            {
+              "id": "Avalonia.Themes.Fluent",
+              "requestedVersion": "12.0.4",
+              "resolvedVersion": "12.0.4"
+            },
+            {
+              "id": "CommunityToolkit.Mvvm",
+              "requestedVersion": "8.4.2",
+              "resolvedVersion": "8.4.2"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Tmds.DBus.Protocol",
+              "requestedVersion": "0.94.2",
+              "resolvedVersion": "0.94.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.Demo/SharpCoreDB.Demo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "4.3.1",
+              "resolvedVersion": "4.3.1"
+            },
+            {
+              "id": "Serilog.Extensions.Logging",
+              "requestedVersion": "10.0.0",
+              "resolvedVersion": "10.0.0"
+            },
+            {
+              "id": "Serilog.Sinks.Console",
+              "requestedVersion": "6.1.1",
+              "resolvedVersion": "6.1.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.DebugBenchmark/SharpCoreDB.DebugBenchmark.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Bogus",
+              "requestedVersion": "35.6.5",
+              "resolvedVersion": "35.6.5"
+            },
+            {
+              "id": "LiteDB",
+              "requestedVersion": "5.0.21",
+              "resolvedVersion": "5.0.21"
+            },
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.DemoJoinsSubQ/SharpCoreDB.DemoJoinsSubQ.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Provider.YesSql/SharpCoreDB.Provider.YesSql.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            },
+            {
+              "id": "YesSql.Core",
+              "requestedVersion": "5.4.7",
+              "resolvedVersion": "5.4.7"
+            },
+            {
+              "id": "YesSql.Provider.Sqlite",
+              "requestedVersion": "5.4.7",
+              "resolvedVersion": "5.4.7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/Web/Orchardcore/SharpCoreDb.Orchardcore/SharpCoreDb.Orchardcore.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "AWSSDK.Core",
+              "requestedVersion": "4.0.8.1",
+              "resolvedVersion": "4.0.8.1"
+            },
+            {
+              "id": "Azure.Identity",
+              "requestedVersion": "1.21.0",
+              "resolvedVersion": "1.21.0"
+            },
+            {
+              "id": "Elastic.Clients.Elasticsearch",
+              "requestedVersion": "9.4.2",
+              "resolvedVersion": "9.4.2"
+            },
+            {
+              "id": "HtmlSanitizer",
+              "requestedVersion": "9.0.892",
+              "resolvedVersion": "9.0.892"
+            },
+            {
+              "id": "MailKit",
+              "requestedVersion": "4.17.0",
+              "resolvedVersion": "4.17.0"
+            },
+            {
+              "id": "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Data.SqlClient",
+              "requestedVersion": "7.0.1",
+              "resolvedVersion": "7.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.Http.Resilience",
+              "requestedVersion": "10.7.0",
+              "resolvedVersion": "10.7.0"
+            },
+            {
+              "id": "Microsoft.Identity.Client",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.Identity.Client.Extensions.Msal",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "MimeKit",
+              "requestedVersion": "4.17.0",
+              "resolvedVersion": "4.17.0"
+            },
+            {
+              "id": "OrchardCore.Application.Cms.Targets",
+              "requestedVersion": "2.2.1",
+              "resolvedVersion": "2.2.1"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/Desktop/SharpCoreDB.Examples.TimeSeries/SharpCoreDB.Examples.TimeSeries.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "4.3.1",
+              "resolvedVersion": "4.3.1"
+            },
+            {
+              "id": "System.Diagnostics.PerformanceCounter",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/Manual/RefFieldDemo/RefFieldDemo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.VectorSearch/SharpCoreDB.VectorSearch.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Graph/SharpCoreDB.Graph.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Moq",
+              "requestedVersion": "4.20.72",
+              "resolvedVersion": "4.20.72"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Analytics/SharpCoreDB.Analytics.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Provider.Sync/SharpCoreDB.Provider.Sync.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Dotmim.Sync.Core",
+              "requestedVersion": "1.3.0",
+              "resolvedVersion": "1.3.0"
+            },
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Logging.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Dotmim.Sync.Core",
+              "requestedVersion": "1.3.0",
+              "resolvedVersion": "1.3.0"
+            },
+            {
+              "id": "Dotmim.Sync.Sqlite",
+              "requestedVersion": "1.3.0",
+              "resolvedVersion": "1.3.0"
+            },
+            {
+              "id": "FluentAssertions",
+              "requestedVersion": "8.10.0",
+              "resolvedVersion": "8.10.0"
+            },
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "Moq",
+              "requestedVersion": "4.20.72",
+              "resolvedVersion": "4.20.72"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Distributed/SharpCoreDB.Distributed.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Server/SharpCoreDB.Server.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Grpc.AspNetCore",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Grpc.AspNetCore.Server.Reflection",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Microsoft.AspNetCore.Authentication.Certificate",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.AspNetCore.Authentication.JwtBearer",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SafeWebCore",
+              "requestedVersion": "1.3.0",
+              "resolvedVersion": "1.3.0"
+            },
+            {
+              "id": "Serilog.AspNetCore",
+              "requestedVersion": "10.0.0",
+              "resolvedVersion": "10.0.0"
+            },
+            {
+              "id": "Serilog.Sinks.Console",
+              "requestedVersion": "6.1.1",
+              "resolvedVersion": "6.1.1"
+            },
+            {
+              "id": "Serilog.Sinks.File",
+              "requestedVersion": "7.0.0",
+              "resolvedVersion": "7.0.0"
+            },
+            {
+              "id": "System.IdentityModel.Tokens.Jwt",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Server.Core/SharpCoreDB.Server.Core.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Grpc.Core.Api",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Tokens",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "System.IdentityModel.Tokens.Jwt",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Server.Protocol/SharpCoreDB.Server.Protocol.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Google.Protobuf",
+              "requestedVersion": "3.35.1",
+              "resolvedVersion": "3.35.1"
+            },
+            {
+              "id": "Grpc.Core.Api",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Grpc.Tools",
+              "requestedVersion": "2.81.1",
+              "resolvedVersion": "2.81.1"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.EventSourcing/SharpCoreDB.EventSourcing.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.EventSourcing.Tests/SharpCoreDB.EventSourcing.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/benchmarks/SharpCoreDB.Benchmarks/SharpCoreDB.Benchmarks.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "BenchmarkDotNet",
+              "requestedVersion": "0.15.8",
+              "resolvedVersion": "0.15.8"
+            },
+            {
+              "id": "BLite",
+              "requestedVersion": "5.0.2",
+              "resolvedVersion": "5.0.2"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/EventSourcing/OrderManagement/OrderManagement.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/EventSourcing/OrderManagement.Tests/OrderManagement.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/EventSourcing/OrderManagement.PersistentDemo/OrderManagement.PersistentDemo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Client/SharpCoreDB.Client.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Google.Protobuf",
+              "requestedVersion": "3.35.1",
+              "resolvedVersion": "3.35.1"
+            },
+            {
+              "id": "Grpc.Net.Client",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Microsoft.Extensions.ObjectPool",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Client.Protocol/SharpCoreDB.Client.Protocol.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Google.Protobuf",
+              "requestedVersion": "3.35.1",
+              "resolvedVersion": "3.35.1"
+            },
+            {
+              "id": "Grpc.Net.Client",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Grpc.Tools",
+              "requestedVersion": "2.81.1",
+              "resolvedVersion": "2.81.1"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Logging.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/benchmarks/SharpCoreDB.Server.Benchmarks/SharpCoreDB.Server.Benchmarks.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "BenchmarkDotNet",
+              "requestedVersion": "0.15.8",
+              "resolvedVersion": "0.15.8"
+            },
+            {
+              "id": "Grpc.Net.Client",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Microsoft.AspNetCore.Mvc.Testing",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.AspNetCore.TestHost",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Graph.Advanced/SharpCoreDB.Graph.Advanced.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.CQRS/SharpCoreDB.CQRS.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.Hosting.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Logging.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SharpDispatch",
+              "requestedVersion": "1.0.1",
+              "resolvedVersion": "1.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.CQRS.Tests/SharpCoreDB.CQRS.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Hosting",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Projections/SharpCoreDB.Projections.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Hosting.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Projections.Tests/SharpCoreDB.Projections.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Hosting",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/CQRS/OrderManagement.CqrsDemo/OrderManagement.CqrsDemo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SharpDispatch",
+              "requestedVersion": "1.0.1",
+              "resolvedVersion": "1.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.AppHost/SharpCoreDB.AppHost.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Aspire.Dashboard.Sdk.win-x64",
+              "requestedVersion": "[13.4.5, )",
+              "resolvedVersion": "13.4.5",
+              "autoReferenced": "true"
+            },
+            {
+              "id": "Aspire.Hosting.AppHost",
+              "requestedVersion": "13.4.5",
+              "resolvedVersion": "13.4.5"
+            },
+            {
+              "id": "Aspire.Hosting.Orchestration.win-x64",
+              "requestedVersion": "[13.4.5, )",
+              "resolvedVersion": "13.4.5",
+              "autoReferenced": "true"
+            },
+            {
+              "id": "KubernetesClient",
+              "requestedVersion": "19.0.2",
+              "resolvedVersion": "19.0.2"
+            },
+            {
+              "id": "MessagePack",
+              "requestedVersion": "2.5.302",
+              "resolvedVersion": "2.5.302"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Functional/SharpCoreDB.Functional.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Functional.Dapper/SharpCoreDB.Functional.Dapper.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Dapper",
+              "requestedVersion": "2.1.79",
+              "resolvedVersion": "2.1.79"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Functional.EntityFrameworkCore/SharpCoreDB.Functional.EntityFrameworkCore.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.EntityFrameworkCore",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/benchmarks/QuickZvecTest/QuickZvecTest.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "System.Text.Json",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/SharpCoreDB.Benchmarks.Comparative.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "BLite",
+              "requestedVersion": "5.0.2",
+              "resolvedVersion": "5.0.2"
+            },
+            {
+              "id": "LiteDB",
+              "requestedVersion": "5.0.21",
+              "resolvedVersion": "5.0.21"
+            },
+            {
+              "id": "Microsoft.Data.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            },
+            {
+              "id": "System.Text.Json",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/DiagTest/DiagTest.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.EntityFrameworkCore.Sqlite",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SQLitePCLRaw.bundle_e_sqlite3",
+              "requestedVersion": "3.0.3",
+              "resolvedVersion": "3.0.3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/Manual/SingleFileTest/SingleFileTest.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Analytics.Tests/SharpCoreDB.Analytics.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Server.IntegrationTests/SharpCoreDB.Server.IntegrationTests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Grpc.AspNetCore",
+              "requestedVersion": "2.80.0",
+              "resolvedVersion": "2.80.0"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/src/SharpCoreDB.Identity/SharpCoreDB.Identity.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.Logging.Abstractions",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/Web/SharpCoreDB.CrudApp/SharpCoreDB.CrudApp.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.WebViewer/SharpCoreDB.WebViewer.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "SafeWebCore",
+              "requestedVersion": "1.3.0",
+              "resolvedVersion": "1.3.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Viewer.Tests/SharpCoreDB.Viewer.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/FluentMigrator/SharpCoreDB.FluentMigratorDemo/SharpCoreDB.FluentMigratorDemo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Azure.Identity",
+              "requestedVersion": "1.21.0",
+              "resolvedVersion": "1.21.0"
+            },
+            {
+              "id": "FluentMigrator",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "FluentMigrator.Runner.SQLite",
+              "requestedVersion": "8.0.1",
+              "resolvedVersion": "8.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Extensions.Logging.Console",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.Identity.Client",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.Identity.Client.Extensions.Msal",
+              "requestedVersion": "4.85.0",
+              "resolvedVersion": "4.85.0"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Protocols",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.IdentityModel.Protocols.OpenIdConnect",
+              "requestedVersion": "8.19.1",
+              "resolvedVersion": "8.19.1"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/Examples/SharpCoreDB.EFCoreCrudDemo/SharpCoreDB.EFCoreCrudDemo.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Identity.Tests/SharpCoreDB.Identity.Tests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "topLevelPackages": [
+            {
+              "id": "coverlet.collector",
+              "requestedVersion": "10.0.1",
+              "resolvedVersion": "10.0.1"
+            },
+            {
+              "id": "Microsoft.Extensions.DependencyInjection",
+              "requestedVersion": "10.0.9",
+              "resolvedVersion": "10.0.9"
+            },
+            {
+              "id": "Microsoft.NET.Test.Sdk",
+              "requestedVersion": "18.6.0",
+              "resolvedVersion": "18.6.0"
+            },
+            {
+              "id": "Microsoft.SourceLink.GitHub",
+              "requestedVersion": "10.0.300",
+              "resolvedVersion": "10.0.300"
+            },
+            {
+              "id": "xunit.runner.visualstudio",
+              "requestedVersion": "3.1.5",
+              "resolvedVersion": "3.1.5"
+            },
+            {
+              "id": "xunit.v3",
+              "requestedVersion": "3.2.2",
+              "resolvedVersion": "3.2.2"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -49,8 +49,9 @@
     <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
   </PropertyGroup>
 
-  <!-- Source Link for debugging -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
+  <!-- Source Link for debugging (version managed in Directory.Packages.props) -->
+  <!-- Skip SourceLink for Aspire AppHost projects which have special SDK requirements -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'SharpCoreDB.AppHost'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 </Project>

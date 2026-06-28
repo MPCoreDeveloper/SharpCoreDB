@@ -40,9 +40,9 @@
 
   <ItemGroup Condition="'$(UseLocalProjectReferences)' != 'true'">
     <!-- Package-based builds: use published NuGet packages -->
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" />
-    <PackageReference Include="SharpCoreDB.Graph" Version="1.9.2" />
-    <PackageReference Include="SharpCoreDB.VectorSearch" Version="1.9.2" />
+    <PackageReference Include="SharpCoreDB" />
+    <PackageReference Include="SharpCoreDB.Graph" />
+    <PackageReference Include="SharpCoreDB.VectorSearch" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

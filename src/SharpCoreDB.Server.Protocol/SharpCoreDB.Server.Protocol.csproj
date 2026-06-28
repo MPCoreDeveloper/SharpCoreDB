@@ -31,9 +31,9 @@
 
   <ItemGroup>
     <!-- gRPC & Protobuf (latest stable for .NET 10) -->
-    <PackageReference Include="Grpc.Core.Api" Version="2.80.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.81.1" PrivateAssets="All" />
-    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="Grpc.Core.Api" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+    <PackageReference Include="Google.Protobuf" />
     
     <!-- Include .proto files -->
     <Protobuf Include="Protos\*.proto" GrpcServices="Both" />
@@ -50,7 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,146 @@
+<Project>
+  <PropertyGroup>
+    <!-- 
+      CENTRAL PACKAGE MANAGEMENT (CPM)
+      All external package versions are declared here.
+      This enables:
+        - Single place to update to latest production versions
+        - Easy vulnerability remediation (bump here + restore)
+        - `dotnet package update` and Visual Studio "Manage NuGet Packages" work reliably
+      Policy: Always use latest stable (non-prerelease) versions unless explicitly overridden for a reason.
+    -->
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Pin transitive dependencies as well so a vulnerable transitive cannot sneak in unnoticed. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+
+    <!-- 
+      Version used for all internal SharpCoreDB.* package references when 
+      a project sets UseSharpCoreDBPackage=true (consume published NuGet instead of ProjectReference).
+      Update this single value when you want examples/tests to consume a newer published package version.
+    -->
+    <SharpCoreDBVersion>1.9.2</SharpCoreDBVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ============================================================ -->
+    <!-- SharpCoreDB family (internal packages) - versioned via property above -->
+    <!-- ============================================================ -->
+    <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Analytics" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Client" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Client.Protocol" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.CQRS" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Data.Provider" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Distributed" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.EntityFrameworkCore" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.EventSourcing" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Extensions" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Functional" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Functional.Dapper" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Functional.EntityFrameworkCore" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Graph" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Graph.Advanced" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Identity" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Projections" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Provider.Sync" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Provider.YesSql" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Serilog.Sinks" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Server" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Server.Core" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
+
+    <!-- ============================================================ -->
+    <!-- External packages (exact versions at time of CPM introduction) -->
+    <!-- To update everything: dotnet package update -s https://api.nuget.org/v3/index.json -->
+    <!-- ============================================================ -->
+    <!-- NOTE: Aspire SDK implicit packages (Aspire.Hosting.Orchestration.win-x64, Aspire.Dashboard.Sdk.win-x64)
+         are NOT listed here because the AppHost project disables CPM and provides inline versions.
+         This is required by the Aspire SDK. -->
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageVersion Include="Avalonia" Version="12.0.5" />
+    <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.0.1" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.0.5" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.18" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.0.5" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.8.1" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.15.8" />
+    <PackageVersion Include="BLite" Version="5.0.2" />
+    <PackageVersion Include="Bogus" Version="35.6.5" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="Dotmim.Sync.Core" Version="1.3.0" />
+    <PackageVersion Include="Dotmim.Sync.Sqlite" Version="1.3.0" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageVersion Include="FluentAssertions" Version="8.10.0" />
+    <PackageVersion Include="FluentMigrator" Version="8.0.1" />
+    <PackageVersion Include="FluentMigrator.Runner" Version="8.0.1" />
+    <PackageVersion Include="FluentMigrator.Runner.Core" Version="8.0.1" />
+    <PackageVersion Include="FluentMigrator.Runner.SQLite" Version="8.0.1" />
+    <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
+    <PackageVersion Include="Grpc.AspNetCore.Server.Reflection" Version="2.80.0" />
+    <PackageVersion Include="Grpc.Core.Api" Version="2.80.0" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.80.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.81.1" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageVersion Include="KubernetesClient" Version="19.0.2" />
+    <PackageVersion Include="LiteDB" Version="5.0.21" />
+    <PackageVersion Include="MailKit" Version="4.17.0" />
+    <PackageVersion Include="Markdig" Version="1.3.2" />
+    <PackageVersion Include="MessagePack" Version="3.1.7" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.Certificate" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.ObjectPool" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Identity.Client" Version="4.85.2" />
+    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.2" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols" Version="8.19.1" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.1" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.19.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
+    <PackageVersion Include="MimeKit" Version="4.17.0" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="OrchardCore.Application.Cms.Targets" Version="2.2.1" />
+    <PackageVersion Include="SafeWebCore" Version="1.3.5" />
+    <PackageVersion Include="ScottPlot" Version="5.1.59" />
+    <PackageVersion Include="Serilog" Version="4.3.1" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageVersion Include="Serilog.Sinks.PeriodicBatching" Version="5.0.0" />
+    <PackageVersion Include="SharpDispatch" Version="1.0.1" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.9" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.9" />
+    <PackageVersion Include="Tmds.DBus.Protocol" Version="0.94.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="YesSql.Core" Version="5.4.7" />
+    <PackageVersion Include="YesSql.Provider.Sqlite" Version="5.4.7" />
+  </ItemGroup>
+</Project>

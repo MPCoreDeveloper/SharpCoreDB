@@ -43,27 +43,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.79" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.9" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <!-- FluentMigrator is build-time only (PrivateAssets=all) for migration tooling.
          We still force modern identity packages below because older transitive versions
          from FM 8.0.1 are flagged as deprecated/Legacy. -->
-    <PackageReference Include="FluentMigrator" Version="8.0.1" PrivateAssets="all" />
-    <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" PrivateAssets="all" />
-    <PackageReference Include="FluentMigrator.Runner.Core" Version="8.0.1" PrivateAssets="all" />
+    <PackageReference Include="FluentMigrator" PrivateAssets="all" />
+    <PackageReference Include="FluentMigrator.Runner" PrivateAssets="all" />
+    <PackageReference Include="FluentMigrator.Runner.Core" PrivateAssets="all" />
 
     <!-- Force latest safe identity stack (Azure.Identity, MSAL, IdentityModel) to eliminate
          deprecated/Legacy transitive packages coming from FluentMigrator and other deps.
          This is required for "everything secure" policy even if we keep the tool. -->
-    <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.19.1" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.1" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
 
     <!-- Reference published SharpCoreDB NuGet package instead of project reference for deployment -->
-    <PackageReference Include="SharpCoreDB" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
-    <PackageReference Include="SharpCoreDB.Client" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" PrivateAssets="all" />
+    <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Client" Condition="'$(UseSharpCoreDBPackage)' == 'true'" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
@@ -110,9 +110,9 @@
     <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll')" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.19.1" />
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
-  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    
+  <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 
 </Project>

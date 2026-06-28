@@ -1,0 +1,350 @@
+[
+  {
+    "Id": "Aspire.Dashboard.Sdk.win-x64",
+    "Versions": "13.4.5"
+  },
+  {
+    "Id": "Aspire.Hosting.AppHost",
+    "Versions": "13.4.5"
+  },
+  {
+    "Id": "Aspire.Hosting.Orchestration.win-x64",
+    "Versions": "13.4.5"
+  },
+  {
+    "Id": "Avalonia",
+    "Versions": "12.0.4"
+  },
+  {
+    "Id": "Avalonia.Controls.DataGrid",
+    "Versions": "12.0.0"
+  },
+  {
+    "Id": "Avalonia.Desktop",
+    "Versions": "12.0.4"
+  },
+  {
+    "Id": "Avalonia.Diagnostics",
+    "Versions": "11.3.17"
+  },
+  {
+    "Id": "Avalonia.Fonts.Inter",
+    "Versions": "12.0.4"
+  },
+  {
+    "Id": "Avalonia.Themes.Fluent",
+    "Versions": "12.0.4"
+  },
+  {
+    "Id": "AWSSDK.Core",
+    "Versions": "4.0.8.1"
+  },
+  {
+    "Id": "Azure.Identity",
+    "Versions": "1.21.0"
+  },
+  {
+    "Id": "BenchmarkDotNet",
+    "Versions": "0.15.8"
+  },
+  {
+    "Id": "BenchmarkDotNet.Diagnostics.Windows",
+    "Versions": "0.15.8"
+  },
+  {
+    "Id": "BLite",
+    "Versions": "5.0.2"
+  },
+  {
+    "Id": "Bogus",
+    "Versions": "35.6.5"
+  },
+  {
+    "Id": "CommunityToolkit.Mvvm",
+    "Versions": "8.4.2"
+  },
+  {
+    "Id": "coverlet.collector",
+    "Versions": "10.0.1"
+  },
+  {
+    "Id": "Dapper",
+    "Versions": "2.1.79"
+  },
+  {
+    "Id": "Dotmim.Sync.Core",
+    "Versions": "1.3.0"
+  },
+  {
+    "Id": "Dotmim.Sync.Sqlite",
+    "Versions": "1.3.0"
+  },
+  {
+    "Id": "Elastic.Clients.Elasticsearch",
+    "Versions": "9.4.2"
+  },
+  {
+    "Id": "FluentAssertions",
+    "Versions": "8.10.0"
+  },
+  {
+    "Id": "FluentMigrator",
+    "Versions": "8.0.1"
+  },
+  {
+    "Id": "FluentMigrator.Runner",
+    "Versions": "8.0.1"
+  },
+  {
+    "Id": "FluentMigrator.Runner.Core",
+    "Versions": "8.0.1"
+  },
+  {
+    "Id": "FluentMigrator.Runner.SQLite",
+    "Versions": "8.0.1"
+  },
+  {
+    "Id": "Google.Protobuf",
+    "Versions": "3.35.1"
+  },
+  {
+    "Id": "Grpc.AspNetCore",
+    "Versions": "2.80.0"
+  },
+  {
+    "Id": "Grpc.AspNetCore.Server.Reflection",
+    "Versions": "2.80.0"
+  },
+  {
+    "Id": "Grpc.Core.Api",
+    "Versions": "2.80.0"
+  },
+  {
+    "Id": "Grpc.Net.Client",
+    "Versions": "2.80.0"
+  },
+  {
+    "Id": "Grpc.Tools",
+    "Versions": "2.81.1"
+  },
+  {
+    "Id": "HtmlSanitizer",
+    "Versions": "9.0.892"
+  },
+  {
+    "Id": "KubernetesClient",
+    "Versions": "19.0.2"
+  },
+  {
+    "Id": "LiteDB",
+    "Versions": "5.0.21"
+  },
+  {
+    "Id": "MailKit",
+    "Versions": "4.17.0"
+  },
+  {
+    "Id": "Markdig",
+    "Versions": "1.3.2"
+  },
+  {
+    "Id": "MessagePack",
+    "Versions": "2.5.302"
+  },
+  {
+    "Id": "Microsoft.AspNetCore.Authentication.Certificate",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.AspNetCore.Authentication.JwtBearer",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.AspNetCore.Mvc.Testing",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.AspNetCore.TestHost",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Data.SqlClient",
+    "Versions": "7.0.1"
+  },
+  {
+    "Id": "Microsoft.Data.Sqlite",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.EntityFrameworkCore",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.EntityFrameworkCore.Relational",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.EntityFrameworkCore.Sqlite",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.DependencyInjection",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Diagnostics.HealthChecks",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Hosting",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Hosting.Abstractions",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Http.Resilience",
+    "Versions": "10.7.0"
+  },
+  {
+    "Id": "Microsoft.Extensions.Logging",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Logging.Abstractions",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.Logging.Console",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Extensions.ObjectPool",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Microsoft.Identity.Client",
+    "Versions": "4.85.0"
+  },
+  {
+    "Id": "Microsoft.Identity.Client.Extensions.Msal",
+    "Versions": "4.85.0"
+  },
+  {
+    "Id": "Microsoft.IdentityModel.Protocols",
+    "Versions": "8.19.1"
+  },
+  {
+    "Id": "Microsoft.IdentityModel.Protocols.OpenIdConnect",
+    "Versions": "8.19.1"
+  },
+  {
+    "Id": "Microsoft.IdentityModel.Tokens",
+    "Versions": "8.19.1"
+  },
+  {
+    "Id": "Microsoft.NET.Test.Sdk",
+    "Versions": "18.6.0"
+  },
+  {
+    "Id": "Microsoft.SourceLink.GitHub",
+    "Versions": "10.0.300"
+  },
+  {
+    "Id": "Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers",
+    "Versions": "18.7.37220.1"
+  },
+  {
+    "Id": "MimeKit",
+    "Versions": "4.17.0"
+  },
+  {
+    "Id": "Moq",
+    "Versions": "4.20.72"
+  },
+  {
+    "Id": "OrchardCore.Application.Cms.Targets",
+    "Versions": "2.2.1"
+  },
+  {
+    "Id": "SafeWebCore",
+    "Versions": "1.3.0"
+  },
+  {
+    "Id": "ScottPlot",
+    "Versions": "5.1.58"
+  },
+  {
+    "Id": "Serilog",
+    "Versions": "4.3.1"
+  },
+  {
+    "Id": "Serilog.AspNetCore",
+    "Versions": "10.0.0"
+  },
+  {
+    "Id": "Serilog.Extensions.Logging",
+    "Versions": "10.0.0"
+  },
+  {
+    "Id": "Serilog.Sinks.Console",
+    "Versions": "6.1.1"
+  },
+  {
+    "Id": "Serilog.Sinks.File",
+    "Versions": "7.0.0"
+  },
+  {
+    "Id": "Serilog.Sinks.PeriodicBatching",
+    "Versions": "5.0.0"
+  },
+  {
+    "Id": "SharpDispatch",
+    "Versions": "1.0.1"
+  },
+  {
+    "Id": "SQLitePCLRaw.bundle_e_sqlite3",
+    "Versions": "3.0.3"
+  },
+  {
+    "Id": "System.Diagnostics.PerformanceCounter",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "System.IdentityModel.Tokens.Jwt",
+    "Versions": "8.19.1"
+  },
+  {
+    "Id": "System.Text.Json",
+    "Versions": "10.0.9"
+  },
+  {
+    "Id": "Tmds.DBus.Protocol",
+    "Versions": "0.94.2"
+  },
+  {
+    "Id": "xunit.runner.visualstudio",
+    "Versions": "3.1.5"
+  },
+  {
+    "Id": "xunit.v3",
+    "Versions": "3.2.2"
+  },
+  {
+    "Id": "YesSql.Core",
+    "Versions": "5.4.7"
+  },
+  {
+    "Id": "YesSql.Provider.Sqlite",
+    "Versions": "5.4.7"
+  }
+]

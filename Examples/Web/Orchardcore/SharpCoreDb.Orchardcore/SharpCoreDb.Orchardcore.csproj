@@ -17,26 +17,26 @@
   <!-- OrchardCore packages only restored when NOT in CI -->
   <ItemGroup Condition="'$(CI)' != 'true' AND '$(GITHUB_ACTIONS)' != 'true'">
     <!-- Stable OrchardCore package -->
-    <PackageReference Include="OrchardCore.Application.Cms.Targets" Version="2.2.1" />
+    <PackageReference Include="OrchardCore.Application.Cms.Targets" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
-    <PackageReference Include="MailKit" Version="4.17.0" />
-    <PackageReference Include="MimeKit" Version="4.17.0" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.8.1" />
+    <PackageReference Include="HtmlSanitizer" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="AWSSDK.Core" />
 
     <!-- Force safer / newer identity and data clients where OrchardCore pulls older ones -->
-    <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
 
     <!-- Replace deprecated NEST / Elasticsearch.Net (Legacy) pulled by OrchardCore.Search.Elasticsearch.
          Modern replacement: Elastic.Clients.Elasticsearch.
          Note: OrchardCore 2.2.1's ES module may still load the old client at runtime for its integration.
          If search is not required for this demo, the Elasticsearch feature can be disabled in OrchardCore setup. -->
-    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' == 'true'">
@@ -46,19 +46,17 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB.Data.Provider" Version="1.9.0" />
-    <PackageReference Include="SharpCoreDB.Provider.YesSql" Version="1.9.0" />
-    <PackageReference Include="SharpCoreDB" Version="1.9.0" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" />
+    <PackageReference Include="SharpCoreDB.Provider.YesSql" />
+    <PackageReference Include="SharpCoreDB" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Explicit override for vulnerable SQLitePCLRaw 2.1.11 (pulled via YesSql or transitive in OrchardCore/SkiaSharp paths) -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
 
     <!-- Force modern Microsoft.Data.SqlClient to avoid CriticalBugs in older 6.x versions pulled by OrchardCore / other deps -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
-
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
 </Project>

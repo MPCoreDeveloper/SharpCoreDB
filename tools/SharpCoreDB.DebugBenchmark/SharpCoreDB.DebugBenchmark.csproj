@@ -21,15 +21,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <PackageReference Include="LiteDB" Version="5.0.21" />
-    <PackageReference Include="Bogus" Version="35.6.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="LiteDB" />
+    <PackageReference Include="Bogus" />
     <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled by Microsoft.Data.Sqlite -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>

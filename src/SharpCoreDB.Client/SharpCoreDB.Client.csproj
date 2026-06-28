@@ -30,11 +30,11 @@
 
   <ItemGroup>
     <!-- gRPC Client (latest stable) -->
-    <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
-    
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Google.Protobuf" />
+
     <!-- Connection pooling -->
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,7 +42,7 @@
     <ProjectReference Include="..\SharpCoreDB.Client.Protocol\SharpCoreDB.Client.Protocol.csproj" Condition="'$(UseSharpCoreDBPackage)' != 'true'" />
 
     <!-- Packaging: use NuGet package reference -->
-    <PackageReference Include="SharpCoreDB.Client.Protocol" Version="1.9.2" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Client.Protocol" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
   </ItemGroup>
 
 
@@ -53,7 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" />
   </ItemGroup>
 
 </Project>

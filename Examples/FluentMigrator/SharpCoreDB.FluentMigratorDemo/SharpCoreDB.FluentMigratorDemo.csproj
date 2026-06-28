@@ -21,27 +21,27 @@
 
   <!-- NuGet: use published packages -->
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' != 'true'">
-    <PackageReference Include="SharpCoreDB" Version="1.9.0" />
-    <PackageReference Include="SharpCoreDB.Extensions" Version="1.9.0" />
+    <PackageReference Include="SharpCoreDB" />
+    <PackageReference Include="SharpCoreDB.Extensions" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentMigrator" Version="8.0.1" />
-    <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
-    <PackageReference Include="FluentMigrator.Runner.SQLite" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+    <PackageReference Include="FluentMigrator" />
+    <PackageReference Include="FluentMigrator.Runner" />
+    <PackageReference Include="FluentMigrator.Runner.SQLite" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
 
     <!-- Force latest safe versions of identity packages that FluentMigrator transitively pulls (deprecated/legacy in older versions).
          This minimizes attack surface even if no active vulnerability is reported today.
          Versions aligned to satisfy Azure.Identity 1.21.0 requirements (no downgrades). -->
-    <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.19.1" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.1" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
 
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    
   </ItemGroup>
 
 </Project>
