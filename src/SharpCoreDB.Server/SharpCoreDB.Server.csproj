@@ -43,7 +43,7 @@
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
 
     <!-- Security headers middleware (own library) -->
-    <PackageReference Include="SafeWebCore" Version="1.3.0" />
+    <PackageReference Include="SafeWebCore" Version="1.3.5" />
   </ItemGroup>
 
   <ItemGroup>
