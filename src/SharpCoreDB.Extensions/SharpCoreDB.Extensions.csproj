@@ -56,8 +56,8 @@
          deprecated/Legacy transitive packages coming from FluentMigrator and other deps.
          This is required for "everything secure" policy even if we keep the tool. -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.2" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.2" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.19.1" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.1" />
 
@@ -110,6 +110,7 @@
     <None Include="bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll" Pack="true" PackagePath="runtimes\osx-arm64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-arm64\SharpCoreDB.Extensions.dll')" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.19.1" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />

@@ -29,8 +29,8 @@
 
     <!-- Force safer / newer identity and data clients where OrchardCore pulls older ones -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.2" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.2" />
 
     <!-- Replace deprecated NEST / Elasticsearch.Net (Legacy) pulled by OrchardCore.Search.Elasticsearch.
          Modern replacement: Elastic.Clients.Elasticsearch.
@@ -56,7 +56,7 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
 
     <!-- Force modern Microsoft.Data.SqlClient to avoid CriticalBugs in older 6.x versions pulled by OrchardCore / other deps -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
 
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>

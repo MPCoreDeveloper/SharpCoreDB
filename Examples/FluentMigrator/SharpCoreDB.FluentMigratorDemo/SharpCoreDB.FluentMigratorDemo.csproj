@@ -36,8 +36,8 @@
          This minimizes attack surface even if no active vulnerability is reported today.
          Versions aligned to satisfy Azure.Identity 1.21.0 requirements (no downgrades). -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.85.2" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.85.2" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols" Version="8.19.1" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.19.1" />
 
