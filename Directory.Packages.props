@@ -140,7 +140,7 @@
     <PackageVersion Include="Tmds.DBus.Protocol" Version="0.94.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="YesSql.Core" Version="5.4.7" />
+    <PackageVersion Include="YesSql.Core" Version="6.0.0" />
     <PackageVersion Include="YesSql.Provider.Sqlite" Version="5.4.7" />
   </ItemGroup>
 </Project>
