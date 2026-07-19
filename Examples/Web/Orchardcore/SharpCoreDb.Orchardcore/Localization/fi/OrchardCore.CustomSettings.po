@@ -10,19 +10,27 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Finnish\n"
 "Language: fi_FI\n"
-"PO-Revision-Date: 2024-09-09 17:00\n"
+"PO-Revision-Date: 2026-06-03 19:19\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.CustomSettings\AdminMenu.cs:44
+#: OrchardCore.CustomSettings\AdminMenu.cs:46
 msgctxt "OrchardCore.CustomSettings.AdminMenu"
 msgid "Configuration"
 msgstr "Konfigurointi"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.CustomSettings\AdminMenu.cs:45
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.CustomSettings\AdminMenu.cs:47
+#: OrchardCore.CustomSettings\AdminMenu.cs:63
 msgctxt "OrchardCore.CustomSettings.AdminMenu"
 msgid "Settings"
 msgstr "Asetukset"
+
+#. Category = S["Settings"];
+#: OrchardCore.CustomSettings\Deployment\CustomSettingsDeploymentStep.cs:16
+msgctxt "OrchardCore.CustomSettings.Deployment.CustomSettingsDeploymentStep"
+msgid "Settings"
+msgstr ""
 
 #. [new StereotypeDescription { Stereotype = "CustomSettings", DisplayName = S["Custom Settings"] }]);
 #: OrchardCore.CustomSettings\Services\CustomSettingsStereotypesProvider.cs:18
@@ -31,19 +39,19 @@ msgid "Custom Settings"
 msgstr ""
 
 #. <h5>@T["Custom Settings"]</h5>
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:8
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "Custom Settings"
 msgstr "Mukautetut asetukset"
 
-#. @T["Include all custom settings."]
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:17
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all custom settings."]</label>
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "Include all custom settings."
 msgstr "Sisällytä kaikki mukautetut asetukset."
 
 #. <span class="hint">@T["The custom settings to add as part of the plan."]</span>
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:27
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:26
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "The custom settings to add as part of the plan."
 msgstr "Suunnitelmaan lisättävät mukautetut asetukset."

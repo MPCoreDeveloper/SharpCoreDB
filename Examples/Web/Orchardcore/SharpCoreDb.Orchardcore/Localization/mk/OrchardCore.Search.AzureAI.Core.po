@@ -10,23 +10,23 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Macedonian\n"
 "Language: mk_MK\n"
-"PO-Revision-Date: 2024-11-17 13:12\n"
+"PO-Revision-Date: 2025-08-07 17:40\n"
 
-#. context.Errors.Add(S["No index name was provided in the '{0}' recipe step.", Name]);
-#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:52
-msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
-msgid "No index name was provided in the '{0}' recipe step."
+#. context.Result.Fail(new ValidationResult(S["The index name contains forbidden characters."]));
+#: OrchardCore.Search.AzureAI.Core\Handlers\AzureAISearchIndexHandler.cs:68
+msgctxt "OrchardCore.Search.AzureAI.Handlers.AzureAISearchIndexHandler"
+msgid "The index name contains forbidden characters."
 msgstr ""
 
-#. context.Errors.Add(S["Invalid index name was provided in the recipe step. IndexName: {0}.", indexInfo.IndexName]);
-#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:59
-msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
-msgid "Invalid index name was provided in the recipe step. IndexName: {0}."
+#. context.Result.Fail(new ValidationResult(S["Invalid index name. Must start with a letter and be 1–128 characters long. Only letters, numbers, and underscores are allowed. Names cannot begin with 'azureSearch'."]));
+#: OrchardCore.Search.AzureAI.Core\Handlers\AzureAISearchIndexProfileHandler.cs:37
+msgctxt "OrchardCore.Search.AzureAI.Handlers.AzureAISearchIndexProfileHandler"
+msgid "Invalid index name. Must start with a letter and be 1–128 characters long. Only letters, numbers, and underscores are allowed. Names cannot begin with 'azureSearch'."
 msgstr ""
 
-#. context.Errors.Add(S["No {0} were provided in the recipe step. IndexName: {1}.", nameof(indexInfo.IndexedContentTypes), indexInfo.IndexName]);
-#: OrchardCore.Search.AzureAI.Core\Recipes\AzureAISearchIndexSettingsStep.cs:66
-msgctxt "OrchardCore.Search.AzureAI.Recipes.AzureAISearchIndexSettingsStep"
-msgid "No {0} were provided in the recipe step. IndexName: {1}."
+#. context.Result.Fail(new ValidationResult(S["At least one mapping field is required."]));
+#: OrchardCore.Search.AzureAI.Core\Handlers\AzureAISearchIndexProfileHandler.cs:44
+msgctxt "OrchardCore.Search.AzureAI.Handlers.AzureAISearchIndexProfileHandler"
+msgid "At least one mapping field is required."
 msgstr ""
 

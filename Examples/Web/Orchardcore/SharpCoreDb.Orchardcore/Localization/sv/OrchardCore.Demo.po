@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Swedish\n"
 "Language: sv_SE\n"
-"PO-Revision-Date: 2024-09-09 17:01\n"
+"PO-Revision-Date: 2026-06-03 19:20\n"
 
 #. .Add(S["Demo"], "10", demo => demo
 #: OrchardCore.Demo\AdminMenu.cs:18
@@ -106,38 +106,32 @@ msgctxt "OrchardCore.Demo.Pages.HelloWorld"
 msgid "MMMM dd, yyyy"
 msgstr ""
 
-#. <span class="icon"><i class="fa-solid fa-hashtag" aria-hidden="true"></i></span><span class="title">@T["Demo"]</span>
-#: OrchardCore.Demo\Views\NavigationItemText-demo.Id.cshtml:1
-msgctxt "OrchardCore.Demo.Views.NavigationItemText-demo.Id"
-msgid "Demo"
-msgstr ""
-
 #. Date using the DateTimeShape: @await DisplayAsync(await New.DateTime(Utc: null, Format: T["MMMM dd, yyyy"].Value))
 #: OrchardCore.Demo\Pages\OutsideAdmin.cshtml:37
 msgctxt "OrchardCore.Demo.Pages.OutsideAdmin"
 msgid "MMMM dd, yyyy"
 msgstr ""
 
-#. <label asp-for="FirstName" class="form-label">@T["First Name"]</label>
+#. <label asp-for="FirstName" class="ocat-label">@T["First Name"]</label>
 #. <input asp-for="FirstName" type="text" class="form-control" placeholder="@T["First Name"]" />
 #: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:4
-#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:5
+#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:6
 msgctxt "OrchardCore.Demo.Views.UserProfile.Edit"
 msgid "First Name"
 msgstr "Förnamn"
 
-#. <label asp-for="LastName" class="form-label">@T["Last Name"]</label>
+#. <label asp-for="LastName" class="ocat-label">@T["Last Name"]</label>
 #. <input asp-for="LastName" type="text" class="form-control" placeholder="@T["Last Name"]" />
-#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:9
-#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:10
+#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:11
+#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:13
 msgctxt "OrchardCore.Demo.Views.UserProfile.Edit"
 msgid "Last Name"
 msgstr "Efternamn"
 
-#. <label asp-for="Age" class="form-label">@T["Age"]</label>
+#. <label asp-for="Age" class="ocat-label">@T["Age"]</label>
 #. <input asp-for="Age" type="text" class="form-control" placeholder="@T["Age"]" />
-#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:14
-#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:15
+#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:18
+#: OrchardCore.Demo\Views\UserProfile.Edit.cshtml:20
 msgctxt "OrchardCore.Demo.Views.UserProfile.Edit"
 msgid "Age"
 msgstr "Ålder"

@@ -10,156 +10,168 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Macedonian\n"
 "Language: mk_MK\n"
-"PO-Revision-Date: 2024-11-10 14:33\n"
+"PO-Revision-Date: 2026-06-03 19:08\n"
 
 #. .Add(S["Audit Trail"], NavigationConstants.AdminMenuAuditTrailPosition, configuration => configuration
-#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:26
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), configuration => configuration
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), configuration => configuration
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
+#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:35
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:44
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:44
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:59
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:59
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:68
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:68
 msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailAdminMenu"
 msgid "Audit Trail"
 msgstr ""
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.AuditTrail\Navigation\AuditTrailSettingsAdminMenu.cs:26
-msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailSettingsAdminMenu"
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:42
+msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailAdminMenu"
 msgid "Configuration"
 msgstr ""
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.AuditTrail\Navigation\AuditTrailSettingsAdminMenu.cs:27
-msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailSettingsAdminMenu"
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:43
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:67
+msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailAdminMenu"
 msgid "Settings"
 msgstr ""
 
-#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
-#. .Add(S["Audit Trail"], S["Audit Trail"].PrefixPosition(), auditTrail => auditTrail
-#: OrchardCore.AuditTrail\Navigation\AuditTrailSettingsAdminMenu.cs:28
-#: OrchardCore.AuditTrail\Navigation\AuditTrailSettingsAdminMenu.cs:28
-msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailSettingsAdminMenu"
-msgid "Audit Trail"
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.AuditTrail\Navigation\AuditTrailAdminMenu.cs:58
+msgctxt "OrchardCore.AuditTrail.Navigation.AuditTrailAdminMenu"
+msgid "Tools"
 msgstr ""
 
 #. options.Categories.Insert(0, new SelectListItem(S["All categories"], string.Empty, string.IsNullOrEmpty(options.Category)));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:74
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:75
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "All categories"
 msgstr ""
 
 #. new(S["Any date"], string.Empty, options.Date == string.Empty),
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:95
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:96
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Any date"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Last 24 hours"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:99
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:100
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Last 24 hours"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Previous 48 hours"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:102
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:103
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Previous 48 hours"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["This week"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:105
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:106
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "This week"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Last week"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:110
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:111
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Last week"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["This month"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:114
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:115
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "This month"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Last month"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:119
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:120
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Last month"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Custom date range"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:120
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:121
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Custom date range"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Last hour"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:123
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:124
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Last hour"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Previous hour"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:126
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:127
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Previous hour"
 msgstr ""
 
 #. options.AuditTrailDates.Add(new SelectListItem(S["Custom time range"], dateTimeValue, options.Date == dateTimeValue));
-#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:127
+#: OrchardCore.AuditTrail\Services\DefaultAuditTrailAdminListQueryService.cs:128
 msgctxt "OrchardCore.AuditTrail.Services.DefaultAuditTrailAdminListQueryService"
 msgid "Custom time range"
 msgstr ""
 
 #. .WithSelectListItem<Startup>((S, opt, model) => new SelectListItem(S["Newest"], opt.Value, model.Sort == string.Empty))
-#: OrchardCore.AuditTrail\Startup.cs:78
+#: OrchardCore.AuditTrail\Startup.cs:77
 msgctxt "OrchardCore.AuditTrail.Startup"
 msgid "Newest"
 msgstr ""
 
 #. .WithSelectListItem<Startup>((S, opt, model) => new SelectListItem(S["Oldest"], opt.Value, model.Sort == opt.Value)))
-#: OrchardCore.AuditTrail\Startup.cs:83
+#: OrchardCore.AuditTrail\Startup.cs:82
 msgctxt "OrchardCore.AuditTrail.Startup"
 msgid "Oldest"
 msgstr ""
 
 #. .WithSelectListItem<Startup>((S, opt, model) => new SelectListItem(S["Category"], opt.Value, model.Sort == opt.Value)))
-#: OrchardCore.AuditTrail\Startup.cs:87
+#: OrchardCore.AuditTrail\Startup.cs:86
 msgctxt "OrchardCore.AuditTrail.Startup"
 msgid "Category"
 msgstr ""
 
 #. .WithSelectListItem<Startup>((S, opt, model) => new SelectListItem(S["Event"], opt.Value, model.Sort == opt.Value)))
-#: OrchardCore.AuditTrail\Startup.cs:100
+#: OrchardCore.AuditTrail\Startup.cs:99
 msgctxt "OrchardCore.AuditTrail.Startup"
 msgid "Event"
 msgstr ""
 
 #. .WithSelectListItem<Startup>((S, opt, model) => new SelectListItem(S["User"], opt.Value, model.Sort == opt.Value)))
-#: OrchardCore.AuditTrail\Startup.cs:113
+#: OrchardCore.AuditTrail\Startup.cs:112
 msgctxt "OrchardCore.AuditTrail.Startup"
 msgid "User"
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<AuditTrailSettings, DeploymentStartup>(S => S["Audit Trail settings"], S => S["Exports the audit trail settings."]);
-#: OrchardCore.AuditTrail\Startup.cs:129
+#: OrchardCore.AuditTrail\Startup.cs:128
 msgctxt "OrchardCore.AuditTrail.DeploymentStartup"
 msgid "Audit Trail settings"
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<AuditTrailSettings, DeploymentStartup>(S => S["Audit Trail settings"], S => S["Exports the audit trail settings."]);
-#: OrchardCore.AuditTrail\Startup.cs:129
+#: OrchardCore.AuditTrail\Startup.cs:128
 msgctxt "OrchardCore.AuditTrail.DeploymentStartup"
 msgid "Exports the audit trail settings."
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<AuditTrailTrimmingSettings, DeploymentStartup>(S => S["Audit Trail Trimming settings"], S => S["Exports the audit trail trimming settings."]);
-#: OrchardCore.AuditTrail\Startup.cs:130
+#: OrchardCore.AuditTrail\Startup.cs:129
 msgctxt "OrchardCore.AuditTrail.DeploymentStartup"
 msgid "Audit Trail Trimming settings"
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<AuditTrailTrimmingSettings, DeploymentStartup>(S => S["Audit Trail Trimming settings"], S => S["Exports the audit trail trimming settings."]);
-#: OrchardCore.AuditTrail\Startup.cs:130
+#: OrchardCore.AuditTrail\Startup.cs:129
 msgctxt "OrchardCore.AuditTrail.DeploymentStartup"
 msgid "Exports the audit trail trimming settings."
 msgstr ""
@@ -306,7 +318,7 @@ msgctxt "OrchardCore.AuditTrail.Views.AuditTrailAdminListSearch"
 msgid "Filter syntax"
 msgstr ""
 
-#. <label asp-for="SearchText" class="sr-only">@T["Search"]</label>
+#. <label asp-for="SearchText" class="visually-hidden">@T["Search"]</label>
 #. <input asp-for="SearchText" class="form-control" placeholder="@T["Search"]" inputmode="search" type="search" autofocus />
 #: OrchardCore.AuditTrail\Views\AuditTrailAdminListSearch.cshtml:32
 #: OrchardCore.AuditTrail\Views\AuditTrailAdminListSearch.cshtml:34
@@ -470,24 +482,24 @@ msgctxt "OrchardCore.AuditTrail.Views.AuditTrailAdminListSearch"
 msgid "Close"
 msgstr ""
 
-#. @T.Plural(Model.EventsCount, "1 item", "{0} items")
+#. @T.Plural(Model.EventsCount, "{0} item", "{0} items")
 #: OrchardCore.AuditTrail\Views\AuditTrailAdminListSummary.cshtml:5
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailAdminListSummary"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
 msgstr[0] ""
 msgstr[1] ""
 
-#. <span class="text-muted" title="@T["Items {0} to {1}", Model.StartIndex, Model.EndIndex]">@T.Plural(Model.TotalItemCount, " / 1 item in total", " / {0} items in total")</span>
+#. <span class="text-muted" title="@T["Items {0} to {1}", Model.StartIndex, Model.EndIndex]">@T.Plural(Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span>
 #: OrchardCore.AuditTrail\Views\AuditTrailAdminListSummary.cshtml:6
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailAdminListSummary"
 msgid "Items {0} to {1}"
 msgstr ""
 
-#. <span class="text-muted" title="@T["Items {0} to {1}", Model.StartIndex, Model.EndIndex]">@T.Plural(Model.TotalItemCount, " / 1 item in total", " / {0} items in total")</span>
+#. <span class="text-muted" title="@T["Items {0} to {1}", Model.StartIndex, Model.EndIndex]">@T.Plural(Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span>
 #: OrchardCore.AuditTrail\Views\AuditTrailAdminListSummary.cshtml:6
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailAdminListSummary"
-msgid " / 1 item in total"
+msgid " / {0} item in total"
 msgid_plural " / {0} items in total"
 msgstr[0] ""
 msgstr[1] ""
@@ -506,50 +518,56 @@ msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventActions.SummaryAdmin"
 msgid "Details"
 msgstr ""
 
+#. <h2 class="h3">@T["Event Info"]</h2>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:3
+msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
+msgid "Event Info"
+msgstr ""
+
 #. <th class="border-top-0 w-25">@T["Category"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:6
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:8
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
 msgid "Category"
 msgstr ""
 
-#. <th>@T["Event"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:10
+#. <th>@T["Event name"]</th>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:12
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
-msgid "Event"
+msgid "Event name"
 msgstr ""
 
-#. <th>@T["User Name"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:14
+#. <th>@T["Triggered by username"]</th>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:16
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
-msgid "User Name"
+msgid "Triggered by username"
 msgstr ""
 
-#. <th>@T["User ID"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:18
+#. <th>@T["Triggered by user ID"]</th>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:20
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
-msgid "User ID"
+msgid "Triggered by user ID"
 msgstr ""
 
-#. <th>@T["Timestamp"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:22
+#. <th>@T["Triggered at timestamp"]</th>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:24
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
-msgid "Timestamp"
+msgid "Triggered at timestamp"
 msgstr ""
 
-#. <th>@T["Client IP Address"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:26
+#. <th>@T["Client IP address"]</th>
+#: OrchardCore.AuditTrail\Views\AuditTrailEventDetail.DetailAdmin.cshtml:28
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventDetail.DetailAdmin"
-msgid "Client IP Address"
+msgid "Client IP address"
 msgstr ""
 
-#. <span class="badge ta-badge font-weight-normal" data-bs-toggle="tooltip" title="@T["User Name"]">
+#. <user-display-name user-name="@(Model.AuditTrailEvent.UserName)" title="@T["User Name"].Value" cache-id="user-display-name-username" display-type="SummaryAdmin" />
 #: OrchardCore.AuditTrail\Views\AuditTrailEventMeta.SummaryAdmin.cshtml:12
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventMeta.SummaryAdmin"
 msgid "User Name"
 msgstr ""
 
 #. <span class="badge ta-badge font-weight-normal" data-bs-toggle="tooltip" title="@T["Client IP Address"]">
-#: OrchardCore.AuditTrail\Views\AuditTrailEventMeta.SummaryAdmin.cshtml:19
+#: OrchardCore.AuditTrail\Views\AuditTrailEventMeta.SummaryAdmin.cshtml:16
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventMeta.SummaryAdmin"
 msgid "Client IP Address"
 msgstr ""
@@ -561,7 +579,7 @@ msgid "Category"
 msgstr ""
 
 #. title="@T["Event Name"]">@Model.Descriptor.LocalizedName(Context.RequestServices)</a>
-#: OrchardCore.AuditTrail\Views\AuditTrailEventTags.SummaryAdmin.cshtml:13
+#: OrchardCore.AuditTrail\Views\AuditTrailEventTags.SummaryAdmin.cshtml:12
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailEventTags.SummaryAdmin"
 msgid "Event Name"
 msgstr ""
@@ -577,86 +595,86 @@ msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Audit Trail"
 msgstr ""
 
-#. <label asp-for="Categories" class="form-label">@T["Events to record"]</label>
+#. <label asp-for="Categories" class="ocat-label">@T["Events to record"]</label>
 #: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:12
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Events to record"
 msgstr ""
 
 #. <th scope="col">@T["Event"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:16
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:17
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Event"
 msgstr ""
 
 #. <th scope="col">@T["Description"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:17
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:18
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Description"
 msgstr ""
 
 #. <th scope="col">@T["Enabled"]</th>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:18
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:19
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Enabled"
 msgstr ""
 
 #. <label class="form-check-label" for="@category.Name">@T["Select all"]</label>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:34
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:35
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Select all"
 msgstr ""
 
 #. <label asp-for="ClientIpAddressAllowed" class="form-check-label">@T["Allow client IP address"]</label>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:68
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:72
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Allow client IP address"
 msgstr ""
 
 #. <span class="hint dashed">@T["Whether the client IP address is recorded."]</span>
-#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:69
+#: OrchardCore.AuditTrail\Views\AuditTrailSettings.Edit.cshtml:73
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailSettings.Edit"
 msgid "Whether the client IP address is recorded."
 msgstr ""
 
 #. <label class="form-check-label" asp-for="Disabled">@T["Disable trimming task"]</label>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:6
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:8
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "Disable trimming task"
 msgstr ""
 
 #. <span class="hint dashed">@T["Whether the trimming task is disabled."]</span>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:7
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:9
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "Whether the trimming task is disabled."
 msgstr ""
 
-#. <label asp-for="RetentionDays" class="form-label">@T["Retention period"]</label>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:11
+#. <label asp-for="RetentionDays" class="ocat-label">@T["Retention period"]</label>
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:15
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "Retention period"
 msgstr ""
 
 #. <span class="hint">@T["The number of days an event is retained."]</span>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:13
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:18
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "The number of days an event is retained."
 msgstr ""
 
-#. <label asp-for="LastRunUtc" class="form-label">@T["Last run"]</label>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:17
+#. <label asp-for="LastRunUtc" class="ocat-label">@T["Last run"]</label>
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:23
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "Last run"
 msgstr ""
 
 #. <div class="form-control">@(Model.LastRunUtc.HasValue ? await DisplayAsync(await New.DateTime(Utc: Model.LastRunUtc.Value, Format: "g")) : T["Never"])</div>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:18
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:25
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "Never"
 msgstr ""
 
 #. <span class="hint">@T["The last time the trimming task was run."]</span>
-#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:19
+#: OrchardCore.AuditTrail\Views\AuditTrailTrimmingSettings.Edit.cshtml:26
 msgctxt "OrchardCore.AuditTrail.Views.AuditTrailTrimmingSettings.Edit"
 msgid "The last time the trimming task was run."
 msgstr ""
@@ -667,7 +685,7 @@ msgctxt "OrchardCore.AuditTrail.Views.Admin.Display"
 msgid "Audit Trail Event"
 msgstr ""
 
-#. <zone name="Title"><h1 class="mb-4">@RenderTitleSegments(T["Audit Trail"])</h1></zone>
+#. <zone name="Title"><h1>@RenderTitleSegments(T["Audit Trail"])</h1></zone>
 #: OrchardCore.AuditTrail\Views\Admin\Index.cshtml:4
 msgctxt "OrchardCore.AuditTrail.Views.Admin.Index"
 msgid "Audit Trail"

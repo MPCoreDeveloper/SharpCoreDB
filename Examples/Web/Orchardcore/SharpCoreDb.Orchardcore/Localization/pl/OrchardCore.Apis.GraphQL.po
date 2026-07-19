@@ -10,37 +10,47 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2024-09-09 16:58\n"
+"PO-Revision-Date: 2025-12-29 12:18\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Apis.GraphQL\AdminMenu.cs:18
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:20
 msgctxt "OrchardCore.Apis.GraphQL.AdminMenu"
 msgid "Configuration"
 msgstr "Konfiguracja"
 
 #. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
 #. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
-#: OrchardCore.Apis.GraphQL\AdminMenu.cs:19
-#: OrchardCore.Apis.GraphQL\AdminMenu.cs:19
+#. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
+#. .Add(S["GraphiQL"], S["GraphiQL"].PrefixPosition(), graphiQL => graphiQL
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:21
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:21
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:33
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:33
 msgctxt "OrchardCore.Apis.GraphQL.AdminMenu"
 msgid "GraphiQL"
 msgstr "GraphiQL"
+
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.Apis.GraphQL\AdminMenu.cs:32
+msgctxt "OrchardCore.Apis.GraphQL.AdminMenu"
+msgid "Tools"
+msgstr "Narzędzia"
 
 #. S["'{0}' exceeds the maximum number of results for '{1}' ({2})", value.Value, arg.Name, _maxNumberOfResults],
 #: OrchardCore.Apis.GraphQL\ValidationRules\MaxNumberOfResultsValidationRule.cs:58
 msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.MaxNumberOfResultsValidationRule"
 msgid "'{0}' exceeds the maximum number of results for '{1}' ({2})"
-msgstr ""
+msgstr "'{0}' przekracza maksymalną liczbę wyników dla '{1}' ({2})"
 
 #. S["Authorization is required to access {0}.", operationName],
 #: OrchardCore.Apis.GraphQL\ValidationRules\RequiresPermissionValidationRule.cs:68
 msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.RequiresPermissionValidationRule"
 msgid "Authorization is required to access {0}."
-msgstr ""
+msgstr "Wymagana jest autoryzacja, aby uzyskać dostęp do węzła {0}."
 
 #. S["Authorization is required to access the node. {0}", nodeName],
 #: OrchardCore.Apis.GraphQL\ValidationRules\RequiresPermissionValidationRule.cs:121
 msgctxt "OrchardCore.Apis.GraphQL.ValidationRules.RequiresPermissionValidationRule"
 msgid "Authorization is required to access the node. {0}"
-msgstr ""
+msgstr "Wymagana jest autoryzacja, aby uzyskać dostęp do węzła. {0}"
 

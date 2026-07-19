@@ -10,34 +10,54 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2024-09-09 16:45\n"
+"PO-Revision-Date: 2026-06-03 19:21\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:18
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:20
 msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
 msgid "Configuration"
 msgstr ""
 
 #. .Add(S["Import/Export"], import => import
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:19
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:21
 msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
 msgid "Import/Export"
 msgstr ""
 
 #. .Add(S["Remote Instances"], S["Remote Instances"].PrefixPosition(), remote => remote
 #. .Add(S["Remote Instances"], S["Remote Instances"].PrefixPosition(), remote => remote
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:20
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:20
+#. .Add(S["Remote Instances"], S["Remote Instances"].PrefixPosition(), remote => remote
+#. .Add(S["Remote Instances"], S["Remote Instances"].PrefixPosition(), remote => remote
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:22
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:22
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:41
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:41
 msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
 msgid "Remote Instances"
 msgstr ""
 
 #. .Add(S["Remote Clients"], S["Remote Clients"].PrefixPosition(), remote => remote
 #. .Add(S["Remote Clients"], S["Remote Clients"].PrefixPosition(), remote => remote
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:25
-#: OrchardCore.Deployment.Remote\AdminMenu.cs:25
+#. .Add(S["Remote Clients"], S["Remote Clients"].PrefixPosition(), remote => remote
+#. .Add(S["Remote Clients"], S["Remote Clients"].PrefixPosition(), remote => remote
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:27
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:27
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:46
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:46
 msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
 msgid "Remote Clients"
+msgstr ""
+
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:39
+msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
+msgid "Tools"
+msgstr ""
+
+#. .Add(S["Deployments"], import => import
+#: OrchardCore.Deployment.Remote\AdminMenu.cs:40
+msgctxt "OrchardCore.Deployment.Remote.AdminMenu"
+msgid "Deployments"
 msgstr ""
 
 #. await _notifier.SuccessAsync(H["Deployment executed successfully."]);
@@ -172,99 +192,69 @@ msgctxt "OrchardCore.Deployment.RemoteInstanceDeploymentTargetProvider"
 msgid "Sends the deployment plan to a remote instance."
 msgstr ""
 
-#. <label asp-for="ClientName" class="form-label">@T["Client Name"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:7
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
-msgid "Client Name"
-msgstr ""
-
-#. <label asp-for="ApiKey" class="form-label">@T["Api Key"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:13
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
-msgid "Api Key"
-msgstr ""
-
-#. <button class="btn btn-primary create" type="submit">@T["Create"]</button>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:19
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
-msgid "Create"
-msgstr ""
-
-#. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:20
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
-msgid "Cancel"
-msgstr ""
-
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Create Remote Instance"])</h1></zone>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:3
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Create Remote Instance"
 msgstr ""
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:8
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Name"
 msgstr ""
 
-#. <label asp-for="Url" class="form-label">@T["Url"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:14
+#. <label asp-for="Url" class="ocat-label">@T["Url"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:16
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Url"
 msgstr ""
 
-#. <label asp-for="ClientName" class="form-label">@T["Client Name"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:20
+#. <label asp-for="ClientName" class="ocat-label">@T["Client Name"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:24
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Client Name"
 msgstr ""
 
-#. <label asp-for="ApiKey" class="form-label">@T["Api Key"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:26
+#. <label asp-for="ApiKey" class="ocat-label">@T["Api Key"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:32
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Api Key"
 msgstr ""
 
 #. <button class="btn btn-primary create" type="submit">@T["Create"]</button>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:32
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:41
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Create"
 msgstr ""
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:33
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Create.cshtml:42
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Create"
 msgid "Cancel"
 msgstr ""
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Remote Client"])</h1></zone>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:3
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
-msgid "Edit Remote Client"
-msgstr ""
-
-#. <label asp-for="ClientName" class="form-label">@T["Client Name"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:10
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+#. <label asp-for="ClientName" class="ocat-label">@T["Client Name"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:7
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
 msgid "Client Name"
 msgstr ""
 
-#. <label asp-for="ApiKey" class="form-label">@T["Api Key"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:16
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+#. <label asp-for="ApiKey" class="ocat-label">@T["Api Key"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:15
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
 msgid "Api Key"
 msgstr ""
 
-#. <button class="btn btn-primary save" type="submit">@T["Save"]</button>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:22
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
-msgid "Save"
+#. <button class="btn btn-primary create" type="submit">@T["Create"]</button>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:24
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
+msgid "Create"
 msgstr ""
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:23
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Create.cshtml:25
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Create"
 msgid "Cancel"
 msgstr ""
 
@@ -274,140 +264,70 @@ msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Edit Remote Instance"
 msgstr ""
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:10
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Name"
 msgstr ""
 
-#. <label asp-for="Url" class="form-label">@T["Url"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:16
+#. <label asp-for="Url" class="ocat-label">@T["Url"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:18
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Url"
 msgstr ""
 
-#. <label asp-for="ClientName" class="form-label">@T["Client Name"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:22
+#. <label asp-for="ClientName" class="ocat-label">@T["Client Name"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:26
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Client Name"
 msgstr ""
 
-#. <label asp-for="ApiKey" class="form-label">@T["Api Key"]</label>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:28
+#. <label asp-for="ApiKey" class="ocat-label">@T["Api Key"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:34
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Api Key"
 msgstr ""
 
 #. <button class="btn btn-primary save" type="submit">@T["Save"]</button>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:34
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:43
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Save"
 msgstr ""
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:35
+#: OrchardCore.Deployment.Remote\Views\RemoteInstance\Edit.cshtml:44
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Edit"
 msgid "Cancel"
 msgstr ""
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["Remote Clients"])</h1></zone>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:7
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Remote Clients"
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Remote Client"])</h1></zone>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:3
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+msgid "Edit Remote Client"
 msgstr ""
 
-#. @T["Url to use from client instances: <b>{0}</b>", Url.Action("Import", "ImportRemoteInstance", null, Context.Request.Scheme)]
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:10
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Url to use from client instances: <b>{0}</b>"
+#. <label asp-for="ClientName" class="ocat-label">@T["Client Name"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:10
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+msgid "Client Name"
 msgstr ""
 
-#. <input asp-for="Options.Search" class="form-control" placeholder="@T["Search"]" type="search" autofocus />
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:25
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Search"
+#. <label asp-for="ApiKey" class="ocat-label">@T["Api Key"]</label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:18
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+msgid "Api Key"
 msgstr ""
 
-#. <a asp-route-action="Create" class="btn btn-secondary create" role="button">@T["Add Remote Client"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:29
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Add Remote Client"
+#. <button class="btn btn-primary save" type="submit">@T["Save"]</button>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:27
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+msgid "Save"
 msgstr ""
 
-#. <label class="form-check-label" for="select-all" id="select-all-label" title="@T["Select All"]"></label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:43
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Select All"
-msgstr ""
-
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "1 item"
-msgid_plural "{0} items"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
-msgstr[3] ""
-
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Items {0} to {1}"
-msgstr ""
-
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid " / {0} item in total"
-msgid_plural " / {0} items in total"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
-msgstr[3] ""
-
-#. @T["Actions"]
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:53
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Actions"
-msgstr ""
-
-#. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:58
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Bulk Action"
-msgstr ""
-
-#. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:58
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Are you sure you want to {0} these items?"
-msgstr ""
-
-#. <a asp-action="Edit" asp-route-id="@entry.Id" class="btn btn-primary btn-sm">@T["Edit"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:75
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Edit"
-msgstr ""
-
-#. <a asp-action="Delete" asp-route-id="@entry.Id" class="btn btn-danger btn-sm" data-url-af="RemoveUrl UnsafeUrl">@T["Delete"]</a>
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:76
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "Delete"
-msgstr ""
-
-#. @T["<strong>Nothing here!</strong> There are no remote clients for the moment."]
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:87
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "<strong>Nothing here!</strong> There are no remote clients for the moment."
-msgstr ""
-
-#. selectedItems.text($(":checkbox[name='itemIds']:checked").length + ' @T["selected"]');
-#. selectedItems.text(selectedItemsCount + ' @T["selected"]');
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:138
-#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:149
-msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
-msgid "selected"
+#. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Edit.cshtml:28
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Edit"
+msgid "Cancel"
 msgstr ""
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Remote Instances"])</h1></zone>
@@ -434,23 +354,23 @@ msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Index"
 msgid "Select All"
 msgstr ""
 
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Index.cshtml:39
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Index"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
 msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 msgstr[3] ""
 
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Index.cshtml:39
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Index"
 msgid "Items {0} to {1}"
 msgstr ""
 
-#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteInstances.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Index.cshtml:39
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Index"
 msgid " / {0} item in total"
@@ -501,6 +421,106 @@ msgstr ""
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Index.cshtml:132
 #: OrchardCore.Deployment.Remote\Views\RemoteInstance\Index.cshtml:143
 msgctxt "OrchardCore.Deployment.Remote.Views.RemoteInstance.Index"
+msgid "selected"
+msgstr ""
+
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Remote Clients"])</h1></zone>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:7
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Remote Clients"
+msgstr ""
+
+#. @T["Url to use from client instances: <b>{0}</b>", Url.Action("Import", "ImportRemoteInstance", null, Context.Request.Scheme)]
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:10
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Url to use from client instances: <b>{0}</b>"
+msgstr ""
+
+#. <input asp-for="Options.Search" class="form-control" placeholder="@T["Search"]" type="search" autofocus />
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:25
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Search"
+msgstr ""
+
+#. <a asp-route-action="Create" class="btn btn-secondary create" role="button">@T["Add Remote Client"]</a>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:29
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Add Remote Client"
+msgstr ""
+
+#. <label class="form-check-label" for="select-all" id="select-all-label" title="@T["Select All"]"></label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:43
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Select All"
+msgstr ""
+
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "{0} item"
+msgid_plural "{0} items"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
+
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Items {0} to {1}"
+msgstr ""
+
+#. <label id="items" for="select-all">@T.Plural(Model.RemoteClients.Count(), "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:44
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid " / {0} item in total"
+msgid_plural " / {0} items in total"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
+
+#. @T["Actions"]
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:53
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Actions"
+msgstr ""
+
+#. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:58
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Bulk Action"
+msgstr ""
+
+#. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:58
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Are you sure you want to {0} these items?"
+msgstr ""
+
+#. <a asp-action="Edit" asp-route-id="@entry.Id" class="btn btn-primary btn-sm">@T["Edit"]</a>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:75
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Edit"
+msgstr ""
+
+#. <a asp-action="Delete" asp-route-id="@entry.Id" class="btn btn-danger btn-sm" data-url-af="RemoveUrl UnsafeUrl">@T["Delete"]</a>
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:76
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "Delete"
+msgstr ""
+
+#. @T["<strong>Nothing here!</strong> There are no remote clients for the moment."]
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:87
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
+msgid "<strong>Nothing here!</strong> There are no remote clients for the moment."
+msgstr ""
+
+#. selectedItems.text($(":checkbox[name='itemIds']:checked").length + ' @T["selected"]');
+#. selectedItems.text(selectedItemsCount + ' @T["selected"]');
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:138
+#: OrchardCore.Deployment.Remote\Views\RemoteClient\Index.cshtml:149
+msgctxt "OrchardCore.Deployment.Remote.Views.RemoteClient.Index"
 msgid "selected"
 msgstr ""
 

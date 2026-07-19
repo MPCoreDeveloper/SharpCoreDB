@@ -10,13 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Simplified\n"
 "Language: zh_CN\n"
-"PO-Revision-Date: 2024-08-24 20:30\n"
-
-#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Html), S["{0} doesn't contain a valid Liquid expression. Details: {1}", partName, string.Join(" ", errors)]);
-#: OrchardCore.Html\Drivers\HtmlBodyPartDisplayDriver.cs:70
-msgctxt "OrchardCore.Html.Drivers.HtmlBodyPartDisplayDriver"
-msgid "{0} doesn't contain a valid Liquid expression. Details: {1}"
-msgstr "{0} 包含无效的 Liquid 表达式。详细信息: {1}"
+"PO-Revision-Date: 2026-06-03 19:31\n"
 
 #. Description = S["Content stored as HTML."];
 #: OrchardCore.Html\GraphQL\HtmlBodyQueryObjectType.cs:23
@@ -43,7 +37,7 @@ msgid "The options are written in an incorrect format."
 msgstr "选项以不正确的格式写入。"
 
 #. <span class="hint">@T["The body of the content item."]</span>
-#: OrchardCore.Html\Views\HtmlBodyPart-Monaco.Edit.cshtml:16
+#: OrchardCore.Html\Views\HtmlBodyPart-Monaco.Edit.cshtml:15
 msgctxt "OrchardCore.Html.Views.HtmlBodyPart-Monaco.Edit"
 msgid "The body of the content item."
 msgstr "内容项的正文。"
@@ -55,7 +49,7 @@ msgid "Monaco editor"
 msgstr "摩纳哥编辑器"
 
 #. <span class="hint">@T["The body of the content item."]</span>
-#: OrchardCore.Html\Views\HtmlBodyPart-Trumbowyg.Edit.cshtml:38
+#: OrchardCore.Html\Views\HtmlBodyPart-Trumbowyg.Edit.cshtml:37
 msgctxt "OrchardCore.Html.Views.HtmlBodyPart-Trumbowyg.Edit"
 msgid "The body of the content item."
 msgstr "内容项的正文。"
@@ -67,7 +61,7 @@ msgid "Trumbowyg editor"
 msgstr "Trumbowyg 编辑器"
 
 #. <span class="hint">@T["The body of the content item."]</span>
-#: OrchardCore.Html\Views\HtmlBodyPart-Wysiwyg.Edit.cshtml:33
+#: OrchardCore.Html\Views\HtmlBodyPart-Wysiwyg.Edit.cshtml:34
 msgctxt "OrchardCore.Html.Views.HtmlBodyPart-Wysiwyg.Edit"
 msgid "The body of the content item."
 msgstr "内容项的正文。"
@@ -85,7 +79,7 @@ msgid "Standard"
 msgstr "标准"
 
 #. <span class="hint">@T["The body of the content item."]</span>
-#: OrchardCore.Html\Views\HtmlBodyPart.Edit.cshtml:14
+#: OrchardCore.Html\Views\HtmlBodyPart.Edit.cshtml:13
 msgctxt "OrchardCore.Html.Views.HtmlBodyPart.Edit"
 msgid "The body of the content item."
 msgstr "内容项的正文。"
@@ -96,56 +90,68 @@ msgctxt "OrchardCore.Html.Views.HtmlBodyPart.Option"
 msgid "Standard"
 msgstr "标准"
 
-#. <label asp-for="Options" class="form-label">@T["Enter the editor options, language is always set to `html` when saved."]</label>
+#. <label asp-for="Options" class="ocat-label">@T["Enter the editor options, language is always set to `html` when saved."]</label>
 #: OrchardCore.Html\Views\HtmlBodyPartMonacoSettings.Edit.cshtml:11
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartMonacoSettings.Edit"
 msgid "Enter the editor options, language is always set to `html` when saved."
 msgstr "输入编辑器选项，在保存时语言总是设置为“html”。"
 
-#. <span class="hint"><a href="https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html" target="_blank">@T["Documentation for options"]</a></span>
-#: OrchardCore.Html\Views\HtmlBodyPartMonacoSettings.Edit.cshtml:13
+#. <span class="hint"><a href="https://microsoft.github.io/monaco-editor/docs.html#interfaces/editor_editor_api.editor.IStandaloneEditorConstructionOptions.html" target="_blank">@T["Documentation for options"]</a></span>
+#: OrchardCore.Html\Views\HtmlBodyPartMonacoSettings.Edit.cshtml:14
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartMonacoSettings.Edit"
 msgid "Documentation for options"
 msgstr "选项文档"
 
 #. <label class="form-check-label" asp-for="SanitizeHtml">@T["Sanitize Html"]</label>
-#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:6
+#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
 msgid "Sanitize Html"
 msgstr "HTML无害化"
 
-#. @T["Whether the Html is sanitized to prevent custom scripts."]
-#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:8
-msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
-msgid "Whether the Html is sanitized to prevent custom scripts."
-msgstr "Html 是否被净化以防止自定义脚本。"
-
-#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/core/Sanitizer" target="_blank">@T["See documentation"]</a>
+#. @T["Whether the Html is sanitized, e.g. by removing script tags (and more)."]
 #: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:9
+msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
+msgid "Whether the Html is sanitized, e.g. by removing script tags (and more)."
+msgstr "Html 是否通过移除脚本标签(以及更多)进行净化。"
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Sanitizer" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:10
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
 msgid "See documentation"
 msgstr "查看文档"
 
+#. <label class="form-check-label" asp-for="RenderLiquid">@T["Render Liquid"]</label>
+#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:19
+msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
+msgid "Render Liquid"
+msgstr "渲染 Liquid"
+
+#. <span class="hint dashed">@T["Whether Liquid markup is rendered or displayed raw. Consider using Shortcodes instead."]</span>
+#: OrchardCore.Html\Views\HtmlBodyPartSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Html.Views.HtmlBodyPartSettings.Edit"
+msgid "Whether Liquid markup is rendered or displayed raw. Consider using Shortcodes instead."
+msgstr "是否呈现或显示Liquid标记。请考虑使用短码。"
+
 #. <label class="form-check-label" asp-for="InsertMediaWithUrl">@T["Insert Media with url"]</label>
-#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:6
+#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartTrumbowygSettings.Edit"
 msgid "Insert Media with url"
 msgstr "插入带有URL的媒体"
 
 #. <span class="hint dashed">@T["Whether the url is used when selected from Insert Media (By default, the Shortcode is inserted)."]</span>
-#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:7
+#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:8
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartTrumbowygSettings.Edit"
 msgid "Whether the url is used when selected from Insert Media (By default, the Shortcode is inserted)."
 msgstr "当从插入媒体时是否使用 url (默认情况下，插入短代码)。"
 
-#. <label asp-for="Options" class="form-label">@T["Enter the editor options"]</label>
-#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:11
+#. <label asp-for="Options" class="ocat-label">@T["Enter the editor options"]</label>
+#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:13
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartTrumbowygSettings.Edit"
 msgid "Enter the editor options"
 msgstr "输入编辑器选项"
 
-#. <span class="hint"><a href="https://alex-d.github.io/Trumbowyg/documentation/#button-pane" target="_blank">@T["Documentation for options"]</a></span>
-#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:12
+#. <span class="hint"><a href="https://alex-d.github.io/Trumbowyg/documentation/#basic-options" target="_blank">@T["Documentation for options"]</a></span>
+#: OrchardCore.Html\Views\HtmlBodyPartTrumbowygSettings.Edit.cshtml:15
 msgctxt "OrchardCore.Html.Views.HtmlBodyPartTrumbowygSettings.Edit"
 msgid "Documentation for options"
 msgstr "选项文档"

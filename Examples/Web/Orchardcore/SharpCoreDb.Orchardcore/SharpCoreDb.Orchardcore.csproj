@@ -37,6 +37,9 @@
          Note: OrchardCore 2.2.1's ES module may still load the old client at runtime for its integration.
          If search is not required for this demo, the Elasticsearch feature can be disabled in OrchardCore setup. -->
     <PackageReference Include="Elastic.Clients.Elasticsearch" />
+
+    <!-- Pin AngleSharp to 0.17.1 to satisfy HtmlSanitizer 9.0.892 requirements and avoid vulnerability NU1902 in 1.1.2 -->
+    <PackageReference Include="AngleSharp" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalSharpCoreDbSources)' == 'true'">

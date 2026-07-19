@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Czech\n"
 "Language: cs_CZ\n"
-"PO-Revision-Date: 2024-08-24 20:40\n"
+"PO-Revision-Date: 2026-06-03 19:58\n"
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Title), S["A value is required for Title."]);
 #: OrchardCore.Title\Drivers\TitlePartDisplayDriver.cs:56
@@ -19,16 +19,22 @@ msgid "A value is required for Title."
 msgstr "Pro název je vyžadována hodnota."
 
 #. context.Fail(S["A value is required for Title."], nameof(part.Title));
-#: OrchardCore.Title\Handlers\TitlePartHandler.cs:46
+#: OrchardCore.Title\Handlers\TitlePartHandler.cs:54
 msgctxt "OrchardCore.Title.Handlers.TitlePartHandler"
 msgid "A value is required for Title."
 msgstr "Vyplňte položku 'Název'"
 
-#. context.Updater.ModelState.AddModelError(nameof(model.Pattern), S["Pattern doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
-#: OrchardCore.Title\Settings\TitlePartSettingsDisplayDriver.cs:48
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Pattern), S["A pattern is required when using the selected behavior option."]);
+#: OrchardCore.Title\Settings\TitlePartSettingsDisplayDriver.cs:55
 msgctxt "OrchardCore.Title.Settings.TitlePartSettingsDisplayDriver"
-msgid "Pattern doesn't contain a valid Liquid expression. Details: {0}"
-msgstr "Vzor neobsahuje platný Liquid výraz. Podrobnosti: {0}"
+msgid "A pattern is required when using the selected behavior option."
+msgstr "Pro zvolené chování titulku je třeba definovat textovou šablonu."
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Pattern), S["The pattern doesn't contain a valid Liquid expression. Details: {0}", string.Join(' ', errors)]);
+#: OrchardCore.Title\Settings\TitlePartSettingsDisplayDriver.cs:59
+msgctxt "OrchardCore.Title.Settings.TitlePartSettingsDisplayDriver"
+msgid "The pattern doesn't contain a valid Liquid expression. Details: {0}"
+msgstr "Textová šablona obsahuje neplatný Liquid výraz. Detaily: {0}"
 
 #. <option value="" selected="@string.IsNullOrEmpty(currentDisplayMode)">@T["Standard"]</option>
 #: OrchardCore.Title\Views\TitlePart.DisplayOption.cshtml:4
@@ -36,20 +42,14 @@ msgctxt "OrchardCore.Title.Views.TitlePart.DisplayOption"
 msgid "Standard"
 msgstr "Výchozí"
 
-#. <label asp-for="Title" class="@Orchard.GetLabelClasses(inputRequired: isRequired)">@T["Title"]</label>
-#: OrchardCore.Title\Views\TitlePart.Edit.cshtml:13
+#. <label asp-for="Title" class="ocat-label @(isRequired ? "ocat-label-required" : "")">@T["Title"]</label>
+#: OrchardCore.Title\Views\TitlePart.Edit.cshtml:12
 msgctxt "OrchardCore.Title.Views.TitlePart.Edit"
 msgid "Title"
 msgstr "Název"
 
-#. <span class="hint">@T["Leave empty to auto-generate the title using the pattern."]</span>
-#: OrchardCore.Title\Views\TitlePart.Edit.cshtml:22
-msgctxt "OrchardCore.Title.Views.TitlePart.Edit"
-msgid "Leave empty to auto-generate the title using the pattern."
-msgstr "Ponechte prázdné pro automatické vygenerování názvu pomocí vzoru."
-
 #. <span class="hint">@T["The title will be auto-generated using the pattern."]</span>
-#: OrchardCore.Title\Views\TitlePart.Edit.cshtml:25
+#: OrchardCore.Title\Views\TitlePart.Edit.cshtml:18
 msgctxt "OrchardCore.Title.Views.TitlePart.Edit"
 msgid "The title will be auto-generated using the pattern."
 msgstr "Název bude automaticky generován pomocí vzoru."
@@ -60,57 +60,69 @@ msgctxt "OrchardCore.Title.Views.TitlePart.Option"
 msgid "Standard"
 msgstr "Výchozí"
 
-#. <label asp-for="Options" class="form-label">@T["Options"]</label>
-#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:16
+#. <label asp-for="Options" class="ocat-label">@T["Behavior option"]</label>
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:15
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
-msgid "Options"
-msgstr "Nastavení"
+msgid "Behavior option"
+msgstr "Možnosti chování"
 
-#. <option value="@TitlePartOptions.Editable" selected="@(Model.Options == TitlePartOptions.Editable)">@T["Title is editable"]</option>
+#. <option value="@nameof(TitlePartOptions.Editable)" selected="@(Model.Options == TitlePartOptions.Editable)">@T["Title is editable"]</option>
 #: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:18
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Title is editable"
 msgstr "Nadpis lze editovat"
 
-#. <option value="@TitlePartOptions.EditableRequired" selected="@(Model.Options == TitlePartOptions.EditableRequired)">@T["Title is editable and required"]</option>
+#. <option value="@nameof(TitlePartOptions.EditableRequired)" selected="@(Model.Options == TitlePartOptions.EditableRequired)">@T["Title is editable and required"]</option>
 #: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:19
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Title is editable and required"
 msgstr "Nadpis lze editovat a je povinný"
 
-#. <option value="@TitlePartOptions.GeneratedDisabled" selected="@(Model.Options == TitlePartOptions.GeneratedDisabled)">@T["Title is generated and input is disabled"]</option>
+#. <option value="@nameof(TitlePartOptions.GeneratedDisabled)" selected="@(Model.Options == TitlePartOptions.GeneratedDisabled)">@T["Title is generated and input is disabled"]</option>
 #: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:20
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Title is generated and input is disabled"
 msgstr "Nadpis je generovaný a zadávácí pole je zakázané"
 
-#. <option value="@TitlePartOptions.GeneratedHidden" selected="@(Model.Options == TitlePartOptions.GeneratedHidden)">@T["Title is generated and input is hidden"]</option>
+#. <option value="@nameof(TitlePartOptions.GeneratedHidden)" selected="@(Model.Options == TitlePartOptions.GeneratedHidden)">@T["Title is generated and input is hidden"]</option>
 #: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:21
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Title is generated and input is hidden"
 msgstr "Nadpis je generovaný a zadávácí pole je skryté"
 
 #. <label asp-for="RenderTitle" class="form-check-label">@T["Render Title"]</label>
-#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:28
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:29
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Render Title"
 msgstr "Vykreslovat název"
 
 #. <span class="hint dashed">@T["Check to render the title in display views."]</span>
-#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:29
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:30
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Check to render the title in display views."
 msgstr "Zaškrtněte pro zobrazení názvu v zobrazení."
 
-#. <label asp-for="Pattern" class="form-label">@T["Pattern"]</label>
-#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:35
+#. <label asp-for="Pattern" class="ocat-label">@T["Pattern"]</label>
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:36
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "Pattern"
 msgstr "Vzor"
 
 #. <span class="hint">@T["The pattern used to render the title of this content type. With Liquid support."]</span>
-#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:37
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:39
 msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
 msgid "The pattern used to render the title of this content type. With Liquid support."
 msgstr "Vzor použitý k vykreslení názvu tohoto typu obsahu. Podporuje Liquid."
+
+#. <label asp-for="Placeholder" class="ocat-label">@T["Placeholder"]</label>
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:44
+msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
+msgid "Placeholder"
+msgstr ""
+
+#. <span class="hint">@T["The placeholder text to display for this field on the editor."]</span>
+#: OrchardCore.Title\Views\TitlePartSettings.Edit.cshtml:47
+msgctxt "OrchardCore.Title.Views.TitlePartSettings.Edit"
+msgid "The placeholder text to display for this field on the editor."
+msgstr ""
 

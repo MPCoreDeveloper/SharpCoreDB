@@ -1,0 +1,62 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: tr\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.ContentManagement.pot\n"
+"X-Crowdin-File-ID: 962\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Turkish\n"
+"Language: tr_TR\n"
+"PO-Revision-Date: 2026-04-22 14:14\n"
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Publishing '{0}' was cancelled.", contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:405
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Publishing '{0}' was cancelled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Publishing {0} '{1}' was cancelled.", typeDefinition.DisplayName, contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:409
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Publishing {0} '{1}' was cancelled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Unpublishing '{0}' was cancelled.", contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:477
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Unpublishing '{0}' was cancelled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Unpublishing {0} '{1}' was cancelled.", typeDefinition.DisplayName, contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:481
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Unpublishing {0} '{1}' was cancelled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Creating '{0}' was canceled.", contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:635
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Creating '{0}' was canceled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Creating {0} '{1}' was canceled.", typeDefinition.DisplayName, contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:639
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Creating {0} '{1}' was canceled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Deletion of '{0}' has been cancelled.", contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:927
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Deletion of '{0}' has been cancelled."
+msgstr ""
+
+#. _updateModelAccessor.ModelUpdater.ModelState.AddModelError("", S["Deleting {0} '{1}' has been cancelled.", typeDefinition.DisplayName, contentItem.DisplayText]);
+#: OrchardCore.ContentManagement\DefaultContentManager.cs:931
+msgctxt "OrchardCore.ContentManagement.DefaultContentManager"
+msgid "Deleting {0} '{1}' has been cancelled."
+msgstr ""
+

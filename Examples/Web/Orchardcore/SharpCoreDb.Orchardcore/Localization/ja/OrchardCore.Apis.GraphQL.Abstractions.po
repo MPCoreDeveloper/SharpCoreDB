@@ -1,0 +1,98 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: ja\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Apis.GraphQL.Abstractions.pot\n"
+"X-Crowdin-File-ID: 960\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Japanese\n"
+"Language: ja_JP\n"
+"PO-Revision-Date: 2025-01-29 16:02\n"
+
+#. { "",  (S, description) => S["{0} is equal to", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:34
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is equal to"
+msgstr ""
+
+#. { "_not",  (S, description) => S["{0} is not equal to", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:35
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is not equal to"
+msgstr ""
+
+#. { "_in", (S, description) => S["{0} is in collection", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:41
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is in collection"
+msgstr ""
+
+#. { "_not_in", (S, description) => S["{0} is not in collection", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:42
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is not in collection"
+msgstr ""
+
+#. { "_gt", (S, description) => S["{0} is greater than", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:48
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is greater than"
+msgstr ""
+
+#. { "_gte", (S, description) => S["{0} is greater than or equal", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:49
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is greater than or equal"
+msgstr ""
+
+#. { "_lt", (S, description) => S["{0} is less than", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:50
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is less than"
+msgstr ""
+
+#. { "_lte", (S, description) => S["{0} is less than or equal", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:51
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} is less than or equal"
+msgstr ""
+
+#. { "_contains", (S, description) => S["{0} contains the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:57
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} contains the string"
+msgstr ""
+
+#. { "_not_contains", (S, description) => S["{0} does not contain the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:58
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} does not contain the string"
+msgstr ""
+
+#. { "_starts_with", (S, description) => S["{0} starts with the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:59
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} starts with the string"
+msgstr ""
+
+#. { "_not_starts_with", (S, description) => S["{0} does not start with the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:60
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} does not start with the string"
+msgstr ""
+
+#. { "_ends_with", (S, description) => S["{0} ends with the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:61
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} ends with the string"
+msgstr ""
+
+#. { "_not_ends_with", (S, description) => S["{0} does not end with the string", description] },
+#: OrchardCore.Apis.GraphQL.Abstractions\Queries\WhereInputObjectGraphType.cs:62
+msgctxt "OrchardCore.Apis.GraphQL.Queries.WhereInputObjectGraphType"
+msgid "{0} does not end with the string"
+msgstr ""
+

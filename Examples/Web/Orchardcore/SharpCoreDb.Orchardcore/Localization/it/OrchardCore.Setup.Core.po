@@ -10,46 +10,48 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Italian\n"
 "Language: it_IT\n"
-"PO-Revision-Date: 2024-11-19 16:32\n"
+"PO-Revision-Date: 2026-06-03 19:50\n"
 
 #. context.Errors.Add(string.Empty, S["DatabaseProvider setting is required."]);
-#: OrchardCore.Setup.Core\SetupService.cs:171
+#: OrchardCore.Setup.Core\Services\SetupService.cs:187
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "DatabaseProvider setting is required."
 msgstr "L'impostazione del DatabaseProvider è obbligatoria."
 
 #. context.Errors.Add(string.Empty, S["The provided database provider is not supported."]);
-#: OrchardCore.Setup.Core\SetupService.cs:174
+#: OrchardCore.Setup.Core\Services\SetupService.cs:190
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "The provided database provider is not supported."
 msgstr "Il provider di database fornito non è supportato."
 
 #. context.Errors.Add(string.Empty, S["The provided connection string is invalid or server is unreachable."]);
-#: OrchardCore.Setup.Core\SetupService.cs:177
+#: OrchardCore.Setup.Core\Services\SetupService.cs:193
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "The provided connection string is invalid or server is unreachable."
 msgstr "La stringa di connessione fornita non è valida o il server non è raggiungibile."
 
 #. context.Errors.Add(string.Empty, S["The security certificate on the server is from a non-trusted source (the certificate issuing authority isn't listed as a trusted authority in Trusted Root Certification Authorities on the client machine). In a development environment, you have the option to use the '{0}' parameter in your connection string to bypass the validation performed by the certificate authority.", "TrustServerCertificate=True"]);
-#: OrchardCore.Setup.Core\SetupService.cs:180
+#: OrchardCore.Setup.Core\Services\SetupService.cs:196
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "The security certificate on the server is from a non-trusted source (the certificate issuing authority isn't listed as a trusted authority in Trusted Root Certification Authorities on the client machine). In a development environment, you have the option to use the '{0}' parameter in your connection string to bypass the validation performed by the certificate authority."
 msgstr "Il certificato di sicurezza sul server proviene da una sorgente non verificata (l'autorità che emana il certificato non è elencata come autorità affidabile in Trusted Root Certification Authorities sulla macchina client). In un ambiente di sviluppo, si ha l'opzione di usare il parametro '{0}' nella connection string per bypassare la validazione effettuata dalla certificate authority."
 
 #. context.Errors.Add(string.Empty, S["The provided database, table prefix and schema are already in use."]);
-#: OrchardCore.Setup.Core\SetupService.cs:183
+#: OrchardCore.Setup.Core\Services\SetupService.cs:199
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "The provided database, table prefix and schema are already in use."
 msgstr "Il database, il prefisso della tabella e lo schema sono già in uso."
 
-#. context.Errors.Add(string.Empty, S["An error occurred while initializing the datastore: {0}", e.Message]);
-#: OrchardCore.Setup.Core\SetupService.cs:216
+#. context.Errors.Add(string.Empty, S["An error occurred while initializing the datastore."]);
+#. context.Errors.Add(string.Empty, S["An error occurred while initializing the datastore."]);
+#: OrchardCore.Setup.Core\Services\SetupService.cs:234
+#: OrchardCore.Setup.Core\Services\SetupService.cs:266
 msgctxt "OrchardCore.Setup.Services.SetupService"
-msgid "An error occurred while initializing the datastore: {0}"
-msgstr "Si è verificato un errore durante l'inizializzazione del datastore: {0}"
+msgid "An error occurred while initializing the datastore."
+msgstr ""
 
 #. context.Errors.Add(string.Empty, S["Unexpected error occurred while importing the recipe."]);
-#: OrchardCore.Setup.Core\SetupService.cs:242
+#: OrchardCore.Setup.Core\Services\SetupService.cs:260
 msgctxt "OrchardCore.Setup.Services.SetupService"
 msgid "Unexpected error occurred while importing the recipe."
 msgstr "Si è verificato un errore imprevisto durante l'importazione della ricetta."

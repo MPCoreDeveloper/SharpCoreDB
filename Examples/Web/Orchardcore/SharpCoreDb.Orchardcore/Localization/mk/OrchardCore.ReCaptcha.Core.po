@@ -10,16 +10,16 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Macedonian\n"
 "Language: mk_MK\n"
-"PO-Revision-Date: 2024-08-24 20:35\n"
+"PO-Revision-Date: 2025-01-29 15:07\n"
 
 #. context.ModelState.AddModelError("ReCaptcha", S["Failed to validate captcha"]);
-#: OrchardCore.ReCaptcha.Core\ActionFilters\ValidateReCaptchaAttribute.cs:44
+#: OrchardCore.ReCaptcha.Core\ActionFilters\ValidateReCaptchaAttribute.cs:20
 msgctxt "OrchardCore.ReCaptcha.ActionFilters.ValidateReCaptchaAttribute"
 msgid "Failed to validate captcha"
 msgstr "Валидација на „captcha“ не беше успешна"
 
 #. reportError("ReCaptcha", S["Failed to validate ReCaptcha"]);
-#: OrchardCore.ReCaptcha.Core\Services\ReCaptchaService.cs:102
+#: OrchardCore.ReCaptcha.Core\Services\ReCaptchaService.cs:77
 msgctxt "OrchardCore.ReCaptcha.Services.ReCaptchaService"
 msgid "Failed to validate ReCaptcha"
 msgstr ""

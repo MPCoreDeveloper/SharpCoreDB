@@ -10,11 +10,17 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Greek\n"
 "Language: el_GR\n"
-"PO-Revision-Date: 2024-08-24 20:22\n"
+"PO-Revision-Date: 2026-06-03 20:11\n"
 
 #. public LocalizedString Name => S["Email Notifications"];
-#: OrchardCore.Notifications.Core\Services\EmailNotificationProvider.cs:22
+#: OrchardCore.Notifications.Core\Services\EmailNotificationProvider.cs:23
 msgctxt "OrchardCore.Notifications.Services.EmailNotificationProvider"
 msgid "Email Notifications"
 msgstr "Ειδοποιήσεις ηλεκτρονικού ταχυδρομείου"
+
+#. return Result.Failed(S["No email address provided."]);
+#: OrchardCore.Notifications.Core\Services\EmailNotificationProvider.cs:38
+msgctxt "OrchardCore.Notifications.Services.EmailNotificationProvider"
+msgid "No email address provided."
+msgstr ""
 

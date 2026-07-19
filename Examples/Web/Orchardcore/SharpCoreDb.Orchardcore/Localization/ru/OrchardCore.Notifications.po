@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Russian\n"
 "Language: ru_RU\n"
-"PO-Revision-Date: 2024-11-10 15:06\n"
+"PO-Revision-Date: 2026-06-03 20:13\n"
 
 #. public override LocalizedString DisplayText => S["Notify Content's Owner Task"];
 #: OrchardCore.Notifications\Activities\NotifyContentOwnerTask.cs:34
@@ -31,19 +31,19 @@ msgid "Notifications"
 msgstr ""
 
 #. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
-#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:75
 msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
 msgid "Done"
 msgstr ""
 
 #. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
-#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:75
 msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
 msgid "Failed"
 msgstr ""
 
 #. => Outcomes(S["Done"], S["Failed"], S["Failed: no user found"]);
-#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:69
+#: OrchardCore.Notifications\Activities\NotifyUserTaskActivity.cs:75
 msgctxt "OrchardCore.Notifications.Activities.NotifyUserTaskActivity"
 msgid "Failed: no user found"
 msgstr ""
@@ -268,7 +268,7 @@ msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListFilters"
 msgid "Sort"
 msgstr ""
 
-#. <label asp-for="SearchText" class="sr-only">@T["Search"]</label>
+#. <label asp-for="SearchText" class="visually-hidden">@T["Search"]</label>
 #. <input asp-for="SearchText" class="form-control" placeholder="@T["Search"]" inputmode="search" type="search" autofocus />
 #: OrchardCore.Notifications\Views\NotificationsAdminListSearch.cshtml:7
 #: OrchardCore.Notifications\Views\NotificationsAdminListSearch.cshtml:9
@@ -282,23 +282,23 @@ msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
 msgid "Select All"
 msgstr ""
 
-#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
 msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
 msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 msgstr[3] ""
 
-#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
 msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
 msgid "Items {0} to {1}"
 msgstr ""
 
-#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural((int)Model.NotificationsCount, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", (int)Model.StartIndex, (int)Model.EndIndex]">@T.Plural((int)Model.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Notifications\Views\NotificationsAdminListSummary.cshtml:9
 msgctxt "OrchardCore.Notifications.Views.NotificationsAdminListSummary"
 msgid " / {0} item in total"
@@ -366,62 +366,62 @@ msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Des
 msgid "Notify Content Owner"
 msgstr ""
 
-#. <label asp-for="Subject" class="form-label">@T["Subject"]</label>
+#. <label asp-for="Subject" class="ocat-label">@T["Subject"]</label>
 #: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:4
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "Subject"
 msgstr ""
 
 #. <span class="hint">@T["You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:7
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "You may use Liquid syntax."
 msgstr ""
 
-#. <label asp-for="Summary" class="form-label">@T["Summary"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:11
+#. <label asp-for="Summary" class="ocat-label">@T["Summary"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "Summary"
 msgstr ""
 
 #. <span class="hint">@T["HTML summary for the notification. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:14
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "HTML summary for the notification. You may use Liquid syntax."
 msgstr ""
 
-#. <label asp-for="TextBody" class="form-label">@T["Text Body"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:18
+#. <label asp-for="TextBody" class="ocat-label">@T["Text Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:22
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "Text Body"
 msgstr ""
 
 #. <span class="hint">@T["This optional text body does not support HTML. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:20
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:25
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "This optional text body does not support HTML. You may use Liquid syntax."
 msgstr ""
 
-#. <label asp-for="HtmlBody" class="form-label">@T["HTML Body"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:24
+#. <label asp-for="HtmlBody" class="ocat-label">@T["HTML Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:30
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "HTML Body"
 msgstr ""
 
 #. <span class="hint">@T["HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:26
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:33
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."
 msgstr ""
 
 #. <label class="form-check-label" asp-for="IsHtmlPreferred">@T["Use HTML Body when possible"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:32
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:41
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "Use HTML Body when possible"
 msgstr ""
 
 #. <span class="hint">@T["When checked, the notification provider will use the HTML body if it supports HTML."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:34
+#: OrchardCore.Notifications\Views\Items\NotifyContentOwnerTask.Fields.Edit.cshtml:43
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyContentOwnerTask.Fields.Edit"
 msgid "When checked, the notification provider will use the HTML body if it supports HTML."
 msgstr ""
@@ -444,14 +444,14 @@ msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Design"
 msgid "Notify Specific Users"
 msgstr ""
 
-#. <label asp-for="UserNames" class="form-label">@T["User names"]</label>
+#. <label asp-for="UserNames" class="ocat-label">@T["User names"]</label>
 #: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Edit.cshtml:4
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Edit"
 msgid "User names"
 msgstr ""
 
 #. <span class="hint">@T["Please provide a comma separated list of user names. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Edit.cshtml:7
+#: OrchardCore.Notifications\Views\Items\NotifyUserTask.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Edit"
 msgid "Please provide a comma separated list of user names. You may use Liquid syntax."
 msgstr ""
@@ -468,62 +468,62 @@ msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTask.Fields.Thumbnail"
 msgid "Notify specific users"
 msgstr ""
 
-#. <label asp-for="Subject" class="form-label">@T["Subject"]</label>
+#. <label asp-for="Subject" class="ocat-label">@T["Subject"]</label>
 #: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:4
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "Subject"
 msgstr ""
 
 #. <span class="hint">@T["You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:7
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "You may use Liquid syntax."
 msgstr ""
 
-#. <label asp-for="Summary" class="form-label">@T["Summary"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:11
+#. <label asp-for="Summary" class="ocat-label">@T["Summary"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "Summary"
 msgstr ""
 
 #. <span class="hint">@T["You may use Liquid syntax. Html is supported."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:14
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "You may use Liquid syntax. Html is supported."
 msgstr ""
 
-#. <label asp-for="TextBody" class="form-label">@T["Text Body"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:18
+#. <label asp-for="TextBody" class="ocat-label">@T["Text Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:22
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "Text Body"
 msgstr ""
 
 #. <span class="hint">@T["This optional text body does not support HTML. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:21
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:26
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "This optional text body does not support HTML. You may use Liquid syntax."
 msgstr ""
 
-#. <label asp-for="HtmlBody" class="form-label">@T["HTML Body"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:25
+#. <label asp-for="HtmlBody" class="ocat-label">@T["HTML Body"]</label>
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:31
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "HTML Body"
 msgstr ""
 
 #. <span class="hint">@T["HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:28
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:35
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "HTML message will only be sent if the notification provider supports it. You may use Liquid syntax."
 msgstr ""
 
 #. <label class="form-check-label" asp-for="IsHtmlPreferred">@T["Use HTML Body when possible"]</label>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:34
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:43
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "Use HTML Body when possible"
 msgstr ""
 
 #. <span class="hint">@T["When checked, the notification provider will use the HTML body if it supports HTML."]</span>
-#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:36
+#: OrchardCore.Notifications\Views\Items\NotifyUserTaskActivity.Fields.Edit.cshtml:45
 msgctxt "OrchardCore.Notifications.Views.Items.NotifyUserTaskActivity.Fields.Edit"
 msgid "When checked, the notification provider will use the HTML body if it supports HTML."
 msgstr ""
@@ -549,37 +549,37 @@ msgstr[2] ""
 msgstr[3] ""
 
 #. <i class="fa-regular fa-bell" aria-hidden="true" data-bs-toggle="tooltip" data-bs-original-title="@T["You have no unread notifications"]"></i>
-#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:32
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:34
 msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
 msgid "You have no unread notifications"
 msgstr ""
 
 #. <li class="text-center">@T["You have no unread notifications."]</li>
-#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:54
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:56
 msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
 msgid "You have no unread notifications."
 msgstr ""
 
 #. <a class="dropdown-item fw-bold" asp-action="List" asp-controller="Admin" asp-area="@NotificationConstants.Features.Notifications">@T["Notification Center"]</a>
-#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:64
+#: OrchardCore.Notifications\Views\UserNotificationNavbar.cshtml:66
 msgctxt "OrchardCore.Notifications.Views.UserNotificationNavbar"
 msgid "Notification Center"
 msgstr "Центр уведомлений"
 
-#. <label asp-for="Methods" class="form-label">@T["Notification Methods"]</label>
+#. <label asp-for="Methods" class="ocat-label">@T["Notification Methods"]</label>
 #: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:7
 msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
 msgid "Notification Methods"
 msgstr ""
 
 #. @T["Select all notification methods to receive."]
-#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:10
+#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:11
 msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
 msgid "Select all notification methods to receive."
 msgstr ""
 
 #. <span class="hint">@T["From the list above, you can sort the notification priority where the most important method is on the top."]</span>
-#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:30
+#: OrchardCore.Notifications\Views\UserNotificationPreferencesPart.Edit.cshtml:31
 msgctxt "OrchardCore.Notifications.Views.UserNotificationPreferencesPart.Edit"
 msgid "From the list above, you can sort the notification priority where the most important method is on the top."
 msgstr ""

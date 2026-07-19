@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Simplified\n"
 "Language: zh_CN\n"
-"PO-Revision-Date: 2024-11-10 15:02\n"
+"PO-Revision-Date: 2026-05-29 02:53\n"
 
 #. <h4>@T["Welcome to Orchard Core, your site has been successfully set up."]</h4>
 #: TheTheme\Views\Home\Index.cshtml:2
@@ -18,37 +18,63 @@ msgctxt "TheTheme.Views.Home.Index"
 msgid "Welcome to Orchard Core, your site has been successfully set up."
 msgstr "欢迎使用 Orchard Core, 您的网站已成功设置。"
 
+#: TheTheme\Views\Pager_First.cshtml:0
+msgctxt "TheTheme.Views.Pager_First"
+msgid "Go to first page."
+msgstr "转到首页。"
+
+#: TheTheme\Views\Pager_Last.cshtml:0
+msgctxt "TheTheme.Views.Pager_Last"
+msgid "Go to last page."
+msgstr "转到末页。"
+
+#: TheTheme\Views\Pager_Next.cshtml:0
+msgctxt "TheTheme.Views.Pager_Next"
+msgid "Go to next page."
+msgstr "下一页。"
+
+#: TheTheme\Views\Pager_Previous.cshtml:0
+msgctxt "TheTheme.Views.Pager_Previous"
+msgid "Go to previous page."
+msgstr "上一页。"
+
+#. <nav aria-label="@T["Listing pages"]">
+#: TheTheme\Views\Pager.cshtml:6
+msgctxt "TheTheme.Views.Pager"
+msgid "Listing pages"
+msgstr "页面列表"
+
 #. <a role="button" class="nav-link dropdown-toggle" id="bd-theme" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
 #. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
 #: TheTheme\Views\ToggleTheme.cshtml:2
 #: TheTheme\Views\ToggleTheme.cshtml:4
 msgctxt "TheTheme.Views.ToggleTheme"
 msgid "Toggle theme"
-msgstr ""
+msgstr "切换主题"
 
 #. <span class="ps-2">@T["Auto"]</span>
 #: TheTheme\Views\ToggleTheme.cshtml:12
 msgctxt "TheTheme.Views.ToggleTheme"
 msgid "Auto"
-msgstr ""
+msgstr "自动"
 
 #. <span class="ps-2">@T["Light"]</span>
 #: TheTheme\Views\ToggleTheme.cshtml:20
 msgctxt "TheTheme.Views.ToggleTheme"
 msgid "Light"
-msgstr ""
+msgstr "亮"
 
 #. <span class="ps-2">@T["Dark"]</span>
 #: TheTheme\Views\ToggleTheme.cshtml:28
 msgctxt "TheTheme.Views.ToggleTheme"
 msgid "Dark"
-msgstr ""
+msgstr "暗"
 
 #. <a type="button" class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="@T["Notifications"]">
 #: TheTheme\Views\UserNotificationNavbar.cshtml:17
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "Notifications"
-msgstr ""
+msgstr "通知"
 
 #: TheTheme\Views\UserNotificationNavbar.cshtml:0
 msgctxt "TheTheme.Views.UserNotificationNavbar"
@@ -62,20 +88,20 @@ msgid_plural "You have {0} unread notifications"
 msgstr[0] "您有{0} 条未读通知"
 
 #. <i class="fa-regular fa-bell" aria-hidden="true" data-bs-toggle="tooltip" data-bs-original-title="@T["You have no unread notifications"]"></i>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:34
+#: TheTheme\Views\UserNotificationNavbar.cshtml:36
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications"
-msgstr ""
+msgstr "您没有未读通知"
 
 #. <li class="text-center">@T["You have no unread notifications."]</li>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:55
+#: TheTheme\Views\UserNotificationNavbar.cshtml:57
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications."
-msgstr ""
+msgstr "您没有未读通知。"
 
 #. <a class="dropdown-item fw-bold" asp-action="List" asp-controller="Admin" asp-area="@NotificationConstants.Features.Notifications">@T["Notification Center"]</a>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:65
+#: TheTheme\Views\UserNotificationNavbar.cshtml:67
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "Notification Center"
-msgstr ""
+msgstr "通知中心"
 

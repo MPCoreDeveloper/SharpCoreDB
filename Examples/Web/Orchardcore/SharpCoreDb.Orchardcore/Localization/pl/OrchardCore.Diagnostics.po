@@ -10,35 +10,35 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2023-12-22 16:16\n"
+"PO-Revision-Date: 2025-12-29 13:19\n"
 
 #. <h1>@T["Your browser sent a request that this server could not understand."]</h1>
 #: OrchardCore.Diagnostics\Views\HttpError-BadRequest.cshtml:1
 msgctxt "OrchardCore.Diagnostics.Views.HttpError-BadRequest"
 msgid "Your browser sent a request that this server could not understand."
-msgstr ""
+msgstr "Twoja przeglądarka wysłała żądanie, którego ten serwer nie mógł zrozumieć."
 
 #. <h1>@T["You do not have access to this resource."]</h1>
 #: OrchardCore.Diagnostics\Views\HttpError-Forbidden.cshtml:1
 msgctxt "OrchardCore.Diagnostics.Views.HttpError-Forbidden"
 msgid "You do not have access to this resource."
-msgstr ""
+msgstr "Nie masz dostępu do tego zasobu."
 
 #. <h1>@T["The page could not be found."]</h1>
 #: OrchardCore.Diagnostics\Views\HttpError-NotFound.cshtml:1
 msgctxt "OrchardCore.Diagnostics.Views.HttpError-NotFound"
 msgid "The page could not be found."
-msgstr ""
+msgstr "Strona nie została znaleziona."
 
 #. <h1>@T["You are not authorized to view this content."]</h1>
 #: OrchardCore.Diagnostics\Views\HttpError-Unauthorized.cshtml:1
 msgctxt "OrchardCore.Diagnostics.Views.HttpError-Unauthorized"
 msgid "You are not authorized to view this content."
-msgstr ""
+msgstr "Nie masz uprawnień do przeglądania tej zawartości."
 
 #. <h1>@T["An error occurred while executing this request."]</h1>
 #: OrchardCore.Diagnostics\Views\HttpError.cshtml:3
 msgctxt "OrchardCore.Diagnostics.Views.HttpError"
 msgid "An error occurred while executing this request."
-msgstr ""
+msgstr "Wystąpił błąd podczas wykonywania tego żądania."
 

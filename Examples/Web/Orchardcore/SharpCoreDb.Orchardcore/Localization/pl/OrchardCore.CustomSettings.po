@@ -10,40 +10,48 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2024-09-09 17:00\n"
+"PO-Revision-Date: 2026-06-03 19:19\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.CustomSettings\AdminMenu.cs:44
+#: OrchardCore.CustomSettings\AdminMenu.cs:46
 msgctxt "OrchardCore.CustomSettings.AdminMenu"
 msgid "Configuration"
 msgstr "Konfiguracja"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.CustomSettings\AdminMenu.cs:45
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.CustomSettings\AdminMenu.cs:47
+#: OrchardCore.CustomSettings\AdminMenu.cs:63
 msgctxt "OrchardCore.CustomSettings.AdminMenu"
 msgid "Settings"
 msgstr "Ustawienia"
+
+#. Category = S["Settings"];
+#: OrchardCore.CustomSettings\Deployment\CustomSettingsDeploymentStep.cs:16
+msgctxt "OrchardCore.CustomSettings.Deployment.CustomSettingsDeploymentStep"
+msgid "Settings"
+msgstr ""
 
 #. [new StereotypeDescription { Stereotype = "CustomSettings", DisplayName = S["Custom Settings"] }]);
 #: OrchardCore.CustomSettings\Services\CustomSettingsStereotypesProvider.cs:18
 msgctxt "OrchardCore.CustomSettings.Services.CustomSettingsStereotypesProvider"
 msgid "Custom Settings"
-msgstr ""
+msgstr "Ustawienia Niestandardowe"
 
 #. <h5>@T["Custom Settings"]</h5>
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:8
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "Custom Settings"
-msgstr "Własne ustawienia"
+msgstr "Ustawienia Niestandardowe"
 
-#. @T["Include all custom settings."]
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:17
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all custom settings."]</label>
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "Include all custom settings."
 msgstr "Dołącz wszystkie niestandardowe ustawienia."
 
 #. <span class="hint">@T["The custom settings to add as part of the plan."]</span>
-#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:27
+#: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Edit.cshtml:26
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Edit"
 msgid "The custom settings to add as part of the plan."
 msgstr "Ustawienia niestandardowe do dodania jako część planu."
@@ -52,7 +60,7 @@ msgstr "Ustawienia niestandardowe do dodania jako część planu."
 #: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Summary.cshtml:8
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Summary"
 msgid "Custom Settings"
-msgstr "Własne ustawienia"
+msgstr "Ustawienia Niestandardowe"
 
 #. <span class="badge text-bg-success">@T["All"]</span>
 #: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Summary.cshtml:12
@@ -70,7 +78,7 @@ msgstr "Nie wybrano niestandardowych ustawień."
 #: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Thumbnail.cshtml:3
 msgctxt "OrchardCore.CustomSettings.Views.Items.CustomSettingsDeploymentStep.Fields.Thumbnail"
 msgid "Custom Settings"
-msgstr "Własne ustawienia"
+msgstr "Ustawienia Niestandardowe"
 
 #. <p>@T["Exports all or specified custom settings."]</p>
 #: OrchardCore.CustomSettings\Views\Items\CustomSettingsDeploymentStep.Fields.Thumbnail.cshtml:4

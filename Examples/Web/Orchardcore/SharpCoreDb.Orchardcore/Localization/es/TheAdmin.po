@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
-"PO-Revision-Date: 2024-08-24 20:43\n"
+"PO-Revision-Date: 2025-02-05 11:32\n"
 
 #. <button type="button" class="leftbar-compactor" title="@T["Collapse / expand menu"]">
 #. <span class="d-none">@T["Collapse / expand menu"]</span>
@@ -53,28 +53,28 @@ msgstr "Filtrar"
 #: TheAdmin\Views\Pager_First.cshtml:0
 msgctxt "TheAdmin.Views.Pager_First"
 msgid "Go to first page."
-msgstr ""
+msgstr "Ir a primera página."
 
 #: TheAdmin\Views\Pager_Last.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Last"
 msgid "Go to last page."
-msgstr ""
+msgstr "Ir a última página."
 
 #: TheAdmin\Views\Pager_Next.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Next"
 msgid "Go to next page."
-msgstr ""
+msgstr "Ir a página siguiente."
 
 #: TheAdmin\Views\Pager_Previous.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Previous"
 msgid "Go to previous page."
-msgstr ""
+msgstr "Ir a página anterior."
 
 #. <nav aria-label="@T["Listing pages"]">
 #: TheAdmin\Views\Pager.cshtml:6
 msgctxt "TheAdmin.Views.Pager"
 msgid "Listing pages"
-msgstr ""
+msgstr "Lista de páginas"
 
 #. <button class="btn btn-link nav-link dropdown-toggle" id="bd-theme" type="button" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
 #. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
@@ -82,23 +82,23 @@ msgstr ""
 #: TheAdmin\Views\ToggleTheme.cshtml:5
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Toggle theme"
-msgstr ""
+msgstr "Alternar tema"
 
 #. <span class="ps-2">@T["Auto"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:13
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Auto"
-msgstr ""
+msgstr "Automático"
 
 #. <span class="ps-2">@T["Light"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:21
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Light"
-msgstr ""
+msgstr "Claro"
 
 #. <span class="ps-2">@T["Dark"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:29
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Dark"
-msgstr ""
+msgstr "Oscuro"
 

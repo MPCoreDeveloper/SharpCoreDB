@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Persian\n"
 "Language: fa_IR\n"
-"PO-Revision-Date: 2024-09-09 17:12\n"
+"PO-Revision-Date: 2026-06-03 19:53\n"
 
 #. .Add(S["Design"], design => design
 #: OrchardCore.Shortcodes\AdminMenu.cs:18
@@ -84,8 +84,14 @@ msgctxt "OrchardCore.Shortcodes.Controllers.AdminController"
 msgid "Shortcode templates successfully removed."
 msgstr "الگوهای کد کوتاه با موفقیت حذف شدند."
 
+#. Category = S["Content"];
+#: OrchardCore.Shortcodes\Deployment\AllShortcodeTemplatesDeploymentStep.cs:16
+msgctxt "OrchardCore.Shortcodes.Deployment.AllShortcodeTemplatesDeploymentStep"
+msgid "Content"
+msgstr ""
+
 #. <h5>@T["All Shortcode Templates"]</h5>
-#: OrchardCore.Shortcodes\Views\Items\AllShortcodeTemplatesDeploymentStep.Edit.cshtml:3
+#: OrchardCore.Shortcodes\Views\Items\AllShortcodeTemplatesDeploymentStep.Edit.cshtml:5
 msgctxt "OrchardCore.Shortcodes.Views.Items.AllShortcodeTemplatesDeploymentStep.Edit"
 msgid "All Shortcode Templates"
 msgstr "همه قالب های کد کوتاه"
@@ -120,130 +126,130 @@ msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Create Shortcode"
 msgstr "ایجاد کد کوتاه"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:44
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:42
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Name"
 msgstr "نام"
 
 #. <span class="hint">@T["The name of the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:47
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:46
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "The name of the shortcode."
 msgstr "نام کد کوتاه."
 
-#. <label asp-for="Hint" class="form-label">@T["Hint"]</label>
+#. <label asp-for="Hint" class="ocat-label">@T["Hint"]</label>
 #: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:51
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Hint"
 msgstr "راهنمایی"
 
 #. <span class="hint">@T["The hint for the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:53
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:54
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "The hint for the shortcode."
 msgstr "راهنمایی برای کد کوتاه."
 
-#. <label asp-for="Usage" class="form-label">@T["Usage"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:57
+#. <label asp-for="Usage" class="ocat-label">@T["Usage"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:59
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Usage"
 msgstr "کاربرد"
 
 #. <span class="hint">@T["Example usage of the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:59
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:62
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Example usage of the shortcode."
 msgstr "مثال استفاده از کد کوتاه."
 
-#. <label asp-for="SelectedCategories" class="form-label">@T["Categories"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:64
+#. <label asp-for="SelectedCategories" class="ocat-label">@T["Categories"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:68
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Categories"
 msgstr "دسته بندی ها"
 
 #. placeholder="@T["Type to search"]"
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:67
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:72
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Type to search"
 msgstr "برای جستجو تایپ کنید"
 
 #. select-label="@T["Select"]"
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:68
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:73
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Select"
 msgstr "انتخاب"
 
 #. deselect-label="@T["Remove"]"
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:69
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:74
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Remove"
 msgstr "حذف"
 
 #. tag-placeholder="@T["Press enter to add a category"]"
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:77
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:82
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Press enter to add a category"
 msgstr "برای افزودن دسته بندی، Enter را فشار دهید"
 
 #. @T["No categories found"]
 #. @T["No categories found"]
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:80
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:83
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:85
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:88
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "No categories found"
 msgstr "هیچ دسته‌ای پیدا نشد"
 
 #. <span class="hint">@T["The categories for this shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:86
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:91
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "The categories for this shortcode."
 msgstr "دسته بندی های این shortcode."
 
-#. <label asp-for="DefaultValue" class="form-label">@T["Default Shortcode Value"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:90
+#. <label asp-for="DefaultValue" class="ocat-label">@T["Default Shortcode Value"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:96
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Default Shortcode Value"
 msgstr "مقدار کد کوتاه پیش فرض"
 
 #. <span class="hint">@T["The default value of the shortcode when selected. Defaults to [name]."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:92
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:99
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "The default value of the shortcode when selected. Defaults to [name]."
 msgstr "مقدار پیش فرض shortcode هنگام انتخاب. پیش‌فرض [name] است."
 
-#. <label asp-for="Content" class="form-label">@T["Content"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:107
+#. <label asp-for="Content" class="ocat-label">@T["Content"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:115
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Content"
 msgstr "محتوا"
 
 #. <span class="hint">@T["The Shortcode Liquid template."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:110
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:119
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "The Shortcode Liquid template."
 msgstr "قالب Liquid کد کوتاه."
 
 #. <button type="submit" name="submit" class="btn btn-primary save">@T["Save"]</button>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:117
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:126
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Save"
 msgstr "ذخیره"
 
 #. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:119
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:128
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Toggle Dropdown"
 msgstr "کشویی را تغییر دهید"
 
 #. <button class="dropdown-item save-continue" name="submit" type="submit" value="SaveAndContinue">@T["and continue"]</button>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:122
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:131
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "and continue"
 msgstr "و ادامه"
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:126
+#: OrchardCore.Shortcodes\Views\Admin\Create.cshtml:135
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Create"
 msgid "Cancel"
 msgstr "انصراف"
@@ -254,130 +260,130 @@ msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Edit Shortcode"
 msgstr "ویرایش Shortcode"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:48
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Name"
 msgstr "نام"
 
 #. <span class="hint">@T["The name of the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:51
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:52
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "The name of the shortcode."
 msgstr "نام کد کوتاه."
 
-#. <label asp-for="Hint" class="form-label">@T["Hint"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:54
+#. <label asp-for="Hint" class="ocat-label">@T["Hint"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:56
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Hint"
 msgstr "راهنمایی"
 
 #. <span class="hint">@T["The hint for the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:56
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:59
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "The hint for the shortcode."
 msgstr "راهنمایی برای کد کوتاه."
 
-#. <label asp-for="Usage" class="form-label">@T["Usage"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:60
+#. <label asp-for="Usage" class="ocat-label">@T["Usage"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:64
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Usage"
 msgstr "کاربرد"
 
 #. <span class="hint">@T["Example usage of the shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:62
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:67
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Example usage of the shortcode."
 msgstr "مثال استفاده از کد کوتاه."
 
-#. <label asp-for="SelectedCategories" class="form-label">@T["Categories"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:67
+#. <label asp-for="SelectedCategories" class="ocat-label">@T["Categories"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:73
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Categories"
 msgstr "دسته بندی ها"
 
 #. placeholder="@T["Type to search"]"
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:70
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:77
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Type to search"
 msgstr "برای جستجو تایپ کنید"
 
 #. select-label="@T["Select"]"
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:71
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:78
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Select"
 msgstr "انتخاب"
 
 #. deselect-label="@T["Remove"]"
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:72
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:79
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Remove"
 msgstr "حذف"
 
 #. tag-placeholder="@T["Press enter to add a category"]"
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:80
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:87
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Press enter to add a category"
 msgstr "برای افزودن دسته بندی، Enter را فشار دهید"
 
 #. @T["No categories found"]
 #. @T["No categories found"]
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:83
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:86
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:90
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:93
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "No categories found"
 msgstr "هیچ دسته‌ای پیدا نشد"
 
 #. <span class="hint">@T["The categories for this shortcode."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:89
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:96
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "The categories for this shortcode."
 msgstr "دسته بندی های این shortcode."
 
-#. <label asp-for="DefaultValue" class="form-label">@T["Default Shortcode Value"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:93
+#. <label asp-for="DefaultValue" class="ocat-label">@T["Default Shortcode Value"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:101
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Default Shortcode Value"
 msgstr "مقدار کد کوتاه پیش فرض"
 
 #. <span class="hint">@T["The default value of the shortcode when selected. Defaults to [name]."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:95
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:104
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "The default value of the shortcode when selected. Defaults to [name]."
 msgstr "مقدار پیش فرض shortcode هنگام انتخاب. پیش‌فرض [name] است."
 
-#. <label asp-for="Content" class="form-label">@T["Content"]</label>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:116
+#. <label asp-for="Content" class="ocat-label">@T["Content"]</label>
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:126
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Content"
 msgstr "محتوا"
 
 #. <span class="hint">@T["The Liquid template."]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:119
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:130
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "The Liquid template."
 msgstr "قالب Liquid."
 
 #. <button type="submit" name="submit" class="btn btn-primary save">@T["Save"]</button>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:125
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:138
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Save"
 msgstr "ذخیره"
 
 #. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:127
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:140
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Toggle Dropdown"
 msgstr "کشویی را تغییر دهید"
 
 #. <button class="dropdown-item save-continue" name="submit" type="submit" value="SaveAndContinue">@T["and continue"]</button>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:130
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:143
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "and continue"
 msgstr "و ادامه"
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Index">@T["Cancel"]</a>
-#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:134
+#: OrchardCore.Shortcodes\Views\Admin\Edit.cshtml:147
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Edit"
 msgid "Cancel"
 msgstr "انصراف"
@@ -406,21 +412,21 @@ msgctxt "OrchardCore.Shortcodes.Views.Admin.Index"
 msgid "Select All"
 msgstr "انتخاب همه"
 
-#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Shortcodes\Views\Admin\Index.cshtml:40
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Index"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
-msgstr[0] "1 مورد"
-msgstr[1] "{0} مورد"
+msgstr[0] ""
+msgstr[1] ""
 
-#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Shortcodes\Views\Admin\Index.cshtml:40
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Index"
 msgid "Items {0} to {1}"
 msgstr "موارد {0} تا {1}"
 
-#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.ShortcodeTemplates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Shortcodes\Views\Admin\Index.cshtml:40
 msgctxt "OrchardCore.Shortcodes.Views.Admin.Index"
 msgid " / {0} item in total"

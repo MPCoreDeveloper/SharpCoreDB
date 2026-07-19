@@ -10,384 +10,398 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Persian\n"
 "Language: fa_IR\n"
-"PO-Revision-Date: 2024-09-09 17:18\n"
+"PO-Revision-Date: 2026-06-03 20:06\n"
 
 #. .Add(S["Security"], NavigationConstants.AdminMenuSecurityPosition, security => security
-#: OrchardCore.Security\AdminMenu.cs:27
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#: OrchardCore.Security\AdminMenu.cs:28
+#: OrchardCore.Security\AdminMenu.cs:45
+#: OrchardCore.Security\AdminMenu.cs:45
 msgctxt "OrchardCore.Security.AdminMenu"
 msgid "Security"
 msgstr "امنیت"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.Security\AdminMenu.cs:30
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Security\AdminMenu.cs:31
+#: OrchardCore.Security\AdminMenu.cs:44
 msgctxt "OrchardCore.Security.AdminMenu"
 msgid "Settings"
 msgstr "تنظیمات"
 
 #. .Add(S["Security Headers"], S["Security Headers"].PrefixPosition(), headers => headers
 #. .Add(S["Security Headers"], S["Security Headers"].PrefixPosition(), headers => headers
-#: OrchardCore.Security\AdminMenu.cs:31
-#: OrchardCore.Security\AdminMenu.cs:31
+#. .Add(S["Security Headers"], S["Security Headers"].PrefixPosition(), headers => headers
+#. .Add(S["Security Headers"], S["Security Headers"].PrefixPosition(), headers => headers
+#: OrchardCore.Security\AdminMenu.cs:32
+#: OrchardCore.Security\AdminMenu.cs:32
+#: OrchardCore.Security\AdminMenu.cs:46
+#: OrchardCore.Security\AdminMenu.cs:46
 msgctxt "OrchardCore.Security.AdminMenu"
 msgid "Security Headers"
 msgstr "سربرگ های امنیتی"
 
-#. @T["The current settings are coming from configuration sources, saving the settings will affect the AdminSettings not the configuration."]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:167
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#. await _notifier.InformationAsync(H["The current settings are coming from configuration sources, saving the settings will affect the AdminSettings not the configuration."]);
+#: OrchardCore.Security\Drivers\SecuritySettingsDisplayDriver.cs:65
+msgctxt "OrchardCore.Security.Drivers.SecuritySettingsDisplayDriver"
 msgid "The current settings are coming from configuration sources, saving the settings will affect the AdminSettings not the configuration."
-msgstr "تنظیمات فعلی از منابع پیکربندی می‌آیند، ذخیره تنظیمات روی AdminSettings تأثیر می‌گذارد نه پیکربندی."
+msgstr ""
 
-#. <label asp-for="ContentSecurityPolicy" class="form-label">@T["Content Security Policy"]</label>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:172
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Content Security Policy"
-msgstr "خط مشی امنیت محتوا"
+#. S => S["Security settings"],
+#: OrchardCore.Security\Startup.cs:52
+msgctxt "OrchardCore.Security.SecurityDeploymentStartup"
+msgid "Security settings"
+msgstr ""
+
+#. S => S["Exports the Security settings."]);
+#: OrchardCore.Security\Startup.cs:53
+msgctxt "OrchardCore.Security.SecurityDeploymentStartup"
+msgid "Exports the Security settings."
+msgstr ""
 
 #. <label class="form-check-label" asp-for="EnableSandbox">@T["Enable Sandbox"]</label>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:176
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:68
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
 msgid "Enable Sandbox"
-msgstr "Sandbox را فعال کنید"
+msgstr ""
 
 #. <span class="hint dashed">@T["Enables a sandbox for the requested resource similar to the iframe sandbox attribute."]</span>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:177
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:70
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
 msgid "Enables a sandbox for the requested resource similar to the iframe sandbox attribute."
-msgstr "یک sandbox را برای منبع درخواستی مشابه ویژگی iframe sandbox فعال می کند."
+msgstr ""
 
 #. <label class="form-check-label" asp-for="UpgradeInsecureRequests">@T["Upgrade Insecure Requests"]</label>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:183
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:78
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
 msgid "Upgrade Insecure Requests"
-msgstr "ارتقاء درخواست های نا امن"
+msgstr ""
 
 #. <th>@T["Name"]</th>
-#. <th>@T["Name"]</th>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:189
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:216
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:88
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
 msgid "Name"
-msgstr "نام"
+msgstr ""
 
 #. <span class="hint">@T["Allows administrators to control resources the user agent is allowed to load for a given page."]</span>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:209
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:108
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
 msgid "Allows administrators to control resources the user agent is allowed to load for a given page."
-msgstr "به مدیران اجازه می دهد تا منابعی را که عامل کاربر مجاز به بارگیری برای یک صفحه معین است، کنترل کنند."
+msgstr ""
 
-#. <label asp-for="PermissionsPolicy" class="form-label">@T["Permissions Policy"]</label>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:212
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Permissions Policy"
-msgstr "خط مشی مجوزها"
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Base URI"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Child Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Connect Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Default Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Font Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Form Action"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Frame Ancestors"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Frame Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Image Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Manifest Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Media Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Object Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Sandbox"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Script Source"
+msgstr ""
+
+#: OrchardCore.Security\Views\ContentSecurityPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.ContentSecurityPolicySettings.Edit"
+msgid "Style Source"
+msgstr ""
+
+#. <th>@T["Name"]</th>
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:114
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Name"
+msgstr ""
 
 #. <th>@T["None"]</th>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:217
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:115
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
 msgid "None"
-msgstr "هیچ‌کدام"
+msgstr ""
 
 #. <th>@T["Any"]</th>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:218
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:116
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
 msgid "Any"
-msgstr "هرکدام"
+msgstr ""
 
 #. <th>@T["Self"]</th>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:219
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:117
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
 msgid "Self"
-msgstr "خود"
+msgstr ""
 
 #. <span class="hint">@T["Allows a site to control which features and APIs can be used in the browser."]</span>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:267
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:165
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
 msgid "Allows a site to control which features and APIs can be used in the browser."
-msgstr "به سایت اجازه می دهد تا کنترل کند که کدام ویژگی ها و API ها می توانند در مرورگر استفاده شوند."
+msgstr ""
 
-#. <label asp-for="ReferrerPolicy" class="form-label">@T["Referrer Policy"]</label>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:270
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Accelerometer"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Ambient Light Sensor"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Autoplay"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Battery"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Camera"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Display Capture"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Document Domain"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Encrypted Media"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Full Screen"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Game Pad"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Geolocation"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Gyroscope"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Layout Animations"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Legacy ImageFormat"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Magnetometer"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Microphone"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Midi"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Oversized Images"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Payment"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Picture In Picture"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Public Key Retrieval"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Push"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Speaker Selection"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Screen Wake Lock"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Synchronous XML Http Request"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Unoptimized Images"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Unsized Media"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "USB"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Web Share"
+msgstr ""
+
+#: OrchardCore.Security\Views\PermissionsPolicySettings.Edit.cshtml:0
+msgctxt "OrchardCore.Security.Views.PermissionsPolicySettings.Edit"
+msgid "Web XR"
+msgstr ""
+
+#. <label asp-for="ReferrerPolicy" class="ocat-label">@T["Referrer Policy"]</label>
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:7
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Referrer Policy"
-msgstr "خط مشی ارجاع دهنده"
+msgstr ""
 
 #. @T["No referrer"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:273
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:11
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "No referrer"
-msgstr "ارجاع نکنید"
+msgstr ""
 
 #. @T["No referrer when downgrade"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:276
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:14
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "No referrer when downgrade"
-msgstr "بدون ارجاع در هنگام تنزل رتبه"
+msgstr ""
 
 #. @T["Origin"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:279
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:17
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Origin"
-msgstr "مبدا"
+msgstr ""
 
 #. @T["Origin when cross origin"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:282
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:20
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Origin when cross origin"
-msgstr "مبدا زمانی که از منشاء عبور می کند"
+msgstr ""
 
 #. @T["Same origin"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:285
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:23
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Same origin"
-msgstr "همان مبدا"
+msgstr ""
 
 #. @T["Strict origin"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:288
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:26
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Strict origin"
-msgstr "مبدا دقیق"
+msgstr ""
 
 #. @T["Strict origin when cross origin"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:291
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:29
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Strict origin when cross origin"
-msgstr "مبدا دقیق زمانی که از منشاء عبور می کند"
+msgstr ""
 
 #. @T["Unsafe URL"]
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:294
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:32
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Unsafe URL"
-msgstr "URL ناامن"
+msgstr ""
 
 #. <span class="hint">@T["Allows a site to control how much information the browser includes when navigating away from a page."]</span>
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:298
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
+#: OrchardCore.Security\Views\ReferrerPolicySettings.Edit.cshtml:36
+msgctxt "OrchardCore.Security.Views.ReferrerPolicySettings.Edit"
 msgid "Allows a site to control how much information the browser includes when navigating away from a page."
-msgstr "به سایت اجازه می‌دهد هنگام دور شدن از یک صفحه، میزان اطلاعاتی که مرورگر شامل می‌شود را کنترل کند."
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Base URI"
-msgstr "URI اصلی"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Child Source"
-msgstr "منبع فرزند"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Connect Source"
-msgstr "منبع اتصال"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Default Source"
-msgstr "منبع پیش فرض"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Font Source"
-msgstr "منبع فونت"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Form Action"
-msgstr "عملیات فرم"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Frame Ancestors"
-msgstr "نیای قاب"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Frame Source"
-msgstr "منبع قاب"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Image Source"
-msgstr "منبع تصویر"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Manifest Source"
-msgstr "منبع مانیفست"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Media Source"
-msgstr "منبع رسانه"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Object Source"
-msgstr "منبع شی"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Sandbox"
-msgstr "Sandbox"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Script Source"
-msgstr "منبع اسکریپت"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Style Source"
-msgstr "منبع سبک"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Accelerometer"
-msgstr "شتاب‌سنج"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Ambient Light Sensor"
-msgstr "حسگر نور محیط"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Autoplay"
-msgstr "پخش خودکار"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Battery"
-msgstr "باتری"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Camera"
-msgstr "دوربین"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Display Capture"
-msgstr "کپچر نمایش"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Document Domain"
-msgstr "دامنه سند"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Encrypted Media"
-msgstr "رسانه رمزگذاری شده"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Full Screen"
-msgstr "تمام صفحه"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Game Pad"
-msgstr "گیم پد"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Geolocation"
-msgstr "موقعیت جغرافیایی"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Gyroscope"
-msgstr "ژیروسکوپ"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Layout Animations"
-msgstr "انیمیشن های Layout"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Legacy ImageFormat"
-msgstr "ImageFormat قدیمی"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Magnetometer"
-msgstr "مغناطیس سنج"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Microphone"
-msgstr "میکروفون"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Midi"
-msgstr "Midi"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Oversized Images"
-msgstr "تصاویر بزرگ"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Payment"
-msgstr "پرداخت"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Picture In Picture"
-msgstr "تصویر در تصویر"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Public Key Retrieval"
-msgstr "بازیابی کلید عمومی"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Push"
-msgstr "فرستادن"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Speaker Selection"
-msgstr "انتخاب سخنران"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Screen Wake Lock"
-msgstr "قفل بیدار شدن صفحه نمایش"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Synchronous XML Http Request"
-msgstr "درخواست Http XML همزمان"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Unoptimized Images"
-msgstr "تصاویر بهینه نشده"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Unsized Media"
-msgstr "رسانه بدون اندازه"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "USB"
-msgstr "USB"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Web Share"
-msgstr "اشتراک گذاری وب"
-
-#: OrchardCore.Security\Views\SecurityHeadersSettings.Edit.cshtml:0
-msgctxt "OrchardCore.Security.Views.SecurityHeadersSettings.Edit"
-msgid "Web XR"
-msgstr "Web XR"
+msgstr ""
 

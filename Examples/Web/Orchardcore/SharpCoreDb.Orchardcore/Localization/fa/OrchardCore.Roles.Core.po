@@ -1,0 +1,32 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: fa\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Roles.Core.pot\n"
+"X-Crowdin-File-ID: 983\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Persian\n"
+"Language: fa_IR\n"
+"PO-Revision-Date: 2026-06-03 20:30\n"
+
+#. RoleDescription = S["A system role that grants all permissions to the assigned users."],
+#: OrchardCore.Roles.Core\DefaultSystemRoleProvider.cs:22
+msgctxt "OrchardCore.Roles.DefaultSystemRoleProvider"
+msgid "A system role that grants all permissions to the assigned users."
+msgstr ""
+
+#. RoleDescription = S["A system role representing all authenticated users."],
+#: OrchardCore.Roles.Core\DefaultSystemRoleProvider.cs:32
+msgctxt "OrchardCore.Roles.DefaultSystemRoleProvider"
+msgid "A system role representing all authenticated users."
+msgstr ""
+
+#. RoleDescription = S["A system role representing all non-authenticated users."],
+#: OrchardCore.Roles.Core\DefaultSystemRoleProvider.cs:39
+msgctxt "OrchardCore.Roles.DefaultSystemRoleProvider"
+msgid "A system role representing all non-authenticated users."
+msgstr ""
+

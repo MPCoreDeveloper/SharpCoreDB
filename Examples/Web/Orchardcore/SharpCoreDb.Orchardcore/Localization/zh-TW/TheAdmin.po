@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Traditional\n"
 "Language: zh_TW\n"
-"PO-Revision-Date: 2024-08-24 20:43\n"
+"PO-Revision-Date: 2025-04-30 22:03\n"
 
 #. <button type="button" class="leftbar-compactor" title="@T["Collapse / expand menu"]">
 #. <span class="d-none">@T["Collapse / expand menu"]</span>
@@ -53,28 +53,28 @@ msgstr "篩選"
 #: TheAdmin\Views\Pager_First.cshtml:0
 msgctxt "TheAdmin.Views.Pager_First"
 msgid "Go to first page."
-msgstr ""
+msgstr "前往第一頁。"
 
 #: TheAdmin\Views\Pager_Last.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Last"
 msgid "Go to last page."
-msgstr ""
+msgstr "最後一頁。"
 
 #: TheAdmin\Views\Pager_Next.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Next"
 msgid "Go to next page."
-msgstr ""
+msgstr "下一頁。"
 
 #: TheAdmin\Views\Pager_Previous.cshtml:0
 msgctxt "TheAdmin.Views.Pager_Previous"
 msgid "Go to previous page."
-msgstr ""
+msgstr "。"
 
 #. <nav aria-label="@T["Listing pages"]">
 #: TheAdmin\Views\Pager.cshtml:6
 msgctxt "TheAdmin.Views.Pager"
 msgid "Listing pages"
-msgstr ""
+msgstr "頁面列表"
 
 #. <button class="btn btn-link nav-link dropdown-toggle" id="bd-theme" type="button" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
 #. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
@@ -82,23 +82,23 @@ msgstr ""
 #: TheAdmin\Views\ToggleTheme.cshtml:5
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Toggle theme"
-msgstr ""
+msgstr "切換佈景主題"
 
 #. <span class="ps-2">@T["Auto"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:13
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Auto"
-msgstr ""
+msgstr "自動"
 
 #. <span class="ps-2">@T["Light"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:21
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Light"
-msgstr ""
+msgstr "亮色"
 
 #. <span class="ps-2">@T["Dark"]</span>
 #: TheAdmin\Views\ToggleTheme.cshtml:29
 msgctxt "TheAdmin.Views.ToggleTheme"
 msgid "Dark"
-msgstr ""
+msgstr "暗色"
 

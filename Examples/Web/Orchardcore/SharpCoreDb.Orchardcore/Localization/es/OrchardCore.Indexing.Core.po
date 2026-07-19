@@ -1,0 +1,120 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: es-ES\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Indexing.Core.pot\n"
+"X-Crowdin-File-ID: 966\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Spanish\n"
+"Language: es_ES\n"
+"PO-Revision-Date: 2026-06-03 20:22\n"
+
+#. Category = S["Indexing"];
+#: OrchardCore.Indexing.Core\Deployments\IndexProfileDeploymentStep.cs:17
+msgctxt "OrchardCore.Indexing.Core.Deployments.IndexProfileDeploymentStep"
+msgid "Indexing"
+msgstr ""
+
+#. Category = S["Indexing"];
+#: OrchardCore.Indexing.Core\Deployments\RebuildIndexDeploymentStep.cs:17
+msgctxt "OrchardCore.Indexing.Core.Deployments.RebuildIndexDeploymentStep"
+msgid "Indexing"
+msgstr ""
+
+#. Category = S["Indexing"];
+#: OrchardCore.Indexing.Core\Deployments\ResetIndexDeploymentStep.cs:17
+msgctxt "OrchardCore.Indexing.Core.Deployments.ResetIndexDeploymentStep"
+msgid "Indexing"
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["At least one content type must be selected."]));
+#: OrchardCore.Indexing.Core\Handlers\ContentIndexProfileHandler.cs:100
+msgctxt "OrchardCore.Indexing.Core.Handlers.ContentIndexProfileHandler"
+msgid "At least one content type must be selected."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Index name is required."], [nameof(IndexProfile.Name)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:50
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "Index name is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The index name cannot be longer than 255 characters."], [nameof(IndexProfile.Name)]));
+#. context.Result.Fail(new ValidationResult(S["The index name cannot be longer than 255 characters."], [nameof(IndexProfile.IndexName)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:56
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:77
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "The index name cannot be longer than 255 characters."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["There is already another index with the same name."], [nameof(IndexProfile.Name)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:64
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "There is already another index with the same name."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The index name is required."], [nameof(IndexProfile.IndexName)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:73
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "The index name is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The index full name is required."]));
+#. context.Result.Fail(new ValidationResult(S["The index full name is required."]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:82
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:107
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "The index full name is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Index profile-source is required."], [nameof(IndexProfile.ProviderName)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:90
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "Index profile-source is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Index type is required."], [nameof(IndexProfile.Type)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:95
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "Index type is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Unable to find a provider named '{0}' with the type '{1}'.", context.Model.ProviderName, context.Model.Type], [nameof(IndexProfile.Type)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:100
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "Unable to find a provider named '{0}' with the type '{1}'."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The index full name is required. Unable to find a index name provider that with the provider name '{0}'.", context.Model.ProviderName, context.Model.Type], [nameof(IndexProfile.Type)]));
+#: OrchardCore.Indexing.Core\Handlers\DefaultIndexProfileHandler.cs:115
+msgctxt "OrchardCore.Indexing.Core.Handlers.DefaultIndexProfileHandler"
+msgid "The index full name is required. Unable to find a index name provider that with the provider name '{0}'."
+msgstr ""
+
+#. context.Errors.Add(S["Could not find provider value. The index will not be imported"]);
+#: OrchardCore.Indexing.Core\Recipes\CreateOrUpdateIndexProfileStep.cs:82
+msgctxt "OrchardCore.Indexing.Core.Recipes.CreateOrUpdateIndexProfileStep"
+msgid "Could not find provider value. The index will not be imported"
+msgstr ""
+
+#. context.Errors.Add(S["Could not find type value. The index will not be imported"]);
+#: OrchardCore.Indexing.Core\Recipes\CreateOrUpdateIndexProfileStep.cs:91
+msgctxt "OrchardCore.Indexing.Core.Recipes.CreateOrUpdateIndexProfileStep"
+msgid "Could not find type value. The index will not be imported"
+msgstr ""
+
+#. context.Errors.Add(S["Unable to find a provider named '{0}' with the type '{1}'.", providerName, type]);
+#: OrchardCore.Indexing.Core\Recipes\CreateOrUpdateIndexProfileStep.cs:98
+msgctxt "OrchardCore.Indexing.Core.Recipes.CreateOrUpdateIndexProfileStep"
+msgid "Unable to find a provider named '{0}' with the type '{1}'."
+msgstr ""
+
+#. context.Errors.Add(S["Unable to create the index '{0}' for the provider '{1}'.", indexProfile.IndexName, providerName]);
+#: OrchardCore.Indexing.Core\Recipes\CreateOrUpdateIndexProfileStep.cs:125
+msgctxt "OrchardCore.Indexing.Core.Recipes.CreateOrUpdateIndexProfileStep"
+msgid "Unable to create the index '{0}' for the provider '{1}'."
+msgstr ""
+

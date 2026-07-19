@@ -10,24 +10,36 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Portuguese, Brazilian\n"
 "Language: pt_BR\n"
-"PO-Revision-Date: 2024-09-09 17:10\n"
+"PO-Revision-Date: 2026-06-03 19:45\n"
 
 #. .Add(S["Security"], security => security
-#: OrchardCore.ReCaptcha\AdminMenu.cs:26
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#: OrchardCore.ReCaptcha\AdminMenu.cs:28
+#: OrchardCore.ReCaptcha\AdminMenu.cs:43
+#: OrchardCore.ReCaptcha\AdminMenu.cs:43
 msgctxt "OrchardCore.ReCaptcha.AdminMenu"
 msgid "Security"
 msgstr "Segurança"
 
+#. .Add(S["Settings"], S["Settings"].PrefixPosition(), settings => settings
+#. .Add(S["Settings"], S["Settings"].PrefixPosition(), settings => settings
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.ReCaptcha\AdminMenu.cs:27
+#: OrchardCore.ReCaptcha\AdminMenu.cs:29
+#: OrchardCore.ReCaptcha\AdminMenu.cs:29
+#: OrchardCore.ReCaptcha\AdminMenu.cs:42
 msgctxt "OrchardCore.ReCaptcha.AdminMenu"
 msgid "Settings"
 msgstr "Configurações"
 
 #. .Add(S["reCaptcha"], S["reCaptcha"].PrefixPosition(), reCaptcha => reCaptcha
 #. .Add(S["reCaptcha"], S["reCaptcha"].PrefixPosition(), reCaptcha => reCaptcha
-#: OrchardCore.ReCaptcha\AdminMenu.cs:28
-#: OrchardCore.ReCaptcha\AdminMenu.cs:28
+#. .Add(S["reCaptcha"], S["reCaptcha"].PrefixPosition(), reCaptcha => reCaptcha
+#. .Add(S["reCaptcha"], S["reCaptcha"].PrefixPosition(), reCaptcha => reCaptcha
+#: OrchardCore.ReCaptcha\AdminMenu.cs:30
+#: OrchardCore.ReCaptcha\AdminMenu.cs:30
+#: OrchardCore.ReCaptcha\AdminMenu.cs:44
+#: OrchardCore.ReCaptcha\AdminMenu.cs:44
 msgctxt "OrchardCore.ReCaptcha.AdminMenu"
 msgid "reCaptcha"
 msgstr ""
@@ -96,32 +108,32 @@ msgctxt "OrchardCore.ReCaptcha.Views.Items.ReCaptchaPart.Fields.Edit"
 msgid "<a {0}>ReCaptcha settings</a> are not configured. The captcha will not be displayed."
 msgstr "<a {0}>Configurações do ReCaptcha</a> não estão definidas. O captcha não será exibido."
 
-#. <label asp-for="SiteKey" class="form-label">@T["Site Key"]</label>
+#. <label asp-for="SiteKey" class="ocat-label">@T["Site Key"]</label>
 #: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:4
 msgctxt "OrchardCore.ReCaptcha.Views.ReCaptchaSettings.Edit"
 msgid "Site Key"
 msgstr "Chave do Site"
 
 #. <span class="hint">@T["Your Google's reCaptcha Site Key."]</span>
-#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:7
+#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:8
 msgctxt "OrchardCore.ReCaptcha.Views.ReCaptchaSettings.Edit"
 msgid "Your Google's reCaptcha Site Key."
 msgstr "Chave do seu site Google reCaptcha."
 
-#. <label asp-for="SecretKey" class="form-label">@T["Secret Key"]</label>
-#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:11
+#. <label asp-for="SecretKey" class="ocat-label">@T["Secret Key"]</label>
+#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:13
 msgctxt "OrchardCore.ReCaptcha.Views.ReCaptchaSettings.Edit"
 msgid "Secret Key"
 msgstr ""
 
 #. <span class="hint">@T["Your Google's reCaptcha Secret Key."]</span>
-#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:14
+#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:17
 msgctxt "OrchardCore.ReCaptcha.Views.ReCaptchaSettings.Edit"
 msgid "Your Google's reCaptcha Secret Key."
 msgstr "Chave do seu site Google reCaptcha."
 
 #. <span class="hint">@T["Get your reCaptcha at"] <a href="https://developers.google.com/recaptcha/" target="_blank">https://developers.google.com/recaptcha/</a></span>
-#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:18
+#: OrchardCore.ReCaptcha\Views\ReCaptchaSettings.Edit.cshtml:23
 msgctxt "OrchardCore.ReCaptcha.Views.ReCaptchaSettings.Edit"
 msgid "Get your reCaptcha at"
 msgstr "Obtenha seu reCaptcha em"

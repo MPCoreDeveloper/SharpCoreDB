@@ -10,17 +10,17 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Simplified\n"
 "Language: zh_CN\n"
-"PO-Revision-Date: 2024-09-23 09:57\n"
+"PO-Revision-Date: 2026-06-03 19:24\n"
 
-#. return EmailResult.FailedResult(S["Email settings must be configured before an Email message can be sent."]);
-#: OrchardCore.Email.Core\Services\DefaultEmailService.cs:35
-msgctxt "OrchardCore.Email.Core.Services.DefaultEmailService"
+#. return Result.Failed(S["Email settings must be configured before an Email message can be sent."]);
+#: OrchardCore.Email.Core\Services\DefaultEmailService.cs:43
+msgctxt "OrchardCore.Email.Services.DefaultEmailService"
 msgid "Email settings must be configured before an Email message can be sent."
-msgstr "在发送邮件信息之前，一定要配置好邮件相关的配置信息"
+msgstr "电子邮件设置必须先配置，然后才能发送邮件。"
 
 #. .Select(address => S["Invalid email address for the sender: '{0}'.", address]);
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:22
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "Invalid email address for the sender: '{0}'."
 msgstr "发件人无效的电子邮件地址: '{0}'。"
 
@@ -32,13 +32,13 @@ msgstr "发件人无效的电子邮件地址: '{0}'。"
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:36
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:42
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:48
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "Invalid email address for the recipient: '{0}'."
-msgstr "无效的收信人邮件地址：{0}"
+msgstr "收件人无效的电子邮件地址：'{0}'。"
 
 #. AddError(context, string.Empty, [S["The mail message should have at least one of these headers: To, Cc or Bcc."]]);
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:54
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "The mail message should have at least one of these headers: To, Cc or Bcc."
-msgstr "邮件信息必须至少含有以下头当中的任意一个：To，Cc或Bcc"
+msgstr "邮件消息必须至少有其中一首：To, Cc 或 Bc。"
 

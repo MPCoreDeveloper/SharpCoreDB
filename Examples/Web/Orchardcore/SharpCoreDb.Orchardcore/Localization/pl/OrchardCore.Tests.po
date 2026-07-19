@@ -10,41 +10,47 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2023-12-22 16:31\n"
+"PO-Revision-Date: 2026-04-22 14:07\n"
+
+#. AddScalarFilterFields<StringGraphType>("culture", S["culture"]);
+#: OrchardCore.Tests\Apis\GraphQL\ContentItemsFieldTypeTests.cs:606
+msgctxt "OrchardCore.Tests.Apis.GraphQL.AnimalNestedPartInput"
+msgid "culture"
+msgstr ""
 
 #. public override LocalizedString DisplayText => S["Add Task"];
 #: OrchardCore.Tests\Workflows\Activities\AddTask.cs:19
 msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
 msgid "Add Task"
-msgstr ""
+msgstr "Dodaj Zadanie"
 
 #. public override LocalizedString Category => S["Test"];
 #: OrchardCore.Tests\Workflows\Activities\AddTask.cs:21
 msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
 msgid "Test"
-msgstr ""
+msgstr "Testuj"
 
 #. return Outcomes(S["Done"]);
 #: OrchardCore.Tests\Workflows\Activities\AddTask.cs:37
 msgctxt "OrchardCore.Tests.Workflows.Activities.AddTask"
 msgid "Done"
-msgstr ""
+msgstr "Wykonano"
 
 #. public override LocalizedString DisplayText => S["Write Line Task"];
 #: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:21
 msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
 msgid "Write Line Task"
-msgstr ""
+msgstr "Zadanie: Napisz Linię"
 
 #. public override LocalizedString Category => S["Test"];
 #: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:23
 msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
 msgid "Test"
-msgstr ""
+msgstr "Testuj"
 
 #. return Outcomes(S["Done"]);
 #: OrchardCore.Tests\Workflows\Activities\WriteLineTask.cs:33
 msgctxt "OrchardCore.Tests.Workflows.Activities.WriteLineTask"
 msgid "Done"
-msgstr ""
+msgstr "Wykonano"
 

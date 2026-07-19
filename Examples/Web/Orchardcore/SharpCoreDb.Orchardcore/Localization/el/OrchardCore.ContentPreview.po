@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Greek\n"
 "Language: el_GR\n"
-"PO-Revision-Date: 2023-12-22 16:11\n"
+"PO-Revision-Date: 2026-06-03 19:14\n"
 
 #. context.Updater.ModelState.AddModelError(nameof(model.Pattern), S["Pattern doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
 #: OrchardCore.ContentPreview\Settings\PreviewPartSettingsDisplayDriver.cs:46
@@ -36,8 +36,8 @@ msgctxt "OrchardCore.ContentPreview.Views.Preview.Index"
 msgid "Preview Error"
 msgstr "Προεπισκόπηση Σφάλματος"
 
-#. <label asp-for="Pattern" class="form-label">@T["Pattern"]</label>
-#: OrchardCore.ContentPreview\Views\PreviewPartSettings.Edit.cshtml:15
+#. <label asp-for="Pattern" class="ocat-label">@T["Pattern"]</label>
+#: OrchardCore.ContentPreview\Views\PreviewPartSettings.Edit.cshtml:14
 msgctxt "OrchardCore.ContentPreview.Views.PreviewPartSettings.Edit"
 msgid "Pattern"
 msgstr "Μοτίβο"

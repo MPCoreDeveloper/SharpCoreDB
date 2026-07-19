@@ -10,24 +10,36 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Spanish\n"
 "Language: es_ES\n"
-"PO-Revision-Date: 2024-09-09 16:37\n"
+"PO-Revision-Date: 2026-06-03 19:31\n"
 
 #. .Add(S["Security"], security => security
-#: OrchardCore.Https\AdminMenu.cs:26
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#. .Add(S["Security"], S["Security"].PrefixPosition(), security => security
+#: OrchardCore.Https\AdminMenu.cs:28
+#: OrchardCore.Https\AdminMenu.cs:43
+#: OrchardCore.Https\AdminMenu.cs:43
 msgctxt "OrchardCore.Https.AdminMenu"
 msgid "Security"
 msgstr "Seguridad"
 
+#. .Add(S["Settings"], S["Settings"].PrefixPosition(), settings => settings
+#. .Add(S["Settings"], S["Settings"].PrefixPosition(), settings => settings
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.Https\AdminMenu.cs:27
+#: OrchardCore.Https\AdminMenu.cs:29
+#: OrchardCore.Https\AdminMenu.cs:29
+#: OrchardCore.Https\AdminMenu.cs:42
 msgctxt "OrchardCore.Https.AdminMenu"
 msgid "Settings"
 msgstr "Ajustes"
 
 #. .Add(S["HTTPS"], S["HTTPS"].PrefixPosition(), https => https
 #. .Add(S["HTTPS"], S["HTTPS"].PrefixPosition(), https => https
-#: OrchardCore.Https\AdminMenu.cs:28
-#: OrchardCore.Https\AdminMenu.cs:28
+#. .Add(S["HTTPS"], S["HTTPS"].PrefixPosition(), https => https
+#. .Add(S["HTTPS"], S["HTTPS"].PrefixPosition(), https => https
+#: OrchardCore.Https\AdminMenu.cs:30
+#: OrchardCore.Https\AdminMenu.cs:30
+#: OrchardCore.Https\AdminMenu.cs:44
+#: OrchardCore.Https\AdminMenu.cs:44
 msgctxt "OrchardCore.Https.AdminMenu"
 msgid "HTTPS"
 msgstr "HTTPS"
@@ -51,55 +63,55 @@ msgid "Exports the Https settings."
 msgstr "Exporta los ajustes de Https."
 
 #. <label class="form-check-label" asp-for="RequireHttps">@T["Require HTTPS"]</label>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:6
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Require HTTPS"
 msgstr "Requerir HTTPS"
 
 #. <span class="hint dashed">@T["Require HTTPS for all requests"]</span>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:7
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:8
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Require HTTPS for all requests"
 msgstr "Requiere HTTPS para todas las solicitudes"
 
 #. <label class="form-check-label" asp-for="EnableStrictTransportSecurity">@T["Enable HSTS"]</label>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:14
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:17
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Enable HSTS"
 msgstr "Habilitar HSTS"
 
 #. <span class="hint dashed">@T["Indicates to browsers that connecting without transport security (e.g SSL or TLS) isn't allowed."]</span>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:15
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:18
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Indicates to browsers that connecting without transport security (e.g SSL or TLS) isn't allowed."
 msgstr "Indica a los navegadores que no están permitidos la conexión sin seguridad de transporte (por ejemplo SSL o TLS)."
 
 #. <div class="alert alert-danger">@T["This option should be enabled with caution, as it may prevent users from connecting if HTTPS was later disabled or wasn't available."]</div>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:18
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:25
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "This option should be enabled with caution, as it may prevent users from connecting if HTTPS was later disabled or wasn't available."
 msgstr "Esta opción debería activarse con precaución, ya que puede impedir que los usuarios se conecten si se desactiva o no está disponible HTTPS."
 
 #. <label class="form-check-label" asp-for="RequireHttpsPermanent">@T["Require HTTPS Permanent"]</label>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:24
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:33
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Require HTTPS Permanent"
 msgstr "Requerir HTTPS permanente"
 
 #. <span class="hint dashed">@T["Specifies whether a permanent redirect, 308 Moved Permanently, should be used instead of a temporary redirect, 307 Found, when redirecting to HTTPS"]</span>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:25
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:34
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "Specifies whether a permanent redirect, 308 Moved Permanently, should be used instead of a temporary redirect, 307 Found, when redirecting to HTTPS"
 msgstr "Especifica si una redirección permanente, 308 Moved Permanently, debe ser usada en lugar de una redirección temporal, 307 Found, cuando se redireccione a HTTPS"
 
-#. <label asp-for="SslPort" class="form-label">@T["SSL Port"]</label>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:30
+#. <label asp-for="SslPort" class="ocat-label">@T["SSL Port"]</label>
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:40
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "SSL Port"
 msgstr "Puerto SSL"
 
 #. <span class="hint">@T["The SSL Port Number, leave empty to let the middleware try to determinate it."]</span>
-#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:33
+#: OrchardCore.Https\Views\HttpsSettings.Edit.cshtml:44
 msgctxt "OrchardCore.Https.Views.HttpsSettings.Edit"
 msgid "The SSL Port Number, leave empty to let the middleware try to determinate it."
 msgstr "El número de puerto SSL, dejar vacío para que el middleware intente determinarlo."

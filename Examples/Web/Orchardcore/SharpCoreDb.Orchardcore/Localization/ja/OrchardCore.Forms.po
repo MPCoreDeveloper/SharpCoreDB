@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Japanese\n"
 "Language: ja_JP\n"
-"PO-Revision-Date: 2024-08-24 20:29\n"
+"PO-Revision-Date: 2026-06-03 19:28\n"
 
 #. public override LocalizedString DisplayText => S["Http Redirect To Form Location Task"];
 #: OrchardCore.Forms\Activities\HttpRedirectToFormLocationTask.cs:24
@@ -37,15 +37,105 @@ msgid "Failed"
 msgstr ""
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Name), S["A value is required for Name."]);
-#: OrchardCore.Forms\Drivers\FormInputElementPartDisplayDriver.cs:36
+#: OrchardCore.Forms\Drivers\FormInputElementPartDisplayDriver.cs:37
 msgctxt "OrchardCore.Forms.Drivers.FormInputElementPartDisplayDriver"
 msgid "A value is required for Name."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Name), S["A Name contains invalid characters."]);
+#: OrchardCore.Forms\Drivers\FormInputElementPartDisplayDriver.cs:45
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementPartDisplayDriver"
+msgid "A Name contains invalid characters."
+msgstr ""
+
+#. new(S["Is"], nameof(FormVisibilityOperator.Is)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:61
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Is"
+msgstr ""
+
+#. new(S["Is not"], nameof(FormVisibilityOperator.IsNot)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:62
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Is not"
+msgstr ""
+
+#. new(S["Empty"], nameof(FormVisibilityOperator.Empty)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:63
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Empty"
+msgstr ""
+
+#. new(S["Not empty"], nameof(FormVisibilityOperator.NotEmpty)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:64
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Not empty"
+msgstr ""
+
+#. new(S["Contains"], nameof(FormVisibilityOperator.Contains)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:65
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Contains"
+msgstr ""
+
+#. new(S["Does not contain"], nameof(FormVisibilityOperator.DoesNotContain)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:66
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Does not contain"
+msgstr ""
+
+#. new(S["Starts with"], nameof(FormVisibilityOperator.StartsWith)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:67
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Starts with"
+msgstr ""
+
+#. new(S["Ends with"], nameof(FormVisibilityOperator.EndsWith)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:68
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Ends with"
+msgstr ""
+
+#. new(S["Greater than"], nameof(FormVisibilityOperator.GreaterThan)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:69
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Greater than"
+msgstr ""
+
+#. new(S["Less than"], nameof(FormVisibilityOperator.LessThan)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:70
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Less than"
+msgstr ""
+
+#. new(S["Always visible"], nameof(FormVisibilityAction.None)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:77
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Always visible"
+msgstr ""
+
+#. new(S["Conditionally show"], nameof(FormVisibilityAction.Show)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:78
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Conditionally show"
+msgstr ""
+
+#. new(S["Conditionally hide"], nameof(FormVisibilityAction.Hide)),
+#: OrchardCore.Forms\Drivers\FormInputElementVisibilityPartDisplayDriver.cs:79
+msgctxt "OrchardCore.Forms.Drivers.FormInputElementVisibilityPartDisplayDriver"
+msgid "Conditionally hide"
 msgstr ""
 
 #. context.Updater.ModelState.AddModelError(Prefix + '.' + nameof(SelectPartEditViewModel.Options), S["The options are written in an incorrect format."]);
 #: OrchardCore.Forms\Drivers\SelectPartDisplayDriver.cs:50
 msgctxt "OrchardCore.Forms.Drivers.SelectPartDisplayDriver"
 msgid "The options are written in an incorrect format."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Rows), S["The Rows field should be greater than or equal 1."]);
+#: OrchardCore.Forms\Drivers\TextAreaPartDisplayDriver.cs:47
+msgctxt "OrchardCore.Forms.Drivers.TextAreaPartDisplayDriver"
+msgid "The Rows field should be greater than or equal 1."
 msgstr ""
 
 #. public override LocalizedString DisplayText => S["Add Model Validation Error Task"];
@@ -168,7 +258,7 @@ msgctxt "OrchardCore.Forms.Workflows.Activities.ValidateFormTask"
 msgid "Invalid"
 msgstr "入力値が不正です"
 
-#. <h4><i class="fa-solid fa-exclamation-triangle" aria-hidden="true"></i>@Model.Activity.GetTitleOrDefault(() => T["Add Form Validation Error"])</h4>
+#. <h4><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>@Model.Activity.GetTitleOrDefault(() => T["Add Form Validation Error"])</h4>
 #: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Design.cshtml:4
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Design"
 msgid "Add Form Validation Error"
@@ -180,31 +270,31 @@ msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Design
 msgid "<em>{0}</em>: <em>{1}</em>"
 msgstr ""
 
-#. <label asp-for="Key" class="@Orchard.GetLabelClasses()">@T["Key"]</label>
-#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:6
+#. <label asp-for="Key" class="ocat-label">@T["Key"]</label>
+#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Edit"
 msgid "Key"
 msgstr ""
 
 #. <span class="hint">@T["The name of the form field that has an invalid value."]</span>
-#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:10
+#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:9
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Edit"
 msgid "The name of the form field that has an invalid value."
 msgstr "無効な値を持つフォームフィールドの名前。"
 
-#. <label asp-for="ErrorMessage" class="@Orchard.GetLabelClasses()">@T["Error Message"]</label>
-#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:15
+#. <label asp-for="ErrorMessage" class="ocat-label">@T["Error Message"]</label>
+#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Edit"
 msgid "Error Message"
 msgstr "エラーメッセージ"
 
 #. <span class="hint">@T["The validation error message to display."]</span>
-#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:19
+#: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Edit"
 msgid "The validation error message to display."
 msgstr ""
 
-#. <h4 class="card-title"><i class="fa-solid fa-exclamation-triangle" aria-hidden="true"></i>@T["Add Form Validation Error"]</h4>
+#. <h4 class="card-title"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>@T["Add Form Validation Error"]</h4>
 #: OrchardCore.Forms\Views\Items\AddModelValidationErrorTask.Fields.Thumbnail.cshtml:1
 msgctxt "OrchardCore.Forms.Views.Items.AddModelValidationErrorTask.Fields.Thumbnail"
 msgid "Add Form Validation Error"
@@ -234,139 +324,151 @@ msgctxt "OrchardCore.Forms.Views.Items.BindModelStateTask.Fields.Thumbnail"
 msgid "Binds submitted form fields to the model state."
 msgstr ""
 
-#. <label asp-for="Text" class="@Orchard.GetLabelClasses()">@T["Text"]</label>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:6
+#. <label asp-for="Text" class="ocat-label">@T["Text"]</label>
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "Text"
 msgstr "テキスト"
 
 #. <span class="hint">@T["The text to display on the button."]</span>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "The text to display on the button."
 msgstr "ボタンに表示するテキスト"
 
-#. <label asp-for="Type" class="@Orchard.GetLabelClasses()">@T["Type"]</label>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:14
+#. <label asp-for="Type" class="ocat-label">@T["Type"]</label>
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "Type"
 msgstr "種類"
 
 #. <option value="submit">@T["Submit"]</option>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:17
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:16
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "Submit"
 msgstr ""
 
 #. <option value="button">@T["Button"]</option>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:18
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "Button"
 msgstr ""
 
 #. <option value="reset">@T["Reset"]</option>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:19
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "Reset"
 msgstr ""
 
 #. <span class="hint">@T["The button type."]</span>
-#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:21
+#: OrchardCore.Forms\Views\Items\ButtonPart.Fields.Edit.cshtml:20
 msgctxt "OrchardCore.Forms.Views.Items.ButtonPart.Fields.Edit"
 msgid "The button type."
 msgstr "ボタンの種類"
 
-#. <label asp-for="LabelOption" class="@Orchard.GetLabelClasses()">@T["Label option"]</label>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:11
+#. <label asp-for="LabelOption" class="ocat-label">@T["Label option"]</label>
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "Label option"
 msgstr ""
 
 #. <option value="@nameof(LabelOptions.None)">@T["None"]</option>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:14
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "None"
 msgstr ""
 
 #. <option value="@nameof(LabelOptions.Standard)">@T["Standard"]</option>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:15
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "Standard"
 msgstr ""
 
 #. <option value="@nameof(LabelOptions.ScreenReaders)">@T["Screen Readers"]</option>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:16
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:15
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "Screen Readers"
 msgstr ""
 
 #. <span class="hint">@T["The type of label to create for this field."]</span>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:18
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "The type of label to create for this field."
 msgstr ""
 
-#. <label asp-for="Label" class="@Orchard.GetLabelClasses()">@T["Label Text"]</label>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:23
+#. <label asp-for="Label" class="ocat-label">@T["Label Text"]</label>
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:22
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "Label Text"
 msgstr ""
 
 #. <span class="hint">@T["The text to display in the label."]</span>
-#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:26
+#: OrchardCore.Forms\Views\Items\FormElementLabelPart.Fields.Edit.cshtml:25
 msgctxt "OrchardCore.Forms.Views.Items.FormElementLabelPart.Fields.Edit"
 msgid "The text to display in the label."
 msgstr ""
 
-#. <label asp-for="Id" class="@Orchard.GetLabelClasses()">@T["ID"]</label>
-#: OrchardCore.Forms\Views\Items\FormElementPart.Fields.Edit.cshtml:6
+#. <label asp-for="Id" class="ocat-label">@T["ID"]</label>
+#: OrchardCore.Forms\Views\Items\FormElementPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.FormElementPart.Fields.Edit"
 msgid "ID"
 msgstr ""
 
 #. <span class="hint">@T["The ID to render on this form element."]</span>
-#: OrchardCore.Forms\Views\Items\FormElementPart.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\FormElementPart.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Forms.Views.Items.FormElementPart.Fields.Edit"
 msgid "The ID to render on this form element."
 msgstr ""
 
-#. <label asp-for="ValidationOption" class="@Orchard.GetLabelClasses()">@T["Validation option"]</label>
-#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:7
+#. <label asp-for="ValidationOption" class="ocat-label">@T["Validation option"]</label>
+#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:6
 msgctxt "OrchardCore.Forms.Views.Items.FormElementValidationPart.Fields.Edit"
 msgid "Validation option"
 msgstr ""
 
 #. <option value="@ValidationOptions.None">@T["None"]</option>
-#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:10
+#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:9
 msgctxt "OrchardCore.Forms.Views.Items.FormElementValidationPart.Fields.Edit"
 msgid "None"
 msgstr ""
 
 #. <option value="@ValidationOptions.Standard">@T["Standard"]</option>
-#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:11
+#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Forms.Views.Items.FormElementValidationPart.Fields.Edit"
 msgid "Standard"
 msgstr ""
 
 #. <span class="hint">@T["The type of validation to create for this field."]</span>
-#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:13
+#: OrchardCore.Forms\Views\Items\FormElementValidationPart.Fields.Edit.cshtml:12
 msgctxt "OrchardCore.Forms.Views.Items.FormElementValidationPart.Fields.Edit"
 msgid "The type of validation to create for this field."
 msgstr ""
 
-#. <label asp-for="Name" class="@Orchard.GetLabelClasses()">@T["Name"]</label>
-#: OrchardCore.Forms\Views\Items\FormInputElementPart.Fields.Edit.cshtml:6
+#. <label asp-for="Name" class="ocat-label">@T["HTML Name"]</label>
+#: OrchardCore.Forms\Views\Items\FormInputElementPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.FormInputElementPart.Fields.Edit"
-msgid "Name"
-msgstr "名前"
-
-#. <span class="hint">@T["The name to render on this form element."]</span>
-#: OrchardCore.Forms\Views\Items\FormInputElementPart.Fields.Edit.cshtml:9
-msgctxt "OrchardCore.Forms.Views.Items.FormInputElementPart.Fields.Edit"
-msgid "The name to render on this form element."
+msgid "HTML Name"
 msgstr ""
 
-#. <label asp-for="Action" class="@Orchard.GetLabelClasses()">@T["Action"]</label>
+#. <span class="hint">@T["The valid characters for the HTML input name attribute are letters (a-z, A-Z), digits (0-9), hyphen (-), underscore (_), period (.), and square brackets ([ ])."]</span>
+#: OrchardCore.Forms\Views\Items\FormInputElementPart.Fields.Edit.cshtml:8
+msgctxt "OrchardCore.Forms.Views.Items.FormInputElementPart.Fields.Edit"
+msgid "The valid characters for the HTML input name attribute are letters (a-z, A-Z), digits (0-9), hyphen (-), underscore (_), period (.), and square brackets ([ ])."
+msgstr ""
+
+#. <label asp-for="Action" class="ocat-label">@T["Action"]</label>
+#: OrchardCore.Forms\Views\FormInputElementVisibility.Edit.cshtml:8
+msgctxt "OrchardCore.Forms.Views.FormInputElementVisibility.Edit"
+msgid "Action"
+msgstr ""
+
+#. <span class="hint">@T["The action to take when the condition is met."]</span>
+#: OrchardCore.Forms\Views\FormInputElementVisibility.Edit.cshtml:11
+msgctxt "OrchardCore.Forms.Views.FormInputElementVisibility.Edit"
+msgid "The action to take when the condition is met."
+msgstr ""
+
+#. <label asp-for="Action" class="ocat-label">@T["Action"]</label>
 #: OrchardCore.Forms\Views\Items\FormPart.Fields.Edit.cshtml:6
 msgctxt "OrchardCore.Forms.Views.Items.FormPart.Fields.Edit"
 msgid "Action"
@@ -378,7 +480,7 @@ msgctxt "OrchardCore.Forms.Views.Items.FormPart.Fields.Edit"
 msgid "The URL to submit the form to."
 msgstr ""
 
-#. <label asp-for="Method" class="@Orchard.GetLabelClasses()">@T["Method"]</label>
+#. <label asp-for="Method" class="ocat-label">@T["Method"]</label>
 #: OrchardCore.Forms\Views\Items\FormPart.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.FormPart.Fields.Edit"
 msgid "Method"
@@ -390,7 +492,7 @@ msgctxt "OrchardCore.Forms.Views.Items.FormPart.Fields.Edit"
 msgid "The HTTP method to use when submitting the form."
 msgstr ""
 
-#. <label asp-for="EncType" class="@Orchard.GetLabelClasses()">@T["EncType"]</label>
+#. <label asp-for="EncType" class="ocat-label">@T["EncType"]</label>
 #: OrchardCore.Forms\Views\Items\FormPart.Fields.Edit.cshtml:25
 msgctxt "OrchardCore.Forms.Views.Items.FormPart.Fields.Edit"
 msgid "EncType"
@@ -432,14 +534,14 @@ msgctxt "OrchardCore.Forms.Views.Items.HttpRedirectToFormLocationTask.Fields.Des
 msgid "HTTP Redirect To Form Location"
 msgstr ""
 
-#. <label asp-for="FormLocationKey" class="form-label">@T["Form Location Key"]</label>
+#. <label asp-for="FormLocationKey" class="ocat-label">@T["Form Location Key"]</label>
 #: OrchardCore.Forms\Views\Items\HttpRedirectToFormLocationTask.Fields.Edit.cshtml:6
 msgctxt "OrchardCore.Forms.Views.Items.HttpRedirectToFormLocationTask.Fields.Edit"
 msgid "Form Location Key"
 msgstr ""
 
 #. <span class="hint">@T["This key name should be equal to the 'Form Location Key' of the HTTP request event. Leave blank if the workflow only handles a single form."]</span>
-#: OrchardCore.Forms\Views\Items\HttpRedirectToFormLocationTask.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\HttpRedirectToFormLocationTask.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Forms.Views.Items.HttpRedirectToFormLocationTask.Fields.Edit"
 msgid "This key name should be equal to the 'Form Location Key' of the HTTP request event. Leave blank if the workflow only handles a single form."
 msgstr ""
@@ -456,240 +558,240 @@ msgctxt "OrchardCore.Forms.Views.Items.HttpRedirectToFormLocationTask.Fields.Thu
 msgid "Redirect the user agent to the original location of the form."
 msgstr ""
 
-#. <label asp-for="Type" class="@Orchard.GetLabelClasses()">@T["Type"]</label>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:8
+#. <label asp-for="Type" class="ocat-label">@T["Type"]</label>
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:7
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Type"
 msgstr "種類"
 
 #. <option value="text">@T["Text"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:11
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Text"
 msgstr "テキスト"
 
 #. <option value="number">@T["Number"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:12
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:11
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Number"
 msgstr "番号"
 
 #. <option value="email">@T["Email"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:13
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:12
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Email"
 msgstr "メールアドレス"
 
 #. <option value="tel">@T["Phone"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:14
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Phone"
 msgstr ""
 
 #. <option value="date">@T["Date"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:15
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Date"
 msgstr "日付"
 
 #. <option value="time">@T["Time"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:16
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:15
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Time"
 msgstr "時間"
 
 #. <option value="datetime">@T["DateTime"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:17
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:16
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "DateTime"
 msgstr "日時"
 
 #. <option value="datetime-local">@T["Local DateTime"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:18
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Local DateTime"
 msgstr "ローカルの日時"
 
 #. <option value="month">@T["Month"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:19
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Month"
 msgstr "月"
 
 #. <option value="week">@T["Week"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:20
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:19
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Week"
 msgstr "週"
 
 #. <option value="hidden">@T["Hidden"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:21
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:20
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Hidden"
 msgstr "非表示"
 
 #. <option value="password">@T["Password"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:22
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:21
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Password"
 msgstr "パスワード"
 
 #. <option value="checkbox">@T["Checkbox"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:23
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:22
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Checkbox"
 msgstr "チェック ボックス"
 
 #. <option value="color">@T["Color"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:24
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:23
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Color"
 msgstr "色"
 
 #. <option value="range">@T["Range"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:25
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:24
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Range"
 msgstr "範囲"
 
 #. <option value="file">@T["File"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:26
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:25
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "File"
 msgstr "ファイル"
 
 #. <option value="url">@T["Url"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:27
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:26
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Url"
 msgstr ""
 
 #. <option value="image">@T["Image"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:28
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:27
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Image"
 msgstr "画像"
 
 #. <option value="reset">@T["Reset"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:29
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:28
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Reset"
 msgstr "リセット"
 
 #. <option value="search">@T["Search"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:30
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:29
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Search"
 msgstr "検索"
 
 #. <option value="submit">@T["Submit"]</option>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:31
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:30
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Submit"
 msgstr "送信"
 
 #. <span class="hint">@T["The button type."]</span>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:33
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:32
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "The button type."
 msgstr "ボタンの種類"
 
-#. <label asp-for="Placeholder" class="@Orchard.GetLabelClasses()">@T["Placeholder Text"]</label>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:38
+#. <label asp-for="Placeholder" class="ocat-label">@T["Placeholder Text"]</label>
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:37
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Placeholder Text"
 msgstr ""
 
 #. <span class="hint">@T["The text to display when the field has no value."]</span>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:41
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:40
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "The text to display when the field has no value."
 msgstr ""
 
-#. <label asp-for="DefaultValue" class="@Orchard.GetLabelClasses()">@T["Default Value"]</label>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:46
+#. <label asp-for="DefaultValue" class="ocat-label">@T["Default Value"]</label>
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:45
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "Default Value"
 msgstr "初期値"
 
 #. <span class="hint">@T["The default value for this field."]</span>
-#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:49
+#: OrchardCore.Forms\Views\Items\InputPart.Fields.Edit.cshtml:48
 msgctxt "OrchardCore.Forms.Views.Items.InputPart.Fields.Edit"
 msgid "The default value for this field."
 msgstr "フィールドの初期値"
 
-#. <label asp-for="For" class="@Orchard.GetLabelClasses()">@T["For"]</label>
-#: OrchardCore.Forms\Views\Items\LabelPart.Fields.Edit.cshtml:6
+#. <label asp-for="For" class="ocat-label">@T["For"]</label>
+#: OrchardCore.Forms\Views\Items\LabelPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.LabelPart.Fields.Edit"
 msgid "For"
 msgstr "対象："
 
 #. <span class="hint">@T["The ID of the form element to associate with this label."]</span>
-#: OrchardCore.Forms\Views\Items\LabelPart.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\LabelPart.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Forms.Views.Items.LabelPart.Fields.Edit"
 msgid "The ID of the form element to associate with this label."
 msgstr ""
 
 #. <input type="text" class="form-control" v-model="optionText" placeholder="@T["Enter the text"]" />
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:12
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:11
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Enter the text"
 msgstr ""
 
 #. <input type="text" class="form-control courier" v-model="optionValue" placeholder="@T["Enter a value"]" />
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:15
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Enter a value"
 msgstr ""
 
 #. <label :for=" partId + '_' + option.key + '_id'" class="form-check-label" title="@T["Set as default"]" >
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:25
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:24
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Set as default"
 msgstr ""
 
 #. <a v-on:click.prevent.stop="remove" href="#" title="@T["Remove element from list"]" class="btn">
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:31
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:30
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Remove element from list"
 msgstr ""
 
 #. <th scope="col">@T["Option Text"]</th>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:44
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:43
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Option Text"
 msgstr ""
 
 #. <th scope="col">@T["Value"]</th>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:45
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:44
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Value"
 msgstr ""
 
 #. <th scope="col" colspan="3">@T["Default?"]</th>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:46
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:45
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Default?"
 msgstr ""
 
 #. <a v-on:click="add()" class="btn btn-light w-100 btn-sm"><i class="fa-solid fa-plus small" aria-hidden="true"></i> @T["Add an option"]</a>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:60
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:59
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Add an option"
 msgstr ""
 
 #. <h5 class="modal-title">@T["Edit Data"]</h5>
-#. <a href="#" v-on:click.prevent.stop="showModal = true" class="float-end" title="@T["Edit Data"]"><i class="fa-solid fa-edit" aria-hidden="true"></i></a>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:74
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:127
+#. <a href="#" v-on:click.prevent.stop="showModal = true" class="float-end" title="@T["Edit Data"]"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></a>
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:73
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:130
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Edit Data"
 msgstr ""
 
-#. <label for="select-options-textarea" class="form-label">@T["Options"]</label>
-#. <label asp-for="Options" class="@Orchard.GetLabelClasses()">@T["Options"]</label>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:79
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:122
+#. <label for="select-options-textarea" class="ocat-label">@T["Options"]</label>
+#. <label asp-for="Options" class="ocat-label">@T["Options"]</label>
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:78
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:125
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Options"
 msgstr ""
@@ -700,83 +802,95 @@ msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "A JSON representation of the allowed values, e.g. {0}"
 msgstr ""
 
-#. <label for="options-default-value" class="form-label">@T["Default value"]</label>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:86
+#. <label for="options-default-value" class="ocat-label">@T["Default value"]</label>
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:87
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Default value"
 msgstr ""
 
 #. <span class="hint">@T["(Optional) The value to assign to the select field."]</span>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:88
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:90
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "(Optional) The value to assign to the select field."
 msgstr ""
 
 #. v-on:click="closeModal(true)">@T["OK"]</button>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:94
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:97
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "OK"
 msgstr ""
 
 #. <button type="button" class="btn btn-secondary" v-on:click="closeModal(false)">@T["Cancel"]</button>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:95
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:98
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Cancel"
 msgstr ""
 
-#. <label asp-for="Editor" class="@Orchard.GetLabelClasses()">@T["Editor"]</label>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:110
+#. <label asp-for="Editor" class="ocat-label">@T["Editor"]</label>
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:113
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Editor"
 msgstr ""
 
 #. <option value="@SelectEditorOption.Dropdown">@T["Dropdown"]</option>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:113
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:116
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Dropdown"
 msgstr ""
 
 #. <option value="@SelectEditorOption.Checkbox">@T["Checkbox"]</option>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:114
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:117
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Checkbox"
 msgstr ""
 
 #. <option value="@SelectEditorOption.Radio">@T["Radio"]</option>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:115
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:118
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "Radio"
 msgstr ""
 
 #. <span class="hint">@T["The editor style to use for this field."]</span>
-#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:117
+#: OrchardCore.Forms\Views\Items\SelectPart.Fields.Edit.cshtml:120
 msgctxt "OrchardCore.Forms.Views.Items.SelectPart.Fields.Edit"
 msgid "The editor style to use for this field."
 msgstr ""
 
-#. <label asp-for="Placeholder" class="@Orchard.GetLabelClasses()">@T["Placeholder Text"]</label>
-#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:6
+#. <label asp-for="Placeholder" class="ocat-label">@T["Placeholder Text"]</label>
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
 msgid "Placeholder Text"
 msgstr ""
 
 #. <span class="hint">@T["The text to display when the textarea has no value."]</span>
-#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
 msgid "The text to display when the textarea has no value."
 msgstr ""
 
-#. <label asp-for="DefaultValue" class="@Orchard.GetLabelClasses()">@T["Default Value"]</label>
-#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:14
+#. <label asp-for="DefaultValue" class="ocat-label">@T["Default Value"]</label>
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
 msgid "Default Value"
 msgstr "初期値"
 
 #. <span class="hint">@T["The default value for this textarea."]</span>
-#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:17
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:16
 msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
 msgid "The default value for this textarea."
 msgstr "テキストエリアの初期値です。"
+
+#. <label asp-for="Rows" class="ocat-label">@T["Rows"]</label>
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:21
+msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
+msgid "Rows"
+msgstr ""
+
+#. <span class="hint">@T["The number of rows to use for this textarea."]</span>
+#: OrchardCore.Forms\Views\Items\TextAreaPart.Fields.Edit.cshtml:24
+msgctxt "OrchardCore.Forms.Views.Items.TextAreaPart.Fields.Edit"
+msgid "The number of rows to use for this textarea."
+msgstr ""
 
 #. <h4><i class="fa-solid fa-shield-alt" aria-hidden="true"></i>@Model.Activity.GetTitleOrDefault(() => T["Validate Antiforgery Token"])</h4>
 #: OrchardCore.Forms\Views\Items\ValidateAntiforgeryTokenTask.Fields.Design.cshtml:4
@@ -808,26 +922,26 @@ msgctxt "OrchardCore.Forms.Views.Items.ValidateFormFieldTask.Fields.Design"
 msgid "Validate <em>{0}</em>"
 msgstr ""
 
-#. <label asp-for="FieldName" class="@Orchard.GetLabelClasses()">@T["Field Name"]</label>
-#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:6
+#. <label asp-for="FieldName" class="ocat-label">@T["Field Name"]</label>
+#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.ValidateFormFieldTask.Fields.Edit"
 msgid "Field Name"
 msgstr "フィールド名"
 
 #. <span class="hint">@T["The name of the form field to validate."]</span>
-#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:10
+#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:9
 msgctxt "OrchardCore.Forms.Views.Items.ValidateFormFieldTask.Fields.Edit"
 msgid "The name of the form field to validate."
 msgstr ""
 
-#. <label asp-for="ErrorMessage" class="@Orchard.GetLabelClasses()">@T["Error Message"]</label>
-#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:15
+#. <label asp-for="ErrorMessage" class="ocat-label">@T["Error Message"]</label>
+#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Forms.Views.Items.ValidateFormFieldTask.Fields.Edit"
 msgid "Error Message"
 msgstr "エラーメッセージ"
 
 #. <span class="hint">@T["The validation error message to display."]</span>
-#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:19
+#: OrchardCore.Forms\Views\Items\ValidateFormFieldTask.Fields.Edit.cshtml:18
 msgctxt "OrchardCore.Forms.Views.Items.ValidateFormFieldTask.Fields.Edit"
 msgid "The validation error message to display."
 msgstr ""
@@ -862,26 +976,26 @@ msgctxt "OrchardCore.Forms.Views.Items.ValidateFormTask.Fields.Thumbnail"
 msgid "Checks whether the submitted form contains any validation errors."
 msgstr ""
 
-#. <label asp-for="For" class="@Orchard.GetLabelClasses()">@T["For"]</label>
-#: OrchardCore.Forms\Views\Items\ValidationPart.Fields.Edit.cshtml:6
+#. <label asp-for="For" class="ocat-label">@T["For"]</label>
+#: OrchardCore.Forms\Views\Items\ValidationPart.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Forms.Views.Items.ValidationPart.Fields.Edit"
 msgid "For"
 msgstr ""
 
 #. <span class="hint">@T["The field name that this validation is for."]</span>
-#: OrchardCore.Forms\Views\Items\ValidationPart.Fields.Edit.cshtml:9
+#: OrchardCore.Forms\Views\Items\ValidationPart.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.Forms.Views.Items.ValidationPart.Fields.Edit"
 msgid "The field name that this validation is for."
 msgstr ""
 
 #. @T["Show Model Only Error"]
-#: OrchardCore.Forms\Views\Items\ValidationSummaryPart.Fields.Edit.cshtml:11
+#: OrchardCore.Forms\Views\Items\ValidationSummaryPart.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Forms.Views.Items.ValidationSummaryPart.Fields.Edit"
 msgid "Show Model Only Error"
 msgstr ""
 
 #. <div class="hint">@T["When checked, model level errors will be visible otherwise all errors will be visible."]</div>
-#: OrchardCore.Forms\Views\Items\ValidationSummaryPart.Fields.Edit.cshtml:14
+#: OrchardCore.Forms\Views\Items\ValidationSummaryPart.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Forms.Views.Items.ValidationSummaryPart.Fields.Edit"
 msgid "When checked, model level errors will be visible otherwise all errors will be visible."
 msgstr ""

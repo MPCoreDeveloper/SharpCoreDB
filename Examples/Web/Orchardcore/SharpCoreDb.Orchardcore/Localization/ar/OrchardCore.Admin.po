@@ -10,24 +10,30 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
-"PO-Revision-Date: 2024-09-09 16:57\n"
+"PO-Revision-Date: 2026-06-03 19:04\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Admin\AdminMenu.cs:26
+#: OrchardCore.Admin\AdminMenu.cs:28
 msgctxt "OrchardCore.Admin.AdminMenu"
 msgid "Configuration"
 msgstr "الإعدادات"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.Admin\AdminMenu.cs:27
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Admin\AdminMenu.cs:29
+#: OrchardCore.Admin\AdminMenu.cs:44
 msgctxt "OrchardCore.Admin.AdminMenu"
 msgid "Settings"
 msgstr "الإعدادات"
 
 #. .Add(S["Admin"], S["Admin"].PrefixPosition(), admin => admin
 #. .Add(S["Admin"], S["Admin"].PrefixPosition(), admin => admin
-#: OrchardCore.Admin\AdminMenu.cs:28
-#: OrchardCore.Admin\AdminMenu.cs:28
+#. .Add(S["Admin"], S["Admin"].PrefixPosition(), admin => admin
+#. .Add(S["Admin"], S["Admin"].PrefixPosition(), admin => admin
+#: OrchardCore.Admin\AdminMenu.cs:30
+#: OrchardCore.Admin\AdminMenu.cs:30
+#: OrchardCore.Admin\AdminMenu.cs:45
+#: OrchardCore.Admin\AdminMenu.cs:45
 msgctxt "OrchardCore.Admin.AdminMenu"
 msgid "Admin"
 msgstr "المدير"
@@ -57,58 +63,52 @@ msgid "Feel free to browse the menu and discover all its possibilities."
 msgstr "لا تتردد في تصفح القائمة و إستكشاف جميع إمكانياتها."
 
 #. <label asp-for="DisplayThemeToggler" class="form-check-label">@T["Enable theme toggler"]</label>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:6
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Enable theme toggler"
 msgstr "مكّن مُبدّل السِمات"
 
 #. <span class="hint">@T["Whether or not to display a theme toggler."]</span>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:8
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:9
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Whether or not to display a theme toggler."
 msgstr "اعرض مُبدّل السِمات أم لا."
 
 #. <label asp-for="DisplayMenuFilter" class="form-check-label">@T["Enable Admin Menu filter"]</label>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:14
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:17
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Enable Admin Menu filter"
 msgstr "تفعيل مرشح قوائم الإدارة"
 
 #. <span class="hint">@T["Whether a quick search to filter the admin menu is displayed."]</span>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:16
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:19
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Whether a quick search to filter the admin menu is displayed."
 msgstr "إظهار البحث السريع لترشيح قوائم الإدارة."
 
 #. <label asp-for="DisplayNewMenu" class="form-check-label">@T["Display New menu"]</label>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:22
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:27
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Display New menu"
 msgstr "عرض قائمة جديدة"
 
 #. <span class="hint">@T["Whether a New menu is displayed in the admin menu."]</span>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:24
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:29
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Whether a New menu is displayed in the admin menu."
 msgstr "إذا تم عرض قائمة جديدة في قائمة المدير."
 
 #. <label asp-for="DisplayTitlesInTopbar" class="form-check-label">@T["Display titles in top bar"]</label>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:30
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:37
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Display titles in top bar"
 msgstr "عرض العناوين في الشريط العلوي"
 
 #. <span class="hint">@T["Whether the titles are displayed in the top bar."]</span>
-#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:32
+#: OrchardCore.Admin\Views\AdminSettings.Edit.cshtml:39
 msgctxt "OrchardCore.Admin.Views.AdminSettings.Edit"
 msgid "Whether the titles are displayed in the top bar."
 msgstr "إذا تم عرض العناوين في الشريط العلوي."
-
-#. <span class="title">@T["Admin"]</span>
-#: OrchardCore.Admin\Views\NavigationItemText-admin.Id.cshtml:4
-msgctxt "OrchardCore.Admin.Views.NavigationItemText-admin.Id"
-msgid "Admin"
-msgstr "المدير"
 
 #. <a href="@Url.Content("~/")" class="nav-link" data-bs-toggle="tooltip" data-bs-placement="bottom" title="@T["Visit Site"]" role="button">
 #: OrchardCore.Admin\Views\VisitSiteNavbarItem.cshtml:2

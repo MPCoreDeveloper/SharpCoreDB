@@ -10,32 +10,248 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Macedonian\n"
 "Language: mk_MK\n"
-"PO-Revision-Date: 2024-08-24 20:08\n"
+"PO-Revision-Date: 2026-06-03 19:14\n"
 
 #. Description = S["Content items are instances of content types, just like objects are instances of classes."],
-#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemQuery.cs:32
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemQuery.cs:29
 msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemQuery"
 msgid "Content items are instances of content types, just like objects are instances of classes."
 msgstr "Содржински елементи се инстанци на содрќински видови, како што објекти се инстанци на класи."
 
-#. Description = S["Content item id"]
-#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemQuery.cs:38
+#. Description = S["Content item id"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemQuery.cs:35
 msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemQuery"
 msgid "Content item id"
 msgstr "Идентификатор на содржински елемент"
 
-#. Description = S["Represents a {0}.", typeDefinition.DisplayName]
+#. Description = S["filters the content items"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemsFieldType.cs:48
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemsFieldType"
+msgid "filters the content items"
+msgstr ""
+
+#. Description = S["sort order"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemsFieldType.cs:54
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemsFieldType"
+msgid "sort order"
+msgstr ""
+
+#. Description = S["the first n content items"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemsFieldType.cs:60
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemsFieldType"
+msgid "the first n content items"
+msgstr ""
+
+#. Description = S["the number of content items to skip"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemsFieldType.cs:66
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemsFieldType"
+msgid "the number of content items to skip"
+msgstr ""
+
+#. Description = S["publication status of the content item"],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentItemsFieldType.cs:72
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentItemsFieldType"
+msgid "publication status of the content item"
+msgstr ""
+
 #. Description = S["Represents a {0}.", typeDefinition.DisplayName],
-#: OrchardCore.ContentManagement.GraphQL\Queries\ContentTypeQuery.cs:58
-#: OrchardCore.ContentManagement.GraphQL\Queries\ContentTypeQuery.cs:64
+#. Description = S["Represents a {0}.", typeDefinition.DisplayName],
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentTypeQuery.cs:60
+#: OrchardCore.ContentManagement.GraphQL\Queries\ContentTypeQuery.cs:65
 msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.ContentTypeQuery"
 msgid "Represents a {0}."
 msgstr "Претставува {0}."
 
+#. Description = S["publication status"];
+#: OrchardCore.ContentManagement.GraphQL\Queries\PublicationStatusGraphType.cs:11
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.PublicationStatusGraphType"
+msgid "publication status"
+msgstr ""
+
+#. Add("PUBLISHED", PublicationStatusEnum.Published, S["published content item version"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\PublicationStatusGraphType.cs:12
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.PublicationStatusGraphType"
+msgid "published content item version"
+msgstr ""
+
+#. Add("DRAFT", PublicationStatusEnum.Draft, S["draft content item version"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\PublicationStatusGraphType.cs:13
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.PublicationStatusGraphType"
+msgid "draft content item version"
+msgstr ""
+
+#. Add("LATEST", PublicationStatusEnum.Latest, S["the latest version, either published or draft"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\PublicationStatusGraphType.cs:14
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.PublicationStatusGraphType"
+msgid "the latest version, either published or draft"
+msgstr ""
+
+#. Add("ALL", PublicationStatusEnum.All, S["all historical versions"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\PublicationStatusGraphType.cs:15
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.PublicationStatusGraphType"
+msgid "all historical versions"
+msgstr ""
+
+#. Description = S["the order by direction"];
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemOrderByInput.cs:37
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.OrderByDirectionGraphType"
+msgid "the order by direction"
+msgstr ""
+
+#. Add("ASC", OrderByDirection.Ascending, S["orders content items in ascending order"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemOrderByInput.cs:38
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.OrderByDirectionGraphType"
+msgid "orders content items in ascending order"
+msgstr ""
+
+#. Add("DESC", OrderByDirection.Descending, S["orders content items in descending order"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemOrderByInput.cs:39
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.OrderByDirectionGraphType"
+msgid "orders content items in descending order"
+msgstr ""
+
+#. .Description(S["Content item id"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:27
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "Content item id"
+msgstr ""
+
+#. .Description(S["The content item version id"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:30
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The content item version id"
+msgstr ""
+
+#. .Description(S["Type of content"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:33
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "Type of content"
+msgstr ""
+
+#. .Description(S["The display text of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:36
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The display text of the content item"
+msgstr ""
+
+#. .Description(S["Is the published version"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:39
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "Is the published version"
+msgstr ""
+
+#. .Description(S["Is the latest version"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:42
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "Is the latest version"
+msgstr ""
+
+#. .Description(S["The date and time of modification"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:46
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The date and time of modification"
+msgstr ""
+
+#. .Description(S["The date and time of publication"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:50
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The date and time of publication"
+msgstr ""
+
+#. .Description(S["The date and time of creation"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:54
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The date and time of creation"
+msgstr ""
+
+#. .Description(S["The owner of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:57
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The owner of the content item"
+msgstr ""
+
+#. .Description(S["The author of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemType.cs:60
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemType"
+msgid "The author of the content item"
+msgstr ""
+
+#. Description = S["the {0} content item filters", contentItemName];
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:24
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the {0} content item filters"
+msgstr ""
+
+#. AddScalarFilterFields<IdGraphType>("contentItemId", S["content item id"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:26
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "content item id"
+msgstr ""
+
+#. AddScalarFilterFields<IdGraphType>("contentItemVersionId", S["the content item version id"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:27
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the content item version id"
+msgstr ""
+
+#. AddScalarFilterFields<StringGraphType>("displayText", S["the display text of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:28
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the display text of the content item"
+msgstr ""
+
+#. AddScalarFilterFields<DateTimeGraphType>("createdUtc", S["the date and time of creation"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:29
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the date and time of creation"
+msgstr ""
+
+#. AddScalarFilterFields<DateTimeGraphType>("modifiedUtc", S["the date and time of modification"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:30
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the date and time of modification"
+msgstr ""
+
+#. AddScalarFilterFields<DateTimeGraphType>("publishedUtc", S["the date and time of publication"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:31
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the date and time of publication"
+msgstr ""
+
+#. AddScalarFilterFields<StringGraphType>("owner", S["the owner of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:32
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the owner of the content item"
+msgstr ""
+
+#. AddScalarFilterFields<StringGraphType>("author", S["the author of the content item"]);
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:33
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "the author of the content item"
+msgstr ""
+
+#. .Description(S["OR logical operation"])
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:38
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "OR logical operation"
+msgstr ""
+
+#. .Description(S["AND logical operation"])
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:42
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "AND logical operation"
+msgstr ""
+
+#. .Description(S["NOT logical operation"])
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\ContentItemWhereInput.cs:46
+msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.ContentItemWhereInput"
+msgid "NOT logical operation"
+msgstr ""
+
 #. Description = S["Represents a {0}.", part.PartDefinition.Name],
 #. Description = S["Represents a {0}.", part.PartDefinition.Name],
-#: OrchardCore.ContentManagement.GraphQL\Queries\Types\DynamicContentTypeBuilder.cs:171
-#: OrchardCore.ContentManagement.GraphQL\Queries\Types\DynamicContentTypeBuilder.cs:185
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\DynamicContentTypeBuilder.cs:176
+#: OrchardCore.ContentManagement.GraphQL\Queries\Types\DynamicContentTypeBuilder.cs:190
 msgctxt "OrchardCore.ContentManagement.GraphQL.Queries.Types.DynamicContentTypeBuilder"
 msgid "Represents a {0}."
 msgstr "Претставува {0}."

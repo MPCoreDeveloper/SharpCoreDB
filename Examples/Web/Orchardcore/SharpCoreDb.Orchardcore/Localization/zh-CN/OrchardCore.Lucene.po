@@ -1,0 +1,532 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: zh-CN\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Lucene.pot\n"
+"X-Crowdin-File-ID: 980\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"PO-Revision-Date: 2026-06-03 20:28\n"
+
+#. .Add(S["Search"], NavigationConstants.AdminMenuSearchPosition, search => search
+#: OrchardCore.Lucene\AdminMenu.cs:18
+msgctxt "OrchardCore.Lucene.AdminMenu"
+msgid "Search"
+msgstr "搜索"
+
+#. .Add(S["Queries"], S["Queries"].PrefixPosition(), import => import
+#. .Add(S["Queries"], S["Queries"].PrefixPosition(), import => import
+#: OrchardCore.Lucene\AdminMenu.cs:19
+#: OrchardCore.Lucene\AdminMenu.cs:19
+msgctxt "OrchardCore.Lucene.AdminMenu"
+msgid "Queries"
+msgstr "查询"
+
+#. .Add(S["Run Lucene Query"], S["Run Lucene Query"].PrefixPosition(), queries => queries
+#. .Add(S["Run Lucene Query"], S["Run Lucene Query"].PrefixPosition(), queries => queries
+#: OrchardCore.Lucene\AdminMenu.cs:20
+#: OrchardCore.Lucene\AdminMenu.cs:20
+msgctxt "OrchardCore.Lucene.AdminMenu"
+msgid "Run Lucene Query"
+msgstr "运行 Lucene 查询"
+
+#. ModelState.AddModelError(nameof(model.DecodedQuery), S["Invalid query: {0}", ex.Message]);
+#: OrchardCore.Lucene\Controllers\AdminController.cs:199
+msgctxt "OrchardCore.Lucene.Controllers.AdminController"
+msgid "Invalid query: {0}"
+msgstr "无效查询： {0}"
+
+#. Category = S["Search"];
+#: OrchardCore.Lucene\Deployment\LuceneIndexDeploymentStep.cs:19
+msgctxt "OrchardCore.Lucene.Deployment.LuceneIndexDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. Category = S["Search"];
+#: OrchardCore.Lucene\Deployment\LuceneIndexRebuildDeploymentStep.cs:19
+msgctxt "OrchardCore.Lucene.Deployment.LuceneIndexRebuildDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. Category = S["Search"];
+#: OrchardCore.Lucene\Deployment\LuceneIndexResetDeploymentStep.cs:19
+msgctxt "OrchardCore.Lucene.Deployment.LuceneIndexResetDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. new SelectListItem(S["Lucene 4.8"], nameof(LuceneVersion.LUCENE_48), queryMetadata.DefaultVersion == LuceneVersion.LUCENE_48),
+#: OrchardCore.Lucene\Drivers\LuceneIndexProfileDisplayDriver.cs:66
+msgctxt "OrchardCore.Lucene.Drivers.LuceneIndexProfileDisplayDriver"
+msgid "Lucene 4.8"
+msgstr "Lucene 4.8"
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Query), S["The query field is required"]);
+#: OrchardCore.Lucene\Drivers\LuceneQueryDisplayDriver.cs:84
+msgctxt "OrchardCore.Lucene.Drivers.LuceneQueryDisplayDriver"
+msgid "The query field is required"
+msgstr "查询字段是必填项"
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Index), S["The index field is required"]);
+#: OrchardCore.Lucene\Drivers\LuceneQueryDisplayDriver.cs:89
+msgctxt "OrchardCore.Lucene.Drivers.LuceneQueryDisplayDriver"
+msgid "The index field is required"
+msgstr "索引字段是必填项"
+
+#. Description = S["Represents the {0} Query : {1}", query.Source, query.Name],
+#. Description = S["Represents the {0} Query : {1}", query.Source, query.Name],
+#: OrchardCore.Lucene\GraphQL\LuceneQueryFieldTypeProvider.cs:156
+#: OrchardCore.Lucene\GraphQL\LuceneQueryFieldTypeProvider.cs:197
+msgctxt "OrchardCore.Queries.Lucene.GraphQL.Queries.LuceneQueryFieldTypeProvider"
+msgid "Represents the {0} Query : {1}"
+msgstr "代表 {0} 查询 : {1}"
+
+#. return new HtmlString($"<option value=\"Lucene\" selected=\"selected\">{S["Lucene"]}</option>");
+#. return new HtmlString($"<option value=\"Lucene\">{S["Lucene"]}</option>");
+#: OrchardCore.Lucene\Shapes\LuceneContentPickerShapeProvider.cs:26
+#: OrchardCore.Lucene\Shapes\LuceneContentPickerShapeProvider.cs:28
+msgctxt "OrchardCore.Lucene.LuceneContentPickerShapeProvider"
+msgid "Lucene"
+msgstr ""
+
+#. o.DisplayName = S["Content in Lucene"];
+#: OrchardCore.Lucene\Startup.cs:94
+msgctxt "OrchardCore.Lucene.ContentsStartup"
+msgid "Content in Lucene"
+msgstr "Lucene 中的内容"
+
+#. o.Description = S["Create an Lucene index based on site contents."];
+#: OrchardCore.Lucene\Startup.cs:95
+msgctxt "OrchardCore.Lucene.ContentsStartup"
+msgid "Create an Lucene index based on site contents."
+msgstr "根据站点内容创建Lucene索引。"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "The Query field is required.")]
+#: OrchardCore.Lucene\ViewModels\AdminQueryViewModel.cs:10
+msgctxt "OrchardCore.Lucene.ViewModels.AdminQueryViewModel"
+msgid "The Query field is required."
+msgstr "查询字段是必需的。"
+
+#. [Required(AllowEmptyStrings = false, ErrorMessage = "The Index field is required.")]
+#: OrchardCore.Lucene\ViewModels\AdminQueryViewModel.cs:13
+msgctxt "OrchardCore.Lucene.ViewModels.AdminQueryViewModel"
+msgid "The Index field is required."
+msgstr "索引字段是必需的。"
+
+#. <label asp-for="Index" class="ocat-label">@T["Index"]</label>
+#: OrchardCore.Lucene\Views\ContentPickerFieldLuceneEditorSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Lucene.Views.ContentPickerFieldLuceneEditorSettings.Edit"
+msgid "Index"
+msgstr "索引"
+
+#. <span class="hint">@T["The Lucene index to query for content items"]</span>
+#: OrchardCore.Lucene\Views\ContentPickerFieldLuceneEditorSettings.Edit.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.ContentPickerFieldLuceneEditorSettings.Edit"
+msgid "The Lucene index to query for content items"
+msgstr "要查询内容项的 Lucene 索引"
+
+#. <h4>Lucene @T["Index settings"]</h4>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Index settings"
+msgstr "索引设置"
+
+#. <label class="form-check-label" asp-for="LuceneContentIndexSettings.Included">@T["Include this element in the index"]</label>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Include this element in the index"
+msgstr "在索引中包含此元素"
+
+#. <span class="hint dashed">@T["Check to include the value of this element in the index."]</span>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:14
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Check to include the value of this element in the index."
+msgstr "选中可在索引中包含此元素的值。"
+
+#. <label class="form-check-label" asp-for="LuceneContentIndexSettings.Keyword">@T["Keyword"]</label>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:19
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Keyword"
+msgstr "关键字"
+
+#. <span class="hint dashed">@T["Check to index as a keyword value (indexed as a single token)."]</span>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Check to index as a keyword value (indexed as a single token)."
+msgstr "选中索引作为关键字值(索引为单个令牌)。"
+
+#. <label class="form-check-label" asp-for="LuceneContentIndexSettings.Stored">@T["Stored"]</label>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:24
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Stored"
+msgstr "已保存"
+
+#. <span class="hint dashed">@T["Check to be able to retrieve the original value from the index."]</span>
+#: OrchardCore.Lucene\Views\LuceneContentIndexSettings.Edit.cshtml:25
+msgctxt "OrchardCore.Lucene.Views.LuceneContentIndexSettings.Edit"
+msgid "Check to be able to retrieve the original value from the index."
+msgstr "选中此项才能从索引处获取原始值。"
+
+#. <h5>@T["Lucene Search Indexes"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Edit.cshtml:10
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Edit"
+msgid "Lucene Search Indexes"
+msgstr "Lucene 搜索索引"
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all search indexes."]</label>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Edit.cshtml:18
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Edit"
+msgid "Include all search indexes."
+msgstr "包含所有搜索索引。"
+
+#. <span class="hint">@T["The search indexes to add as part of the plan."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Edit.cshtml:26
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Edit"
+msgid "The search indexes to add as part of the plan."
+msgstr "作为计划一部分的搜索索引。"
+
+#. <h5>@T["Lucene Search Indexes"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Summary"
+msgid "Lucene Search Indexes"
+msgstr "Lucene 搜索索引"
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr "全部"
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr "未选择索引。"
+
+#. <h4 class="card-title">@T["Lucene Search Indexes"]</h4>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Thumbnail"
+msgid "Lucene Search Indexes"
+msgstr "Lucene 搜索索引"
+
+#. <p>@T["Exports all or specified search indexes."]</p>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexDeploymentStep.Fields.Thumbnail"
+msgid "Exports all or specified search indexes."
+msgstr "导出所有或指定的搜索索引。"
+
+#. class="dropdown-item btn-sm">@T["Query Index"]</a>
+#: OrchardCore.Lucene\Views\LuceneIndexProfile.ActionsMenuItems.SummaryAdmin.cshtml:11
+msgctxt "OrchardCore.Lucene.Views.LuceneIndexProfile.ActionsMenuItems.SummaryAdmin"
+msgid "Query Index"
+msgstr "查询索引"
+
+#. <label asp-for="AnalyzerName" class="ocat-label">@T["Analyzer"]</label>
+#: OrchardCore.Lucene\Views\LuceneIndexProfile.Edit.cshtml:4
+msgctxt "OrchardCore.Lucene.Views.LuceneIndexProfile.Edit"
+msgid "Analyzer"
+msgstr "分析器"
+
+#. <label class="form-check-label" asp-for="StoreSourceData">@T["Store Source Data"]</label>
+#: OrchardCore.Lucene\Views\LuceneIndexProfile.Edit.cshtml:15
+msgctxt "OrchardCore.Lucene.Views.LuceneIndexProfile.Edit"
+msgid "Store Source Data"
+msgstr "存储源数据"
+
+#. <span class="hint dashed">@T["Check to store the fields in the index for future retrieval."]</span>
+#: OrchardCore.Lucene\Views\LuceneIndexProfile.Edit.cshtml:16
+msgctxt "OrchardCore.Lucene.Views.LuceneIndexProfile.Edit"
+msgid "Check to store the fields in the index for future retrieval."
+msgstr "选中可将字段存储在索引中以备将来检索。"
+
+#. <h5>@T["Rebuild Lucene Search Indices"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Edit.cshtml:5
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Edit"
+msgid "Rebuild Lucene Search Indices"
+msgstr "重建Lucene 搜索指数"
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all Lucene search indices."]</label>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Edit.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Edit"
+msgid "Include all Lucene search indices."
+msgstr "包含所有的 Lucene 搜索指数。"
+
+#. <span class="hint">@T["The Lucene search indices to rebuild as part of the plan."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Edit.cshtml:21
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Edit"
+msgid "The Lucene search indices to rebuild as part of the plan."
+msgstr "Lucene搜索指数作为计划的一部分进行重建。"
+
+#. <h5>@T["Rebuild Lucene Search Indices"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Summary"
+msgid "Rebuild Lucene Search Indices"
+msgstr "重建Lucene 搜索指数"
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr "全部"
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr "未选择索引。"
+
+#. <h4 class="card-title">@T["Rebuild Lucene Search Indices"]</h4>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Thumbnail"
+msgid "Rebuild Lucene Search Indices"
+msgstr "重建Lucene 搜索指数"
+
+#. <p>@T["Rebuild all or specified Lucene search indices."]</p>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexRebuildDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexRebuildDeploymentStep.Fields.Thumbnail"
+msgid "Rebuild all or specified Lucene search indices."
+msgstr "重建所有或指定的 Lucene 搜索指数。"
+
+#. <h5>@T["Reset Lucene Search Indices"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Edit.cshtml:5
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Edit"
+msgid "Reset Lucene Search Indices"
+msgstr "重置 Lucene 搜索指数"
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all Lucene search indices."]</label>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Edit.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Edit"
+msgid "Include all Lucene search indices."
+msgstr "包含所有的 Lucene 搜索指数。"
+
+#. <span class="hint">@T["The Lucene Search Indices to reset as part of the plan."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Edit.cshtml:21
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Edit"
+msgid "The Lucene Search Indices to reset as part of the plan."
+msgstr "将重置作为计划一部分的Lucene搜索指数。"
+
+#. <h5>@T["Reset Lucene Search Indices"]</h5>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Summary"
+msgid "Reset Lucene Search Indices"
+msgstr "重置 Lucene 搜索指数"
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr "全部"
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr "未选择索引。"
+
+#. <h4 class="card-title">@T["Reset Lucene Search Indices"]</h4>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Thumbnail"
+msgid "Reset Lucene Search Indices"
+msgstr "重置 Lucene 搜索指数"
+
+#. <p>@T["Reset all or specified Lucene search indices."]</p>
+#: OrchardCore.Lucene\Views\Items\LuceneIndexResetDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.Lucene.Views.Items.LuceneIndexResetDeploymentStep.Fields.Thumbnail"
+msgid "Reset all or specified Lucene search indices."
+msgstr "重置所有或指定的 Lucene 搜索指数。"
+
+#. class="btn btn-success btn-sm">@T["Run"]</a>
+#: OrchardCore.Lucene\Views\LuceneQuery.Buttons.SummaryAdmin.cshtml:22
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Buttons.SummaryAdmin"
+msgid "Run"
+msgstr "运行"
+
+#. <label asp-for="Index" class="ocat-label">@T["Index"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:8
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "Index"
+msgstr "索引"
+
+#. <option value="">@T["Select an index"]</option>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:11
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "Select an index"
+msgstr "选择一个索引"
+
+#. <span class="hint">@T["The Lucene index to search on"]</span>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "The Lucene index to search on"
+msgstr "要搜索的 Lucene 索引"
+
+#. <label class="form-check-label" asp-for="ReturnContentItems">@T["Return Content Items"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:21
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "Return Content Items"
+msgstr "返回内容项"
+
+#. <span class="hint dashed">@T["Check to return the corresponding content items."]</span>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:22
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "Check to return the corresponding content items."
+msgstr "选中返回相应的内容项。"
+
+#. <label asp-for="Query" class="ocat-label">@T["Query"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:28
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "Query"
+msgstr "查询"
+
+#. <span class="hint">@T["The search query uses the Lucene format. Some documentation can be found <a target=\"_blank\" href=\"{0}\">here</a>.", "https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html"]</span>
+#: OrchardCore.Lucene\Views\LuceneQuery.Edit.cshtml:31
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.Edit"
+msgid "The search query uses the Lucene format. Some documentation can be found <a target=\"_blank\" href=\"{0}\">here</a>."
+msgstr "搜索查询使用 Lucene 格式。一些文档可以在 <a target=\"_blank\" href=\"{0}\">这里</a> 找到。"
+
+#. <span class="hint">@T["Lucene query"]</span>
+#: OrchardCore.Lucene\Views\LuceneQuery.SummaryAdmin.cshtml:1
+msgctxt "OrchardCore.Lucene.Views.LuceneQuery.SummaryAdmin"
+msgid "Lucene query"
+msgstr "Lucene 查询"
+
+#. <h4 class="mt-4 mb-0">@T["Default Query Settings"]</h4>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:7
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Default Query Settings"
+msgstr "默认查询设置"
+
+#. <label asp-for="QueryAnalyzerName" class="ocat-label">@T["Query analyzer"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:12
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Query analyzer"
+msgstr "查询分析器"
+
+#. <label asp-for="DefaultVersion" class="ocat-label">@T["Version"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:20
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Version"
+msgstr "版本"
+
+#. <label class="form-check-label" asp-for="AllowLuceneQueries">@T["Allow Lucene queries"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:31
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Allow Lucene queries"
+msgstr "允许 Lucene 查询"
+
+#. <span class="hint dashed">@T["Check to allow Lucene queries."]</span>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:32
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Check to allow Lucene queries."
+msgstr "选中以允许 Lucene 查询。"
+
+#. <label asp-for="DefaultSearchFields" class="ocat-label">@T["Query field names"]</label>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:38
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "Query field names"
+msgstr "查询字段名称"
+
+#. <span class="hint">@T["The fields to use for query. Leave it blank to query all fields."]</span>
+#: OrchardCore.Lucene\Views\LuceneQuerySettings.Edit.cshtml:61
+msgctxt "OrchardCore.Lucene.Views.LuceneQuerySettings.Edit"
+msgid "The fields to use for query. Leave it blank to query all fields."
+msgstr "用于查询的字段。留空以查询所有字段。"
+
+#. <h4>@T["Lucene"]</h4>
+#: OrchardCore.Lucene\Views\Query-Lucene.Link.cshtml:12
+msgctxt "OrchardCore.Lucene.Views.Query-Lucene.Link"
+msgid "Lucene"
+msgstr ""
+
+#. <p class="hint">@T["Queries a Lucene index."]</p>
+#: OrchardCore.Lucene\Views\Query-Lucene.Link.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.Query-Lucene.Link"
+msgid "Queries a Lucene index."
+msgstr "查询 Lucene 索引。"
+
+#. <a disabled="@disabled" class="btn btn-primary btn-sm" asp-route-action="Create" asp-route-controller="Admin" asp-route-id="@Model.Name" asp-area="OrchardCore.Queries">@T["Add"]</a>
+#: OrchardCore.Lucene\Views\Query-Lucene.Link.cshtml:16
+msgctxt "OrchardCore.Lucene.Views.Query-Lucene.Link"
+msgid "Add"
+msgstr "添加"
+
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Lucene Query"])</h1></zone>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:13
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Lucene Query"
+msgstr "Lucene 查询"
+
+#. <label asp-for="Id" class="ocat-label">@T["Index"]</label>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:18
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Index"
+msgstr "索引"
+
+#. <option value="">@T["Select an index"]</option>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:21
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Select an index"
+msgstr "选择一个索引"
+
+#. <span class="hint">@T["The Lucene index to search on"]</span>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:23
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "The Lucene index to search on"
+msgstr "要搜索的 Lucene 索引"
+
+#. <label asp-for="DecodedQuery" class="ocat-label">@T["Query"]</label>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:28
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Query"
+msgstr "查询"
+
+#. <span class="hint">@T["You can use the <a href=\"{0}\">Match All query</a> to search all documents.", Html.Raw(Url.Action("Query", "Admin", new { area = "OrchardCore.Lucene", query = Model.MatchAllQuery, id = Model.Id }))]</span>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:31
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "You can use the <a href=\"{0}\">Match All query</a> to search all documents."
+msgstr "您可以使用 <a href=\"{0}\">匹配所有查询的</a> 来搜索所有文档。"
+
+#. <span class="hint">@T["The search query uses the Elasticsearch format. Some documentation can be found here <a target=\"_blank\" href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html\">https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html</a>"]</span>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:32
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "The search query uses the Elasticsearch format. Some documentation can be found here <a target=\"_blank\" href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html\">https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html</a>"
+msgstr "搜索查询使用 Elasticsearch 格式。这里可以找到一些文档 <a target=\"_blank\" href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html\">https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html</a>"
+
+#. <label asp-for="Parameters" class="ocat-label">@T["Parameters"]</label>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:37
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Parameters"
+msgstr "参数"
+
+#. <span class="hint">@T["An optional Json object containing the parameter values for this query."]</span>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:40
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "An optional Json object containing the parameter values for this query."
+msgstr "包含此查询参数值的可选Json对象。"
+
+#. <button type="submit" class="btn btn-primary">@T["Run Query"]</button>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:46
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Run Query"
+msgstr "运行查询"
+
+#. <p><span class="text-muted">@T["Found {0} result(s) in {1} ms", Model.Count.ToString(), Model.Elapsed.TotalMilliseconds.ToString()]</span></p>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:54
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Found {0} result(s) in {1} ms"
+msgstr "找到 {0} 个结果(秒) 在 {1} 毫秒"
+
+#. <a href="@Url.Action("Create", "Admin", new { area = "OrchardCore.Queries", id = "Lucene", query = Model.DecodedQuery })" class="btn btn-secondary">@T["Save Query"]</a>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:64
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "Save Query"
+msgstr "保存查询"
+
+#. <p><span class="text-muted">@T["The results displayed are coming from the stored fields in Lucene."]</span></p>
+#: OrchardCore.Lucene\Views\Admin\Query.cshtml:97
+msgctxt "OrchardCore.Lucene.Views.Admin.Query"
+msgid "The results displayed are coming from the stored fields in Lucene."
+msgstr "显示的结果来自Lucene存储的字段。"
+

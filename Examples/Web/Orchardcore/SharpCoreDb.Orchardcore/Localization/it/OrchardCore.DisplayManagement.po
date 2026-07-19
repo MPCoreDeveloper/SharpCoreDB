@@ -10,10 +10,10 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Italian\n"
 "Language: it_IT\n"
-"PO-Revision-Date: 2024-11-18 13:33\n"
+"PO-Revision-Date: 2025-11-21 20:24\n"
 
 #. return H.Plural(time.TotalYears(), "1 year ago", "{0} years ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:43
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:42
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 year ago"
 msgid_plural "{0} years ago"
@@ -21,7 +21,7 @@ msgstr[0] "1 anno fa"
 msgstr[1] "{0} anni fa"
 
 #. return H.Plural(-time.TotalYears(), "in 1 year", "in {0} years");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:48
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:47
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 year"
 msgid_plural "in {0} years"
@@ -29,7 +29,7 @@ msgstr[0] "tra 1 anno"
 msgstr[1] "tra {0} anni"
 
 #. return H.Plural(time.TotalMonths(), "1 month ago", "{0} months ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:53
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:52
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 month ago"
 msgid_plural "{0} months ago"
@@ -37,7 +37,7 @@ msgstr[0] "1 mese fa"
 msgstr[1] "{0} mesi fa"
 
 #. return H.Plural(-time.TotalMonths(), "in 1 month", "in {0} months");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:58
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:57
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 month"
 msgid_plural "in {0} months"
@@ -45,7 +45,7 @@ msgstr[0] "tra 1 mese"
 msgstr[1] "tra {0} mesi"
 
 #. return H.Plural(time.TotalWeeks(), "1 week ago", "{0} weeks ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:63
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:62
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 week ago"
 msgid_plural "{0} weeks ago"
@@ -53,7 +53,7 @@ msgstr[0] "1 settimana fa"
 msgstr[1] "{0} settimane fa"
 
 #. return H.Plural(-time.TotalWeeks(), "in 1 week", "in {0} weeks");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:68
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:67
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 week"
 msgid_plural "in {0} weeks"
@@ -61,7 +61,7 @@ msgstr[0] "tra 1 settimana"
 msgstr[1] "tra {0} settimane"
 
 #. return H.Plural(time.Days, "1 day ago", "{0} days ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:73
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:72
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 day ago"
 msgid_plural "{0} days ago"
@@ -69,7 +69,7 @@ msgstr[0] "1 giorno fa"
 msgstr[1] "{0} giorni fa"
 
 #. return H.Plural(-time.Days, "in 1 day", "in {0} days");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:78
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:77
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 day"
 msgid_plural "in {0} days"
@@ -77,7 +77,7 @@ msgstr[0] "tra 1 giorno"
 msgstr[1] "tra {0} giorni"
 
 #. return H.Plural(time.Hours, "1 hour ago", "{0} hours ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:83
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:82
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 hour ago"
 msgid_plural "{0} hours ago"
@@ -85,7 +85,7 @@ msgstr[0] "1 ora fa"
 msgstr[1] "{0} ore fa"
 
 #. return H.Plural(-time.Hours, "in 1 hour", "in {0} hours");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:88
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:87
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 hour"
 msgid_plural "in {0} hours"
@@ -93,7 +93,7 @@ msgstr[0] "tra 1 ora"
 msgstr[1] "tra {0} ore"
 
 #. return H.Plural(time.Minutes, "1 minute ago", "{0} minutes ago");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:93
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:92
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 minute ago"
 msgid_plural "{0} minutes ago"
@@ -101,7 +101,7 @@ msgstr[0] "1 minuto fa"
 msgstr[1] "{0} minuti fa"
 
 #. return H.Plural(-time.Minutes, "in 1 minute", "in {0} minutes");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:98
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:97
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 minute"
 msgid_plural "in {0} minutes"
@@ -109,7 +109,7 @@ msgstr[0] "tra 1 minuto"
 msgstr[1] "tra {0} minuti"
 
 #. return H.Plural(time.Seconds, "1 second ago", "{0} seconds ago"); // Aware that the singular won't be used.
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:103
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:102
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 second ago"
 msgid_plural "{0} seconds ago"
@@ -117,7 +117,7 @@ msgstr[0] "1 secondo fa"
 msgstr[1] "{0} secondi fa"
 
 #. return H.Plural(-time.Seconds, "in 1 second", "in {0} seconds");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:108
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:107
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in 1 second"
 msgid_plural "in {0} seconds"
@@ -125,19 +125,25 @@ msgstr[0] "tra 1 secondo"
 msgstr[1] "tra {0} secondi"
 
 #. ? H["a moment ago"]
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:112
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:111
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "a moment ago"
 msgstr "un momento fa"
 
 #. : H["in a moment"];
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:113
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:112
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "in a moment"
 msgstr "tra un momento"
 
+#. Format ??= S["dddd, MMMM d, yyyy h:mm:ss tt"].Value;
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:120
+msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
+msgid "dddd, MMMM d, yyyy h:mm:ss tt"
+msgstr ""
+
 #. return H.Plural(seconds, "1 second", "{0} seconds");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:153
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:152
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 second"
 msgid_plural "{0} seconds"
@@ -145,13 +151,13 @@ msgstr[0] "1 secondo"
 msgstr[1] "{0} secondi"
 
 #. return H["less than a second"];
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:156
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:155
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "less than a second"
 msgstr "meno di un secondo"
 
 #. return H.Plural(timeSpan.Days, "1 day", "{0} days");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:165
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:164
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 day"
 msgid_plural "{0} days"
@@ -159,7 +165,7 @@ msgstr[0] "1 giorno"
 msgstr[1] "{0} giorni"
 
 #. return H.Plural((int)Math.Round(totalDays), "approximately a day", "approximately {0} days");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:168
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:167
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "approximately a day"
 msgid_plural "approximately {0} days"
@@ -167,7 +173,7 @@ msgstr[0] "approssimativamente un giorno"
 msgstr[1] "approssimativamente {0} giorni"
 
 #. return H.Plural(timeSpan.Hours, "1 hour", "{0} hours");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:177
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:176
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 hour"
 msgid_plural "{0} hours"
@@ -175,7 +181,7 @@ msgstr[0] "1 ora"
 msgstr[1] "{0} ore"
 
 #. return H.Plural((int)Math.Round(totalHours), "approximately an hour", "approximately {0} hours");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:180
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:179
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "approximately an hour"
 msgid_plural "approximately {0} hours"
@@ -183,7 +189,7 @@ msgstr[0] "approssimativamente un ora"
 msgstr[1] "approssimativamente {0} ore"
 
 #. return H.Plural(timeSpan.Minutes, "1 minute", "{0} minutes");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:189
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:188
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "1 minute"
 msgid_plural "{0} minutes"
@@ -191,7 +197,7 @@ msgstr[0] "1 minuto"
 msgstr[1] "{0} minuti"
 
 #. return H.Plural((int)Math.Round(totalMinutes), "approximately a minute", "approximately {0} minutes");
-#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:192
+#: OrchardCore.DisplayManagement\Shapes\DateTimeShapes.cs:191
 msgctxt "OrchardCore.DisplayManagement.Shapes.DateTimeShapes"
 msgid "approximately a minute"
 msgid_plural "approximately {0} minutes"

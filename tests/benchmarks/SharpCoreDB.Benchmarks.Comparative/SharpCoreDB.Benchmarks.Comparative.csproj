@@ -18,7 +18,6 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="LiteDB" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="System.Text.Json" />
     <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled by Microsoft.Data.Sqlite -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>

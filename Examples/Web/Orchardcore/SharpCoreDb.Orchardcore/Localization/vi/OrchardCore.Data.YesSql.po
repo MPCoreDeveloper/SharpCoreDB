@@ -10,11 +10,11 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Vietnamese\n"
 "Language: vi_VN\n"
-"PO-Revision-Date: 2024-08-24 20:48\n"
+"PO-Revision-Date: 2025-04-22 04:36\n"
 
 #. context.ErrorMessage = S["Failed to remove the tables."];
 #: OrchardCore.Data.YesSql\Removing\ShellDbTablesRemovingHandler.cs:105
 msgctxt "OrchardCore.Environment.Shell.Removing.ShellDbTablesRemovingHandler"
 msgid "Failed to remove the tables."
-msgstr ""
+msgstr "Xóa bảng không thành công."
 

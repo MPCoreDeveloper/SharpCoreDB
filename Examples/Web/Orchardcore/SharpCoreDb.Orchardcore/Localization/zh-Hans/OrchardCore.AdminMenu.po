@@ -10,18 +10,32 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Simplified\n"
 "Language: zh_CN\n"
-"PO-Revision-Date: 2024-09-23 09:56\n"
+"PO-Revision-Date: 2026-06-03 19:06\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.AdminMenu\AdminMenu.cs:25
+#: OrchardCore.AdminMenu\AdminMenu.cs:27
 msgctxt "OrchardCore.AdminMenu.AdminMenu"
 msgid "Configuration"
 msgstr "配置"
 
+#. .Add(S["Admin menus"], S["Admin menus"].PrefixPosition(), adminMenu => adminMenu
+#. .Add(S["Admin menus"], S["Admin menus"].PrefixPosition(), adminMenu => adminMenu
+#: OrchardCore.AdminMenu\AdminMenu.cs:28
+#: OrchardCore.AdminMenu\AdminMenu.cs:28
+msgctxt "OrchardCore.AdminMenu.AdminMenu"
+msgid "Admin menus"
+msgstr "管理员菜单"
+
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.AdminMenu\AdminMenu.cs:39
+msgctxt "OrchardCore.AdminMenu.AdminMenu"
+msgid "Tools"
+msgstr "工具"
+
 #. .Add(S["Admin Menus"], S["Admin Menus"].PrefixPosition(), adminMenu => adminMenu
 #. .Add(S["Admin Menus"], S["Admin Menus"].PrefixPosition(), adminMenu => adminMenu
-#: OrchardCore.AdminMenu\AdminMenu.cs:26
-#: OrchardCore.AdminMenu\AdminMenu.cs:26
+#: OrchardCore.AdminMenu\AdminMenu.cs:40
+#: OrchardCore.AdminMenu\AdminMenu.cs:40
 msgctxt "OrchardCore.AdminMenu.AdminMenu"
 msgid "Admin Menus"
 msgstr "管理菜单"
@@ -75,37 +89,43 @@ msgid "Admin menu toggled successfully."
 msgstr "管理菜单已成功切换。"
 
 #. await _notifier.SuccessAsync(H["Admin node added successfully."]);
-#: OrchardCore.AdminMenu\Controllers\NodeController.cs:147
+#: OrchardCore.AdminMenu\Controllers\NodeController.cs:149
 msgctxt "OrchardCore.AdminMenu.Controllers.NodeController"
 msgid "Admin node added successfully."
 msgstr "管理节点添加成功。"
 
 #. await _notifier.SuccessAsync(H["Admin node updated successfully."]);
-#: OrchardCore.AdminMenu\Controllers\NodeController.cs:227
+#: OrchardCore.AdminMenu\Controllers\NodeController.cs:231
 msgctxt "OrchardCore.AdminMenu.Controllers.NodeController"
 msgid "Admin node updated successfully."
 msgstr "管理节点更新成功。"
 
 #. await _notifier.ErrorAsync(H["The admin node has validation errors."]);
-#: OrchardCore.AdminMenu\Controllers\NodeController.cs:231
+#: OrchardCore.AdminMenu\Controllers\NodeController.cs:247
 msgctxt "OrchardCore.AdminMenu.Controllers.NodeController"
 msgid "The admin node has validation errors."
 msgstr "管理节点有验证错误。"
 
 #. await _notifier.SuccessAsync(H["Admin node deleted successfully."]);
-#: OrchardCore.AdminMenu\Controllers\NodeController.cs:268
+#: OrchardCore.AdminMenu\Controllers\NodeController.cs:284
 msgctxt "OrchardCore.AdminMenu.Controllers.NodeController"
 msgid "Admin node deleted successfully."
 msgstr "管理节点删除成功。"
 
 #. await _notifier.SuccessAsync(H["Admin node toggled successfully."]);
-#: OrchardCore.AdminMenu\Controllers\NodeController.cs:300
+#: OrchardCore.AdminMenu\Controllers\NodeController.cs:316
 msgctxt "OrchardCore.AdminMenu.Controllers.NodeController"
 msgid "Admin node toggled successfully."
 msgstr "管理节点切换成功。"
 
+#. Category = S["Content Management"];
+#: OrchardCore.AdminMenu\Deployment\AdminMenuDeploymentStep.cs:19
+msgctxt "OrchardCore.AdminMenu.Deployment.AdminMenuDeploymentStep"
+msgid "Content Management"
+msgstr ""
+
 #. <h5>@T["Admin Menus"]</h5>
-#: OrchardCore.AdminMenu\Views\Items\AdminMenuDeploymentStep.Fields.Edit.cshtml:3
+#: OrchardCore.AdminMenu\Views\Items\AdminMenuDeploymentStep.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.AdminMenu.Views.Items.AdminMenuDeploymentStep.Fields.Edit"
 msgid "Admin Menus"
 msgstr "管理菜单"
@@ -140,20 +160,20 @@ msgctxt "OrchardCore.AdminMenu.Views.Menu.Create"
 msgid "Create Admin Menu {0}"
 msgstr "创建管理菜单 {0}"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.AdminMenu\Views\Menu\Create.cshtml:9
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Create"
 msgid "Name"
 msgstr "名称"
 
 #. <button class="btn btn-success create" type="submit">@T["Create"]</button>
-#: OrchardCore.AdminMenu\Views\Menu\Create.cshtml:15
+#: OrchardCore.AdminMenu\Views\Menu\Create.cshtml:18
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Create"
 msgid "Create"
 msgstr "创建"
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="List">@T["Cancel"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\Create.cshtml:16
+#: OrchardCore.AdminMenu\Views\Menu\Create.cshtml:19
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Create"
 msgid "Cancel"
 msgstr "取消"
@@ -165,43 +185,43 @@ msgid "Create Node"
 msgstr "添加节点"
 
 #. <button class="btn btn-success create" type="submit">@T["Create"]</button>
-#: OrchardCore.AdminMenu\Views\Node\Create.cshtml:14
+#: OrchardCore.AdminMenu\Views\Node\Create.cshtml:15
 msgctxt "OrchardCore.AdminMenu.Views.Node.Create"
 msgid "Create"
 msgstr "创建"
 
 #. asp-route-id="@Model.AdminMenuId">@T["Cancel"]</a>
-#: OrchardCore.AdminMenu\Views\Node\Create.cshtml:19
+#: OrchardCore.AdminMenu\Views\Node\Create.cshtml:20
 msgctxt "OrchardCore.AdminMenu.Views.Node.Create"
 msgid "Cancel"
 msgstr "取消"
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Admin Menu: {0}", Model.Name])</h1></zone>
-#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:4
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Admin Menu: {0}", localizedAdminMenuName])</h1></zone>
+#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:9
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Edit"
 msgid "Edit Admin Menu: {0}"
 msgstr "编辑管理菜单: {0}"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
-#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:9
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:14
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Edit"
 msgid "Name"
 msgstr "名称"
 
 #. <button class="btn btn-success save" type="submit">@T["Save"]</button>
-#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:14
+#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:22
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Edit"
 msgid "Save"
 msgstr "保存"
 
 #. <a class="btn btn-primary edit-nodes" role="button" asp-route-controller="Node" asp-route-action="List" asp-route-id="@Model.Id">@T["Edit Admin Nodes"] </a>
-#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:15
+#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:23
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Edit"
 msgid "Edit Admin Nodes"
 msgstr "编辑管理节点"
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="List">@T["Cancel"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:16
+#: OrchardCore.AdminMenu\Views\Menu\Edit.cshtml:24
 msgctxt "OrchardCore.AdminMenu.Views.Menu.Edit"
 msgid "Cancel"
 msgstr "取消"
@@ -236,152 +256,164 @@ msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
 msgid "The position order of this link in the admin menu."
 msgstr "此链接在管理菜单中的位置顺序。"
 
-#. <button class="btn btn-success save" type="submit">@T["Save"]</button>
-#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:26
+#. <button class="btn btn-success save" type="submit" name="submit" value="save">@T["Save"]</button>
+#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:27
 msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
 msgid "Save"
 msgstr "保存"
 
+#. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
+#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:29
+msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
+msgid "Toggle Dropdown"
+msgstr "切换下拉列表"
+
+#. <button class="dropdown-item save-continue" type="submit" name="submit" value="SaveAndContinue">@T["and continue"]</button>
+#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:32
+msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
+msgid "and continue"
+msgstr "并继续"
+
 #. data-url-af="RemoveUrl UnsafeUrl">@T["Delete"]</a>
-#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:33
+#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:41
 msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
 msgid "Delete"
 msgstr "删除"
 
 #. asp-route-id="@Model.AdminMenuId">@T["Cancel"]</a>
-#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:38
+#: OrchardCore.AdminMenu\Views\Node\Edit.cshtml:46
 msgctxt "OrchardCore.AdminMenu.Views.Node.Edit"
 msgid "Cancel"
 msgstr "取消"
 
-#. <h5>@T["Link"]</h5>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:12
+#. <h5 class="mb-0">@T["Link"]</h5>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:14
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Link"
 msgstr "链接"
 
-#. <label asp-for="LinkText" class="form-label">@T["Link Text"]</label>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:15
+#. <label asp-for="LinkText" class="ocat-label">@T["Link Text"]</label>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:19
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Link Text"
 msgstr "链接文本"
 
 #. <span class="hint">@T["The Link Text as it will be shown in the tree."]</span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:18
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:23
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "The Link Text as it will be shown in the tree."
 msgstr "链接文本将在菜单中显示。"
 
-#. <label asp-for="LinkUrl" class="form-label">@T["Link Url"]</label>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:22
+#. <label asp-for="LinkUrl" class="ocat-label">@T["Link Url"]</label>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:28
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Link Url"
 msgstr "链接网址"
 
 #. <span class="hint">@T["The url of the link. A link will be shown only if it or one of their children have a url. The url will be relative to the root of the admin site"]</span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:24
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:31
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "The url of the link. A link will be shown only if it or one of their children have a url. The url will be relative to the root of the admin site"
 msgstr "链接的URL地址，当链接本身或其子链接包含URL地址时才会显示；应设为管理根目录的相对地址。"
 
-#. <label asp-for="Target" class="form-label">@T["Target"]</label>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:28
+#. <label asp-for="Target" class="ocat-label">@T["Target"]</label>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:36
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Target"
 msgstr "目标"
 
 #. <option value="_self">@T["Opens the linked document in the same frame as it was clicked (this is default)."]</option>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:31
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:40
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Opens the linked document in the same frame as it was clicked (this is default)."
 msgstr "打开链接的文档与单击相同的帧(这是默认)。"
 
 #. <option value="_blank">@T["Opens the linked document in a new window or tab."]</option>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:32
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:41
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Opens the linked document in a new window or tab."
 msgstr "在新窗口或标签打开链接的文档。"
 
 #. <option value="_parent">@T["Opens the linked document in the parent frame."]</option>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:33
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:42
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Opens the linked document in the parent frame."
 msgstr "在父框架中打开链接的文档。"
 
 #. <option value="_top">@T["Opens the linked document in the full body of the window."]</option>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:34
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:43
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Opens the linked document in the full body of the window."
 msgstr "在窗口正文打开链接的文档。"
 
 #. <span class="hint">@T["The target attribute of the A tag, see more:"] <a class="seedoc" target="_blank" href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a#target">target</a></span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:36
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:45
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "The target attribute of the A tag, see more:"
 msgstr "A标签的目标属性，查看更多："
 
-#. <label asp-for="IconClass" class="form-label">@T["Icon"]</label>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:40
+#. <label asp-for="IconClass" class="ocat-label">@T["Icon"]</label>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:50
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Icon"
 msgstr "图标"
 
 #. @T["Pick"]
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:53
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:61
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Pick"
 msgstr "选择"
 
 #. <span class="hint">@T["Select an icon to display when this link is a first level menu item."]</span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:67
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:73
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Select an icon to display when this link is a first level menu item."
 msgstr "当此链接是顶级菜单项时显示的图标。"
 
-#. <h5 class="modal-title">@T["Pick an icon"]</h5>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:75
-msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
-msgid "Pick an icon"
-msgstr "选择一个图标"
-
-#. <label asp-for="SelectedPermissionNames" class="form-label">@T["Permissions"]</label>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:95
+#. <label asp-for="SelectedPermissionNames" class="ocat-label">@T["Permissions"]</label>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:86
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Permissions"
 msgstr "权限"
 
 #. placeholder="@T["Type to search"]"
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:120
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:107
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Type to search"
 msgstr "要搜索的类型"
 
 #. select-label="@T["Select"]"
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:127
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:114
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Select"
 msgstr "选择"
 
 #. deselect-label="@T["Remove"]">
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:128
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:115
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "Remove"
 msgstr "删除"
 
 #. @T["No result found"]
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:133
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:120
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "No result found"
 msgstr "未找到结果"
 
 #. <span class="hint">@T["The permissions required to display this menu item (optional)."]</span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:136
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:123
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
 msgid "The permissions required to display this menu item (optional)."
 msgstr "显示此菜单项所需的权限(可选)。"
 
-#. <span>@Model.Value.LinkText  <code>@Model.Value.LinkUrl</code> <span class="text-muted dashed">@T["Link"]</span></span>
-#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeSummary.cshtml:4
+#. <h5 class="modal-title">@T["Pick an icon"]</h5>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeEdit.cshtml:139
+msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeEdit"
+msgid "Pick an icon"
+msgstr "选择一个图标"
+
+#. <span>@localizedAdminMenuItemLinkText <code>@Model.Value.LinkUrl</code> <span class="text-muted dashed">@T["Link"]</span></span>
+#: OrchardCore.AdminMenu\Views\Items\LinkAdminNode.Fields.TreeSummary.cshtml:11
 msgctxt "OrchardCore.AdminMenu.Views.Items.LinkAdminNode.Fields.TreeSummary"
 msgid "Link"
 msgstr "链接"
@@ -399,131 +431,131 @@ msgid "Adds a link with a text and a url."
 msgstr "添加带有文本和 url 的链接"
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Admin Menus"])</h1></zone>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:10
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:11
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Admin Menus"
 msgstr "管理菜单"
 
 #. <input asp-for="Options.Search" class="form-control" placeholder="@T["Search"]" type="search" autofocus />
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:24
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:25
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Search"
 msgstr "搜索​​​​"
 
 #. <a asp-route-action="Create" class="btn btn-secondary create" role="button">@T["Add Admin Menu"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:28
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:29
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Add Admin Menu"
 msgstr "添加管理菜单"
 
 #. <label class="form-check-label" for="select-all" id="select-all-label" title="@T["Select All"]"></label>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:42
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:43
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Select All"
 msgstr "选择全部"
 
-#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:43
+#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:44
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
-msgstr[0] "{0} 项"
+msgstr[0] "{0} 个"
 
-#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:43
+#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:44
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Items {0} to {1}"
 msgstr "项目 {0} 到 {1}"
 
-#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:43
+#. <label id="items" for="select-all">@T.Plural(Model.AdminMenu.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:44
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid " / {0} item in total"
 msgid_plural " / {0} items in total"
 msgstr[0] " / 总计 {0} 个项目"
 
 #. @T["Actions"]
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:50
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:51
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Actions"
 msgstr "操作"
 
 #. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:55
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:56
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Bulk Action"
 msgstr "批量操作"
 
 #. <li><a class="dropdown-item" href="javascript:void(0)" data-action="@item.Value" data-title="@T["Bulk Action"]" data-message="@T["Are you sure you want to {0} these items?", @item.Text.ToLower()]">@item.Text</a></li>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:55
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:56
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Are you sure you want to {0} these items?"
 msgstr "您确定要 {0} 这些项目吗？"
 
 #. <a asp-controller="Node" asp-action="List" asp-route-id="@entry.AdminMenu.Id" class="btn btn-secondary btn-sm">@T["Edit Nodes"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:70
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:71
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Edit Nodes"
 msgstr "编辑节点"
 
 #. <a asp-action="Edit" asp-route-id="@entry.AdminMenu.Id" class="btn btn-primary btn-sm">@T["Edit"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:71
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:72
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Edit"
 msgstr "编辑"
 
 #. <a asp-action="Delete" asp-route-id="@entry.AdminMenu.Id" class="btn btn-danger" data-url-af="RemoveUrl UnsafeUrl">@T["Delete"]</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:73
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:74
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Delete"
 msgstr "删除"
 
 #. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:75
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:76
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Toggle Dropdown"
 msgstr "切换下拉菜单"
 
 #. <a asp-action="Toggle" asp-route-id="@entry.AdminMenu.Id" class="dropdown-item btn-sm" data-url-af="UnsafeUrl">@(entry.AdminMenu.Enabled ? T["Disable"] : T["Enable"])</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:79
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:80
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Disable"
 msgstr "禁用"
 
 #. <a asp-action="Toggle" asp-route-id="@entry.AdminMenu.Id" class="dropdown-item btn-sm" data-url-af="UnsafeUrl">@(entry.AdminMenu.Enabled ? T["Disable"] : T["Enable"])</a>
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:79
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:80
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "Enable"
 msgstr "启用"
 
 #. @T["<strong>Nothing here!</strong> There are no menus for the moment."]
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:92
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:93
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "<strong>Nothing here!</strong> There are no menus for the moment."
 msgstr "<strong>这里没什么！</strong> 暂时没有菜单。"
 
 #. selectedItems.text($(":checkbox[name='itemIds']:checked").length + ' @T["selected"]');
 #. selectedItems.text(selectedItemsCount + ' @T["selected"]');
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:143
-#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:154
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:144
+#: OrchardCore.AdminMenu\Views\Menu\List.cshtml:155
 msgctxt "OrchardCore.AdminMenu.Views.Menu.List"
 msgid "selected"
 msgstr "已选择"
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Nodes for '{0}'", Model.AdminMenu.Name])</h1></zone>
-#: OrchardCore.AdminMenu\Views\Node\List.cshtml:12
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Nodes for '{0}'", localizedAdminMenuName])</h1></zone>
+#: OrchardCore.AdminMenu\Views\Node\List.cshtml:14
 msgctxt "OrchardCore.AdminMenu.Views.Node.List"
 msgid "Edit Nodes for '{0}'"
 msgstr "编辑 '{0}' 的节点"
 
 #. @T["Add Node"]
-#: OrchardCore.AdminMenu\Views\Node\List.cshtml:20
+#: OrchardCore.AdminMenu\Views\Node\List.cshtml:22
 msgctxt "OrchardCore.AdminMenu.Views.Node.List"
 msgid "Add Node"
 msgstr "添加节点"
 
 #. @T["<strong>Nothing here!</strong> There are no nodes on this tree for the moment."]
-#: OrchardCore.AdminMenu\Views\Node\List.cshtml:53
+#: OrchardCore.AdminMenu\Views\Node\List.cshtml:54
 msgctxt "OrchardCore.AdminMenu.Views.Node.List"
 msgid "<strong>Nothing here!</strong> There are no nodes on this tree for the moment."
 msgstr "<strong>这里什么都没有!</strong> 此树上暂时没有节点。"
@@ -599,86 +631,86 @@ msgctxt "OrchardCore.AdminMenu.Views.MenuItem.TreeThumbnail"
 msgid "Add"
 msgstr "添加"
 
-#. <h5>@T["Placeholder"]</h5>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:12
+#. <h5 class="mb-0">@T["Placeholder"]</h5>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:13
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Placeholder"
 msgstr "占位符"
 
-#. <label asp-for="LinkText" class="form-label">@T["Link Text"]</label>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:15
+#. <label asp-for="LinkText" class="ocat-label">@T["Link Text"]</label>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:18
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Link Text"
 msgstr "链接文本"
 
 #. <span class="hint">@T["The text of the menu item as it will be shown in the tree."]</span>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:18
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:22
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "The text of the menu item as it will be shown in the tree."
 msgstr "树形显示的菜单项文本"
 
-#. <label asp-for="IconClass" class="form-label">@T["Icon"]</label>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:22
+#. <label asp-for="IconClass" class="ocat-label">@T["Icon"]</label>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:27
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Icon"
 msgstr "图标"
 
 #. @T["Pick"]
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:35
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:38
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Pick"
 msgstr "选择"
 
 #. <span class="hint">@T["Select an icon to display when this menu item is at the first level."]</span>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:45
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:47
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Select an icon to display when this menu item is at the first level."
 msgstr "选择要在此菜单项处于第一级时显示的图标。"
 
-#. <h5 class="modal-title">@T["Pick an icon"]</h5>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:53
-msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
-msgid "Pick an icon"
-msgstr "选择一个图标"
-
-#. <label asp-for="SelectedPermissionNames" class="form-label">@T["Permissions"]</label>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:73
+#. <label asp-for="SelectedPermissionNames" class="ocat-label">@T["Permissions"]</label>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:60
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Permissions"
 msgstr "权限"
 
 #. placeholder="@T["Type to search"]"
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:98
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:84
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Type to search"
 msgstr "要搜索的类型"
 
 #. select-label="@T["Select"]"
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:105
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:91
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Select"
 msgstr "选择"
 
 #. deselect-label="@T["Remove"]">
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:106
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:92
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "Remove"
 msgstr "删除"
 
 #. @T["No result found"]
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:111
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:97
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "No result found"
 msgstr "未找到结果"
 
 #. <span class="hint">@T["The permissions required to display this menu item (optional)."]</span>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:114
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:100
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
 msgid "The permissions required to display this menu item (optional)."
 msgstr "显示此菜单项所需的权限(可选)。"
 
-#. <span>@Model.Value.LinkText <span class="text-muted dashed">@T["Placeholder"]</span></span>
-#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeSummary.cshtml:4
+#. <h5 class="modal-title">@T["Pick an icon"]</h5>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeEdit.cshtml:116
+msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeEdit"
+msgid "Pick an icon"
+msgstr "选择一个图标"
+
+#. <span>@localizedAdminMenuItemLinkText <span class="text-muted dashed">@T["Placeholder"]</span></span>
+#: OrchardCore.AdminMenu\Views\Items\PlaceholderAdminNode.Fields.TreeSummary.cshtml:11
 msgctxt "OrchardCore.AdminMenu.Views.Items.PlaceholderAdminNode.Fields.TreeSummary"
 msgid "Placeholder"
 msgstr "占位符"

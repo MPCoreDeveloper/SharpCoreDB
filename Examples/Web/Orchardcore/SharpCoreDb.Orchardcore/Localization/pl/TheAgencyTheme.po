@@ -10,35 +10,35 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2024-08-24 20:44\n"
+"PO-Revision-Date: 2025-12-29 21:00\n"
 
 #: TheAgencyTheme\Views\HttpError-NotFound.liquid:0
 msgctxt "TheAgencyTheme.Views.HttpError-NotFound"
 msgid "Page Not Found"
-msgstr ""
+msgstr "Nie Znaleziono Strony"
 
 #: TheAgencyTheme\Views\HttpError-NotFound.liquid:0
 msgctxt "TheAgencyTheme.Views.HttpError-NotFound"
 msgid "The page you requested could not be found."
-msgstr ""
+msgstr "Nie można odnaleźć żądanej strony."
 
 #: TheAgencyTheme\Views\Search-List.liquid:0
 msgctxt "TheAgencyTheme.Views.Search-List"
 msgid "Search"
-msgstr ""
+msgstr "Szukaj"
 
 #: TheAgencyTheme\Views\SearchForm.liquid:0
 msgctxt "TheAgencyTheme.Views.SearchForm"
 msgid "Enter your search term(s)"
-msgstr ""
+msgstr "Wprowadź wyszukiwane frazy"
 
 #: TheAgencyTheme\Views\SearchForm.liquid:0
 msgctxt "TheAgencyTheme.Views.SearchForm"
 msgid "Search"
-msgstr ""
+msgstr "Szukaj"
 
 #: TheAgencyTheme\Views\SearchResults.liquid:0
 msgctxt "TheAgencyTheme.Views.SearchResults"
 msgid "There are no such results."
-msgstr ""
+msgstr "Nie ma takich wyników."
 

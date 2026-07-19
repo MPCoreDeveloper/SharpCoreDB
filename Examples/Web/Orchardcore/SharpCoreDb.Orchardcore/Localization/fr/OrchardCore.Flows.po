@@ -10,22 +10,22 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
-"PO-Revision-Date: 2024-08-24 20:28\n"
+"PO-Revision-Date: 2026-06-03 19:27\n"
 
 #. await _notifier.WarningAsync(H["The Widget content item with id {0} has no matching {1} content type definition.", contentItem.ContentItemId, contentItem.ContentType]);
-#: OrchardCore.Flows\Drivers\BagPartDisplayDriver.cs:185
+#: OrchardCore.Flows\Drivers\BagPartDisplayDriver.cs:213
 msgctxt "OrchardCore.Flows.Drivers.BagPartDisplayDriver"
 msgid "The Widget content item with id {0} has no matching {1} content type definition."
 msgstr "L'élément de contenu du Widget avec l'id {0} ne correspond pas à la définition du type de contenu {1}."
 
 #. await _notifier.WarningAsync(H["The Widget content item with id {0} has no matching {1} content type definition.", widget.ContentItem.ContentItemId, widget.ContentItem.ContentType]);
-#: OrchardCore.Flows\Drivers\FlowPartDisplayDriver.cs:70
+#: OrchardCore.Flows\Drivers\FlowPartDisplayDriver.cs:90
 msgctxt "OrchardCore.Flows.Drivers.FlowPartDisplayDriver"
 msgid "The Widget content item with id {0} has no matching {1} content type definition."
 msgstr "L'élément de contenu du Widget avec l'id {0} ne correspond pas à la définition du type de contenu {1}."
 
 #. await _notifier.WarningAsync(H["Publishing this content item may erase created content. Fix any content type issues beforehand."]);
-#: OrchardCore.Flows\Drivers\FlowPartDisplayDriver.cs:83
+#: OrchardCore.Flows\Drivers\FlowPartDisplayDriver.cs:103
 msgctxt "OrchardCore.Flows.Drivers.FlowPartDisplayDriver"
 msgid "Publishing this content item may erase created content. Fix any content type issues beforehand."
 msgstr "La publication de cet élément de contenu peut effacer le contenu créé. Corriger les problèmes de type de contenu au préalable."
@@ -36,38 +36,112 @@ msgctxt "OrchardCore.Flows.GraphQL.BagPartQueryObjectType"
 msgid "A BagPart allows to add content items directly within another content item"
 msgstr "Un BagPart permet d'ajouter des éléments de contenu directement dans un autre élément de contenu"
 
+#. .Description(S["the content items"])
+#: OrchardCore.Flows\GraphQL\BagPartQueryObjectType.cs:18
+msgctxt "OrchardCore.Flows.GraphQL.BagPartQueryObjectType"
+msgid "the content items"
+msgstr "les éléments de contenu"
+
+#. Description = S["The widget alignment."];
+#: OrchardCore.Flows\GraphQL\FlowAlignmentEnum.cs:12
+msgctxt "OrchardCore.Flows.GraphQL.FlowAlignmentEnum"
+msgid "The widget alignment."
+msgstr "L'alignement du widget."
+
+#. Add("Left", 0, S["Left alignment."]);
+#: OrchardCore.Flows\GraphQL\FlowAlignmentEnum.cs:13
+msgctxt "OrchardCore.Flows.GraphQL.FlowAlignmentEnum"
+msgid "Left alignment."
+msgstr "Alignement à gauche."
+
+#. Add("Center", 1, S["Center alignment."]);
+#: OrchardCore.Flows\GraphQL\FlowAlignmentEnum.cs:14
+msgctxt "OrchardCore.Flows.GraphQL.FlowAlignmentEnum"
+msgid "Center alignment."
+msgstr "Alignement au centre."
+
+#. Add("Right", 2, S["Right alignment."]);
+#: OrchardCore.Flows\GraphQL\FlowAlignmentEnum.cs:15
+msgctxt "OrchardCore.Flows.GraphQL.FlowAlignmentEnum"
+msgid "Right alignment."
+msgstr "Alignement à droite."
+
+#. Add("Justify", 3, S["Justify alignment."]);
+#: OrchardCore.Flows\GraphQL\FlowAlignmentEnum.cs:16
+msgctxt "OrchardCore.Flows.GraphQL.FlowAlignmentEnum"
+msgid "Justify alignment."
+msgstr "Alignement justifié."
+
 #. Description = S["A FlowPart allows to add content items directly within another content item"];
 #: OrchardCore.Flows\GraphQL\FlowPartQueryObjectType.cs:13
 msgctxt "OrchardCore.Flows.GraphQL.FlowPartQueryObjectType"
 msgid "A FlowPart allows to add content items directly within another content item"
 msgstr "Un FlowPart permet d'ajouter des éléments de contenu directement dans un autre élément de contenu"
 
+#. .Description(S["The widgets."])
+#: OrchardCore.Flows\GraphQL\FlowPartQueryObjectType.cs:16
+msgctxt "OrchardCore.Flows.GraphQL.FlowPartQueryObjectType"
+msgid "The widgets."
+msgstr "Les widgets."
+
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Source), S["Content type source must be set with a valid value."]);
-#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:65
+#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:69
 msgctxt "OrchardCore.Flows.Settings.BagPartSettingsDisplayDriver"
 msgid "Content type source must be set with a valid value."
 msgstr "La source du type de contenu doit être définie avec une valeur valide."
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Stereotypes), S["Please provide a Stereotype."]);
-#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:76
+#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:80
 msgctxt "OrchardCore.Flows.Settings.BagPartSettingsDisplayDriver"
 msgid "Please provide a Stereotype."
 msgstr "Veuillez fournir un stéréotype."
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(model.ContainedContentTypes), S["At least one content type must be selected."]);
-#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:93
+#: OrchardCore.Flows\Settings\BagPartSettingsDisplayDriver.cs:97
 msgctxt "OrchardCore.Flows.Settings.BagPartSettingsDisplayDriver"
 msgid "At least one content type must be selected."
 msgstr "Au moins un type de contenu doit être sélectionné."
 
-#. href="javascript:;">@T["Add {0}", type.DisplayName]</a>
-#: OrchardCore.Flows\Views\BagPart.Edit.cshtml:69
+#. <i class="fa fa-plus" aria-hidden="true"></i> @T["Add {0}", type.DisplayName]
+#: OrchardCore.Flows\Views\BagPart-Blocks.Edit.cshtml:73
+msgctxt "OrchardCore.Flows.Views.BagPart-Blocks.Edit"
+msgid "Add {0}"
+msgstr "Ajouter {0}"
+
+#. <i class="fa fa-plus" aria-hidden="true"></i> @(string.IsNullOrEmpty(Model.AddButtonText) ? T["Add Block"] : Model.AddButtonText)
+#: OrchardCore.Flows\Views\BagPart-Blocks.Edit.cshtml:82
+msgctxt "OrchardCore.Flows.Views.BagPart-Blocks.Edit"
+msgid "Add Block"
+msgstr "Ajouter un bloc"
+
+#. <h5 class="modal-title" id="contentTypePickerModalLabel">@T["Select Block"]</h5>
+#. modalTitle: '@(string.IsNullOrEmpty(Model.ModalTitleText) ? T["Select Block"].Value : Model.ModalTitleText)',
+#: OrchardCore.Flows\Views\BagPart-Blocks.Edit.cshtml:111
+#: OrchardCore.Flows\Views\BagPart-Blocks.Edit.cshtml:181
+msgctxt "OrchardCore.Flows.Views.BagPart-Blocks.Edit"
+msgid "Select Block"
+msgstr "Sélectionner le bloc"
+
+#. <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="@T["Close"]"></button>
+#: OrchardCore.Flows\Views\BagPart-Blocks.Edit.cshtml:112
+msgctxt "OrchardCore.Flows.Views.BagPart-Blocks.Edit"
+msgid "Close"
+msgstr "Fermer"
+
+#. <option value="Blocks" selected="@(currentEditor == "Blocks")">@T["Blocks"]</option>
+#: OrchardCore.Flows\Views\BagPart-Blocks.Option.cshtml:4
+msgctxt "OrchardCore.Flows.Views.BagPart-Blocks.Option"
+msgid "Blocks"
+msgstr "Blocs"
+
+#. href="javascript:;">@T["Add {0}", D[type.DisplayName, DataLocalizationContext.ContentType]]</a>
+#: OrchardCore.Flows\Views\BagPart.Edit.cshtml:75
 msgctxt "OrchardCore.Flows.Views.BagPart.Edit"
 msgid "Add {0}"
 msgstr "Ajouter {0}"
 
 #. @T["Add Item"]
-#: OrchardCore.Flows\Views\BagPart.Edit.cshtml:75
+#: OrchardCore.Flows\Views\BagPart.Edit.cshtml:81
 msgctxt "OrchardCore.Flows.Views.BagPart.Edit"
 msgid "Add Item"
 msgstr "Ajouter un élément"
@@ -78,178 +152,316 @@ msgctxt "OrchardCore.Flows.Views.BagPart.Option"
 msgid "Standard"
 msgstr "Standard"
 
-#. <label asp-for="Source" class="form-label">@T["Contained Content Types"]</label>
-#. <label asp-for="ContainedContentTypes" class="form-label">@T["Contained Content Types"]</label>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:5
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:23
+#. <label asp-for="AddButtonText" class="ocat-label">@T["Add Button Text"]</label>
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "Add Button Text"
+msgstr "Ajouter un texte de bouton"
+
+#. <input asp-for="AddButtonText" class="form-control" placeholder="@T["Add Block"]" />
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:7
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "Add Block"
+msgstr "Ajouter un bloc"
+
+#. <span class="hint">@T["(Optional) Custom text for the add button. Leave empty for default."]</span>
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:8
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "(Optional) Custom text for the add button. Leave empty for default."
+msgstr "(Facultatif) Texte personnalisé pour le bouton d'ajout. Laisser vide par défaut."
+
+#. <label asp-for="ModalTitleText" class="ocat-label">@T["Modal Title Text"]</label>
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:13
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "Modal Title Text"
+msgstr "Texte du titre modal"
+
+#. <input asp-for="ModalTitleText" class="form-control" placeholder="@T["Select Block"]" />
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:15
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "Select Block"
+msgstr "Sélectionner le bloc"
+
+#. <span class="hint">@T["(Optional) Custom text for the content type picker modal title. Leave empty for default."]</span>
+#: OrchardCore.Flows\Views\BagPartBlocksEditorSettings.Edit.cshtml:16
+msgctxt "OrchardCore.Flows.Views.BagPartBlocksEditorSettings.Edit"
+msgid "(Optional) Custom text for the content type picker modal title. Leave empty for default."
+msgstr "(Facultatif) Texte personnalisé pour le titre modal du sélecteur de type de contenu. Laissez vide pour la valeur par défaut."
+
+#. <label asp-for="Source" class="ocat-label">@T["Contained Content Types"]</label>
+#. <label asp-for="ContainedContentTypes" class="ocat-label">@T["Contained Content Types"]</label>
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:6
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:24
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "Contained Content Types"
 msgstr "Types de contenu contenus"
 
 #. @T["Content Types"]
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:10
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:11
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "Content Types"
 msgstr "Types de contenu"
 
 #. @T["Stereotype"] <span class="hint">@T["All content types of these Stereotypes"]</span>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:16
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:17
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "Stereotype"
 msgstr "Stéréotype"
 
 #. @T["Stereotype"] <span class="hint">@T["All content types of these Stereotypes"]</span>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:16
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:17
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "All content types of these Stereotypes"
 msgstr "Tous les types de contenu de ces stéréotypes"
 
 #. <span class="hint">@T["The content types that this bag can contain, e.g. Slide for a Slide Show."]</span>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:24
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:26
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "The content types that this bag can contain, e.g. Slide for a Slide Show."
 msgstr "Les types de contenu que ce Bag peut contenir, par exemple un Slide pour un Slide Show."
 
-#. <label asp-for="Stereotypes" class="form-label">@T["Stereotypes"]</label>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:30
+#. <label asp-for="Stereotypes" class="ocat-label">@T["Stereotypes"]</label>
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:32
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "Stereotypes"
 msgstr "Stéréotypes"
 
 #. <span class="hint">@T["The Stereotypes of the content types that this bag can contain. You may define multiple Stereotypes using the comma (,) as a separator"]</span>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:32
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:35
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "The Stereotypes of the content types that this bag can contain. You may define multiple Stereotypes using the comma (,) as a separator"
 msgstr "Les stéréotypes des types de contenu que ce bag peut contenir. Vous pouvez définir plusieurs stéréotypes en utilisant la virgule (,) comme séparateur"
 
-#. <label asp-for="DisplayType" class="form-label">@T["Display Type"]</label>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:37
+#. <label asp-for="DisplayType" class="ocat-label">@T["Display Type"]</label>
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:40
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "Display Type"
 msgstr "Type d'affichage"
 
 #. <span class="hint">@T["The display type to use when rendering the content items. Default is Summary."]</span>
-#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:40
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:43
 msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
 msgid "The display type to use when rendering the content items. Default is Summary."
 msgstr "Le type d'affichage à utiliser lors de l'affichage des éléments du contenu. Par défaut, Summary."
 
-#. @T["{0} <span class=\"hint dashed\">{1}</span>", contentItem.DisplayText, contentType]
-#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:24
+#. <label class="form-check-label" asp-for="CollapseContainedItems">@T["Collapse Contained Items"]</label>
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:51
+msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
+msgid "Collapse Contained Items"
+msgstr "Réduire les éléments contenus"
+
+#. <span class="hint">@T["When checked, the contained items will be collapsed when the edit form is loaded."]</span>
+#: OrchardCore.Flows\Views\BagPartSettings.Edit.cshtml:52
+msgctxt "OrchardCore.Flows.Views.BagPartSettings.Edit"
+msgid "When checked, the contained items will be collapsed when the edit form is loaded."
+msgstr "Lorsque cette case est cochée, les éléments contenus seront réduits lorsque le formulaire d'édition sera chargé."
+
+#. @T["{0} <span class=\"hint dashed\">{1}</span>", contentItem.DisplayText, contentTypeDisplayText]
+#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:32
 msgctxt "OrchardCore.Flows.Views.ContentCard-BagPart.Edit"
 msgid "{0} <span class=\"hint dashed\">{1}</span>"
 msgstr "{0} <span class=\"hint dashed\">{1}</span>"
 
 #. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:29
+#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:37
 msgctxt "OrchardCore.Flows.Views.ContentCard-BagPart.Edit"
 msgid "Delete"
 msgstr "Supprimer"
 
 #. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:29
+#: OrchardCore.Flows\Views\ContentCard-BagPart.Edit.cshtml:37
 msgctxt "OrchardCore.Flows.Views.ContentCard-BagPart.Edit"
 msgid "Are you sure you want to remove this item?"
 msgstr "Êtes-vous sûr de vouloir supprimer cet élément ?"
 
 #. <span data-content-type-display-text="@contentTypeDisplayText" class="widget-editor-header-text">@T["{0} {1}", contentItemDisplayText, contentTypeDisplayText]</span>
-#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:23
+#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:38
 msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPart.Edit"
 msgid "{0} {1}"
 msgstr "{0} {1}"
 
 #. <button type="button" class="toggleAll btn btn-secondary btn-sm" onclick="toggleWidgets();" title="@T["Toggle all widgets"]">
-#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:33
+#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:48
 msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPart.Edit"
 msgid "Toggle all widgets"
 msgstr "Activer/désactiver tous les widgets"
 
 #. <button type="button" title="@T["Insert Widget"]" class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:36
+#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:51
 msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPart.Edit"
 msgid "Insert Widget"
 msgstr "Insérer un widget"
 
 #. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:64
+#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:79
 msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPart.Edit"
 msgid "Delete"
 msgstr "Supprimer"
 
 #. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:64
+#: OrchardCore.Flows\Views\ContentCard-FlowPart.Edit.cshtml:79
 msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPart.Edit"
 msgid "Are you sure you want to remove this item?"
 msgstr "Êtes-vous sûr de vouloir supprimer cet élément ?"
 
+#. <span data-content-type-display-text="@contentTypeDisplayText" class="widget-editor-header-text">@T["{0} {1}", contentItemDisplayText, contentTypeDisplayText]</span>
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:40
+msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPartBlocks.Edit"
+msgid "{0} {1}"
+msgstr "{0} {1}"
+
+#. <button type="button" class="toggleAll btn btn-secondary btn-sm" onclick="toggleWidgets();" title="@T["Toggle all widgets"]">
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:50
+msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPartBlocks.Edit"
+msgid "Toggle all widgets"
+msgstr "Activer/désactiver tous les widgets"
+
+#. title="@T["Insert Widget"]">
+#. modalTitle: '@T["Insert Widget"].Value',
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:56
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:113
+msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPartBlocks.Edit"
+msgid "Insert Widget"
+msgstr "Insérer un widget"
+
+#. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:66
+msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPartBlocks.Edit"
+msgid "Delete"
+msgstr "Supprimer"
+
+#. <button type="button" class="btn btn-danger widget-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+#: OrchardCore.Flows\Views\ContentCard-FlowPartBlocks.Edit.cshtml:66
+msgctxt "OrchardCore.Flows.Views.ContentCard-FlowPartBlocks.Edit"
+msgid "Are you sure you want to remove this item?"
+msgstr "Êtes-vous sûr de vouloir supprimer cet élément ?"
+
+#. @T["Failed to add the item. Please try again."]
+#: OrchardCore.Flows\Views\ContentTypePicker.cshtml:5
+msgctxt "OrchardCore.Flows.Views.ContentTypePicker"
+msgid "Failed to add the item. Please try again."
+msgstr "Échec de l'ajout de l'élément. Veuillez réessayer."
+
+#. placeholder="@T["Search"]"
+#. aria-label="@T["Search"]">
+#: OrchardCore.Flows\Views\ContentTypePicker.cshtml:14
+#: OrchardCore.Flows\Views\ContentTypePicker.cshtml:15
+msgctxt "OrchardCore.Flows.Views.ContentTypePicker"
+msgid "Search"
+msgstr "Rechercher"
+
+#. <button type="button" class="btn btn-primary btn-sm" v-on:click="selectContentType(contentType)">@T["Add"]</button>
+#: OrchardCore.Flows\Views\ContentTypePicker.cshtml:43
+msgctxt "OrchardCore.Flows.Views.ContentTypePicker"
+msgid "Add"
+msgstr "Ajouter"
+
+#. <p>@T["No content types match your search criteria."]</p>
+#: OrchardCore.Flows\Views\ContentTypePicker.cshtml:52
+msgctxt "OrchardCore.Flows.Views.ContentTypePicker"
+msgid "No content types match your search criteria."
+msgstr "Aucun type de contenu ne correspond à vos critères de recherche."
+
 #. <input class="d-none" asp-for="Alignment" id="@Html.IdFor(x => x.Alignment)_Left" type="radio" autocomplete="off" value="Left"><i class="fa-solid fa-align-left" aria-hidden="true"></i> @T["Left"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:10
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:16
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "Left"
 msgstr "Gauche"
 
 #. <input class="d-none" asp-for="Alignment" id="@Html.IdFor(x => x.Alignment)_Center" type="radio" autocomplete="off" value="Center"><i class="fa-solid fa-align-center" aria-hidden="true"></i> @T["Center"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:13
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:19
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "Center"
 msgstr "Centre"
 
 #. <input class="d-none" asp-for="Alignment" id="@Html.IdFor(x => x.Alignment)_Right" type="radio" autocomplete="off" value="Right"><i class="fa-solid fa-align-right" aria-hidden="true"></i> @T["Right"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:16
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:22
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "Right"
 msgstr "Droite"
 
 #. <input class="d-none" asp-for="Alignment" id="@Html.IdFor(x => x.Alignment)_Justify" type="radio" autocomplete="off" value="Justify"><i class="fa-solid fa-align-justify" aria-hidden="true"></i> @T["Justify"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:19
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:25
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "Justify"
 msgstr "Justifier"
 
+#. <input class="d-none" asp-for="Alignment" id="@Html.IdFor(x => x.Alignment)_Inherit" type="radio" autocomplete="off" value="Inherit"><i class="fa-solid fa-indent" aria-hidden="true"></i> @T["Inherit"]
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:28
+msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
+msgid "Inherit"
+msgstr "Hériter"
+
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_25" type="radio" autocomplete="off" value="25">@T["25%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:30
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:39
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "25%"
 msgstr "25 %"
 
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_33" type="radio" autocomplete="off" value="33">@T["33%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:33
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:42
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "33%"
 msgstr "33%"
 
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_50" type="radio" autocomplete="off" value="50">@T["50%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:36
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:45
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "50%"
 msgstr "50 %"
 
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_66" type="radio" autocomplete="off" value="66">@T["66%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:39
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:48
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "66%"
 msgstr "66%"
 
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_75" type="radio" autocomplete="off" value="75">@T["75%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:42
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:51
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "75%"
 msgstr "75%"
 
 #. <input class="d-none" asp-for="Size" id="@Html.IdFor(x => x.Size)_100" type="radio" autocomplete="off" value="100">@T["100%"]
-#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:45
+#: OrchardCore.Flows\Views\FlowMetadata.Edit.cshtml:54
 msgctxt "OrchardCore.Flows.Views.FlowMetadata.Edit"
 msgid "100%"
 msgstr "100 %"
 
+#. <button type="button" id="@buttonId" title="@T["Add Widget"]" class="btn btn-primary btn-sm">
+#: OrchardCore.Flows\Views\FlowPart-Blocks.Edit.cshtml:68
+msgctxt "OrchardCore.Flows.Views.FlowPart-Blocks.Edit"
+msgid "Add Widget"
+msgstr "Ajouter un Widget"
+
+#. <h5 class="modal-title" id="contentTypePickerModalLabel">@T["Select Widget"]</h5>
+#. modalTitle: '@T["Select Widget"].Value',
+#: OrchardCore.Flows\Views\FlowPart-Blocks.Edit.cshtml:100
+#: OrchardCore.Flows\Views\FlowPart-Blocks.Edit.cshtml:170
+msgctxt "OrchardCore.Flows.Views.FlowPart-Blocks.Edit"
+msgid "Select Widget"
+msgstr "Sélectionnez le Widget"
+
+#. <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="@T["Close"]"></button>
+#: OrchardCore.Flows\Views\FlowPart-Blocks.Edit.cshtml:101
+msgctxt "OrchardCore.Flows.Views.FlowPart-Blocks.Edit"
+msgid "Close"
+msgstr "Fermer"
+
+#. <option value="Blocks" selected="@(currentEditor == "Blocks")">@T["Blocks"]</option>
+#: OrchardCore.Flows\Views\FlowPart-Blocks.Option.cshtml:4
+msgctxt "OrchardCore.Flows.Views.FlowPart-Blocks.Option"
+msgid "Blocks"
+msgstr "Blocs"
+
 #. <button type="button" title="@T["Add Widget"]" class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-#: OrchardCore.Flows\Views\FlowPart.Edit.cshtml:66
+#: OrchardCore.Flows\Views\FlowPart.Edit.cshtml:73
 msgctxt "OrchardCore.Flows.Views.FlowPart.Edit"
 msgid "Add Widget"
 msgstr "Ajouter un Widget"
 
 #. <a class="dropdown-item add-widget btn-sm" href="javascript:;">@T["No widgets found."]</a>
-#: OrchardCore.Flows\Views\FlowPart.Edit.cshtml:72
+#: OrchardCore.Flows\Views\FlowPart.Edit.cshtml:79
 msgctxt "OrchardCore.Flows.Views.FlowPart.Edit"
 msgid "No widgets found."
 msgstr "Aucun widget trouvé."
@@ -260,15 +472,64 @@ msgctxt "OrchardCore.Flows.Views.FlowPart.Option"
 msgid "Standard"
 msgstr "Standard"
 
-#. <label asp-for="ContainedContentTypes" class="form-label">@T["Restrict Content Types"]</label>
-#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:4
+#. <label asp-for="ContainedContentTypes" class="ocat-label">@T["Restrict Content Types"]</label>
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:6
 msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
 msgid "Restrict Content Types"
 msgstr "Restreindre les types de contenu"
 
 #. <span class="hint">@T["The content types that this flow can contain."]</span>
-#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:5
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:8
 msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
 msgid "The content types that this flow can contain."
 msgstr "Les types de contenu que ce flow peut contenir."
+
+#. <label class="form-check-label" asp-for="CollapseContainedItems">@T["Collapse Contained Items"]</label>
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:17
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Collapse Contained Items"
+msgstr "Réduire les éléments contenus"
+
+#. <span class="hint">@T["When checked, the contained items will be collapsed when the edit form is loaded."]</span>
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:18
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "When checked, the contained items will be collapsed when the edit form is loaded."
+msgstr "Lorsque cette case est cochée, les éléments contenus seront réduits lorsque le formulaire d'édition sera chargé."
+
+#. <label asp-for="DefaultAlignment" class="ocat-label">@T["What default alignment should be used?"]</label>
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:24
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "What default alignment should be used?"
+msgstr "Quel alignement par défaut doit être utilisé ?"
+
+#. <option value="">@T["Please choose an alignment"]</option>
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:27
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Please choose an alignment"
+msgstr "Veuillez choisir un alignement"
+
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:0
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Left"
+msgstr "Gauche"
+
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:0
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Right"
+msgstr "Droite"
+
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:0
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Center"
+msgstr "Centrer"
+
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:0
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Justify"
+msgstr "Justifier"
+
+#: OrchardCore.Flows\Views\FlowPartSettings.Edit.cshtml:0
+msgctxt "OrchardCore.Flows.Views.FlowPartSettings.Edit"
+msgid "Inherit"
+msgstr "Hériter"
 

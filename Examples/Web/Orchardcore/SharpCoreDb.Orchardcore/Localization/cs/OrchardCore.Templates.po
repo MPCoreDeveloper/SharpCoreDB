@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Czech\n"
 "Language: cs_CZ\n"
-"PO-Revision-Date: 2024-11-10 14:56\n"
+"PO-Revision-Date: 2026-06-03 19:56\n"
 
 #. .Add(S["Design"], design => design
 #: OrchardCore.Templates\AdminMenu.cs:18
@@ -88,56 +88,68 @@ msgctxt "OrchardCore.Templates.Controllers.TemplateController"
 msgid "The content is mandatory."
 msgstr "Obsah je povinný."
 
-#. Description = S["Template for a {0} part in detail views", contentPartDefinition.DisplayName()]
+#. Category = S["Development"];
+#: OrchardCore.Templates\Deployment\AllAdminTemplatesDeploymentStep.cs:19
+msgctxt "OrchardCore.Templates.Deployment.AllAdminTemplatesDeploymentStep"
+msgid "Development"
+msgstr ""
+
+#. Category = S["Development"];
+#: OrchardCore.Templates\Deployment\AllTemplatesDeploymentStep.cs:19
+msgctxt "OrchardCore.Templates.Deployment.AllTemplatesDeploymentStep"
+msgid "Development"
+msgstr ""
+
+#. Description = S["Template for a {0} part in detail views", contentPartDefinition.DisplayName()],
 #: OrchardCore.Templates\Settings\TemplateContentPartDefinitionDriver.cs:28
 msgctxt "OrchardCore.Templates.Settings.TemplateContentPartDefinitionDriver"
 msgid "Template for a {0} part in detail views"
 msgstr "Šablona pro blok {0} pro zobrazení detailu"
 
-#. Description = S["Template for a {0} part in summary views", contentPartDefinition.DisplayName()]
+#. Description = S["Template for a {0} part in summary views", contentPartDefinition.DisplayName()],
 #: OrchardCore.Templates\Settings\TemplateContentPartDefinitionDriver.cs:35
 msgctxt "OrchardCore.Templates.Settings.TemplateContentPartDefinitionDriver"
 msgid "Template for a {0} part in summary views"
 msgstr "Šablona pro blok {0} pro zobrazení v přehledu"
 
-#. Description = S["Template for a {0} content item in detail views", contentTypeDefinition.DisplayName]
+#. Description = S["Template for a {0} content item in detail views", contentTypeDefinition.DisplayName],
 #: OrchardCore.Templates\Settings\TemplateContentTypeDefinitionDriver.cs:32
 msgctxt "OrchardCore.Templates.Settings.TemplateContentTypeDefinitionDriver"
 msgid "Template for a {0} content item in detail views"
 msgstr "Šablona pro položku obsahu {0} pro zobrazení detailu"
 
-#. Description = S["Template for a {0} content item in summary views", contentTypeDefinition.DisplayName]
+#. Description = S["Template for a {0} content item in summary views", contentTypeDefinition.DisplayName],
 #: OrchardCore.Templates\Settings\TemplateContentTypeDefinitionDriver.cs:39
 msgctxt "OrchardCore.Templates.Settings.TemplateContentTypeDefinitionDriver"
 msgid "Template for a {0} content item in summary views"
 msgstr "Šablona pro položku obsahu {0} pro zobrazení v přehledu"
 
-#. Description = S["Template for the {0} part in a {1} type in detail views", partName, contentTypePartDefinition.ContentTypeDefinition.DisplayName]
+#. Description = S["Template for the {0} part in a {1} type in detail views", partName, contentTypePartDefinition.ContentTypeDefinition.DisplayName],
 #: OrchardCore.Templates\Settings\TemplateContentTypePartDefinitionDriver.cs:30
 msgctxt "OrchardCore.Templates.Settings.TemplateContentTypePartDefinitionDriver"
 msgid "Template for the {0} part in a {1} type in detail views"
 msgstr "Šablona pro blok {0} v typu {1} typu při zobrazení detailu"
 
-#. Description = S["Template for the {0} part in a {1} type in summary views", partName, contentTypePartDefinition.ContentTypeDefinition.DisplayName]
+#. Description = S["Template for the {0} part in a {1} type in summary views", partName, contentTypePartDefinition.ContentTypeDefinition.DisplayName],
 #: OrchardCore.Templates\Settings\TemplateContentTypePartDefinitionDriver.cs:37
 msgctxt "OrchardCore.Templates.Settings.TemplateContentTypePartDefinitionDriver"
 msgid "Template for the {0} part in a {1} type in summary views"
 msgstr "Šablona pro blok {0} v typu {1} typu při zobrazení přehledu"
 
 #. <h5>@T["All Admin Templates"]</h5>
-#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:3
+#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Templates.Views.Items.AllAdminTemplatesDeploymentStep.Fields.Edit"
 msgid "All Admin Templates"
 msgstr "Všechny šablony administrace"
 
 #. <label class="form-check-label" asp-for="ExportAsFiles">@T["Export templates as files"]</label>
-#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:7
+#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Templates.Views.Items.AllAdminTemplatesDeploymentStep.Fields.Edit"
 msgid "Export templates as files"
 msgstr "Exportovat šablony jako soubory"
 
 #. <span class="hint dashed">@T["Check if the templates should be exported as files instead of inline."]</span>
-#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:8
+#: OrchardCore.Templates\Views\Items\AllAdminTemplatesDeploymentStep.Fields.Edit.cshtml:15
 msgctxt "OrchardCore.Templates.Views.Items.AllAdminTemplatesDeploymentStep.Fields.Edit"
 msgid "Check if the templates should be exported as files instead of inline."
 msgstr "Zvolte, pokud mají být šablony exportovány jako soubory namísto inline."
@@ -167,19 +179,19 @@ msgid "Exports admin templates."
 msgstr "Exportovat šablony administrace."
 
 #. <h5>@T["All Templates"]</h5>
-#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:3
+#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Templates.Views.Items.AllTemplatesDeploymentStep.Fields.Edit"
 msgid "All Templates"
 msgstr "Všechny šablony"
 
 #. <label class="form-check-label" asp-for="ExportAsFiles">@T["Export templates as files"]</label>
-#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:7
+#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:13
 msgctxt "OrchardCore.Templates.Views.Items.AllTemplatesDeploymentStep.Fields.Edit"
 msgid "Export templates as files"
 msgstr "Exportovat šablony jako soubory"
 
 #. <span class="hint dashed">@T["Check if the templates should be exported as files instead of inline."]</span>
-#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:8
+#: OrchardCore.Templates\Views\Items\AllTemplatesDeploymentStep.Fields.Edit.cshtml:15
 msgctxt "OrchardCore.Templates.Views.Items.AllTemplatesDeploymentStep.Fields.Edit"
 msgid "Check if the templates should be exported as files instead of inline."
 msgstr "Zvolte, pokud mají být šablony exportovány jako soubory namísto inline."
@@ -209,171 +221,154 @@ msgid "Exports templates."
 msgstr "Exportuje šablony."
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Create Template"])</h1></zone>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:9
+#: OrchardCore.Templates\Views\Template\Create.cshtml:7
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Create Template"
 msgstr "Vytvořit šablonu"
 
-#. <button type="submit" name="submit" class="btn btn-sm btn-primary save">@T["Save"]</button>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:16
+#. <button type="submit" name="submit" class="btn btn-primary save">@T["Save"]</button>
+#: OrchardCore.Templates\Views\Template\Create.cshtml:14
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Save"
 msgstr "Uložit"
 
 #. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:18
+#: OrchardCore.Templates\Views\Template\Create.cshtml:16
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Toggle Dropdown"
 msgstr "Zobrazit/skrýt rozbalovací menu"
 
 #. <button class="dropdown-item save-continue" name="submit" type="submit" value="SaveAndContinue">@T["and continue"]</button>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:21
+#: OrchardCore.Templates\Views\Template\Create.cshtml:19
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "and continue"
 msgstr "a pokračovat"
 
-#. <a class="btn btn-sm btn-secondary cancel" role="button" href="@returnUrl">@T["Cancel"]</a>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:27
+#. <a class="btn btn-secondary cancel" role="button" href="@returnUrl">@T["Cancel"]</a>
+#: OrchardCore.Templates\Views\Template\Create.cshtml:25
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Cancel"
 msgstr "Storno"
 
-#. <a class="btn btn-sm btn-info" role="button" href="@Url.Action("Index", "Preview", new { area = "OrchardCore.Templates" })" target="_blank">@T["Preview"]</a>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:32
+#. <a class="btn btn-info" role="button" href="@Url.Action("Index", "Preview", new { area = "OrchardCore.Templates" })" target="_blank">@T["Preview"]</a>
+#: OrchardCore.Templates\Views\Template\Create.cshtml:30
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Preview"
 msgstr "Náhled"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:40
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.Templates\Views\Template\Create.cshtml:38
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Name"
 msgstr "Název"
 
 #. <span class="hint">@T["The name of the template."]</span>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:43
+#: OrchardCore.Templates\Views\Template\Create.cshtml:42
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "The name of the template."
 msgstr "Název šablony."
 
-#. <label asp-for="Description" class="form-label">@T["Description"]</label>
+#. <label asp-for="Description" class="ocat-label">@T["Description"]</label>
 #: OrchardCore.Templates\Views\Template\Create.cshtml:47
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Description"
 msgstr "Popis"
 
 #. <span class="hint">@T["The description of the template."]</span>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:49
+#: OrchardCore.Templates\Views\Template\Create.cshtml:50
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "The description of the template."
 msgstr "Popis šablony."
 
-#. <label asp-for="Content" class="form-label">@T["Content"]</label>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:53
+#. <label asp-for="Content" class="ocat-label">@T["Content"]</label>
+#: OrchardCore.Templates\Views\Template\Create.cshtml:55
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "Content"
 msgstr "Obsah"
 
 #. <span class="hint">@T["The Liquid template."]</span>
-#: OrchardCore.Templates\Views\Template\Create.cshtml:57
+#: OrchardCore.Templates\Views\Template\Create.cshtml:60
 msgctxt "OrchardCore.Templates.Views.Template.Create"
 msgid "The Liquid template."
 msgstr "Šablona Liquid."
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Admin Template"])</h1></zone>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:11
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:9
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Edit Admin Template"
 msgstr "Upravit šablonu administrace"
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Template"])</h1></zone>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:15
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:13
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Edit Template"
 msgstr "Upravit šablonu"
 
-#. <button type="submit" name="submit" class="btn btn-sm btn-primary save">@T["Save"]</button>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:23
+#. <button type="submit" name="submit" class="btn btn-primary save">@T["Save"]</button>
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:21
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Save"
 msgstr "Uložit"
 
 #. <span class="visually-hidden">@T["Toggle Dropdown"]</span>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:25
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:23
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Toggle Dropdown"
 msgstr "Zobrazit/skrýt rozbalovací menu"
 
 #. <button class="dropdown-item save-continue" name="submit" type="submit" value="SaveAndContinue">@T["and continue"]</button>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:28
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:26
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "and continue"
 msgstr "a pokračovat"
 
-#. <a class="btn btn-sm btn-secondary cancel" role="button" href="@returnUrl">@T["Cancel"]</a>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:34
+#. <a class="btn btn-secondary cancel" role="button" href="@returnUrl">@T["Cancel"]</a>
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:32
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Cancel"
 msgstr "Storno"
 
-#. <a class="btn btn-sm btn-info" role="button" href="@Url.Action("Index", "Preview", new { area = "OrchardCore.Templates" })" target="_blank">@T["Preview"]</a>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:39
+#. <a class="btn btn-info" role="button" href="@Url.Action("Index", "Preview", new { area = "OrchardCore.Templates" })" target="_blank">@T["Preview"]</a>
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:37
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Preview"
 msgstr "Náhled"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:48
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:46
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Name"
 msgstr "Název"
 
 #. <span class="hint">@T["The name of the template."]</span>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:51
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:50
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "The name of the template."
 msgstr "Název šablony."
 
-#. <label asp-for="Description" class="form-label">@T["Description"]</label>
+#. <label asp-for="Description" class="ocat-label">@T["Description"]</label>
 #: OrchardCore.Templates\Views\Template\Edit.cshtml:55
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Description"
 msgstr "Popis"
 
 #. <span class="hint">@T["The description of the template."]</span>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:57
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:58
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "The description of the template."
 msgstr "Popis šablony."
 
-#. <label asp-for="Content" class="form-label">@T["Content"]</label>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:61
+#. <label asp-for="Content" class="ocat-label">@T["Content"]</label>
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:63
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "Content"
 msgstr "Obsah"
 
 #. <span class="hint">@T["The Liquid template."]</span>
-#: OrchardCore.Templates\Views\Template\Edit.cshtml:65
+#: OrchardCore.Templates\Views\Template\Edit.cshtml:68
 msgctxt "OrchardCore.Templates.Views.Template.Edit"
 msgid "The Liquid template."
 msgstr "Šablona Liquid."
-
-#: OrchardCore.Templates\Views\Preview\Index.cshtml:0
-msgctxt "OrchardCore.Templates.Views.Preview.Index"
-msgid "Template Preview"
-msgstr "Náhled šablony"
-
-#. <span>@T["Preview Disconnected"] </span>
-#: OrchardCore.Templates\Views\Preview\Index.cshtml:15
-msgctxt "OrchardCore.Templates.Views.Preview.Index"
-msgid "Preview Disconnected"
-msgstr "Náhled odpojen"
-
-#. <p>@T["Preview Error"] </p>
-#: OrchardCore.Templates\Views\Preview\Index.cshtml:20
-msgctxt "OrchardCore.Templates.Views.Preview.Index"
-msgid "Preview Error"
-msgstr "Chyba náhledu"
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Admin Templates"])</h1></zone>
 #: OrchardCore.Templates\Views\Template\Index.cshtml:10
@@ -405,23 +400,23 @@ msgctxt "OrchardCore.Templates.Views.Template.Index"
 msgid "Select All"
 msgstr "Vybrat vše"
 
-#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Templates\Views\Template\Index.cshtml:48
 msgctxt "OrchardCore.Templates.Views.Template.Index"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
-msgstr[0] "1 položka"
-msgstr[1] "{0} položky"
-msgstr[2] "{0} položek"
-msgstr[3] "{0} položek"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
 
-#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Templates\Views\Template\Index.cshtml:48
 msgctxt "OrchardCore.Templates.Views.Template.Index"
 msgid "Items {0} to {1}"
 msgstr "Položky od {0} až {1}"
 
-#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Templates.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural((int)Model.Pager.TotalItemCount, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.Templates\Views\Template\Index.cshtml:48
 msgctxt "OrchardCore.Templates.Views.Template.Index"
 msgid " / {0} item in total"
@@ -480,6 +475,23 @@ msgstr "Viz dokumentaci"
 msgctxt "OrchardCore.Templates.Views.Template.Index"
 msgid "selected"
 msgstr "vybráno"
+
+#: OrchardCore.Templates\Views\Preview\Index.cshtml:0
+msgctxt "OrchardCore.Templates.Views.Preview.Index"
+msgid "Template Preview"
+msgstr "Náhled šablony"
+
+#. <span>@T["Preview Disconnected"] </span>
+#: OrchardCore.Templates\Views\Preview\Index.cshtml:15
+msgctxt "OrchardCore.Templates.Views.Preview.Index"
+msgid "Preview Disconnected"
+msgstr "Náhled odpojen"
+
+#. <p>@T["Preview Error"] </p>
+#: OrchardCore.Templates\Views\Preview\Index.cshtml:20
+msgctxt "OrchardCore.Templates.Views.Preview.Index"
+msgid "Preview Error"
+msgstr "Chyba náhledu"
 
 #. @T["Edit templates"]
 #: OrchardCore.Templates\Views\TemplateSettings.cshtml:5

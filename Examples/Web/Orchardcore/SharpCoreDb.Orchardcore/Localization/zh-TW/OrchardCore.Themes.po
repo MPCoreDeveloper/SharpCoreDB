@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Traditional\n"
 "Language: zh_TW\n"
-"PO-Revision-Date: 2024-11-10 14:57\n"
+"PO-Revision-Date: 2026-06-03 19:58\n"
 
 #. .Add(S["Design"], NavigationConstants.AdminMenuDesignPosition, design => design
 #: OrchardCore.Themes\AdminMenu.cs:18
@@ -20,11 +20,11 @@ msgstr "設計"
 
 #. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
 #. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
-#: OrchardCore.Themes\AdminMenu.cs:20
-#: OrchardCore.Themes\AdminMenu.cs:20
+#: OrchardCore.Themes\AdminMenu.cs:21
+#: OrchardCore.Themes\AdminMenu.cs:21
 msgctxt "OrchardCore.Themes.AdminMenu"
 msgid "Themes"
-msgstr "主题"
+msgstr "佈景主題"
 
 #. await _notifier.SuccessAsync(H["{0} was enabled", feature.Name ?? feature.Id]);
 #: OrchardCore.Themes\Controllers\AdminController.cs:145
@@ -42,24 +42,30 @@ msgstr "將 {0} 設定為預設 {1} 主題"
 #: OrchardCore.Themes\Controllers\AdminController.cs:165
 msgctxt "OrchardCore.Themes.Controllers.AdminController"
 msgid "The Site theme was reset."
-msgstr "\"网站\" 主题已重置。"
+msgstr "已重設前台佈景主題。"
 
 #. await _notifier.SuccessAsync(H["The Admin theme was reset."]);
 #: OrchardCore.Themes\Controllers\AdminController.cs:180
 msgctxt "OrchardCore.Themes.Controllers.AdminController"
 msgid "The Admin theme was reset."
-msgstr "管理主题已重置。"
+msgstr "已重設後台佈景主題。"
 
 #. await _notifier.SuccessAsync(H["{0} was disabled.", feature.Name ?? feature.Id]);
 #: OrchardCore.Themes\Controllers\AdminController.cs:203
 msgctxt "OrchardCore.Themes.Controllers.AdminController"
 msgid "{0} was disabled."
-msgstr ""
+msgstr "{0} 已關閉。"
 
 #. await _notifier.SuccessAsync(H["{0} was enabled.", feature.Name ?? feature.Id]);
 #: OrchardCore.Themes\Controllers\AdminController.cs:226
 msgctxt "OrchardCore.Themes.Controllers.AdminController"
 msgid "{0} was enabled."
+msgstr "{0} 已啟用。"
+
+#. Category = S["Theming"];
+#: OrchardCore.Themes\Deployment\ThemesDeploymentStep.cs:19
+msgctxt "OrchardCore.Themes.Deployment.ThemesDeploymentStep"
+msgid "Theming"
 msgstr ""
 
 #. throw new InvalidOperationException(H["The theme \"{0}\" is already in the stack of themes that need features disabled.", themeName].ToString());
@@ -90,7 +96,7 @@ msgstr "{0} 已禁用."
 #: OrchardCore.Themes\Views\Admin\Index.cshtml:11
 msgctxt "OrchardCore.Themes.Views.Admin.Index"
 msgid "Themes"
-msgstr "主題"
+msgstr "佈景主題"
 
 #. <p>@T["There are no themes installed."]</p>
 #: OrchardCore.Themes\Views\Admin\Index.cshtml:15
@@ -102,7 +108,7 @@ msgstr "没有安装主题。"
 #: OrchardCore.Themes\Views\Admin\Index.cshtml:29
 msgctxt "OrchardCore.Themes.Views.Admin.Index"
 msgid "Reset current themes"
-msgstr ""
+msgstr "重設目前佈景主題"
 
 #. <p>@T["The following actions reset the themes. It is used for sites that can't use theming."]</p>
 #: OrchardCore.Themes\Views\Admin\Index.cshtml:30
@@ -138,53 +144,47 @@ msgctxt "OrchardCore.Themes.Views.Admin.Index"
 msgid "Are you sure you want to reset the Admin theme?"
 msgstr "确实要重置 \"管理\" 主题吗？"
 
-#. <span class="icon"><i class="fa-solid fa-desktop" aria-hidden="true"></i></span><span class="title">@T["Design"]</span>
-#: OrchardCore.Themes\Views\NavigationItemText-themes.Id.cshtml:1
-msgctxt "OrchardCore.Themes.Views.NavigationItemText-themes.Id"
-msgid "Design"
-msgstr "設計"
-
 #. <button type="submit" class="btn btn-sm btn-primary">@T["Make Current"]</button>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsMakeCurrent.SummaryAdmin.cshtml:7
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsMakeCurrent.SummaryAdmin"
 msgid "Make Current"
-msgstr ""
+msgstr "設為目前佈景"
 
 #. <button type="submit" class="btn btn-sm btn-secondary">@T["Disable"]</button>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsToggleState.SummaryAdmin.cshtml:9
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsToggleState.SummaryAdmin"
 msgid "Disable"
-msgstr ""
+msgstr "關閉"
 
 #. <button type="submit" class="btn btn-sm btn-secondary">@T["Enable"]</button>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsToggleState.SummaryAdmin.cshtml:16
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsToggleState.SummaryAdmin"
 msgid "Enable"
-msgstr ""
+msgstr "启用"
 
 #. <span class="text-muted">@T["This is the current Admin theme"]</span>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-Current.SummaryAdmin.cshtml:8
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-Current.SummaryAdmin"
 msgid "This is the current Admin theme"
-msgstr ""
+msgstr "此為目前的後台佈景"
 
 #. <span class="text-muted">@T["This is the current Site theme"]</span>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-Current.SummaryAdmin.cshtml:13
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-Current.SummaryAdmin"
 msgid "This is the current Site theme"
-msgstr ""
+msgstr "此為目前的前台佈景"
 
 #. <h5>@T["Themes"]</h5>
-#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Edit.cshtml:3
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Edit.cshtml:5
 msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Edit"
 msgid "Themes"
-msgstr "主题"
+msgstr "佈景主題"
 
 #. <h5>@T["Themes"]</h5>
 #: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Summary.cshtml:3
 msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Summary"
 msgid "Themes"
-msgstr "主题"
+msgstr "佈景主題"
 
 #. <span class="hint">@T["Adds the currently selected site theme and admin theme to the plan."]</span>
 #: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Summary.cshtml:5
@@ -196,7 +196,7 @@ msgstr "将当前选定的站点主题和管理主题添加到计划中。"
 #: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Thumbnail.cshtml:3
 msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Thumbnail"
 msgid "Themes"
-msgstr "主题"
+msgstr "佈景主題"
 
 #. <p>@T["Exports the currently selected site theme and admin theme."]</p>
 #: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Thumbnail.cshtml:4
@@ -210,23 +210,23 @@ msgstr "导出当前选定的站点主题和管理主题。"
 #: OrchardCore.Themes\Views\ToggleTheme.cshtml:5
 msgctxt "OrchardCore.Themes.Views.ToggleTheme"
 msgid "Toggle theme"
-msgstr ""
+msgstr "切換主題"
 
 #. <span class="ps-2">@T["Auto"]</span>
 #: OrchardCore.Themes\Views\ToggleTheme.cshtml:13
 msgctxt "OrchardCore.Themes.Views.ToggleTheme"
 msgid "Auto"
-msgstr ""
+msgstr "自動"
 
 #. <span class="ps-2">@T["Light"]</span>
 #: OrchardCore.Themes\Views\ToggleTheme.cshtml:21
 msgctxt "OrchardCore.Themes.Views.ToggleTheme"
 msgid "Light"
-msgstr ""
+msgstr "亮色"
 
 #. <span class="ps-2">@T["Dark"]</span>
 #: OrchardCore.Themes\Views\ToggleTheme.cshtml:29
 msgctxt "OrchardCore.Themes.Views.ToggleTheme"
 msgid "Dark"
-msgstr ""
+msgstr "暗色"
 

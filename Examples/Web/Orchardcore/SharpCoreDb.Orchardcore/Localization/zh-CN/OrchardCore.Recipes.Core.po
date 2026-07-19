@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Simplified\n"
 "Language: zh_CN\n"
-"PO-Revision-Date: 2024-09-23 09:57\n"
+"PO-Revision-Date: 2026-06-03 20:08\n"
 
 #. stepResult.Errors = [S["Unexpected error occurred while executing the '{0}' step.", stepResult.StepName]];
 #: OrchardCore.Recipes.Core\Services\RecipeExecutor.cs:113
@@ -19,7 +19,7 @@ msgid "Unexpected error occurred while executing the '{0}' step."
 msgstr "执行'{0}' 步骤时发生意外错误。"
 
 #. throw new ValidationException(S["The variable '{0}' was used in the recipe but not defined. Make sure you add the '{0}' variable in the '{1}' section of the recipe.", name, GlobalMethodName]);
-#: OrchardCore.Recipes.Core\VariablesMethodProvider.cs:28
+#: OrchardCore.Recipes.Core\VariablesMethodProvider.cs:46
 msgctxt "OrchardCore.Recipes.VariablesMethodProvider"
 msgid "The variable '{0}' was used in the recipe but not defined. Make sure you add the '{0}' variable in the '{1}' section of the recipe."
 msgstr "变量'{0}'被用于配方，但未定义。 请确保在配方的'{1}'部分中添加'{0}'变量。"

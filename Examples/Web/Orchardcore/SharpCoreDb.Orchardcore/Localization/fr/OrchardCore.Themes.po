@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
-"PO-Revision-Date: 2024-11-10 14:57\n"
+"PO-Revision-Date: 2026-06-03 19:57\n"
 
 #. .Add(S["Design"], NavigationConstants.AdminMenuDesignPosition, design => design
 #: OrchardCore.Themes\AdminMenu.cs:18
@@ -20,8 +20,8 @@ msgstr "Design"
 
 #. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
 #. .Add(S["Themes"], S["Themes"].PrefixPosition(), themes => themes
-#: OrchardCore.Themes\AdminMenu.cs:20
-#: OrchardCore.Themes\AdminMenu.cs:20
+#: OrchardCore.Themes\AdminMenu.cs:21
+#: OrchardCore.Themes\AdminMenu.cs:21
 msgctxt "OrchardCore.Themes.AdminMenu"
 msgid "Themes"
 msgstr "Thèmes"
@@ -61,6 +61,12 @@ msgstr "{0} a été désactivé."
 msgctxt "OrchardCore.Themes.Controllers.AdminController"
 msgid "{0} was enabled."
 msgstr "{0} a été activé."
+
+#. Category = S["Theming"];
+#: OrchardCore.Themes\Deployment\ThemesDeploymentStep.cs:19
+msgctxt "OrchardCore.Themes.Deployment.ThemesDeploymentStep"
+msgid "Theming"
+msgstr "Thème"
 
 #. throw new InvalidOperationException(H["The theme \"{0}\" is already in the stack of themes that need features disabled.", themeName].ToString());
 #: OrchardCore.Themes\Services\ThemeService.cs:39
@@ -138,12 +144,6 @@ msgctxt "OrchardCore.Themes.Views.Admin.Index"
 msgid "Are you sure you want to reset the Admin theme?"
 msgstr "Êtes-vous sûr de vouloir réinitialiser le thème Admin ?"
 
-#. <span class="icon"><i class="fa-solid fa-desktop" aria-hidden="true"></i></span><span class="title">@T["Design"]</span>
-#: OrchardCore.Themes\Views\NavigationItemText-themes.Id.cshtml:1
-msgctxt "OrchardCore.Themes.Views.NavigationItemText-themes.Id"
-msgid "Design"
-msgstr "Design"
-
 #. <button type="submit" class="btn btn-sm btn-primary">@T["Make Current"]</button>
 #: OrchardCore.Themes\Views\Items\ThemeEntry-ButtonsMakeCurrent.SummaryAdmin.cshtml:7
 msgctxt "OrchardCore.Themes.Views.Items.ThemeEntry-ButtonsMakeCurrent.SummaryAdmin"
@@ -175,7 +175,7 @@ msgid "This is the current Site theme"
 msgstr "Ceci est le thème actuel du site"
 
 #. <h5>@T["Themes"]</h5>
-#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Edit.cshtml:3
+#: OrchardCore.Themes\Views\Items\ThemesDeploymentStep.Edit.cshtml:5
 msgctxt "OrchardCore.Themes.Views.Items.ThemesDeploymentStep.Edit"
 msgid "Themes"
 msgstr "Thèmes"

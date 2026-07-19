@@ -10,56 +10,74 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Japanese\n"
 "Language: ja_JP\n"
-"PO-Revision-Date: 2024-09-09 16:59\n"
+"PO-Revision-Date: 2026-06-03 19:13\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.ContentLocalization\AdminMenu.cs:32
+#: OrchardCore.ContentLocalization\AdminMenu.cs:34
 msgctxt "OrchardCore.ContentLocalization.AdminMenu"
 msgid "Configuration"
 msgstr "構成"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.ContentLocalization\AdminMenu.cs:33
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.ContentLocalization\AdminMenu.cs:35
+#: OrchardCore.ContentLocalization\AdminMenu.cs:59
 msgctxt "OrchardCore.ContentLocalization.AdminMenu"
 msgid "Settings"
 msgstr "設定"
 
 #. .Add(S["Localization"], localization => localization
-#: OrchardCore.ContentLocalization\AdminMenu.cs:34
+#. .Add(S["Localization"], S["Localization"].PrefixPosition(), localization => localization
+#. .Add(S["Localization"], S["Localization"].PrefixPosition(), localization => localization
+#: OrchardCore.ContentLocalization\AdminMenu.cs:36
+#: OrchardCore.ContentLocalization\AdminMenu.cs:60
+#: OrchardCore.ContentLocalization\AdminMenu.cs:60
 msgctxt "OrchardCore.ContentLocalization.AdminMenu"
 msgid "Localization"
 msgstr "ローカライゼーション"
 
 #. .Add(S["Content Request Culture Provider"], S["Content Request Culture Provider"].PrefixPosition(), provider => provider
 #. .Add(S["Content Request Culture Provider"], S["Content Request Culture Provider"].PrefixPosition(), provider => provider
-#: OrchardCore.ContentLocalization\AdminMenu.cs:35
-#: OrchardCore.ContentLocalization\AdminMenu.cs:35
+#: OrchardCore.ContentLocalization\AdminMenu.cs:37
+#: OrchardCore.ContentLocalization\AdminMenu.cs:37
 msgctxt "OrchardCore.ContentLocalization.AdminMenu"
 msgid "Content Request Culture Provider"
 msgstr ""
 
 #. .Add(S["Content Culture Picker"], S["Content Culture Picker"].PrefixPosition(), picker => picker
 #. .Add(S["Content Culture Picker"], S["Content Culture Picker"].PrefixPosition(), picker => picker
-#: OrchardCore.ContentLocalization\AdminMenu.cs:42
-#: OrchardCore.ContentLocalization\AdminMenu.cs:42
+#. .Add(S["Content Culture Picker"], S["Content Culture Picker"].PrefixPosition(), picker => picker
+#. .Add(S["Content Culture Picker"], S["Content Culture Picker"].PrefixPosition(), picker => picker
+#: OrchardCore.ContentLocalization\AdminMenu.cs:44
+#: OrchardCore.ContentLocalization\AdminMenu.cs:44
+#: OrchardCore.ContentLocalization\AdminMenu.cs:68
+#: OrchardCore.ContentLocalization\AdminMenu.cs:68
 msgctxt "OrchardCore.ContentLocalization.AdminMenu"
 msgid "Content Culture Picker"
 msgstr "コンテンツのカルチャーピッカー"
 
+#. .Add(S["Content Culture"], S["Content Culture"].PrefixPosition(), provider => provider
+#. .Add(S["Content Culture"], S["Content Culture"].PrefixPosition(), provider => provider
+#: OrchardCore.ContentLocalization\AdminMenu.cs:61
+#: OrchardCore.ContentLocalization\AdminMenu.cs:61
+msgctxt "OrchardCore.ContentLocalization.AdminMenu"
+msgid "Content Culture"
+msgstr ""
+
 #. await _notifier.WarningAsync(H["A localization already exists for '{0}'.", targetCulture]);
-#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:76
+#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:69
 msgctxt "OrchardCore.ContentLocalization.Controllers.AdminController"
 msgid "A localization already exists for '{0}'."
 msgstr "「{0}」の翻訳は既に存在します。"
 
 #. await _notifier.InformationAsync(H["Localized version of the content created successfully."]);
-#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:83
+#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:76
 msgctxt "OrchardCore.ContentLocalization.Controllers.AdminController"
 msgid "Localized version of the content created successfully."
 msgstr "コンテンツのローカライズされたバージョンが正常に作成されました。"
 
 #. await _notifier.WarningAsync(H["Could not create localized version of the content item."]);
-#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:88
+#: OrchardCore.ContentLocalization\Controllers\AdminController.cs:81
 msgctxt "OrchardCore.ContentLocalization.Controllers.AdminController"
 msgid "Could not create localized version of the content item."
 msgstr "コンテンツ項目のローカライズバージョンを作成できませんでした。"
@@ -71,19 +89,19 @@ msgid "All cultures"
 msgstr "すべてのカルチャ"
 
 #. Description = S["the localization part of the content item"];
-#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:13
+#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:14
 msgctxt "OrchardCore.ContentLocalization.GraphQL.LocalizationInputObjectType"
 msgid "the localization part of the content item"
 msgstr "コンテンツ項目のローカライズ部分"
 
 #. AddScalarFilterFields<StringGraphType>("culture", S["the culture of the content item to filter"]);
-#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:15
+#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:16
 msgctxt "OrchardCore.ContentLocalization.GraphQL.LocalizationInputObjectType"
 msgid "the culture of the content item to filter"
 msgstr "フィルタするコンテンツ項目のカルチャ"
 
 #. Field(x => x.LocalizationSet, nullable: true).Description(S["the localization set of the content item to filter"]);
-#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:16
+#: OrchardCore.ContentLocalization\GraphQL\LocalizationInputObjectType.cs:17
 msgctxt "OrchardCore.ContentLocalization.GraphQL.LocalizationInputObjectType"
 msgid "the localization set of the content item to filter"
 msgstr "フィルタするコンテンツ項目のローカライズセット"
@@ -113,37 +131,37 @@ msgid "The localizations of the content item."
 msgstr "コンテンツ項目のローカライズ"
 
 #. <label class="form-check-label" asp-for="SetCookie">@T["Set Cookie"]</label>
-#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:7
+#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:8
 msgctxt "OrchardCore.ContentLocalization.Views.ContentCulturePickerSettings.Edit"
 msgid "Set Cookie"
 msgstr "クッキーを設定"
 
 #. <span class="hint dashed">@T["Sets the localization cookie when switching cultures using the ContentCulturePicker"]</span>
-#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:8
+#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:10
 msgctxt "OrchardCore.ContentLocalization.Views.ContentCulturePickerSettings.Edit"
 msgid "Sets the localization cookie when switching cultures using the ContentCulturePicker"
 msgstr "ContentCulturePicker を使用してカルチャを変更する場合にローカライズクッキーをセットする"
 
 #. <label class="form-check-label" asp-for="RedirectToHomepage">@T["Homepage redirect "]</label>
-#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:15
+#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:18
 msgctxt "OrchardCore.ContentLocalization.Views.ContentCulturePickerSettings.Edit"
 msgid "Homepage redirect "
 msgstr "ホームページのリダイレクト "
 
 #. <span class="hint dashed">@T["Redirects to the homepage of the target culture if the ContentItem of the target culture does not exist."]</span>
-#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:16
+#: OrchardCore.ContentLocalization\Views\ContentCulturePickerSettings.Edit.cshtml:20
 msgctxt "OrchardCore.ContentLocalization.Views.ContentCulturePickerSettings.Edit"
 msgid "Redirects to the homepage of the target culture if the ContentItem of the target culture does not exist."
 msgstr "対象のカルチャのコンテンツ項目が存在しない場合に対象のカルチャのホームページにリダイレクトします"
 
 #. <label class="form-check-label" asp-for="SetCookie">@T["Set Cookie"]</label>
-#: OrchardCore.ContentLocalization\Views\ContentRequestCultureProviderSettings.Edit.cshtml:7
+#: OrchardCore.ContentLocalization\Views\ContentRequestCultureProviderSettings.Edit.cshtml:8
 msgctxt "OrchardCore.ContentLocalization.Views.ContentRequestCultureProviderSettings.Edit"
 msgid "Set Cookie"
 msgstr "クッキーを設定"
 
 #. <span class="hint dashed">@T["Sets the localization cookie based on the LocalizationPart culture when accessing a page in the frontend."]</span>
-#: OrchardCore.ContentLocalization\Views\ContentRequestCultureProviderSettings.Edit.cshtml:8
+#: OrchardCore.ContentLocalization\Views\ContentRequestCultureProviderSettings.Edit.cshtml:10
 msgctxt "OrchardCore.ContentLocalization.Views.ContentRequestCultureProviderSettings.Edit"
 msgid "Sets the localization cookie based on the LocalizationPart culture when accessing a page in the frontend."
 msgstr "フロントエンドのページにアクセスする際の LocalizationPart カルチャーに基づいてローカライズクッキーを設定します。"
@@ -190,7 +208,7 @@ msgctxt "OrchardCore.ContentLocalization.Views.LocalizationPart.Edit"
 msgid "Add or remove supported cultures for the site"
 msgstr "サイトでサポートするカルチャを追加または削除する"
 
-#. <a class="list-group-item list-group-item-action" asp-action="Edit" asp-controller="Admin" asp-route-area="OrchardCore.Contents" asp-route-contentItemId="@culture.ContentItemId" asp-route-returnUrl="@returnUrl" title="@T["Edit {0}", culture.Culture.DisplayName]"><i class="fa-solid fa-edit" aria-hidden="true"></i> @culture.Culture.DisplayName | @culture.Culture.Name </a>
+#. <a class="list-group-item list-group-item-action" asp-action="Edit" asp-controller="Admin" asp-route-area="OrchardCore.Contents" asp-route-contentItemId="@culture.ContentItemId" asp-route-returnUrl="@returnUrl" title="@T["Edit {0}", culture.Culture.DisplayName]"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> @culture.Culture.DisplayName | @culture.Culture.Name </a>
 #: OrchardCore.ContentLocalization\Views\LocalizationPart.Edit.cshtml:34
 msgctxt "OrchardCore.ContentLocalization.Views.LocalizationPart.Edit"
 msgid "Edit {0}"
@@ -221,7 +239,7 @@ msgctxt "OrchardCore.ContentLocalization.Views.LocalizationPart.SummaryAdminLink
 msgid "Localizations"
 msgstr "現地語化"
 
-#. <a class="dropdown-item btn-sm" asp-action="Edit" asp-controller="Admin" asp-route-area="OrchardCore.Contents" asp-route-contentItemId="@culture.ContentItemId" asp-route-returnUrl="@returnUrl" data-url-af="UnsafeUrl" title=@T["Edit {0}", culture.Culture.DisplayName]><i class="fa-solid fa-edit" aria-hidden="true"></i> @culture.Culture.DisplayName | @culture.Culture.Name </a>
+#. <a class="dropdown-item btn-sm" asp-action="Edit" asp-controller="Admin" asp-route-area="OrchardCore.Contents" asp-route-contentItemId="@culture.ContentItemId" asp-route-returnUrl="@returnUrl" data-url-af="UnsafeUrl" title=@T["Edit {0}", culture.Culture.DisplayName]><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> @culture.Culture.DisplayName | @culture.Culture.Name </a>
 #: OrchardCore.ContentLocalization\Views\LocalizationPart.SummaryAdminLinks.cshtml:17
 msgctxt "OrchardCore.ContentLocalization.Views.LocalizationPart.SummaryAdminLinks"
 msgid "Edit {0}"

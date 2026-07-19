@@ -1,0 +1,348 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=4; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 3;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: cs\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.AzureAI.pot\n"
+"X-Crowdin-File-ID: 974\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Czech\n"
+"Language: cs_CZ\n"
+"PO-Revision-Date: 2026-06-03 20:25\n"
+
+#. .Add(S["Configuration"], configuration => configuration
+#: OrchardCore.AzureAI\AdminMenu.cs:41
+msgctxt "OrchardCore.AzureAI.AdminMenu"
+msgid "Configuration"
+msgstr ""
+
+#. .Add(S["Settings"], settings => settings
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.AzureAI\AdminMenu.cs:42
+#: OrchardCore.AzureAI\AdminMenu.cs:57
+msgctxt "OrchardCore.AzureAI.AdminMenu"
+msgid "Settings"
+msgstr ""
+
+#. .Add(S["Azure AI Search"], S["Azure AI Search"].PrefixPosition(), azureAISearch => azureAISearch
+#. .Add(S["Azure AI Search"], S["Azure AI Search"].PrefixPosition(), azureAISearch => azureAISearch
+#. .Add(S["Azure AI Search"], S["Azure AI Search"].PrefixPosition(), azureAISearch => azureAISearch
+#. .Add(S["Azure AI Search"], S["Azure AI Search"].PrefixPosition(), azureAISearch => azureAISearch
+#: OrchardCore.AzureAI\AdminMenu.cs:43
+#: OrchardCore.AzureAI\AdminMenu.cs:43
+#: OrchardCore.AzureAI\AdminMenu.cs:59
+#: OrchardCore.AzureAI\AdminMenu.cs:59
+msgctxt "OrchardCore.AzureAI.AdminMenu"
+msgid "Azure AI Search"
+msgstr ""
+
+#. .Add(S["Search"], S["Search"].PrefixPosition(), search => search
+#. .Add(S["Search"], S["Search"].PrefixPosition(), search => search
+#: OrchardCore.AzureAI\AdminMenu.cs:58
+#: OrchardCore.AzureAI\AdminMenu.cs:58
+msgctxt "OrchardCore.AzureAI.AdminMenu"
+msgid "Search"
+msgstr ""
+
+#. new SelectListItem(S["Default"], nameof(AzureAIAuthenticationType.Default)),
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:61
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "Default"
+msgstr ""
+
+#. new SelectListItem(S["Managed Identity"], nameof(AzureAIAuthenticationType.ManagedIdentity)),
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:62
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "Managed Identity"
+msgstr ""
+
+#. new SelectListItem(S["API Key"], nameof(AzureAIAuthenticationType.ApiKey)),
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:63
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "API Key"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Endpoint), S["Endpoint is required."]);
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:108
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "Endpoint is required."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Endpoint), S["Endpoint must be a valid url."]);
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:112
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "Endpoint must be a valid url."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.ApiKey), S["API Key is required when using API Key authentication type."]);
+#: OrchardCore.AzureAI\Drivers\AzureAISearchDefaultSettingsDisplayDriver.cs:121
+msgctxt "OrchardCore.AzureAI.Drivers.AzureAISearchDefaultSettingsDisplayDriver"
+msgid "API Key is required when using API Key authentication type."
+msgstr ""
+
+#. o.DisplayName = S["Content in Azure AI Search"];
+#: OrchardCore.AzureAI\Startup.cs:83
+msgctxt "OrchardCore.AzureAI.ContentsStartup"
+msgid "Content in Azure AI Search"
+msgstr ""
+
+#. o.Description = S["Create an Azure AI Search index based on site contents."];
+#: OrchardCore.AzureAI\Startup.cs:84
+msgctxt "OrchardCore.AzureAI.ContentsStartup"
+msgid "Create an Azure AI Search index based on site contents."
+msgstr ""
+
+#. <h4>@T["Azure AI Search Index Settings"]</h4>
+#: OrchardCore.AzureAI\Views\AzureAISearchContentIndexSettings.Edit.cshtml:5
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchContentIndexSettings.Edit"
+msgid "Azure AI Search Index Settings"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="Included">@T["Include this element in the index"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchContentIndexSettings.Edit.cshtml:13
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchContentIndexSettings.Edit"
+msgid "Include this element in the index"
+msgstr ""
+
+#. <span class="hint dashed">@T["Check to include the value of this element in the index."]</span>
+#: OrchardCore.AzureAI\Views\AzureAISearchContentIndexSettings.Edit.cshtml:14
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchContentIndexSettings.Edit"
+msgid "Check to include the value of this element in the index."
+msgstr ""
+
+#. @T["Azure AI Search has been set up and configured. Feel free to utilize the provided settings below to customize your connection preferences if needed."]
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:14
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Azure AI Search has been set up and configured. Feel free to utilize the provided settings below to customize your connection preferences if needed."
+msgstr ""
+
+#. <label class="form-check-label" asp-for="UseCustomConfiguration">@T["Use custom Azure Search AI settings"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:23
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Use custom Azure Search AI settings"
+msgstr ""
+
+#. <span class="hint dashed">@T["Check to configure a custom Azure Search AI instance."]</span>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:24
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Check to configure a custom Azure Search AI instance."
+msgstr ""
+
+#. <label asp-for="Endpoint" class="ocat-label">@T["Endpoint"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:33
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Endpoint"
+msgstr ""
+
+#. <label asp-for="AuthenticationType" class="ocat-label">@T["Authentication Type"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:41
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Authentication Type"
+msgstr ""
+
+#. <label asp-for="ApiKey" class="ocat-label">@T["Api Key"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:49
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Api Key"
+msgstr ""
+
+#. <input type="text" asp-for="ApiKey" class="form-control" placeholder="@(Model.ApiKeyExists ? T["API key stored. Leave blank for current key or enter a new one"] : T["Provide an authentication key"])" />
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:51
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "API key stored. Leave blank for current key or enter a new one"
+msgstr ""
+
+#. <input type="text" asp-for="ApiKey" class="form-control" placeholder="@(Model.ApiKeyExists ? T["API key stored. Leave blank for current key or enter a new one"] : T["Provide an authentication key"])" />
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:51
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Provide an authentication key"
+msgstr ""
+
+#. <label asp-for="IdentityClientId" class="ocat-label">@T["Identity Client Id"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:57
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Identity Client Id"
+msgstr ""
+
+#. <span class="hint">@T["Leaving identity client id blank will use system."]</span>
+#: OrchardCore.AzureAI\Views\AzureAISearchDefaultSettings.Edit.cshtml:61
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchDefaultSettings.Edit"
+msgid "Leaving identity client id blank will use system."
+msgstr ""
+
+#. <h5>@T["Azure AI Search Indexes"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Edit.cshtml:12
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Edit"
+msgid "Azure AI Search Indexes"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all search indexes."]</label>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Edit.cshtml:20
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Edit"
+msgid "Include all search indexes."
+msgstr ""
+
+#. <span class="hint">@T["The search indexes to add as part of the plan."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Edit.cshtml:28
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Edit"
+msgid "The search indexes to add as part of the plan."
+msgstr ""
+
+#. <h5>@T["Azure AI Search Indexes"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Summary"
+msgid "Azure AI Search Indexes"
+msgstr ""
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr ""
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr ""
+
+#. <h4 class="card-title">@T["Azure AI Search Indexes"]</h4>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Thumbnail"
+msgid "Azure AI Search Indexes"
+msgstr ""
+
+#. <p>@T["Exports all or specified search indexes."]</p>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexDeploymentStep.Fields.Thumbnail"
+msgid "Exports all or specified search indexes."
+msgstr ""
+
+#. <label asp-for="AnalyzerName" class="ocat-label">@T["Analyzer"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchIndexProfile.Edit.cshtml:4
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchIndexProfile.Edit"
+msgid "Analyzer"
+msgstr ""
+
+#. <h5>@T["Rebuild Azure AI Search Indices"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Edit.cshtml:7
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Edit"
+msgid "Rebuild Azure AI Search Indices"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all Azure AI Search indices."]</label>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Edit.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Edit"
+msgid "Include all Azure AI Search indices."
+msgstr ""
+
+#. <span class="hint">@T["The Azure AI Search indices to rebuild as part of the plan."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Edit.cshtml:23
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Edit"
+msgid "The Azure AI Search indices to rebuild as part of the plan."
+msgstr ""
+
+#. <h5>@T["Rebuild Azure AI Search Indices"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Summary"
+msgid "Rebuild Azure AI Search Indices"
+msgstr ""
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr ""
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr ""
+
+#. <h4 class="card-title">@T["Rebuild Azure AI Search Indices"]</h4>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Thumbnail"
+msgid "Rebuild Azure AI Search Indices"
+msgstr ""
+
+#. <p>@T["Rebuild all or specified Azure AI Search indices."]</p>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexRebuildDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexRebuildDeploymentStep.Fields.Thumbnail"
+msgid "Rebuild all or specified Azure AI Search indices."
+msgstr ""
+
+#. <h5>@T["Reset Azure AI Search Indices"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Edit.cshtml:7
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Edit"
+msgid "Reset Azure AI Search Indices"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="IncludeAll">@T["Include all Azure AI Search indices."]</label>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Edit.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Edit"
+msgid "Include all Azure AI Search indices."
+msgstr ""
+
+#. <span class="hint">@T["The Azure AI Search Indices to reset as part of the plan."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Edit.cshtml:23
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Edit"
+msgid "The Azure AI Search Indices to reset as part of the plan."
+msgstr ""
+
+#. <h5>@T["Reset Azure AI Search Indices"]</h5>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Summary.cshtml:11
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Summary"
+msgid "Reset Azure AI Search Indices"
+msgstr ""
+
+#. <span class="badge text-bg-success">@T["All"]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Summary.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Summary"
+msgid "All"
+msgstr ""
+
+#. <span class="badge text-bg-warning">@T["No index selected."]</span>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Summary.cshtml:26
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Summary"
+msgid "No index selected."
+msgstr ""
+
+#. <h4 class="card-title">@T["Reset Azure AI Indices"]</h4>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Thumbnail.cshtml:3
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Thumbnail"
+msgid "Reset Azure AI Indices"
+msgstr ""
+
+#. <p>@T["Reset all or specified Azure AI Search indices."]</p>
+#: OrchardCore.AzureAI\Views\Items\AzureAISearchIndexResetDeploymentStep.Fields.Thumbnail.cshtml:4
+msgctxt "OrchardCore.AzureAI.Views.Items.AzureAISearchIndexResetDeploymentStep.Fields.Thumbnail"
+msgid "Reset all or specified Azure AI Search indices."
+msgstr ""
+
+#. <h4 class="mt-4 mb-0">@T["Default Query Settings"]</h4>
+#: OrchardCore.AzureAI\Views\AzureAISearchQuerySettings.Edit.cshtml:10
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchQuerySettings.Edit"
+msgid "Default Query Settings"
+msgstr ""
+
+#. <label asp-for="QueryAnalyzerName" class="ocat-label">@T["Query analyzer"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchQuerySettings.Edit.cshtml:15
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchQuerySettings.Edit"
+msgid "Query analyzer"
+msgstr ""
+
+#. <label asp-for="DefaultSearchFields" class="ocat-label">@T["Query field names"]</label>
+#: OrchardCore.AzureAI\Views\AzureAISearchQuerySettings.Edit.cshtml:23
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchQuerySettings.Edit"
+msgid "Query field names"
+msgstr ""
+
+#. <span class="hint">@T["The fields to use for query. Leave it blank to query all searchable fields."]</span>
+#: OrchardCore.AzureAI\Views\AzureAISearchQuerySettings.Edit.cshtml:46
+msgctxt "OrchardCore.AzureAI.Views.AzureAISearchQuerySettings.Edit"
+msgid "The fields to use for query. Leave it blank to query all searchable fields."
+msgstr ""
+

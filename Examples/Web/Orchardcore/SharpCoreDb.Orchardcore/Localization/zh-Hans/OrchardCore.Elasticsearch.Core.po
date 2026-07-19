@@ -1,0 +1,64 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: zh-CN\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.Elasticsearch.Core.pot\n"
+"X-Crowdin-File-ID: 976\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"PO-Revision-Date: 2026-06-03 20:26\n"
+
+#. Category = S["Search"];
+#: OrchardCore.Elasticsearch.Core\Deployment\ElasticsearchIndexDeploymentStep.cs:19
+msgctxt "OrchardCore.Elasticsearch.Core.Deployment.ElasticsearchIndexDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. Category = S["Search"];
+#: OrchardCore.Elasticsearch.Core\Deployment\ElasticsearchIndexRebuildDeploymentStep.cs:19
+msgctxt "OrchardCore.Elasticsearch.Core.Deployment.ElasticsearchIndexRebuildDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. Category = S["Search"];
+#: OrchardCore.Elasticsearch.Core\Deployment\ElasticsearchIndexResetDeploymentStep.cs:19
+msgctxt "OrchardCore.Elasticsearch.Core.Deployment.ElasticsearchIndexResetDeploymentStep"
+msgid "Search"
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["Invalid index name: it must be lowercase, under 255 bytes, not start with -, _, or +, and must not contain , /, *, ?, \", <, >, |, space, ,, or #, nor be \".\" or \"..\"."]));
+#: OrchardCore.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:48
+msgctxt "OrchardCore.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "Invalid index name: it must be lowercase, under 255 bytes, not start with -, _, or +, and must not contain , /, *, ?, \", <, >, |, space, ,, or #, nor be \".\" or \"..\"."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["At least one mapping property is required."]));
+#: OrchardCore.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:56
+msgctxt "OrchardCore.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "At least one mapping property is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The '{0}' is required.", nameof(ElasticsearchIndexMap.KeyFieldName)]));
+#: OrchardCore.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:61
+msgctxt "OrchardCore.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "The '{0}' is required."
+msgstr ""
+
+#. options.AddIndexingProvider(ElasticsearchConstants.ProviderName, provider => provider.DisplayName = S["Elasticsearch"]));
+#: OrchardCore.Elasticsearch.Core\ServiceCollectionExtensions.cs:36
+msgctxt "OrchardCore.Elasticsearch.ServiceCollectionExtensions"
+msgid "Elasticsearch"
+msgstr ""
+
+#. return new HtmlString($"<option value=\"Elasticsearch\" selected=\"selected\">{S["Elasticsearch"]}</option>");
+#. return new HtmlString($"<option value=\"Elasticsearch\">{S["Elasticsearch"]}</option>");
+#: OrchardCore.Elasticsearch.Core\Shapes\ElasticContentPickerShapeProvider.cs:26
+#: OrchardCore.Elasticsearch.Core\Shapes\ElasticContentPickerShapeProvider.cs:29
+msgctxt "OrchardCore.Elasticsearch.ElasticContentPickerShapeProvider"
+msgid "Elasticsearch"
+msgstr ""
+

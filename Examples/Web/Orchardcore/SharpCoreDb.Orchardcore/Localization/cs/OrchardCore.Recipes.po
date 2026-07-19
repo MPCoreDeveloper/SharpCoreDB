@@ -10,21 +10,31 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Czech\n"
 "Language: cs_CZ\n"
-"PO-Revision-Date: 2024-11-10 14:51\n"
+"PO-Revision-Date: 2025-01-29 15:36\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Recipes\AdminMenu.cs:18
+#: OrchardCore.Recipes\AdminMenu.cs:20
 msgctxt "OrchardCore.Recipes.AdminMenu"
 msgid "Configuration"
 msgstr "Konfigurace"
 
 #. .Add(S["Recipes"], S["Recipes"].PrefixPosition(), recipes => recipes
 #. .Add(S["Recipes"], S["Recipes"].PrefixPosition(), recipes => recipes
-#: OrchardCore.Recipes\AdminMenu.cs:19
-#: OrchardCore.Recipes\AdminMenu.cs:19
+#. .Add(S["Recipes"], S["Recipes"].PrefixPosition(), recipes => recipes
+#. .Add(S["Recipes"], S["Recipes"].PrefixPosition(), recipes => recipes
+#: OrchardCore.Recipes\AdminMenu.cs:21
+#: OrchardCore.Recipes\AdminMenu.cs:21
+#: OrchardCore.Recipes\AdminMenu.cs:35
+#: OrchardCore.Recipes\AdminMenu.cs:35
 msgctxt "OrchardCore.Recipes.AdminMenu"
 msgid "Recipes"
 msgstr "Recepty"
+
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.Recipes\AdminMenu.cs:34
+msgctxt "OrchardCore.Recipes.AdminMenu"
+msgid "Tools"
+msgstr ""
 
 #. await Context.Output.WriteLineAsync(S["No recipes found."]);
 #: OrchardCore.Recipes\Commands\RecipesCommands.cs:27

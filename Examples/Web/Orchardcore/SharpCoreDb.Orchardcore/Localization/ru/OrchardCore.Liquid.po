@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Russian\n"
 "Language: ru_RU\n"
-"PO-Revision-Date: 2024-08-24 20:11\n"
+"PO-Revision-Date: 2026-06-03 19:34\n"
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Liquid), S["The Liquid Body doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
 #: OrchardCore.Liquid\Drivers\LiquidPartDisplayDriver.cs:48
@@ -18,20 +18,20 @@ msgctxt "OrchardCore.Liquid.Drivers.LiquidPartDisplayDriver"
 msgid "The Liquid Body doesn't contain a valid Liquid expression. Details: {0}"
 msgstr "Блок Liquid содержит некорректное выражение Liquid. Подробности: {0}"
 
-#. <label asp-for="Liquid" class="@Orchard.GetLabelClasses()">@T["Body"]</label>
-#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:15
+#. <label asp-for="Liquid" class="ocat-label">@T["Body"]</label>
+#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:14
 msgctxt "OrchardCore.Liquid.Views.LiquidPart.Edit"
 msgid "Body"
 msgstr "Тело"
 
 #. @T["The body of the content item, in Liquid format."]
-#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:19
+#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:18
 msgctxt "OrchardCore.Liquid.Views.LiquidPart.Edit"
 msgid "The body of the content item, in Liquid format."
 msgstr "Тело элемента содержимого, в формате Liquid."
 
 #. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Liquid" target="_blank">@T["See documentation"]</a>
-#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:20
+#: OrchardCore.Liquid\Views\LiquidPart.Edit.cshtml:19
 msgctxt "OrchardCore.Liquid.Views.LiquidPart.Edit"
 msgid "See documentation"
 msgstr "Смотреть документацию"

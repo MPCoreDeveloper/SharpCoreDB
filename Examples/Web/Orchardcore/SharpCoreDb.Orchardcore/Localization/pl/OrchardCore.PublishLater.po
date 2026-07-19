@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2023-12-22 16:31\n"
+"PO-Revision-Date: 2025-12-29 16:10\n"
 
 #. <button class="btn btn-outline-success text-nowrap btn-publish-later" type="submit" name="submit.Save" value="submit.PublishLater">@T["Publish Later"]</button>
 #: OrchardCore.PublishLater\Views\PublishLaterPart.Edit.cshtml:12
@@ -22,17 +22,17 @@ msgstr "Opublikuj później"
 #: OrchardCore.PublishLater\Views\PublishLaterPart.Edit.cshtml:19
 msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.Edit"
 msgid "Cancel Publish Later"
-msgstr ""
+msgstr "Anuluj Publikację Później"
 
 #. <option value="" selected="@string.IsNullOrEmpty(currentEditor)">@T["Standard"]</option>
 #: OrchardCore.PublishLater\Views\PublishLaterPart.Option.cshtml:4
 msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.Option"
 msgid "Standard"
-msgstr ""
+msgstr "Standardowy"
 
 #. <span class="hint">@T["Scheduled to be published on {0}", (object)(await DisplayAsync(await New.DateTime(Utc: Model.ScheduledPublishUtc)))]</span>
 #: OrchardCore.PublishLater\Views\PublishLaterPart.SummaryAdmin.cshtml:6
 msgctxt "OrchardCore.PublishLater.Views.PublishLaterPart.SummaryAdmin"
 msgid "Scheduled to be published on {0}"
-msgstr ""
+msgstr "Zaplanowano opublikowanie na {0}"
 

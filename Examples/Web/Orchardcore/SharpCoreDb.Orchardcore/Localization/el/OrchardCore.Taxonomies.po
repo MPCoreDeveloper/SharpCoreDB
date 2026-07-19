@@ -10,54 +10,60 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Greek\n"
 "Language: el_GR\n"
-"PO-Revision-Date: 2024-09-09 17:12\n"
+"PO-Revision-Date: 2026-06-03 19:55\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Taxonomies\AdminMenu.cs:26
+#: OrchardCore.Taxonomies\AdminMenu.cs:28
 msgctxt "OrchardCore.Taxonomies.AdminMenu"
 msgid "Configuration"
 msgstr "Παραμετροποίηση"
 
 #. .Add(S["Settings"], "1", settings => settings
-#: OrchardCore.Taxonomies\AdminMenu.cs:27
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Taxonomies\AdminMenu.cs:29
+#: OrchardCore.Taxonomies\AdminMenu.cs:44
 msgctxt "OrchardCore.Taxonomies.AdminMenu"
 msgid "Settings"
 msgstr "Ρυθμίσεις"
 
 #. .Add(S["Taxonomy Filters"], S["Taxonomy Filters"].PrefixPosition(), filters => filters
 #. .Add(S["Taxonomy Filters"], S["Taxonomy Filters"].PrefixPosition(), filters => filters
-#: OrchardCore.Taxonomies\AdminMenu.cs:28
-#: OrchardCore.Taxonomies\AdminMenu.cs:28
+#. .Add(S["Taxonomy Filters"], S["Taxonomy Filters"].PrefixPosition(), filters => filters
+#. .Add(S["Taxonomy Filters"], S["Taxonomy Filters"].PrefixPosition(), filters => filters
+#: OrchardCore.Taxonomies\AdminMenu.cs:30
+#: OrchardCore.Taxonomies\AdminMenu.cs:30
+#: OrchardCore.Taxonomies\AdminMenu.cs:45
+#: OrchardCore.Taxonomies\AdminMenu.cs:45
 msgctxt "OrchardCore.Taxonomies.AdminMenu"
 msgid "Taxonomy Filters"
 msgstr "Φίλτρα Ταξινομίας"
 
 #. await _notifier.SuccessAsync(H["Taxonomy item deleted successfully."]);
-#: OrchardCore.Taxonomies\Controllers\AdminController.cs:327
+#: OrchardCore.Taxonomies\Controllers\AdminController.cs:347
 msgctxt "OrchardCore.Taxonomies.Controllers.AdminController"
 msgid "Taxonomy item deleted successfully."
 msgstr "Το στοιχείο ταξινομίας διαγράφηκε με επιτυχία."
 
 #. Text = S["Clear filter"],
-#: OrchardCore.Taxonomies\Drivers\TaxonomyContentsAdminListDisplayDriver.cs:81
+#: OrchardCore.Taxonomies\Drivers\TaxonomyContentsAdminListDisplayDriver.cs:86
 msgctxt "OrchardCore.Taxonomies.Drivers.TaxonomyContentsAdminListDisplayDriver"
 msgid "Clear filter"
 msgstr "Καθαρισμός φίλτρου"
 
 #. Text = S["Show all"],
-#: OrchardCore.Taxonomies\Drivers\TaxonomyContentsAdminListDisplayDriver.cs:86
+#: OrchardCore.Taxonomies\Drivers\TaxonomyContentsAdminListDisplayDriver.cs:91
 msgctxt "OrchardCore.Taxonomies.Drivers.TaxonomyContentsAdminListDisplayDriver"
 msgid "Show all"
 msgstr "Εμφάνιση όλων"
 
 #. S["A value is required for {0}.", context.PartFieldDefinition.DisplayName()]);
-#: OrchardCore.Taxonomies\Drivers\TaxonomyFieldDisplayDriver.cs:81
+#: OrchardCore.Taxonomies\Drivers\TaxonomyFieldDisplayDriver.cs:99
 msgctxt "OrchardCore.Taxonomies.Drivers.TaxonomyFieldDisplayDriver"
 msgid "A value is required for {0}."
 msgstr ""
 
 #. S["A value is required for {0}.", context.PartFieldDefinition.DisplayName()]);
-#: OrchardCore.Taxonomies\Drivers\TaxonomyFieldTagsDisplayDriver.cs:86
+#: OrchardCore.Taxonomies\Drivers\TaxonomyFieldTagsDisplayDriver.cs:104
 msgctxt "OrchardCore.Taxonomies.Drivers.TaxonomyFieldTagsDisplayDriver"
 msgid "A value is required for {0}."
 msgstr ""
@@ -68,6 +74,36 @@ msgctxt "OrchardCore.Taxonomies.Drivers.TaxonomyPartDisplayDriver"
 msgid "The Term Content Type field is required."
 msgstr ""
 
+#. .Description(S["term content item ids"])
+#: OrchardCore.Taxonomies\GraphQL\TaxonomyFieldQueryObjectType.cs:19
+msgctxt "OrchardCore.Taxonomies.GraphQL.TaxonomyFieldQueryObjectType"
+msgid "term content item ids"
+msgstr ""
+
+#. .Description(S["taxonomy content item id"])
+#: OrchardCore.Taxonomies\GraphQL\TaxonomyFieldQueryObjectType.cs:27
+msgctxt "OrchardCore.Taxonomies.GraphQL.TaxonomyFieldQueryObjectType"
+msgid "taxonomy content item id"
+msgstr ""
+
+#. .Description(S["the term content items"])
+#: OrchardCore.Taxonomies\GraphQL\TaxonomyFieldQueryObjectType.cs:34
+msgctxt "OrchardCore.Taxonomies.GraphQL.TaxonomyFieldQueryObjectType"
+msgid "the term content items"
+msgstr ""
+
+#. .Description(S["the taxonomy content item"])
+#: OrchardCore.Taxonomies\GraphQL\TaxonomyFieldQueryObjectType.cs:63
+msgctxt "OrchardCore.Taxonomies.GraphQL.TaxonomyFieldQueryObjectType"
+msgid "the taxonomy content item"
+msgstr ""
+
+#. .Description(S["the content items"])
+#: OrchardCore.Taxonomies\GraphQL\TaxonomyPartQueryObjectType.cs:19
+msgctxt "OrchardCore.Taxonomies.GraphQL.TaxonomyPartQueryObjectType"
+msgid "the content items"
+msgstr ""
+
 #. context.Fail(S["A value is required for '{0}'", context.ContentPartFieldDefinition.DisplayName()], nameof(field.TermContentItemIds));
 #: OrchardCore.Taxonomies\Handlers\TaxonomyFieldHandler.cs:24
 msgctxt "OrchardCore.Taxonomies.Handlers.TaxonomyFieldHandler"
@@ -75,13 +111,13 @@ msgid "A value is required for '{0}'"
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<TaxonomyContentsAdminListSettings, ContentsAdminListDeploymentStartup>(S => S["Taxonomy Filters settings"], S => S["Exports the Taxonomy filters settings."]);
-#: OrchardCore.Taxonomies\Startup.cs:98
+#: OrchardCore.Taxonomies\Startup.cs:101
 msgctxt "OrchardCore.Taxonomies.ContentsAdminListDeploymentStartup"
 msgid "Taxonomy Filters settings"
 msgstr "Ρυθμίσεις Φίλτρων Ταξινομίας"
 
 #. services.AddSiteSettingsPropertyDeploymentStep<TaxonomyContentsAdminListSettings, ContentsAdminListDeploymentStartup>(S => S["Taxonomy Filters settings"], S => S["Exports the Taxonomy filters settings."]);
-#: OrchardCore.Taxonomies\Startup.cs:98
+#: OrchardCore.Taxonomies\Startup.cs:101
 msgctxt "OrchardCore.Taxonomies.ContentsAdminListDeploymentStartup"
 msgid "Exports the Taxonomy filters settings."
 msgstr "Εξάγει τις ρυθμίσεις φίλτρων Ταξινομίας."
@@ -116,32 +152,26 @@ msgctxt "OrchardCore.Taxonomies.Views.ContentsAdminListTaxonomyFilter"
 msgid "{0}"
 msgstr ""
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["New {0}", typeDisplayName])</h1></zone>
-#: OrchardCore.Taxonomies\Views\Admin\Create.cshtml:13
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["New {0}", localizedTypeDisplayName])</h1></zone>
+#: OrchardCore.Taxonomies\Views\Admin\Create.cshtml:16
 msgctxt "OrchardCore.Taxonomies.Views.Admin.Create"
 msgid "New {0}"
 msgstr "Νέο {0}"
 
-#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit {0}", typeDisplayName])</h1></zone>
-#: OrchardCore.Taxonomies\Views\Admin\Edit.cshtml:13
+#. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit {0}", localizedTypeDisplayName])</h1></zone>
+#: OrchardCore.Taxonomies\Views\Admin\Edit.cshtml:16
 msgctxt "OrchardCore.Taxonomies.Views.Admin.Edit"
 msgid "Edit {0}"
 msgstr "Επεξεργασία {0}"
 
-#. <span class="icon"><i class="fa-solid fa-tags" aria-hidden="true"></i></span><span class="title">@T["Taxonomy Filters"]</span>
-#: OrchardCore.Taxonomies\Views\NavigationItemText-taxonomyfilters.Id.cshtml:1
-msgctxt "OrchardCore.Taxonomies.Views.NavigationItemText-taxonomyfilters.Id"
-msgid "Taxonomy Filters"
-msgstr "Φίλτρα Ταξινομίας"
-
-#. <label asp-for="TaxonomyEntries" class="form-label">@T["Taxonomies"]</label>
+#. <label asp-for="TaxonomyEntries" class="ocat-label">@T["Taxonomies"]</label>
 #: OrchardCore.Taxonomies\Views\TaxonomyContentsAdminListSettings.Edit.cshtml:4
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyContentsAdminListSettings.Edit"
 msgid "Taxonomies"
 msgstr "Ταξινομίες"
 
 #. <span class="hint dashed">@T["The taxonomies to filters in the contents list."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyContentsAdminListSettings.Edit.cshtml:5
+#: OrchardCore.Taxonomies\Views\TaxonomyContentsAdminListSettings.Edit.cshtml:6
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyContentsAdminListSettings.Edit"
 msgid "The taxonomies to filters in the contents list."
 msgstr "Οι ταξινομίες για τα φίλτρα στη λίστα περιεχομένων."
@@ -153,45 +183,45 @@ msgid "Tags"
 msgstr "Ετικέτες"
 
 #. @T["The taxonomy could not be found. Please check the settings for this field."]
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:41
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:44
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "The taxonomy could not be found. Please check the settings for this field."
 msgstr "Δεν ήταν δυνατή η εύρεση της ταξινομίας. Ελέγξτε τις ρυθμίσεις για αυτό το πεδίο."
 
 #. <div id="@vueElementId" class="tags" data-taxonomy-content-item-id="@Model.Taxonomy.ContentItemId" data-open="@open.ToString().ToLower()" data-leaves-only="@taxonomySettings.LeavesOnly.ToString().ToLower()" data-create-tag-error-message="@T["Error creating tag"]" data-all-tag-terms="@Model.TagTermEntries" data-create-tag-url="@createTagUrl">
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:46
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:49
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "Error creating tag"
 msgstr "Σφάλμα κατά τη δημιουργία ετικέτας"
 
-#. placeholder="@T["Type to search"]"
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:52
+#. placeholder="@(string.IsNullOrEmpty(taxonomySettings.Placeholder) ? T["Type to search"] : taxonomySettings.Placeholder)"
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:55
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "Type to search"
 msgstr "Πληκτρολογήστε για αναζήτηση"
 
 #. select-label="@T["Select"]"
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:53
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:56
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "Select"
 msgstr "Επιλογή"
 
 #. deselect-label="@T["Remove"]"
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:54
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:57
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "Remove"
 msgstr "Αφαίρεση"
 
 #. tag-placeholder="@T["Press enter to create a tag"]"
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:66
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:69
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "Press enter to create a tag"
 msgstr "Πατήστε enter για να δημιουργήσετε μια ετικέτα"
 
 #. @T["No tags found"]
 #. @T["No tags found"]
-#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:69
 #: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:72
+#: OrchardCore.Taxonomies\Views\TaxonomyField-Tags.Edit.cshtml:75
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField-Tags.Edit"
 msgid "No tags found"
 msgstr "Δεν βρέθηκαν ετικέτες"
@@ -209,7 +239,7 @@ msgid "Standard"
 msgstr "Καθιερωμένο"
 
 #. @T["The taxonomy could not be found. Please check the settings for this field."]
-#: OrchardCore.Taxonomies\Views\TaxonomyField.Edit.cshtml:24
+#: OrchardCore.Taxonomies\Views\TaxonomyField.Edit.cshtml:27
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField.Edit"
 msgid "The taxonomy could not be found. Please check the settings for this field."
 msgstr "Δεν βρέθηκε ταξινομία. Ελέγξτε τις ρυθμίσεις για αυτό το πεδίο."
@@ -220,98 +250,110 @@ msgctxt "OrchardCore.Taxonomies.Views.TaxonomyField.Option"
 msgid "Standard"
 msgstr "Καθιερωμένο"
 
-#. <label asp-for="Hint" class="form-label">@T["Hint"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:15
+#. <label asp-for="Placeholder" class="ocat-label">@T["Placeholder"]</label>
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:14
+msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
+msgid "Placeholder"
+msgstr ""
+
+#. <span class="hint">@T["The placeholder text to display for this field on the editor."]</span>
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:17
+msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
+msgid "The placeholder text to display for this field on the editor."
+msgstr ""
+
+#. <label asp-for="Hint" class="ocat-label">@T["Hint"]</label>
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:22
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Hint"
 msgstr "Υπόδειξη"
 
 #. <span class="hint">@T["The hint text to display for this field on the editor."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:18
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:25
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "The hint text to display for this field on the editor."
 msgstr "Το κείμενο υπόδειξης που θα εμφανιστεί για αυτό το πεδίο στον επεξεργαστή κειμένου."
 
-#. <label asp-for="TaxonomyContentItemId" class="form-label">@T["Taxonomy"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:23
+#. <label asp-for="TaxonomyContentItemId" class="ocat-label">@T["Taxonomy"]</label>
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:30
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Taxonomy"
 msgstr "Ταξινομία"
 
 #. <option value="">@T["Select a Taxonomy"]</option>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:25
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:33
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Select a Taxonomy"
 msgstr ""
 
 #. <label class="form-check-label" asp-for="Required">@T["Required"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:37
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:46
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Required"
 msgstr "Απαιτείται"
 
 #. <span class="hint dashed">@T["Whether at least one element is selected."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:38
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:47
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Whether at least one element is selected."
 msgstr "Εάν έχει επιλεγεί τουλάχιστον ένα στοιχείο."
 
 #. <label class="form-check-label" asp-for="Unique">@T["Unique"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:45
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:56
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Unique"
 msgstr "Μοναδικό"
 
 #. <span class="hint dashed">@T["Whether only one element can be selected."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:46
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:57
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Whether only one element can be selected."
 msgstr "Εάν μπορεί να επιλεγεί μόνο ένα στοιχείο."
 
 #. <label class="form-check-label" asp-for="LeavesOnly">@T["Leaves only"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:53
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:66
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Leaves only"
 msgstr "Μόνο Φύλλα"
 
 #. <span class="hint dashed">@T["Whether leaves are the only items that can be selected."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:54
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldSettings.Edit.cshtml:67
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldSettings.Edit"
 msgid "Whether leaves are the only items that can be selected."
 msgstr "Εάν τα φύλλα είναι τα μόνα στοιχεία που μπορούν να επιλεγούν."
 
 #. <label class="form-check-label" asp-for="Open">@T["Open"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldTagsEditorSettings.Edit.cshtml:6
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldTagsEditorSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldTagsEditorSettings.Edit"
 msgid "Open"
 msgstr "Άνοιγμα"
 
 #. <span class="hint dashed">@T["Whether new tags can be created inline. Note: When creating tags inline only the display text term property will be set."]</span>
-#: OrchardCore.Taxonomies\Views\TaxonomyFieldTagsEditorSettings.Edit.cshtml:7
+#: OrchardCore.Taxonomies\Views\TaxonomyFieldTagsEditorSettings.Edit.cshtml:8
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyFieldTagsEditorSettings.Edit"
 msgid "Whether new tags can be created inline. Note: When creating tags inline only the display text term property will be set."
 msgstr "Εάν μπορούν να δημιουργηθούν νέες ετικέτες inline. Σημείωση: Κατά τη δημιουργία ενσωματωμένων ετικετών θα οριστεί μόνο η ιδιότητα όρου κειμένου εμφάνισης."
 
-#. <label asp-for="TermContentType" class="@Orchard.GetLabelClasses()">@T["Term Content Type"]</label>
-#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:25
+#. <label asp-for="TermContentType" class="ocat-label">@T["Term Content Type"]</label>
+#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:26
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyPart.Edit"
 msgid "Term Content Type"
 msgstr "Όρος Τύπος Περιεχόμενου"
 
 #. <option value="">@T["Select a term content type"]</option>
-#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:28
+#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:29
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyPart.Edit"
 msgid "Select a term content type"
 msgstr ""
 
-#. @T["Add {0}", termContentType.DisplayName]
-#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:47
+#. @T["Add {0}", D[termContentType.DisplayName, "Content Types"]]
+#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:48
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyPart.Edit"
 msgid "Add {0}"
 msgstr "Προσθήκη {0}"
 
 #. <div id="msg-leave" style="display:none" data>@T["You have reordered the taxonomy."]</div>
-#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:63
+#: OrchardCore.Taxonomies\Views\TaxonomyPart.Edit.cshtml:69
 msgctxt "OrchardCore.Taxonomies.Views.TaxonomyPart.Edit"
 msgid "You have reordered the taxonomy."
 msgstr "Έχετε αναδιατάξει την ταξινομία."

@@ -10,19 +10,19 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Italian\n"
 "Language: it_IT\n"
-"PO-Revision-Date: 2024-11-12 14:58\n"
+"PO-Revision-Date: 2026-06-03 19:23\n"
 
-#. return EmailResult.FailedResult(S["Email settings must be configured before an Email message can be sent."]);
-#: OrchardCore.Email.Core\Services\DefaultEmailService.cs:35
-msgctxt "OrchardCore.Email.Core.Services.DefaultEmailService"
+#. return Result.Failed(S["Email settings must be configured before an Email message can be sent."]);
+#: OrchardCore.Email.Core\Services\DefaultEmailService.cs:43
+msgctxt "OrchardCore.Email.Services.DefaultEmailService"
 msgid "Email settings must be configured before an Email message can be sent."
-msgstr "Le impostazioni email devono essere configurate prima che un messaggio email possa essere inviato."
+msgstr ""
 
 #. .Select(address => S["Invalid email address for the sender: '{0}'.", address]);
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:22
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "Invalid email address for the sender: '{0}'."
-msgstr "Indirizzo email non valido per il mittente: {0}."
+msgstr ""
 
 #. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
 #. .Select(address => S["Invalid email address for the recipient: '{0}'.", address]);
@@ -32,13 +32,13 @@ msgstr "Indirizzo email non valido per il mittente: {0}."
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:36
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:42
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:48
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "Invalid email address for the recipient: '{0}'."
-msgstr "Indirizzo email non valido per il destinatario: '{0}'."
+msgstr ""
 
 #. AddError(context, string.Empty, [S["The mail message should have at least one of these headers: To, Cc or Bcc."]]);
 #: OrchardCore.Email.Core\Services\EmailMessageValidator.cs:54
-msgctxt "OrchardCore.Email.Core.Services.EmailMessageValidator"
+msgctxt "OrchardCore.Email.Services.EmailMessageValidator"
 msgid "The mail message should have at least one of these headers: To, Cc or Bcc."
-msgstr "Il messaggio mail deve avere almeno una delle seguenti intestazioni: A, Cc o Bcc."
+msgstr ""
 

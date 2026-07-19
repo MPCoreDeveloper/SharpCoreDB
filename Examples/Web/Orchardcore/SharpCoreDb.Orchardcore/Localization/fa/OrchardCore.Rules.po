@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Persian\n"
 "Language: fa_IR\n"
-"PO-Revision-Date: 2024-08-24 20:38\n"
+"PO-Revision-Date: 2026-06-03 19:48\n"
 
 #. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Script), S["Please provide a script."]);
 #. await _notifier.ErrorAsync(H["Please provide a script."]);
@@ -93,13 +93,13 @@ msgid "Does not contain"
 msgstr "شامل نمی‌شود"
 
 #. <h5>@T["All"]</h5>
-#: OrchardCore.Rules\Views\Items\AllCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\AllCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.AllCondition.Fields.Edit"
 msgid "All"
 msgstr "همه"
 
-#. <label asp-for="DisplayText" class="form-label">@T["Name"]</label>
-#: OrchardCore.Rules\Views\Items\AllCondition.Fields.Edit.cshtml:6
+#. <label asp-for="DisplayText" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.Rules\Views\Items\AllCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.AllCondition.Fields.Edit"
 msgid "Name"
 msgstr "نام"
@@ -123,13 +123,13 @@ msgid "An all condition group contains other conditions which are all required t
 msgstr "یک گروه همه شرط ها شامل شرایط دیگری است که همه آنها باید درست باشند."
 
 #. <h5>@T["Any"]</h5>
-#: OrchardCore.Rules\Views\Items\AnyCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\AnyCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.AnyCondition.Fields.Edit"
 msgid "Any"
 msgstr "هر"
 
-#. <label asp-for="DisplayText" class="form-label">@T["Name"]</label>
-#: OrchardCore.Rules\Views\Items\AnyCondition.Fields.Edit.cshtml:6
+#. <label asp-for="DisplayText" class="ocat-label">@T["Name"]</label>
+#: OrchardCore.Rules\Views\Items\AnyCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.AnyCondition.Fields.Edit"
 msgid "Name"
 msgstr "نام"
@@ -153,19 +153,19 @@ msgid "An any condition group contains other conditions but only requires any co
 msgstr "هر گروه شرطی شامل شرایط دیگری است اما فقط مستلزم درست بودن هر شرطی است."
 
 #. <h5>@T["Boolean"]</h5>
-#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.BooleanCondition.Fields.Edit"
 msgid "Boolean"
 msgstr "مقدار بولین"
 
 #. @T["True"]
-#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:9
+#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.BooleanCondition.Fields.Edit"
 msgid "True"
 msgstr "صحیح"
 
 #. @T["False"]
-#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:15
+#: OrchardCore.Rules\Views\Items\BooleanCondition.Fields.Edit.cshtml:20
 msgctxt "OrchardCore.Rules.Views.Items.BooleanCondition.Fields.Edit"
 msgid "False"
 msgstr "نادرست"
@@ -213,7 +213,7 @@ msgid "Add"
 msgstr "افزودن"
 
 #. <p class="alert alert-warning message-warning mb-0 ms-0 mt-3 me-3">@T["No conditions found. Please add at least one condition."]</p>
-#: OrchardCore.Rules\Views\Items\ConditionGroup.Fields.Summary.cshtml:6
+#: OrchardCore.Rules\Views\Items\ConditionGroup.Fields.Summary.cshtml:7
 msgctxt "OrchardCore.Rules.Views.Items.ConditionGroup.Fields.Summary"
 msgid "No conditions found. Please add at least one condition."
 msgstr "هیچ شرایطی پیدا نشد لطفا حداقل یک شرط اضافه کنید."
@@ -239,31 +239,31 @@ msgid "Cancel"
 msgstr "انصراف"
 
 #. <h5>@T["Content type"]</h5>
-#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.ContentTypeCondition.Fields.Edit"
 msgid "Content type"
 msgstr "نوع محتوا"
 
-#. <label asp-for="SelectedOperation" class="form-label">@T["Operation"]</label>
-#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:7
+#. <label asp-for="SelectedOperation" class="ocat-label">@T["Operation"]</label>
+#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.ContentTypeCondition.Fields.Edit"
 msgid "Operation"
 msgstr "عملیات"
 
 #. <span class="hint">@T["Select the rule operator."]</span>
-#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:11
+#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.ContentTypeCondition.Fields.Edit"
 msgid "Select the rule operator."
 msgstr "عملگر قانون را انتخاب کنید."
 
-#. <label asp-for="Value" class="form-label">@T["Value"]</label>
-#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:16
+#. <label asp-for="Value" class="ocat-label">@T["Value"]</label>
+#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:19
 msgctxt "OrchardCore.Rules.Views.Items.ContentTypeCondition.Fields.Edit"
 msgid "Value"
 msgstr "مقدار"
 
 #. <span class="hint">@T["The value for the operation."]</span>
-#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:20
+#: OrchardCore.Rules\Views\Items\ContentTypeCondition.Fields.Edit.cshtml:23
 msgctxt "OrchardCore.Rules.Views.Items.ContentTypeCondition.Fields.Edit"
 msgid "The value for the operation."
 msgstr "مقدار برای عملیات."
@@ -287,31 +287,31 @@ msgid "A content type condition evaluates the currently displayed content types 
 msgstr "یک شرط نوع محتوا، انواع محتوای نمایش داده شده فعلی را با یک مقدار ارزیابی می کند."
 
 #. <h5>@T["Culture"]</h5>
-#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.CultureCondition.Fields.Edit"
 msgid "Culture"
 msgstr "فرهنگ"
 
-#. <label asp-for="SelectedOperation" class="form-label">@T["Operation"]</label>
-#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:7
+#. <label asp-for="SelectedOperation" class="ocat-label">@T["Operation"]</label>
+#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.CultureCondition.Fields.Edit"
 msgid "Operation"
 msgstr "عملیات"
 
 #. <span class="hint">@T["Select the condition operator."]</span>
-#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:11
+#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.CultureCondition.Fields.Edit"
 msgid "Select the condition operator."
 msgstr "عملگر قانون را انتخاب کنید."
 
-#. <label asp-for="Value" class="form-label">@T["Value"]</label>
-#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:16
+#. <label asp-for="Value" class="ocat-label">@T["Value"]</label>
+#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:19
 msgctxt "OrchardCore.Rules.Views.Items.CultureCondition.Fields.Edit"
 msgid "Value"
 msgstr "مقدار"
 
 #. <span class="hint">@T["The value for the operation."]</span>
-#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:20
+#: OrchardCore.Rules\Views\Items\CultureCondition.Fields.Edit.cshtml:23
 msgctxt "OrchardCore.Rules.Views.Items.CultureCondition.Fields.Edit"
 msgid "The value for the operation."
 msgstr "مقدار برای عملیات."
@@ -335,19 +335,19 @@ msgid "A culture condition evaluates the current ui culture against a value."
 msgstr "یک شرط فرهنگ، فرهنگ رابط کاربری فعلی را در برابر یک مقدار ارزیابی می کند."
 
 #. <h5>@T["Homepage"]</h5>
-#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.HomepageCondition.Fields.Edit"
 msgid "Homepage"
 msgstr "صفحهٔ نخست"
 
 #. @T["Is homepage"]
-#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:9
+#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.HomepageCondition.Fields.Edit"
 msgid "Is homepage"
 msgstr "صفحه اصلی است"
 
 #. @T["Is not homepage"]
-#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:15
+#: OrchardCore.Rules\Views\Items\HomepageCondition.Fields.Edit.cshtml:20
 msgctxt "OrchardCore.Rules.Views.Items.HomepageCondition.Fields.Edit"
 msgid "Is not homepage"
 msgstr "صفحه اصلی نیست"
@@ -425,19 +425,19 @@ msgid "Whether the current user is authenticated."
 msgstr "اینکه آیا کاربر فعلی احراز هویت شده است یا خیر."
 
 #. <h5>@T["Javascript"]</h5>
-#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.JavascriptCondition.Fields.Edit"
 msgid "Javascript"
 msgstr "جاوا اسکریپت"
 
-#. <label asp-for="Script" class="form-label">@T["Script"]</label>
-#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:14
+#. <label asp-for="Script" class="ocat-label">@T["Script"]</label>
+#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:17
 msgctxt "OrchardCore.Rules.Views.Items.JavascriptCondition.Fields.Edit"
 msgid "Script"
 msgstr "اسکریپت"
 
 #. <span class="hint">@T["The script must return true or false."]</span>
-#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:16
+#: OrchardCore.Rules\Views\Items\JavascriptCondition.Fields.Edit.cshtml:20
 msgctxt "OrchardCore.Rules.Views.Items.JavascriptCondition.Fields.Edit"
 msgid "The script must return true or false."
 msgstr "اسکریپت باید true یا false را برگرداند."
@@ -461,31 +461,31 @@ msgid "A script condition written in javascript."
 msgstr "یک شرط اسکریپت که با جاوا اسکریپت نوشته شده است."
 
 #. <h5>@T["Role"]</h5>
-#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.RoleCondition.Fields.Edit"
 msgid "Role"
 msgstr "نقش"
 
-#. <label asp-for="SelectedOperation" class="form-label">@T["Operation"]</label>
-#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:7
+#. <label asp-for="SelectedOperation" class="ocat-label">@T["Operation"]</label>
+#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.RoleCondition.Fields.Edit"
 msgid "Operation"
 msgstr "عملیات"
 
 #. <span class="hint">@T["Select the condition operator."]</span>
-#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:11
+#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.RoleCondition.Fields.Edit"
 msgid "Select the condition operator."
 msgstr "عملگر قانون را انتخاب کنید."
 
-#. <label asp-for="Value" class="form-label">@T["Value"]</label>
-#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:16
+#. <label asp-for="Value" class="ocat-label">@T["Value"]</label>
+#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:19
 msgctxt "OrchardCore.Rules.Views.Items.RoleCondition.Fields.Edit"
 msgid "Value"
 msgstr "مقدار"
 
 #. <span class="hint">@T["The value for the operation."]</span>
-#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:20
+#: OrchardCore.Rules\Views\Items\RoleCondition.Fields.Edit.cshtml:23
 msgctxt "OrchardCore.Rules.Views.Items.RoleCondition.Fields.Edit"
 msgid "The value for the operation."
 msgstr "مقدار برای عملیات."
@@ -515,37 +515,37 @@ msgid "Rules"
 msgstr "قوانین"
 
 #. @T["Add"]
-#: OrchardCore.Rules\Views\Rule.Summary.cshtml:10
+#: OrchardCore.Rules\Views\Rule.Summary.cshtml:12
 msgctxt "OrchardCore.Rules.Views.Rule.Summary"
 msgid "Add"
 msgstr "افزودن"
 
 #. <h5>@T["Url"]</h5>
-#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:3
+#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:5
 msgctxt "OrchardCore.Rules.Views.Items.UrlCondition.Fields.Edit"
 msgid "Url"
 msgstr "آدرس"
 
-#. <label asp-for="SelectedOperation" class="form-label">@T["Operation"]</label>
-#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:7
+#. <label asp-for="SelectedOperation" class="ocat-label">@T["Operation"]</label>
+#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:10
 msgctxt "OrchardCore.Rules.Views.Items.UrlCondition.Fields.Edit"
 msgid "Operation"
 msgstr "عملیات"
 
 #. <span class="hint">@T["Select the condition operator."]</span>
-#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:11
+#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:14
 msgctxt "OrchardCore.Rules.Views.Items.UrlCondition.Fields.Edit"
 msgid "Select the condition operator."
 msgstr "عملگر شرط را انتخاب کنید."
 
-#. <label asp-for="Value" class="form-label">@T["Value"]</label>
-#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:16
+#. <label asp-for="Value" class="ocat-label">@T["Value"]</label>
+#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:19
 msgctxt "OrchardCore.Rules.Views.Items.UrlCondition.Fields.Edit"
 msgid "Value"
 msgstr "مقدار"
 
 #. <span class="hint">@T["The value for the operation."]</span>
-#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:20
+#: OrchardCore.Rules\Views\Items\UrlCondition.Fields.Edit.cshtml:23
 msgctxt "OrchardCore.Rules.Views.Items.UrlCondition.Fields.Edit"
 msgid "The value for the operation."
 msgstr "مقدار برای عملیات."

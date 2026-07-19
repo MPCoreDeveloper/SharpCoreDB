@@ -10,17 +10,17 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Polish\n"
 "Language: pl_PL\n"
-"PO-Revision-Date: 2024-08-24 20:35\n"
+"PO-Revision-Date: 2025-12-27 20:04\n"
 
 #. context.ModelState.AddModelError("ReCaptcha", S["Failed to validate captcha"]);
-#: OrchardCore.ReCaptcha.Core\ActionFilters\ValidateReCaptchaAttribute.cs:44
+#: OrchardCore.ReCaptcha.Core\ActionFilters\ValidateReCaptchaAttribute.cs:20
 msgctxt "OrchardCore.ReCaptcha.ActionFilters.ValidateReCaptchaAttribute"
 msgid "Failed to validate captcha"
 msgstr "Nie udało się zweryfikować captcha"
 
 #. reportError("ReCaptcha", S["Failed to validate ReCaptcha"]);
-#: OrchardCore.ReCaptcha.Core\Services\ReCaptchaService.cs:102
+#: OrchardCore.ReCaptcha.Core\Services\ReCaptchaService.cs:77
 msgctxt "OrchardCore.ReCaptcha.Services.ReCaptchaService"
 msgid "Failed to validate ReCaptcha"
-msgstr ""
+msgstr "Nie udało się zweryfikować ReCaptcha"
 

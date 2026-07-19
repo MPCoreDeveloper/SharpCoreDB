@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Arabic\n"
 "Language: ar_SA\n"
-"PO-Revision-Date: 2024-08-24 20:42\n"
+"PO-Revision-Date: 2026-06-03 20:02\n"
 
 #. [new StereotypeDescription { Stereotype = "Widget", DisplayName = S["Widget"] }]);
 #: OrchardCore.Widgets\Services\WidgetStereotypesProvider.cs:18
@@ -19,37 +19,37 @@ msgid "Widget"
 msgstr ""
 
 #. <button type="button" title="@T["Insert Widget"]" class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:24
+#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:28
 msgctxt "OrchardCore.Widgets.Views.ContentCard-WidgetsListPart.Edit"
 msgid "Insert Widget"
 msgstr "إدراج مربع جانبي"
 
 #. <button type="button" class="btn btn-danger widget-list-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:53
+#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:57
 msgctxt "OrchardCore.Widgets.Views.ContentCard-WidgetsListPart.Edit"
 msgid "Delete"
 msgstr "حذف"
 
 #. <button type="button" class="btn btn-danger widget-list-delete" data-title="@T["Delete"]" data-message="@T["Are you sure you want to remove this item?"]"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:53
+#: OrchardCore.Widgets\Views\ContentCard-WidgetsListPart.Edit.cshtml:57
 msgctxt "OrchardCore.Widgets.Views.ContentCard-WidgetsListPart.Edit"
 msgid "Are you sure you want to remove this item?"
 msgstr "هل أنت متأكد من حذف هذا العنصر؟"
 
 #. <span data-content-type-display-text="@contentTypeDisplayText" class="widget-editor-header-text">@T["{0} {1}", contentItemDisplayText, contentTypeDisplayText]</span>
-#: OrchardCore.Widgets\Views\ContentCard.Preview.cshtml:16
+#: OrchardCore.Widgets\Views\ContentCard.Preview.cshtml:19
 msgctxt "OrchardCore.Widgets.Views.ContentCard.Preview"
 msgid "{0} {1}"
 msgstr ""
 
 #. <span>@T["Actions"]</span>
-#: OrchardCore.Widgets\Views\Widget.SummaryAdmin.cshtml:60
+#: OrchardCore.Widgets\Views\Widget.SummaryAdmin.cshtml:56
 msgctxt "OrchardCore.Widgets.Views.Widget.SummaryAdmin"
 msgid "Actions"
 msgstr "الإجراءت"
 
 #. <button type="button" title="@T["Add Widget"]" class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-#: OrchardCore.Widgets\Views\WidgetsListPart.Edit.cshtml:134
+#: OrchardCore.Widgets\Views\WidgetsListPart.Edit.cshtml:138
 msgctxt "OrchardCore.Widgets.Views.WidgetsListPart.Edit"
 msgid "Add Widget"
 msgstr "اضافة ودجت"
@@ -60,14 +60,14 @@ msgctxt "OrchardCore.Widgets.Views.WidgetsListPart.Option"
 msgid "Standard"
 msgstr "قياسي"
 
-#. <label asp-for="Zones" class="form-label">@T["Available widgets zones"]</label>
+#. <label asp-for="Zones" class="ocat-label">@T["Available widgets zones"]</label>
 #: OrchardCore.Widgets\Views\WidgetsPartSettings.Edit.cshtml:4
 msgctxt "OrchardCore.Widgets.Views.WidgetsPartSettings.Edit"
 msgid "Available widgets zones"
 msgstr "مناطق الودجت المتاحة"
 
 #. <span class="hint">@T["A comma separated list of values, representing the available zones for widgets."]</span>
-#: OrchardCore.Widgets\Views\WidgetsPartSettings.Edit.cshtml:7
+#: OrchardCore.Widgets\Views\WidgetsPartSettings.Edit.cshtml:8
 msgctxt "OrchardCore.Widgets.Views.WidgetsPartSettings.Edit"
 msgid "A comma separated list of values, representing the available zones for widgets."
 msgstr "قائمة قيم مفصولة بفواصل, تعبر عن المناطق المتاحة للودجت."

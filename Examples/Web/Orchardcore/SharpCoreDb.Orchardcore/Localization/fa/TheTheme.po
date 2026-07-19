@@ -10,13 +10,39 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Persian\n"
 "Language: fa_IR\n"
-"PO-Revision-Date: 2024-11-10 15:02\n"
+"PO-Revision-Date: 2025-01-29 15:50\n"
 
 #. <h4>@T["Welcome to Orchard Core, your site has been successfully set up."]</h4>
 #: TheTheme\Views\Home\Index.cshtml:2
 msgctxt "TheTheme.Views.Home.Index"
 msgid "Welcome to Orchard Core, your site has been successfully set up."
 msgstr "به Orchard Core خوش آمدید، سایت شما با موفقیت راه‌اندازی شد."
+
+#: TheTheme\Views\Pager_First.cshtml:0
+msgctxt "TheTheme.Views.Pager_First"
+msgid "Go to first page."
+msgstr ""
+
+#: TheTheme\Views\Pager_Last.cshtml:0
+msgctxt "TheTheme.Views.Pager_Last"
+msgid "Go to last page."
+msgstr ""
+
+#: TheTheme\Views\Pager_Next.cshtml:0
+msgctxt "TheTheme.Views.Pager_Next"
+msgid "Go to next page."
+msgstr ""
+
+#: TheTheme\Views\Pager_Previous.cshtml:0
+msgctxt "TheTheme.Views.Pager_Previous"
+msgid "Go to previous page."
+msgstr ""
+
+#. <nav aria-label="@T["Listing pages"]">
+#: TheTheme\Views\Pager.cshtml:6
+msgctxt "TheTheme.Views.Pager"
+msgid "Listing pages"
+msgstr ""
 
 #. <a role="button" class="nav-link dropdown-toggle" id="bd-theme" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
 #. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
@@ -63,19 +89,19 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. <i class="fa-regular fa-bell" aria-hidden="true" data-bs-toggle="tooltip" data-bs-original-title="@T["You have no unread notifications"]"></i>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:34
+#: TheTheme\Views\UserNotificationNavbar.cshtml:36
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications"
 msgstr ""
 
 #. <li class="text-center">@T["You have no unread notifications."]</li>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:55
+#: TheTheme\Views\UserNotificationNavbar.cshtml:57
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications."
 msgstr ""
 
 #. <a class="dropdown-item fw-bold" asp-action="List" asp-controller="Admin" asp-area="@NotificationConstants.Features.Notifications">@T["Notification Center"]</a>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:65
+#: TheTheme\Views\UserNotificationNavbar.cshtml:67
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "Notification Center"
 msgstr ""

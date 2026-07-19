@@ -1,0 +1,56 @@
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Crowdin-Project: orchard-core\n"
+"X-Crowdin-Project-ID: 307044\n"
+"X-Crowdin-Language: fr\n"
+"X-Crowdin-File: /main/Localization/OrchardCore.AzureAI.Core.pot\n"
+"X-Crowdin-File-ID: 972\n"
+"Project-Id-Version: orchard-core\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language-Team: French\n"
+"Language: fr_FR\n"
+"PO-Revision-Date: 2026-06-03 20:24\n"
+
+#. Category = S["Search"];
+#: OrchardCore.AzureAI.Core\Deployment\AzureAISearchIndexDeploymentStep.cs:17
+msgctxt "OrchardCore.AzureAI.Deployment.AzureAISearchIndexDeploymentStep"
+msgid "Search"
+msgstr "Recherche"
+
+#. Category = S["Search"];
+#: OrchardCore.AzureAI.Core\Deployment\AzureAISearchIndexRebuildDeploymentStep.cs:16
+msgctxt "OrchardCore.AzureAI.Deployment.AzureAISearchIndexRebuildDeploymentStep"
+msgid "Search"
+msgstr "Recherche"
+
+#. Category = S["Search"];
+#: OrchardCore.AzureAI.Core\Deployment\AzureAISearchIndexResetDeploymentStep.cs:16
+msgctxt "OrchardCore.AzureAI.Deployment.AzureAISearchIndexResetDeploymentStep"
+msgid "Search"
+msgstr "Recherche"
+
+#. context.Result.Fail(new ValidationResult(S["The index name contains forbidden characters."]));
+#: OrchardCore.AzureAI.Core\Handlers\AzureAISearchIndexHandler.cs:73
+msgctxt "OrchardCore.AzureAI.Handlers.AzureAISearchIndexHandler"
+msgid "The index name contains forbidden characters."
+msgstr "Le nom de l'index contient des caractères interdits."
+
+#. context.Result.Fail(new ValidationResult(S["Invalid index name. Must start with a letter and be 1–128 characters long. Only letters, numbers, and underscores are allowed. Names cannot begin with 'azureSearch'."]));
+#: OrchardCore.AzureAI.Core\Handlers\AzureAISearchIndexProfileHandler.cs:37
+msgctxt "OrchardCore.AzureAI.Handlers.AzureAISearchIndexProfileHandler"
+msgid "Invalid index name. Must start with a letter and be 1–128 characters long. Only letters, numbers, and underscores are allowed. Names cannot begin with 'azureSearch'."
+msgstr "Nom d'index invalide. Doit commencer par une lettre et contenir entre 1 et 128 caractères. Seuls les lettres, chiffres et tirets bas sont autorisés. Les noms ne peuvent pas commencer par 'azureSearch'."
+
+#. context.Result.Fail(new ValidationResult(S["At least one mapping field is required."]));
+#: OrchardCore.AzureAI.Core\Handlers\AzureAISearchIndexProfileHandler.cs:44
+msgctxt "OrchardCore.AzureAI.Handlers.AzureAISearchIndexProfileHandler"
+msgid "At least one mapping field is required."
+msgstr "Au moins un champ de mappage est requis."
+
+#. options.AddIndexingProvider(AzureAISearchConstants.ProviderName, provider => provider.DisplayName = S["Azure AI Search"]));
+#: OrchardCore.AzureAI.Core\ServiceCollectionExtensions.cs:23
+msgctxt "OrchardCore.AzureAI.Core.ServiceCollectionExtensions"
+msgid "Azure AI Search"
+msgstr "Recherche Azure AI"
+

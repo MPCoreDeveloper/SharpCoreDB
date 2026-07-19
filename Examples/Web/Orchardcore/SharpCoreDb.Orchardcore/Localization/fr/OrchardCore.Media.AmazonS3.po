@@ -10,29 +10,43 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
-"PO-Revision-Date: 2024-09-09 16:36\n"
+"PO-Revision-Date: 2026-06-03 20:07\n"
 
 #. builder.Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Media.AmazonS3\AdminMenu.cs:17
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:19
 msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
 msgid "Configuration"
 msgstr "Configuration"
 
 #. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
 #. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
-#: OrchardCore.Media.AmazonS3\AdminMenu.cs:18
-#: OrchardCore.Media.AmazonS3\AdminMenu.cs:18
+#. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
+#. .Add(S["Media"], S["Media"].PrefixPosition(), media => media
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:20
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:20
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:33
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:33
 msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
 msgid "Media"
 msgstr "Média"
 
 #. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
 #. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
-#: OrchardCore.Media.AmazonS3\AdminMenu.cs:19
-#: OrchardCore.Media.AmazonS3\AdminMenu.cs:19
+#. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
+#. .Add(S["Amazon S3 Options"], S["Amazon S3 Options"].PrefixPosition(), options => options
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:21
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:21
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:34
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:34
 msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
 msgid "Amazon S3 Options"
 msgstr "Options Amazon S3"
+
+#. builder.Add(S["Settings"], settings => settings
+#: OrchardCore.Media.AmazonS3\AdminMenu.cs:32
+msgctxt "OrchardCore.Media.AmazonS3.AdminMenu"
+msgid "Settings"
+msgstr "Paramètres"
 
 #. await _notifier.ErrorAsync(H["The Amazon S3 Media feature is enabled, but it was not configured with appsettings.json."]);
 #: OrchardCore.Media.AmazonS3\Controllers\AdminController.cs:40
@@ -42,8 +56,8 @@ msgstr "La fonctionnalité Amazon S3 Media est activée, mais elle n'a pas été
 
 #. context.ErrorMessage = S["Failed to remove the Amazon S3 Bucket '{0}'.", _options.BucketName];
 #. context.ErrorMessage = S["Failed to remove the Amazon S3 Bucket '{0}'.", _options.BucketName];
-#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:121
-#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:127
+#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:130
+#: OrchardCore.Media.AmazonS3\Services\AwsTenantEventsBase.cs:136
 msgctxt "OrchardCore.Media.AmazonS3.Services.AwsTenantEventsBase"
 msgid "Failed to remove the Amazon S3 Bucket '{0}'."
 msgstr "Impossible de supprimer le bucket Amazon S3 '{0}."
@@ -66,26 +80,26 @@ msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
 msgid "See documentation."
 msgstr "Voir la documentation."
 
-#. <label asp-for="BucketName" class="col-sm-2 col-form-label">@T["Bucket Name"]</label>
+#. <label asp-for="BucketName" class="ocat-label">@T["Bucket Name"]</label>
 #: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:10
 msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
 msgid "Bucket Name"
 msgstr "Nom du Bucket"
 
-#. <label asp-for="BasePath" class="col-sm-2 col-form-label">@T["Base Path"]</label>
+#. <label asp-for="BasePath" class="ocat-label">@T["Base Path"]</label>
 #: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:17
 msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
 msgid "Base Path"
 msgstr "Chemin de base"
 
 #. <label class="form-check-label" asp-for="CreateBucket">@T["Create Bucket"]</label>
-#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:26
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:27
 msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
 msgid "Create Bucket"
 msgstr "Créer un Bucket"
 
 #. <span class="hint">@T["Whether a bucket is created on startup if it does not exist."]</span>
-#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:27
+#: OrchardCore.Media.AmazonS3\Views\Admin\Options.cshtml:28
 msgctxt "OrchardCore.Media.AmazonS3.Views.Admin.Options"
 msgid "Whether a bucket is created on startup if it does not exist."
 msgstr "Si un bucket est créé au démarrage s'il n'existe pas."

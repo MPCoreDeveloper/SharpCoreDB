@@ -10,64 +10,74 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
-"PO-Revision-Date: 2024-11-10 17:24\n"
+"PO-Revision-Date: 2026-06-03 20:19\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.UrlRewriting\AdminMenu.cs:18
+#: OrchardCore.UrlRewriting\AdminMenu.cs:20
 msgctxt "OrchardCore.UrlRewriting.AdminMenu"
 msgid "Configuration"
 msgstr "Configuration"
 
 #. .Add(S["URL Rewriting"], S["URL Rewriting"].PrefixPosition(), rewriting => rewriting
 #. .Add(S["URL Rewriting"], S["URL Rewriting"].PrefixPosition(), rewriting => rewriting
-#: OrchardCore.UrlRewriting\AdminMenu.cs:19
-#: OrchardCore.UrlRewriting\AdminMenu.cs:19
+#. .Add(S["URL Rewriting"], S["URL Rewriting"].PrefixPosition(), rewriting => rewriting
+#. .Add(S["URL Rewriting"], S["URL Rewriting"].PrefixPosition(), rewriting => rewriting
+#: OrchardCore.UrlRewriting\AdminMenu.cs:21
+#: OrchardCore.UrlRewriting\AdminMenu.cs:21
+#: OrchardCore.UrlRewriting\AdminMenu.cs:35
+#: OrchardCore.UrlRewriting\AdminMenu.cs:35
 msgctxt "OrchardCore.UrlRewriting.AdminMenu"
 msgid "URL Rewriting"
 msgstr "Réécriture d'URL"
 
+#. .Add(S["Tools"], tools => tools
+#: OrchardCore.UrlRewriting\AdminMenu.cs:34
+msgctxt "OrchardCore.UrlRewriting.AdminMenu"
+msgid "Tools"
+msgstr "Outils"
+
 #. new SelectListItem(S["Delete"], nameof(RewriteRuleAction.Remove)),
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:91
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:85
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Delete"
 msgstr "Supprimer"
 
 #. await _notifier.ErrorAsync(H["Unable to find a rule-source that can handle the source '{Source}'.", id]);
 #. await _notifier.ErrorAsync(H["Unable to find a rule-source that can handle the source '{Source}'.", id]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:108
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:144
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:102
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:138
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Unable to find a rule-source that can handle the source '{Source}'."
 msgstr "Impossible de trouver une source de règles qui peut gérer la source '{Source}'."
 
 #. await _notifier.ErrorAsync(H["Invalid rule source."]);
 #. await _notifier.ErrorAsync(H["Invalid rule source."]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:117
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:153
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:111
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:147
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Invalid rule source."
 msgstr "Source de règle invalide."
 
 #. await _notifier.SuccessAsync(H["Rule created successfully."]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:168
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:162
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Rule created successfully."
 msgstr "Règle créée avec succès."
 
 #. await _notifier.SuccessAsync(H["Rule updated successfully."]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:230
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:224
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Rule updated successfully."
 msgstr "Règle mise à jour avec succès."
 
 #. await _notifier.SuccessAsync(H["Rule deleted successfully."]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:259
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:253
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Rule deleted successfully."
 msgstr "Règle supprimée avec succès."
 
 #. await _notifier.SuccessAsync(H["Rules removed successfully."]);
-#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:292
+#: OrchardCore.UrlRewriting\Controllers\AdminController.cs:286
 msgctxt "OrchardCore.UrlRewriting.Controllers.AdminController"
 msgid "Rules removed successfully."
 msgstr "Règles supprimées avec succès."
@@ -169,13 +179,13 @@ msgid "A valid Substitution URL Pattern is required."
 msgstr "Un modèle d'URL de substitution valide est requis."
 
 #. context.Errors.Add(S["Could not find rule source value. The rule will not be imported"]);
-#: OrchardCore.UrlRewriting\Recipes\UrlRewritingStep.cs:59
+#: OrchardCore.UrlRewriting\Recipes\UrlRewritingStep.cs:54
 msgctxt "OrchardCore.UrlRewriting.Recipes.UrlRewritingStep"
 msgid "Could not find rule source value. The rule will not be imported"
 msgstr "Impossible de trouver la valeur source de la règle. La règle ne sera pas importée"
 
 #. context.Errors.Add(S["Unable to find a rule-source that can handle the source '{Source}'.", sourceName]);
-#: OrchardCore.UrlRewriting\Recipes\UrlRewritingStep.cs:68
+#: OrchardCore.UrlRewriting\Recipes\UrlRewritingStep.cs:63
 msgctxt "OrchardCore.UrlRewriting.Recipes.UrlRewritingStep"
 msgid "Unable to find a rule-source that can handle the source '{Source}'."
 msgstr "Impossible de trouver une source de règles qui peut gérer la source '{Source}'."
@@ -240,21 +250,21 @@ msgctxt "OrchardCore.UrlRewriting.Views.Admin.Index"
 msgid "Select All"
 msgstr "Tout sélectionner"
 
-#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.UrlRewriting\Views\Admin\Index.cshtml:42
 msgctxt "OrchardCore.UrlRewriting.Views.Admin.Index"
-msgid "1 item"
+msgid "{0} item"
 msgid_plural "{0} items"
-msgstr[0] "1 élément"
+msgstr[0] "{0} élément"
 msgstr[1] "{0} éléments"
 
-#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.UrlRewriting\Views\Admin\Index.cshtml:42
 msgctxt "OrchardCore.UrlRewriting.Views.Admin.Index"
 msgid "Items {0} to {1}"
 msgstr "Éléments : {0} sur {1}"
 
-#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "1 item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
+#. <label id="items" for="select-all">@T.Plural(Model.Rules.Count, "{0} item", "{0} items")<span class="text-muted" title="@T["Items {0} to {1}", startIndex, endIndex]">@T.Plural(Model.Rules.Count, " / {0} item in total", " / {0} items in total")</span></label>
 #: OrchardCore.UrlRewriting\Views\Admin\Index.cshtml:42
 msgctxt "OrchardCore.UrlRewriting.Views.Admin.Index"
 msgid " / {0} item in total"
@@ -322,12 +332,6 @@ msgctxt "OrchardCore.UrlRewriting.Views.Admin.Index"
 msgid "selected"
 msgstr "sélectionné(s)"
 
-#. <span class="title">@T["URL Rewriting"]</span>
-#: OrchardCore.UrlRewriting\Views\NavigationItemText-urlrewriting.Id.cshtml:4
-msgctxt "OrchardCore.UrlRewriting.Views.NavigationItemText-urlrewriting.Id"
-msgid "URL Rewriting"
-msgstr "Réécriture d'URL"
-
 #. class="btn btn-primary btn-sm">@T["Edit"]</a>
 #: OrchardCore.UrlRewriting\Views\RewriteRule.Buttons.SummaryAdmin.cshtml:9
 msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.Buttons.SummaryAdmin"
@@ -340,7 +344,7 @@ msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.Buttons.SummaryAdmin"
 msgid "Delete"
 msgstr "Supprimer"
 
-#. <span class="badge ta-badge font-weight-normal" data-bs-toggle="tooltip" title="@T["Author"]">
+#. <user-display-name user-name="@(Model.Value.Author)" title="@T["Author"].Value" display-type="@Model.Metadata.DisplayType" cache-id="user-display-name-author" />
 #: OrchardCore.UrlRewriting\Views\RewriteRule.DefaultMeta.SummaryAdmin.cshtml:17
 msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.DefaultMeta.SummaryAdmin"
 msgid "Author"
@@ -352,14 +356,14 @@ msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.DefaultTags.SummaryAdmin"
 msgid "Source"
 msgstr "Source"
 
-#. <label asp-for="Name" class="form-label">@T["Display Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Display Name"]</label>
 #: OrchardCore.UrlRewriting\Views\RewriteRule.Fields.Edit.cshtml:4
 msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.Fields.Edit"
 msgid "Display Name"
 msgstr "Nom d'affichage"
 
 #. <span class="hint">@T["A display name for the rule."]</span>
-#: OrchardCore.UrlRewriting\Views\RewriteRule.Fields.Edit.cshtml:7
+#: OrchardCore.UrlRewriting\Views\RewriteRule.Fields.Edit.cshtml:8
 msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.Fields.Edit"
 msgid "A display name for the rule."
 msgstr "Un nom d'affichage pour la règle."
@@ -378,104 +382,104 @@ msgctxt "OrchardCore.UrlRewriting.Views.RewriteRule.SummaryAdmin"
 msgid "Actions"
 msgstr "Actions"
 
-#. <label asp-for="Pattern" class="form-label">@T["Match URL Pattern"]</label>
+#. <label asp-for="Pattern" class="ocat-label">@T["Match URL Pattern"]</label>
 #: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:4
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Match URL Pattern"
 msgstr "Modèle d'URL de correspondance"
 
 #. <span class="hint">@T["Specifies a pattern using regular expressions to match incoming URLs, following the syntax defined in ECMA-262."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:6
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:7
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Specifies a pattern using regular expressions to match incoming URLs, following the syntax defined in ECMA-262."
 msgstr "Spécifie un motif en utilisant des expressions régulières pour correspondre aux URL entrantes, en suivant la syntaxe définie dans ECMA-262."
 
 #. <label class="form-check-label" asp-for="IsCaseInsensitive">@T["Case Insensitive"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:12
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:15
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Case Insensitive"
 msgstr "Insensible à la casse"
 
 #. <span class="hint dashed">@T["When checked, the pattern will be case insensitive."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:13
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:16
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "When checked, the pattern will be case insensitive."
 msgstr "Si coché, le modèle sera insensible à la casse."
 
-#. <label asp-for="QueryStringPolicy" class="form-label">@T["Query String Policy"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:18
+#. <label asp-for="QueryStringPolicy" class="ocat-label">@T["Query String Policy"]</label>
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:22
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Query String Policy"
 msgstr "Query String Policy"
 
-#. <label asp-for="RedirectType" class="form-label">@T["Redirect Type"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:23
+#. <label asp-for="RedirectType" class="ocat-label">@T["Redirect Type"]</label>
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:29
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Redirect Type"
 msgstr "Type de redirection"
 
-#. <label asp-for="SubstitutionPattern" class="form-label">@T["The Substitution URL Pattern"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:28
+#. <label asp-for="SubstitutionPattern" class="ocat-label">@T["The Substitution URL Pattern"]</label>
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:36
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "The Substitution URL Pattern"
 msgstr "Le modèle d'URL de Substitution"
 
 #. <span class="hint">@T["Defines a URL structure with placeholders that will be replaced by actual values during the request."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:31
+#: OrchardCore.UrlRewriting\Views\UrlRedirectRule.Edit.cshtml:40
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRedirectRule.Edit"
 msgid "Defines a URL structure with placeholders that will be replaced by actual values during the request."
 msgstr "Définit une structure d'URL avec des espaces réservés qui seront remplacés par des valeurs réelles pendant la requête."
 
-#. <label asp-for="Pattern" class="form-label">@T["Match URL Pattern"]</label>
+#. <label asp-for="Pattern" class="ocat-label">@T["Match URL Pattern"]</label>
 #: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:4
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Match URL Pattern"
 msgstr "Modèle d'URL de correspondance"
 
 #. <span class="hint">@T["Specifies a pattern using regular expressions to match incoming URLs, following the syntax defined in ECMA-262."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:6
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:7
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Specifies a pattern using regular expressions to match incoming URLs, following the syntax defined in ECMA-262."
 msgstr "Spécifie un motif en utilisant des expressions régulières pour correspondre aux URL entrantes, en suivant la syntaxe définie dans ECMA-262."
 
 #. <label class="form-check-label" asp-for="IsCaseInsensitive">@T["Case Insensitive"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:12
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:15
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Case Insensitive"
 msgstr "Insensible à la casse"
 
 #. <span class="hint dashed">@T["When checked, the pattern will be case insensitive."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:13
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:16
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "When checked, the pattern will be case insensitive."
 msgstr "Si coché, le modèle sera insensible à la casse."
 
-#. <label asp-for="QueryStringPolicy" class="form-label">@T["Query String Policy"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:18
+#. <label asp-for="QueryStringPolicy" class="ocat-label">@T["Query String Policy"]</label>
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:22
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Query String Policy"
 msgstr "Query String Policy"
 
 #. <label class="form-check-label" asp-for="SkipFurtherRules">@T["Stop Evaluation of Subsequent Rules"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:25
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:32
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Stop Evaluation of Subsequent Rules"
 msgstr "Arrêter l'évaluation des règles suivantes"
 
 #. <span class="hint dashed">@T["When selected, subsequent rules will be ignored if this rule is matched."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:26
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:33
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "When selected, subsequent rules will be ignored if this rule is matched."
 msgstr "Lorsqu'elle est sélectionnée, les règles suivantes seront ignorées si cette règle est correspondante."
 
-#. <label asp-for="SubstitutionPattern" class="form-label">@T["The Substitution URL Pattern"]</label>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:31
+#. <label asp-for="SubstitutionPattern" class="ocat-label">@T["The Substitution URL Pattern"]</label>
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:39
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "The Substitution URL Pattern"
 msgstr "Le modèle d'URL de Substitution"
 
 #. <span class="hint">@T["Defines a URL structure with placeholders that will be replaced by actual values during the request."]</span>
-#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:34
+#: OrchardCore.UrlRewriting\Views\UrlRewriteRule.Edit.cshtml:43
 msgctxt "OrchardCore.UrlRewriting.Views.UrlRewriteRule.Edit"
 msgid "Defines a URL structure with placeholders that will be replaced by actual values during the request."
 msgstr "Définit une structure d'URL avec des espaces réservés qui seront remplacés par des valeurs réelles pendant la requête."

@@ -10,97 +10,119 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Macedonian\n"
 "Language: mk_MK\n"
-"PO-Revision-Date: 2024-09-09 17:06\n"
+"PO-Revision-Date: 2026-06-03 19:36\n"
 
 #. .Add(S["Configuration"], configuration => configuration
-#: OrchardCore.Localization\AdminMenu.cs:34
+#: OrchardCore.Localization\AdminMenu.cs:36
 msgctxt "OrchardCore.Localization.AdminMenu"
 msgid "Configuration"
 msgstr "Конфигурација"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.Localization\AdminMenu.cs:35
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Localization\AdminMenu.cs:37
+#: OrchardCore.Localization\AdminMenu.cs:56
 msgctxt "OrchardCore.Localization.AdminMenu"
 msgid "Settings"
 msgstr "Подесувања"
 
 #. .Add(S["Localization"], localization => localization
-#: OrchardCore.Localization\AdminMenu.cs:36
+#. .Add(S["Localization"], S["Localization"].PrefixPosition(), localization => localization
+#. .Add(S["Localization"], S["Localization"].PrefixPosition(), localization => localization
+#: OrchardCore.Localization\AdminMenu.cs:38
+#: OrchardCore.Localization\AdminMenu.cs:57
+#: OrchardCore.Localization\AdminMenu.cs:57
 msgctxt "OrchardCore.Localization.AdminMenu"
 msgid "Localization"
 msgstr ""
 
 #. .Add(S["Cultures"], S["Cultures"].PrefixPosition(), cultures => cultures
 #. .Add(S["Cultures"], S["Cultures"].PrefixPosition(), cultures => cultures
-#: OrchardCore.Localization\AdminMenu.cs:39
-#: OrchardCore.Localization\AdminMenu.cs:39
+#. .Add(S["Cultures"], S["Cultures"].PrefixPosition(), cultures => cultures
+#. .Add(S["Cultures"], S["Cultures"].PrefixPosition(), cultures => cultures
+#: OrchardCore.Localization\AdminMenu.cs:41
+#: OrchardCore.Localization\AdminMenu.cs:41
+#: OrchardCore.Localization\AdminMenu.cs:60
+#: OrchardCore.Localization\AdminMenu.cs:60
 msgctxt "OrchardCore.Localization.AdminMenu"
 msgid "Cultures"
 msgstr "Култури"
 
 #. context.Updater.ModelState.AddModelError("SupportedCultures", S["A culture is required"]);
-#: OrchardCore.Localization\Drivers\LocalizationSettingsDisplayDriver.cs:106
+#: OrchardCore.Localization\Drivers\LocalizationSettingsDisplayDriver.cs:111
 msgctxt "OrchardCore.Localization.Drivers.LocalizationSettingsDisplayDriver"
 msgid "A culture is required"
 msgstr "Избор на култура е задолжителен"
 
 #. await _notifier.WarningAsync(H["The site has been restarted for the settings to take effect."]);
-#: OrchardCore.Localization\Drivers\LocalizationSettingsDisplayDriver.cs:126
+#: OrchardCore.Localization\Drivers\LocalizationSettingsDisplayDriver.cs:132
 msgctxt "OrchardCore.Localization.Drivers.LocalizationSettingsDisplayDriver"
 msgid "The site has been restarted for the settings to take effect."
 msgstr ""
 
+#. .Description(S["The culture code."])
+#: OrchardCore.Localization\GraphQL\CultureQueryObjectType.cs:19
+msgctxt "OrchardCore.Localization.GraphQL.CultureQueryObjectType"
+msgid "The culture code."
+msgstr ""
+
+#. .Description(S["Whether this is the default culture."])
+#: OrchardCore.Localization\GraphQL\CultureQueryObjectType.cs:23
+msgctxt "OrchardCore.Localization.GraphQL.CultureQueryObjectType"
+msgid "Whether this is the default culture."
+msgstr ""
+
 #. Description = S["The active cultures configured for the site."],
-#: OrchardCore.Localization\GraphQL\SiteCulturesQuery.cs:47
+#: OrchardCore.Localization\GraphQL\SiteCulturesQuery.cs:49
 msgctxt "OrchardCore.Localization.GraphQL.SiteCulturesQuery"
 msgid "The active cultures configured for the site."
 msgstr "Листа на активните култури кои се подесени за овој сајт."
 
 #. services.AddSiteSettingsPropertyDeploymentStep<LocalizationSettings, LocalizationDeploymentStartup>(S => S["Culture settings"], S => S["Exports the culture settings."]);
-#: OrchardCore.Localization\Startup.cs:67
+#: OrchardCore.Localization\Startup.cs:70
 msgctxt "OrchardCore.Localization.LocalizationDeploymentStartup"
 msgid "Culture settings"
 msgstr ""
 
 #. services.AddSiteSettingsPropertyDeploymentStep<LocalizationSettings, LocalizationDeploymentStartup>(S => S["Culture settings"], S => S["Exports the culture settings."]);
-#: OrchardCore.Localization\Startup.cs:67
+#: OrchardCore.Localization\Startup.cs:70
 msgctxt "OrchardCore.Localization.LocalizationDeploymentStartup"
 msgid "Exports the culture settings."
 msgstr ""
 
 #. <th>@T["Culture"]</th>
-#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:25
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:37
 msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
 msgid "Culture"
 msgstr "Култура"
 
 #. <th>@T["Default culture"]</th>
-#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:26
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:38
 msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
 msgid "Default culture"
 msgstr "Иницијална култура"
 
 #. <a v-on:click="remove(index)" title="@T["Remove culture"]" href="javascript:void(0)" class="btn btn-secondary btn-sm" style="cursor:pointer">
-#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:44
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:56
 msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
 msgid "Remove culture"
 msgstr "Одстрани култура"
 
 #. <a v-on:click="add()" href="javascript:void(0)" class="btn btn-success"><i class="fa-solid fa-plus small" aria-hidden="true"></i> @T["Add culture"]</a>
-#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:61
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:73
 msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
 msgid "Add culture"
 msgstr "Додади култура"
 
-#. <label class="form-label">@T["Define which cultures are supported by the site."]</label>
-#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:74
+#. <label class="ocat-label">@T["Define which cultures are supported by the site."]</label>
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:83
 msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
 msgid "Define which cultures are supported by the site."
 msgstr "Дефинирај поддржани култури на сајтот."
 
-#. <span class="icon"><i class="fa-solid fa-globe" aria-hidden="true"></i></span><span class="title">@T["Localization"]</span>
-#: OrchardCore.Localization\Views\NavigationItemText-localization.Id.cshtml:1
-msgctxt "OrchardCore.Localization.Views.NavigationItemText-localization.Id"
-msgid "Localization"
+#. <label class="form-check-label" asp-for="FallBackToParentCultures">@T["Fall back to parent culture(s)"]</label>
+#: OrchardCore.Localization\Views\LocalizationSettings.Edit.cshtml:95
+msgctxt "OrchardCore.Localization.Views.LocalizationSettings.Edit"
+msgid "Fall back to parent culture(s)"
 msgstr ""
 

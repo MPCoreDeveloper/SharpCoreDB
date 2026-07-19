@@ -10,18 +10,24 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Vietnamese\n"
 "Language: vi_VN\n"
-"PO-Revision-Date: 2024-08-24 20:45\n"
+"PO-Revision-Date: 2025-08-07 17:41\n"
 
-#. context.ErrorMessage = S["Failed to remove the Elasticsearch index '{0}'.", settings.IndexName];
-#: OrchardCore.Search.Elasticsearch.Core\Services\ElasticIndexInitializerService.cs:81
-msgctxt "OrchardCore.Search.Elasticsearch.ElasticIndexInitializerService"
-msgid "Failed to remove the Elasticsearch index '{0}'."
+#. context.Result.Fail(new ValidationResult(S["Invalid index name: it must be lowercase, under 255 bytes, not start with -, _, or +, and must not contain , /, *, ?, \", <, >, |, space, ,, or #, nor be \".\" or \"..\"."]));
+#: OrchardCore.Search.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:48
+msgctxt "OrchardCore.Search.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "Invalid index name: it must be lowercase, under 255 bytes, not start with -, _, or +, and must not contain , /, *, ?, \", <, >, |, space, ,, or #, nor be \".\" or \"..\"."
 msgstr ""
 
-#. context.ErrorMessage = S["Failed to remove Elasticsearch indices."];
-#: OrchardCore.Search.Elasticsearch.Core\Services\ElasticIndexInitializerService.cs:88
-msgctxt "OrchardCore.Search.Elasticsearch.ElasticIndexInitializerService"
-msgid "Failed to remove Elasticsearch indices."
+#. context.Result.Fail(new ValidationResult(S["At least one mapping property is required."]));
+#: OrchardCore.Search.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:56
+msgctxt "OrchardCore.Search.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "At least one mapping property is required."
+msgstr ""
+
+#. context.Result.Fail(new ValidationResult(S["The '{0}' is required.", nameof(ElasticsearchIndexMap.KeyFieldName)]));
+#: OrchardCore.Search.Elasticsearch.Core\Handlers\ElasticsearchIndexProfileHandler.cs:61
+msgctxt "OrchardCore.Search.Elasticsearch.Core.Handlers.ElasticsearchIndexProfileHandler"
+msgid "The '{0}' is required."
 msgstr ""
 
 #. return new HtmlString($"<option value=\"Elasticsearch\" selected=\"selected\">{S["Elasticsearch"]}</option>");

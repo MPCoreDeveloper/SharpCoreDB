@@ -10,32 +10,44 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Czech\n"
 "Language: cs_CZ\n"
-"PO-Revision-Date: 2024-11-10 14:43\n"
+"PO-Revision-Date: 2026-06-03 19:33\n"
 
 #. .Add(S["Design"], design => design
-#: OrchardCore.Layers\AdminMenu.cs:26
+#. .Add(S["Design"], design => design
+#: OrchardCore.Layers\AdminMenu.cs:28
+#: OrchardCore.Layers\AdminMenu.cs:47
 msgctxt "OrchardCore.Layers.AdminMenu"
 msgid "Design"
 msgstr "Design"
 
 #. .Add(S["Settings"], settings => settings
-#: OrchardCore.Layers\AdminMenu.cs:27
+#. .Add(S["Settings"], settings => settings
+#: OrchardCore.Layers\AdminMenu.cs:29
+#: OrchardCore.Layers\AdminMenu.cs:54
 msgctxt "OrchardCore.Layers.AdminMenu"
 msgid "Settings"
 msgstr "Nastavení"
 
 #. .Add(S["Zones"], S["Zones"].PrefixPosition(), zones => zones
 #. .Add(S["Zones"], S["Zones"].PrefixPosition(), zones => zones
-#: OrchardCore.Layers\AdminMenu.cs:28
-#: OrchardCore.Layers\AdminMenu.cs:28
+#. .Add(S["Zones"], S["Zones"].PrefixPosition(), zones => zones
+#. .Add(S["Zones"], S["Zones"].PrefixPosition(), zones => zones
+#: OrchardCore.Layers\AdminMenu.cs:30
+#: OrchardCore.Layers\AdminMenu.cs:30
+#: OrchardCore.Layers\AdminMenu.cs:55
+#: OrchardCore.Layers\AdminMenu.cs:55
 msgctxt "OrchardCore.Layers.AdminMenu"
 msgid "Zones"
 msgstr "Zóny"
 
 #. .Add(S["Widgets"], S["Widgets"].PrefixPosition(), widgets => widgets
 #. .Add(S["Widgets"], S["Widgets"].PrefixPosition(), widgets => widgets
-#: OrchardCore.Layers\AdminMenu.cs:34
-#: OrchardCore.Layers\AdminMenu.cs:34
+#. .Add(S["Widgets"], S["Widgets"].PrefixPosition(), widgets => widgets
+#. .Add(S["Widgets"], S["Widgets"].PrefixPosition(), widgets => widgets
+#: OrchardCore.Layers\AdminMenu.cs:36
+#: OrchardCore.Layers\AdminMenu.cs:36
+#: OrchardCore.Layers\AdminMenu.cs:48
+#: OrchardCore.Layers\AdminMenu.cs:48
 msgctxt "OrchardCore.Layers.AdminMenu"
 msgid "Widgets"
 msgstr "Widgety"
@@ -59,13 +71,13 @@ msgid "The layer couldn't be deleted: you must remove any associated widgets fir
 msgstr "Vrstva nemohla být odstraněne: musíte nejprve odstranit všechny související widgety."
 
 #. ModelState.AddModelError(nameof(LayerEditViewModel.Name), S["The layer name is required."]);
-#: OrchardCore.Layers\Controllers\AdminController.cs:345
+#: OrchardCore.Layers\Controllers\AdminController.cs:341
 msgctxt "OrchardCore.Layers.Controllers.AdminController"
 msgid "The layer name is required."
 msgstr "Název vrstvy je povinný."
 
 #. ModelState.AddModelError(nameof(LayerEditViewModel.Name), S["The layer name already exists."]);
-#: OrchardCore.Layers\Controllers\AdminController.cs:349
+#: OrchardCore.Layers\Controllers\AdminController.cs:345
 msgctxt "OrchardCore.Layers.Controllers.AdminController"
 msgid "The layer name already exists."
 msgstr "Název vrstvy již existuje."
@@ -94,20 +106,86 @@ msgctxt "OrchardCore.Layers.Controllers.LayerRuleController"
 msgid "Condition deleted successfully."
 msgstr "Podmínka úspěšně odstraněna."
 
-#. context.Updater.ModelState.AddModelError(Prefix, "LayerMetadata.Zone", S["Zone is missing"]);
+#. Category = S["Content"];
+#: OrchardCore.Layers\Deployment\AllLayersDeploymentStep.cs:19
+msgctxt "OrchardCore.Layers.Deployment.AllLayersDeploymentStep"
+msgid "Content"
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Title), S["Title is required field."]);
 #: OrchardCore.Layers\Drivers\LayerMetadataWelder.cs:75
+msgctxt "OrchardCore.Layers.Drivers.LayerMetadataWelder"
+msgid "Title is required field."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, "LayerMetadata.Zone", S["Zone is missing"]);
+#: OrchardCore.Layers\Drivers\LayerMetadataWelder.cs:80
 msgctxt "OrchardCore.Layers.Drivers.LayerMetadataWelder"
 msgid "Zone is missing"
 msgstr "Zóna nenalezena"
 
-#. context.Updater.ModelState.AddModelError(Prefix, "LayerMetadata.Layer", S["Layer is missing"]);
-#: OrchardCore.Layers\Drivers\LayerMetadataWelder.cs:80
+#. context.Updater.ModelState.AddModelError(Prefix, "LayerMetadata.Layer", S["Layer is missing field."]);
+#: OrchardCore.Layers\Drivers\LayerMetadataWelder.cs:85
 msgctxt "OrchardCore.Layers.Drivers.LayerMetadataWelder"
-msgid "Layer is missing"
-msgstr "Vrstva nenalezena"
+msgid "Layer is missing field."
+msgstr ""
+
+#. .Description(S["The name of the layer."]);
+#: OrchardCore.Layers\GraphQL\LayerQueryObjectType.cs:23
+msgctxt "OrchardCore.Layers.GraphQL.LayerQueryObjectType"
+msgid "The name of the layer."
+msgstr ""
+
+#. .Description(S["The rule that activates the layer."])
+#: OrchardCore.Layers\GraphQL\LayerQueryObjectType.cs:26
+msgctxt "OrchardCore.Layers.GraphQL.LayerQueryObjectType"
+msgid "The rule that activates the layer."
+msgstr ""
+
+#. .Description(S["The description of the layer."]);
+#: OrchardCore.Layers\GraphQL\LayerQueryObjectType.cs:30
+msgctxt "OrchardCore.Layers.GraphQL.LayerQueryObjectType"
+msgid "The description of the layer."
+msgstr ""
+
+#. .Description(S["The widgets for this layer."])
+#: OrchardCore.Layers\GraphQL\LayerQueryObjectType.cs:33
+msgctxt "OrchardCore.Layers.GraphQL.LayerQueryObjectType"
+msgid "The widgets for this layer."
+msgstr ""
+
+#. .Argument<PublicationStatusGraphType>("status", S["publication status of the widgets"])
+#: OrchardCore.Layers\GraphQL\LayerQueryObjectType.cs:34
+msgctxt "OrchardCore.Layers.GraphQL.LayerQueryObjectType"
+msgid "publication status of the widgets"
+msgstr ""
+
+#. .Description(S["The name of the widget's zone."])
+#: OrchardCore.Layers\GraphQL\LayerWidgetQueryObjectType.cs:16
+msgctxt "OrchardCore.Layers.GraphQL.LayerWidgetQueryObjectType"
+msgid "The name of the widget's zone."
+msgstr ""
+
+#. .Description(S["The position of the widget in the zone."])
+#: OrchardCore.Layers\GraphQL\LayerWidgetQueryObjectType.cs:20
+msgctxt "OrchardCore.Layers.GraphQL.LayerWidgetQueryObjectType"
+msgid "The position of the widget in the zone."
+msgstr ""
+
+#. .Description(S["Whether to render the widget's title."])
+#: OrchardCore.Layers\GraphQL\LayerWidgetQueryObjectType.cs:24
+msgctxt "OrchardCore.Layers.GraphQL.LayerWidgetQueryObjectType"
+msgid "Whether to render the widget's title."
+msgstr ""
+
+#. .Description(S["A widget on this layer."])
+#: OrchardCore.Layers\GraphQL\LayerWidgetQueryObjectType.cs:28
+msgctxt "OrchardCore.Layers.GraphQL.LayerWidgetQueryObjectType"
+msgid "A widget on this layer."
+msgstr ""
 
 #. Description = S["Site layers define the rules and zone placement for widgets."],
-#: OrchardCore.Layers\GraphQL\SiteLayersQuery.cs:39
+#: OrchardCore.Layers\GraphQL\SiteLayersQuery.cs:41
 msgctxt "OrchardCore.Layers.GraphQL.SiteLayersQuery"
 msgid "Site layers define the rules and zone placement for widgets."
 msgstr "Vrstvy webu definují pravidla a umístění zón pro widgety."
@@ -125,7 +203,7 @@ msgid "No changes have been made. The following types of conditions cannot be ad
 msgstr ""
 
 #. <h5>@T["All Layers"]</h5>
-#: OrchardCore.Layers\Views\Items\AllLayersDeploymentStep.Edit.cshtml:3
+#: OrchardCore.Layers\Views\Items\AllLayersDeploymentStep.Edit.cshtml:5
 msgctxt "OrchardCore.Layers.Views.Items.AllLayersDeploymentStep.Edit"
 msgid "All Layers"
 msgstr "Všechny vrstvy"
@@ -160,20 +238,20 @@ msgctxt "OrchardCore.Layers.Views.Admin.Create"
 msgid "Create Layer"
 msgstr "Vytvořit vrstvu"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.Layers\Views\Admin\Create.cshtml:7
 msgctxt "OrchardCore.Layers.Views.Admin.Create"
 msgid "Name"
 msgstr "Název"
 
-#. <label asp-for="Description" class="form-label">@T["Description"]</label>
-#: OrchardCore.Layers\Views\Admin\Create.cshtml:13
+#. <label asp-for="Description" class="ocat-label">@T["Description"]</label>
+#: OrchardCore.Layers\Views\Admin\Create.cshtml:15
 msgctxt "OrchardCore.Layers.Views.Admin.Create"
 msgid "Description"
 msgstr "Popis"
 
 #. <input class="btn btn-primary" type="submit" value="@T["Create"]" />
-#: OrchardCore.Layers\Views\Admin\Create.cshtml:18
+#: OrchardCore.Layers\Views\Admin\Create.cshtml:22
 msgctxt "OrchardCore.Layers.Views.Admin.Create"
 msgid "Create"
 msgstr "Vytvořit"
@@ -185,13 +263,13 @@ msgid "Create Rule"
 msgstr "Vytvořit pravidlo"
 
 #. <button class="btn btn-primary create" type="submit">@T["Create"]</button>
-#: OrchardCore.Layers\Views\LayerRule\Create.cshtml:14
+#: OrchardCore.Layers\Views\LayerRule\Create.cshtml:15
 msgctxt "OrchardCore.Layers.Views.LayerRule.Create"
 msgid "Create"
 msgstr "Vytvořit"
 
 #. <a class="btn btn-secondary cancel" role="button" asp-route-action="Edit" asp-route-controller="Admin" asp-route-name="@Model.Name">@T["Cancel"]</a>
-#: OrchardCore.Layers\Views\LayerRule\Create.cshtml:15
+#: OrchardCore.Layers\Views\LayerRule\Create.cshtml:16
 msgctxt "OrchardCore.Layers.Views.LayerRule.Create"
 msgid "Cancel"
 msgstr "Storno"
@@ -202,26 +280,26 @@ msgctxt "OrchardCore.Layers.Views.Admin.Edit"
 msgid "Edit Layer - {0}"
 msgstr "Upravit vrstvu - {0}"
 
-#. <label asp-for="Name" class="form-label">@T["Name"]</label>
+#. <label asp-for="Name" class="ocat-label">@T["Name"]</label>
 #: OrchardCore.Layers\Views\Admin\Edit.cshtml:18
 msgctxt "OrchardCore.Layers.Views.Admin.Edit"
 msgid "Name"
 msgstr "Název"
 
-#. <label asp-for="Description" class="form-label">@T["Description"]</label>
-#: OrchardCore.Layers\Views\Admin\Edit.cshtml:24
+#. <label asp-for="Description" class="ocat-label">@T["Description"]</label>
+#: OrchardCore.Layers\Views\Admin\Edit.cshtml:26
 msgctxt "OrchardCore.Layers.Views.Admin.Edit"
 msgid "Description"
 msgstr "Popis"
 
 #. <div class="d-none" id="ruleOrderErrorMessage" data-message="@T["Error updating rule order"]"></div>
-#: OrchardCore.Layers\Views\Admin\Edit.cshtml:31
+#: OrchardCore.Layers\Views\Admin\Edit.cshtml:35
 msgctxt "OrchardCore.Layers.Views.Admin.Edit"
 msgid "Error updating rule order"
 msgstr "Chyba při aktualizaci pořadí pravidel"
 
-#. <input class="btn btn-primary mt-3" type="submit" value="@T["Save"]" />
-#: OrchardCore.Layers\Views\Admin\Edit.cshtml:35
+#. <input class="btn btn-primary" type="submit" value="@T["Save"]" />
+#: OrchardCore.Layers\Views\Admin\Edit.cshtml:41
 msgctxt "OrchardCore.Layers.Views.Admin.Edit"
 msgid "Save"
 msgstr "Uložit"
@@ -233,127 +311,139 @@ msgid "Edit Rule"
 msgstr "Upravit pravidlo"
 
 #. <button class="btn btn-primary save" type="submit">@T["Save"]</button>
-#: OrchardCore.Layers\Views\LayerRule\Edit.cshtml:13
+#: OrchardCore.Layers\Views\LayerRule\Edit.cshtml:18
 msgctxt "OrchardCore.Layers.Views.LayerRule.Edit"
 msgid "Save"
 msgstr "Uložit"
 
 #. <zone Name="Title"><h1>@RenderTitleSegments(T["Edit Widgets and Layers"])</h1></zone>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:13
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:17
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Edit Widgets and Layers"
 msgstr "Upravit widgety a vrstvy"
 
 #. @T["Widget successfully moved. <a href=\"javascript:console.log('submit');$('#undo-form').submit();\"><strong>Undo</strong></a>."]
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:17
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:21
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Widget successfully moved. <a href=\"javascript:console.log('submit');$('#undo-form').submit();\"><strong>Undo</strong></a>."
 msgstr "Widget úspěšně přesunut. <a href=\"javascript:console.log('submit');$('#undo-form').submit();\"><strong>Zpět</strong></a>."
 
 #. <h3>@T["Zones"]</h3>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:26
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:30
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Zones"
 msgstr "Zóny"
 
 #. <p class="alert alert-warning">@T["Please <a href=\"{0}\">define the available zones</a> before adding Widgets", Url.Action("Index", "Admin", new { area = "OrchardCore.Settings", groupId = LayerSiteSettingsDisplayDriver.GroupId })]</p>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:30
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:34
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Please <a href=\"{0}\">define the available zones</a> before adding Widgets"
 msgstr "Před vkládáním widgetů <a href=\"{0}\">definujte dostupné zóny</a>"
 
 #. @T["Add Widget"]
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:79
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:81
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Add Widget"
 msgstr "Přidat widget"
 
 #. <span>@T["No widgets found."]</span>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:101
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:103
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "No widgets found."
 msgstr ""
 
 #. <span>@T["No layers found."]</span>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:106
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:108
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "No layers found."
 msgstr ""
 
 #. <h3>@T["Layers"]</h3>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:115
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:117
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Layers"
 msgstr "Vrstvy"
 
 #. @T["Select a layer to reveal its associated widgets."]
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:118
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:120
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Select a layer to reveal its associated widgets."
 msgstr "Pro zobrazení svázaných widgetů vyberte vrstvu."
 
 #. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Layers/#rules" target="_blank">@T["See documentation"]</a>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:119
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:121
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "See documentation"
 msgstr "Viz dokumentaci"
 
 #. <a class="btn btn-primary btn-sm" href="@Url.Action("Edit", "Admin", new { area = "OrchardCore.Layers", name = layer.Name })">@T["Edit"]</a>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:134
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:136
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Edit"
 msgstr "Upravit"
 
 #. <a class="btn btn-danger btn-sm" href="@Url.Action("Delete", "Admin", new { area = "OrchardCore.Layers", name = layer.Name })" data-url-af="RemoveUrl UnsafeUrl">@T["Delete"]</a>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:135
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:137
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Delete"
 msgstr "Smazat"
 
 #. <p class="alert alert-warning">@T["Please <a href=\"{0}\">create a layer</a> before adding Widgets", Url.Action("Create", "Admin", new { area = "OrchardCore.Layers" })]</p>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:148
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:150
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Please <a href=\"{0}\">create a layer</a> before adding Widgets"
 msgstr "Před vkládáním widgetů <a href=\"{0}\">vytvořte vrstvu</a>"
 
 #. <a class="btn btn-primary btn-sm" href="@Url.Action("Create", "Admin", new { area = "OrchardCore.Layers" })">@T["Add"]</a>
-#: OrchardCore.Layers\Views\Admin\Index.cshtml:151
+#: OrchardCore.Layers\Views\Admin\Index.cshtml:154
 msgctxt "OrchardCore.Layers.Views.Admin.Index"
 msgid "Add"
 msgstr "Přidat"
 
-#. <label asp-for="Title" class="@Orchard.GetLabelClasses()">@T["Title"]</label>
-#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:5
+#. <label asp-for="Title" class="ocat-label">@T["Title"]</label>
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:4
 msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
 msgid "Title"
 msgstr "Titulek"
 
 #. <label class="form-check-label" asp-for="LayerMetadata.RenderTitle">@T["Render title"]</label>
-#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:16
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:15
 msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
 msgid "Render title"
 msgstr "Vykreslit titulek"
 
 #. <span class="hint dashed">@T["If checked, the title will be rendered with the widget."]</span>
-#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:17
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:16
 msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
 msgid "If checked, the title will be rendered with the widget."
 msgstr "Je-li zaškrtnuto, název bude vykreslen společně s widgetem."
 
-#. <label asp-for="LayerMetadata.Layer" class="@Orchard.GetLabelClasses()">@T["The layer the widget should be associated with."]</label>
-#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:23
+#. <label asp-for="LayerMetadata.Layer" class="ocat-label">@T["The layer"]</label>
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:22
 msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
-msgid "The layer the widget should be associated with."
-msgstr "Vrstva, se kterou má být widget svázán."
+msgid "The layer"
+msgstr ""
 
-#. <label asp-for="Zones" class="form-label">@T["Available zones for Layers"]</label>
+#. <option value="">@T["Select a layer"]</option>
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:25
+msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
+msgid "Select a layer"
+msgstr ""
+
+#. <span class="hint">@T["The layer controls the visibility of this widget."]</span>
+#: OrchardCore.Layers\Views\LayerMetadata.Edit.cshtml:32
+msgctxt "OrchardCore.Layers.Views.LayerMetadata.Edit"
+msgid "The layer controls the visibility of this widget."
+msgstr ""
+
+#. <label asp-for="Zones" class="ocat-label">@T["Available zones for Layers"]</label>
 #: OrchardCore.Layers\Views\LayerSettings.Edit.cshtml:4
 msgctxt "OrchardCore.Layers.Views.LayerSettings.Edit"
 msgid "Available zones for Layers"
 msgstr "Dostupné zóny pro vrstvy"
 
 #. @T["A comma separated list of values, representing the available zones for <a href=\"{0}\">widgets</a>. Note that you'll need to render these zones in the layout template, as they do not automatically render.",
-#: OrchardCore.Layers\Views\LayerSettings.Edit.cshtml:8
+#: OrchardCore.Layers\Views\LayerSettings.Edit.cshtml:9
 msgctxt "OrchardCore.Layers.Views.LayerSettings.Edit"
 msgid "A comma separated list of values, representing the available zones for <a href=\"{0}\">widgets</a>. Note that you'll need to render these zones in the layout template, as they do not automatically render."
 msgstr "Čárkami oddělený seznam hodnot, které představují dostupné zóny pro <a href=\"{0}\">widgety</a>. Všimněte si, že budete muset vykreslit tyto zóny v rozvržení šablony (Layout. cshtml nebo Layout. liquid), protože se nezobrazují automaticky."

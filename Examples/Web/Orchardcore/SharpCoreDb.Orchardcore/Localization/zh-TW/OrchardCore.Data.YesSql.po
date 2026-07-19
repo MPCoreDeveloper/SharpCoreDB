@@ -10,11 +10,11 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Chinese Traditional\n"
 "Language: zh_TW\n"
-"PO-Revision-Date: 2024-08-24 20:48\n"
+"PO-Revision-Date: 2025-04-30 13:51\n"
 
 #. context.ErrorMessage = S["Failed to remove the tables."];
 #: OrchardCore.Data.YesSql\Removing\ShellDbTablesRemovingHandler.cs:105
 msgctxt "OrchardCore.Environment.Shell.Removing.ShellDbTablesRemovingHandler"
 msgid "Failed to remove the tables."
-msgstr ""
+msgstr "無法刪除表格。"
 

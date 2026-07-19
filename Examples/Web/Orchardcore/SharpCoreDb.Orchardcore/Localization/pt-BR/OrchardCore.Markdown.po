@@ -10,19 +10,19 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Portuguese, Brazilian\n"
 "Language: pt_BR\n"
-"PO-Revision-Date: 2024-08-24 20:32\n"
+"PO-Revision-Date: 2026-06-03 19:37\n"
 
-#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Markdown), S["{0} doesn't contain a valid Liquid expression. Details: {1}", partName, string.Join(" ", errors)]);
-#: OrchardCore.Markdown\Drivers\MarkdownBodyPartDisplayDriver.cs:72
+#. S["{0} contains invalid Liquid expression: {1}",
+#: OrchardCore.Markdown\Drivers\MarkdownBodyPartDisplayDriver.cs:75
 msgctxt "OrchardCore.Markdown.Drivers.MarkdownBodyPartDisplayDriver"
-msgid "{0} doesn't contain a valid Liquid expression. Details: {1}"
+msgid "{0} contains invalid Liquid expression: {1}"
 msgstr ""
 
-#. context.Updater.ModelState.AddModelError(Prefix, nameof(viewModel.Markdown), S["{0} field doesn't contain a valid Liquid expression. Details: {1}", fieldName, string.Join(" ", errors)]);
-#: OrchardCore.Markdown\Drivers\MarkdownFieldDisplayDriver.cs:103
+#. S["{0} contains invalid Liquid expression: {1}",
+#: OrchardCore.Markdown\Drivers\MarkdownFieldDisplayDriver.cs:105
 msgctxt "OrchardCore.Markdown.Drivers.MarkdownFieldDisplayDriver"
-msgid "{0} field doesn't contain a valid Liquid expression. Details: {1}"
-msgstr "{0} campo não contém uma expressão Liquid válida. Detalhes: {1}"
+msgid "{0} contains invalid Liquid expression: {1}"
+msgstr ""
 
 #. Description = S["Content stored as Markdown. You can also query the HTML interpreted version of Markdown."];
 #: OrchardCore.Markdown\GraphQL\MarkdownBodyQueryObjectType.cs:25
@@ -60,6 +60,22 @@ msgctxt "OrchardCore.Markdown.GraphQL.MarkdownFieldQueryObjectType"
 msgid "the HTML representation of the markdown content"
 msgstr "a representação HTML do conteúdo do markdown"
 
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Options), S["The options are written in an incorrect format."]);
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Options), S["The options are written in an incorrect format."]);
+#: OrchardCore.Markdown\Settings\MarkdownBodyPartWysiwygEditorSettingsDriver.cs:46
+#: OrchardCore.Markdown\Settings\MarkdownBodyPartWysiwygEditorSettingsDriver.cs:65
+msgctxt "OrchardCore.Markdown.Settings.MarkdownBodyPartWysiwygEditorSettingsDriver"
+msgid "The options are written in an incorrect format."
+msgstr ""
+
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Options), S["The options are written in an incorrect format."]);
+#. context.Updater.ModelState.AddModelError(Prefix, nameof(model.Options), S["The options are written in an incorrect format."]);
+#: OrchardCore.Markdown\Settings\MarkdownFieldWysiwygEditorSettingsDriver.cs:46
+#: OrchardCore.Markdown\Settings\MarkdownFieldWysiwygEditorSettingsDriver.cs:65
+msgctxt "OrchardCore.Markdown.Settings.MarkdownFieldWysiwygEditorSettingsDriver"
+msgid "The options are written in an incorrect format."
+msgstr ""
+
 #. <span class="hint">@T["The markdown text of the content item."]</span>
 #: OrchardCore.Markdown\Views\MarkdownBodyPart-Wysiwyg.Edit.cshtml:22
 msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPart-Wysiwyg.Edit"
@@ -79,7 +95,7 @@ msgid "Standard"
 msgstr "Padrão"
 
 #. <span class="hint">@T["The body of the content item, in Markdown format."]</span>
-#: OrchardCore.Markdown\Views\MarkdownBodyPart.Edit.cshtml:17
+#: OrchardCore.Markdown\Views\MarkdownBodyPart.Edit.cshtml:16
 msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPart.Edit"
 msgid "The body of the content item, in Markdown format."
 msgstr "O corpo do item de conteúdo, no formato Markdown."
@@ -91,21 +107,45 @@ msgid "Standard"
 msgstr "Padrão"
 
 #. <label class="form-check-label" asp-for="SanitizeHtml">@T["Sanitize Html"]</label>
-#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:6
+#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:7
 msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
 msgid "Sanitize Html"
 msgstr "Sanitizar o HTML"
 
-#. @T["Whether the Html output from the Markdown is sanitized to prevent custom scripts."]
-#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:8
-msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
-msgid "Whether the Html output from the Markdown is sanitized to prevent custom scripts."
-msgstr "Se a versão HTML do Markdown é examinado para impedir scripts personalizados."
-
-#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/core/Sanitizer" target="_blank">@T["See documentation"]</a>
+#. @T["Whether the Html output from Markdown is sanitized, e.g. by removing script tags (and more)."]
 #: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:9
 msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
+msgid "Whether the Html output from Markdown is sanitized, e.g. by removing script tags (and more)."
+msgstr ""
+
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Sanitizer" target="_blank">@T["See documentation"]</a>
+#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:10
+msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
 msgid "See documentation"
+msgstr ""
+
+#. <label class="form-check-label" asp-for="RenderLiquid">@T["Render Liquid"]</label>
+#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:19
+msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
+msgid "Render Liquid"
+msgstr ""
+
+#. <span class="hint dashed">@T["Whether Liquid markup is rendered or displayed raw. NOTE: Liquid support for Markdown Body Part will be removed in version 4.0; if you want to continue using Liquid, migrate your content to use Liquid Part. Consider using Shortcodes instead."]</span>
+#: OrchardCore.Markdown\Views\MarkdownBodyPartSettings.Edit.cshtml:20
+msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartSettings.Edit"
+msgid "Whether Liquid markup is rendered or displayed raw. NOTE: Liquid support for Markdown Body Part will be removed in version 4.0; if you want to continue using Liquid, migrate your content to use Liquid Part. Consider using Shortcodes instead."
+msgstr ""
+
+#. <label asp-for="Options" class="ocat-label">@T["Enter the editor options"]</label>
+#: OrchardCore.Markdown\Views\MarkdownBodyPartWysiwygEditorSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartWysiwygEditorSettings.Edit"
+msgid "Enter the editor options"
+msgstr ""
+
+#. <span class="hint"><a href="https://github.com/Ionaru/easy-markdown-editor#configuration" target="_blank">@T["Documentation for options"]</a></span>
+#: OrchardCore.Markdown\Views\MarkdownBodyPartWysiwygEditorSettings.Edit.cshtml:7
+msgctxt "OrchardCore.Markdown.Views.MarkdownBodyPartWysiwygEditorSettings.Edit"
+msgid "Documentation for options"
 msgstr ""
 
 #. <option value="Wysiwyg" selected="@(currentEditor == "Wysiwyg")">@T["Wysiwyg editor"]</option>
@@ -126,14 +166,14 @@ msgctxt "OrchardCore.Markdown.Views.MarkdownField.Option"
 msgid "Standard"
 msgstr "Padrão"
 
-#. <label asp-for="Hint" class="form-label">@T["Hint"]</label>
-#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:5
+#. <label asp-for="Hint" class="ocat-label">@T["Hint"]</label>
+#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:3
 msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
 msgid "Hint"
 msgstr "Dica"
 
 #. <span class="hint">@T["The hint text to display for this field on the editor."]</span>
-#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:7
+#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:6
 msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
 msgid "The hint text to display for this field on the editor."
 msgstr "O texto da dica para este campo que será exibido no editor."
@@ -144,32 +184,56 @@ msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
 msgid "Sanitize Html"
 msgstr "Sanitizar o HTML"
 
-#. @T["Whether the Html output is sanitized to prevent custom scripts."]
+#. @T["Whether the Html output from Markdown is sanitized, e.g. by removing script tags (and more)."]
 #: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:16
 msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
-msgid "Whether the Html output is sanitized to prevent custom scripts."
-msgstr "Se o HTML é examinado para evitar scripts personalizados."
+msgid "Whether the Html output from Markdown is sanitized, e.g. by removing script tags (and more)."
+msgstr ""
 
-#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/core/Sanitizer" target="_blank">@T["See documentation"]</a>
+#. <a class="seedoc" href="@(OrchardCore.Admin.Constants.DocsUrl)reference/modules/Sanitizer" target="_blank">@T["See documentation"]</a>
 #: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:17
 msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
 msgid "See documentation"
 msgstr ""
 
+#. <label class="form-check-label" asp-for="RenderLiquid">@T["Render Liquid"]</label>
+#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:22
+msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
+msgid "Render Liquid"
+msgstr ""
+
+#. <span class="hint dashed">@T["Whether Liquid markup is rendered or displayed raw. NOTE: Liquid support for Markdown Fields will be removed in version 4.0; if you want to continue using Liquid, migrate your content to use Liquid Part. Consider using Shortcodes instead."]</span>
+#: OrchardCore.Markdown\Views\MarkdownFieldSettings.Edit.cshtml:23
+msgctxt "OrchardCore.Markdown.Views.MarkdownFieldSettings.Edit"
+msgid "Whether Liquid markup is rendered or displayed raw. NOTE: Liquid support for Markdown Fields will be removed in version 4.0; if you want to continue using Liquid, migrate your content to use Liquid Part. Consider using Shortcodes instead."
+msgstr ""
+
+#. <label asp-for="Options" class="ocat-label">@T["Enter the editor options"]</label>
+#: OrchardCore.Markdown\Views\MarkdownFieldWysiwygEditorSettings.Edit.cshtml:5
+msgctxt "OrchardCore.Markdown.Views.MarkdownFieldWysiwygEditorSettings.Edit"
+msgid "Enter the editor options"
+msgstr ""
+
+#. <span class="hint"><a href="https://github.com/Ionaru/easy-markdown-editor#configuration" target="_blank">@T["Documentation for options"]</a></span>
+#: OrchardCore.Markdown\Views\MarkdownFieldWysiwygEditorSettings.Edit.cshtml:7
+msgctxt "OrchardCore.Markdown.Views.MarkdownFieldWysiwygEditorSettings.Edit"
+msgid "Documentation for options"
+msgstr ""
+
 #. <h5 class="modal-title">@T["Select Media"]</h5>
-#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:7
+#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:5
 msgctxt "OrchardCore.Markdown.Views.Media-MarkdownBodyPart.Modal"
 msgid "Select Media"
 msgstr "Selecionar mídia"
 
 #. <button type="button" class="btn btn-primary" id="mediaMarkdownSelectButton">@T["OK"]</button>
-#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:13
+#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:11
 msgctxt "OrchardCore.Markdown.Views.Media-MarkdownBodyPart.Modal"
 msgid "OK"
 msgstr ""
 
 #. <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">@T["Cancel"]</button>
-#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:14
+#: OrchardCore.Markdown\Views\Media-MarkdownBodyPart.Modal.cshtml:12
 msgctxt "OrchardCore.Markdown.Views.Media-MarkdownBodyPart.Modal"
 msgid "Cancel"
 msgstr "Cancelar"

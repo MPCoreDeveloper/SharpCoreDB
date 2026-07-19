@@ -10,16 +10,16 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Czech\n"
 "Language: cs_CZ\n"
-"PO-Revision-Date: 2024-08-24 20:01\n"
+"PO-Revision-Date: 2026-06-03 19:07\n"
 
 #. Description = S["the alias part of the content item"];
-#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:13
+#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:14
 msgctxt "OrchardCore.Alias.GraphQL.AliasInputObjectType"
 msgid "the alias part of the content item"
 msgstr "alias položky obsahu"
 
 #. AddScalarFilterFields<StringGraphType>("alias", S["the alias of the content item"]);
-#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:15
+#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:16
 msgctxt "OrchardCore.Alias.GraphQL.AliasInputObjectType"
 msgid "the alias of the content item"
 msgstr "alias položky obsahu"
@@ -34,13 +34,13 @@ msgstr "Alternativní cesta pro položku obsahu"
 #: OrchardCore.Alias\Models\AliasPartExtensions.cs:16
 msgctxt "OrchardCore.Alias.Models.AliasPartExtensions"
 msgid "Your alias is too long. The alias can only be up to {0} characters. \"{1}\""
-msgstr ""
+msgstr "Váš alias je příliš dlouhý. Maximální délka může být {0} znaků."
 
 #. yield return new ValidationResult(S["Your alias is already in use. \"{0}\"", part.Alias], new[] { nameof(part.Alias) });
 #: OrchardCore.Alias\Models\AliasPartExtensions.cs:21
 msgctxt "OrchardCore.Alias.Models.AliasPartExtensions"
 msgid "Your alias is already in use. \"{0}\""
-msgstr ""
+msgstr "Alias je již používán. \"{0}\""
 
 #. context.Updater.ModelState.AddModelError(nameof(model.Pattern), S["Pattern doesn't contain a valid Liquid expression. Details: {0}", string.Join(" ", errors)]);
 #: OrchardCore.Alias\Settings\AliasPartSettingsDisplayDriver.cs:47
@@ -48,14 +48,14 @@ msgctxt "OrchardCore.Alias.Settings.AliasPartSettingsDisplayDriver"
 msgid "Pattern doesn't contain a valid Liquid expression. Details: {0}"
 msgstr "Předloha neobsahuje platný Liquid výraz. Detaily: {0}"
 
-#. <label asp-for="Alias" class="@Orchard.GetLabelClasses()">@T["Alias"] </label>
-#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:11
+#. <label asp-for="Alias" class="ocat-label">@T["Alias"] </label>
+#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:10
 msgctxt "OrchardCore.Alias.Views.AliasPart.Edit"
 msgid "Alias"
-msgstr ""
+msgstr "Alias"
 
 #. @T["The alias of the content item."]
-#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:16
+#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:15
 msgctxt "OrchardCore.Alias.Views.AliasPart.Edit"
 msgid "The alias of the content item."
 msgstr "Alias položky obsahu."
@@ -71,8 +71,8 @@ msgctxt "OrchardCore.Alias.Views.AliasPart.Option"
 msgid "Standard"
 msgstr "Výchozí"
 
-#. <label asp-for="Options" class="form-label">@T["Options"]</label>
-#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:15
+#. <label asp-for="Options" class="ocat-label">@T["Options"]</label>
+#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:14
 msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Options"
 msgstr "Nastavení"
@@ -89,8 +89,8 @@ msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Alias is generated and input is disabled"
 msgstr "Alias je generován a nelze jej upravit"
 
-#. <label asp-for="Pattern" class="form-label">@T["Pattern"]</label>
-#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:24
+#. <label asp-for="Pattern" class="ocat-label">@T["Pattern"]</label>
+#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:23
 msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Pattern"
 msgstr "Předloha"

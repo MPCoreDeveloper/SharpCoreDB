@@ -10,13 +10,39 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Vietnamese\n"
 "Language: vi_VN\n"
-"PO-Revision-Date: 2024-11-10 15:02\n"
+"PO-Revision-Date: 2025-04-23 10:42\n"
 
 #. <h4>@T["Welcome to Orchard Core, your site has been successfully set up."]</h4>
 #: TheTheme\Views\Home\Index.cshtml:2
 msgctxt "TheTheme.Views.Home.Index"
 msgid "Welcome to Orchard Core, your site has been successfully set up."
 msgstr "Chào mừng bạn đến với Orchard Core, trang web của bạn đã được thiết lập thành công."
+
+#: TheTheme\Views\Pager_First.cshtml:0
+msgctxt "TheTheme.Views.Pager_First"
+msgid "Go to first page."
+msgstr "Đến trang đầu tiên."
+
+#: TheTheme\Views\Pager_Last.cshtml:0
+msgctxt "TheTheme.Views.Pager_Last"
+msgid "Go to last page."
+msgstr "Đến trang cuối cùng."
+
+#: TheTheme\Views\Pager_Next.cshtml:0
+msgctxt "TheTheme.Views.Pager_Next"
+msgid "Go to next page."
+msgstr "Đến trang tiếp theo."
+
+#: TheTheme\Views\Pager_Previous.cshtml:0
+msgctxt "TheTheme.Views.Pager_Previous"
+msgid "Go to previous page."
+msgstr "Quay lại trang trước."
+
+#. <nav aria-label="@T["Listing pages"]">
+#: TheTheme\Views\Pager.cshtml:6
+msgctxt "TheTheme.Views.Pager"
+msgid "Listing pages"
+msgstr "Liệt kê các trang"
 
 #. <a role="button" class="nav-link dropdown-toggle" id="bd-theme" aria-expanded="false" data-bs-toggle="dropdown" data-bs-display="static" aria-label="@T["Toggle theme"]">
 #. <span class="d-none" id="bd-theme-text">@T["Toggle theme"]</span>
@@ -48,12 +74,12 @@ msgstr "Tối"
 #: TheTheme\Views\UserNotificationNavbar.cshtml:17
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "Notifications"
-msgstr ""
+msgstr "Thông báo"
 
 #: TheTheme\Views\UserNotificationNavbar.cshtml:0
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have more than {0} unread notifications"
-msgstr ""
+msgstr "Bạn có hơn {0} thông báo chưa đọc"
 
 #: TheTheme\Views\UserNotificationNavbar.cshtml:0
 msgctxt "TheTheme.Views.UserNotificationNavbar"
@@ -62,19 +88,19 @@ msgid_plural "You have {0} unread notifications"
 msgstr[0] "Bạn có {0} thông báo chưa đọc"
 
 #. <i class="fa-regular fa-bell" aria-hidden="true" data-bs-toggle="tooltip" data-bs-original-title="@T["You have no unread notifications"]"></i>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:34
+#: TheTheme\Views\UserNotificationNavbar.cshtml:36
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications"
 msgstr "Bạn chưa có thông báo mới"
 
 #. <li class="text-center">@T["You have no unread notifications."]</li>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:55
+#: TheTheme\Views\UserNotificationNavbar.cshtml:57
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "You have no unread notifications."
-msgstr ""
+msgstr "Bạn không có thông báo chưa đọc."
 
 #. <a class="dropdown-item fw-bold" asp-action="List" asp-controller="Admin" asp-area="@NotificationConstants.Features.Notifications">@T["Notification Center"]</a>
-#: TheTheme\Views\UserNotificationNavbar.cshtml:65
+#: TheTheme\Views\UserNotificationNavbar.cshtml:67
 msgctxt "TheTheme.Views.UserNotificationNavbar"
 msgid "Notification Center"
 msgstr "Trung Tâm Thông Báo"

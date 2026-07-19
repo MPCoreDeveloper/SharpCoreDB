@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Vietnamese\n"
 "Language: vi_VN\n"
-"PO-Revision-Date: 2024-08-24 20:17\n"
+"PO-Revision-Date: 2026-06-03 20:08\n"
 
 #. stepResult.Errors = [S["Unexpected error occurred while executing the '{0}' step.", stepResult.StepName]];
 #: OrchardCore.Recipes.Core\Services\RecipeExecutor.cs:113
@@ -19,7 +19,7 @@ msgid "Unexpected error occurred while executing the '{0}' step."
 msgstr ""
 
 #. throw new ValidationException(S["The variable '{0}' was used in the recipe but not defined. Make sure you add the '{0}' variable in the '{1}' section of the recipe.", name, GlobalMethodName]);
-#: OrchardCore.Recipes.Core\VariablesMethodProvider.cs:28
+#: OrchardCore.Recipes.Core\VariablesMethodProvider.cs:46
 msgctxt "OrchardCore.Recipes.VariablesMethodProvider"
 msgid "The variable '{0}' was used in the recipe but not defined. Make sure you add the '{0}' variable in the '{1}' section of the recipe."
 msgstr "Biến '{0}' đã được sử dụng trong công thức nhưng không được xác định. Đảm bảo bạn thêm biến '{0}' vào phần '{1}' của công thức."

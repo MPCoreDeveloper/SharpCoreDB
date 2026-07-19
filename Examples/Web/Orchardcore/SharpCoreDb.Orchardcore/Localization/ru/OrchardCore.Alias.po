@@ -10,16 +10,16 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language-Team: Russian\n"
 "Language: ru_RU\n"
-"PO-Revision-Date: 2024-08-24 20:10\n"
+"PO-Revision-Date: 2026-06-03 19:07\n"
 
 #. Description = S["the alias part of the content item"];
-#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:13
+#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:14
 msgctxt "OrchardCore.Alias.GraphQL.AliasInputObjectType"
 msgid "the alias part of the content item"
 msgstr "часть псевдонима содержимого"
 
 #. AddScalarFilterFields<StringGraphType>("alias", S["the alias of the content item"]);
-#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:15
+#: OrchardCore.Alias\GraphQL\AliasInputObjectType.cs:16
 msgctxt "OrchardCore.Alias.GraphQL.AliasInputObjectType"
 msgid "the alias of the content item"
 msgstr "псевдоним содержимого"
@@ -48,14 +48,14 @@ msgctxt "OrchardCore.Alias.Settings.AliasPartSettingsDisplayDriver"
 msgid "Pattern doesn't contain a valid Liquid expression. Details: {0}"
 msgstr "Шаблон не содержит допустимое выражение Liquid. Подробности: {0}"
 
-#. <label asp-for="Alias" class="@Orchard.GetLabelClasses()">@T["Alias"] </label>
-#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:11
+#. <label asp-for="Alias" class="ocat-label">@T["Alias"] </label>
+#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:10
 msgctxt "OrchardCore.Alias.Views.AliasPart.Edit"
 msgid "Alias"
 msgstr "Псевдоним"
 
 #. @T["The alias of the content item."]
-#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:16
+#: OrchardCore.Alias\Views\AliasPart.Edit.cshtml:15
 msgctxt "OrchardCore.Alias.Views.AliasPart.Edit"
 msgid "The alias of the content item."
 msgstr "Псевдоним содержимого."
@@ -71,8 +71,8 @@ msgctxt "OrchardCore.Alias.Views.AliasPart.Option"
 msgid "Standard"
 msgstr "Стандартный"
 
-#. <label asp-for="Options" class="form-label">@T["Options"]</label>
-#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:15
+#. <label asp-for="Options" class="ocat-label">@T["Options"]</label>
+#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:14
 msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Options"
 msgstr "Настройки"
@@ -89,8 +89,8 @@ msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Alias is generated and input is disabled"
 msgstr "Псевдоним создан и ввод отключен"
 
-#. <label asp-for="Pattern" class="form-label">@T["Pattern"]</label>
-#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:24
+#. <label asp-for="Pattern" class="ocat-label">@T["Pattern"]</label>
+#: OrchardCore.Alias\Views\AliasPartSettings.Edit.cshtml:23
 msgctxt "OrchardCore.Alias.Views.AliasPartSettings.Edit"
 msgid "Pattern"
 msgstr "Шаблон"
