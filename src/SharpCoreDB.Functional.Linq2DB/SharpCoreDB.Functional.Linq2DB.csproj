@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>SharpCoreDB.Functional.Linq2DB</PackageId>
+    <Version>1.9.2</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Functional.Linq2DB</Product>
+    <Description>linq2db adapter for SharpCoreDB.Functional with zero-dependency Option/Fin APIs, compile-time type safety, and fluent LINQ composition for .NET 10 and C# 14. Ideal for high-throughput AI agentic workflows.</Description>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+    <PackageReleaseNotes>v1.9.2: Initial linq2db adapter for the functional SharpCoreDB stack with native type mappings and AOT support.</PackageReleaseNotes>
+    <PackageTags>sharpcoredb;functional;linq2db;linq;option;fin;net10;csharp14;aot</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="linq2db" />
+    <!-- Required by linq2db's SQLite provider adapter resolution when using SQLite SQL dialect.
+         We still execute against SharpCoreDB's own ADO.NET provider. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="SharpCoreDB.Functional" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+    <PackageReference Include="SharpCoreDB.Data.Provider" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseSharpCoreDBPackage)' != 'true'">
+    <ProjectReference Include="..\SharpCoreDB.Functional\SharpCoreDB.Functional.csproj" />
+    <ProjectReference Include="..\SharpCoreDB.Data.Provider\SharpCoreDB.Data.Provider.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Pack="true" PackagePath="/" Link="SharpCoreDB.jpg" />
+  </ItemGroup>
+
+</Project>
