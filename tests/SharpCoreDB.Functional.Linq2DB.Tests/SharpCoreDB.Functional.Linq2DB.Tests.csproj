@@ -13,6 +13,7 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="linq2db" />
+    <!-- Microsoft.Data.Sqlite is pulled via Central Package Management (Directory.Packages.props) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />

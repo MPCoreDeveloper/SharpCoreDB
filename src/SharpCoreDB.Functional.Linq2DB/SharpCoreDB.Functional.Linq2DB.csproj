@@ -31,8 +31,8 @@
 
   <ItemGroup>
     <PackageReference Include="linq2db" />
-    <!-- Required by linq2db's SQLite provider adapter resolution when using SQLite SQL dialect.
-         We still execute against SharpCoreDB's own ADO.NET provider. -->
+    <!-- Microsoft.Data.Sqlite is required by linq2db's SQLite provider adapter resolution.
+         Version managed centrally in Directory.Packages.props. -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SharpCoreDB.Functional" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />
     <PackageReference Include="SharpCoreDB.Data.Provider" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />

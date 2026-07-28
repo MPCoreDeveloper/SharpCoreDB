@@ -55,7 +55,8 @@
     <ProjectReference Include="..\..\src\SharpCoreDB.Provider.Sync\SharpCoreDB.Provider.Sync.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Modern, non-vulnerable SQLite stack (we refuse System.Data.SQLite.Core 1.0.119) -->
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force safe non-vulnerable SQLite stack) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     

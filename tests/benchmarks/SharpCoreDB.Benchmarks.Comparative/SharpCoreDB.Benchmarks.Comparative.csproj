@@ -15,10 +15,11 @@
 
   <ItemGroup>
     <PackageReference Include="BLite" />
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 are managed centrally in Directory.Packages.props
+         (kept explicit here to force safe non-vulnerable SQLite stack for comparative benchmarks) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="LiteDB" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled by Microsoft.Data.Sqlite -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 

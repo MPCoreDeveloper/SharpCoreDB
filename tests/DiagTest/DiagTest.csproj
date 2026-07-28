@@ -10,8 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
-    <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled by EF Core Sqlite -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <!-- SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props.
+         Explicit reference kept to force safe non-vulnerable SQLitePCLRaw bundle. -->
   </ItemGroup>
   <ItemGroup>
     

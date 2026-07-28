@@ -55,7 +55,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Explicit override for vulnerable SQLitePCLRaw 2.1.11 (pulled via YesSql or transitive in OrchardCore/SkiaSharp paths) -->
+    <!-- SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force safe non-vulnerable bundle for YesSql/OrchardCore) -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
 
     <!-- Force modern Microsoft.Data.SqlClient to avoid CriticalBugs in older 6.x versions pulled by OrchardCore / other deps -->

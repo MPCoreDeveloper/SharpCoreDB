@@ -115,8 +115,9 @@
 
   <!-- Include runtime-specific assemblies in the package -->
   <ItemGroup>
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force safe non-vulnerable SQLitePCLRaw bundle) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
-    <!-- Explicit override: forces newer non-vulnerable SQLitePCLRaw bundle (YesSql + Microsoft.Data.Sqlite pull vulnerable 2.1.11) -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll" Pack="true" PackagePath="runtimes\win-x64\lib\$(TargetFramework)\" Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\SharpCoreDB.Provider.YesSql.dll')" />
     

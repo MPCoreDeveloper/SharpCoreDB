@@ -52,9 +52,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 
-    <!-- Belt-and-suspenders: Force modern safe SQLite stack.
-         Dotmim.Sync.Sqlite may transitively bring older System.Data.SQLite bits.
-         We prefer Microsoft.Data.Sqlite + safe SQLitePCLRaw.bundle. -->
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force modern safe SQLite stack; Dotmim.Sync.Sqlite may pull older bits) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>

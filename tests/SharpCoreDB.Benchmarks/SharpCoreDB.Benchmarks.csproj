@@ -13,9 +13,10 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
 
     <!-- Comparative Database Engines -->
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force safe non-vulnerable SQLite stack for benchmarks) -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="LiteDB" />
-    <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" />
 

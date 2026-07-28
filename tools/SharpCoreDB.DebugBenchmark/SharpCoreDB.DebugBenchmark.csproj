@@ -24,7 +24,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="LiteDB" />
     <PackageReference Include="Bogus" />
-    <!-- Explicit override for vulnerable SQLitePCLRaw.lib.e_sqlite3 2.1.11 pulled by Microsoft.Data.Sqlite -->
+    <!-- Microsoft.Data.Sqlite + SQLitePCLRaw.bundle_e_sqlite3 managed centrally in Directory.Packages.props
+         (explicit reference kept to force safe non-vulnerable SQLite stack) -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
