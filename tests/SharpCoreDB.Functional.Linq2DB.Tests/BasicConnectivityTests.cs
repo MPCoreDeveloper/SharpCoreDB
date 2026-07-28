@@ -53,44 +53,49 @@ public sealed class BasicConnectivityTests : IClassFixture<Linq2DbTestFixture>
     public async Task Query_WithLinq_ShouldReturnFilteredResults()
     {
         // Arrange
-        await _fixture.Connection.InsertAsync(new TestEntity { Name = "Alice", Age = 25 });
-        await _fixture.Connection.InsertAsync(new TestEntity { Name = "Bob", Age = 35 });
-        await _fixture.Connection.InsertAsync(new TestEntity { Name = "Charlie", Age = 30 });
+        var prefix = "query_" + Guid.NewGuid().ToString("N");
+        await _fixture.Connection.InsertAsync(new TestEntity { Name = prefix + "_Alice", Age = 25 });
+        await _fixture.Connection.InsertAsync(new TestEntity { Name = prefix + "_Bob", Age = 35 });
+        await _fixture.Connection.InsertAsync(new TestEntity { Name = prefix + "_Charlie", Age = 30 });
 
         // Act
         var results = await _fixture.Connection.GetTable<TestEntity>()
-            .Where(e => e.Age > 28)
+            .Where(e => e.Name.StartsWith(prefix) && e.Age > 28)
             .OrderBy(e => e.Name)
             .ToListAsync();
 
         // Assert
         results.Should().HaveCount(2);
-        results[0].Name.Should().Be("Bob");
-        results[1].Name.Should().Be("Charlie");
+        results[0].Name.Should().Be(prefix + "_Bob");
+        results[1].Name.Should().Be(prefix + "_Charlie");
     }
 
     [Fact]
     public async Task Update_ShouldModifyEntity()
     {
-        // Arrange - use unique name to avoid conflicts in shared fixture
+        // Arrange - use unique values and reload to ensure identity is available
         var uniqueName = "Original_" + Guid.NewGuid().ToString("N");
-        var entity = new TestEntity { Name = uniqueName, Age = 20 };
-        await _fixture.Connection.InsertAsync(entity);
-        var id = entity.Id;
+        await _fixture.Connection.InsertAsync(new TestEntity { Name = uniqueName, Age = 20 });
+
+        var persisted = await _fixture.Connection.GetTable<TestEntity>()
+            .Where(e => e.Name == uniqueName)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        persisted.Should().NotBeNull("Inserted entity should be queryable for update");
 
         // Act
-        entity.Name = "Updated_" + Guid.NewGuid().ToString("N");
-        entity.Age = 21;
-        await _fixture.Connection.UpdateAsync(entity);
+        persisted!.Name = "Updated_" + Guid.NewGuid().ToString("N");
+        persisted.Age = 21;
+        await _fixture.Connection.UpdateAsync(persisted);
 
         // Assert
         var retrieved = await _fixture.Connection.GetTable<TestEntity>()
-            .Where(e => e.Id == id)
+            .Where(e => e.Id == persisted.Id)
             .FirstOrDefaultAsync();
 
         retrieved.Should().NotBeNull("Update by Id should have succeeded");
         retrieved!.Age.Should().Be(21);
-        // Name may have been updated to a new unique value; we only check the changed field that is stable
     }
 
     [Fact]

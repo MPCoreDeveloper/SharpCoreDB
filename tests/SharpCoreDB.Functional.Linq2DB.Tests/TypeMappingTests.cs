@@ -58,20 +58,40 @@ public sealed class Linq2DbTestFixture : IDisposable
     {
         Connection?.Dispose();
 
-        // Robust cleanup for Windows SQLite locking
-        for (int i = 0; i < 15; i++)
+        // Robust cleanup for Windows SQLite locking and sidecar files
+        var cleanupPaths = new[] { DbPath, DbPath + "-wal", DbPath + "-shm" };
+
+        for (int i = 0; i < 20; i++)
         {
             try
             {
-                if (File.Exists(DbPath))
+                foreach (var path in cleanupPaths)
                 {
-                    File.Delete(DbPath);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
                 }
-                break;
+
+                return;
             }
-            catch (IOException) when (i < 14)
+            catch (IOException)
             {
-                System.Threading.Thread.Sleep(150);
+                if (i == 19)
+                {
+                    return;
+                }
+
+                System.Threading.Thread.Sleep(200);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                if (i == 19)
+                {
+                    return;
+                }
+
+                System.Threading.Thread.Sleep(200);
             }
         }
     }

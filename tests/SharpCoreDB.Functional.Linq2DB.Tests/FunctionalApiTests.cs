@@ -85,19 +85,24 @@ public sealed class FunctionalApiTests : IClassFixture<Linq2DbTestFixture>
     public async Task QueryAsync_WithQueryBuilder_ShouldApplyTransformations()
     {
         // Arrange
-        await _fixture.Connection.InsertAsync(new User { Email = "user1@test.com", IsActive = true });
-        await _fixture.Connection.InsertAsync(new User { Email = "user2@test.com", IsActive = true });
-        await _fixture.Connection.InsertAsync(new User { Email = "user3@test.com", IsActive = false });
+        var prefix = "qb_" + Guid.NewGuid().ToString("N");
+        var email1 = prefix + "_user1@test.com";
+        var email2 = prefix + "_user2@test.com";
+        var email3 = prefix + "_user3@test.com";
+
+        await _fixture.Connection.InsertAsync(new User { Email = email1, IsActive = true });
+        await _fixture.Connection.InsertAsync(new User { Email = email2, IsActive = true });
+        await _fixture.Connection.InsertAsync(new User { Email = email3, IsActive = false });
 
         // Act
         var result = await _fixture.FunctionalDb.QueryAsync<User>(q => q
-            .Where(u => u.IsActive)
+            .Where(u => u.IsActive && u.Email.StartsWith(prefix))
             .OrderBy(u => u.Email)
             .Take(1));
 
         // Assert
         result.Count().Should().Be(1);
-        result[0].Email.Should().Be("user1@test.com");
+        result[0].Email.Should().Be(email1);
     }
 
     [Fact]
