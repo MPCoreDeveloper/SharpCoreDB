@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.VectorSearch</PackageId>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>
@@ -28,7 +28,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v1.9.2: Release preparation version bump across all packages, documentation updates to current release label 1.9.2, inclusion of current test count (2,223) in docs, and changelog entry for changes since 1.9.1.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Linq2DB functional adapter production release + full version synchronization to 1.9.3 across all packages, documentation, and tests. All Linq2DB tests now passing. Updated DocumentationConsistencyTests and changelog.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

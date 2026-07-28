@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
 
     <PackageId>SharpCoreDB.Functional.Dapper</PackageId>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Functional.Dapper</Product>
     <Description>Dapper adapter for SharpCoreDB.Functional with zero-dependency Option/Fin APIs and fluent functional composition for .NET 10 and C# 14.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.2: Initial modular Dapper adapter for the functional SharpCoreDB stack.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Updated to align with core 1.9.3 release and Linq2DB adapter.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;functional;dapper;option;fin;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

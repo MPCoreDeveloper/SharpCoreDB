@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
 
     <PackageId>SharpCoreDB.Functional</PackageId>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Functional</Product>
     <Description>Functional facade for SharpCoreDB with zero-dependency Option, Fin, Seq, and Unit types, fluent composition, and low-allocation wrappers for .NET 10 and C# 14.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.2: Functional facade with zero-dependency Option/Fin/Seq/Unit types and fluent composition.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Updated to align with core 1.9.3 release and Linq2DB adapter.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;functional;option;result;fin;monad;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

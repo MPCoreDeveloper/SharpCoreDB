@@ -16,7 +16,7 @@
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <PackageTags>ado.net;database;data-provider;sharpcoredb</PackageTags>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
@@ -24,7 +24,7 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageId>SharpCoreDB.Data.Provider</PackageId>
     <Description>Data provider layer for SharpCoreDB on .NET 10.</Description>
-    <PackageReleaseNotes>v1.9.2: Release preparation version bump across all packages, documentation updates to current release label 1.9.2, inclusion of current test count (2,223) in docs, and changelog entry for changes since 1.9.1.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Linq2DB functional adapter production release + full version synchronization to 1.9.3 across all packages, documentation, and tests. All Linq2DB tests now passing. Updated DocumentationConsistencyTests and changelog.</PackageReleaseNotes>
 
     <!-- Visual Studio: Enable "Pack" command to create multi-RID package -->
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>

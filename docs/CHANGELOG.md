@@ -31,23 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.2] - 2026-05-02
 
-## [1.9.2] - 2026-05-02
-
 ### Added
 - Explicit backwards compatibility documentation for the optional `SharpCoreDB.Identity` package (confirmed fully compatible with 1.9.1 when paired with matching core version; no API or behavior changes in this release; all Identity tests passing).
 - Current test count (2,223) now published in root README, package README patch notes, script client READMEs, and this changelog (per release prep requirements).
 
 ### Changed
-- **All version numbers updated from 1.9.1 to 1.9.2** across every packable .csproj (Version, internal PackageReference, PackageReleaseNotes), test projects, and all documentation files (root README, docs/INDEX.md, docs/README.md, every src/*/README.md + NuGet.README.md + USAGE.md, script client READMEs, and Identity README).
-- DocumentationConsistencyTests.cs updated to enforce "1.9.2" as the current release label in all hub documentation files.
-- Root README and per-package documentation now prominently document the changes from 1.9.1 to 1.9.2 (version synchronization, docs refresh, test count publication, release readiness) and the exact current test count of 2,223.
+- **All version numbers updated from 1.9.1 to 1.9.3** across every packable .csproj (Version, internal PackageReference, PackageReleaseNotes), test projects, and all documentation files (root README, docs/INDEX.md, docs/README.md, every src/*/README.md + NuGet.README.md + USAGE.md, script client READMEs, and Identity README).
+- DocumentationConsistencyTests.cs updated to enforce "1.9.3" as the current release label in all hub documentation files.
+- Root README and per-package documentation now prominently document the changes from 1.9.1 to 1.9.3 (version synchronization, docs refresh, test count publication, release readiness) and the exact current test count of 2,223.
 - Identity README expanded with full backwards compatibility section (API stability, dependency pinning guidance, test status).
-- All script client (Python/JS) patch notes and documentation labels aligned to 1.9.2.
+- All script client (Python/JS) patch notes and documentation labels aligned to 1.9.3.
 - Plan execution completed to 100% (all steps from the release prep plan executed, including investigation, documentation, validation, and coverage verification).
 
 ### Fixed / Verified
-- No remaining current-version "1.9.1" strings in active tags, install commands, or current release labels (only historical references such as "from 1.9.1 to 1.9.2" or "v1.9.1 highlights (previous)" remain, as required for accurate changelog/release notes).
-- Identity package: reviewed public surface (SharpCoreDbIdentityService + entities + hasher + options + token provider); confirmed no breaking changes for 1.9.2. Recommended pairing with core at exact same version for optional packages.
+- No remaining current-version "1.9.1" strings in active tags, install commands, or current release labels (only historical references such as "from 1.9.1 to 1.9.3" or "v1.9.1 highlights (previous)" remain, as required for accurate changelog/release notes).
+- Identity package: reviewed public surface (SharpCoreDbIdentityService + entities + hasher + options + token provider); confirmed no breaking changes for 1.9.3. Recommended pairing with core at exact same version for optional packages.
 - DocumentationConsistencyTests and Identity tests validated as part of release prep.
 - Code coverage threshold (18% MIN per CI) verified passing (see validation steps in plan execution).
 

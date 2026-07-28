@@ -8,13 +8,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Extensions</PackageId>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Extensions</Product>
     <Description>Extensions for SharpCoreDB including Dapper integration and ASP.NET Core health checks. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.2: Release preparation version bump across all packages, documentation updates to current release label 1.9.2, inclusion of current test count (2,223) in docs, and changelog entry for changes since 1.9.1.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Linq2DB functional adapter production release + full version synchronization to 1.9.3 across all packages, documentation, and tests. All Linq2DB tests now passing. Updated DocumentationConsistencyTests and changelog.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;database;dapper;healthchecks;extensions;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

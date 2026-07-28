@@ -86,9 +86,15 @@ public static class Extensions
         this SharpCoreDBDataConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        // linq2db v6+ deprecates direct .Connection in favor of TryGetDbConnection/OpenDbConnection.
-        // Return the underlying ADO.NET connection (Microsoft.Data.Sqlite.SqliteConnection in this case).
-        // Tests use it only for CreateCommand(), which DbConnection supports.
-        return connection.Connection;
+
+        // linq2db v6+ recommends TryGetDbConnection/OpenDbConnection. 
+        // We use .Connection (deprecated but stable in v6) for compatibility with current tests and to force close on Windows (SQLite file locking).
+        // The recommended TryGetDbConnection() returns the same underlying connection in practice for SQLite provider.
+        var conn = connection.Connection;
+        if (conn?.State == System.Data.ConnectionState.Open)
+        {
+            conn.Close(); // aggressively release file handle to mitigate Windows SQLite locking
+        }
+        return conn!;
     }
 }

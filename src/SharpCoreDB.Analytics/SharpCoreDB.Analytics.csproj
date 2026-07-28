@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Analytics</PackageId>
@@ -13,7 +13,7 @@
     <Product>SharpCoreDB.Analytics</Product>
     <Description>Analytics extensions for SharpCoreDB: aggregates, window functions, SIMD-accelerated analytics, and time-series helpers for .NET 10.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.2: Release preparation version bump across all packages, documentation updates to current release label 1.9.2, inclusion of current test count (2,223) in docs, and changelog entry for changes since 1.9.1.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.3: Linq2DB functional adapter production release + full version synchronization to 1.9.3 across all packages, documentation, and tests. All Linq2DB tests now passing. Updated DocumentationConsistencyTests and changelog.</PackageReleaseNotes>
     <PackageTags>analytics;aggregates;window-functions;statistics;timeseries;database;sharpcoredb;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

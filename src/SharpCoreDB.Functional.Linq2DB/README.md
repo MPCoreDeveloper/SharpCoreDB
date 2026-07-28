@@ -24,7 +24,7 @@ linq2db adapter for `SharpCoreDB.Functional`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.2
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.3
 ```
 
 ---

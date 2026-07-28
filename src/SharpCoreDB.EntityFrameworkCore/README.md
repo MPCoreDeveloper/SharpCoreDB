@@ -2,19 +2,19 @@
 
 Entity Framework Core 10 provider for `SharpCoreDB`.
 
-**Version:** `v1.9.1`
+**Version:** `v1.9.3`
 **Target framework:** `.NET 10`  
 **Status:** Production-ready provider package
 
 
-## Patch updates in v1.9.1
+## Patch updates in v1.9.3
 
 - ✅ Fixed EF Core materialization for aliased and quoted SELECT columns by normalizing DataReader column names and fallback value resolution.
 - ✅ Added targeted regression tests for aliased and qualified column lookup behavior.
-- ✅ Aligned package metadata and version references to the synchronized 1.9.1 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.3 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## Patch updates in v1.9.1
+## Patch updates in v1.9.3
 
 - ✅ Fixed critical bug where `Guid` foreign keys were not correctly persisted during `SaveChanges` when using `Include` + navigation filters (e.g. `Where(x => x.Vacancies.Any(v => v.IsActive))`).
 - Root cause: Raw `Guid` objects were not normalized to strings before being sent to the engine during INSERT (only `DateTime` had this protection).
@@ -41,7 +41,7 @@ Entity Framework Core 10 provider for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.2
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.3
 ```
 
 ## DateTime Handling (Reliable Pattern)

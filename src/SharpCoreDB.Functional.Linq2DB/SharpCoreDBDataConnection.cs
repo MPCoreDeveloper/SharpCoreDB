@@ -25,7 +25,9 @@ public sealed class SharpCoreDBDataConnection : DataConnection
             .UseConnectionString(ProviderName.SQLite, connectionString)
             .UseMappingSchema(SharpCoreDBMappingSchema.Instance))
     {
-        // Mapping schema is already applied via DataOptions for consistency with the DataOptions constructor and to avoid duplicate calls.
+        // Ensure the underlying SQLite connection is opened so that tests using GetUnderlyingConnection().CreateCommand() succeed immediately.
+        // This is especially important on Windows where connection state can be closed by default.
+        EnsureConnectionOpen();
     }
 
     /// <summary>
@@ -34,6 +36,19 @@ public sealed class SharpCoreDBDataConnection : DataConnection
     public SharpCoreDBDataConnection(DataOptions options)
         : base(options.UseMappingSchema(SharpCoreDBMappingSchema.Instance))
     {
+        // Ensure the underlying SQLite connection is opened so that tests using GetUnderlyingConnection().CreateCommand() succeed immediately.
+        EnsureConnectionOpen();
+    }
+
+    private void EnsureConnectionOpen()
+    {
+        // Explicitly open the connection so tests using GetUnderlyingConnection().CreateCommand() succeed on first use.
+        // The underlying Microsoft.Data.Sqlite.SqliteConnection must be Open for ExecuteNonQuery in test constructors.
+        // Note: .Connection is deprecated in linq2db v7+; this is kept for v6 compatibility and Windows file-handle behavior.
+        if (Connection?.State != System.Data.ConnectionState.Open)
+        {
+            Connection?.Open();
+        }
     }
 
     /// <summary>

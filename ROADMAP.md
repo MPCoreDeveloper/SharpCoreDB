@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v1.9.2 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v1.9.3 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 
@@ -24,7 +24,7 @@
 
 ---
 
-## ✅ Already Shipped (≤ v1.9.2)
+## ✅ Already Shipped (≤ v1.9.3)
 
 ### Core Engine
 - ✅ **AES-256-GCM single-file encrypted database**
@@ -130,7 +130,7 @@
 ---
 
 ### Column-Level Security (CLS / Data Masking)
-> **Why:** Completes the security story started with RLS in v1.9.2.
+> **Why:** Completes the security story started with RLS in v1.9.3.
 
 - `MASKED WITH (FUNCTION = ...)` DDL syntax
 - Built-in masking functions: `default()`, `email()`, `partial()`, `random()`

@@ -20,9 +20,9 @@
 Convenience extensions package for `SharpCoreDB`.
 
 
-## Patch updates in v1.9.2
+## Patch updates in v1.9.3
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.3 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features

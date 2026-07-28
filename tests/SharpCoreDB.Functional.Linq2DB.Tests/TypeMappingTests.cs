@@ -10,22 +10,25 @@ using Xunit;
 namespace SharpCoreDB.Functional.Linq2DB.Tests;
 
 /// <summary>
-/// Tests for SharpCoreDB-specific type mappings (ULID, GUID, DateTime).
-/// C# 14: Validates custom mapping schema behavior.
+/// Shared fixture for LINQ2DB tests to avoid Windows SQLite file locking by using a single DB instance.
 /// </summary>
-public sealed class TypeMappingTests : IDisposable
+public sealed class Linq2DbTestFixture : IDisposable
 {
-    private readonly string _testDbPath;
-    private readonly SharpCoreDBDataConnection _connection;
+    public readonly string DbPath = Path.Combine(Path.GetTempPath(), $"linq2db_shared_test_{Guid.NewGuid():N}.scdb");
+    public readonly SharpCoreDBDataConnection Connection;
+    public readonly FunctionalLinq2DbContext FunctionalDb;
 
-    public TypeMappingTests()
+    public Linq2DbTestFixture()
     {
-        _testDbPath = Path.Combine(Path.GetTempPath(), $"test_types_{Guid.NewGuid():N}.scdb");
-        // Use Data Source= format compatible with Microsoft.Data.Sqlite / linq2db SQLite provider
-        _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
+        Connection = new SharpCoreDBDataConnection($"Data Source={DbPath}");
+        FunctionalDb = new FunctionalLinq2DbContext(Connection);
 
-        // Use underlying ADO.NET command for table creation (bypasses linq2db SQLite provider adapter "Path=" incompatibility)
-        using (var cmd = _connection.GetUnderlyingConnection().CreateCommand())
+        // Ensure connection is open and create tables once
+        var underlyingConn = Connection.GetUnderlyingConnection();
+        if (underlyingConn.State != System.Data.ConnectionState.Open)
+            underlyingConn.Open();
+
+        using (var cmd = underlyingConn.CreateCommand())
         {
             cmd.CommandText = @"
                 CREATE TABLE IF NOT EXISTS TypedEntities (
@@ -36,9 +39,55 @@ public sealed class TypeMappingTests : IDisposable
                     is_active INTEGER,
                     binary_data BLOB,
                     optional_ulid TEXT
+                );
+                CREATE TABLE IF NOT EXISTS TestEntities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    age INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS Users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    is_active INTEGER
                 );";
             cmd.ExecuteNonQuery();
         }
+    }
+
+    public void Dispose()
+    {
+        Connection?.Dispose();
+
+        // Robust cleanup for Windows SQLite locking
+        for (int i = 0; i < 15; i++)
+        {
+            try
+            {
+                if (File.Exists(DbPath))
+                {
+                    File.Delete(DbPath);
+                }
+                break;
+            }
+            catch (IOException) when (i < 14)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Tests for SharpCoreDB-specific type mappings (ULID, GUID, DateTime).
+/// Now uses IClassFixture to share one DB instance.
+/// </summary>
+public sealed class TypeMappingTests : IClassFixture<Linq2DbTestFixture>
+{
+    private readonly Linq2DbTestFixture _fixture;
+
+    public TypeMappingTests(Linq2DbTestFixture fixture)
+    {
+        _fixture = fixture;
     }
 
     [Fact]
@@ -49,8 +98,8 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = ulid, Name = "ULID Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.UlidValue == ulid)
             .FirstOrDefaultAsync();
 
@@ -67,8 +116,8 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = Ulid.NewUlid(), GuidValue = guid, Name = "GUID Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.GuidValue == guid)
             .FirstOrDefaultAsync();
 
@@ -85,8 +134,8 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = Ulid.NewUlid(), CreatedAt = now, Name = "DateTime Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.Name == "DateTime Test")
             .FirstOrDefaultAsync();
 
@@ -102,8 +151,8 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = Ulid.NewUlid(), IsActive = true, Name = "Bool Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.IsActive)
             .FirstOrDefaultAsync();
 
@@ -120,8 +169,8 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = Ulid.NewUlid(), BinaryData = data, Name = "Binary Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.Name == "Binary Test")
             .FirstOrDefaultAsync();
 
@@ -137,35 +186,14 @@ public sealed class TypeMappingTests : IDisposable
         var entity = new TypedEntity { UlidValue = Ulid.NewUlid(), OptionalUlid = null, Name = "Nullable Test" };
 
         // Act
-        await _connection.InsertAsync(entity);
-        var retrieved = await _connection.GetTable<TypedEntity>()
+        await _fixture.Connection.InsertAsync(entity);
+        var retrieved = await _fixture.Connection.GetTable<TypedEntity>()
             .Where(e => e.Name == "Nullable Test")
             .FirstOrDefaultAsync();
 
         // Assert
         retrieved.Should().NotBeNull();
         retrieved!.OptionalUlid.Should().BeNull();
-    }
-
-    public void Dispose()
-    {
-        _connection?.Dispose();
-        // Add retry for Windows file locking (common with SQLite/linq2db connections not fully released)
-        for (int i = 0; i < 5; i++)
-        {
-            try
-            {
-                if (File.Exists(_testDbPath))
-                {
-                    File.Delete(_testDbPath);
-                }
-                break;
-            }
-            catch (IOException) when (i < 4)
-            {
-                System.Threading.Thread.Sleep(100); // brief backoff
-            }
-        }
     }
 }
 

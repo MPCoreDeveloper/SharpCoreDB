@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>SharpCoreDB.Identity</PackageId>
-    <Version>1.9.2</Version>
+    <Version>1.9.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Identity</Product>

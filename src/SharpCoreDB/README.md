@@ -5,15 +5,15 @@
   
   High-performance encrypted embedded + network-capable database engine for .NET 10.
 
-  **Version:** `v1.9.2`
+  **Version:** `v1.9.3`
   **Package:** `SharpCoreDB`
 
 ---
 
 
-## Patch updates in v1.9.2
+## Patch updates in v1.9.3
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.2 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.3 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features
@@ -39,7 +39,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.0
+dotnet add package SharpCoreDB --version 1.9.3
 ```
 
 ---
@@ -67,7 +67,7 @@ MIT License - Free for commercial and personal use. See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** April 26, 2026 | Version: 1.9.0
+**Last Updated:** July 28, 2026 | Version: 1.9.3
 
 *Made with ❤️ by the SharpCoreDB team*
 
