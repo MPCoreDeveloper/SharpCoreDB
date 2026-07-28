@@ -26,7 +26,7 @@ public sealed class FunctionalApiTests : IDisposable
         _functionalDb = new FunctionalLinq2DbContext(_connection);
 
         // Create table via underlying connection (avoids linq2db SQLite adapter "Path=" parsing issues)
-        using (var cmd = _connection.Connection.CreateCommand())
+        using (var cmd = _connection.GetUnderlyingConnection().CreateCommand())
         {
             cmd.CommandText = @"
                 CREATE TABLE IF NOT EXISTS Users (
@@ -242,9 +242,21 @@ public sealed class FunctionalApiTests : IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
-        if (File.Exists(_testDbPath))
+        // Add retry for Windows file locking (common with SQLite/linq2db connections not fully released)
+        for (int i = 0; i < 5; i++)
         {
-            File.Delete(_testDbPath);
+            try
+            {
+                if (File.Exists(_testDbPath))
+                {
+                    File.Delete(_testDbPath);
+                }
+                break;
+            }
+            catch (IOException) when (i < 4)
+            {
+                System.Threading.Thread.Sleep(100); // brief backoff
+            }
         }
     }
 }

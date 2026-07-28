@@ -82,12 +82,13 @@ public static class Extensions
     /// </summary>
     /// <param name="connection">The data connection</param>
     /// <returns>The underlying SharpCoreDB connection</returns>
-    public static SharpCoreDB.Data.Provider.SharpCoreDBConnection GetUnderlyingConnection(
+    public static System.Data.Common.DbConnection GetUnderlyingConnection(
         this SharpCoreDBDataConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
         // linq2db v6+ deprecates direct .Connection in favor of TryGetDbConnection/OpenDbConnection.
-        // The cast works for the current SharpCoreDB ADO.NET provider integration.
-        return (SharpCoreDB.Data.Provider.SharpCoreDBConnection)connection.Connection;
+        // Return the underlying ADO.NET connection (Microsoft.Data.Sqlite.SqliteConnection in this case).
+        // Tests use it only for CreateCommand(), which DbConnection supports.
+        return connection.Connection;
     }
 }

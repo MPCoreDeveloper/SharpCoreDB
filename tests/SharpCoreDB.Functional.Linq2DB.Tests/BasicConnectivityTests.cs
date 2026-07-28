@@ -24,7 +24,7 @@ public sealed class BasicConnectivityTests : IDisposable
         _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
 
         // Create table using the underlying connection to avoid linq2db SQLite adapter connection string parsing issues with "Path=".
-        using (var cmd = _connection.Connection.CreateCommand())
+        using (var cmd = _connection.GetUnderlyingConnection().CreateCommand())
         {
             cmd.CommandText = @"
                 CREATE TABLE IF NOT EXISTS TestEntities (
@@ -149,9 +149,21 @@ public sealed class BasicConnectivityTests : IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
-        if (File.Exists(_testDbPath))
+        // Add retry for Windows file locking (common with SQLite/linq2db connections not fully released)
+        for (int i = 0; i < 5; i++)
         {
-            File.Delete(_testDbPath);
+            try
+            {
+                if (File.Exists(_testDbPath))
+                {
+                    File.Delete(_testDbPath);
+                }
+                break;
+            }
+            catch (IOException) when (i < 4)
+            {
+                System.Threading.Thread.Sleep(100); // brief backoff
+            }
         }
     }
 }

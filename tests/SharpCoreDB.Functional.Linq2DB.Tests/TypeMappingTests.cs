@@ -4,6 +4,7 @@ using FluentAssertions;
 using LinqToDB;
 using LinqToDB.Async;
 using LinqToDB.Mapping;
+using SharpCoreDB.Functional.Linq2DB;
 using Xunit;
 
 namespace SharpCoreDB.Functional.Linq2DB.Tests;
@@ -24,7 +25,7 @@ public sealed class TypeMappingTests : IDisposable
         _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
 
         // Use underlying ADO.NET command for table creation (bypasses linq2db SQLite provider adapter "Path=" incompatibility)
-        using (var cmd = _connection.Connection.CreateCommand())
+        using (var cmd = _connection.GetUnderlyingConnection().CreateCommand())
         {
             cmd.CommandText = @"
                 CREATE TABLE IF NOT EXISTS TypedEntities (
@@ -149,9 +150,21 @@ public sealed class TypeMappingTests : IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
-        if (File.Exists(_testDbPath))
+        // Add retry for Windows file locking (common with SQLite/linq2db connections not fully released)
+        for (int i = 0; i < 5; i++)
         {
-            File.Delete(_testDbPath);
+            try
+            {
+                if (File.Exists(_testDbPath))
+                {
+                    File.Delete(_testDbPath);
+                }
+                break;
+            }
+            catch (IOException) when (i < 4)
+            {
+                System.Threading.Thread.Sleep(100); // brief backoff
+            }
         }
     }
 }

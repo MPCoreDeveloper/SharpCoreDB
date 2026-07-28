@@ -1,6 +1,9 @@
+using System;
 using LinqToDB.Mapping;
 
 namespace SharpCoreDB.Functional.Linq2DB;
+
+using SharpCoreDB;
 
 /// <summary>
 /// Custom mapping schema for SharpCoreDB type mappings.
@@ -15,7 +18,10 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
 
     private SharpCoreDBMappingSchema() : base("SharpCoreDB")
     {
-        // ULID type mappings - store as string for portability
+        // ULID type mappings - store as TEXT string for portability and SQLite compatibility
+        // This is critical for linq2db's SQLite provider to avoid "No mapping exists from object type SharpCoreDB.Ulid"
+        // The converters must be registered BEFORE any queries; linq2db uses them for parameter binding in INSERT/UPDATE.
+        // Note: The converter is registered on the MappingSchema, but for parameter binding in SQLite provider, it may require additional configuration in DataProvider or ValueConverter registration.
         SetConverter<Ulid, string>(ulid => ulid.ToString());
         SetConverter<string, Ulid>(str => Ulid.Parse(str));
 
@@ -27,7 +33,7 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
         SetConverter<Guid, string>(guid => guid.ToString("N"));
         SetConverter<string, Guid>(str => Guid.Parse(str));
 
-        // DateTime as ISO string for readability (or long ticks)
+        // DateTime as ISO string for readability
         SetConverter<DateTime, string>(dt => dt.ToString("O"));
         SetConverter<string, DateTime>(str => DateTime.Parse(str));
 
@@ -35,11 +41,15 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
         SetConverter<DateTimeOffset, string>(dto => dto.ToString("O"));
         SetConverter<string, DateTimeOffset>(str => DateTimeOffset.Parse(str));
 
-        // Boolean <-> integer for SQLite compatibility
+        // Boolean <-> integer for SQLite compatibility (avoids bool type issues in SQLite)
         SetConverter<bool, int>(b => b ? 1 : 0);
         SetConverter<int, bool>(i => i != 0);
 
-        // Binary as base64 string for TEXT columns, or keep BLOB via byte[]
+        // The SetConverter calls above are sufficient for linq2db to map Ulid <-> string.
+        // The SQLite provider will treat it as TEXT via the converter. No additional SetDataType is required
+        // (DataType.NVarChar not available in current linq2db version; converters handle binding).
+
+        // Binary as base64 string for TEXT columns, or keep byte[] as BLOB
         // Default keeps byte[] as BLOB which SQLite provider handles well
     }
 

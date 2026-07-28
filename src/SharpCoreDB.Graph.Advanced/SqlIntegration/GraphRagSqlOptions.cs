@@ -6,6 +6,8 @@
 // </copyright>
 namespace SharpCoreDB.Graph.Advanced.SqlIntegration;
 
+using System;
+
 /// <summary>
 /// Options for GRAPH_RAG SQL provider registration.
 /// </summary>

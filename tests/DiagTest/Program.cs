@@ -1,4 +1,6 @@
+using System;
 using System.Globalization;
+using System.IO;
 
 Console.WriteLine("Testing locale validation with CreateCulture...");
 
