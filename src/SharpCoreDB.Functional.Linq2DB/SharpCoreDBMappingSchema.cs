@@ -6,6 +6,7 @@ using LinqToDB.Mapping;
 namespace SharpCoreDB.Functional.Linq2DB;
 
 using SharpCoreDB;
+using DataType = LinqToDB.DataType;
 
 /// <summary>
 /// Custom mapping schema for SharpCoreDB type mappings.
@@ -26,16 +27,17 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
         // DB → CLR uses the direct converter.
         // This is the standard pattern from linq2db docs/discussions for custom scalar types like ULID.
 
-        // Ulid → DB parameter (string stored as TEXT)
+        // Ulid → DB parameter (string stored as TEXT/NVarChar)
+        // Use DataType.NVarChar (standard for string parameters in linq2db; SQLite maps it to TEXT affinity)
         SetConverter<Ulid, DataParameter>(ulid =>
             new DataParameter(null, ulid.ToString(), DataType.NVarChar));
 
         // string → Ulid (for SELECT/materialization)
         SetConverter<string, Ulid>(str => Ulid.Parse(str));
 
-        // Nullable ULID support
+        // Nullable ULID support (fixed: use `ulid != null` instead of method group `.HasValue`)
         SetConverter<Ulid?, DataParameter>(ulid =>
-            ulid.HasValue
+            ulid != null
                 ? new DataParameter(null, ulid.Value.ToString(), DataType.NVarChar)
                 : new DataParameter(null, DBNull.Value, DataType.NVarChar));
         SetConverter<string?, Ulid?>(str => string.IsNullOrWhiteSpace(str) ? null : Ulid.Parse(str));
@@ -58,8 +60,8 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
 
         // Binary remains as byte[] (BLOB) — handled natively by SQLite provider
 
-        // Optional: Register as scalar type for additional provider hints
-        // (AddScalarType helps the provider recognize the type; NVarChar maps to TEXT in SQLite)
+        // Register as scalar type for additional provider hints
+        // (AddScalarType helps the provider recognize the type; NVarChar maps to TEXT in SQLite provider)
         AddScalarType(typeof(Ulid), DataType.NVarChar);
     }
 
