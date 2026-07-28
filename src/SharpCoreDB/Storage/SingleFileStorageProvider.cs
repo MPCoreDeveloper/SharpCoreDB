@@ -1045,7 +1045,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             return;
         }
 
-        await FlushInternalAsync(cancellationToken, flushToDisk: false).ConfigureAwait(false);
+        // ✅ CRITICAL FIX: macOS CI regression - use flushToDisk: true for durable persistence
+        // FlushAsync() is called from Database.Flush() after INSERT operations.
+        // On macOS, filesystem buffering is aggressive - data stays in OS cache without fsync.
+        // With flushToDisk: false, data is lost on database reopen (test failure: expected 2 rows, got 1).
+        // Solution: Always use FileStream.Flush(flushToDisk: true) for guaranteed durability.
+        await FlushInternalAsync(cancellationToken, flushToDisk: true).ConfigureAwait(false);
     }
 
     /// <summary>
