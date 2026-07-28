@@ -6,6 +6,8 @@
       "src\\SharpCoreDB.VectorSearch\\SharpCoreDB.VectorSearch.csproj",
       "src\\SharpCoreDB.Data.Provider\\SharpCoreDB.Data.Provider.csproj",
       "src\\SharpCoreDB.EntityFrameworkCore\\SharpCoreDB.EntityFrameworkCore.csproj",
+      "src\\SharpCoreDB.Functional\\SharpCoreDB.Functional.csproj",
+      "src\\SharpCoreDB.Functional.Linq2DB\\SharpCoreDB.Functional.Linq2DB.csproj",
       "src\\SharpCoreDB.Graph\\SharpCoreDB.Graph.csproj",
       "src\\SharpCoreDB.Graph.Advanced\\SharpCoreDB.Graph.Advanced.csproj",
       "src\\SharpCoreDB.Extensions\\SharpCoreDB.Extensions.csproj",
@@ -14,6 +16,7 @@
       "tests\\SharpCoreDB.Tests\\SharpCoreDB.Tests.csproj",
       "tests\\SharpCoreDB.VectorSearch.Tests\\SharpCoreDB.VectorSearch.Tests.csproj",
       "tests\\SharpCoreDB.EntityFrameworkCore.Tests\\SharpCoreDB.EntityFrameworkCore.Tests.csproj",
+      "tests\\SharpCoreDB.Functional.Linq2DB.Tests\\SharpCoreDB.Functional.Linq2DB.Tests.csproj",
       "tools\\SharpCoreDB.Demo\\SharpCoreDB.Demo.csproj"
     ]
   }
