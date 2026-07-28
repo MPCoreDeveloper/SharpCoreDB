@@ -102,6 +102,7 @@
     <Project Path="src/SharpCoreDB.Extensions/SharpCoreDB.Extensions.csproj" />
     <Project Path="src/SharpCoreDB.Functional.Dapper/SharpCoreDB.Functional.Dapper.csproj" />
     <Project Path="src/SharpCoreDB.Functional.EntityFrameworkCore/SharpCoreDB.Functional.EntityFrameworkCore.csproj" />
+    <Project Path="src/SharpCoreDB.Functional.Linq2DB/SharpCoreDB.Functional.Linq2DB.csproj" />
     <Project Path="src/SharpCoreDB.Functional/SharpCoreDB.Functional.csproj" />
     <Project Path="src/SharpCoreDB.Graph.Advanced/SharpCoreDB.Graph.Advanced.csproj" />
     <Project Path="src/SharpCoreDB.Graph/SharpCoreDB.Graph.csproj" />
@@ -124,6 +125,7 @@
     <Project Path="tests/SharpCoreDB.DemoJoinsSubQ/SharpCoreDB.DemoJoinsSubQ.csproj" />
     <Project Path="tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.EventSourcing.Tests/SharpCoreDB.EventSourcing.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Profiling/SharpCoreDB.Profiling.csproj" />
     <Project Path="tests/SharpCoreDB.Projections.Tests/SharpCoreDB.Projections.Tests.csproj" />

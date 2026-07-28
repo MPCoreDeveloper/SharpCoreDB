@@ -108,6 +108,13 @@ jobs:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
+    - name: Test SharpCoreDB.Functional.Linq2DB.Tests
+      run: dotnet test tests/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
+      timeout-minutes: 10
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
     - name: Validate coverage threshold
       if: matrix.os == 'ubuntu-latest'
       shell: python3 {0}
@@ -352,7 +359,8 @@ jobs:
           "SharpCoreDB.Provider.Sync.*.nupkg" \
           "SharpCoreDB.Provider.YesSql.*.nupkg" \
           "SharpCoreDB.Functional.Dapper.*.nupkg" \
-          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg"
+          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
+          "SharpCoreDB.Functional.Linq2DB.*.nupkg"
 
         # Catch any remaining packages not in the layers above
         push_layer "Remaining packages" \

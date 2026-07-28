@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v1.9.2`)
+**Status:** Active documentation set (`v1.9.3`)
 
 ## 1. Project Entry Points
 
@@ -50,6 +50,7 @@
 - `../src/SharpCoreDB.Functional/README.md`
 - `../src/SharpCoreDB.Functional.Dapper/README.md`
 - `../src/SharpCoreDB.Functional.EntityFrameworkCore/README.md`
+- `../src/SharpCoreDB.Functional.Linq2DB/README.md` (new production linq2db adapter with `Option`/`Fin`/`Seq` + BulkCopy)
 - `../src/SharpCoreDB.Identity/README.md`
 - `../src/SharpCoreDB.Serilog.Sinks/README.md`
 - `../src/SharpCoreDB.Serilog.Sinks/NuGet.README.md`

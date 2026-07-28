@@ -86,6 +86,8 @@ public static class Extensions
         this SharpCoreDBDataConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
+        // linq2db v6+ deprecates direct .Connection in favor of TryGetDbConnection/OpenDbConnection.
+        // The cast works for the current SharpCoreDB ADO.NET provider integration.
         return (SharpCoreDB.Data.Provider.SharpCoreDBConnection)connection.Connection;
     }
 }

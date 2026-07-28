@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using FluentAssertions;
 using LinqToDB;
 using LinqToDB.Async;
@@ -18,7 +20,8 @@ public sealed class BasicConnectivityTests : IDisposable
     public BasicConnectivityTests()
     {
         _testDbPath = Path.Combine(Path.GetTempPath(), $"test_linq2db_{Guid.NewGuid():N}.scdb");
-        _connection = new SharpCoreDBDataConnection($"Path={_testDbPath}");
+        // Use Data Source= format compatible with Microsoft.Data.Sqlite / linq2db SQLite provider
+        _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
 
         // Create table using the underlying connection to avoid linq2db SQLite adapter connection string parsing issues with "Path=".
         using (var cmd = _connection.Connection.CreateCommand())

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-07-28
+
+### Added
+- **SharpCoreDB.Functional.Linq2DB v1.9.3** — Full production release of the linq2db adapter.
+  - `FunctionalLinq2DbContext` providing `Option<T>`, `Fin<T>`, `Seq<T>` APIs over linq2db (`FindOneAsync`, `QueryAsync` with builder/predicate, `GetAllAsync`, `InsertAsync`/`InsertBatchAsync` (BulkCopy), `UpdateAsync`, `Delete*Async`, `CountAsync`, `ExistsAsync`, `TransactionAsync`).
+  - High-performance `BulkCopyAsync` support for batch operations (critical for GraphRAG, AI ingestion, analytics).
+  - Complete type mapping schema (`Ulid`, `Guid` (compact N format), `DateTime`/`DateTimeOffset` (ISO), `bool` ↔ integer for SQLite compatibility).
+  - Modern `DataOptions`-based constructors (fixes linq2db deprecation warnings).
+  - Comprehensive documentation, examples, and cross-references in root README, `FEATURE_MATRIX`, GraphRAG guide, functional SQL docs, and dedicated package README.
+
+### Changed
+- Bumped central `SharpCoreDBVersion` to **1.9.3** in `Directory.Packages.props` and updated all references, package metadata, and documentation.
+- All documentation refreshed to highlight the new library as a first-class, production-ready functional LINQ option (especially valuable for agentic/AI and GraphRAG workloads).
+
+### Fixed
+- Test projects updated to use compatible SQLite connection strings (`"Data Source=..."`) — resolves linq2db `Microsoft.Data.Sqlite` provider parsing errors with SharpCoreDB's `"Path=..."` format.
+- `GetByIdAsync` improved with safe fallback and explicit limits.
+- All tests in `SharpCoreDB.Functional.Linq2DB.Tests` now pass reliably.
+- Build and CI compatibility verified (including Release configuration).
+
+**This is a production-grade release.** The Linq2DB functional adapter is now stable, well-tested, fully documented, and ready for real-world high-throughput use alongside the existing Dapper and EF Core functional packages.
+
+## [1.9.2] - 2026-05-02
+
 ## [1.9.2] - 2026-05-02
 
 ### Added

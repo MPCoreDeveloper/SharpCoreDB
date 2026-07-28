@@ -1,6 +1,8 @@
 using LinqToDB;
 using LinqToDB.Data;
 
+using LinqToDB.Mapping;
+
 namespace SharpCoreDB.Functional.Linq2DB;
 
 /// <summary>

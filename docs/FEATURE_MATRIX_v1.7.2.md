@@ -59,6 +59,7 @@ This page consolidates the major SharpCoreDB capabilities by package for quick d
 | `SharpCoreDB.Functional` | Functional façade | `Option<T>`, `Fin<T>`, `Seq<T>`, functional-first database APIs |
 | `SharpCoreDB.Functional.Dapper` | Functional Dapper adapter | Functional wrappers over Dapper read/write/query patterns |
 | `SharpCoreDB.Functional.EntityFrameworkCore` | Functional EF Core adapter | Functional wrappers over `DbContext` workflows |
+| `SharpCoreDB.Functional.Linq2DB` (**new**) | linq2db adapter | Compile-time safe LINQ + `Option<T>`/`Fin<T>`/`Seq<T>` railway patterns, `BulkCopyAsync`, ULID/GUID/DateTime mappings, low-overhead queries. Ideal for high-throughput AI/agentic code. See dedicated README. |
 
 ## Quality and compatibility summary
 

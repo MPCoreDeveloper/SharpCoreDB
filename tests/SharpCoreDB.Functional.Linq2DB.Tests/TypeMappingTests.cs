@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using FluentAssertions;
 using LinqToDB;
 using LinqToDB.Async;
@@ -18,7 +20,8 @@ public sealed class TypeMappingTests : IDisposable
     public TypeMappingTests()
     {
         _testDbPath = Path.Combine(Path.GetTempPath(), $"test_types_{Guid.NewGuid():N}.scdb");
-        _connection = new SharpCoreDBDataConnection($"Path={_testDbPath}");
+        // Use Data Source= format compatible with Microsoft.Data.Sqlite / linq2db SQLite provider
+        _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
 
         // Use underlying ADO.NET command for table creation (bypasses linq2db SQLite provider adapter "Path=" incompatibility)
         using (var cmd = _connection.Connection.CreateCommand())

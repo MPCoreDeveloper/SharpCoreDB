@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using FluentAssertions;
 using LinqToDB;
 using LinqToDB.Mapping;
@@ -19,7 +21,8 @@ public sealed class FunctionalApiTests : IDisposable
     public FunctionalApiTests()
     {
         _testDbPath = Path.Combine(Path.GetTempPath(), $"test_functional_{Guid.NewGuid():N}.scdb");
-        _connection = new SharpCoreDBDataConnection($"Path={_testDbPath}");
+        // Use Data Source= format compatible with Microsoft.Data.Sqlite / linq2db SQLite provider
+        _connection = new SharpCoreDBDataConnection($"Data Source={_testDbPath}");
         _functionalDb = new FunctionalLinq2DbContext(_connection);
 
         // Create table via underlying connection (avoids linq2db SQLite adapter "Path=" parsing issues)

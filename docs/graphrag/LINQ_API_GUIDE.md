@@ -2,7 +2,9 @@
 
 ## Overview
 
-This guide demonstrates how to use the **GraphRAG LINQ extensions** with Entity Framework Core to query graph relationships with a fluent, type-safe API.
+This guide demonstrates how to use the **GraphRAG LINQ extensions** with Entity Framework Core (and the new `SharpCoreDB.Functional.Linq2DB` adapter) to query graph relationships with a fluent, type-safe API.
+
+**New:** For zero-overhead, compile-time safe queries with railway-oriented return types (`Option<T>`, `Fin<T>`, `Seq<T>`), use the production-ready `SharpCoreDB.Functional.Linq2DB` package. It pairs excellently with GraphRAG patterns for agentic/AI workloads.
 
 > **Phase Status**: ✅ Phase 2 complete (Phase 3 prototype)
 
@@ -279,7 +281,26 @@ ORDER BY CreatedDate ASC
 - **Index Utilization**: Native SQL queries leverage existing indexes
 - **Lazy Evaluation**: LINQ queries are not executed until `.ToList()` or `.ToListAsync()`
 
-### Best Practices
+### Using with SharpCoreDB.Functional.Linq2DB (Recommended for Production)
+
+```csharp
+using SharpCoreDB.Functional.Linq2DB;
+using static SharpCoreDB.Functional.Prelude;
+
+var conn = new SharpCoreDBDataConnection("Data Source=./graphrag.scdb");
+var db = new FunctionalLinq2DbContext(conn);
+
+// Functional + type-safe LINQ (perfect for GraphRAG agent flows)
+var node = await db.FindOneAsync<Node>(n => n.Id == 1);
+var neighbors = await db.QueryAsync<Node>(q => q
+    .Where(n => n.Type == "Entity")
+    .OrderBy(n => n.Name)
+    .Take(10));
+```
+
+See `src/SharpCoreDB.Functional.Linq2DB/README.md` for full API (`InsertBatchAsync` with BulkCopy, transactions, etc.).
+
+## Best Practices (EF Core + linq2db)
 
 1. **Use `.ToListAsync()` in async contexts**
    ```csharp

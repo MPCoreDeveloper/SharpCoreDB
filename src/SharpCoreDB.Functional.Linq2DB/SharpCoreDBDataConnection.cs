@@ -21,18 +21,19 @@ public sealed class SharpCoreDBDataConnection : DataConnection
     /// Uses linq2db SQLite dialect for SQL generation.
     /// </summary>
     public SharpCoreDBDataConnection(string connectionString)
-        : base(ProviderName.SQLite, connectionString)
+        : base(new DataOptions()
+            .UseConnectionString(ProviderName.SQLite, connectionString)
+            .UseMappingSchema(SharpCoreDBMappingSchema.Instance))
     {
-        AddMappingSchema(SharpCoreDBMappingSchema.Instance);
+        // Mapping schema is already applied via DataOptions for consistency with the DataOptions constructor and to avoid duplicate calls.
     }
 
     /// <summary>
     /// Initializes using pre-built DataOptions (recommended for DI).
     /// </summary>
     public SharpCoreDBDataConnection(DataOptions options)
-        : base(options)
+        : base(options.UseMappingSchema(SharpCoreDBMappingSchema.Instance))
     {
-        AddMappingSchema(SharpCoreDBMappingSchema.Instance);
     }
 
     /// <summary>
