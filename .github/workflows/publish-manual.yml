@@ -106,7 +106,8 @@ jobs:
           "SharpCoreDB.Provider.Sync.*.nupkg" \
           "SharpCoreDB.Provider.YesSql.*.nupkg" \
           "SharpCoreDB.Functional.Dapper.*.nupkg" \
-          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg"
+          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
+          "SharpCoreDB.Functional.Linq2DB.*.nupkg"
 
         push_layer "Remaining packages" \
           "*.nupkg"
