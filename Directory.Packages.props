@@ -86,7 +86,7 @@
     <PackageVersion Include="Grpc.Core.Api" Version="2.80.0" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.80.0" />
     <PackageVersion Include="Grpc.Tools" Version="2.83.0" />
-    <PackageVersion Include="HtmlSanitizer" Version="9.1.973" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />
     <PackageVersion Include="KubernetesClient" Version="19.0.2" />
     <PackageVersion Include="LiteDB" Version="5.0.21" />
     <PackageVersion Include="linq2db" Version="6.3.0" />
