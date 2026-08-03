@@ -56,7 +56,7 @@
          are NOT listed here because the AppHost project disables CPM and provides inline versions.
          This is required by the Aspire SDK. -->
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
-    <PackageVersion Include="AngleSharp" Version="1.6.0" />
+    <PackageVersion Include="AngleSharp" Version="1.7.0" />
     <PackageVersion Include="Avalonia" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
