@@ -74,7 +74,7 @@
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <PackageVersion Include="Dotmim.Sync.Core" Version="1.3.0" />
     <PackageVersion Include="Dotmim.Sync.Sqlite" Version="1.3.0" />
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.0" />
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
     <PackageVersion Include="FluentMigrator" Version="8.0.1" />
     <PackageVersion Include="FluentMigrator.Runner" Version="8.0.1" />
