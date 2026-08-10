@@ -128,7 +128,7 @@
     <PackageVersion Include="MimeKit" Version="4.17.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="OrchardCore.Application.Cms.Targets" Version="3.0.1" />
-    <PackageVersion Include="SafeWebCore" Version="1.6.0" />
+    <PackageVersion Include="SafeWebCore" Version="1.7.0" />
     <PackageVersion Include="ScottPlot" Version="5.1.59" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
