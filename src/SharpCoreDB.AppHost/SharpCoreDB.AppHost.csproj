@@ -27,7 +27,7 @@
     <PackageReference Include="KubernetesClient" Version="19.0.2" />
     <!-- Explicit override for vulnerable transitive MessagePack brought by KubernetesClient + Aspire/StreamJsonRpc (>=2.5.302 required) -->
     <PackageReference Include="MessagePack" Version="3.1.8" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.301">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
