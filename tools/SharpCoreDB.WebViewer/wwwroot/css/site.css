@@ -57,7 +57,7 @@
     --scdb-toolbar-height:   32px;
 
     /* Sidebar (Object Explorer) */
-    --scdb-sidebar-width:    240px;
+    --scdb-sidebar-width:    300px;
     --scdb-sidebar-bg:       #252526;
     --scdb-sidebar-text:     #cccccc;
     --scdb-sidebar-hover:    #2a2d2e;
@@ -201,6 +201,7 @@ html, body {
     align-items: center;
     gap: 0;
     padding: 0 8px;
+    -webkit-user-select: none;
     user-select: none;
     height: var(--scdb-menubar-height);
 }
@@ -382,6 +383,7 @@ html, body {
 .scdb-resize-active,
 .scdb-resize-active * {
     cursor: col-resize !important;
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -467,6 +469,7 @@ html, body {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--scdb-chrome-text-mute);
+    -webkit-user-select: none;
     user-select: none;
     flex-shrink: 0;
 }
@@ -544,13 +547,70 @@ html, body {
     overflow: auto;
 }
 
-/* The form wrapping the editor textarea must also stretch to fill the panel */
+/* ── SQL syntax-highlight editor (overlay technique) ────────────────────
+   Transparent textarea sits on top of a highlighted <pre> mirror.
+   Identical metrics keep caret and highlight perfectly aligned.
+   CSP A+ safe: no eval, no inline styles, no third-party libraries. */ 
 #form-execute-main {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    position: relative;
 }
+
+.scdb-sql-mirror {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    pointer-events: none;
+    overflow: auto;
+    font-family: var(--scdb-mono-font, 'Cascadia Code', 'Consolas', monospace);
+    font-size: 13px;
+    line-height: 1.5;
+    tab-size: 4;
+    white-space: pre;
+    background: var(--scdb-editor-bg);
+    color: var(--scdb-chrome-text);
+    z-index: 0;
+}
+
+/* Textarea transparent background so mirror shows through; keep caret visible */
+.scdb-editor-textarea {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--scdb-chrome-text);
+}
+
+.scdb-editor-textarea:focus {
+    outline: none;
+}
+
+/* ── SQL token colours (VS Code Dark+ palette) ─────────────────────────── */
+.tok-keyword     { color: #569cd6; }
+.tok-type        { color: #4ec9b0; }
+.tok-function    { color: #dcdcaa; }
+.tok-string      { color: #ce9178; }
+.tok-ident       { color: #9cdcfe; }
+.tok-ident-soft  { color: #d4d4d4; }
+.tok-number      { color: #b5cea8; }
+.tok-comment     { color: #6a9955; font-style: italic; }
+.tok-op          { color: #d4d4d4; }
+
+/* Light theme token colours */
+[data-theme="light"] .tok-keyword    { color: #0000ff; }
+[data-theme="light"] .tok-type       { color: #2b91af; }
+[data-theme="light"] .tok-function   { color: #795e26; }
+[data-theme="light"] .tok-string     { color: #a31515; }
+[data-theme="light"] .tok-ident      { color: #2b91af; }
+[data-theme="light"] .tok-ident-soft { color: #1e1e1e; }
+[data-theme="light"] .tok-number     { color: #098658; }
+[data-theme="light"] .tok-comment    { color: #008000; font-style: italic; }
+[data-theme="light"] .tok-op         { color: #1e1e1e; }
 
 .scdb-editor-panel__toolbar {
     background: var(--scdb-panel-bg);
@@ -677,6 +737,7 @@ html, body {
     border-left: 1px solid transparent;
     border-right: 1px solid transparent;
     margin-right: 2px;
+    -webkit-user-select: none;
     user-select: none;
     transition: color 0.1s;
 }
@@ -718,6 +779,7 @@ html, body {
     position: sticky;
     top: 0;
     z-index: 1;
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -928,6 +990,7 @@ html, body {
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition: color 0.1s;
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -988,6 +1051,7 @@ html, body {
     letter-spacing: 0.07em;
     color: var(--scdb-chrome-text-mute);
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
     /* button reset */
     background: none;
@@ -1013,7 +1077,7 @@ html, body {
 .scdb-sidebar__meta {
     border-top: 1px solid var(--scdb-panel-border);
     flex-shrink: 0;
-    max-height: 220px;
+    max-height: 320px;
     overflow-y: auto;
 }
 
@@ -1052,6 +1116,38 @@ html, body {
     padding: 2px 8px;
     border-bottom: 1px solid var(--scdb-grid-border);
     max-width: 110px;
+}
+
+/* ── Sidebar DDL block (approximate CREATE TABLE) ────────────────────────── */
+.scdb-sidebar__meta-ddl {
+    border-top: 1px solid var(--scdb-panel-border);
+    padding: 6px 8px 8px;
+}
+
+.scdb-sidebar__meta-subheader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--scdb-chrome-text-mute);
+    margin-bottom: 6px;
+}
+
+.scdb-sidebar__meta-ddl-pre {
+    margin: 0;
+    padding: 8px;
+    background: var(--scdb-editor-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--scdb-chrome-text);
 }
 
 /* ── Session detail list ─────────────────────────────────────────────── */
@@ -1284,6 +1380,7 @@ html, body {
 
 .scdb-snippet-dialog::backdrop {
     background: rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
 }
 
@@ -1732,4 +1829,210 @@ html, body {
 .scdb-btn--compact {
     padding: 1px 8px;
     font-size: 11px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SSMS MENU DROPDOWNS
+   Pure CSS + external JS (CSP A+ safe). No inline styles.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.scdb-menu-dropdown {
+    position: fixed;
+    min-width: 230px;
+    max-width: 360px;
+    background: var(--scdb-menu-bg, #252526);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    padding: 4px 0;
+    z-index: 3000;
+    display: none;
+    margin: 0;
+}
+
+.scdb-menu-dropdown.open {
+    display: block;
+    animation: scdbMenuFade 0.1s ease-out;
+}
+
+@keyframes scdbMenuFade {
+    from { opacity: 0; transform: translateY(-2px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.scdb-menu__group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--scdb-chrome-text);
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.scdb-menu__group:hover,
+.scdb-menu__group:focus {
+    background: var(--scdb-sidebar-selected);
+    outline: none;
+}
+
+.scdb-menu__group:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.scdb-menu__shortcut {
+    font-size: 10px;
+    color: var(--scdb-chrome-text-mute);
+    font-family: var(--scdb-editor-font);
+    margin-left: 24px;
+}
+
+.scdb-menu__separator {
+    height: 1px;
+    background: var(--scdb-panel-border);
+    margin: 4px 10px;
+}
+
+/* Light theme menu adjustments */
+[data-theme="light"] .scdb-menu-dropdown {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Sidebar group content (moved SSMS panels) */
+.scdb-sidebar__group-content {
+    padding: 0;
+}
+
+.scdb-sidebar-section {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--scdb-panel-border);
+}
+
+.scdb-sidebar-section .scdb-connection-panel__title {
+    margin-bottom: 8px;
+}
+
+/* Connection panel inside the sidebar: reduce outer margin so it fits */
+.scdb-sidebar .scdb-connection-panel {
+    margin: 8px 0 0;
+    border-left: none;
+    border-right: none;
+}
+
+/* Saved query / history groups are collapsible; keep them compact */
+.scdb-sidebar .scdb-saved-query,
+.scdb-sidebar .scdb-history-item {
+    font-size: 11px;
+}
+
+/* ── Toolbar danger button (e.g. Rollback) ───────────────────────────────── */
+.scdb-toolbar__btn--danger {
+    background: var(--scdb-error);
+    border-color: var(--scdb-error);
+    color: #ffffff;
+}
+
+.scdb-toolbar__btn--danger:hover {
+    background: #d13438;
+    border-color: #d13438;
+}
+
+/* ── Muted helper text ───────────────────────────────────────────────────── */
+.scdb-muted {
+    color: var(--scdb-chrome-text-mute);
+}
+
+/* ── Editor panel label ──────────────────────────────────────────────────── */
+.scdb-editor-panel__label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--scdb-chrome-text-mute);
+}
+
+/* ── Object Explorer context menu ────────────────────────────────────────── */
+.scdb-contextmenu {
+    position: fixed;
+    z-index: 4000;
+    min-width: 160px;
+    background: var(--scdb-panel-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    padding: 4px;
+}
+
+.scdb-contextmenu__item {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    background: transparent;
+    color: var(--scdb-chrome-text);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+.scdb-contextmenu__item:hover,
+.scdb-contextmenu__item:focus-visible {
+    background: var(--scdb-sidebar-hover);
+    outline: none;
+}
+
+/* ── Busy overlay (database creation / seeding progress) ─────────────────── */
+.scdb-busy-overlay {
+    align-items: center;
+    justify-content: center;
+    padding-top: 0;
+    z-index: 5000;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.scdb-busy-overlay__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    min-width: 280px;
+    max-width: 420px;
+    padding: 28px 32px;
+    background: var(--scdb-panel-bg);
+    border: 1px solid var(--scdb-panel-border);
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+
+.scdb-busy-overlay__spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid var(--scdb-panel-border);
+    border-top-color: var(--scdb-accent);
+    animation: scdb-spin 0.9s linear infinite;
+}
+
+.scdb-busy-overlay__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--scdb-chrome-text);
+}
+
+.scdb-busy-overlay__text {
+    font-size: 12px;
+    color: var(--scdb-chrome-text-mute);
+}
+
+@keyframes scdb-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }

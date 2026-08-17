@@ -1,5 +1,7 @@
 # SharpCoreDB Web Viewer (Razor Pages) Implementation Plan
 
+> **➡️ Superseded by:** [`scdms-standalone-plan.md`](scdms-standalone-plan.md) — the WebViewer is becoming **SCDMS** (Sharp Core Database Management System) in its own repository `github.com/MPCoreDeveloper/SCDMS`.
+
 **Version:** v1.7.0  
 **Status:** Draft roadmap  
 **Scope:** Local-first, cross-platform web UI for SharpCoreDB  

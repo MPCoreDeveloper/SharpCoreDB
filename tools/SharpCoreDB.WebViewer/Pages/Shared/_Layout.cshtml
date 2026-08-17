@@ -34,13 +34,13 @@
             <span class="scdb-menubar__version">v1.7.0</span>
         </div>
 
-        <nav class="scdb-menubar__nav" aria-label="Application menu">
-            <span class="scdb-menubar__item">File</span>
-            <span class="scdb-menubar__item">Edit</span>
-            <span class="scdb-menubar__item">View</span>
-            <span class="scdb-menubar__item">Query</span>
-            <span class="scdb-menubar__item">Tools</span>
-            <span class="scdb-menubar__item">Help</span>
+        <nav class="scdb-menubar__nav" id="scdb-menubar-nav" aria-label="Application menu">
+            <span class="scdb-menubar__item" data-menu-id="menu-file" tabindex="0">File</span>
+            <span class="scdb-menubar__item" data-menu-id="menu-edit" tabindex="-1">Edit</span>
+            <span class="scdb-menubar__item" data-menu-id="menu-view" tabindex="-1">View</span>
+            <span class="scdb-menubar__item" data-menu-id="menu-query" tabindex="-1">Query</span>
+            <span class="scdb-menubar__item" data-menu-id="menu-tools" tabindex="-1">Tools</span>
+            <span class="scdb-menubar__item" data-menu-id="menu-help" tabindex="-1">Help</span>
         </nav>
 
         <div class="scdb-menubar__right">
@@ -55,6 +55,127 @@
             </button>
         </div>
     </header>
+
+    @* ═══════════════════════════════════════════
+       MENU DROPDOWNS  (populated by menubar.js)
+    ═══════════════════════════════════════════ *@
+    <div id="menu-file" class="scdb-menu-dropdown" role="menu" aria-label="File menu">
+        <div class="scdb-menu__group" data-action="file.new-query" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+T</span>New Query
+        </div>
+        <div class="scdb-menu__group" data-action="file.new-database" role="menuitem" tabindex="-1">
+            New Database…
+        </div>
+        <div class="scdb-menu__group" data-action="file.new-contoso-sample" role="menuitem" tabindex="-1">
+            New Contoso Sample Database
+        </div>
+        <div class="scdb-menu__group" data-action="file.new-adventureworks-sample" role="menuitem" tabindex="-1">
+            New AdventureWorks Sample Database
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="file.open" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+O</span>Open Database…
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="file.export-workspace" role="menuitem" tabindex="-1">
+            Export Workspace…
+        </div>
+        <div class="scdb-menu__group" data-action="file.import-workspace" role="menuitem" tabindex="-1">
+            Import Workspace…
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="file.disconnect" role="menuitem" tabindex="-1">
+            Disconnect
+        </div>
+    </div>
+
+    <div id="menu-edit" class="scdb-menu-dropdown" role="menu" aria-label="Edit menu">
+        <div class="scdb-menu__group" data-action="edit.undo" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+Z</span>Undo
+        </div>
+        <div class="scdb-menu__group" data-action="edit.redo" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+Y</span>Redo
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="edit.find" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+F</span>Find
+        </div>
+        <div class="scdb-menu__group" data-action="edit.replace" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+H</span>Replace
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="edit.select-all" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+A</span>Select All
+        </div>
+    </div>
+
+    <div id="menu-view" class="scdb-menu-dropdown" role="menu" aria-label="View menu">
+        <div class="scdb-menu__group" data-action="view.object-explorer" role="menuitem" tabindex="-1">
+            Object Explorer
+        </div>
+        <div class="scdb-menu__group" data-action="view.saved-queries" role="menuitem" tabindex="-1">
+            Saved Queries
+        </div>
+        <div class="scdb-menu__group" data-action="view.query-history" role="menuitem" tabindex="-1">
+            Query History
+        </div>
+        <div class="scdb-menu__group" data-action="view.cycle-theme" role="menuitem" tabindex="-1">
+            Toggle Theme (Dark / Light)
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="view.command-palette" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">Ctrl+Shift+P</span>Command Palette…
+        </div>
+    </div>
+
+    <div id="menu-query" class="scdb-menu-dropdown" role="menu" aria-label="Query menu">
+        <div class="scdb-menu__group" data-action="query.execute" role="menuitem" tabindex="-1">
+            <span class="scdb-menu__shortcut">F5</span>Execute
+        </div>
+        <div class="scdb-menu__group" data-action="query.execute-selection" role="menuitem" tabindex="-1">
+            Execute Selected
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="query.preview-selected" role="menuitem" tabindex="-1">
+            Preview Selected Table
+        </div>
+        <div class="scdb-menu__group" data-action="query.count-selected" role="menuitem" tabindex="-1">
+            Count Rows in Selected Table
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="query.export-csv" role="menuitem" tabindex="-1">
+            Export Results as CSV
+        </div>
+        <div class="scdb-menu__group" data-action="query.export-json" role="menuitem" tabindex="-1">
+            Export Results as JSON
+        </div>
+    </div>
+
+    <div id="menu-tools" class="scdb-menu-dropdown" role="menu" aria-label="Tools menu">
+        <div class="scdb-menu__group" data-action="tools.create-table" role="menuitem" tabindex="-1">
+            New Table…
+        </div>
+        <div class="scdb-menu__group" data-action="tools.import-csv" role="menuitem" tabindex="-1">
+            Import CSV to New Table…
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="tools.settings" role="menuitem" tabindex="-1">
+            Settings…
+        </div>
+    </div>
+
+    <div id="menu-help" class="scdb-menu-dropdown" role="menu" aria-label="Help menu">
+        <div class="scdb-menu__group" data-action="help.sql-reference" role="menuitem" tabindex="-1">
+            SQL Syntax Reference
+        </div>
+        <div class="scdb-menu__group" data-action="help.user-manual" role="menuitem" tabindex="-1">
+            User Manual
+        </div>
+        <div class="scdb-menu__separator"></div>
+        <div class="scdb-menu__group" data-action="help.about" role="menuitem" tabindex="-1">
+            About SharpCoreDB
+        </div>
+    </div>
 
     @* ═══════════════════════════════════════════
        TOOLBAR  (connection indicator + page toolbar slot)
@@ -134,6 +255,10 @@
         </div>
     </footer>
 
+    <script src="~/js/menubar.js" asp-append-version="true" nonce="@cspNonce"></script>
+    <script src="~/js/menu-actions.js" asp-append-version="true" nonce="@cspNonce"></script>
+    <script src="~/js/sql-editor.js" asp-append-version="true" nonce="@cspNonce"></script>
+    <script src="~/js/shortcuts.js" asp-append-version="true" nonce="@cspNonce"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

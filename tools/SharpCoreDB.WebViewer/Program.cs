@@ -41,6 +41,7 @@ builder.Services.AddNetSecureHeadersStrictAPlus(options =>
 builder.Services.AddSharpCoreDB();
 builder.Services.AddSingleton<IRecentConnectionsStore, RecentConnectionsStore>();
 builder.Services.AddSingleton<IQueryWorkspaceStore, QueryWorkspaceStore>();
+builder.Services.AddSingleton<ISampleDatabaseCatalog, SampleDatabaseCatalog>();
 builder.Services.AddScoped<IViewerConnectionService, ViewerConnectionService>();
 builder.Services.AddScoped<IViewerTransactionService, ViewerTransactionService>();
 builder.Services.AddScoped<IMetadataService, MetadataService>();
@@ -61,5 +62,12 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
 app.MapRazorPages();
+
+// IMPORTANT: create the default "scdb" database on first launch.
+using (var scope = app.Services.CreateScope())
+{
+    var sampleCatalog = scope.ServiceProvider.GetRequiredService<ISampleDatabaseCatalog>();
+    await sampleCatalog.EnsureDefaultDatabaseAsync().ConfigureAwait(false);
+}
 
 await app.RunAsync().ConfigureAwait(false);

@@ -70,23 +70,230 @@
     </div>
 
     <div class="scdb-sidebar__body">
-        <div class="scdb-sidebar__group">
-            <button type="button" class="scdb-sidebar__group-header" data-action="toggle-group" aria-expanded="true">
+
+        @* ── Connections (moved from the former right-hand panel — SSMS layout) ── *@
+        <div class="scdb-sidebar__group" id="scdb-group-connect">
+            <button type="button" class="scdb-sidebar__group-header" data-action="toggle-group"
+                    aria-expanded="true" id="scdb-connect-group-header">
                 <span class="scdb-sidebar__chevron">▾</span>
                 Connections
             </button>
-            <ul class="scdb-sidebar__tree">
+
+            <div class="scdb-sidebar__group-content">
                 @if (!Model.IsConnected)
                 {
-                    <li title="No active connection"><span class="scdb-muted">No active connection</span></li>
+                    @if (Model.RecentConnections.Count > 0)
+                    {
+                        <div class="scdb-sidebar-section">
+                            <div class="scdb-connection-panel__title">Recent</div>
+                            @foreach (var profile in Model.RecentConnections)
+                            {
+                                <form method="post" asp-page-handler="LoadProfile"
+                                      asp-route-name="@profile.Name"
+                                      asp-route-target="@profile.DisplayTarget"
+                                      class="scdb-mb-4">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="scdb-btn scdb-btn--secondary scdb-btn-w-100-gap-6"
+                                            title="@profile.DisplayTarget">
+                                        <span class="scdb-btn__icon">⬡</span>
+                                        <span class="scdb-truncate">@profile.Name</span>
+                                        <span class="scdb-muted scdb-text-xs scdb-ws-nowrap">@profile.DisplayTarget</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    }
+
+                    <form method="post" asp-page-handler="EnsureSample" id="form-ensure-sample" class="scdb-hidden">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" id="ensure-sample-name" name="sampleName" value="" />
+                    </form>
+
+                    <form method="post" asp-page-handler="Connect"
+                          id="form-connect"
+                          class="scdb-connection-panel scdb-sidebar-section">
+                        @Html.AntiForgeryToken()
+                        <div class="scdb-connection-panel__title">New Connection</div>
+
+                        <div class="scdb-form-group">
+                            <label class="scdb-label" asp-for="Connection.Name">Connection name</label>
+                            <input class="scdb-input" asp-for="Connection.Name" placeholder="My database" />
+                        </div>
+
+                        <div class="scdb-form-group">
+                            <label class="scdb-label">Mode</label>
+                            <div class="scdb-form-radio-group">
+                                <label class="scdb-form-radio-label">
+                                    <input type="radio" asp-for="Connection.ConnectionMode" value="Local"
+                                           id="radio-mode-local" />
+                                    Local
+                                </label>
+                                <label class="scdb-form-radio-label">
+                                    <input type="radio" asp-for="Connection.ConnectionMode" value="Server"
+                                           id="radio-mode-server" />
+                                    Server
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="scdb-local-fields">
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.LocalDatabasePath">Database path</label>
+                                <input class="scdb-input" asp-for="Connection.LocalDatabasePath"
+                                       placeholder="C:\data\mydb" />
+                                <span asp-validation-for="Connection.LocalDatabasePath"
+                                      class="scdb-validation-message"></span>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.LocalStorageMode">Storage mode</label>
+                                <select class="scdb-select" asp-for="Connection.LocalStorageMode">
+                                    <option value="Directory">Directory</option>
+                                    <option value="SingleFile">Single File</option>
+                                </select>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-form-checkbox-label">
+                                    <input type="checkbox" asp-for="Connection.LocalReadOnly" />
+                                    Open read-only
+                                </label>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.Password">Password</label>
+                                <input class="scdb-input" asp-for="Connection.Password" type="password"
+                                       placeholder="Database password" />
+                                <span asp-validation-for="Connection.Password" class="scdb-validation-message"></span>
+                            </div>
+                        </div>
+
+                        <div id="scdb-server-fields" hidden>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.ServerHost">Host</label>
+                                <input class="scdb-input" asp-for="Connection.ServerHost"
+                                       placeholder="localhost" />
+                                <span asp-validation-for="Connection.ServerHost"
+                                      class="scdb-validation-message"></span>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.ServerPort">Port</label>
+                                <input class="scdb-input scdb-mono" asp-for="Connection.ServerPort"
+                                       type="number" min="1" max="65535" />
+                                <span asp-validation-for="Connection.ServerPort"
+                                      class="scdb-validation-message"></span>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.ServerDatabase">Database</label>
+                                <input class="scdb-input" asp-for="Connection.ServerDatabase"
+                                       placeholder="master" />
+                                <span asp-validation-for="Connection.ServerDatabase"
+                                      class="scdb-validation-message"></span>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-label" asp-for="Connection.ServerUsername">Username</label>
+                                <input class="scdb-input" asp-for="Connection.ServerUsername"
+                                       placeholder="anonymous" />
+                                <span asp-validation-for="Connection.ServerUsername"
+                                      class="scdb-validation-message"></span>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-form-checkbox-label">
+                                    <input type="checkbox" asp-for="Connection.ServerUseSsl" />
+                                    Use TLS/SSL
+                                </label>
+                            </div>
+                            <div class="scdb-form-group">
+                                <label class="scdb-form-checkbox-label">
+                                    <input type="checkbox" asp-for="Connection.ServerPreferHttp3" />
+                                    Prefer HTTP/3 (gRPC)
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="scdb-btn scdb-btn--primary scdb-btn-w-100 scdb-mt-4">
+                            Connect to Existing
+                        </button>
+                    </form>
                 }
                 else
                 {
-                    <li class="selected" title="@Model.ActiveTargetDisplay">
-                        <span class="scdb-truncate">@Model.ActiveSession?.Name</span>
+                    <div class="scdb-connection-panel scdb-sidebar-section">
+                        <div class="scdb-connection-panel__title">Active Session</div>
+
+                        <dl class="scdb-session-dl">
+                            <dt>Name</dt>
+                            <dd class="scdb-mono">@Model.ActiveSession!.Name</dd>
+                            <dt>Mode</dt>
+                            <dd>@Model.ActiveSession.ConnectionMode</dd>
+                            @if (!string.IsNullOrWhiteSpace(Model.ActiveSession.LocalDatabasePath))
+                            {
+                                <dt>Path</dt>
+                                <dd class="scdb-mono scdb-truncate" title="@Model.ActiveSession.LocalDatabasePath">
+                                    @Model.ActiveSession.LocalDatabasePath
+                                </dd>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(Model.ActiveSession.ServerHost))
+                            {
+                                <dt>Host</dt>
+                                <dd class="scdb-mono">@Model.ActiveSession.ServerHost:@Model.ActiveSession.ServerPort</dd>
+                                <dt>Database</dt>
+                                <dd class="scdb-mono">@Model.ActiveSession.ServerDatabase</dd>
+                            }
+                        </dl>
+
+                        @if (Model.IsTransactionActive)
+                        {
+                            <div class="scdb-alert scdb-alert--warn scdb-mt-10">
+                                <span>⚡</span>
+                                <span>Transaction active — @Model.ActiveTransaction!.ConnectionMode</span>
+                            </div>
+                        }
+
+                        <form method="post" asp-page-handler="Disconnect" class="scdb-mt-12">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="scdb-btn scdb-btn--danger scdb-btn-w-100">
+                                Disconnect
+                            </button>
+                        </form>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── Database actions (New Database… + sample databases) ── *@
+        <div class="scdb-sidebar__group">
+            <button type="button" class="scdb-sidebar__group-header" data-action="toggle-group" aria-expanded="true">
+                <span class="scdb-sidebar__chevron">▾</span>
+                Database Actions
+            </button>
+            <ul class="scdb-sidebar__tree">
+                <li title="Create a new local SharpCoreDB database" data-action="open-create-db" tabindex="0" role="button" aria-label="New Database">
+                    <svg class="scdb-sidebar__tree-icon" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <path d="M7 2v10M2 7h10" stroke="#4ec9b0" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                    <span class="scdb-truncate">New Database…</span>
+                </li>
+                @foreach (var sample in Model.AvailableSamples)
+                {
+                    <li title="Create and connect to the @sample.DisplayName sample database"
+                        data-sample="@sample.Name"
+                        tabindex="0"
+                        role="button"
+                        aria-label="Create @sample.DisplayName sample database">
+                        <svg class="scdb-sidebar__tree-icon" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                            <ellipse cx="7" cy="4" rx="5" ry="2" stroke="#4ec9b0" stroke-width="1.1"/>
+                            <path d="M2 4v6c0 1.1 2.2 2 5 2s5-.9 5-2V4" stroke="#4ec9b0" stroke-width="1.1"/>
+                            <path d="M2 7c0 1.1 2.2 2 5 2s5-.9 5-2" stroke="#4ec9b0" stroke-width="1.1"/>
+                        </svg>
+                        <span class="scdb-truncate">@sample.DisplayName</span>
                     </li>
                 }
             </ul>
+            @if (Model.IsWellKnownDefaultPasswordInUse)
+            {
+                <p class="scdb-p-12 scdb-text-muted scdb-text-12">
+                    Built-in databases (scdb, Contoso, AdventureWorks) use the default password
+                    <code class="scdb-mono">scdb</code>.
+                </p>
+            }
         </div>
 
         @if (!Model.IsConnected)
@@ -94,9 +301,6 @@
             <p class="scdb-p-12 scdb-text-muted scdb-text-12">
                 Connect to a database to browse objects.
             </p>
-            <div class="scdb-sidebar__actions">
-                <button type="button" class="scdb-btn scdb-btn--secondary scdb-sidebar__action" data-action="open-create-db">+ New Database</button>
-            </div>
         }
         else if (Model.Tables.Count == 0)
         {
@@ -148,6 +352,105 @@
                 </div>
             </div>
         }
+
+        @* ── Saved Queries (moved from former right-hand panel) ── *@
+        <div class="scdb-sidebar__group" id="scdb-group-saved">
+            <button type="button" class="scdb-sidebar__group-header" data-action="toggle-group" aria-expanded="true">
+                <span class="scdb-sidebar__chevron">▾</span>
+                Saved Queries
+                @if (Model.SavedQueries.Count > 0)
+                {
+                    <span class="scdb-muted scdb-text-xs scdb-ml-4">(@Model.SavedQueries.Count)</span>
+                }
+            </button>
+
+            <div class="scdb-sidebar__group-content">
+                @if (Model.SavedQueries.Count == 0)
+                {
+                    <p class="scdb-p-10 scdb-text-muted scdb-text-12">No saved queries yet.</p>
+                }
+                else
+                {
+                    <div class="scdb-sidebar-section">
+                        @foreach (var sq in Model.SavedQueries)
+                        {
+                            <div class="scdb-saved-query">
+                                <form method="post" asp-page-handler="LoadSavedQuery"
+                                      asp-route-queryId="@sq.Id" class="scdb-form-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="scdb-btn scdb-btn--secondary scdb-saved-query__load"
+                                            title="Load: @sq.Sql">
+                                        @sq.Name
+                                    </button>
+                                </form>
+                                <form method="post" asp-page-handler="DeleteSavedQuery"
+                                      asp-route-queryId="@sq.Id" class="scdb-form-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="scdb-btn scdb-btn--danger scdb-saved-query__delete"
+                                            title="Delete saved query" aria-label="Delete @sq.Name">✕</button>
+                                </form>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="scdb-panel-section scdb-p-10">
+                    <div class="scdb-panel-section__title">Snippets</div>
+                    <div class="scdb-snippet-browser scdb-mt-8" id="scdb-snippet-browser">
+                        <p class="scdb-text-muted scdb-text-12">No snippets saved.</p>
+                    </div>
+                    <button type="button" class="scdb-btn scdb-btn--secondary scdb-btn-w-100 scdb-mt-8" id="btn-add-snippet"
+                            data-action="open-snippet-dialog">
+                        + Add Snippet
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* ── Query History (moved from former right-hand panel) ── *@
+        <div class="scdb-sidebar__group" id="scdb-group-history">
+            <button type="button" class="scdb-sidebar__group-header" data-action="toggle-group" aria-expanded="true">
+                <span class="scdb-sidebar__chevron">▾</span>
+                Query History
+                @if (Model.QueryHistory.Count > 0)
+                {
+                    <span class="scdb-muted scdb-text-xs scdb-ml-4">(@Model.QueryHistory.Count)</span>
+                }
+            </button>
+
+            <div class="scdb-sidebar__group-content">
+                @if (Model.QueryHistory.Count == 0)
+                {
+                    <p class="scdb-p-10 scdb-text-muted scdb-text-12">No history yet.</p>
+                }
+                else
+                {
+                    <div class="scdb-sidebar-section">
+                        @foreach (var h in Model.QueryHistory)
+                        {
+                            <button type="button" class="scdb-history-item @(h.Succeeded ? "" : "scdb-history-item--error")"
+                                 title="@h.SqlPreview"
+                                 data-action="load-history"
+                                 data-sql="@Html.Raw(System.Text.Json.JsonSerializer.Serialize(h.SqlPreview))">
+                                <div class="scdb-history-item__sql scdb-mono scdb-truncate">@h.SqlPreview</div>
+                                <div class="scdb-history-item__meta scdb-muted">
+                                    <span>@h.ExecutedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                                    <span>@h.TargetDisplay</span>
+                                    @if (!h.Succeeded)
+                                    {
+                                        <span class="scdb-text-error">✕ failed</span>
+                                    }
+                                </div>
+                            </button>
+                        }
+                        <form method="post" asp-page-handler="ClearHistory" class="scdb-form-inline scdb-mt-8">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="scdb-btn scdb-btn--danger scdb-btn--compact">Clear</button>
+                        </form>
+                    </div>
+                }
+            </div>
+        </div>
     </div>
 
     @if (Model.SelectedTableMetadata is not null)
@@ -171,6 +474,24 @@
                     }
                 </tbody>
             </table>
+
+            @if (!string.IsNullOrWhiteSpace(Model.SelectedTableMetadata.Ddl))
+            {
+                <div class="scdb-sidebar__meta-ddl">
+                    <div class="scdb-sidebar__meta-subheader">
+                        <span>DDL <span class="scdb-muted">(approximate)</span></span>
+                        <form method="post" asp-page-handler="ScriptTable" class="scdb-form-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" asp-for="SelectedTable" />
+                            <button type="submit" class="scdb-btn scdb-btn--secondary scdb-btn--compact"
+                                    title="Insert this DDL into the query editor">
+                                Script to editor
+                            </button>
+                        </form>
+                    </div>
+                    <pre class="scdb-mono scdb-sidebar__meta-ddl-pre">@Model.SelectedTableMetadata.Ddl</pre>
+                </div>
+            }
         </div>
     }
 </aside>
@@ -301,7 +622,7 @@
             <div class="scdb-messages-body">
                 @if (!Model.IsConnected)
                 {
-                    <p class="scdb-text-muted scdb-text-12">Not connected. Use the Connection panel on the right to connect to a database.</p>
+                    <p class="scdb-text-muted scdb-text-12">Not connected. Use the Connections group in the Object Explorer to connect to a database.</p>
                 }
                 else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
                 {
@@ -320,314 +641,6 @@
     </div>
 </div>
 
-<div class="scdb-splitter scdb-splitter--vertical" id="scdb-splitter-right" role="separator" aria-label="Resize side tools" aria-orientation="vertical"></div>
-
-<div class="scdb-right-panel" id="scdb-right-panel">
-    <div class="scdb-panel-tabs" role="tablist">
-        <button class="scdb-panel-tab active" id="ptab-connect"
-                data-action="switch-panel" data-panel="connect" role="tab">
-            <span>@(Model.IsConnected ? "Session" : "Connect")</span>
-            <button type="button" class="scdb-panel-tab__dock-btn" data-action="toggle-panel-dock" data-panel="connect"
-                    title="Toggle panel" aria-label="Toggle panel">
-                <span class="scdb-sidebar__chevron">▾</span>
-            </button>
-        </button>
-        <button class="scdb-panel-tab" id="ptab-saved"
-                data-action="switch-panel" data-panel="saved" role="tab">
-            <span>Saved
-            @if (Model.SavedQueries.Count > 0)
-            {
-                <span class="scdb-tab-count">(@Model.SavedQueries.Count)</span>
-            }
-            </span>
-            <button type="button" class="scdb-panel-tab__dock-btn" data-action="toggle-panel-dock" data-panel="saved"
-                    title="Toggle panel" aria-label="Toggle panel">
-                <span class="scdb-sidebar__chevron">▸</span>
-            </button>
-        </button>
-        <button class="scdb-panel-tab" id="ptab-history"
-                data-action="switch-panel" data-panel="history" role="tab">
-            <span>History
-            @if (Model.QueryHistory.Count > 0)
-            {
-                <span class="scdb-tab-count">(@Model.QueryHistory.Count)</span>
-            }
-            </span>
-            <button type="button" class="scdb-panel-tab__dock-btn" data-action="toggle-panel-dock" data-panel="history"
-                    title="Toggle panel" aria-label="Toggle panel">
-                <span class="scdb-sidebar__chevron">▸</span>
-            </button>
-        </button>
-    </div>
-
-    <div class="scdb-panel-body" id="ppane-connect">
-        @if (!Model.IsConnected)
-        {
-            @if (Model.RecentConnections.Count > 0)
-            {
-                <div class="scdb-connection-panel scdb-mb-10">
-                    <div class="scdb-connection-panel__title">Recent</div>
-                    @foreach (var profile in Model.RecentConnections)
-                    {
-                        <form method="post" asp-page-handler="LoadProfile"
-                              asp-route-name="@profile.Name"
-                              asp-route-target="@profile.DisplayTarget"
-                              class="scdb-mb-4">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="scdb-btn scdb-btn--secondary scdb-btn-w-100-gap-6"
-                                    title="@profile.DisplayTarget">
-                                <span class="scdb-btn__icon">⬡</span>
-                                <span class="scdb-truncate">@profile.Name</span>
-                                <span class="scdb-muted scdb-text-xs scdb-ws-nowrap">@profile.DisplayTarget</span>
-                            </button>
-                        </form>
-                    }
-                </div>
-            }
-
-            <form method="post" asp-page-handler="Connect"
-                  id="form-connect"
-                  class="scdb-connection-panel">
-                @Html.AntiForgeryToken()
-                <div class="scdb-connection-panel__title">New Connection</div>
-
-                <div class="scdb-form-group">
-                    <label class="scdb-label" asp-for="Connection.Name">Connection name</label>
-                    <input class="scdb-input" asp-for="Connection.Name" placeholder="My database" />
-                </div>
-
-                <div class="scdb-form-group">
-                    <label class="scdb-label">Mode</label>
-                    <div class="scdb-form-radio-group">
-                        <label class="scdb-form-radio-label">
-                            <input type="radio" asp-for="Connection.ConnectionMode" value="Local"
-                                   id="radio-mode-local" />
-                            Local
-                        </label>
-                        <label class="scdb-form-radio-label">
-                            <input type="radio" asp-for="Connection.ConnectionMode" value="Server"
-                                   id="radio-mode-server" />
-                            Server
-                        </label>
-                    </div>
-                </div>
-
-                <div id="scdb-local-fields">
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.LocalDatabasePath">Database path</label>
-                        <input class="scdb-input" asp-for="Connection.LocalDatabasePath"
-                               placeholder="C:\data\mydb" />
-                        <span asp-validation-for="Connection.LocalDatabasePath"
-                              class="scdb-validation-message"></span>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.LocalStorageMode">Storage mode</label>
-                        <select class="scdb-select" asp-for="Connection.LocalStorageMode">
-                            <option value="Directory">Directory</option>
-                            <option value="SingleFile">Single File</option>
-                        </select>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-form-checkbox-label">
-                            <input type="checkbox" asp-for="Connection.LocalReadOnly" />
-                            Open read-only
-                        </label>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.Password">Password</label>
-                        <input class="scdb-input" asp-for="Connection.Password" type="password"
-                               placeholder="Database password" />
-                        <span asp-validation-for="Connection.Password" class="scdb-validation-message"></span>
-                    </div>
-                </div>
-
-                <div id="scdb-server-fields" hidden>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.ServerHost">Host</label>
-                        <input class="scdb-input" asp-for="Connection.ServerHost"
-                               placeholder="localhost" />
-                        <span asp-validation-for="Connection.ServerHost"
-                              class="scdb-validation-message"></span>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.ServerPort">Port</label>
-                        <input class="scdb-input scdb-mono" asp-for="Connection.ServerPort"
-                               type="number" min="1" max="65535" />
-                        <span asp-validation-for="Connection.ServerPort"
-                              class="scdb-validation-message"></span>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.ServerDatabase">Database</label>
-                        <input class="scdb-input" asp-for="Connection.ServerDatabase"
-                               placeholder="master" />
-                        <span asp-validation-for="Connection.ServerDatabase"
-                              class="scdb-validation-message"></span>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-label" asp-for="Connection.ServerUsername">Username</label>
-                        <input class="scdb-input" asp-for="Connection.ServerUsername"
-                               placeholder="anonymous" />
-                        <span asp-validation-for="Connection.ServerUsername"
-                              class="scdb-validation-message"></span>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-form-checkbox-label">
-                            <input type="checkbox" asp-for="Connection.ServerUseSsl" />
-                            Use TLS/SSL
-                        </label>
-                    </div>
-                    <div class="scdb-form-group">
-                        <label class="scdb-form-checkbox-label">
-                            <input type="checkbox" asp-for="Connection.ServerPreferHttp3" />
-                            Prefer HTTP/3 (gRPC)
-                        </label>
-                    </div>
-                </div>
-
-                <button type="submit" class="scdb-btn scdb-btn--primary scdb-btn--w-100 scdb-mt-4">
-                    Connect to Existing
-                </button>
-            </form>
-
-            <div class="scdb-connection-panel scdb-mt-4">
-                <div class="scdb-connection-panel__title">New Database</div>
-                <p class="scdb-text-muted scdb-text-12">Create a new local SharpCoreDB database and connect to it.</p>
-                <button type="button" class="scdb-btn scdb-btn--secondary scdb-btn--w-100" data-action="open-create-db">
-                    + Create &amp; Connect
-                </button>
-            </div>
-        }
-        else
-        {
-            <div class="scdb-connection-panel">
-                <div class="scdb-connection-panel__title">Active Session</div>
-
-                <dl class="scdb-session-dl">
-                    <dt>Name</dt>
-                    <dd class="scdb-mono">@Model.ActiveSession!.Name</dd>
-                    <dt>Mode</dt>
-                    <dd>@Model.ActiveSession.ConnectionMode</dd>
-                    @if (!string.IsNullOrWhiteSpace(Model.ActiveSession.LocalDatabasePath))
-                    {
-                        <dt>Path</dt>
-                        <dd class="scdb-mono scdb-truncate" title="@Model.ActiveSession.LocalDatabasePath">
-                            @Model.ActiveSession.LocalDatabasePath
-                        </dd>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(Model.ActiveSession.ServerHost))
-                    {
-                        <dt>Host</dt>
-                        <dd class="scdb-mono">@Model.ActiveSession.ServerHost:@Model.ActiveSession.ServerPort</dd>
-                        <dt>Database</dt>
-                        <dd class="scdb-mono">@Model.ActiveSession.ServerDatabase</dd>
-                    }
-                </dl>
-
-                @if (Model.IsTransactionActive)
-                {
-                    <div class="scdb-alert scdb-alert--warn scdb-mt-10">
-                        <span>⚡</span>
-                        <span>Transaction active — @Model.ActiveTransaction!.ConnectionMode</span>
-                    </div>
-                }
-
-                <form method="post" asp-page-handler="Disconnect" class="scdb-mt-12">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="scdb-btn scdb-btn--danger scdb-btn-w-100">
-                        Disconnect
-                    </button>
-                </form>
-            </div>
-        }
-    </div>
-
-    <div class="scdb-panel-body scdb-hidden" id="ppane-saved">
-        <div class="scdb-connection-panel">
-            <div class="scdb-connection-panel__title">
-                Saved Queries
-            </div>
-
-            @if (Model.SavedQueries.Count == 0)
-            {
-                <p class="scdb-text-muted scdb-text-12">No saved queries yet.</p>
-            }
-            else
-            {
-                @foreach (var sq in Model.SavedQueries)
-                {
-                    <div class="scdb-saved-query">
-                        <form method="post" asp-page-handler="LoadSavedQuery"
-                              asp-route-queryId="@sq.Id" class="scdb-form-inline">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="scdb-btn scdb-btn--secondary scdb-saved-query__load"
-                                    title="Load: @sq.Sql">
-                                @sq.Name
-                            </button>
-                        </form>
-                        <form method="post" asp-page-handler="DeleteSavedQuery"
-                              asp-route-queryId="@sq.Id" class="scdb-form-inline">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="scdb-btn scdb-btn--danger scdb-saved-query__delete"
-                                    title="Delete saved query" aria-label="Delete @sq.Name">✕</button>
-                        </form>
-                    </div>
-                }
-            }
-
-            <div class="scdb-panel-section">
-                <div class="scdb-panel-section__title">Snippets</div>
-                <div class="scdb-snippet-browser scdb-mt-8" id="scdb-snippet-browser">
-                    <p class="scdb-text-muted scdb-text-12">No snippets saved.</p>
-                </div>
-                <button type="button" class="scdb-btn scdb-btn--secondary scdb-btn-w-100 scdb-mt-8" id="btn-add-snippet"
-                        data-action="open-snippet-dialog">
-                    + Add Snippet
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <div class="scdb-panel-body scdb-hidden" id="ppane-history">
-        <div class="scdb-connection-panel">
-            <div class="scdb-panel-header">
-                <span>Query History</span>
-                @if (Model.QueryHistory.Count > 0)
-                {
-                    <form method="post" asp-page-handler="ClearHistory" class="scdb-form-inline">
-                        @Html.AntiForgeryToken()
-                        <button type="submit" class="scdb-btn scdb-btn--danger scdb-btn--compact">Clear</button>
-                    </form>
-                }
-            </div>
-
-            @if (Model.QueryHistory.Count == 0)
-            {
-                <p class="scdb-text-muted scdb-text-12">No history yet.</p>
-            }
-            else
-            {
-                @foreach (var h in Model.QueryHistory)
-                {
-                    <button type="button" class="scdb-history-item @(h.Succeeded ? "" : "scdb-history-item--error")"
-                         title="@h.SqlPreview"
-                         data-action="load-history"
-                         data-sql="@Html.Raw(System.Text.Json.JsonSerializer.Serialize(h.SqlPreview))">
-                        <div class="scdb-history-item__sql scdb-mono scdb-truncate">@h.SqlPreview</div>
-                        <div class="scdb-history-item__meta scdb-muted">
-                            <span>@h.ExecutedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
-                            <span>@h.TargetDisplay</span>
-                            @if (!h.Succeeded)
-                            {
-                                <span class="scdb-text-error">✕ failed</span>
-                            }
-                        </div>
-                    </button>
-                }
-            }
-        </div>
-    </div>
-</div>
-
 <div id="scdb-command-palette" class="scdb-overlay scdb-hidden" aria-hidden="true">
     <div class="scdb-command-palette" role="dialog" aria-label="Command palette" aria-modal="true">
         <input type="text" id="scdb-command-input" class="scdb-input scdb-command-palette__input" placeholder="Type a command..." autocomplete="off" />
@@ -640,44 +653,112 @@
     <button type="button" class="scdb-contextmenu__item" data-action="ctx-new">New Query</button>
     <button type="button" class="scdb-contextmenu__item" data-action="ctx-top">Select Top 100</button>
     <button type="button" class="scdb-contextmenu__item" data-action="ctx-count">Count Rows</button>
+    <button type="button" class="scdb-contextmenu__item" data-action="ctx-ddl">Script Table (CREATE)</button>
+</div>
+
+@* Hidden form used by the "Script Table (CREATE)" context-menu action. *@
+<form method="post" asp-page-handler="ScriptTable" id="form-script-table" class="scdb-hidden">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="SelectedTable" value="" />
+</form>
+
+<div id="scdb-busy-overlay" class="scdb-overlay scdb-busy-overlay scdb-hidden" aria-hidden="true" role="alert" aria-busy="true">
+    <div class="scdb-busy-overlay__card">
+        <div class="scdb-busy-overlay__spinner" aria-hidden="true"></div>
+        <div class="scdb-busy-overlay__title" id="scdb-busy-title">Working…</div>
+        <div class="scdb-busy-overlay__text" id="scdb-busy-text">Please wait.</div>
+    </div>
 </div>
 
 <dialog id="scdb-create-db-dialog" class="scdb-snippet-dialog">
-    <form method="post" asp-page-handler="Connect" id="form-create-db">
+    <form method="post" asp-page-handler="CreateDatabase" id="form-create-db">
         @Html.AntiForgeryToken()
-        <input type="hidden" name="Connection.ConnectionMode" value="Local" />
         <div class="scdb-snippet-dialog__header">
             <h3 class="scdb-no-margin">Create New Database</h3>
             <button type="button" class="scdb-snippet-dialog__close" data-action="close-create-db" aria-label="Close">✕</button>
         </div>
         <div class="scdb-snippet-dialog__body">
             <div class="scdb-form-group">
-                <label class="scdb-label" for="create-db-name">Connection name</label>
-                <input type="text" class="scdb-input" id="create-db-name" name="Connection.Name" placeholder="My New Database" />
+                <label class="scdb-label" for="create-db-name">Database name</label>
+                <input type="text" class="scdb-input" id="create-db-name" name="NewDatabaseName" placeholder="My New Database" />
             </div>
             <div class="scdb-form-group">
                 <label class="scdb-label" for="create-db-path">Database path <span class="scdb-required">*</span></label>
-                <input type="text" class="scdb-input" id="create-db-path" name="Connection.LocalDatabasePath" placeholder="C:\data\mynewdb" />
+                <input type="text" class="scdb-input" id="create-db-path" name="NewDatabasePath" placeholder="C:\data\mynewdb" />
                 <span class="scdb-validation-message" id="create-db-path-error"></span>
                 <small class="scdb-text-muted scdb-text-12">The folder will be created if it does not exist.</small>
             </div>
             <div class="scdb-form-group">
                 <label class="scdb-label" for="create-db-mode">Storage mode</label>
-                <select class="scdb-select" id="create-db-mode" name="Connection.LocalStorageMode">
+                <select class="scdb-select" id="create-db-mode" name="NewDatabaseStorageMode">
                     <option value="Directory">Directory</option>
                     <option value="SingleFile">Single File</option>
                 </select>
             </div>
             <div class="scdb-form-group">
                 <label class="scdb-label" for="create-db-password">Password <span class="scdb-required">*</span></label>
-                <input type="password" class="scdb-input" id="create-db-password" name="Connection.Password" placeholder="Choose a database password" />
+                <input type="password" class="scdb-input" id="create-db-password" name="NewDatabasePassword" placeholder="Choose a database password" />
                 <span class="scdb-validation-message" id="create-db-password-error"></span>
                 <small class="scdb-text-muted scdb-text-12">Required — used to encrypt and open the database.</small>
             </div>
         </div>
         <div class="scdb-snippet-dialog__footer">
             <button type="button" class="scdb-btn scdb-btn--secondary" data-action="close-create-db">Cancel</button>
-            <button type="submit" class="scdb-btn scdb-btn--primary">Create &amp; Connect</button>
+            <button type="submit" class="scdb-btn scdb-btn--primary">Create & Connect</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="scdb-create-table-dialog" class="scdb-snippet-dialog">
+    <form method="post" asp-page-handler="CreateTable">
+        @Html.AntiForgeryToken()
+        <div class="scdb-snippet-dialog__header">
+            <h3 class="scdb-no-margin">New Table (Table Designer)</h3>
+            <button type="button" class="scdb-snippet-dialog__close" data-action="close-create-table" aria-label="Close">✕</button>
+        </div>
+        <div class="scdb-snippet-dialog__body">
+            <div class="scdb-form-group">
+                <label class="scdb-label" for="new-table-name">Table name <span class="scdb-required">*</span></label>
+                <input type="text" class="scdb-input scdb-mono" id="new-table-name" name="NewTableName" placeholder="customers" />
+            </div>
+            <div class="scdb-form-group">
+                <label class="scdb-label" for="new-table-columns">Column definitions</label>
+                <textarea class="scdb-input scdb-mono" id="new-table-columns" name="NewTableColumnsDefinition" rows="6">Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NULL</textarea>
+                <small class="scdb-text-muted scdb-text-12">Comma-separated: <code>Name TYPE [NOT NULL] [PRIMARY KEY]</code></small>
+            </div>
+            <div class="scdb-alert scdb-alert--warn">
+                <span>ℹ</span>
+                <span>Each row becomes one line in the CREATE TABLE statement.</span>
+            </div>
+        </div>
+        <div class="scdb-snippet-dialog__footer">
+            <button type="button" class="scdb-btn scdb-btn--secondary" data-action="close-create-table">Cancel</button>
+            <button type="submit" class="scdb-btn scdb-btn--primary">Create Table</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="scdb-import-csv-dialog" class="scdb-snippet-dialog">
+    <form method="post" asp-page-handler="ImportCsv">
+        @Html.AntiForgeryToken()
+        <div class="scdb-snippet-dialog__header">
+            <h3 class="scdb-no-margin">Import CSV to New Table</h3>
+            <button type="button" class="scdb-snippet-dialog__close" data-action="close-import-csv" aria-label="Close">✕</button>
+        </div>
+        <div class="scdb-snippet-dialog__body">
+            <div class="scdb-form-group">
+                <label class="scdb-label" for="import-csv-table-name">Target table name <span class="scdb-required">*</span></label>
+                <input type="text" class="scdb-input scdb-mono" id="import-csv-table-name" name="ImportCsvTableName" placeholder="imported_data" />
+            </div>
+            <div class="scdb-form-group">
+                <label class="scdb-label" for="import-csv-content">CSV content <span class="scdb-required">*</span></label>
+                <textarea class="scdb-input scdb-mono" id="import-csv-content" name="ImportCsvContent" rows="8" placeholder="id,name,email&#10;1,Alice,alice@example.com&#10;2,Bob,bob@example.com"></textarea>
+                <small class="scdb-text-muted scdb-text-12">First row is the header. Column types (INTEGER/REAL/TEXT) are inferred automatically.</small>
+            </div>
+        </div>
+        <div class="scdb-snippet-dialog__footer">
+            <button type="button" class="scdb-btn scdb-btn--secondary" data-action="close-import-csv">Cancel</button>
+            <button type="submit" class="scdb-btn scdb-btn--primary">Import</button>
         </div>
     </form>
 </dialog>

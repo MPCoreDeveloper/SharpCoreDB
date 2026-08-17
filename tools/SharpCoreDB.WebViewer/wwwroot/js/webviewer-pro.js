@@ -18,17 +18,6 @@
         selectedTable: ''
     };
 
-    const panelState = {
-        connect: { isOpen: true, width: 320 },
-        saved: { isOpen: false, width: 320 },
-        history: { isOpen: false, width: 320 },
-        get storageKey() {
-            const workspace = document.getElementById('scdb-workspace');
-            const scope = workspace?.dataset?.tabScope?.trim() || 'global';
-            return `scdb.panels.${scope}`;
-        }
-    };
-
     const snippetState = {
         snippets: [],
         get storageKey() {
@@ -60,13 +49,6 @@
 
         document.getElementById('tab-results')?.classList.toggle('active', name === 'results');
         document.getElementById('tab-messages')?.classList.toggle('active', name === 'messages');
-    }
-
-    function switchPanel(name) {
-        ['connect', 'saved', 'history'].forEach(p => {
-            document.getElementById(`ppane-${p}`)?.classList.toggle('scdb-hidden', p !== name);
-            document.getElementById(`ptab-${p}`)?.classList.toggle('active', p === name);
-        });
     }
 
     function createTabTitle(sql, fallbackIndex) {
@@ -325,10 +307,10 @@
         document.querySelectorAll('#scdb-table-list li').forEach(li => li.classList.remove('selected'));
         element.classList.add('selected');
 
-        const hidden = document.querySelector('input[name="SelectedTable"]');
-        if (hidden) {
+        // Keep every hidden SelectedTable input in sync (preview, execute, script-table forms…).
+        document.querySelectorAll('input[name="SelectedTable"]').forEach(hidden => {
             hidden.value = tableName;
-        }
+        });
 
         setSelectedTableName(tableName);
     }
@@ -376,6 +358,51 @@
         }
 
         appendSqlToActiveTab(`SELECT COUNT(*) AS TotalRows FROM ${quoteIdentifier(table)};`);
+    }
+
+    function scriptTableFromSelection() {
+        const table = getSelectedTableName();
+        if (!table) {
+            return;
+        }
+
+        const form = document.getElementById('form-script-table');
+        const input = form ? form.querySelector('input[name="SelectedTable"]') : null;
+        if (!form || !input) {
+            return;
+        }
+
+        input.value = table;
+        form.submit();
+    }
+
+    function showBusyOverlay(title, text) {
+        const overlay = document.getElementById('scdb-busy-overlay');
+        if (!overlay) {
+            return;
+        }
+
+        const titleEl = document.getElementById('scdb-busy-title');
+        const textEl = document.getElementById('scdb-busy-text');
+        if (titleEl && title) {
+            titleEl.textContent = title;
+        }
+        if (textEl && text) {
+            textEl.textContent = text;
+        }
+
+        overlay.classList.remove('scdb-hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideBusyOverlay() {
+        const overlay = document.getElementById('scdb-busy-overlay');
+        if (!overlay) {
+            return;
+        }
+
+        overlay.classList.add('scdb-hidden');
+        overlay.setAttribute('aria-hidden', 'true');
     }
 
     function toggleGroup(header) {
@@ -769,58 +796,6 @@
         });
     }
 
-    function savePanelState() {
-        try {
-            localStorage.setItem(panelState.storageKey, JSON.stringify({
-                connect: { isOpen: panelState.connect.isOpen },
-                saved:   { isOpen: panelState.saved.isOpen },
-                history: { isOpen: panelState.history.isOpen }
-            }));
-        } catch {
-        }
-    }
-
-    function loadPanelState() {
-        try {
-            const raw = localStorage.getItem(panelState.storageKey);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                ['connect', 'saved', 'history'].forEach(p => {
-                    if (parsed[p]?.isOpen !== undefined) {
-                        panelState[p].isOpen = parsed[p].isOpen;
-                    }
-                });
-            }
-        } catch {
-        }
-    }
-
-    function renderPanelDockState(panel) {
-        const pane = document.getElementById(`ppane-${panel}`);
-        const tab  = document.getElementById(`ptab-${panel}`);
-        if (!pane || !tab) return;
-
-        if (panelState[panel]?.isOpen === false) {
-            pane.classList.add('scdb-hidden');
-        } else {
-            pane.classList.remove('scdb-hidden');
-        }
-    }
-
-    function togglePanelDock(panel) {
-        if (!panelState[panel]) return;
-        panelState[panel].isOpen = !panelState[panel].isOpen;
-        renderPanelDockState(panel);
-        savePanelState();
-    }
-
-    function restorePanelStates() {
-        loadPanelState();
-        ['connect', 'saved', 'history'].forEach(panel => {
-            renderPanelDockState(panel);
-        });
-    }
-
     function loadSnippets() {
         try {
             const raw = localStorage.getItem(snippetState.storageKey);
@@ -872,6 +847,23 @@
         }
 
         appendSqlToActiveTab(snippet.sql);
+    }
+
+    function createSampleDatabase(sampleName) {
+        if (!sampleName) {
+            return;
+        }
+
+        const nameInput = document.getElementById('ensure-sample-name');
+        const form = document.getElementById('form-ensure-sample');
+        if (nameInput) {
+            nameInput.value = sampleName;
+        }
+
+        if (form) {
+            showBusyOverlay('Creating sample database…', `Seeding tables and demo data for "${sampleName}". This can take a few seconds.`);
+            form.submit();
+        }
     }
 
     function openCreateDbDialog() {
@@ -1121,6 +1113,8 @@
             { label: 'Export as CSV', hint: '', action: () => exportResultsAsCsv() },
             { label: 'Export as JSON', hint: '', action: () => exportResultsAsJson() },
             { label: 'Add Snippet', hint: '', action: () => openSnippetDialog() },
+            { label: 'Create Contoso Sample Database', hint: '', action: () => createSampleDatabase('contoso') },
+            { label: 'Create AdventureWorks Sample Database', hint: '', action: () => createSampleDatabase('adventureworks') },
             { label: 'Close Command Palette', hint: 'Esc', action: () => closeCommandPalette() },
         ];
     }
@@ -1230,6 +1224,7 @@
             case 'new': newQueryFromSelection(); break;
             case 'top': selectTopFromSelection(); break;
             case 'count': countRowsFromSelection(); break;
+            case 'ddl': scriptTableFromSelection(); break;
         }
     }
 
@@ -1308,6 +1303,11 @@
                     if (table) selectTable(btn, table);
                     break;
                 }
+                case 'create-sample-db': {
+                    const sample = btn.dataset.sample;
+                    if (sample) createSampleDatabase(sample);
+                    break;
+                }
                 case 'new-query-selection':
                     newQueryFromSelection();
                     break;
@@ -1338,16 +1338,6 @@
                 case 'export-json':
                     exportResultsAsJson();
                     break;
-                case 'switch-panel':
-                    // Ignore if the dock button inside the tab was clicked
-                    if (!e.target.closest('[data-action="toggle-panel-dock"]')) {
-                        switchPanel(btn.dataset.panel);
-                    }
-                    break;
-                case 'toggle-panel-dock':
-                    e.stopPropagation();
-                    togglePanelDock(btn.dataset.panel);
-                    break;
                 case 'open-snippet-dialog':
                     openSnippetDialog();
                     break;
@@ -1369,6 +1359,9 @@
                 case 'ctx-count':
                     contextMenuAction('count');
                     break;
+                case 'ctx-ddl':
+                    contextMenuAction('ddl');
+                    break;
                 case 'dismiss-alert':
                     btn.closest('.scdb-alert')?.remove();
                     break;
@@ -1376,6 +1369,20 @@
                     cycleTheme();
                     break;
             }
+        });
+
+        // Sample database items: click + keyboard
+        document.querySelectorAll('[data-sample]').forEach(el => {
+            el.addEventListener('click', e => {
+                const target = e.target.closest('[data-sample]');
+                if (target) createSampleDatabase(target.dataset.sample);
+            });
+            el.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    createSampleDatabase(el.dataset.sample);
+                }
+            });
         });
 
         // Table li: keyboard Enter/Space acts as click
@@ -1456,17 +1463,34 @@
         wireEvents();
         initializeCommandPalette();
         initializeContextMenu();
-        restorePanelStates();
         renderSnippetBrowser();
         renderPaginationToolbar();
         wireKeyboardShortcuts();
-        initHorizontalResizer('scdb-splitter-left', 'scdb-object-explorer', 'scdb-right-panel', 'scdb.sidebar.width', 'scdb.rightpanel.width');
-        initHorizontalResizer('scdb-splitter-right', 'scdb-object-explorer', 'scdb-right-panel', 'scdb.sidebar.width', 'scdb.rightpanel.width');
+        initHorizontalResizer('scdb-splitter-left', 'scdb-object-explorer', 'scdb-workspace', 'scdb.sidebar.width', 'scdb.workspace.width');
 
         const createDbDialog = document.getElementById('scdb-create-db-dialog');
         if (createDbDialog) {
             createDbDialog.addEventListener('cancel', e => { e.preventDefault(); closeCreateDbDialog(); });
             createDbDialog.addEventListener('click', e => { if (e.target === createDbDialog) closeCreateDbDialog(); });
+        }
+
+        const createDbForm = document.getElementById('form-create-db');
+        if (createDbForm) {
+            createDbForm.addEventListener('submit', e => {
+                if (!validateCreateDbForm()) {
+                    e.preventDefault();
+                    return;
+                }
+
+                showBusyOverlay('Creating database…', 'The new database is being created and opened. This can take a few seconds.');
+            });
+        }
+
+        const ensureSampleForm = document.getElementById('form-ensure-sample');
+        if (ensureSampleForm) {
+            ensureSampleForm.addEventListener('submit', () => {
+                showBusyOverlay('Creating sample database…', 'Seeding tables and demo data. This can take a few seconds.');
+            });
         }
 
         const dialog = document.getElementById('scdb-snippet-dialog');
@@ -1489,7 +1513,6 @@
     }
 
     window.switchResultTab = switchResultTab;
-    window.switchPanel = switchPanel;
     window.selectTable = selectTable;
     window.toggleGroup = toggleGroup;
     window.toggleConnectionMode = toggleConnectionMode;
@@ -1508,9 +1531,12 @@
     window.closeCommandPalette = closeCommandPalette;
     window.openCreateDbDialog = openCreateDbDialog;
     window.closeCreateDbDialog = closeCreateDbDialog;
+    window.createSampleDatabase = createSampleDatabase;
     window.validateCreateDbForm = validateCreateDbForm;
+    window.scriptTableFromSelection = scriptTableFromSelection;
+    window.showBusyOverlay = showBusyOverlay;
+    window.hideBusyOverlay = hideBusyOverlay;
     window.contextMenuAction = contextMenuAction;
-    window.togglePanelDock = togglePanelDock;
     window.openSnippetDialog = openSnippetDialog;
     window.closeSnippetDialog = closeSnippetDialog;
     window.saveSnippet = saveSnippet;

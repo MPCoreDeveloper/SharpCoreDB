@@ -9,6 +9,12 @@
 
   <ItemGroup>
     <PackageReference Include="SafeWebCore" />
+    <PackageReference Include="SharpDispatch" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The SeedProbe console tool has its own project file; do not compile it into the web app. -->
+    <Compile Remove="SeedProbe\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

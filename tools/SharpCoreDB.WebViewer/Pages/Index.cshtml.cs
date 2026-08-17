@@ -16,6 +16,7 @@ public sealed class IndexModel(
     IViewerTransactionService transactionService,
     IMetadataService metadataService,
     IViewerQueryService viewerQueryService,
+    ISampleDatabaseCatalog sampleDatabaseCatalog,
     IOptions<WebViewerOptions> options) : PageModel
 {
     private readonly IRecentConnectionsStore _recentConnectionsStore = recentConnectionsStore;
@@ -24,7 +25,14 @@ public sealed class IndexModel(
     private readonly IViewerTransactionService _transactionService = transactionService;
     private readonly IMetadataService _metadataService = metadataService;
     private readonly IViewerQueryService _viewerQueryService = viewerQueryService;
+    private readonly ISampleDatabaseCatalog _sampleDatabaseCatalog = sampleDatabaseCatalog;
     private readonly WebViewerOptions _options = options.Value;
+
+    /// <summary>
+    /// Session key marking that the user explicitly disconnected. While present, the
+    /// viewer does not auto-connect to the default database on the next page load.
+    /// </summary>
+    private const string UserDisconnectedSessionKey = "SharpCoreDB.WebViewer.UserDisconnected";
 
     [BindProperty]
     public ConnectionRequest Connection { get; set; } = CreateDefaultConnection();
@@ -37,6 +45,30 @@ public sealed class IndexModel(
 
     [BindProperty]
     public string ImportWorkspaceJson { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string NewTableName { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string NewTableColumnsDefinition { get; set; } = "Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NULL";
+
+    [BindProperty]
+    public string ImportCsvContent { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string ImportCsvTableName { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string NewDatabaseName { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string NewDatabasePath { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string NewDatabasePassword { get; set; } = string.Empty;
+
+    [BindProperty]
+    public DatabaseStorageMode NewDatabaseStorageMode { get; set; } = DatabaseStorageMode.Directory;
 
     [BindProperty(SupportsGet = true)]
     public string? SelectedTable { get; set; }
@@ -53,6 +85,10 @@ public sealed class IndexModel(
 
     public IReadOnlyList<QueryHistoryItem> QueryHistory { get; private set; } = [];
 
+    public IReadOnlyList<SampleDatabaseInfo> AvailableSamples { get; private set; } = [];
+
+    public string DefaultDatabasePath { get; private set; } = string.Empty;
+
     public IReadOnlyList<string> Tables { get; private set; } = [];
 
     public ViewerSessionState? ActiveSession { get; private set; }
@@ -65,11 +101,24 @@ public sealed class IndexModel(
 
     public string EndpointDisplay => $"https://{_options.BindAddress}:{_options.HttpsPort}";
 
+    /// <summary>
+    /// Gets a value indicating whether the built-in databases still use the well-known default
+    /// password ("scdb"). Only then does the UI display the password hint, so a customized
+    /// password is never rendered into the page.
+    /// </summary>
+    public bool IsWellKnownDefaultPasswordInUse =>
+        string.Equals(_options.DefaultDatabasePassword, "scdb", StringComparison.Ordinal);
+
     public int QueryTimeoutSeconds => _options.QueryTimeoutSeconds;
 
     public int ResultRowLimit => _options.ResultRowLimit;
 
-    public bool IsConnected => ActiveSession is not null;
+    /// <summary>
+    /// Gets a value indicating whether a database session is active. The session is hydrated
+    /// lazily from the ASP.NET session store, so POST handlers can check this before
+    /// <see cref="LoadPageStateAsync"/> has run.
+    /// </summary>
+    public bool IsConnected => (ActiveSession ??= _viewerConnectionService.GetCurrentSession()) is not null;
 
     public bool HasQueryResult => QueryResult is not null;
 
@@ -91,6 +140,13 @@ public sealed class IndexModel(
     public async Task OnGetAsync()
     {
         await LoadPageStateAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+
+        // SSMS-like behavior: automatically connect to the default "scdb" database,
+        // unless the user explicitly disconnected earlier in this browser session.
+        if (!IsConnected && !WasUserDisconnected)
+        {
+            await ConnectToDefaultDatabaseAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -112,7 +168,57 @@ public sealed class IndexModel(
             await _transactionService.ClearAsync(HttpContext.RequestAborted).ConfigureAwait(false);
             var session = await _viewerConnectionService.ConnectAsync(Connection, HttpContext.RequestAborted).ConfigureAwait(false);
             await SaveRecentConnectionAsync(session, HttpContext.RequestAborted).ConfigureAwait(false);
+            ClearUserDisconnectedFlag();
             StatusMessage = $"Connected to {session.DisplayTarget}.";
+            Query = CreateDefaultQuery();
+            return RedirectToPage();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+            return Page();
+        }
+    }
+
+    /// <summary>
+    /// Creates (if needed) and connects to a built-in sample database (Contoso, AdventureWorks).
+    /// </summary>
+    /// <param name="sampleName">Sample database name.</param>
+    /// <returns>The viewer page result.</returns>
+    public async Task<IActionResult> OnPostEnsureSampleAsync(string sampleName)
+    {
+        ClearConnectionModelState();
+
+        try
+        {
+            var sample = _sampleDatabaseCatalog.ListSamples()
+                .FirstOrDefault(item => string.Equals(item.Name, sampleName, StringComparison.OrdinalIgnoreCase));
+            if (sample is null)
+            {
+                ErrorMessage = $"Unknown sample database '{sampleName}'.";
+                await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+                return Page();
+            }
+
+            await _sampleDatabaseCatalog.EnsureSampleAsync(sample.Name, HttpContext.RequestAborted).ConfigureAwait(false);
+
+            var path = _sampleDatabaseCatalog.GetSampleDatabasePath(sample.Name);
+            Connection = new ConnectionRequest
+            {
+                Name = sample.DisplayName,
+                ConnectionMode = ViewerConnectionMode.Local,
+                LocalDatabasePath = path,
+                LocalStorageMode = sample.StorageMode,
+                LocalReadOnly = false,
+                Password = _options.DefaultDatabasePassword
+            };
+
+            await _transactionService.ClearAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            var session = await _viewerConnectionService.ConnectAsync(Connection, HttpContext.RequestAborted).ConfigureAwait(false);
+            await SaveRecentConnectionAsync(session, HttpContext.RequestAborted).ConfigureAwait(false);
+            ClearUserDisconnectedFlag();
+            StatusMessage = $"Sample database '{sample.DisplayName}' created and connected.";
             Query = CreateDefaultQuery();
             return RedirectToPage();
         }
@@ -132,8 +238,70 @@ public sealed class IndexModel(
     {
         await _transactionService.ClearAsync(HttpContext.RequestAborted).ConfigureAwait(false);
         await _viewerConnectionService.DisconnectAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+        SetUserDisconnectedFlag();
         StatusMessage = "Disconnected from the active database.";
         return RedirectToPage();
+    }
+
+    /// <summary>
+    /// Creates a new empty local database and connects the current browser session to it.
+    /// </summary>
+    /// <returns>The viewer page result.</returns>
+    public async Task<IActionResult> OnPostCreateDatabaseAsync()
+    {
+        ClearConnectionModelState();
+
+        if (string.IsNullOrWhiteSpace(NewDatabasePath))
+        {
+            ErrorMessage = "Enter a path for the new database.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(NewDatabasePassword))
+        {
+            ErrorMessage = "Enter a password for the new database.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        try
+        {
+            var trimmedPath = NewDatabasePath.Trim();
+            var fullPath = Path.IsPathRooted(trimmedPath)
+                ? Path.GetFullPath(trimmedPath)
+                : Path.GetFullPath(Path.Combine(_sampleDatabaseCatalog.GetDataRootDirectory(), trimmedPath));
+
+            Directory.CreateDirectory(fullPath);
+
+            var displayName = string.IsNullOrWhiteSpace(NewDatabaseName)
+                ? Path.GetFileName(fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) ?? "database"
+                : NewDatabaseName.Trim();
+
+            Connection = new ConnectionRequest
+            {
+                Name = displayName,
+                ConnectionMode = ViewerConnectionMode.Local,
+                LocalDatabasePath = fullPath,
+                LocalStorageMode = NewDatabaseStorageMode,
+                LocalReadOnly = false,
+                Password = NewDatabasePassword
+            };
+
+            await _transactionService.ClearAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            var session = await _viewerConnectionService.ConnectAsync(Connection, HttpContext.RequestAborted).ConfigureAwait(false);
+            await SaveRecentConnectionAsync(session, HttpContext.RequestAborted).ConfigureAwait(false);
+            ClearUserDisconnectedFlag();
+            Query = CreateDefaultQuery();
+            StatusMessage = $"Database '{session.Name}' created and connected.";
+            return RedirectToPage();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+            return Page();
+        }
     }
 
     /// <summary>
@@ -496,6 +664,153 @@ public sealed class IndexModel(
         return Page();
     }
 
+    /// <summary>
+    /// Scripts the approximate DDL for the selected table into the SQL editor.
+    /// </summary>
+    /// <returns>The viewer page result.</returns>
+    public async Task<IActionResult> OnPostScriptTableAsync()
+    {
+        ClearConnectionModelState();
+
+        if (!IsConnected)
+        {
+            ErrorMessage = "Connect to a database before scripting a table.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedTable))
+        {
+            ErrorMessage = "Select a table before scripting DDL.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        try
+        {
+            var metadata = await _metadataService.GetTableMetadataAsync(SelectedTable, HttpContext.RequestAborted).ConfigureAwait(false);
+            if (metadata is null || string.IsNullOrWhiteSpace(metadata.Ddl))
+            {
+                ErrorMessage = $"No DDL could be reconstructed for table '{SelectedTable}'.";
+            }
+            else
+            {
+                Query.Sql = metadata.Ddl;
+                StatusMessage = $"Scripted approximate DDL for table '{SelectedTable}' into the editor.";
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+        }
+
+        await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+        return Page();
+    }
+
+    /// <summary>
+    /// Creates a new table using the SSMS-style visual table designer.
+    /// </summary>
+    /// <returns>The viewer page result.</returns>
+    public async Task<IActionResult> OnPostCreateTableAsync()
+    {
+        ClearConnectionModelState();
+
+        if (!IsConnected)
+        {
+            ErrorMessage = "Connect to a database before creating a table.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(NewTableName))
+        {
+            ErrorMessage = "Enter a table name.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(NewTableColumnsDefinition))
+        {
+            ErrorMessage = "Define at least one column.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        try
+        {
+            var escapedName = NewTableName.Trim().Replace("\"", "\"\"", StringComparison.Ordinal);
+            var createSql = $"CREATE TABLE IF NOT EXISTS \"{escapedName}\" ({NewTableColumnsDefinition.Trim()});";
+            Query = new QueryExecutionRequest { Sql = createSql, ParametersJson = string.Empty };
+            var result = await _viewerQueryService.ExecuteAsync(Query, HttpContext.RequestAborted).ConfigureAwait(false);
+            SelectedTable = NewTableName.Trim();
+            StatusMessage = $"Table '{NewTableName.Trim()}' created.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+    }
+
+    /// <summary>
+    /// Imports CSV content into a new table with inferred column types.
+    /// </summary>
+    /// <returns>The viewer page result.</returns>
+    public async Task<IActionResult> OnPostImportCsvAsync()
+    {
+        ClearConnectionModelState();
+
+        if (!IsConnected)
+        {
+            ErrorMessage = "Connect to a database before importing CSV.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(ImportCsvTableName))
+        {
+            ErrorMessage = "Enter a target table name.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        if (string.IsNullOrWhiteSpace(ImportCsvContent))
+        {
+            ErrorMessage = "Paste CSV content before importing.";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+
+        try
+        {
+            var (createSql, insertSqls) = CsvImportBuilder.BuildSql(ImportCsvTableName.Trim(), ImportCsvContent);
+            var builder = new System.Text.StringBuilder();
+            builder.AppendLine(createSql);
+            foreach (var insertSql in insertSqls)
+            {
+                builder.AppendLine(insertSql);
+            }
+
+            Query = new QueryExecutionRequest { Sql = builder.ToString(), ParametersJson = string.Empty };
+            var result = await _viewerQueryService.ExecuteAsync(Query, HttpContext.RequestAborted).ConfigureAwait(false);
+            SelectedTable = ImportCsvTableName.Trim();
+            ImportCsvContent = string.Empty;
+            StatusMessage = $"Imported CSV into table '{ImportCsvTableName.Trim()}' ({insertSqls.Count} rows).";
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage = ex.Message;
+            await LoadPageStateAsync(HttpContext.RequestAborted, preserveFormValues: true, keepQueryResult: true).ConfigureAwait(false);
+            return Page();
+        }
+    }
+
     private async Task LoadPageStateAsync(CancellationToken cancellationToken, bool preserveFormValues = false, bool keepQueryResult = false)
     {
         if (!keepQueryResult)
@@ -505,6 +820,9 @@ public sealed class IndexModel(
 
         RecentConnections = await _recentConnectionsStore.LoadAsync(cancellationToken).ConfigureAwait(false);
         var workspace = await _queryWorkspaceStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+
+        AvailableSamples = _sampleDatabaseCatalog.ListSamples();
+        DefaultDatabasePath = _sampleDatabaseCatalog.GetDefaultDatabasePath();
 
         ActiveSession = _viewerConnectionService.GetCurrentSession();
         ActiveTransaction = _transactionService.GetActiveTransaction();
@@ -785,4 +1103,42 @@ public sealed class IndexModel(
         ServerDatabase = "master",
         ServerUsername = "anonymous"
     };
+
+    private bool WasUserDisconnected =>
+        string.Equals(HttpContext.Session.GetString(UserDisconnectedSessionKey), "1", StringComparison.Ordinal);
+
+    private void SetUserDisconnectedFlag() => HttpContext.Session.SetString(UserDisconnectedSessionKey, "1");
+
+    private void ClearUserDisconnectedFlag() => HttpContext.Session.Remove(UserDisconnectedSessionKey);
+
+    private async Task ConnectToDefaultDatabaseAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _sampleDatabaseCatalog.EnsureDefaultDatabaseAsync(cancellationToken).ConfigureAwait(false);
+
+            Connection = new ConnectionRequest
+            {
+                Name = _options.DefaultDatabaseName,
+                ConnectionMode = ViewerConnectionMode.Local,
+                LocalDatabasePath = _sampleDatabaseCatalog.GetDefaultDatabasePath(),
+                LocalStorageMode = DatabaseStorageMode.Directory,
+                LocalReadOnly = false,
+                Password = _options.DefaultDatabasePassword
+            };
+
+            await _transactionService.ClearAsync(cancellationToken).ConfigureAwait(false);
+            var session = await _viewerConnectionService.ConnectAsync(Connection, cancellationToken).ConfigureAwait(false);
+            await SaveRecentConnectionAsync(session, cancellationToken).ConfigureAwait(false);
+            ClearUserDisconnectedFlag();
+            Query = CreateDefaultQuery();
+            StatusMessage = $"Connected to the default '{_options.DefaultDatabaseName}' database.";
+            await LoadPageStateAsync(cancellationToken, preserveFormValues: true).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ErrorMessage ??= ex.Message;
+            await LoadPageStateAsync(cancellationToken, preserveFormValues: true).ConfigureAwait(false);
+        }
+    }
 }

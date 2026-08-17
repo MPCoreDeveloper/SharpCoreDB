@@ -33,7 +33,9 @@
     <File Path="docs/server/REST_API.md" />
     <File Path="docs/server/SECURITY.md" />
   </Folder>
-  <Folder Name="/Examples/" />
+  <Folder Name="/Examples/">
+    <Project Path="Examples/SharpCoreDB.GraphRAG.AIAssistant/SharpCoreDB.GraphRAG.AIAssistant.csproj" />
+  </Folder>
   <Folder Name="/Examples/CQRS/">
     <Project Path="Examples/CQRS/OrderManagement.CqrsDemo/OrderManagement.CqrsDemo.csproj" />
   </Folder>
@@ -147,5 +149,6 @@
     <Project Path="tools/SharpCoreDB.DebugBenchmark/SharpCoreDB.DebugBenchmark.csproj" />
     <Project Path="tools/SharpCoreDB.Demo/SharpCoreDB.Demo.csproj" />
     <Project Path="tools/SharpCoreDB.Viewer/SharpCoreDB.Viewer.csproj" />
+    <Project Path="tools/SharpCoreDB.WebViewer/SharpCoreDB.WebViewer.csproj" />
   </Folder>
 </Solution>

@@ -1,4 +1,8 @@
-# SharpCoreDB WebViewer v1.9.0
+# SharpCoreDB WebViewer — Primary Studio Tool
+
+> **📦 Moving to its own repository:** this tool is becoming **SCDMS — Sharp Core Database Management System**, hosted at [`github.com/MPCoreDeveloper/SCDMS`](https://github.com/MPCoreDeveloper/SCDMS). New development happens there. SCDMS migrates your existing `%LOCALAPPDATA%\SharpCoreDB.WebViewer` data automatically on first start. See [`docs/viewer/scdms-standalone-plan.md`](../../docs/viewer/scdms-standalone-plan.md) for the full plan.
+
+**This is the recommended database studio for SharpCoreDB.** It replaces the legacy `SharpCoreDB.Viewer` Avalonia desktop application, which is now **deprecated**.
 
 SharpCoreDB WebViewer is a local-first Razor Pages application for inspecting and operating SharpCoreDB databases with secure defaults.
 
@@ -14,6 +18,36 @@ SharpCoreDB WebViewer is a local-first Razor Pages application for inspecting an
 - Saved query library with scoped visibility per connection target
 - Query execution history with success/failure status
 - Workspace import/export as JSON
+
+## Built-in databases
+
+The viewer ships with one default database and two sample databases:
+
+| Database | Purpose | Created when |
+|---|---|---|
+| `scdb` | Default scratch database with a small `welcome` table | Automatically on first launch |
+| `contoso` | Retail sample (customers, products, orders, order items, inventory) | On demand (sidebar **Database Actions** or **File** menu) |
+| `adventureworks` | Cycles manufacturer sample (products, customers, sales orders, territories) | On demand (sidebar **Database Actions** or **File** menu) |
+
+**Password:** all built-in databases are created with the default password **`scdb`**.
+You need it when reconnecting manually (recent connection profiles intentionally do not persist passwords).
+
+**Storage location:** `%LOCALAPPDATA%\SharpCoreDB.WebViewer\Data\<name>` (e.g. `C:\Users\<you>\AppData\Local\SharpCoreDB.WebViewer\Data\contoso`).
+
+**Changing the defaults:** edit `appsettings.json`:
+
+```json
+"WebViewer": {
+  "DefaultDatabaseName": "scdb",
+  "DefaultDatabasePassword": "scdb",
+  "DefaultDatabasePath": "",
+  "SampleDatabasesDirectory": ""
+}
+```
+
+- `DefaultDatabasePassword` applies to newly created built-in databases. Existing databases keep the password they were created with — delete the database folder to re-create it with a new password.
+- `DefaultDatabasePath` overrides the storage folder of the default database.
+- `SampleDatabasesDirectory` overrides the root folder for all built-in databases.
 
 ## Security posture
 

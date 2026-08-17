@@ -1,3 +1,4 @@
+using System.Text;
 using SharpCoreDB.Client;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.WebViewer.Models;
@@ -85,7 +86,8 @@ public sealed class MetadataService(IViewerConnectionService connectionService, 
             Name = tableName,
             Columns = columns,
             Indexes = indexes,
-            Triggers = triggers
+            Triggers = triggers,
+            Ddl = BuildApproximateDdl(tableName, columns)
         };
     }
 
@@ -137,9 +139,44 @@ public sealed class MetadataService(IViewerConnectionService connectionService, 
             Name = tableName,
             Columns = columns,
             Indexes = [.. indexRows.Select(static row => row.Count == 0 ? string.Empty : row[0] ?? string.Empty).Where(static name => !string.IsNullOrWhiteSpace(name))],
-            Triggers = [.. triggerRows.Select(static row => row.Count == 0 ? string.Empty : row[0] ?? string.Empty).Where(static name => !string.IsNullOrWhiteSpace(name))]
+            Triggers = [.. triggerRows.Select(static row => row.Count == 0 ? string.Empty : row[0] ?? string.Empty).Where(static name => !string.IsNullOrWhiteSpace(name))],
+            Ddl = BuildApproximateDdl(tableName, columns)
         };
     }
+
+    /// <summary>
+    /// Reconstructs an approximate CREATE TABLE statement from live column metadata.
+    /// The engine's metadata provider does not expose PK/FK/UNIQUE/DEFAULT constraints,
+    /// so the result is intentionally marked as approximate.
+    /// </summary>
+    /// <param name="tableName">Table name.</param>
+    /// <param name="columns">Column metadata.</param>
+    /// <returns>Approximate DDL script.</returns>
+    private static string BuildApproximateDdl(string tableName, IReadOnlyList<TableColumnMetadata> columns)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("-- Approximate DDL reconstructed from live table metadata.");
+        builder.AppendLine("-- Constraints (PRIMARY KEY / FOREIGN KEY / UNIQUE / DEFAULT) are not exposed by the engine and are omitted.");
+        builder.Append("CREATE TABLE ").Append(QuoteIdentifier(tableName)).AppendLine(" (");
+
+        for (var index = 0; index < columns.Count; index++)
+        {
+            var column = columns[index];
+            builder.Append("    ").Append(QuoteIdentifier(column.Name)).Append(' ').Append(column.DataType.ToUpperInvariant());
+            if (!column.IsNullable)
+            {
+                builder.Append(" NOT NULL");
+            }
+
+            builder.AppendLine(index < columns.Count - 1 ? "," : string.Empty);
+        }
+
+        builder.Append(");");
+        return builder.ToString();
+    }
+
+    private static string QuoteIdentifier(string identifier) =>
+        string.Concat("\"", identifier.Replace("\"", "\"\"", StringComparison.Ordinal), "\"");
 
     private async Task<IReadOnlyList<IReadOnlyList<string?>>> ExecuteServerQueryAsync(
         ViewerSessionState session,

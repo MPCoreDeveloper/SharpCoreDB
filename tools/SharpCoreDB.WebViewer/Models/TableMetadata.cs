@@ -12,6 +12,12 @@ public sealed record class TableMetadata
     public IReadOnlyList<string> Indexes { get; init; } = [];
 
     public IReadOnlyList<string> Triggers { get; init; } = [];
+
+    /// <summary>
+    /// Approximate CREATE TABLE statement reconstructed from live column metadata.
+    /// Engine metadata does not expose PK/FK/UNIQUE/DEFAULT constraints, so those are omitted.
+    /// </summary>
+    public string Ddl { get; init; } = string.Empty;
 }
 
 /// <summary>
