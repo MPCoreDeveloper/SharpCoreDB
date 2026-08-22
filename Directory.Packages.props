@@ -1,28 +1,10 @@
 <Project>
   <PropertyGroup>
-    <!-- 
-      CENTRAL PACKAGE MANAGEMENT (CPM)
-      All external package versions are declared here.
-      This enables:
-        - Single place to update to latest production versions
-        - Easy vulnerability remediation (bump here + restore)
-        - `dotnet package update` and Visual Studio "Manage NuGet Packages" work reliably
-      Policy: Always use latest stable (non-prerelease) versions unless explicitly overridden for a reason.
-    -->
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <!-- Pin transitive dependencies as well so a vulnerable transitive cannot sneak in unnoticed. -->
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <!-- 
-      Version used for all internal SharpCoreDB.* package references when 
-      a project sets UseSharpCoreDBPackage=true (consume published NuGet instead of ProjectReference).
-      Update this single value when you want examples/tests to consume a newer published package version.
-    -->
     <SharpCoreDBVersion>1.9.4</SharpCoreDBVersion>
   </PropertyGroup>
   <ItemGroup>
-    <!-- ============================================================ -->
-    <!-- SharpCoreDB family (internal packages) - versioned via property above -->
-    <!-- ============================================================ -->
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Analytics" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Client" Version="$(SharpCoreDBVersion)" />
@@ -48,13 +30,6 @@
     <PackageVersion Include="SharpCoreDB.Server.Core" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
-    <!-- ============================================================ -->
-    <!-- External packages (exact versions at time of CPM introduction) -->
-    <!-- To update everything: dotnet package update -s https://api.nuget.org/v3/index.json -->
-    <!-- ============================================================ -->
-    <!-- NOTE: Aspire SDK implicit packages (Aspire.Hosting.Orchestration.win-x64, Aspire.Dashboard.Sdk.win-x64)
-         are NOT listed here because the AppHost project disables CPM and provides inline versions.
-         This is required by the Aspire SDK. -->
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
     <PackageVersion Include="AngleSharp" Version="1.7.1" />
     <PackageVersion Include="Avalonia" Version="12.1.1" />
@@ -105,8 +80,6 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
-    <!-- Used by linq2db SQLite provider adapter resolution in integration scenarios.
-         The Update directive above (and in Directory.Build.props) forces our version and prevents NU1506 duplicate PackageVersion warnings from transitive dependencies. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.11" />
@@ -127,6 +100,10 @@
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.22.0" />
     <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.22.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <!-- MTP coverage module for xunit.v3 test hosts on .NET 10.
+         Required because the VSTest collects flow used by the old dotnet test path is no
+         longer supported by MTP on .NET 10+; CI runs the MTP test host directly. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.10.1" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />

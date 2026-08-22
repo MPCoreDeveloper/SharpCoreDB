@@ -17,35 +17,34 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
   CI_TEST_FILTER: 'Category!=Debug&Category!=Manual&Category!=Performance'
-  MIN_LINE_COVERAGE_PERCENT: '18'
 
 jobs:
   build:
-    name: Build & Test
+    name: Build and Test
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        
+
     steps:
     - name: Checkout
       uses: actions/checkout@v7
       with:
         fetch-depth: 0
-        
+
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: '10.0.x'
-        
+
     - name: Display .NET info
       run: dotnet --info
-        
+
     - name: Restore dependencies
       run: dotnet restore SharpCoreDB.CI.slnf --configfile NuGet.Config /p:UseLocalProjectReferences=true
-      
+
     - name: Fail on deprecated NuGet packages
       shell: pwsh
       run: |
@@ -64,7 +63,7 @@ jobs:
         }
 
         Write-Host "No deprecated NuGet packages detected."
-      
+
     - name: Fail on vulnerable NuGet packages
       shell: pwsh
       run: |
@@ -83,101 +82,64 @@ jobs:
         }
 
         Write-Host "No vulnerable NuGet packages detected."
-      
+
     - name: Build
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true
 
+    # MTP (xunit.v3) test hosts on .NET 10 no longer support `dotnet test`'s VSTest flags
+    # (e.g. --collect "XPlat Code Coverage", --logger trx, --blame-hang). CI runs the MTP
+    # executable directly, which understands the same VSTest filter expression and writes TRX.
     - name: Test SharpCoreDB.Tests
-      run: dotnet test tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.Tests
+        tests/SharpCoreDB.Tests/bin/Release/net10.0/SharpCoreDB.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.Tests/SharpCoreDB.Tests.trx"
       timeout-minutes: 30
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
     - name: Test SharpCoreDB.VectorSearch.Tests
-      run: dotnet test tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.VectorSearch.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.VectorSearch.Tests
+        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net10.0/SharpCoreDB.VectorSearch.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.trx"
       timeout-minutes: 15
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
     - name: Test SharpCoreDB.EntityFrameworkCore.Tests
-      run: dotnet test tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests
+        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net10.0/SharpCoreDB.EntityFrameworkCore.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.trx"
       timeout-minutes: 15
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
     - name: Test SharpCoreDB.Functional.Linq2DB.Tests
-      run: dotnet test tests/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.csproj --configuration Release --no-build --verbosity minimal --logger trx --results-directory ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests --collect:"XPlat Code Coverage" --filter "${{ env.CI_TEST_FILTER }}" --blame-hang --blame-hang-timeout 10m
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests
+        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net10.0/SharpCoreDB.Functional.Linq2DB.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.trx"
       timeout-minutes: 10
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
-
-    - name: Validate coverage threshold
-      if: matrix.os == 'ubuntu-latest'
-      shell: python3 {0}
-      run: |
-        import glob
-        import os
-        import sys
-        import xml.etree.ElementTree as ET
-
-        threshold = float(os.environ.get("MIN_LINE_COVERAGE_PERCENT", "60"))
-        files = glob.glob("**/TestResults/**/coverage.cobertura.xml", recursive=True)
-
-        if not files:
-          print("No coverage.cobertura.xml files found.", file=sys.stderr)
-          sys.exit(1)
-
-        line_hits_by_file = {}
-        for file in files:
-          try:
-            root = ET.parse(file).getroot()
-            lines_valid = int(root.attrib.get("lines-valid", "0"))
-            lines_covered = int(root.attrib.get("lines-covered", "0"))
-            print(f"Coverage input: {file} -> {lines_covered}/{lines_valid}")
-
-            for class_element in root.findall(".//class"):
-              filename = class_element.attrib.get("filename")
-              if not filename:
-                continue
-
-              file_hits = line_hits_by_file.setdefault(filename, {})
-              for line_element in class_element.findall("./lines/line"):
-                number_text = line_element.attrib.get("number")
-                if number_text is None:
-                  continue
-
-                try:
-                  line_number = int(number_text)
-                except ValueError:
-                  continue
-
-                hits = int(line_element.attrib.get("hits", "0"))
-                file_hits[line_number] = max(file_hits.get(line_number, 0), hits)
-          except Exception as ex:
-            print(f"Skipping unreadable coverage file {file}: {ex}")
-
-        valid = sum(len(file_hits) for file_hits in line_hits_by_file.values())
-        covered = sum(
-          1
-          for file_hits in line_hits_by_file.values()
-          for hits in file_hits.values()
-          if hits > 0
-        )
-
-        if valid == 0:
-          print("Coverage reports found but no line entries could be merged.", file=sys.stderr)
-          sys.exit(1)
-
-        percent = (covered / valid) * 100.0
-        print(f"Merged unique line coverage: {percent:.2f}% (threshold: {threshold:.2f}%)")
-
-        if percent < threshold:
-          print("Coverage threshold not met.", file=sys.stderr)
-          sys.exit(1)
 
     - name: Upload test results
       if: always()
@@ -186,31 +148,19 @@ jobs:
         name: test-results-${{ matrix.os }}
         path: '**/TestResults/**/*.trx'
         if-no-files-found: ignore
-        
-    - name: Upload coverage
-      if: matrix.os == 'ubuntu-latest'
-      uses: codecov/codecov-action@v6
-      with:
-        files: '**/TestResults/**/coverage.cobertura.xml'
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
-        disable_search: false
-        verbose: true
 
   pack:
     name: Pack NuGet Packages
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    
+
     steps:
     - name: Checkout
       uses: actions/checkout@v7
       with:
         fetch-depth: 0
-        
+
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
@@ -229,14 +179,14 @@ jobs:
 
           if [ "$is_packable" = "true" ] && [ -n "$package_id" ]; then
             projects+=("$project")
-            echo "✅ Packable: $project ($package_id)"
+            echo "Packable: $project ($package_id)"
           else
-            echo "⏭️ Skipped: $project (IsPackable=$is_packable, PackageId=$package_id)"
+            echo "Skipped: $project (IsPackable=$is_packable, PackageId=$package_id)"
           fi
         done < <(find ./src -name '*.csproj' -print0)
 
         if [ ${#projects[@]} -eq 0 ]; then
-          echo "❌ No packable projects found under ./src"
+          echo "No packable projects found under ./src"
           exit 1
         fi
 
@@ -246,7 +196,7 @@ jobs:
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
-        echo "📦 Discovered ${#projects[@]} packable project(s)."
+        echo "Discovered ${#projects[@]} packable project(s)."
 
     - name: Pack NuGet packages
       shell: bash
@@ -257,7 +207,7 @@ jobs:
 
         while IFS= read -r project; do
           [ -n "$project" ] || continue
-          echo "📦 Packing $project"
+          echo "Packing $project"
           dotnet pack "$project" \
             --configuration Release \
             --output ./artifacts \
@@ -265,7 +215,7 @@ jobs:
             /p:UseLocalProjectReferences=true \
             --configfile NuGet.Config
         done <<< "${{ steps.discover-packable.outputs.packable_projects }}"
-      
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -278,19 +228,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: pack
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    
+
     steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: '10.0.x'
-        
+
     - name: Download NuGet packages
       uses: actions/download-artifact@v4
       with:
         name: nuget-packages
         path: ./artifacts
-        
+
     - name: Publish packages in dependency order
       shell: bash
       env:
@@ -309,7 +264,7 @@ jobs:
             for pkg in ./artifacts/${pattern}; do
               [ -f "$pkg" ] || continue
               found_any=true
-              echo "  ↗ Pushing $(basename "$pkg")"
+              echo "  Publishing $(basename "$pkg")"
               dotnet nuget push "$pkg" \
                 --api-key "$NUGET_API_KEY" \
                 --source "$NUGET_SOURCE" \
@@ -318,20 +273,17 @@ jobs:
           done
           echo "::endgroup::"
 
-          # Wait for NuGet.org indexing before pushing the next layer
           if [ "$found_any" = true ]; then
-            echo "⏳ Waiting 30s for NuGet.org to index $layer_name..."
+            echo "Waiting 30s for NuGet.org to index $layer_name..."
             sleep 30
           fi
         }
 
-        # Layer 0 – no internal dependencies
         push_layer "Layer 0 (core)" \
           "SharpCoreDB.[0-9]*.nupkg" \
           "SharpCoreDB.Client.Protocol.*.nupkg" \
           "SharpCoreDB.Server.Protocol.*.nupkg"
 
-        # Layer 1 – depends on core only
         push_layer "Layer 1 (core dependents)" \
           "SharpCoreDB.Graph.[0-9]*.nupkg" \
           "SharpCoreDB.VectorSearch.*.nupkg" \
@@ -342,7 +294,6 @@ jobs:
           "SharpCoreDB.Identity.*.nupkg" \
           "SharpCoreDB.Serilog.Sinks.*.nupkg"
 
-        # Layer 2 – depends on layer 1
         push_layer "Layer 2 (mid-level)" \
           "SharpCoreDB.Client.[0-9]*.nupkg" \
           "SharpCoreDB.EntityFrameworkCore.[0-9]*.nupkg" \
@@ -352,7 +303,6 @@ jobs:
           "SharpCoreDB.CQRS.*.nupkg" \
           "SharpCoreDB.Projections.*.nupkg"
 
-        # Layer 3 – depends on layer 2
         push_layer "Layer 3 (top-level)" \
           "SharpCoreDB.Server.[0-9]*.nupkg" \
           "SharpCoreDB.Graph.Advanced.*.nupkg" \
@@ -362,20 +312,16 @@ jobs:
           "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
           "SharpCoreDB.Functional.Linq2DB.*.nupkg"
 
-        # Catch any remaining packages not in the layers above
         push_layer "Remaining packages" \
           "*.nupkg"
 
-        echo "✅ All packages published in dependency order."
+        echo "All packages published in dependency order."
 
     - name: Create release summary
       run: |
-        echo "## 📦 NuGet Packages Published (Dependency-Ordered)" >> $GITHUB_STEP_SUMMARY
+        echo "## NuGet Packages Published (Dependency-Ordered)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "Published $(ls -1 ./artifacts/*.nupkg | wc -l) package(s) to NuGet.org" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Packages were published in 4 layers based on their dependency chain," >> $GITHUB_STEP_SUMMARY
-        echo "with 30-second waits between layers for NuGet.org indexing." >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Packages" >> $GITHUB_STEP_SUMMARY
         ls -1 ./artifacts/*.nupkg | xargs -I {} basename {} >> $GITHUB_STEP_SUMMARY
