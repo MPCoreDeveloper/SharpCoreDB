@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Client.Protocol</AssemblyName>
-    <Version>1.9.3</Version>
+    <Version>1.9.4</Version>
     <Description>Client-side protocol implementation for SharpCoreDB (gRPC, binary)</Description>
 
     <!-- NuGet Package Properties -->
@@ -26,7 +26,7 @@
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.9.3: Linq2DB functional adapter production release + full version synchronization to 1.9.3 across all packages, documentation, and tests. All Linq2DB tests now passing. Updated DocumentationConsistencyTests and changelog.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.4: Known-issue fixes (opt-in at-rest per-record encryption EnableAtRestRecordEncryption, opt-in SQLite integer affinity UseSqliteIntegerAffinity, reopen-insert AOORE fix, functional single-file point operations, ExecuteQuery batch flush, SQL validator @-prefix normalization), single-file to directory SQL parity (LIKE/IS NULL/NOT NULL/BETWEEN), and version synchronization to 1.9.4 across all packages, documentation and tests.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

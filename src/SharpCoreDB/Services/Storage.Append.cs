@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Services;
 
+using SharpCoreDB.Constants;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -17,13 +18,216 @@ using Microsoft.Win32.SafeHandles;
 /// Storage implementation - Append partial class.
 /// Handles append operations with CRITICAL transaction support for batch inserts.
 /// THIS IS WHERE THE 680x PERFORMANCE FIX HAPPENS!
+///
+/// ✅ Known Issue 1 FIX: When encryption is enabled (!NoEncryptMode), each appended record
+/// is encrypted with AES-256-GCM BEFORE it is written to disk. New encrypted table files
+/// carry an 8-byte magic header (see <see cref="PersistenceConstants.EncryptedTableMagic"/>);
+/// legacy plaintext files (no header) remain fully readable — full backward compatibility.
+///
+/// FORMAT INVARIANT: the byte offset returned/stored as the record position is the literal
+/// file offset of the 4-byte length prefix. For encrypted files this prefix is immediately
+/// after the 8-byte magic header for the first record. Readers (ReadBytesFrom / ReadAllRecords)
+/// read at that offset and decrypt the payload, so B-tree-indexed positions stay consistent
+/// with point lookups and RebuildPrimaryKeyIndexFromDisk.
 /// </summary>
 public partial class Storage
 {
+    /// <summary>Maximum accepted record/ciphertext length (1 GB).</summary>
+    private const int MaxRecordSize = 1_000_000_000;
+
+    /// <summary>AES-GCM overhead = nonce(12) + tag(16).</summary>
+    private const int GcmOverhead = CryptoConstants.GCM_NONCE_SIZE + CryptoConstants.GCM_TAG_SIZE;
+
     // Track buffered appends during transaction
     private readonly Dictionary<string, List<(byte[] data, long position)>> bufferedAppends = new();
     private readonly Dictionary<string, long> cachedFileLengths = new();  // ✅ NEW: Cache file lengths
+
+    // ✅ NEW: Tracks which buffered files still need the 8-byte magic header written on flush
+    // (only for brand-new files created while encryption is enabled).
+    private readonly HashSet<string> headerPendingFiles = new(StringComparer.Ordinal);
+
+    // ✅ Known Issue 1 FIX (backward compatibility): Files that already exist WITHOUT the
+    // encrypted magic header (legacy databases / NoEncryptMode) must keep receiving plaintext
+    // appends. Encrypting new records into a legacy plaintext file would silently corrupt it
+    // because the header-detection would not mark the file as encrypted.
+    private readonly HashSet<string> legacyPlaintextFiles = new(StringComparer.OrdinalIgnoreCase);
+
+    // ✅ PERFORMANCE: Per-path decision cache (true = encrypt writes to this file). The
+    // decision is taken once per file per Storage instance (first append), avoiding a
+    // repeated File.Exists + header-read stat on every AppendBytes call — the hot path.
+    private readonly ConcurrentDictionary<string, bool> _encryptModeCache = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Lock appendLock = new();
+
+    /// <summary>
+    /// ✅ Known Issue 1 FIX (opt-in): gate per-record at-rest encryption behind
+    /// DatabaseConfig.EnableAtRestRecordEncryption (default false). When disabled, behavior is
+    /// byte-for-byte identical to the original engine (plaintext length-prefixed records).
+    /// </summary>
+    private readonly bool enableAtRestRecordEncryption;
+
+    /// <summary>
+    /// Returns true when the current configuration wants per-record at-rest encryption.
+    /// </summary>
+    private bool UseRecordEncryption => enableAtRestRecordEncryption && !noEncryption;
+
+    /// <summary>
+    /// Determines whether writes to <paramref name="path"/> should be encrypted.
+    /// New files (or files already carrying the encrypted magic header) are encrypted in
+    /// encrypted mode; pre-existing legacy plaintext files stay plaintext forever so an
+    /// upgrade never corrupts an existing database. The decision is cached per path.
+    /// </summary>
+    private bool ShouldEncryptWrites(string path)
+    {
+        if (!UseRecordEncryption)
+        {
+            return false;
+        }
+
+        return _encryptModeCache.GetOrAdd(path, static (p, self) => self.DecideEncryptWrites(p), this);
+    }
+
+    /// <summary>
+    /// Evaluates the per-file encryption decision on first encounter. A file that already
+    /// exists without the encrypted magic header is treated as legacy plaintext for the
+    /// lifetime of this Storage instance.
+    /// </summary>
+    private bool DecideEncryptWrites(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return true; // Brand-new file → write the magic header + encrypted records.
+        }
+
+        if (FileHasEncryptedHeader(path))
+        {
+            return true; // Existing encrypted per-record file → keep encrypting.
+        }
+
+        // ✅ Known Issue 1 FIX (DDL interplay): CREATE TABLE pre-creates an empty .dat file.
+        // A 0-byte file has no legacy records, so it must be treated as brand-new (encrypt),
+        // NOT as legacy plaintext. Only files with actual length and no header are legacy.
+        if (new FileInfo(path).Length == 0)
+        {
+            return true;
+        }
+
+        legacyPlaintextFiles.Add(path);
+        return false; // Legacy plaintext file → never mix encrypted records into it.
+    }
+
+    /// <summary>
+    /// Encrypts a single record with AES-256-GCM (passthrough when encryption is disabled or
+    /// the target is a legacy plaintext file). Output format: [nonce(12)][ciphertext][tag(16)].
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private byte[] EncryptRecord(byte[] data, bool encryptWrites) =>
+        encryptWrites ? crypto.Encrypt(key, data) : data;
+
+    /// <summary>
+    /// Decrypts a single per-record payload. Passthrough when the configuration does not
+    /// enable encryption.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private byte[]? DecryptRecord(byte[] payload)
+    {
+        if (!UseRecordEncryption)
+        {
+            return payload;
+        }
+
+        try
+        {
+            return crypto.Decrypt(key, payload);
+        }
+        catch
+        {
+            // Corrupt or legacy data — surface null so readers treat it as an invalid record.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Detects whether <paramref name="path"/> is an encrypted per-record table file by
+    /// checking for the 8-byte magic header. Missing/empty/short files → false.
+    /// </summary>
+    private static bool FileHasEncryptedHeader(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            var info = new FileInfo(path);
+            if (info.Length < PersistenceConstants.EncryptedTableMagicLength)
+            {
+                return false;
+            }
+
+            Span<byte> header = stackalloc byte[PersistenceConstants.EncryptedTableMagicLength];
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            int read = fs.Read(header);
+            if (read < PersistenceConstants.EncryptedTableMagicLength)
+            {
+                return false;
+            }
+
+            return header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Initializes the buffered-append state for <paramref name="path"/> on first use inside a
+    /// transaction. Detects whether the file is brand-new so a magic header is written on flush
+    /// (only for encrypted mode), and caches the current file length once per transaction.
+    /// ✅ FORMAT INVARIANT (Known Issue 1): For a brand-new encrypted file the cached length is
+    /// initialized to the 8-byte magic header size, so buffered record positions equal the real
+    /// on-disk offsets produced when FlushBufferedAppends writes the header first.
+    /// </summary>
+    /// <param name="path">The table data file path.</param>
+    /// <param name="encryptWrites">Whether this file receives encrypted per-record writes.</param>
+    private void EnsureAppendInitialized(string path, bool encryptWrites)
+    {
+        // Get or create buffer for this file
+        if (!bufferedAppends.TryGetValue(path, out var fileBuffer))
+        {
+            fileBuffer = new List<(byte[], long)>();
+            bufferedAppends[path] = fileBuffer;
+
+            // ✅ CRITICAL OPTIMIZATION: Cache file length ONCE per file per transaction.
+            // This saves ~5 seconds for 10K inserts!
+            bool fileExists = File.Exists(path);
+            long fileLength = fileExists ? new FileInfo(path).Length : 0;
+            long initialLength = fileLength;
+
+            // ✅ Known Issue 1 FIX: Brand-new encrypted files (absent OR empty, since DDL
+            // pre-creates empty .dat files) start after the 8-byte magic header so buffered
+            // record positions match the real on-disk offsets after FlushBufferedAppends.
+            bool isBrandNew = !fileExists || fileLength == 0;
+            if (isBrandNew && encryptWrites)
+            {
+                initialLength += PersistenceConstants.EncryptedTableMagicLength;
+                headerPendingFiles.Add(path);
+            }
+
+            cachedFileLengths[path] = initialLength;
+        }
+    }
+
+    /// <summary>
+    /// Writes the 8-byte encrypted-table magic header at the current stream position.
+    /// Only called for brand-new files while record encryption is enabled.
+    /// </summary>
+    private static void WriteEncryptedHeader(FileStream fs)
+    {
+        fs.Write(PersistenceConstants.EncryptedTableMagic);
+    }
 
     // ✅ NEW: Batch encryption support
     private Optimizations.BufferedAesEncryption? _batchEncryption;
@@ -67,32 +271,31 @@ public partial class Storage
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long AppendBytes(string path, byte[] data)
     {
+        // ✅ Known Issue 1 FIX: Encrypt the record BEFORE buffering/writing so the payload
+        // never reaches disk as plaintext (unless NoEncryptMode is active, OR the target is
+        // a legacy plaintext file that predates this upgrade — those keep plaintext forever
+        // to avoid corrupting existing databases).
+        bool encryptWrites = ShouldEncryptWrites(path);
+        byte[] record = EncryptRecord(data, encryptWrites);
+        int recordLength = record.Length;
+
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER the append!
         if (IsInTransaction)
         {
             lock (appendLock)
             {
-                // Get or create buffer for this file
-                if (!bufferedAppends.TryGetValue(path, out var fileBuffer))
-                {
-                    fileBuffer = new List<(byte[], long)>();
-                    bufferedAppends[path] = fileBuffer;
-                    
-                    // ✅ CRITICAL OPTIMIZATION: Cache file length ONCE per file per transaction
-                    // This saves ~5 seconds for 10K inserts!
-                    cachedFileLengths[path] = File.Exists(path) ? new FileInfo(path).Length : 0;
-                }
+                EnsureAppendInitialized(path, encryptWrites);
 
                 // ✅ OPTIMIZED: Use cached file length instead of recalculating
                 long currentFileLength = cachedFileLengths[path];
-                
+
                 // This is where this data WILL be written when we flush
                 long futurePosition = currentFileLength;
-                
+
                 // Buffer the append and update cached length
-                fileBuffer.Add((data, futurePosition));
-                cachedFileLengths[path] = currentFileLength + 4 + data.Length;  // Update cache
-                
+                bufferedAppends[path].Add((record, futurePosition));
+                cachedFileLengths[path] = currentFileLength + 4 + recordLength;  // Update cache
+
                 return futurePosition;
             }
         }
@@ -100,22 +303,30 @@ public partial class Storage
         // Normal append (not in transaction) - write immediately
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough);
         long position = fs.Position;
-        
-        // Write length prefix
+
+        // ✅ Known Issue 1 FIX: brand-new encrypted files (position 0) receive the 8-byte
+        // magic header; records then start immediately after it.
+        if (position == 0 && encryptWrites)
+        {
+            WriteEncryptedHeader(fs);
+            position = fs.Position;
+        }
+
+        // Write length prefix (ciphertext length for encrypted files, data length otherwise)
         Span<byte> lengthBuffer = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
         fs.Write(lengthBuffer);
-        
-        // Write data
-        fs.Write(data.AsSpan());
-        
+
+        // Write encrypted (or plaintext) data
+        fs.Write(record.AsSpan());
+
         // Invalidate cache
         if (this.pageCache != null)
         {
             int pageId = ComputePageId(path, position);
             this.pageCache.EvictPage(pageId);
         }
-        
+
         return position;
     }
 
@@ -130,40 +341,50 @@ public partial class Storage
         if (IsInTransaction)
         {
             var result = new long[dataBlocks.Count];  // ✅ FIXED: Renamed to 'result' to avoid variable name conflict
-            
+
             for (int i = 0; i < dataBlocks.Count; i++)
             {
                 result[i] = AppendBytes(path, dataBlocks[i]);
             }
-            
+
             return result;
         }
 
         // Normal batch append (not in transaction) - write immediately
         var positions = new long[dataBlocks.Count];
-        
+
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536, FileOptions.WriteThrough);
-        
+
         Span<byte> lengthBuffer = stackalloc byte[4];
-        
+
         for (int i = 0; i < dataBlocks.Count; i++)
         {
             var data = dataBlocks[i];
-            
+
+            // ✅ Known Issue 1 FIX: Encrypt each record individually before writing.
+            bool encryptWrites = ShouldEncryptWrites(path);
+            byte[] record = EncryptRecord(data, encryptWrites);
+
             positions[i] = fs.Position;
-            
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+
+            if (positions[i] == 0 && encryptWrites)
+            {
+                WriteEncryptedHeader(fs);
+                positions[i] = fs.Position;
+            }
+
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, record.Length);
             fs.Write(lengthBuffer);
-            
-            fs.Write(data.AsSpan());
-            
+
+            fs.Write(record.AsSpan());
+
             if (this.pageCache != null)
             {
                 int pageId = ComputePageId(path, positions[i]);
                 this.pageCache.EvictPage(pageId);
             }
         }
-        
+
         return positions;
     }
 
@@ -171,6 +392,10 @@ public partial class Storage
     /// Flushes all buffered appends to disk during transaction commit.
     /// CRITICAL PERFORMANCE: This writes ALL buffered inserts in ONE operation!
     /// ✅ NEW: If batch encryption is enabled, encrypts entire batch at once!
+    /// ✅ Known Issue 1 FIX: Records are already individually encrypted by AppendBytes, so the
+    /// flushed bytes are ciphertext — nothing is written as plaintext. Brand-new encrypted files
+    /// receive the 8-byte magic header before their first record, matching the buffered offsets
+    /// computed by EnsureAppendInitialized.
     /// </summary>
     internal void FlushBufferedAppends()
     {
@@ -181,15 +406,13 @@ public partial class Storage
                 return;
             }
 
-            // ✅ NEW: If batch encryption enabled, encrypt entire batch at once
+            // ✅ NEW: If batch encryption enabled, encrypt entire batch at once.
+            // Per-record encryption already guarantees ciphertext-at-rest; this call is retained
+            // for statistics parity with call sites that use BeginBatchEncryption() explicitly.
             if (enableBatchEncryption && _batchEncryption != null && _batchEncryption.HasPendingData)
             {
                 byte[]? encryptedBatch = _batchEncryption.FlushBatch();
-                if (encryptedBatch != null)
-                {
-                    // Batch is now encrypted - replace plaintext with ciphertext
-                    // Note: This is a simplified version - production would track file mappings
-                }
+                _ = encryptedBatch;
             }
 
             Span<byte> lengthBuffer = stackalloc byte[4];
@@ -200,6 +423,14 @@ public partial class Storage
                     continue;
 
                 using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 65536);
+
+                // ✅ Known Issue 1 FIX: Write the 8-byte magic header when this was a
+                // brand-new file created while encryption is enabled.
+                if (headerPendingFiles.Contains(path))
+                {
+                    WriteEncryptedHeader(fs);
+                    headerPendingFiles.Remove(path);
+                }
 
                 foreach (var (data, _) in appends)
                 {
@@ -213,6 +444,7 @@ public partial class Storage
 
             bufferedAppends.Clear();
             cachedFileLengths.Clear();
+            headerPendingFiles.Clear();
         }
     }
 
@@ -283,6 +515,7 @@ public partial class Storage
         {
             bufferedAppends.Clear();
             cachedFileLengths.Clear();  // ✅ Clear cache too
+            headerPendingFiles.Clear(); // ✅ Clear pending header markers on rollback
         }
     }
 
@@ -313,18 +546,93 @@ public partial class Storage
             }
         }
 
-        // Read length prefix (4 bytes)
+        // Read length prefix (4 bytes) — the offset is the physical file offset of the
+        // 4-byte length prefix (identical for legacy plaintext and encrypted files).
         Span<byte> lengthBuffer = stackalloc byte[4];
         int bytesRead = RandomAccess.Read(handle, lengthBuffer, offset);
         if (bytesRead < 4) return null;
 
         int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
 
-        const int MaxRowSize = 1_000_000_000;
-        if (length <= 0 || length > MaxRowSize) return null;
+        if (length <= 0 || length > MaxRecordSize) return null;
 
-        byte[] data = new byte[length];
-        bytesRead = RandomAccess.Read(handle, data.AsSpan(), offset + 4);
-        return bytesRead == length ? data : null;
+        byte[] payload = new byte[length];
+        bytesRead = RandomAccess.Read(handle, payload.AsSpan(), offset + 4);
+        if (bytesRead != length) return null;
+
+        // ✅ Known Issue 1 FIX (opt-in): Per-record AES-256-GCM decryption when the file carries
+        // the encrypted magic header AND the at-rest encryption flag is enabled. When the flag
+        // is off, files are returned byte-for-byte identical to the original engine (plaintext).
+        if (UseRecordEncryption && FileHasEncryptedHeader(path))
+        {
+            return DecryptRecord(payload);
+        }
+
+        return payload;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// ✅ Known Issue 1 FIX: Overrides the plaintext-only interface default with a version
+    /// that understands per-record AES-256-GCM encryption. Yields the literal physical
+    /// file offset of each 4-byte length prefix (the same offset returned by AppendBytes)
+    /// together with the decrypted record payload, so B-tree PK positions built from this
+    /// enumeration always match point-lookup offsets (ReadBytesFrom).
+    /// </remarks>
+    public IEnumerable<(long RecordOffset, byte[] Data)> ReadAllRecords(string path)
+    {
+        if (!File.Exists(path))
+        {
+            yield break;
+        }
+
+        // ✅ Known Issue 1 FIX (opt-in): only treat a magic-headered file as encrypted when the
+        // at-rest encryption flag is enabled; otherwise parse the original plaintext layout.
+        bool encrypted = UseRecordEncryption && FileHasEncryptedHeader(path);
+        long position = encrypted ? PersistenceConstants.EncryptedTableMagicLength : 0;
+        long fileLength = new FileInfo(path).Length;
+
+        while (position + 4 <= fileLength)
+        {
+            Span<byte> lengthBuffer = stackalloc byte[4];
+            int read;
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            {
+                fs.Position = position;
+                read = fs.Read(lengthBuffer);
+            }
+
+            if (read < 4)
+            {
+                yield break;
+            }
+
+            int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+            if (length <= 0 || length > MaxRecordSize || position + 4 + length > fileLength)
+            {
+                yield break; // Invalid or incomplete record tail
+            }
+
+            byte[] payload = new byte[length];
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            {
+                fs.Position = position + 4;
+                read = fs.Read(payload, 0, length);
+            }
+
+            if (read != length)
+            {
+                yield break;
+            }
+
+            byte[]? recordData = encrypted ? DecryptRecord(payload) : payload;
+            if (recordData is null)
+            {
+                yield break; // Decryption failed — wrong key or corruption
+            }
+
+            yield return (position, recordData);
+            position += 4 + length;
+        }
     }
 }

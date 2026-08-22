@@ -168,9 +168,13 @@ public partial class SqlParser
             }
             else
             {
+                // ✅ FIX (Known Issue 6): Optionally map INTEGER to Int64 (SQLite affinity).
+                // Default (UseSqliteIntegerAffinity = false) keeps INTEGER → Int32 for full
+                // backward compatibility with existing databases and consumer code.
+                var useSqliteAffinity = this.config?.UseSqliteIntegerAffinity ?? false;
                 colType = typeStr switch
                 {
-                    "INTEGER" => DataType.Integer,
+                    "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
                     "BIGINT" => DataType.Long,
                     "TEXT" => DataType.String,
                     "REAL" => DataType.Real,

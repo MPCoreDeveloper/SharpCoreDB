@@ -2,13 +2,13 @@
 
 Event store primitives for `SharpCoreDB`.
 
-**Version:** `v1.9.3`
+**Version:** `v1.9.4`
 **Package:** `SharpCoreDB.EventSourcing`
 
 
-## Patch updates in v1.9.3
+## Patch updates in v1.9.4
 
-synchronized 1.9.3 release line.
+synchronized 1.9.4 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features

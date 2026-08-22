@@ -20,6 +20,28 @@ public class DatabaseConfig
     public bool NoEncryptMode { get; init; } = false;
 
     /// <summary>
+    /// Gets a value indicating whether SQLite integer type affinity is used for DDL type mapping.
+    /// When <see langword="true"/> (opt-in), <c>INTEGER</c> maps to <see cref="DataType.Long"/> (Int64),
+    /// matching SQLite semantics so values like <c>DateTime.UtcNow.Ticks</c> (~6.4e17) fit.
+    /// When <see langword="false"/> (default), <c>INTEGER</c> maps to <see cref="DataType.Integer"/> (Int32)
+    /// for full backward compatibility with existing databases and consumer code.
+    /// ⚠️ OPT-IN BREAKING: enabling changes the persisted type for newly created/added INTEGER columns;
+    /// existing columns are unaffected (their type is stored in table metadata).
+    /// </summary>
+    public bool UseSqliteIntegerAffinity { get; init; } = false;
+
+    /// <summary>
+    /// Gets a value indicating whether table payload records are encrypted at rest with
+    /// per-record AES-256-GCM (opt-in; default <see langword="false"/> for full backward
+    /// compatibility). When <see langword="true"/>, NEW table data files carry an 8-byte
+    /// magic header followed by per-record ciphertext (Known Issue 1). Legacy plaintext
+    /// files and NoEncryptMode databases remain byte-for-byte unchanged and readable.
+    /// ⚠️ OPT-IN FORMAT: only enable on databases whose tables are created/opened with the
+    /// same flag, and never share such databases with tooling built before this option.
+    /// </summary>
+    public bool EnableAtRestRecordEncryption { get; init; } = false;
+
+    /// <summary>
     /// Gets a value indicating whether batch encryption is enabled during bulk operations.
     /// When true, rows are accumulated in plaintext and encrypted in 64KB batches.
     /// Expected gain: 6-10x faster than per-row encryption for bulk inserts.

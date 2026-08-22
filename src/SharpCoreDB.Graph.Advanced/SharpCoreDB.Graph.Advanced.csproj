@@ -6,7 +6,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>SharpCoreDB.Graph.Advanced</AssemblyName>
     <RootNamespace>SharpCoreDB.Graph.Advanced</RootNamespace>
-    <Version>1.9.3</Version>
+    <Version>1.9.4</Version>
     <PackageId>SharpCoreDB.Graph.Advanced</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>MPCoreDeveloper</Company>

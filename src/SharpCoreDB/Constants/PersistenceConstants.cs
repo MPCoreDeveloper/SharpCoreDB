@@ -19,6 +19,28 @@ public static class PersistenceConstants
     /// <summary>The file extension for table data files (binary format).</summary>
     public const string TableFileExtension = ".dat";
 
+    // ── Table data file format versioning (Known Issue 1) ───────────────────────
+    // Legacy (and NoEncryptMode=true) table files are plaintext length-prefixed
+    // records: [len:4][data]... with NO magic header — byte-for-byte identical to
+    // every existing SharpCoreDB version, so backward compat is guaranteed.
+    //
+    // When encryption is enabled (DatabaseConfig.Default, NoEncryptMode=false),
+    // NEW table files carry this 8-byte magic header, followed by per-record
+    // AES-256-GCM ciphertext: [len_cipher:4][nonce(12)][cipher][tag(16)]...
+    // The len field stores the ciphertext size so legacy-style parsers can skip
+    // records; readers detect the header and decrypt each record.
+    //
+    // The magic never collides with a valid legacy record because records start
+    // with a 4-byte signed length; the first 4 bytes here are 0x53 0x43 0x44 0x42
+    // ("SCDB" as ASCII) which as a little-endian Int32 is +1128354611 (>1GB) and
+    // therefore treated as invalid-length by all existing parsers — they already
+    // break on such records, so no silent misread can occur on legacy tools.
+    /// <summary>The 8-byte magic header marking an encrypted per-record table data file.</summary>
+    public static readonly byte[] EncryptedTableMagic = [0x53, 0x43, 0x44, 0x42, 0x01, 0x01, 0x00, 0x00];
+
+    /// <summary>Length of <see cref="EncryptedTableMagic"/>.</summary>
+    public const int EncryptedTableMagicLength = 8;
+
     /// <summary>The key for tables in metadata.</summary>
     public const string TablesKey = "tables";
 

@@ -129,4 +129,46 @@ public interface IStorage
     /// <param name="noEncrypt">If true, bypasses encryption for this operation.</param>
     /// <returns>The read data, or null if file does not exist or position is invalid.</returns>
     byte[]? ReadBytesAt(string path, long position, int maxLength, bool noEncrypt);
+
+    /// <summary>
+    /// Enumerates every record in a table data file, yielding the literal file offset of the
+    /// 4-byte length prefix (the offset returned by <see cref="AppendBytes"/>) together with the
+    /// decrypted (or plaintext) record payload. Format-agnostic: transparently handles both legacy
+    /// plaintext files and per-record AES-256-GCM encrypted files (those carrying the magic header
+    /// <c>SharpCoreDB.Constants.PersistenceConstants.EncryptedTableMagic</c>).
+    /// Used by full-table scans, primary-key index rebuilds and compaction so B-tree positions
+    /// always match point-lookup offsets. Default implementation parses plaintext only for
+    /// compatibility with alternative <see cref="IStorage"/> implementations.
+    /// </summary>
+    /// <param name="path">The table data file path.</param>
+    /// <returns>Sequence of (recordOffset, recordData) tuples in file order.</returns>
+    IEnumerable<(long RecordOffset, byte[] Data)> ReadAllRecords(string path)
+    {
+        if (!File.Exists(path))
+        {
+            yield break;
+        }
+
+        var data = ReadBytes(path, noEncrypt: true);
+        if (data is null || data.Length == 0)
+        {
+            yield break;
+        }
+
+        const int MaxRecordSizeLocal = 1_000_000_000;
+        long position = 0;
+        while (position + 4 <= data.Length)
+        {
+            int length = BitConverter.ToInt32(data, (int)position);
+            if (length <= 0 || length > MaxRecordSizeLocal || position + 4 + length > data.Length)
+            {
+                yield break;
+            }
+
+            var record = new byte[length];
+            Array.Copy(data, position + 4, record, 0, length);
+            yield return (position, record);
+            position += 4 + length;
+        }
+    }
 }

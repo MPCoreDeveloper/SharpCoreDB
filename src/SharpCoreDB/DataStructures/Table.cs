@@ -473,8 +473,11 @@ public partial class Table : ITable, IDisposable
 
     /// <summary>
     /// Parses a string data type to DataType enum.
+    /// ✅ FIX (Known Issue 6): Honors <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/>
+    /// so ALTER TABLE ADD COLUMN INTEGER maps to Int64 when the opt-in flag is enabled;
+    /// otherwise retains the legacy Int32 mapping for backward compatibility.
     /// </summary>
-    private static DataType ParseDataType(string typeStr)
+    private DataType ParseDataType(string typeStr)
     {
         var upper = typeStr.ToUpperInvariant();
 
@@ -484,9 +487,13 @@ public partial class Table : ITable, IDisposable
             return DataType.Vector;
         }
 
+        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
+        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
+        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
+
         return upper switch
         {
-            "INTEGER" or "INT" => DataType.Integer,
+            "INTEGER" or "INT" => useSqliteAffinity ? DataType.Long : DataType.Integer,
             "TEXT" or "VARCHAR" or "NVARCHAR" => DataType.String,
             "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
             "BLOB" => DataType.Blob,
@@ -532,52 +539,16 @@ public partial class Table : ITable, IDisposable
         // Clear existing index and initialize with collation
         Index = new BTree<string, long>(pkCollation);
 
-        // Read entire data file
-        var data = storage.ReadBytes(DataFile, noEncrypt: false);
-        if (data == null || data.Length == 0)
-        {
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] Data file is empty, no index to rebuild");
-#endif
-            return;
-        }
-
-#if DEBUG
-        System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] Data file size: {data.Length} bytes");
-#endif
-
-        // Scan file and rebuild index
-        int filePosition = 0;
-        ReadOnlySpan<byte> dataSpan = data.AsSpan();
+        // ✅ Known Issue 1 FIX: Use ReadAllRecords (physical-offset aware) instead of parsing a
+        // rejoined plaintext buffer. For encrypted per-record files the physical file offset of
+        // the 4-byte length prefix differs from the plaintext-buffer offset (8-byte magic header
+        // plus 28 bytes AES-GCM overhead per record). The B-tree stores the physical offset so
+        // that FindByPrimaryKey -> storage.ReadBytesFrom(position) resolves the correct record
+        // for both legacy plaintext and new encrypted files.
         int recordsIndexed = 0;
 
-        while (filePosition < dataSpan.Length)
+        foreach (var (recordOffset, recordData) in storage.ReadAllRecords(DataFile))
         {
-            // Read length prefix (4 bytes)
-            if (filePosition + 4 > dataSpan.Length)
-            {
-                break;
-            }
-
-            int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
-                dataSpan.Slice(filePosition, 4));
-
-            if (recordLength <= 0 || recordLength > 1_000_000_000)
-            {
-                break; // Invalid record
-            }
-
-            if (filePosition + 4 + recordLength > dataSpan.Length)
-            {
-                break; // Incomplete record
-            }
-
-            long currentRecordPosition = filePosition; // This is the key for the index!
-
-            // Skip length prefix and read record data
-            int dataOffset = filePosition + 4;
-            ReadOnlySpan<byte> recordData = dataSpan.Slice(dataOffset, recordLength);
-
             // Parse just enough to get the primary key value
             try
             {
@@ -591,7 +562,7 @@ public partial class Table : ITable, IDisposable
                         break;
                     }
 
-                    var value = ReadTypedValueFromSpan(recordData.Slice(offset), ColumnTypes[i], out int bytesRead);
+                    var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
 
                     // Only store PK column, we don't need the rest for index rebuild
                     if (i == PrimaryKeyIndex)
@@ -606,19 +577,19 @@ public partial class Table : ITable, IDisposable
                 if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
                 {
                     var pkStr = pkValue.ToString() ?? string.Empty;
-                    
+
                     // Only add if this key doesn't exist yet (handles UPDATE versions - keep latest)
                     var existing = Index.Search(pkStr);
                     if (!existing.Found)
                     {
-                        Index.Insert(pkStr, currentRecordPosition);
+                        Index.Insert(pkStr, recordOffset);
                         recordsIndexed++;
                     }
                     else
                     {
                         // Update to newer position (later in file = newer version)
                         Index.Delete(pkStr);
-                        Index.Insert(pkStr, currentRecordPosition);
+                        Index.Insert(pkStr, recordOffset);
                     }
                 }
             }
@@ -626,8 +597,6 @@ public partial class Table : ITable, IDisposable
             {
                 // Skip corrupted records
             }
-
-            filePosition += 4 + recordLength;
         }
 
 #if DEBUG

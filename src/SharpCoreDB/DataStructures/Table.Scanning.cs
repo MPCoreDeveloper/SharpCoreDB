@@ -217,6 +217,18 @@ public partial class Table
             return SqlParser.EvaluateJoinWhere(row, where);
         }
 
+        // ✅ Parity: delegate LIKE / NOT LIKE / BETWEEN (single-condition form) to the shared
+        // SqlParser evaluator, which now implements SQL-correct semantics (NULL never matches
+        // LIKE, %/_ patterns, BETWEEN as inclusive range). Previously these fell through the
+        // switch's default → return true (no filtering) in this directory-mode scan path.
+        if (parts.Length >= 2 &&
+            (parts[1].Equals("LIKE", StringComparison.OrdinalIgnoreCase) ||
+             parts[1].Equals("NOT LIKE", StringComparison.OrdinalIgnoreCase) ||
+             parts[1].Equals("BETWEEN", StringComparison.OrdinalIgnoreCase)))
+        {
+            return SqlParser.EvaluateJoinWhere(row, where);
+        }
+
         var columnName = parts[0].Trim('"', '[', ']', '`');
 
         // ✅ FIX: Strip table alias prefix from column names (e.g., "u"."Username" → Username)

@@ -135,8 +135,27 @@ public static class SqlQueryValidator
                     .Distinct()
                     .ToHashSet();
                 
+                // ✅ FIX (Known Issue 5): Normalize caller keys by stripping the @ or : prefix,
+                // EXACTLY like SqlParser.ResolveParameter does (parameterName.TrimStart('@', ':')).
+                // This makes the validator consistent with the runtime: `@name` and `name` keys
+                // are both accepted for the `@name` placeholder.
+                static string NormalizeKey(string key) =>
+                    key.Length > 1 && (key[0] == '@' || key[0] == ':')
+                        ? key[1..]
+                        : key;
+
+                // Build normalized key lookup for fast membership checks.
+                // A @-prefixed key and an unprefixed key with the same name are equivalent;
+                // we use the first occurrence so duplicates collapse to a single normalized entry.
+                var normalizedKeys = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var key in parameters.Keys)
+                {
+                    normalizedKeys.Add(NormalizeKey(key));
+                }
+                
                 // Check for missing parameters (SQL has @param but no matching key)
-                var missingParams = paramNames.Where(p => !parameters.ContainsKey(p)).ToList();
+                // A key is missing only if neither `name`, `@name`, nor `:name` was provided.
+                var missingParams = paramNames.Where(p => !normalizedKeys.Contains(p)).ToList();
                 if (missingParams.Any())
                 {
                     warnings.Add($"Missing parameters for placeholders: {string.Join(", ", missingParams.Select(p => $"@{p}"))}");
@@ -144,7 +163,8 @@ public static class SqlQueryValidator
                 
                 // Check for unused parameters (key provided but not in SQL)
                 // Only warn if parameter count significantly exceeds SQL params (allows for flexibility)
-                var unusedParams = parameters.Keys.Where(k => !paramNames.Contains(k)).ToList();
+                // Keys are compared normalized so `@name` correctly matches the `@name` placeholder.
+                var unusedParams = parameters.Keys.Where(k => !paramNames.Contains(NormalizeKey(k))).ToList();
                 if (unusedParams.Any() && unusedParams.Count >= paramNames.Count)
                 {
                     warnings.Add($"Unused parameters provided (not in SQL): {string.Join(", ", unusedParams)}");

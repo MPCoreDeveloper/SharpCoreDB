@@ -3,9 +3,9 @@
 TypeScript/JavaScript client SDK for SharpCoreDB Server.
 
 
-## Patch updates in v1.9.3
+## Patch updates in v1.9.4
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.3 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
 - ✅ Current test count (2,223) published; Identity package backwards compatibility confirmed and documented for this release.
 
 ## Features

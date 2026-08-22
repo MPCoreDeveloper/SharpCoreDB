@@ -99,10 +99,15 @@ All SELECT is routed through the shared `SqlParser`:
 | `DISTINCT` | ✅ | |
 | Column aliases (`col AS alias`) | ✅ | |
 | `IS NULL` / `IS NOT NULL` | ✅ | |
-| `LIKE` | ✅ | |
+| `LIKE` / `NOT LIKE` | ✅ | Case-insensitive; `%` / `_` patterns; NULL never matches |
 | `IN (...)` | ✅ | |
+| `BETWEEN x AND y` | ✅ | Inclusive; numeric culture-independent comparison |
 | Subqueries in `FROM` / `WHERE` | ✅ | Via EnhancedSqlParser |
 | `EXPLAIN` | ✅ | |
+
+> **WHERE operator parity (v1.9.x):** single-file mode now matches directory mode for the full
+> operator set, including `LIKE`, `IS NULL` / `IS NOT NULL` and `BETWEEN`. Results are
+> byte-identical to directory mode (covered by `SingleFileDirectoryParityTests`).
 
 ### Transactions
 

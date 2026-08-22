@@ -19,13 +19,13 @@
 
 Serilog sink package for `SharpCoreDB`.
 
-**Version:** `v1.9.3`
+**Version:** `v1.9.4`
 **Package:** `SharpCoreDB.Serilog.Sinks`
 
 
-## Patch updates in v1.9.3
+## Patch updates in v1.9.4
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.3 release line.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
 ## Features

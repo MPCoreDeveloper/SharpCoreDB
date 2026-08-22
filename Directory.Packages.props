@@ -17,7 +17,7 @@
       a project sets UseSharpCoreDBPackage=true (consume published NuGet instead of ProjectReference).
       Update this single value when you want examples/tests to consume a newer published package version.
     -->
-    <SharpCoreDBVersion>1.9.3</SharpCoreDBVersion>
+    <SharpCoreDBVersion>1.9.4</SharpCoreDBVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- ============================================================ -->

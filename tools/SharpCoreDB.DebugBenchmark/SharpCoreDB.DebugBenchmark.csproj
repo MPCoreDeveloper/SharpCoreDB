@@ -12,7 +12,7 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Description>Debug benchmark harness for SharpCoreDB.</Description>
-    <PackageReleaseNotes>v1.0.5: Stabilized benchmark setup; fixed transaction overlaps; added age index creation.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.4: Known-issue fixes (opt-in at-rest per-record encryption EnableAtRestRecordEncryption, opt-in SQLite integer affinity UseSqliteIntegerAffinity, reopen-insert AOORE fix, functional single-file point operations, ExecuteQuery batch flush, SQL validator @-prefix normalization), single-file to directory SQL parity (LIKE/IS NULL/NOT NULL/BETWEEN), and version synchronization to 1.9.4 across all packages, documentation and tests.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

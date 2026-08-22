@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-08-22
+
+### Added
+- **Known Issue 1 — opt-in at-rest per-record encryption**: `DatabaseConfig.EnableAtRestRecordEncryption`
+  (default `false` for full backward compatibility). When enabled, table data files carry an 8-byte
+  magic header and each appended record is AES-256-GCM encrypted; point reads, full scans, PK index
+  rebuilds and compaction decrypt transparently. Legacy plaintext files and `NoEncryptMode` remain
+  byte-for-byte unchanged; legacy/encrypted file mixing is prevented per file.
+- **Known Issue 6 — opt-in SQLite integer affinity**: `DatabaseConfig.UseSqliteIntegerAffinity`
+  (default `false`). When enabled, `INTEGER` DDL maps to `DataType.Long` (Int64) so values like
+  `DateTime.UtcNow.Ticks` fit; the default Int32 path now throws an actionable overflow message
+  pointing to `BIGINT`/the flag.
+- **Single-file ↔ directory SQL parity**: single-file mode now handles the full WHERE operator set
+  identically to directory mode — `LIKE` / `NOT LIKE` (case-insensitive, `%`/`_`, NULL never matches),
+  `IS NULL` / `IS NOT NULL`, and `BETWEEN` (inclusive, culture-independent numeric comparison).
+  Aggregates (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`), `GROUP BY`, `IN`, `ORDER BY`, `LIMIT`, `DISTINCT`
+  and JOINs already matched via the shared `SqlParser` and are now covered by regression tests.
+- **New tests**: `KnownIssuesFixTests` (8, one per known issue incl. backward-compat guards) and
+  `SingleFileDirectoryParityTests` (17 parity cases). Final suite: **1,474 tests, 0 failures**,
+  15 intentionally-skipped CPU-timing performance benchmarks.
+
+### Changed
+- **Version bump 1.9.3 → 1.9.4** across all packable `.csproj` files, `Directory.Packages.props`
+  (`SharpCoreDBVersion`), test projects, and documentation (hub docs, per-package READMEs,
+  NuGet-readme info, script clients). `DocumentationConsistencyTests` now enforces `1.9.4` as the
+  current release label.
+- **Known Issue 2 — reopen AOORE fix**: `Database.Load()` now pads `DefaultExpressions`,
+  `ColumnCheckExpressions` and `ColumnLocaleNames` to the column count, so `ITable.Insert` after a
+  reopen no longer throws `ArgumentOutOfRangeException`.
+- **Known Issue 3 — single-file point operations**: `SingleFileTable.FindByPrimaryKey` /
+  `UpdateByPrimaryKey` / `DeleteByPrimaryKey` are now functional (transaction-aware, respect
+  `AutoFlush`) instead of returning `null`/`false`.
+- **Known Issue 4 — read-after-write**: `ExecuteQuery` flushes pending batch-update writes
+  (`_batchUpdateActive`) before executing, matching `ExecuteSQL(SELECT)`; plain metadata dirtiness is
+  no longer force-flushed per query (avoids page-based engine read regressions).
+- **Known Issue 5 — SQL validator**: parameter keys are normalized by stripping `@`/`:` prefixes
+  (consistent with `SqlParser.ResolveParameter`), removing false "Missing/Unused parameters" warnings
+  while genuine mismatches are still reported.
+- **Benchmark test fix**: `InsertOptimizationsTests.Baseline_10K_Inserts_Without_Optimizations` used
+  an inverted `> 100 ms` assertion (faster machines were marked as failing); replaced by a correct
+  functional upper-bound check.
+
+### Fixed
+- Directory-mode full-table scan now delegates `LIKE`/`NOT LIKE`/`BETWEEN` single-condition filtering
+  to the shared evaluator (previously `BETWEEN` threw "Unsupported operator" and `LIKE` matched NULL
+  rows), making directory and single-file semantics identical.
+
 ## [1.9.3] - 2026-07-28
 
 ### Added

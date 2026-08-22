@@ -327,6 +327,16 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
+        // ✅ FIX (Known Issue 4): Flush pending BATCH (ITable bulk/transaction) writes before
+        // executing the query so they are visible without an explicit database.Flush().
+        // NOTE: We deliberately do NOT flush on plain _metadataDirty — SQL INSERTs are already
+        // visible in-memory on the default engine, and a blanket metadata flush here breaks
+        // read-after-write for the page-based engine (regression observed in the full suite).
+        if (_batchUpdateActive)
+        {
+            Flush();
+        }
+
         var entry = GetOrAddPlan(sql, parameters, SqlCommandType.SELECT);
         var sqlParser = GetSharedSqlParser();
         if (entry is not null)
@@ -343,6 +353,13 @@ public partial class Database
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters, bool noEncrypt)
     {
+        // ✅ FIX (Known Issue 4): Flush pending BATCH writes so they are visible without an
+        // explicit database.Flush() (see the parameterless overload for the _metadataDirty note).
+        if (_batchUpdateActive)
+        {
+            Flush();
+        }
+
         var sqlParser = GetSharedSqlParser();
         return sqlParser.ExecuteQuery(sql, parameters ?? [], noEncrypt);
     }

@@ -29,6 +29,7 @@ using System.Runtime.InteropServices;
 public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable, ITableSchemaApplicator
 {
     private readonly IStorageProvider _storageProvider = storageProvider ?? throw new ArgumentNullException(nameof(storageProvider));
+    private readonly DatabaseConfig? _config;
     private readonly Lock _tableLock = new();
     private readonly string _dataBlockName = $"table:{tableName}:data";
     private List<Dictionary<string, object>> _rowCache = [];
@@ -52,6 +53,20 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         PrimaryKeyIndex = metadata.PrimaryKeyIndex;
         LoadSchemaFromProvider(tableName);
         // ✅ REMOVED: InitializeColumnMetadata() — LoadSchemaFromProvider now handles IsAuto/IsNotNull
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SingleFileTable"/> class with database configuration.
+    /// The config is used for type-mapping behavior (e.g. <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/>)
+    /// when columns are added via ALTER TABLE in single-file mode.
+    /// </summary>
+    /// <param name="tableName">Table name.</param>
+    /// <param name="storageProvider">Storage provider.</param>
+    /// <param name="config">Optional database configuration.</param>
+    public SingleFileTable(string tableName, IStorageProvider storageProvider, DatabaseConfig? config)
+        : this(tableName, storageProvider)
+    {
+        _config = config;
     }
 
     /// <summary>
@@ -379,16 +394,132 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     }
 
     /// <inheritdoc />
-    public Dictionary<string, object>? FindByPrimaryKey(object key) => null;
+    /// <remarks>
+    /// ✅ FIX (Known Issue 3): Point lookups now work in single-file mode via the in-memory
+    /// row cache. The cache is transactional (rollback restores the pre-transaction snapshot),
+    /// so lookups observe committed state consistently.
+    /// </remarks>
+    public Dictionary<string, object>? FindByPrimaryKey(object key)
+    {
+        EnsureCacheLoaded();
+        if (PrimaryKeyIndex < 0)
+        {
+            return null;
+        }
+
+        var pkColumn = Columns[PrimaryKeyIndex];
+        var keyStr = key?.ToString();
+
+        lock (_tableLock)
+        {
+            foreach (var row in _rowCache)
+            {
+                if (row.TryGetValue(pkColumn, out var pkValue) &&
+                    pkValue is not null &&
+                    string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
+                {
+                    return new Dictionary<string, object>(row);
+                }
+            }
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
     public List<Dictionary<string, object>> FindByIndex(string column, object value) => [];
 
     /// <inheritdoc />
-    public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates) => false;
+    /// <remarks>
+    /// ✅ FIX (Known Issue 3): Update by primary key now works in single-file mode.
+    /// The primary key value itself is not re-validated after update; if the caller changes
+    /// the PK column, the row becomes addressable only by the new value.
+    /// </remarks>
+    public bool UpdateByPrimaryKey(object key, Dictionary<string, object> updates)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        EnsureCacheLoaded();
+        if (PrimaryKeyIndex < 0)
+        {
+            return false;
+        }
+
+        var pkColumn = Columns[PrimaryKeyIndex];
+        var keyStr = key?.ToString();
+        bool found = false;
+
+        lock (_tableLock)
+        {
+            foreach (var row in _rowCache)
+            {
+                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
+                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                foreach (var update in updates)
+                {
+                    row[update.Key] = update.Value;
+                }
+
+                _isDirty = true;
+                found = true;
+                break;
+            }
+        }
+
+        // ✅ CRITICAL FIX: Only flush if not in transaction (matches Update/Delete semantics)
+        if (found && AutoFlush && !_isInTransaction)
+        {
+            FlushCache();
+        }
+
+        return found;
+    }
 
     /// <inheritdoc />
-    public bool DeleteByPrimaryKey(object key) => false;
+    /// <remarks>
+    /// ✅ FIX (Known Issue 3): Delete by primary key now works in single-file mode.
+    /// </remarks>
+    public bool DeleteByPrimaryKey(object key)
+    {
+        EnsureCacheLoaded();
+        if (PrimaryKeyIndex < 0)
+        {
+            return false;
+        }
+
+        var pkColumn = Columns[PrimaryKeyIndex];
+        var keyStr = key?.ToString();
+        bool found = false;
+
+        lock (_tableLock)
+        {
+            for (int i = 0; i < _rowCache.Count; i++)
+            {
+                var row = _rowCache[i];
+                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
+                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                _rowCache.RemoveAt(i);
+                _isDirty = true;
+                found = true;
+                break;
+            }
+        }
+
+        // ✅ CRITICAL FIX: Only flush if not in transaction (matches Delete semantics)
+        if (found && AutoFlush && !_isInTransaction)
+        {
+            FlushCache();
+        }
+
+        return found;
+    }
 
     /// <summary>
     /// Flushes the in-memory row cache to the storage provider.
@@ -895,10 +1026,17 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
     private readonly Dictionary<string, object> _metadata = new(StringComparer.OrdinalIgnoreCase);
 
-    private static DataType ParseDataType(string typeName)
-        => typeName.ToUpperInvariant() switch
+    private DataType ParseDataType(string typeName)
+    {
+        var upper = typeName.ToUpperInvariant();
+
+        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
+        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
+        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
+
+        return upper switch
         {
-            "INT" or "INTEGER" => DataType.Integer,
+            "INT" or "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
             "LONG" or "BIGINT" => DataType.Long,
             "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
             "DECIMAL" or "NUMERIC" => DataType.Decimal,
@@ -909,6 +1047,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             "ULID" => DataType.Ulid,
             _ => DataType.String
         };
+    }
 
     private static string GetColumnName(ColumnDefinitionEntry entry)
     {
@@ -926,9 +1065,32 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
     }
 
+    /// <summary>
+    /// Normalizes a column reference to the bare row-key form: strips alias qualifiers
+    /// (e.g. b.Url to Url) and identifier quotes (", [, ], `).
+    /// </summary>
+    private static string NormalizeColumnName(string columnName)
+    {
+        var dotIndex = columnName.LastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < columnName.Length - 1)
+        {
+            columnName = columnName[(dotIndex + 1)..];
+        }
+
+        return columnName.Trim('"', '[', ']', '`');
+    }
+
     private static bool EvaluateCondition(Dictionary<string, object> row, string condition)
     {
-        var parts = condition.Split([" AND ", " and "], StringSplitOptions.RemoveEmptyEntries);
+        var trimmedCondition = condition.Trim();
+
+        // ✅ Parity: BETWEEN contains " AND " as part of its syntax; don't split on it.
+        if (trimmedCondition.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase))
+        {
+            return EvaluateSingleCondition(row, trimmedCondition);
+        }
+
+        var parts = trimmedCondition.Split([" AND ", " and "], StringSplitOptions.RemoveEmptyEntries);
         foreach (var part in parts)
         {
             if (!EvaluateSingleCondition(row, part.Trim()))
@@ -942,6 +1104,62 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
     {
+        var trimmed = condition.Trim();
+
+        // ✅ Parity: support IS NULL / IS NOT NULL (previously ignored → all rows returned)
+        var isNullMatch = System.Text.RegularExpressions.Regex.Match(
+            trimmed, @"^([A-Za-z_]\w*)\s+IS\s+(NOT\s+)?NULL$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (isNullMatch.Success)
+        {
+            var col = NormalizeColumnName(isNullMatch.Groups[1].Value);
+            var negated = isNullMatch.Groups[2].Success;
+            var isNull = !row.TryGetValue(col, out var v) || v is null or DBNull;
+            return negated ? !isNull : isNull;
+        }
+
+        // ✅ Parity: support LIKE (previously ignored)
+        var likeMatch = System.Text.RegularExpressions.Regex.Match(
+            trimmed, @"^([A-Za-z_]\w*)\s+LIKE\s+'([^']*)'$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (likeMatch.Success)
+        {
+            var col = NormalizeColumnName(likeMatch.Groups[1].Value);
+            if (!row.TryGetValue(col, out var v) || v is null or DBNull)
+            {
+                return false;
+            }
+
+            var pattern = likeMatch.Groups[2].Value;
+            var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+                .Replace("%", ".*").Replace("_", ".") + "$";
+            return System.Text.RegularExpressions.Regex.IsMatch(
+                v.ToString() ?? string.Empty, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // ✅ Parity: support BETWEEN (previously ignored)
+        var betweenMatch = System.Text.RegularExpressions.Regex.Match(
+            trimmed, @"^([A-Za-z_]\w*)\s+BETWEEN\s+([^\s]+)\s+AND\s+([^\s]+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (betweenMatch.Success)
+        {
+            var col = NormalizeColumnName(betweenMatch.Groups[1].Value);
+            var lowStr = betweenMatch.Groups[2].Value.Trim('\'', '"');
+            var highStr = betweenMatch.Groups[3].Value.Trim('\'', '"');
+            if (!row.TryGetValue(col, out var rowVal) || rowVal is null or DBNull)
+            {
+                return false;
+            }
+
+            if (double.TryParse(rowVal.ToString(), out var valD) &&
+                double.TryParse(lowStr, out var lowD) &&
+                double.TryParse(highStr, out var highD))
+            {
+                return valD >= lowD && valD <= highD;
+            }
+
+            // Fallback: string comparison
+            return string.CompareOrdinal(rowVal.ToString(), lowStr) >= 0 &&
+                   string.CompareOrdinal(rowVal.ToString(), highStr) <= 0;
+        }
+
         var operators = new[] { ">=", "<=", "!=", "<>", "=", ">", "<" };
         string? op = null;
         int opIndex = -1;

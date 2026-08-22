@@ -178,7 +178,11 @@ public partial class SqlParser
 
             return type switch
             {
-                DataType.Integer => int.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
+                // ✅ FIX (Known Issue 6): Actionable overflow message instead of the generic
+                // "Value was either too large or too small for an Int32". Values like
+                // DateTime.UtcNow.Ticks (~6.4e17) exceed Int32; point the user to BIGINT/LONG
+                // or the opt-in DatabaseConfig.UseSqliteIntegerAffinity (SQLite INTEGER → Int64).
+                DataType.Integer => ParseInt32Checked(val),
                 DataType.String => val,
                 DataType.Real => double.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Blob => Convert.FromBase64String(val),
@@ -195,6 +199,26 @@ public partial class SqlParser
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Invalid value '{val}' for data type {type}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Parses an Int32 from string with an actionable overflow message.
+    /// ✅ FIX (Known Issue 6): When the value exceeds Int32, tell the user how to resolve it
+    /// (use BIGINT/LONG or enable DatabaseConfig.UseSqliteIntegerAffinity for SQLite semantics).
+    /// </summary>
+    private static int ParseInt32Checked(string val)
+    {
+        try
+        {
+            return int.Parse(val, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException(
+                $"Value '{val}' exceeds the Int32 range for an INTEGER column. " +
+                $"Declare the column as BIGINT or LONG, or set " +
+                $"DatabaseConfig.UseSqliteIntegerAffinity = true to map INTEGER to Int64 (SQLite behavior).");
         }
     }
 
@@ -275,6 +299,14 @@ public partial class SqlParser
     {
         var key = parts[0].Trim();
         var op = parts[1].Trim();
+
+        // ✅ Parity (BETWEEN): "price BETWEEN 10 AND 16" -> parts = [price, BETWEEN, 10, AND, 16]
+        if (op.Equals("BETWEEN", StringComparison.OrdinalIgnoreCase) && parts.Length >= 5)
+        {
+            var low = parts[2].Trim().Trim('\'', '"');
+            var high = parts[4].Trim().Trim('\'', '"');
+            return EvaluateBetween(row, key, low, high);
+        }
 
         // Handle IS NOT NULL (parts: key, IS, NOT, NULL)
         if (op.Equals("IS", StringComparison.OrdinalIgnoreCase)
@@ -374,20 +406,31 @@ public partial class SqlParser
             }
             else
             {
-                var value = parts[i + 2].Trim().Trim('\'');
-
-                if (value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+                // ✅ Parity (BETWEEN): "price BETWEEN 10 AND 16" -> 5 tokens: key BETWEEN low AND high
+                if (op.Equals("BETWEEN", StringComparison.OrdinalIgnoreCase) && i + 4 < parts.Length)
                 {
-                    value = null;
+                    var low = parts[i + 2].Trim().Trim('\'');
+                    var high = parts[i + 4].Trim().Trim('\'');
+                    expr = row.ContainsKey(key) && EvaluateBetween(row, key, low, high);
+                    consumed = 5;
                 }
-
-                expr = false;
-                if (row.ContainsKey(key))
+                else
                 {
-                    var rowValue = row[key];
-                    expr = EvaluateOperator(rowValue, op, value);
+                    var value = parts[i + 2].Trim().Trim('\'');
+
+                    if (value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = null;
+                    }
+
+                    expr = false;
+                    if (row.ContainsKey(key))
+                    {
+                        var rowValue = row[key];
+                        expr = EvaluateOperator(rowValue, op, value);
+                    }
+                    consumed = 3;
                 }
-                consumed = 3;
             }
 
             if (current is null)
@@ -533,14 +576,69 @@ public partial class SqlParser
             "<=" => Compare(rowValue, rhs) <= 0,
             ">" => Compare(rowValue, rhs) > 0,
             ">=" => Compare(rowValue, rhs) >= 0,
-            "LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) == true,
-            "NOT LIKE" => rowValueStr?.Contains(value?.Replace("%", string.Empty).Replace("_", string.Empty) ?? string.Empty) != true,
+            // ✅ Parity: NULL matches nothing (SQL) and %/_ patterns are honored
+            "LIKE" => rowValueStr is not null && value is not null && LikeMatch(rowValueStr, value),
+            "NOT LIKE" => rowValueStr is not null && value is not null && !LikeMatch(rowValueStr, value),
             "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None),
             "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None),
             "IN" => value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false,
             "NOT IN" => !(value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false),
             _ => throw new InvalidOperationException($"Unsupported operator {op}"),
         };
+    }
+
+    /// <summary>
+    /// Evaluates a BETWEEN condition: key >= low AND key <= high (numeric or string).
+    /// ✅ Parity with single-file mode.
+    /// </summary>
+    private static bool EvaluateBetween(Dictionary<string, object> row, string key, string low, string high)
+    {
+        if (!row.TryGetValue(key, out var rowVal) || rowVal is null or DBNull)
+        {
+            return false;
+        }
+
+        // ✅ Parity (culture-neutral): numeric comparison. Do NOT round-trip through
+        // ToString() + InvariantCulture parse — on e.g. nl-NL, 10.5.ToString() yields
+        // "10,5" which fails InvariantCulture parsing and breaks BETWEEN. Converting the
+        // boxed numeric value directly is culture-independent and matches SQL semantics.
+        if (rowVal is not string)
+        {
+            double valD = 0;
+            double lowD = 0;
+            double highD = 0;
+            bool numeric = false;
+            try
+            {
+                valD = Convert.ToDouble(rowVal, System.Globalization.CultureInfo.InvariantCulture);
+                lowD = Convert.ToDouble(low, System.Globalization.CultureInfo.InvariantCulture);
+                highD = Convert.ToDouble(high, System.Globalization.CultureInfo.InvariantCulture);
+                numeric = true;
+            }
+            catch
+            {
+                numeric = false;
+            }
+
+            if (numeric)
+            {
+                return valD >= lowD && valD <= highD;
+            }
+        }
+
+        // Fallback: string comparison
+        return string.CompareOrdinal(rowVal.ToString(), low) >= 0 &&
+               string.CompareOrdinal(rowVal.ToString(), high) <= 0;
+    }
+
+    /// <summary>
+    /// Matches a SQL LIKE pattern (% = any sequence, _ = single char), case-insensitive.
+    /// </summary>
+    private static bool LikeMatch(string input, string pattern)
+    {
+        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+            .Replace("%", ".*").Replace("_", ".") + "$";
+        return Regex.IsMatch(input, regex, RegexOptions.IgnoreCase);
     }
 
     /// <summary>

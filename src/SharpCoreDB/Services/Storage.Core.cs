@@ -41,6 +41,10 @@ public partial class Storage : IStorage
         this.crypto = crypto;
         this.key = key;
         this.noEncryption = config?.NoEncryptMode ?? false;
+        // ✅ Known Issue 1 FIX (opt-in): per-record at-rest encryption is gated behind
+        // DatabaseConfig.EnableAtRestRecordEncryption (default false) for full backward
+        // compatibility with existing databases and storage-engine behavior.
+        this.enableAtRestRecordEncryption = (config?.EnableAtRestRecordEncryption ?? false) && !this.noEncryption;
         this.pageCache = pageCache;
         this.pageSize = config?.PageSize ?? 4096;
         this.bufferPool = ArrayPool<byte>.Shared;

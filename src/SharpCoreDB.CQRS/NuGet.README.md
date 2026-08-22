@@ -24,7 +24,7 @@ CQRS and outbox primitives for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.9.0
+dotnet add package SharpCoreDB.CQRS --version 1.9.4
 ```
 
 ## Documentation

@@ -32,10 +32,10 @@ YesSql ORM integration with SharpCoreDB's encryption and performance for documen
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.YesSql --version 1.9.0
+dotnet add package SharpCoreDB.Provider.YesSql --version 1.9.4
 ```
 
-**Requires:** SharpCoreDB v1.9.0+, YesSql.Core v5.4.7+
+**Requires:** SharpCoreDB v1.9.4+, YesSql.Core v5.4.7+
 
 ---
 

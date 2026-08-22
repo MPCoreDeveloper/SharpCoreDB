@@ -130,23 +130,17 @@ public class DatabaseFactory(IServiceProvider services)
 /// Database implementation for single-file (.scdb) storage.
 /// Wraps SingleFileStorageProvider and provides IDatabase interface.
 /// <para>
-/// <b>⚠️ SQL LIMITATIONS:</b> This class uses a <b>regex-based SQL parser</b>, not the full <c>SqlParser</c> engine.
-/// The following SQL features are <b>not supported</b>:
-/// <list type="bullet">
-///   <item>JOIN (INNER, LEFT, RIGHT, FULL OUTER, CROSS)</item>
-///   <item>GROUP BY / HAVING</item>
-///   <item>Subqueries</item>
-///   <item>Aggregate functions (COUNT, SUM, AVG, MIN, MAX)</item>
-///   <item>LIMIT / OFFSET</item>
-///   <item>DELETE without WHERE clause</item>
-///   <item>UPDATE without WHERE clause</item>
-///   <item>Multi-row INSERT</item>
-///   <item>ALTER TABLE</item>
-/// </list>
-/// For full SQL support use the <see cref="Database"/> class (directory mode) which routes through <c>SqlParser</c>.
+/// <b>SQL support:</b> DML and SELECT are routed through the shared <c>SqlParser</c> engine,
+/// which means single-file mode supports the same SELECT feature set as directory mode:
+/// aggregates (COUNT, SUM, AVG, MIN, MAX), GROUP BY, JOINs, subqueries, DISTINCT, LIMIT,
+/// ORDER BY and WHERE operators (=, <>, <, >, <=, >=, IN, LIKE, IS NULL /
+/// IS NOT NULL, BETWEEN). DDL (CREATE/DROP/ALTER TABLE, CREATE/DROP INDEX) uses an internal
+/// regex path with full parity for common operations.
 /// </para>
 /// <para>
-/// See <c>docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md</c> for the complete support matrix.
+/// Remaining intentionally-unimplemented features: <c>CREATE VIEW</c> / <c>TRIGGER</c> and
+/// per-statement <c>STORAGE = COLUMNAR</c> hints (directory-mode only). See
+/// <c>docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md</c> for the complete support matrix.
 /// </para>
 /// </summary>
 internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposable

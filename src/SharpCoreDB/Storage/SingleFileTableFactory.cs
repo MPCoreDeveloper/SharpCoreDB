@@ -20,13 +20,14 @@ internal sealed class SingleFileTableFactory(IStorageProvider storageProvider) :
     /// <inheritdoc />
     /// <remarks>
     /// The <paramref name="tableName"/> is used as the storage block identifier within the
-    /// single .scdb file. Schema properties are populated by the DDL caller after construction,
-    /// so <paramref name="isReadOnly"/> and <paramref name="config"/> are accepted for interface
-    /// parity but <paramref name="config"/> is not consumed by <see cref="SingleFileTable"/>.
+    /// single .scdb file. Schema properties are populated by the DDL caller after construction.
+    /// <paramref name="config"/> is forwarded to the table so type mapping (e.g.
+    /// <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/>) is honored by ALTER TABLE
+    /// ADD COLUMN in single-file mode.
     /// </remarks>
     public ITable CreateTable(string tableName, bool isReadOnly, DatabaseConfig? config)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
-        return new SingleFileTable(tableName, _storageProvider);
+        return new SingleFileTable(tableName, _storageProvider, config);
     }
 }

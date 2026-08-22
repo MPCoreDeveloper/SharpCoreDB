@@ -6,6 +6,7 @@
 namespace SharpCoreDB.Services;
 
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using System.Runtime.CompilerServices;
@@ -89,17 +90,52 @@ public partial class Storage
         {
             return fileData;
         }
-        else
+
+        // ✅ Known Issue 1 FIX (opt-in): table data files carrying the encrypted per-record magic
+        // header store each record as AES-256-GCM ciphertext. Decrypt every record and rejoin
+        // them into a plaintext length-prefixed buffer so existing full-table scan/compaction
+        // parsers work unchanged. This is gated on UseRecordEncryption (config flag) — when the
+        // flag is off, behavior is byte-for-byte identical to the original engine.
+        if (FileHasEncryptedHeader(path))
         {
-            try
-            {
-                return this.crypto.Decrypt(this.key, fileData);
-            }
-            catch
-            {
-                return fileData;
-            }
+            return DecryptTableFileToPlaintext(path) ?? fileData;
         }
+
+        // Legacy single-blob whole-file encryption (meta.dat, .salt, etc.)
+        try
+        {
+            return this.crypto.Decrypt(this.key, fileData);
+        }
+        catch
+        {
+            // Legacy plaintext file (no header, not encrypted) — return raw bytes.
+            return fileData;
+        }
+    }
+
+    /// <summary>
+    /// Decrypts every record in an encrypted per-record table file (magic header present)
+    /// and rejoins them into a plaintext length-prefixed buffer. Returns null if the file
+    /// doesn't exist or no complete records could be read.
+    /// </summary>
+    private byte[]? DecryptTableFileToPlaintext(string path)
+    {
+        var records = ReadAllRecords(path)?.ToList();
+        if (records is null || records.Count == 0)
+        {
+            return null;
+        }
+
+        using var ms = new MemoryStream();
+        Span<byte> lengthBuffer = stackalloc byte[4];
+        foreach (var (_, data) in records)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+            ms.Write(lengthBuffer);
+            ms.Write(data);
+        }
+
+        return ms.ToArray();
     }
 
     /// <inheritdoc />

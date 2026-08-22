@@ -54,7 +54,7 @@ A production-focused stack validated by **2,223 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.3
+dotnet add package SharpCoreDB --version 1.9.4
 ```
 
 ```csharp
@@ -82,8 +82,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.3
-dotnet add package SharpCoreDB.Client --version 1.9.3
+dotnet add package SharpCoreDB.Server --version 1.9.4
+dotnet add package SharpCoreDB.Client --version 1.9.4
 ```
 
 ---
@@ -105,16 +105,16 @@ dotnet add package SharpCoreDB.Client --version 1.9.3
 
 ---
 
-## v1.9.3 release (current)
+## v1.9.4 release (current)
 
-- **Full version synchronization to 1.9.3** across all packages (core, Server, Client, Analytics, VectorSearch, Graph, EF Core provider, Identity, EventSourcing, Projections, CQRS, Functional family including the new `SharpCoreDB.Functional.Linq2DB`, and more), internal project references, PackageReleaseNotes, and test projects.
+- **Full version synchronization to 1.9.4** across all packages (core, Server, Client, Analytics, VectorSearch, Graph, EF Core provider, Identity, EventSourcing, Projections, CQRS, Functional family including the new `SharpCoreDB.Functional.Linq2DB`, and more), internal project references, PackageReleaseNotes, and test projects.
 - **Bug fixes and stability improvements**:
   - Resolved several bugs and stability issues in `SharpCoreDB.Identity` (enhanced persistence, user/role management, password handling, and test coverage for concurrency scenarios; core identity surface now at 100% pass rate in key areas).
   - Multiple fixes and enhancements in the `SharpCoreDB.EntityFrameworkCore` provider (improved Guid-keyed entity relationships, transaction handling, and end-to-end integration reliability).
-- **Extensive updates and changes**: Comprehensive refresh of all documentation (root README, package READMEs/NuGet.README.md files, USAGE guides, script client docs for Python/JS, and hub files like docs/INDEX.md and docs/README.md) with 1.9.3 install instructions, release labels, and notes. Updated test project infrastructure across the board.
+- **Extensive updates and changes**: Comprehensive refresh of all documentation (root README, package READMEs/NuGet.README.md files, USAGE guides, script client docs for Python/JS, and hub files like docs/INDEX.md and docs/README.md) with 1.9.4 install instructions, release labels, and notes. Updated test project infrastructure across the board.
 - **Test infrastructure modernization for security and standards**: All test projects updated to latest compliant versions of Microsoft.NET.Test.Sdk (18.6.0+), xunit.v3 (3.2.2+), xunit.runner.visualstudio (3.1.5+), coverlet.collector, and related packages to align with current .NET 10 / C# 14 security best practices and compatibility requirements.
 - **Test count and quality**: **2,223 tests** passing (verified and now prominently documented; significant increase in coverage and stability reporting from the prior 2,000+ baseline).
-- Changes from 1.9.1 to 1.9.3 (including the above bug resolutions, dependency updates, and documentation overhaul) are detailed in this section and `docs/CHANGELOG.md`.
+- Changes from 1.9.1 to 1.9.4 (including the above bug resolutions, dependency updates, and documentation overhaul) are detailed in this section and `docs/CHANGELOG.md`.
 - **2,223 tests passing**, **zero breaking changes**, **100% backward compatible**.
 
 ---
@@ -216,43 +216,43 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,223 tests passing**
-- **100% backward compatible** across the v1.9.3 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.3
+- **100% backward compatible** across the v1.9.4 release line
+- Zero breaking changes intended from v1.5.0 to v1.9.4
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.3)
+## Available NuGet packages (v1.9.4)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.3
+dotnet add package SharpCoreDB --version 1.9.4
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.3
-dotnet add package SharpCoreDB.Client --version 1.9.3
+dotnet add package SharpCoreDB.Server --version 1.9.4
+dotnet add package SharpCoreDB.Client --version 1.9.4
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.3
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.3
-dotnet add package SharpCoreDB.Graph --version 1.9.3
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.3
-dotnet add package SharpCoreDB.Distributed --version 1.9.3
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.3
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.3
-dotnet add package SharpCoreDB.Extensions --version 1.9.3
+dotnet add package SharpCoreDB.Analytics --version 1.9.4
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.4
+dotnet add package SharpCoreDB.Graph --version 1.9.4
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.4
+dotnet add package SharpCoreDB.Distributed --version 1.9.4
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.4
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.4
+dotnet add package SharpCoreDB.Extensions --version 1.9.4
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.3
-dotnet add package SharpCoreDB.Projections --version 1.9.3
-dotnet add package SharpCoreDB.CQRS --version 1.9.3
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.4
+dotnet add package SharpCoreDB.Projections --version 1.9.4
+dotnet add package SharpCoreDB.CQRS --version 1.9.4
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.3
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.3
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.3
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.3
+dotnet add package SharpCoreDB.Functional --version 1.9.4
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.4
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.4
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.4
 ```
 
 ---
@@ -267,7 +267,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.3
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.3 release (version bump prep, docs sync, test count 2,223, release readiness), see the v1.9.3 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.4 release (version bump prep, docs sync, test count 2,223, release readiness), see the v1.9.4 section above and docs/CHANGELOG.md.
 
 ---
 
@@ -284,7 +284,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.3
 - Migration docs: `docs/migration/README.md`
 - Single-file SQL support and limits: `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
-- **New in v1.9.3**: `SharpCoreDB.Functional.Linq2DB` — production-ready linq2db adapter with `Option<T>`/`Fin<T>`/`Seq<T>` APIs, `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), and compile-time safe LINQ queries. Ideal for high-throughput AI/agentic and GraphRAG workloads. See `src/SharpCoreDB.Functional.Linq2DB/README.md`.
+- **New in v1.9.4**: `SharpCoreDB.Functional.Linq2DB` — production-ready linq2db adapter with `Option<T>`/`Fin<T>`/`Seq<T>` APIs, `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), and compile-time safe LINQ queries. Ideal for high-throughput AI/agentic and GraphRAG workloads. See `src/SharpCoreDB.Functional.Linq2DB/README.md`.
 - Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
 - Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 

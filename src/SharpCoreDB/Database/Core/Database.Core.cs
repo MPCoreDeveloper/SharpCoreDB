@@ -374,10 +374,29 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 {
                     table.DefaultValues.Add(null);
                 }
+                // ✅ Phase 2: Backward compatible — missing default expressions default to null
+                // REQUIRED: Table.Insert indexes DefaultExpressions[i] without bounds checks,
+                // so this list MUST be padded to the column count after deserialization.
+                while (table.DefaultExpressions.Count < table.Columns.Count)
+                {
+                    table.DefaultExpressions.Add(null);
+                }
+                // ✅ Phase 2: Backward compatible — missing column check expressions default to null
+                // REQUIRED: Table.Insert indexes ColumnCheckExpressions[i] without bounds checks,
+                // so this list MUST be padded to the column count after deserialization.
+                while (table.ColumnCheckExpressions.Count < table.Columns.Count)
+                {
+                    table.ColumnCheckExpressions.Add(null);
+                }
                 // ✅ COLLATE Phase 1: Backward compatible — missing collations default to Binary
                 while (table.ColumnCollations.Count < table.Columns.Count)
                 {
                     table.ColumnCollations.Add(CollationType.Binary);
+                }
+                // ✅ Phase 9: Backward compatible — missing locale names default to null
+                while (table.ColumnLocaleNames.Count < table.Columns.Count)
+                {
+                    table.ColumnLocaleNames.Add(null);
                 }
                 
 #if DEBUG
