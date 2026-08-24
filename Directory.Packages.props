@@ -103,7 +103,7 @@
     <!-- MTP coverage module for xunit.v3 test hosts on .NET 10.
          Required because the VSTest collects flow used by the old dotnet test path is no
          longer supported by MTP on .NET 10+; CI runs the MTP test host directly. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.10.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
