@@ -269,6 +269,9 @@ public sealed class ScdbFile : IDisposable
         
         // ✅ Phase 3.3: Enable delta-update feature flag
         header.FeatureFlags |= ScdbFileHeader.FEATURE_DELTA_UPDATES;
+
+        // ✅ 1.9.5: New files store ULIDs in the ULID-spec-compliant encoding from birth.
+        header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
         
         // Write header
         Span<byte> buffer = stackalloc byte[(int)ScdbFileHeader.HEADER_SIZE];

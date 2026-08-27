@@ -73,6 +73,12 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     // Track if metadata needs to be flush
     private bool _metadataDirty;
 
+    // ✅ 1.9.5: ULID encoding generation of this database.
+    // true  = created by 1.9.5+ (or already migrated) → ULIDs are spec-compliant.
+    // false = created before 1.9.5 → may contain legacy-encoded ULIDs, see MigrateLegacyUlids().
+    // Set during Load() based on the persisted "ulidSpec" metadata marker.
+    private bool? _ulidSpec;
+
     // Last insert rowid tracking (SQLite compatibility).
     // Intentionally a plain field — AsyncLocal caused stale reads when EF
     // fires synchronous change-tracker notifications (SetStoreGeneratedValue)
@@ -244,6 +250,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         // ✅ FIX: Handle empty/null metadata gracefully (valid for new databases)
         if (string.IsNullOrWhiteSpace(metaJson))
         {
+            // ✅ 1.9.5: No metadata file at all → fresh 1.9.5+ database (spec ULIDs from birth).
+            // Metadata exists but is empty → conservative: treat as pre-1.9.5 (may hold legacy ULIDs).
+            _ulidSpec = !metaExists;
+
 #if DEBUG
             System.Diagnostics.Debug.WriteLine("[Load] No metadata or empty metadata - new database");
 #endif
@@ -254,6 +264,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         var trimmedJson = metaJson.Trim();
         if (trimmedJson == "{}" || trimmedJson == "null" || trimmedJson == "[]")
         {
+            // ✅ 1.9.5: Empty metadata without the ULID-spec marker → treat as pre-1.9.5 (conservative).
+            _ulidSpec = !metaExists;
+
 #if DEBUG
             System.Diagnostics.Debug.WriteLine($"[Load] Empty metadata structure: {trimmedJson}");
 #endif
@@ -294,11 +307,18 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         // ✅ FIX: Handle null meta result
         if (meta is null)
         {
+            // Metadata existed but could not be parsed → conservative pre-1.9.5 treatment.
+            _ulidSpec = !metaExists;
+
 #if DEBUG
             System.Diagnostics.Debug.WriteLine("[Load] Metadata deserialized to null");
 #endif
             return;
         }
+
+        // ✅ 1.9.5: Read the persisted ULID-spec marker. Databases created before 1.9.5 lack it,
+        // so their stored ULID strings may use the legacy Base32 encoding (see MigrateLegacyUlids).
+        _ulidSpec = ReadUlidSpecMarker(meta, metaExists);
         
         if (meta.TryGetValue(PersistenceConstants.TablesKey, out var tablesObj) != true || tablesObj is null)
         {
@@ -473,6 +493,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
+        // ✅ 1.9.5: Persist the ULID-spec marker so reopened databases know whether they were created
+        // by 1.9.5+ (spec-compliant ULIDs) or earlier (legacy ULIDs needing MigrateLegacyUlids()).
+        meta[PersistenceConstants.UlidSpecMarkerKey] = _ulidSpec ?? true;
         var metaJson = JsonSerializer.Serialize(meta);
         
         if (_storageProvider is not null)

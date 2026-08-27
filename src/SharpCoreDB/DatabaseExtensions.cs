@@ -628,6 +628,120 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     public StorageMode StorageMode => _storageProvider.Mode;
     public StorageStatistics GetStorageStatistics() => _storageProvider.GetStatistics();
 
+    /// <inheritdoc />
+    public bool NeedsLegacyUlidMigration()
+    {
+        return _storageProvider is SingleFileStorageProvider provider && !provider.SupportsSpecUlids;
+    }
+
+    /// <inheritdoc />
+    public int MigrateLegacyUlids()
+    {
+        if (_options.IsReadOnly)
+        {
+            throw new InvalidOperationException("Cannot migrate ULIDs in a read-only database.");
+        }
+
+        if (!NeedsLegacyUlidMigration())
+        {
+            return 0;
+        }
+
+        int converted = 0;
+        foreach (var table in _tables.Values.OfType<SingleFileTable>())
+        {
+            converted += MigrateSingleFileTableUlids(table);
+        }
+
+        // Permanently mark the file as spec-compliant so the migration runs exactly once.
+        ((SingleFileStorageProvider)_storageProvider).MarkSpecUlids();
+        return converted;
+    }
+
+    /// <summary>
+    /// Rewrites every ULID value of a single-file table from the legacy encoding to the spec encoding.
+    /// </summary>
+    /// <param name="table">The table to migrate.</param>
+    /// <returns>The number of rows rewritten.</returns>
+    private static int MigrateSingleFileTableUlids(SingleFileTable table)
+    {
+        List<int> ulidColumns = new(table.Columns.Count);
+        for (int i = 0; i < table.Columns.Count; i++)
+        {
+            if (table.ColumnTypes[i] == DataType.Ulid)
+            {
+                ulidColumns.Add(i);
+            }
+        }
+
+        if (ulidColumns.Count == 0)
+        {
+            return 0;
+        }
+
+        var rows = table.Select();
+        int converted = 0;
+
+        foreach (var row in rows)
+        {
+            var updates = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (int columnIndex in ulidColumns)
+            {
+                string columnName = table.Columns[columnIndex];
+                if (!row.TryGetValue(columnName, out var value) || value is null || value == DBNull.Value)
+                {
+                    continue;
+                }
+
+                // ULID columns deserialize to Ulid records; plain TEXT mirrors come back as strings.
+                string text = value switch
+                {
+                    string s => s,
+                    Ulid u => u.Value,
+                    _ => string.Empty,
+                };
+
+                if (text.Length != 26)
+                {
+                    continue;
+                }
+
+                if (Ulid.TryFromLegacy(text, out var upgraded) && upgraded is not null && upgraded.Value != text)
+                {
+                    updates[columnName] = upgraded.Value;
+                }
+            }
+
+            if (updates.Count == 0)
+            {
+                continue;
+            }
+
+            // Replace the row via delete + insert so the PK index stays consistent even when the
+            // primary key itself is a ULID whose text changes (the 128-bit value stays identical).
+            if (table.PrimaryKeyIndex >= 0)
+            {
+                string pkColumn = table.Columns[table.PrimaryKeyIndex];
+                if (row.TryGetValue(pkColumn, out var pkValue) && pkValue is not null && pkValue != DBNull.Value
+                    && !table.DeleteByPrimaryKey(pkValue))
+                {
+                    throw new InvalidOperationException(
+                        $"ULID migration failed: could not locate row by primary key '{pkColumn}' in table '{table.Name}'.");
+                }
+            }
+
+            foreach (var kvp in updates)
+            {
+                row[kvp.Key] = kvp.Value;
+            }
+
+            table.Insert(row);
+            converted++;
+        }
+
+        return converted;
+    }
+
     public void Dispose()
     {
         if (_storageProvider is IAsyncDisposable)

@@ -274,4 +274,25 @@ public interface IDatabase : IAsyncDisposable
     /// </summary>
     /// <returns>Storage statistics</returns>
     StorageStatistics GetStorageStatistics();
+
+    /// <summary>
+    /// Gets whether this database was created before 1.9.5 and may contain ULIDs stored in the
+    /// legacy (pre-spec) Base32 encoding that need to be converted with <see cref="MigrateLegacyUlids"/>.
+    /// The database metadata records the ULID encoding generation it was created with, so a database
+    /// created before 1.9.5 is detected automatically.
+    /// </summary>
+    /// <returns>True when the database predates 1.9.5 and should be migrated; otherwise false.</returns>
+    bool NeedsLegacyUlidMigration();
+
+    /// <summary>
+    /// Converts every ULID value stored in this database from the legacy pre-1.9.5 Base32 encoding
+    /// to the ULID-spec-compliant encoding. The 128-bit value (timestamp + randomness) of every ULID
+    /// is preserved exactly — only the Base32 text changes — so existing <c>_rowid</c> values and
+    /// ULID columns migrate one-to-one. After a successful migration the database is permanently
+    /// marked as spec-compliant and further calls are no-ops.
+    /// </summary>
+    /// <returns>The number of rows whose ULID values were rewritten.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the database is read-only or a row
+    /// cannot be located while migrating.</exception>
+    int MigrateLegacyUlids();
 }

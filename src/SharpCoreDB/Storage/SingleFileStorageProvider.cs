@@ -208,6 +208,27 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal bool SupportsDeltaUpdates => _header.SupportsDeltaUpdates && _options.EnableDeltaUpdates;
 
+    /// <summary>
+    /// Gets whether the file stores ULIDs in the ULID-spec-compliant encoding (1.9.5+).
+    /// Files created before 1.9.5 lack the marker and may contain legacy-encoded ULIDs.
+    /// </summary>
+    internal bool SupportsSpecUlids => _header.SupportsSpecUlids;
+
+    /// <summary>
+    /// Marks the file as storing ULID-spec-compliant ULIDs and persists the header.
+    /// Used by <c>Database.MigrateLegacyUlids()</c> after all ULID values were rewritten.
+    /// </summary>
+    internal void MarkSpecUlids()
+    {
+        if (SupportsSpecUlids)
+        {
+            return;
+        }
+
+        _header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
+        WriteHeaderAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     /// <inheritdoc/>
     public StorageMode Mode => StorageMode.SingleFile;
 
@@ -1356,6 +1377,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private static ScdbFileHeader InitializeNewFile(FileStream fs, DatabaseOptions options)
     {
         var header = ScdbFileHeader.CreateDefault((ushort)options.PageSize);
+
+        // ✅ 1.9.5: New files store ULIDs in the ULID-spec-compliant encoding from birth.
+        header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
         
         // Set encryption flags
         if (options.EnableEncryption)

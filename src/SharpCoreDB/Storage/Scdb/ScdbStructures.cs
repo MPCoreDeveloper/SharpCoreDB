@@ -136,14 +136,26 @@ public struct ScdbFileHeader
     public const ulong FEATURE_DELTA_UPDATES = 0x0000_0000_0000_0001;
 
     /// <summary>
+    /// Feature flag: the database stores ULIDs in the ULID-spec-compliant encoding (1.9.5).
+    /// New files are created with this flag; files created before 1.9.5 lack it and may contain
+    /// legacy-encoded ULIDs that should be migrated with <c>Database.MigrateLegacyUlids()</c>.
+    /// </summary>
+    public const ulong FEATURE_ULID_SPEC = 0x0000_0000_0000_0002;
+
+    /// <summary>
     /// Validates the header magic and version.
     /// </summary>
     public readonly bool IsValid => Magic == MAGIC && FormatVersion == CURRENT_VERSION;
-    
+
     /// <summary>
     /// Checks if delta-update feature is enabled (Phase 3.3 optimization).
     /// </summary>
     public readonly bool SupportsDeltaUpdates => (FeatureFlags & FEATURE_DELTA_UPDATES) != 0;
+
+    /// <summary>
+    /// Checks if the database stores ULIDs in the ULID-spec-compliant encoding (1.9.5+).
+    /// </summary>
+    public readonly bool SupportsSpecUlids => (FeatureFlags & FEATURE_ULID_SPEC) != 0;
 
     /// <summary>
     /// Zero-allocation parser from ReadOnlySpan using MemoryMarshal.

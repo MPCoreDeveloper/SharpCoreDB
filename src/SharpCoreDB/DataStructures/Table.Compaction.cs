@@ -78,9 +78,14 @@ public partial class Table
             
             if (PrimaryKeyIndex >= 0)
             {
-                // Collect all positions from primary key index
+                // Collect all positions from primary key index.
+                // ✅ FIX (1.9.5): Include the hidden _rowid column when present — otherwise rows in
+                // tables with an internal ULID primary key cannot be resolved to storage positions
+                // and compaction would drop every row.
                 var pkColumn = Columns[PrimaryKeyIndex];
-                var allRows = Select(); // Get all current rows
+                var allRows = HasInternalRowId
+                    ? SelectIncludingRowId(where: null, orderBy: null, asc: true, noEncrypt: false)
+                    : Select();
                 
                 foreach (var row in allRows)
                 {

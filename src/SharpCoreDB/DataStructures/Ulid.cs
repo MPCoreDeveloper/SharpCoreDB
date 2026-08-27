@@ -75,6 +75,13 @@ public record Ulid(string Value)
             throw new ArgumentException("Timestamp must be a positive number.");
         }
 
+        // The ULID standard limits the timestamp to 48 bits (max 2^48 - 1 milliseconds,
+        // i.e. ~year 10889 AD). Reject larger values to stay within the 128-bit ULID range.
+        if (timestamp > 0xFF_FF_FF_FF_FF_FF)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timestamp), "Timestamp exceeds the ULID 48-bit limit.");
+        }
+
         Span<byte> ulidBytes = stackalloc byte[16];
 
         for (int i = 5; i >= 0; i--)
@@ -243,6 +250,67 @@ public record Ulid(string Value)
         catch (ArgumentException)
         {
             throw new ArgumentException("Invalid ULID string.");
+        }
+    }
+
+    /// <summary>
+    /// Converts a legacy ULID (generated before 1.9.5 with the non-spec-compliant Base32 encoding)
+    /// into the equivalent ULID in the current ULID-spec-compliant encoding.
+    /// The 128-bit value — timestamp and randomness — is preserved exactly; only the Base32 text
+    /// encoding changes, so the converted ULID is interchangeable with other implementations.
+    /// </summary>
+    /// <param name="legacyUlid">The 26-character legacy ULID string.</param>
+    /// <returns>A new <see cref="Ulid"/> with the same 128-bit value, encoded per the ULID spec.</returns>
+    /// <exception cref="ArgumentException">Thrown when the string is not a valid legacy ULID.</exception>
+    public static Ulid FromLegacy(string legacyUlid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(legacyUlid);
+
+        if (legacyUlid.Length != 26)
+        {
+            throw new ArgumentException("Invalid legacy ULID string. ULID should be 26 characters long.");
+        }
+
+        try
+        {
+            byte[] bytes = Base32.LegacyDecode(legacyUlid);
+            if (bytes.Length != 16)
+            {
+                throw new ArgumentException("Invalid legacy ULID string length.");
+            }
+
+            return new Ulid(Base32.Encode(bytes));
+        }
+        catch (ArgumentException)
+        {
+            throw new ArgumentException("Invalid legacy ULID string.");
+        }
+    }
+
+    /// <summary>
+    /// Attempts to convert a legacy ULID (generated before 1.9.5) into the equivalent ULID in the
+    /// current ULID-spec-compliant encoding. Returns false when the string is not a valid legacy ULID.
+    /// </summary>
+    /// <param name="legacyUlid">The 26-character legacy ULID string.</param>
+    /// <param name="ulid">The converted ULID when successful; otherwise null.</param>
+    /// <returns>True when the conversion succeeded.</returns>
+    public static bool TryFromLegacy(string legacyUlid, out Ulid? ulid)
+    {
+        ulid = null;
+
+        if (string.IsNullOrEmpty(legacyUlid) || legacyUlid.Length != 26)
+        {
+            return false;
+        }
+
+        try
+        {
+            ulid = FromLegacy(legacyUlid);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
         }
     }
 }

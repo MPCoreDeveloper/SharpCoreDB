@@ -45,6 +45,13 @@ public static class PersistenceConstants
     public const string TablesKey = "tables";
 
     /// <summary>
+    /// The metadata key marking whether a database stores ULIDs in the ULID-spec-compliant encoding.
+    /// Absent in databases created before 1.9.5; those may contain legacy-encoded ULIDs and should be
+    /// migrated with <c>Database.MigrateLegacyUlids()</c>.
+    /// </summary>
+    public const string UlidSpecMarkerKey = "ulidSpec";
+
+    /// <summary>
     /// The name of the auto-generated internal row identifier column.
     /// Injected as primary key when a table is created without an explicit PRIMARY KEY.
     /// Uses ULID type for globally unique, lexicographically sortable identifiers.
