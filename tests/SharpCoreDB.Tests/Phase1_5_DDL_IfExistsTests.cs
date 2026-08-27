@@ -16,6 +16,7 @@ using System.Linq;
 /// Tests for Phase 1.5: DDL IF EXISTS/IF NOT EXISTS extensions.
 /// Covers CREATE INDEX IF NOT EXISTS, DROP INDEX/PROCEDURE/VIEW/TRIGGER IF EXISTS.
 /// </summary>
+[Collection("SerialTriggerTests")]
 public sealed class Phase1_5_DDL_IfExistsTests : IDisposable
 {
     private readonly string _testDbPath;
@@ -23,6 +24,10 @@ public sealed class Phase1_5_DDL_IfExistsTests : IDisposable
 
     public Phase1_5_DDL_IfExistsTests()
     {
+        // Clear any leftover triggers from previous tests to prevent cross-test
+        // contamination via the shared (static) trigger registry.
+        SharpCoreDB.Services.SqlParser.ClearAllTriggersForTesting();
+
         _testDbPath = Path.Combine(Path.GetTempPath(), $"test_phase15_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDbPath);
         
@@ -42,6 +47,9 @@ public sealed class Phase1_5_DDL_IfExistsTests : IDisposable
 
     public void Dispose()
     {
+        // Remove any triggers this class registered in the shared (static) registry.
+        try { SharpCoreDB.Services.SqlParser.ClearAllTriggersForTesting(); } catch { }
+
         try
         {
             _db?.Dispose();

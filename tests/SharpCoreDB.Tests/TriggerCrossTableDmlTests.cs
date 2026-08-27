@@ -40,6 +40,9 @@ public class TriggerCrossTableDmlTests : IDisposable
 
     public void Dispose()
     {
+        // Remove any triggers this class registered in the shared (static) registry.
+        try { SharpCoreDB.Services.SqlParser.ClearAllTriggersForTesting(); } catch { }
+
         try { db.Dispose(); } catch { }
         GC.Collect();
         GC.WaitForPendingFinalizers();
