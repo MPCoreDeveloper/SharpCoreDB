@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <SharpCoreDBVersion>1.9.4</SharpCoreDBVersion>
+    <SharpCoreDBVersion>1.9.5</SharpCoreDBVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
@@ -30,21 +30,14 @@
     <PackageVersion Include="SharpCoreDB.Server.Core" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
     <PackageVersion Include="AngleSharp" Version="1.7.2" />
-    <PackageVersion Include="Avalonia" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.18" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
-    <PackageVersion Include="AWSSDK.Core" Version="4.0.102" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.102.1" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.15.8" />
-    <PackageVersion Include="BLite" Version="5.0.8" />
+    <PackageVersion Include="BLite" Version="5.0.9" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <PackageVersion Include="Dotmim.Sync.Core" Version="1.3.0" />
@@ -68,7 +61,7 @@
     <PackageVersion Include="linq2db.Provider.SQLite" Version="6.0.0" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
-    <PackageVersion Include="MessagePack" Version="3.1.7" />
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.Certificate" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
@@ -79,7 +72,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.11" />
@@ -121,8 +114,6 @@
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.11" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.11" />
-    <PackageVersion Include="Tmds.DBus.Protocol" Version="0.95.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.0" />
     <PackageVersion Include="YesSql.Core" Version="6.0.0" />
