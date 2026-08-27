@@ -644,87 +644,12 @@ public partial class SqlParser
     /// <summary>
     /// Binds parameters to a SQL query string, replacing placeholders with actual values.
     /// Supports both named parameters (@paramName) and positional parameters (?).
-    /// OPTIMIZED: Uses StringBuilder for O(n) performance (30-40% faster for 10+ parameters).
+    /// Delegates to <see cref="ParameterBinder.Bind"/> (position-aware, token-based), the
+    /// single source of truth for parameter binding.
     /// </summary>
     private static string BindParameters(string sql, Dictionary<string, object?> parameters)
     {
-        var sb = new StringBuilder(sql);
-        int namedParamsBound = 0;
-        
-        // Handle named parameters (@paramName or @param0, @param1, etc.)
-        foreach (var param in parameters)
-        {
-            var paramName = param.Key;
-            var valueStr = FormatValue(param.Value);
-            
-            if (paramName.StartsWith('@'))
-            {
-                // ✅ StringBuilder.Replace is O(n) vs string.Replace O(n²)
-                if (sql.Contains(paramName))
-                {
-                    sb.Replace(paramName, valueStr);
-                    namedParamsBound++;
-                }
-            }
-            else
-            {
-                var namedParam = "@" + paramName;
-                if (sql.Contains(namedParam))
-                {
-                    sb.Replace(namedParam, valueStr);
-                    namedParamsBound++;
-                }
-            }
-        }
-        
-        // Handle positional parameters (?)
-        var result = sb.ToString();
-        var questionMarkCount = result.Count(c => c == '?');
-        if (questionMarkCount > 0)
-        {
-            if (namedParamsBound > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Mixed parameter styles detected: found {questionMarkCount} '?' placeholders but already bound {namedParamsBound} named parameters (@param). " +
-                    $"Use either '?' placeholders with keys '0','1','2',... OR '@name' placeholders with keys 'name','email',... but not both.");
-            }
-            
-            // For positional parameters, rebuild with StringBuilder
-            sb.Clear();
-            sb.Append(result);
-            
-            var paramIndex = 0;
-            var index = 0;
-
-            // Determine binding order: numeric keys (0..N-1) preferred; otherwise use insertion order of dictionary
-            List<object?> orderedValues;
-            var numericKeysAvailable = Enumerable.Range(0, questionMarkCount).All(i => parameters.ContainsKey(i.ToString()));
-            if (numericKeysAvailable)
-            {
-                orderedValues = Enumerable.Range(0, questionMarkCount)
-                    .Select(i => parameters[i.ToString()])
-                    .ToList();
-            }
-            else
-            {
-                // Fallback: use parameter values in enumeration order (take as many as needed)
-                orderedValues = parameters.Values.Take(questionMarkCount).ToList();
-            }
-            
-            while ((index = sb.ToString().IndexOf('?', index)) != -1)
-            {
-                var value = orderedValues[paramIndex];
-                var valueStr = FormatValue(value);
-                sb.Remove(index, 1);
-                sb.Insert(index, valueStr);
-                index += valueStr.Length;
-                paramIndex++;
-            }
-            
-            result = sb.ToString();
-        }
-
-        return result;
+        return ParameterBinder.Bind(sql, parameters);
     }
 
     /// <summary>
@@ -734,25 +659,6 @@ public partial class SqlParser
     private static string SanitizeSql(string sql)
     {
         return sql.Replace("'", "''");
-    }
-
-    /// <summary>
-    /// Formats a value for inclusion in a SQL query string.
-    /// </summary>
-    private static string FormatValue(object? value)
-    {
-        return value switch
-        {
-            null => "NULL",
-            string s => $"'{s.Replace("'", "''")}'",
-            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            bool b => b ? "1" : "0",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
-            decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            _ => $"'{value.ToString()?.Replace("'", "''")}'",
-        };
     }
 
     /// <summary>

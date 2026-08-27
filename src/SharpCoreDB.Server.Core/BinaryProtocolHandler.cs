@@ -527,7 +527,7 @@ public sealed class BinaryProtocolHandler(
 
         var processId = session.SessionId.GetHashCode();
         var statements = _preparedStatements.GetOrAdd(processId, _ => new Dictionary<string, PreparedPortal>());
-        statements[statementName] = new PreparedPortal(queryText);
+        statements[statementName] = new PreparedPortal(TranslateDollarParameters(queryText));
 
         await writer.WriteParseCompleteAsync(cancellationToken);
     }
@@ -543,12 +543,44 @@ public sealed class BinaryProtocolHandler(
         var portalName = await ReadNullTerminatedStringAsync(reader);
         var statementName = await ReadNullTerminatedStringAsync(reader);
 
+        // Read parameter format codes (0 = text, 1 = binary). Values are read as text.
+        var formatCodeCount = ReadInt16(reader);
+        for (var i = 0; i < formatCodeCount; i++)
+        {
+            ReadInt16(reader);
+        }
+
+        // Read parameter values (positional, in '$1', '$2', ... / '?' order).
+        var parameterCount = ReadInt16(reader);
+        var parameters = new Dictionary<string, object?>(parameterCount);
+        for (var i = 0; i < parameterCount; i++)
+        {
+            var valueLength = ReadInt32(reader);
+            if (valueLength == -1)
+            {
+                parameters[i.ToString()] = null;
+            }
+            else
+            {
+                var buffer = new byte[valueLength];
+                reader.ReadExactly(buffer);
+                parameters[i.ToString()] = Encoding.UTF8.GetString(buffer);
+            }
+        }
+
+        // Read result format codes (ignored; rows are always written as text).
+        var resultFormatCodeCount = ReadInt16(reader);
+        for (var i = 0; i < resultFormatCodeCount; i++)
+        {
+            ReadInt16(reader);
+        }
+
         var processId = session.SessionId.GetHashCode();
         if (_preparedStatements.TryGetValue(processId, out var statements) &&
             statements.TryGetValue(statementName, out var portal))
         {
-            // Read parameter format codes and values (simplified: text-only)
             portal.BoundPortalName = portalName;
+            portal.Parameters = parameters.Count > 0 ? parameters : null;
         }
 
         await writer.WriteBindCompleteAsync(cancellationToken);
@@ -621,9 +653,10 @@ public sealed class BinaryProtocolHandler(
         try
         {
             var sql = portal.Sql.Trim();
+            var parameters = portal.Parameters ?? new Dictionary<string, object?>();
             if (IsRowReturningStatement(sql))
             {
-                var result = connection.Database.ExecuteQuery(sql, []);
+                var result = connection.Database.ExecuteQuery(sql, parameters);
 
                 // Row-level policy: filter results by tenant discriminator
                 if (_rowLevelPolicyEngine is not null && result.Count > 0)
@@ -667,7 +700,7 @@ public sealed class BinaryProtocolHandler(
                     }
                 }
 
-                connection.Database.ExecuteSQL(sql);
+                connection.Database.ExecuteSQL(sql, parameters);
                 await writer.WriteCommandCompleteAsync(BuildCommandTag(sql, 0), cancellationToken);
             }
         }
@@ -734,7 +767,7 @@ public sealed class BinaryProtocolHandler(
             try
             {
                 await using var connection = await session.DatabaseInstance.GetConnectionAsync(cancellationToken);
-                var result = connection.Database.ExecuteQuery(portal.Sql, []);
+                var result = connection.Database.ExecuteQuery(portal.Sql, portal.Parameters ?? new Dictionary<string, object?>());
                 if (result.Count > 0)
                 {
                     var firstRow = result[0];
@@ -971,6 +1004,75 @@ public sealed class BinaryProtocolHandler(
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
+    /// <summary>Reads a big-endian Int16 from the message stream.</summary>
+    private static short ReadInt16(Stream stream)
+    {
+        Span<byte> buffer = stackalloc byte[2];
+        stream.ReadExactly(buffer);
+        return BinaryPrimitives.ReadInt16BigEndian(buffer);
+    }
+
+    /// <summary>Reads a big-endian Int32 from the message stream.</summary>
+    private static int ReadInt32(Stream stream)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        stream.ReadExactly(buffer);
+        return BinaryPrimitives.ReadInt32BigEndian(buffer);
+    }
+
+    /// <summary>
+    /// Converts PostgreSQL-style '$1' parameter markers (extended query protocol) to
+    /// SharpCoreDB '?' positional placeholders, ignoring '$' inside string literals.
+    /// </summary>
+    private static string TranslateDollarParameters(string sql)
+    {
+        if (string.IsNullOrEmpty(sql) || sql.IndexOf('$') < 0)
+        {
+            return sql;
+        }
+
+        var sb = new StringBuilder(sql.Length);
+        bool inString = false;
+        char stringChar = '\0';
+
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+
+            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            {
+                if (!inString)
+                {
+                    inString = true;
+                    stringChar = c;
+                }
+                else if (c == stringChar)
+                {
+                    inString = false;
+                }
+            }
+
+            if (!inString && c == '$' && i + 1 < sql.Length && char.IsDigit(sql[i + 1]))
+            {
+                // Skip '$' and all following digits; emit a single '?'.
+                i++;
+                while (i < sql.Length && char.IsDigit(sql[i]))
+                {
+                    i++;
+                }
+
+                i--;  // The for-loop increment will advance past the last digit.
+                sb.Append('?');
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+
+        return sb.ToString();
+    }
+
 
     /// <summary>
     /// Maps .NET types to PostgreSQL type IDs.
@@ -1355,4 +1457,7 @@ internal sealed class PreparedPortal(string sql)
 
     /// <summary>Portal name set during Bind. Null until bound.</summary>
     public string? BoundPortalName { get; set; }
+
+    /// <summary>Parameter values bound during Bind, keyed by '0'..'N-1'. Null until bound.</summary>
+    public Dictionary<string, object?>? Parameters { get; set; }
 }

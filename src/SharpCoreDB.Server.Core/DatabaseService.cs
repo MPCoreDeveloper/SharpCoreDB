@@ -261,7 +261,8 @@ public sealed class DatabaseService(
         try
         {
             var executionStart = Stopwatch.GetTimestamp();
-            var result = connection.Database.ExecuteQuery(sql, []);
+            var parameters = ToParameterDictionary(request.Parameters);
+            var result = connection.Database.ExecuteQuery(sql, parameters);
 
             // Row-level policy: filter results by tenant discriminator
             if (_rowLevelPolicyEngine is not null && result.Count > 0)
@@ -412,6 +413,7 @@ public sealed class DatabaseService(
             var executionStart = Stopwatch.GetTimestamp();
 
             var sql = request.Sql;
+            var parameters = ToParameterDictionary(request.Parameters);
             var sqlUpper = sql.Trim().ToUpperInvariant();
 
             // Row-level policy: validate writes against tenant discriminator
@@ -437,7 +439,7 @@ public sealed class DatabaseService(
                 {
                     // Estimate by counting matching rows before execution
                     var countResult = connection.Database.ExecuteQuery(
-                        ConvertToCountQuery(sql), []);
+                        ConvertToCountQuery(sql), parameters);
                     if (countResult.Count > 0 && countResult[0].Values.FirstOrDefault() is int count)
                         rowsAffected = count;
                     else if (countResult.Count > 0 && countResult[0].Values.FirstOrDefault() is long countL)
@@ -449,7 +451,7 @@ public sealed class DatabaseService(
                 }
             }
 
-            connection.Database.ExecuteSQL(sql);
+            connection.Database.ExecuteSQL(sql, parameters);
 
             if (sqlUpper.StartsWith("INSERT"))
                 rowsAffected = 1; // Single INSERT always affects 1 row
@@ -601,18 +603,52 @@ public sealed class DatabaseService(
     }
 
     // Helper methods
-    private static DataType MapDataType(Type type)
+    /// <summary>
+    /// Converts a protocol <see cref="ParameterValue"/> to its CLR representation,
+    /// mirroring the client-side <c>ConvertParameter</c> in reverse.
+    /// </summary>
+    private static object? ToClrValue(ParameterValue pv)
     {
-        if (type == typeof(int)) return DataType.Integer;
-        if (type == typeof(long)) return DataType.Long;
-        if (type == typeof(double)) return DataType.Real;
-        if (type == typeof(string)) return DataType.String;
-        if (type == typeof(byte[])) return DataType.Blob;
-        if (type == typeof(bool)) return DataType.Boolean;
-        if (type == typeof(DateTime)) return (DataType)6; // DATETIME
-        if (type == typeof(Guid)) return DataType.Guid;
-        if (type == typeof(float[])) return DataType.Vector;
-        return DataType.String;
+        if (pv is null)
+        {
+            return null;
+        }
+
+        return pv.ValueCase switch
+        {
+            ParameterValue.ValueOneofCase.IntValue => pv.IntValue,
+            ParameterValue.ValueOneofCase.LongValue => pv.LongValue,
+            ParameterValue.ValueOneofCase.DoubleValue => pv.DoubleValue,
+            ParameterValue.ValueOneofCase.StringValue => pv.StringValue,
+            ParameterValue.ValueOneofCase.BytesValue => pv.BytesValue.ToByteArray(),
+            ParameterValue.ValueOneofCase.BoolValue => pv.BoolValue,
+            ParameterValue.ValueOneofCase.TimestampValue => pv.TimestampValue.ToDateTime(),
+            ParameterValue.ValueOneofCase.GuidValue => Guid.TryParse(pv.GuidValue, out var guid) ? guid : pv.GuidValue,
+            ParameterValue.ValueOneofCase.UlidValue => pv.UlidValue,
+            ParameterValue.ValueOneofCase.VectorValue => pv.VectorValue.Values.ToArray(),
+            ParameterValue.ValueOneofCase.RowrefValue => pv.RowrefValue,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Converts a protocol parameter map to the <c>Dictionary&lt;string, object?&gt;</c>
+    /// expected by the <see cref="SharpCoreDB.Interfaces.IDatabase"/> overloads.
+    /// </summary>
+    private static Dictionary<string, object?> ToParameterDictionary(Google.Protobuf.Collections.MapField<string, ParameterValue> parameters)
+    {
+        var dict = new Dictionary<string, object?>();
+        if (parameters is null)
+        {
+            return dict;
+        }
+
+        foreach (var kvp in parameters)
+        {
+            dict[kvp.Key] = ToClrValue(kvp.Value);
+        }
+
+        return dict;
     }
 
     private static ParameterValue MapParameterValue(object? value)

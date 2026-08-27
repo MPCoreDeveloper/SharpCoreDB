@@ -247,28 +247,37 @@ internal static class ParameterBinder
     }
 
     /// <summary>Binds named parameters (@paramName) to SQL template.</summary>
+    /// <remarks>
+    /// Token-aware replacement: every occurrence of every named parameter is replaced
+    /// from end to start, so parameter names that are prefixes of other names
+    /// (e.g. @t vs @tid) can never corrupt each other.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static string BindNamedParameters(
         string sql,
         Dictionary<string, int> namedParameters,
         Dictionary<string, object?> parameters)
     {
-        var sb = new System.Text.StringBuilder(sql);
-
-        // Sort by position (descending) to avoid offset changes
-        var sortedParams = new List<(string name, int pos)>();
+        // Validate that every referenced parameter has a value (fail loudly).
         foreach (var kvp in namedParameters)
         {
             if (!parameters.TryGetValue(kvp.Key, out _))
                 throw new ArgumentException($"Missing required parameter: {kvp.Key}");
-
-            sortedParams.Add((kvp.Key, kvp.Value));
         }
 
-        sortedParams.Sort((a, b) => b.pos.CompareTo(a.pos));
+        // Collect every occurrence of every named parameter token.
+        var occurrences = new List<(string name, int pos)>();
+        foreach (var (name, pos) in ExtractNamedParameterOccurrences(sql))
+        {
+            if (namedParameters.ContainsKey(name))
+                occurrences.Add((name, pos));
+        }
 
-        // Replace from end to start (to maintain positions)
-        foreach (var (paramName, pos) in sortedParams)
+        // Replace from end to start (to maintain positions).
+        occurrences.Sort((a, b) => b.pos.CompareTo(a.pos));
+
+        var sb = new System.Text.StringBuilder(sql);
+        foreach (var (paramName, pos) in occurrences)
         {
             string paramValue = FormatParameter(parameters[paramName]);
             int endPos = pos + 1;
@@ -285,6 +294,186 @@ internal static class ParameterBinder
 
         return sb.ToString();
     }
+    /// <summary>
+    /// Binds named (@paramName) or positional (?) parameters to a SQL template using exact
+    /// token positions. This is the single source of truth for parameter binding: placeholders
+    /// are replaced token-by-token, so parameter names that are prefixes of other names
+    /// (e.g. @t vs @tid) never corrupt each other.
+    /// </summary>
+    /// <param name="sql">The SQL template with placeholders.</param>
+    /// <param name="parameters">
+    /// The parameters to bind. Keys may be prefixed with '@' or ':' (or unprefixed) for named
+    /// parameters, and '0'..'N-1' (or dictionary order) for positional '?' placeholders.
+    /// </param>
+    /// <returns>The bound SQL.</returns>
+    internal static string Bind(string sql, Dictionary<string, object?> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+
+        if (parameters is null || parameters.Count == 0)
+        {
+            return sql;
+        }
+
+        // Normalize keys so '@name', ':name' and 'name' all resolve to the same parameter.
+        var normalized = new Dictionary<string, object?>(parameters.Count, StringComparer.Ordinal);
+        foreach (var kvp in parameters)
+        {
+            var key = kvp.Key;
+            int trim = 0;
+            while (trim < key.Length && (key[trim] == '@' || key[trim] == ':'))
+            {
+                trim++;
+            }
+
+            normalized[key[trim..]] = kvp.Value;
+        }
+
+        var namedParameters = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (name, pos) in ExtractNamedParameterOccurrences(sql))
+        {
+            if (!namedParameters.ContainsKey(name))
+                namedParameters[name] = pos;
+        }
+
+        if (namedParameters.Count > 0)
+        {
+            if (ExtractPositionalParameterPositions(sql).Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "Mixed parameter styles detected: found both '@param' named parameters and '?' positional placeholders. " +
+                    "Use either '?' placeholders with keys '0','1','2',... OR '@name' placeholders with keys 'name','email',... but not both.");
+            }
+
+            return BindNamedParameters(sql, namedParameters, normalized);
+        }
+
+        var positionalPositions = ExtractPositionalParameterPositions(sql);
+        if (positionalPositions.Length > 0)
+        {
+            var orderedValues = new object?[positionalPositions.Length];
+
+            // Numeric keys (0..N-1) preferred; otherwise use dictionary order.
+            bool numericKeysAvailable = true;
+            for (int i = 0; i < positionalPositions.Length; i++)
+            {
+                if (!normalized.ContainsKey(i.ToString()))
+                {
+                    numericKeysAvailable = false;
+                    break;
+                }
+            }
+
+            if (numericKeysAvailable)
+            {
+                for (int i = 0; i < positionalPositions.Length; i++)
+                {
+                    orderedValues[i] = normalized[i.ToString()];
+                }
+            }
+            else
+            {
+                int valueIndex = 0;
+                foreach (var value in normalized.Values)
+                {
+                    if (valueIndex >= orderedValues.Length)
+                    {
+                        break;
+                    }
+
+                    orderedValues[valueIndex++] = value;
+                }
+            }
+
+            return BindPositionalParameters(sql, positionalPositions, orderedValues);
+        }
+
+        return sql;
+    }
+    /// <summary>Extracts every named parameter token (@paramName) from SQL, outside string literals.</summary>
+    internal static List<(string name, int pos)> ExtractNamedParameterOccurrences(string sql)
+    {
+        var occurrences = new List<(string name, int pos)>();
+        bool inString = false;
+        char stringChar = '\0';
+
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+
+            // Skip string literals ('...' or "...").
+            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            {
+                if (!inString)
+                {
+                    inString = true;
+                    stringChar = c;
+                }
+                else if (c == stringChar)
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (inString || c != '@' || i + 1 >= sql.Length || !char.IsLetterOrDigit(sql[i + 1]))
+            {
+                continue;
+            }
+
+            int nameStart = i + 1;
+            int nameEnd = nameStart;
+            while (nameEnd < sql.Length && (char.IsLetterOrDigit(sql[nameEnd]) || sql[nameEnd] == '_'))
+            {
+                nameEnd++;
+            }
+
+            occurrences.Add((sql[nameStart..nameEnd], i));
+            i = nameEnd - 1;  // Skip past the parameter token
+        }
+
+        return occurrences;
+    }
+
+    /// <summary>Extracts positions of '?' placeholders from SQL, outside string literals.</summary>
+    internal static int[] ExtractPositionalParameterPositions(string sql)
+    {
+        var positions = new List<int>();
+        bool inString = false;
+        char stringChar = '\0';
+
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+
+            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            {
+                if (!inString)
+                {
+                    inString = true;
+                    stringChar = c;
+                }
+                else if (c == stringChar)
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (!inString && c == '?')
+            {
+                positions.Add(i);
+            }
+        }
+
+        return positions.ToArray();
+    }
+
+
+
+
 
     /// <summary>Formats a parameter value for SQL substitution.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

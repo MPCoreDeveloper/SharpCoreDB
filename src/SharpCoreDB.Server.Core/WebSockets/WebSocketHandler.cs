@@ -253,7 +253,7 @@ public sealed class WebSocketHandler(
             await using var connection = await _session!.DatabaseInstance
                 .GetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            var result = connection.Database.ExecuteQuery(request.Sql, []);
+            var result = connection.Database.ExecuteQuery(request.Sql, request.Parameters);
             var columns = result.Count > 0 ? result[0].Keys.ToList() : [];
 
             // Stream results in batches of 1000 rows
@@ -332,7 +332,7 @@ public sealed class WebSocketHandler(
             await using var connection = await _session!.DatabaseInstance
                 .GetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            connection.Database.ExecuteSQL(request.Sql);
+            connection.Database.ExecuteSQL(request.Sql, request.Parameters ?? new Dictionary<string, object?>());
 
             await SendResponseAsync(webSocket, new WebSocketResponse
             {
