@@ -47,8 +47,6 @@
     <Project Path="Examples/EventSourcing/OrderManagement.Tests/OrderManagement.Tests.csproj" />
     <Project Path="Examples/EventSourcing/OrderManagement/OrderManagement.csproj" />
   </Folder>
-  <Folder Name="/Examples/Mobile/" />
-  <Folder Name="/Examples/Snippets/" />
   <Folder Name="/Examples/Web/" />
   <Folder Name="/Examples/Web/OrchardCore/" />
   <Folder Name="/Examples/Web/OrchardCore/SharpCoreDb.Orchardcore/">
@@ -148,7 +146,5 @@
   <Folder Name="/tools/">
     <Project Path="tools/SharpCoreDB.DebugBenchmark/SharpCoreDB.DebugBenchmark.csproj" />
     <Project Path="tools/SharpCoreDB.Demo/SharpCoreDB.Demo.csproj" />
-    <Project Path="tools/SharpCoreDB.Viewer/SharpCoreDB.Viewer.csproj" />
-    <Project Path="tools/SharpCoreDB.WebViewer/SharpCoreDB.WebViewer.csproj" />
   </Folder>
 </Solution>

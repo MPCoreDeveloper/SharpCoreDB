@@ -323,61 +323,6 @@
       ]
     },
     {
-      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.Viewer/SharpCoreDB.Viewer.csproj",
-      "frameworks": [
-        {
-          "framework": "net10.0",
-          "topLevelPackages": [
-            {
-              "id": "Avalonia",
-              "requestedVersion": "12.0.4",
-              "resolvedVersion": "12.0.4"
-            },
-            {
-              "id": "Avalonia.Controls.DataGrid",
-              "requestedVersion": "12.0.0",
-              "resolvedVersion": "12.0.0"
-            },
-            {
-              "id": "Avalonia.Desktop",
-              "requestedVersion": "12.0.4",
-              "resolvedVersion": "12.0.4"
-            },
-            {
-              "id": "Avalonia.Diagnostics",
-              "requestedVersion": "11.3.17",
-              "resolvedVersion": "11.3.17"
-            },
-            {
-              "id": "Avalonia.Fonts.Inter",
-              "requestedVersion": "12.0.4",
-              "resolvedVersion": "12.0.4"
-            },
-            {
-              "id": "Avalonia.Themes.Fluent",
-              "requestedVersion": "12.0.4",
-              "resolvedVersion": "12.0.4"
-            },
-            {
-              "id": "CommunityToolkit.Mvvm",
-              "requestedVersion": "8.4.2",
-              "resolvedVersion": "8.4.2"
-            },
-            {
-              "id": "Microsoft.SourceLink.GitHub",
-              "requestedVersion": "10.0.300",
-              "resolvedVersion": "10.0.300"
-            },
-            {
-              "id": "Tmds.DBus.Protocol",
-              "requestedVersion": "0.94.2",
-              "resolvedVersion": "0.94.2"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.Demo/SharpCoreDB.Demo.csproj",
       "frameworks": [
         {
@@ -1715,56 +1660,6 @@
               "requestedVersion": "10.0.9",
               "resolvedVersion": "10.0.9"
             },
-            {
-              "id": "Microsoft.NET.Test.Sdk",
-              "requestedVersion": "18.6.0",
-              "resolvedVersion": "18.6.0"
-            },
-            {
-              "id": "Microsoft.SourceLink.GitHub",
-              "requestedVersion": "10.0.300",
-              "resolvedVersion": "10.0.300"
-            },
-            {
-              "id": "xunit.runner.visualstudio",
-              "requestedVersion": "3.1.5",
-              "resolvedVersion": "3.1.5"
-            },
-            {
-              "id": "xunit.v3",
-              "requestedVersion": "3.2.2",
-              "resolvedVersion": "3.2.2"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tools/SharpCoreDB.WebViewer/SharpCoreDB.WebViewer.csproj",
-      "frameworks": [
-        {
-          "framework": "net10.0",
-          "topLevelPackages": [
-            {
-              "id": "Microsoft.SourceLink.GitHub",
-              "requestedVersion": "10.0.300",
-              "resolvedVersion": "10.0.300"
-            },
-            {
-              "id": "SafeWebCore",
-              "requestedVersion": "1.3.0",
-              "resolvedVersion": "1.3.0"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "path": "D:/source/repos/MPCoreDeveloper/SharpCoreDB/tests/SharpCoreDB.Viewer.Tests/SharpCoreDB.Viewer.Tests.csproj",
-      "frameworks": [
-        {
-          "framework": "net10.0",
-          "topLevelPackages": [
             {
               "id": "Microsoft.NET.Test.Sdk",
               "requestedVersion": "18.6.0",
