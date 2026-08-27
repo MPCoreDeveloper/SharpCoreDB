@@ -1,4 +1,4 @@
-# Tool Compatibility Smoke Procedure v1.9.0
+# Tool Compatibility Smoke Procedure v1.9.5
 
 This folder contains repeatable assets for validating external tool compatibility against SharpCoreDB Server.
 

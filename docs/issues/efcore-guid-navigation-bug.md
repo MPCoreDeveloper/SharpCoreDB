@@ -101,7 +101,7 @@ High-level phases:
 `bug`, `ef-core-provider`, `guid`, `include`, `navigation`, `high-priority`
 
 ## Milestone
-Target: 1.10.0 or next patch after 1.9.0
+Target: 1.10.0 or next patch after 1.9.5
 
 ---
 

@@ -2,21 +2,21 @@
 
 Entity Framework Core 10 provider for `SharpCoreDB`.
 
-**Version:** `v1.9.4`
+**Version:** `v1.9.5`
 **Target framework:** `.NET 10`  
 **Status:** Production-ready provider package
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
 - ✅ Fixed EF Core materialization for aliased and quoted SELECT columns by normalizing DataReader column names and fallback value resolution.
 - ✅ Added targeted regression tests for aliased and qualified column lookup behavior.
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Patch updates in v1.9.4
-
-- ✅ Fixed critical bug where `Guid` foreign keys were not correctly persisted during `SaveChanges` when using `Include` + navigation filters (e.g. `Where(x => x.Vacancies.Any(v => v.IsActive))`).
 - Root cause: Raw `Guid` objects were not normalized to strings before being sent to the engine during INSERT (only `DateTime` had this protection).
 - Fix: Added `Guid` → canonical string normalization (`ToString("D")`) in `BuildParameterDictionary()` (both EF and raw ADO.NET command layers).
 - The recommended pattern now works reliably with `Guid` primary keys and foreign keys:
@@ -41,7 +41,7 @@ Entity Framework Core 10 provider for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.4
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.5
 ```
 
 ## DateTime Handling (Reliable Pattern)

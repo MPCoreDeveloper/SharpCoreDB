@@ -6,48 +6,48 @@
 
 ## 📊 Executive Summary
 
-### Het Kernprobleem
-SharpCoreDB heeft **drie verschillende query execution paths** die dezelfde logica dupliceren:
+### The Core Problem
+SharpCoreDB has **three different query execution paths** that duplicate the same logic:
 
 1. **Basic Parser** (`SqlParser.DML.cs` → `ExecuteSelectQuery`)
-   - Voor eenvoudige SELECT queries zonder JOINs
-   - Gebruikt string splitting en regex
-   - Snelste pad voor simple queries
+   - For simple SELECT queries without JOINs
+   - Uses string splitting and regex
+   - Fastest path for simple queries
 
 2. **Enhanced Parser** (`EnhancedSqlParser` → `HandleDerivedTable` → `AstExecutor`)
-   - Voor JOINs, subqueries, en complexe queries
-   - Gebruikt AST (Abstract Syntax Tree)
-   - Meer flexibel maar slower
+   - For JOINs, subqueries, and complex queries
+   - Uses AST (Abstract Syntax Tree)
+   - More flexible but slower
 
 3. **Aggregate Parser** (`ExecuteAggregateQuery` + `ExecuteCountStar`)
-   - Voor COUNT(*), SUM(), AVG(), etc.
-   - Speciale logic voor GROUP BY
+   - For COUNT(*), SUM(), AVG(), etc.
+   - Special logic for GROUP BY
    - Separate code path
 
-### Waarom Dit Een Probleem Is
+### Why This Is a Problem
 
-**❌ Code Duplicatie:**
+**❌ Code Duplication:**
 ```
 ExecuteSelectQuery (line 305-368)     → Basic JOIN check
 HandleDerivedTable  (line 440-463)    → Calls Enhanced Parser
 RequiresEnhancedParser (NEW)          → Centralized check (INCOMPLETE)
 ```
 
-**❌ Inconsistent Gedrag:**
-- **Demo's** gebruiken vaak `HandleDerivedTable` (via interactive prompts)
-- **Unit tests** roepen direct `ExecuteSelectQuery` aan
-- **Fixes** worden toegepast op één pad, maar niet op anderen
+**❌ Inconsistent Behavior:**
+- **Demos** often use `HandleDerivedTable` (via interactive prompts)
+- **Unit tests** call `ExecuteSelectQuery` directly
+- **Fixes** are applied to one path, but not to others
 
-**❌ Resultaat:**
-> "Het rare vind ik dat ik het gevoel heb dat ik steeds op dezelfde problemen stuit, we lossen ze op vinden andere problemen in die run dan draai ik een demo het werkt, vervolgens een test en dan heb ik weer hetzelfde probleem"
+**❌ Result:**
+> "I keep running into the same issues; we fix them, find other problems in that run, then I run a demo and it works, then a test and I hit the same problem again"
 
 ---
 
-## 🎯 Oplossing: Centralized Query Router Pattern
+## 🎯 Solution: Centralized Query Router Pattern
 
-### Architectuur Beeld
+### Architecture Overview
 
-**VOOR (Current - Chaotic):**
+**BEFORE (Current - Chaotic):**
 ```
                     ┌────────────────────────┐
                     │   ExecuteSelectQuery   │
@@ -69,7 +69,7 @@ RequiresEnhancedParser (NEW)          → Centralized check (INCOMPLETE)
           └──────────────────────┘
 ```
 
-**NA (Proposed - Clean):**
+**AFTER (Proposed - Clean):**
 ```
                     ┌──────────────────────────┐
                     │  ExecuteSelectQuery      │
@@ -92,9 +92,9 @@ RequiresEnhancedParser (NEW)          → Centralized check (INCOMPLETE)
 
 ## 📝 Implementation Plan
 
-### Phase 1: Stabilisatie (Week 1) ✅ **COMPLETED**
+### Phase 1: Stabilization (Week 1) ✅ **COMPLETED**
 
-**Doel:** Stop de bloeding - zorg dat de huidige code stabiel is.
+**Goal:** Stop the bleeding - make the current code stable.
 
 #### ✅ Step 1.1: CREATE UNIQUE INDEX Fix
 ```csharp
@@ -132,10 +132,10 @@ public void ExecuteSelectQuery_SubqueryInFrom_UsesEnhancedParser()
 **Status:** 📋 TODO
 
 #### ⏳ Step 1.3: Document Current Routing Logic
-Create `docs/architecture/CURRENT_QUERY_ROUTING.md` met:
-- Flowchart van alle routing paths
-- Decision matrix: Welke queries gebruiken welk pad?
-- Performance metingen per pad
+Create `docs/architecture/CURRENT_QUERY_ROUTING.md` with:
+- Flowchart of all routing paths
+- Decision matrix: Which queries use which path?
+- Performance measurements per path
 
 **Status:** 📋 TODO
 

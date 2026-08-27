@@ -1,18 +1,23 @@
-# SharpCoreDB.Data.Provider v1.9.0
+# SharpCoreDB.Data.Provider v1.9.5
 
 **ADO.NET Data Provider for SharpCoreDB**
 
 Complete ADO.NET provider enabling standard database connectivity patterns with SharpCoreDB's encryption and performance.
 
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.9.0
+## Features
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.9.0
+
+- ✅ Inherits metadata improvements from SharpCoreDB v1.9.5
 - ✅ Enterprise connectivity features
 - ✅ Full ADO.NET compatibility
 - ✅ Zero breaking changes
@@ -53,14 +58,14 @@ while (reader.Read())
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.9.4
+dotnet add package SharpCoreDB.Data.Provider --version 1.9.5
 ```
 
-**Requires:** SharpCoreDB v1.9.4+
+**Requires:** SharpCoreDB v1.9.5+
 
 ---
 
-**Version:** 1.9.0 | **Status:** ✅ Production Ready
+**Version:** 1.9.5 | **Status:** ✅ Production Ready
 
 
 

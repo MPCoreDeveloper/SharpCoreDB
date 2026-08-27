@@ -15,9 +15,9 @@ This directory contains examples demonstrating how to use @sharpcoredb/client to
 - Connection pooling patterns
 - Error handling and latency checks
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Example docs aligned to the current `v1.9.0` server/client release line
+- Example docs aligned to the current `v1.9.5` server/client release line
 - References updated for gRPC-first server usage
 
 ## Prerequisites

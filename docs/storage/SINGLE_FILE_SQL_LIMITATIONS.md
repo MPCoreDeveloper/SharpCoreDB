@@ -222,5 +222,5 @@ storage backend.
 
 ---
 
-*Last updated: v1.9.0*
+*Last updated: v1.9.5*
 

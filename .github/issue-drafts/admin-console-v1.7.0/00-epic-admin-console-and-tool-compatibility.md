@@ -19,6 +19,11 @@ Resolved workstreams in repository:
 
 All workstreams complete. Epic 100% delivered for v1.7.0.
 
+> **🔎 Note (2026-08-27):** the viewer workstreams (06/07/08) have since **moved to the
+> standalone repo [MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS)** — the code
+> (`tools/SharpCoreDB.Viewer`, `tools/SharpCoreDB.WebViewer`, `tests/SharpCoreDB.Viewer.Tests`) was
+> removed from this repo. See `docs/SCDMS.md`. This document is historical and describes the v1.7.0 planning.
+
 This roadmap is based on current `v1.7.0` behavior:
 - `tools/SharpCoreDB.Viewer` exists but remains minimal.
 - Server binary protocol is PostgreSQL-wire-compatible in foundation form.

@@ -11,16 +11,21 @@ Full EF Core integration with SharpCoreDB's encryption and performance for moder
 - Root cause was missing Guid normalization during INSERT parameter binding (now aligned with DateTime handling).
 - The recommended pattern now works reliably with Guid primary keys and foreign keys.
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.5
 
 - ✅ Fixed EF Core materialization for aliased and quoted SELECT columns by normalizing DataReader column names and fallback value resolution.
 - ✅ Added targeted regression tests for aliased and qualified column lookup behavior.
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.9.0
+## Features
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.9.0
+
+- ✅ Inherits metadata improvements from SharpCoreDB v1.9.5
 - ✅ Entity Framework Core integration
 - ✅ Enterprise distributed features support
 - ✅ Zero breaking changes
@@ -66,7 +71,7 @@ var users = await context.Users.Where(u => u.IsActive).ToListAsync();
 dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.1
 ```
 
-**Requires:** SharpCoreDB v1.9.4+, EntityFrameworkCore v8.0+
+**Requires:** SharpCoreDB v1.9.5+, EntityFrameworkCore v8.0+
 
 ---
 

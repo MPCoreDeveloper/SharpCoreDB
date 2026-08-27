@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-08-27
+
+### Added
+- **Regression tests for parameter binding**: `ParametricInsertTests` (9 tests) round-trip
+  parameterized INSERT/SELECT/UPDATE with 4–11 named parameters and assert the values land in the
+  columns the SQL specifies.
+- **Regression tests for server parameter pass-through**: `ParameterRoundTripTests` (2 tests)
+  validate parameterized INSERT + SELECT over gRPC.
+- **ULID specification compatibility tests**: 6 new tests in `UlidTests` validate generation,
+  parsing and timestamp extraction against the official ULID test vector
+  (`0000XSNJG0MQJHBF4QX1EFD6Y3` / timestamp `1000000000` ms), the 128-bit range (`7ZZZ…Z` accepted,
+  `8ZZZ…Z` rejected) and the 48-bit timestamp limit.
+
+### Fixed
+- **Issue 336 — parameterized INSERT bound values to the wrong columns**: `SqlParser.BindParameters`
+  used substring-based replacement, so a parameter name that is a prefix of another (`@t` vs `@tid`)
+  corrupted the longer placeholder (e.g. `@tid` → `200id`). Binding is now token-aware via
+  `ParameterBinder.Bind` — the single source of truth for named and positional parameters — and
+  replaces every occurrence of each placeholder.
+- **Issue 337 — SharpCoreDB.Server dropped `request.Parameters`**: `DatabaseService.ExecuteQuery` and
+  `ExecuteNonQuery` now translate `request.Parameters` into the parameter dictionary expected by the
+  engine. The binary protocol handler now parses bind-message parameter values (and `$n` placeholders)
+  and forwards them, and the WebSocket handler forwards parameters as well.
+- **ULID encoding was not standards-compliant**: the Crockford Base32 encoder/decoder treated a ULID
+  as a plain 128-bit bit stream (RFC-4648 style), so generated ULIDs were not interchangeable with
+  other standards-compliant implementations (Python/Java/Go). Encoding now follows the ULID
+  specification — the first character carries only 3 significant bits — and decoding rejects values
+  above the 128-bit range. `Ulid.NewUlid(long)` also enforces the 48-bit timestamp limit.
+  *Breaking change vs 1.9.4 for previously stored ULID strings, mirroring posseth.global.ulid v2.0.0.*
+- **Upgrade path for legacy ULIDs**: new `Ulid.FromLegacy(string)` / `Ulid.TryFromLegacy(...)` convert
+  ULIDs generated before 1.9.5 into the current spec-compliant encoding. The 128-bit value
+  (timestamp + randomness) is preserved exactly — only the Base32 text changes — so existing
+  `_rowid` values and ULID columns can be migrated one-to-one. The legacy encoder/decoder is kept as
+  `Base32.LegacyEncode`/`Base32.LegacyDecode` for migration tooling.
+- **Automatic legacy-database detection and one-shot ULID migration**: `Database.NeedsLegacyUlidMigration()`
+  tells you whether a database was created before 1.9.5 — the ULID encoding generation is recorded in
+  the database metadata (directory mode) and in the file-header feature flags (single-file `.scdb` mode),
+  so no schema or version guessing is needed. `Database.MigrateLegacyUlids()` rewrites every ULID value
+  in every `ULID`-typed column of every table (including hidden `_rowid` primary keys) to the
+  spec-compliant encoding, preserving the 128-bit value exactly, and permanently marks the database as
+  migrated (subsequent calls are no-ops). Run it once right after upgrading, before writing new rows;
+  ULIDs mirrored in plain `TEXT` columns are not rewritten automatically and should be converted with
+  `Ulid.FromLegacy` by the application.
+- **Flaky `QueryCache_CacheSizeLimit_EvictsLeastUsed`**: the shared (static) trigger registry could
+  leak a trigger registered by another test into parallel test runs ("Table audit_log does not
+  exist"). Trigger tests now run serialized (`SerialTriggerTests` collection) and clear the registry
+  in both setup and teardown.
+
+### Changed
+- **Graphical UI moved to SCDMS**: `tools/SharpCoreDB.Viewer` (Avalonia desktop viewer),
+  `tools/SharpCoreDB.WebViewer` (Razor Pages web admin portal), `tests/SharpCoreDB.Viewer.Tests` and
+  `docs/viewer/*` were removed from this repository. The UI now lives in the standalone repo
+  [MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS). See `docs/SCDMS.md`.
+- **Documentation is now English-only**: all Dutch-language documentation was translated, including
+  the SCDMS migration note, the Examples hub README and the query-routing refactoring plan.
+- **NuGet dependencies updated** to their latest stable versions across the whole repository
+  (`Directory.Packages.props` and `SharpCoreDB.AppHost`): Aspire.Hosting.AppHost 13.5.3 +
+  Aspire.AppHost.Sdk 13.5.3, AWSSDK.Core 4.0.102.1, BLite 5.0.9, MessagePack 3.1.8,
+  Microsoft.EntityFrameworkCore.InMemory 10.0.11; the script-client versions (JS `package.json`,
+  Python `pyproject.toml`) were synchronized to 1.9.5 and the legacy `SharpCoreDB.nuspec` dependency
+  pins were refreshed. Unused Avalonia-related package pins from the removed viewer were deleted.
+- **Full version synchronization to 1.9.5** across all packages, internal project references,
+  `PackageReleaseNotes`, documentation, NuGet READMEs and test projects.
+
+
 ## [1.9.4] - 2026-08-22
 
 ### Added

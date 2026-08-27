@@ -5,13 +5,13 @@
 
   **Dapper Integration · Health Checks · Repository Pattern · Bulk Operations · Performance Monitoring · FluentMigrator**
 
-  **Version:** 1.9.0  
+  **Version:** 1.9.5  
   **Status:** Production Ready ✅
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/download)
   [![C#](https://img.shields.io/badge/C%23-14-blueviolet.svg)](https://learn.microsoft.com/dotnet/csharp/)
-  [![NuGet](https://img.shields.io/badge/NuGet-1.9.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
+  [![NuGet](https://img.shields.io/badge/NuGet-1.9.5-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Extensions)
 
 </div>
 
@@ -20,14 +20,14 @@
 Convenience extensions package for `SharpCoreDB`.
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Features
-
-- Dapper integration helpers
 - ASP.NET Core health check integration
 - FluentMigrator integration hooks (optional)
 - Repository/bulk utility helpers for common workflows
@@ -68,17 +68,17 @@ services.Configure<ProcessorOptions>(options =>
 
 Explicit configuration is preserved and is not overwritten by the extension.
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Package/docs synchronized to `v1.9.0`
+- Package/docs synchronized to `v1.9.5`
 - Guidance updated for optional migration/health scenarios
 - FluentMigrator now defaults to SQLite syntax compatibility when using `AddSharpCoreDBFluentMigrator()`
-- Inherits core reliability improvements from SharpCoreDB v1.9.0
+- Inherits core reliability improvements from SharpCoreDB v1.9.5
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 1.9.0
+dotnet add package SharpCoreDB.Extensions --version 1.9.5
 ```
 
 ## Documentation

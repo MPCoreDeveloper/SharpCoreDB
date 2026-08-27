@@ -2,18 +2,18 @@
 
 Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 
-**Version:** `v1.9.4`
+**Version:** `v1.9.5`
 **Package:** `SharpCoreDB.Graph.Advanced`
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Features
-
-- Community detection: Louvain, Label Propagation, Connected Components
 - Centrality metrics: Degree, Betweenness, Closeness, Eigenvector, Clustering
 - Subgraph analysis: K-core, clique, and triangle detection
 - Graph-aware ranking for GraphRAG workflows
@@ -21,14 +21,14 @@ Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 
 ## What's new in v1.9.1
 
-- Advanced graph analytics package aligned with the `v1.9.0` ecosystem release line
+- Advanced graph analytics package aligned with the `v1.9.5` ecosystem release line
 - Maintained GraphRAG SQL registration guidance for DI-based applications
 - Documentation consolidated around current graph, vector, and observability workflows
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.5
 ```
 
 ## Quick start

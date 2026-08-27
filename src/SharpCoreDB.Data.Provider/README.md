@@ -5,7 +5,7 @@
 
   **ADO.NET Data Provider for SharpCoreDB**
 
-  **Version:** 1.9.0  
+  **Version:** 1.9.5  
   **Status:** Production Ready ✅
 
   [![NuGet Version](https://img.shields.io/nuget/v/SharpCoreDB.Data.Provider)](https://www.nuget.org/packages/SharpCoreDB.Data.Provider)
@@ -19,14 +19,14 @@
 ---
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Overview
-
-Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encrypted embedded database engine. Use standard `DbConnection`, `DbCommand`, `DbDataReader` APIs with:
 
 - ✅ **Full ADO.NET Compliance** - Standard interfaces
 - ✅ **Connection Pooling** - Efficient resource management
@@ -41,9 +41,9 @@ Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encryp
 
 ---
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Package version standardized to `v1.9.0`
+- Package version standardized to `v1.9.5`
 - Documentation refreshed to align with current provider behavior
 - Inherits core metadata durability and parser reliability fixes
 
@@ -52,7 +52,7 @@ Complete ADO.NET Data Provider for **SharpCoreDB** — a high-performance encryp
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.9.0
+dotnet add package SharpCoreDB.Data.Provider --version 1.9.5
 ```
 
 **Requirements:** .NET 10.0+
@@ -246,7 +246,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** April 26, 2026 | Version 1.9.0
+**Last Updated:** April 26, 2026 | Version 1.9.5
 
 
 

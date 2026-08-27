@@ -8,13 +8,13 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Extensions</PackageId>
-    <Version>1.9.4</Version>
+    <Version>1.9.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Extensions</Product>
     <Description>Extensions for SharpCoreDB including Dapper integration and ASP.NET Core health checks. Built for .NET 10 with C# 14. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices with platform-specific optimizations.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.4: Known-issue fixes (opt-in at-rest per-record encryption EnableAtRestRecordEncryption, opt-in SQLite integer affinity UseSqliteIntegerAffinity, reopen-insert AOORE fix, functional single-file point operations, ExecuteQuery batch flush, SQL validator @-prefix normalization), single-file to directory SQL parity (LIKE/IS NULL/NOT NULL/BETWEEN), and version synchronization to 1.9.4 across all packages, documentation and tests.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.5: Fixes parameterized query binding (token-aware named-parameter replacement, resolving @t/@tid collisions), forwards request parameters through the server (gRPC, binary protocol, WebSocket), makes ULID encoding standards-compliant (Crockford Base32 per the ULID spec), removes the legacy UI (moved to SCDMS), documentation is now English-only, and NuGet dependencies updated.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;database;dapper;healthchecks;extensions;net10;csharp14;android;ios;mobile;iot;arm64;x64</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

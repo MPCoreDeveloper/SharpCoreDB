@@ -194,7 +194,7 @@ The optional web admin is served on the HTTPS API port (8443) at the `/admin` pa
 | Large object API (`lo_*` functions) | Tools that use LOBs | Store binary data as `BLOB` columns; use file-system or object store for large files. |
 | Scrollable/updatable cursors | Some BI tools (Tableau live queries) | Use Import mode instead of Live Query in BI tools that require scrollable cursors. |
 | Some `pg_catalog` views return fewer columns | DataGrip, pgAdmin DDL editor | Minor cosmetic warnings; queries execute correctly. Tracked for v1.7.0 catalog expansion. |
-| `pg_dump` schema-only mode may miss custom types | pg_dump `--schema-only` | Run `SHOW CREATE TABLE` in SharpCoreDB Viewer for accurate DDL. |
+| `pg_dump` schema-only mode may miss custom types | pg_dump `--schema-only` | Run `SHOW CREATE TABLE` in SCDMS (the management UI, github.com/MPCoreDeveloper/SCDMS) for accurate DDL. |
 | HeidiSQL metadata queries may time out | HeidiSQL | Increase HeidiSQL "Net read timeout" to 30s in connection settings. |
 | Case-sensitive identifiers | Tools sending double-quoted names | SharpCoreDB is case-insensitive for unquoted identifiers; double-quoted names are case-sensitive. |
 
@@ -240,18 +240,11 @@ Key metrics available:
 | `protocol_binary_requests` | Binary protocol request count |
 | `protocol_https_requests` | HTTP REST request count |
 
-### SharpCoreDB Viewer Diagnostics
+### Management UI (SCDMS)
 
-From the Viewer tool (SharpCoreDB.Viewer):
-1. Connect to a database.
-2. Toolbar → **Diagnostics** (ℹ️ icon).
-3. Click **Run Diagnostics** to capture:
-   - Page count, page size, total storage size.
-   - Cache size, journal mode.
-   - Integrity check status.
-   - Table row counts.
-4. Use **Optimize Database** or **Checkpoint WAL** to run admin operations.
-5. Use **Export Snapshot** to save a JSON diagnostics snapshot for offline analysis.
+The graphical management UI (formerly **SharpCoreDB.Viewer** / **SharpCoreDB.WebViewer**) has moved
+to the standalone repo **[MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS)**.
+Diagnostics, database optimization (Optimize / Checkpoint WAL) and snapshot export live there.
 
 ---
 

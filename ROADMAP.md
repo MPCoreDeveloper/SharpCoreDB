@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v1.9.4 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v1.9.5 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 
@@ -67,7 +67,9 @@
 - ✅ **Time-series cold tiering** — `BucketTier.Hot/Cold`, archival manager, retention policies (`src/SharpCoreDB/TimeSeries/`)
 
 ### Tooling
-- ✅ **`SharpCoreDB.WebViewer`** — Razor Pages admin portal (table browser, query runner, live connection status)
+> **Note:** the graphical UI (formerly `SharpCoreDB.Viewer` / `SharpCoreDB.WebViewer`) has moved to
+> the standalone repo **[MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS)**.
+- ✅ **SCDMS** — management UI (Razor Pages web admin portal: table browser, query runner, live connection status)
 - ✅ **.NET client SDK** (`SharpCoreDB.Client`, ADO.NET-style)
 - ✅ **JavaScript/TypeScript SDK** (npm)
 - ✅ **Python client** (`PySharpDB`)
@@ -77,8 +79,8 @@
 ## 🔶 In Progress
 
 ### Visual Query Execution Plan Explorer
-- **Status:** Plan cache and optimizer internals exist; WebViewer UI not yet built
-- **What's needed:** Tree/graph view in WebViewer showing join types, cost estimates, and row counts per node — similar to pgAdmin's EXPLAIN visualizer
+- **Status:** Plan cache and optimizer internals exist; SCDMS UI not built yet
+- **What's needed:** Tree/graph view in SCDMS showing join types, cost estimates, and row counts per node — similar to pgAdmin's EXPLAIN visualizer
 - **Tracking:** [#issue](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
 
 ### Column-Level Security (CLS)
@@ -119,10 +121,10 @@
 
 ---
 
-### Visual Query Execution Plan Explorer (WebViewer)
+### Visual Query Execution Plan Explorer (SCDMS)
 > **Why:** `QueryPlanCache` and `ExecutionPlan` already expose all node data. Only the UI is missing.
 
-- Interactive tree/graph visualizer in WebViewer
+- Interactive tree/graph visualizer in SCDMS
 - Show operator type, estimated/actual row count, cost, index used
 - Highlight bottleneck nodes (slowest % of total cost)
 - Export plan as JSON or SVG
@@ -166,7 +168,7 @@
 ---
 
 ### Deep Query Execution Plan Visualizer (Advanced)
-> Beyond the near-term WebViewer plan explorer — advanced profiling tooling.
+> Beyond the near-term SCDMS plan explorer — advanced profiling tooling.
 
 - Runtime query profiling with actual vs estimated row counts
 - Per-operator memory and CPU time breakdown
@@ -185,8 +187,8 @@
 
 ---
 
-### Management Dashboard Expansion (WebViewer Pro)
-> **Status:** WebViewer ships today. These are planned additions.
+### Management Dashboard Expansion (SCDMS Pro)
+> **Status:** SCDMS (the management UI) has moved to github.com/MPCoreDeveloper/SCDMS. These additions are planned in SCDMS.
 
 - 📊 Live connection monitor (active queries, blocked sessions, lock waits)
 - 📈 Performance dashboard (QPS, latency P50/P95/P99, cache hit rate)
@@ -227,7 +229,7 @@ These are ideas raised by the community that need more design work or votes befo
 
 | Version | Focus |
 |---------|-------|
-| **v2.0** | Let's Encrypt/ACME, Visual EXPLAIN in WebViewer, Column-Level Security |
+| **v2.0** | Let's Encrypt/ACME, Visual EXPLAIN in SCDMS, Column-Level Security |
 | **v2.1** | Enterprise Backup Orchestrator, Backup retention + remote targets |
 | **v2.2** | PITR (requires v2.1 backup foundation) |
 | **v2.x** | Automated Data Tiering, full OTel distributed tracing, advanced plan profiling |

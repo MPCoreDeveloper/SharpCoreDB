@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
 
     <PackageId>SharpCoreDB.Functional.EntityFrameworkCore</PackageId>
-    <Version>1.9.4</Version>
+    <Version>1.9.5</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Functional.EntityFrameworkCore</Product>
     <Description>Entity Framework Core adapter for SharpCoreDB.Functional with zero-dependency Option/Fin APIs and fluent functional composition for .NET 10 and C# 14.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.4: Known-issue fixes (opt-in at-rest per-record encryption EnableAtRestRecordEncryption, opt-in SQLite integer affinity UseSqliteIntegerAffinity, reopen-insert AOORE fix, functional single-file point operations, ExecuteQuery batch flush, SQL validator @-prefix normalization), single-file to directory SQL parity (LIKE/IS NULL/NOT NULL/BETWEEN), and version synchronization to 1.9.4 across all packages, documentation and tests.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.5: Fixes parameterized query binding (token-aware named-parameter replacement, resolving @t/@tid collisions), forwards request parameters through the server (gRPC, binary protocol, WebSocket), makes ULID encoding standards-compliant (Crockford Base32 per the ULID spec), removes the legacy UI (moved to SCDMS), documentation is now English-only, and NuGet dependencies updated.</PackageReleaseNotes>
     <PackageTags>sharpcoredb;functional;entityframeworkcore;efcore;option;fin;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

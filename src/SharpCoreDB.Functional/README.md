@@ -2,32 +2,32 @@
 
 Functional facade for `SharpCoreDB`.
 
-**Version:** `v1.9.4`
+**Version:** `v1.9.5`
 **Package:** `SharpCoreDB.Functional`
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Features
-
-- Functional wrappers for database workflows
 - Core types: `Option<T>`, `Fin<T>`, `Seq<T>`, and `Unit`
 - Functional query/command style extensions over `Database` and `IDatabase`
 - Works as base module for Dapper and EF Core functional adapters
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Functional package introduced and aligned to `v1.9.0`
+- Functional package introduced and aligned to `v1.9.5`
 - Documentation aligned with modular adapter ecosystem
 - Maintains optional architecture with transitive dependency flow
 
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.9.0
+dotnet add package SharpCoreDB.Functional --version 1.9.5
 ```
 
 ## Related packages
@@ -50,7 +50,7 @@ dotnet add package SharpCoreDB.Functional --version 1.9.0
 - `DeleteAsync(...) -> Task<Fin<Unit>>`
 - `CountAsync(...) -> Task<long>`
 
-## Functional SQL Syntax (v1.9.0)
+## Functional SQL Syntax (v1.9.5)
 
 The functional facade supports SQL extensions that map directly to `Option<T>` behavior.
 

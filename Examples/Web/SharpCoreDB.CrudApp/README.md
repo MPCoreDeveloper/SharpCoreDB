@@ -1,4 +1,4 @@
-# SharpCoreDB.CrudApp (v1.9.0)
+# SharpCoreDB.CrudApp (v1.9.5)
 
 `SharpCoreDB.CrudApp` is an ASP.NET Core MVC (.NET 10) showcase for:
 

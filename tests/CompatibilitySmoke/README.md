@@ -1,7 +1,7 @@
 # SharpCoreDB Compatibility Smoke Tests
 
 **Location:** `tests/CompatibilitySmoke/`  
-**Version:** v1.9.0  
+**Version:** v1.9.5  
 **Purpose:** Validate protocol handshake, simple query, and metadata discovery against a live SharpCoreDB Server instance.
 
 ---

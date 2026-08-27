@@ -29,6 +29,10 @@ A production-focused stack validated by **2,223 tests** and **backward compatibi
 
 ---
 
+> **🖥️ Looking for the graphical UI?** The `SharpCoreDB.Viewer` / `SharpCoreDB.WebViewer` projects have
+> moved to the standalone repo **[MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS)**.
+> This repository now contains only the engine, providers, and server. See [docs/SCDMS.md](docs/SCDMS.md).
+
 ## Why SharpCoreDB?
 
 - **One stack, two deployment models**: embedded and server mode
@@ -54,7 +58,7 @@ A production-focused stack validated by **2,223 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.4
+dotnet add package SharpCoreDB --version 1.9.5
 ```
 
 ```csharp
@@ -82,8 +86,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.4
-dotnet add package SharpCoreDB.Client --version 1.9.4
+dotnet add package SharpCoreDB.Server --version 1.9.5
+dotnet add package SharpCoreDB.Client --version 1.9.5
 ```
 
 ---
@@ -105,17 +109,19 @@ dotnet add package SharpCoreDB.Client --version 1.9.4
 
 ---
 
-## v1.9.4 release (current)
+## v1.9.5 release (current)
 
-- **Full version synchronization to 1.9.4** across all packages (core, Server, Client, Analytics, VectorSearch, Graph, EF Core provider, Identity, EventSourcing, Projections, CQRS, Functional family including the new `SharpCoreDB.Functional.Linq2DB`, and more), internal project references, PackageReleaseNotes, and test projects.
-- **Bug fixes and stability improvements**:
-  - Resolved several bugs and stability issues in `SharpCoreDB.Identity` (enhanced persistence, user/role management, password handling, and test coverage for concurrency scenarios; core identity surface now at 100% pass rate in key areas).
-  - Multiple fixes and enhancements in the `SharpCoreDB.EntityFrameworkCore` provider (improved Guid-keyed entity relationships, transaction handling, and end-to-end integration reliability).
-- **Extensive updates and changes**: Comprehensive refresh of all documentation (root README, package READMEs/NuGet.README.md files, USAGE guides, script client docs for Python/JS, and hub files like docs/INDEX.md and docs/README.md) with 1.9.4 install instructions, release labels, and notes. Updated test project infrastructure across the board.
-- **Test infrastructure modernization for security and standards**: All test projects updated to latest compliant versions of Microsoft.NET.Test.Sdk (18.6.0+), xunit.v3 (3.2.2+), xunit.runner.visualstudio (3.1.5+), coverlet.collector, and related packages to align with current .NET 10 / C# 14 security best practices and compatibility requirements.
-- **Test count and quality**: **2,223 tests** passing (verified and now prominently documented; significant increase in coverage and stability reporting from the prior 2,000+ baseline).
-- Changes from 1.9.1 to 1.9.4 (including the above bug resolutions, dependency updates, and documentation overhaul) are detailed in this section and `docs/CHANGELOG.md`.
-- **2,223 tests passing**, **zero breaking changes**, **100% backward compatible**.
+- **Full version synchronization to 1.9.5** across all packages (core, Server, Client, Analytics, VectorSearch, Graph, EF Core provider, Identity, EventSourcing, Projections, CQRS, Functional family including the new `SharpCoreDB.Functional.Linq2DB`, and more), internal project references, PackageReleaseNotes, and test projects.
+- **Bug fixes**:
+  - **Parameterized INSERT bound values to the wrong columns** (Issue #336): named-parameter binding is now token-aware, so a parameter name that is a prefix of another (e.g. `@t` vs `@tid`) no longer corrupts the longer placeholder.
+  - **SharpCoreDB.Server dropped `request.Parameters`** (Issue #337): parameters are now forwarded on the gRPC `ExecuteQuery`/`ExecuteNonQuery`, the binary (PostgreSQL) protocol and the WebSocket handler.
+  - **ULID encoding is now standards-compliant**: the Crockford Base32 encoder/decoder follows the ULID specification (first character carries 3 significant bits), so generated ULIDs are interchangeable with Python/Java/Go implementations; decoding rejects values above the 128-bit range and timestamps above 2^48−1 are rejected. *(Note: ULIDs generated before 1.9.5 are not spec-compliant; this mirrors the `posseth.global.ulid` v2.0.0 fix.)* **Upgrade path:** use `Ulid.FromLegacy(string)` / `Ulid.TryFromLegacy(...)` to convert pre-1.9.5 ULIDs to the current encoding — the 128-bit value (timestamp + randomness) is preserved exactly, so existing `_rowid` values and ULID columns can be migrated one-to-one. Legacy databases are detected automatically: `Database.NeedsLegacyUlidMigration()` reports whether a database was created before 1.9.5 (the ULID encoding generation is recorded in the database metadata for directory mode and in the file-header feature flags for single-file `.scdb` mode), and `Database.MigrateLegacyUlids()` rewrites every ULID value in every ULID-typed column of every table (including hidden `_rowid` primary keys) and permanently marks the database as migrated. Run it once right after upgrading, before writing new rows.
+- **UI moved to SCDMS**: the graphical UI (formerly `SharpCoreDB.Viewer` / `SharpCoreDB.WebViewer`) has moved to the standalone repo [MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS); this repository now contains only the engine, providers and server. See `docs/SCDMS.md`.
+- **Documentation is now English-only** and updated to the 1.9.5 state (root README, package READMEs/NuGet.README.md files, USAGE guides, script client docs for Python/JS, hub files and the changelog).
+- **NuGet dependencies updated** to their latest stable versions (Aspire 13.5.3, AWSSDK.Core, BLite, MessagePack, EF Core InMemory 10.0.11, Aspire.AppHost.Sdk 13.5.3); unused Avalonia-related package pins from the removed viewer were deleted.
+- **Tests**: the full test suite passes — **2,491 tests, 0 failures** — including new regression tests for parameter binding, server parameter pass-through, ULID specification compatibility and the automatic legacy-ULID migration.
+- Changes from 1.9.1 to 1.9.5 (including the above bug resolutions, dependency updates, and documentation overhaul) are detailed in this section and `docs/CHANGELOG.md`.
+- **100% backward compatible** with the exception of ULID strings generated before 1.9.5 (see the ULID note above).
 
 ---
 
@@ -216,43 +222,43 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 ### Quality and compatibility
 
 - **2,223 tests passing**
-- **100% backward compatible** across the v1.9.4 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.4
+- **100% backward compatible** across the v1.9.5 release line
+- Zero breaking changes intended from v1.5.0 to v1.9.5
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.4)
+## Available NuGet packages (v1.9.5)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.4
+dotnet add package SharpCoreDB --version 1.9.5
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.4
-dotnet add package SharpCoreDB.Client --version 1.9.4
+dotnet add package SharpCoreDB.Server --version 1.9.5
+dotnet add package SharpCoreDB.Client --version 1.9.5
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.4
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.4
-dotnet add package SharpCoreDB.Graph --version 1.9.4
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.4
-dotnet add package SharpCoreDB.Distributed --version 1.9.4
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.4
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.4
-dotnet add package SharpCoreDB.Extensions --version 1.9.4
+dotnet add package SharpCoreDB.Analytics --version 1.9.5
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.5
+dotnet add package SharpCoreDB.Graph --version 1.9.5
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.5
+dotnet add package SharpCoreDB.Distributed --version 1.9.5
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.5
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.5
+dotnet add package SharpCoreDB.Extensions --version 1.9.5
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.4
-dotnet add package SharpCoreDB.Projections --version 1.9.4
-dotnet add package SharpCoreDB.CQRS --version 1.9.4
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.5
+dotnet add package SharpCoreDB.Projections --version 1.9.5
+dotnet add package SharpCoreDB.CQRS --version 1.9.5
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.4
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.4
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.4
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.4
+dotnet add package SharpCoreDB.Functional --version 1.9.5
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.5
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.5
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.5
 ```
 
 ---
@@ -267,7 +273,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.4
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.4 release (version bump prep, docs sync, test count 2,223, release readiness), see the v1.9.4 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.5 release (version bump prep, docs sync, test count 2,223, release readiness), see the v1.9.5 section above and docs/CHANGELOG.md.
 
 ---
 
@@ -284,7 +290,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.4
 - Migration docs: `docs/migration/README.md`
 - Single-file SQL support and limits: `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
-- **New in v1.9.4**: `SharpCoreDB.Functional.Linq2DB` — production-ready linq2db adapter with `Option<T>`/`Fin<T>`/`Seq<T>` APIs, `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), and compile-time safe LINQ queries. Ideal for high-throughput AI/agentic and GraphRAG workloads. See `src/SharpCoreDB.Functional.Linq2DB/README.md`.
+- **New in v1.9.5**: `SharpCoreDB.Functional.Linq2DB` — production-ready linq2db adapter with `Option<T>`/`Fin<T>`/`Seq<T>` APIs, `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), and compile-time safe LINQ queries. Ideal for high-throughput AI/agentic and GraphRAG workloads. See `src/SharpCoreDB.Functional.Linq2DB/README.md`.
 - Optional architecture packages: `src/SharpCoreDB.EventSourcing/README.md`, `src/SharpCoreDB.Projections/README.md`, `src/SharpCoreDB.CQRS/README.md`
 - Package publish/readme guidance: `nuget/README.md`, `NuGet.README.md`
 

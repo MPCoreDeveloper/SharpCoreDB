@@ -66,7 +66,7 @@ grep -r "<Version>" src/ --include="*.csproj"
 
 # Edit each one:
 # OLD: <Version>X.Y.Z</Version>
-# NEW: <Version>1.9.0</Version>
+# NEW: <Version>1.9.5</Version>
 
 # STEP 3: Test Everything Locally
 dotnet clean
@@ -76,13 +76,13 @@ dotnet test --configuration Release --no-build
 
 # STEP 4: Commit & Push
 git add .
-git commit -m "Release v1.9.0"
+git commit -m "Release v1.9.5"
 git push origin master
 # 🚀 CI/CD automatically publishes!
 
 # STEP 5: Create GitHub Release
-gh release create v1.9.0 \
-  --title "SharpCoreDB v1.9.0" \
+gh release create v1.9.5 \
+  --title "SharpCoreDB v1.9.5" \
   --notes "$(cat RELEASE_NOTES.md)"
 
 # STEP 6: Verify on NuGet

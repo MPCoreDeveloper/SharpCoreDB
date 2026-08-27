@@ -40,7 +40,7 @@
 - Event sourcing must support both persistent storage and the existing in-memory option; provide an additional demo example specifically for persistent storage.
 - Prioritize gRPC as the flagship protocol for SharpCoreDB.Server; binary/HTTP are secondary.
 - SharpCoreDB roadmap priority: make Event Sourcing first-class, add native snapshots, then projection engine; keep ES/CQRS optional packages, .NET 10-native, zero external deps in core, and gRPC-first networked server integration.
-- For the SharpCoreDB WebViewer, keep the implementation secure-by-default and, when integrating SafeWebCore, use the strict A+ settings/profile. Support both local database connections and network SharpCoreDB server connections, aiming to expose broad feature coverage from available SharpCoreDB NuGet capabilities.
+- The graphical UI (formerly SharpCoreDB.WebViewer / SharpCoreDB.Viewer) lives in the standalone repo MPCoreDeveloper/SCDMS. Keep it secure-by-default and, when integrating SafeWebCore, use the strict A+ settings/profile. Support both local database connections and network SharpCoreDB server connections, aiming to expose broad feature coverage from available SharpCoreDB NuGet capabilities.
 - For the table designer, provide a typed dropdown with all types supported by SharpCoreDB, explicitly including ULID and GUID.
 - Distinguish native SharpCoreDB syntax from PostgreSQL syntax and SQLite syntax; only apply SQLite-specific engine restrictions when SQLite syntax is explicitly relevant.
 - Use the full SqlParser for DDL in SingleFileDatabase to support advanced features like those in FluentMigrator.

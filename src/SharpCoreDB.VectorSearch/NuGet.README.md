@@ -1,18 +1,23 @@
-# SharpCoreDB.VectorSearch v1.9.0
+# SharpCoreDB.VectorSearch v1.9.5
 
 **SIMD-Accelerated Vector Similarity Search**
 
 Semantic search and similarity matching **50-100x faster than SQLite** using HNSW indexing and SIMD acceleration.
 
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
 
-## ✨ What's New in v1.9.0
+## Features
 
-- ✅ Inherits metadata improvements from SharpCoreDB v1.9.0
+
+- ✅ Inherits metadata improvements from SharpCoreDB v1.9.5
 - ✅ Phase 8 complete: HNSW-accelerated semantic search
 - ✅ 50-100x faster than SQLite
 - ✅ NativeAOT compatible
@@ -50,14 +55,14 @@ Semantic search and similarity matching **50-100x faster than SQLite** using HNS
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.4
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.5
 ```
 
-**Requires:** SharpCoreDB v1.9.4+
+**Requires:** SharpCoreDB v1.9.5+
 
 ---
 
-**Version:** 1.9.0 | **Status:** ✅ Production Ready | **Phase:** 8 Complete
+**Version:** 1.9.5 | **Status:** ✅ Production Ready | **Phase:** 8 Complete
 
 
 

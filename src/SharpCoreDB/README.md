@@ -5,20 +5,20 @@
   
   High-performance encrypted embedded + network-capable database engine for .NET 10.
 
-  **Version:** `v1.9.4`
+  **Version:** `v1.9.5`
   **Package:** `SharpCoreDB`
 
 ---
 
 
-## Patch updates in v1.9.4
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.4 release line.
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
+- ✅ Aligned package metadata and version references to the synchronized 1.9.5 release line.
 - ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Features
-
-- Embedded single-file database with AES-256-GCM encryption
 - SQL engine with ACID transactions, WAL, B-tree/hash indexing, and FTS
 - SIMD-optimized execution paths (including `Vector256.LoadUnsafe` hot paths)
 - Query plan caching, prepared statements, and compiled-query support
@@ -26,9 +26,9 @@
 
 ---
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Synchronized ecosystem release to `v1.9.0`
+- Synchronized ecosystem release to `v1.9.5`
 - SQL lexer/parser fixes for parameterized compiled-query execution
 - Metadata durability improvements (flush/reopen reliability)
 - Backward-compatible Brotli metadata support
@@ -39,7 +39,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.4
+dotnet add package SharpCoreDB --version 1.9.5
 ```
 
 ---
@@ -67,7 +67,7 @@ MIT License - Free for commercial and personal use. See [LICENSE](../../LICENSE)
 
 ---
 
-**Last Updated:** July 28, 2026 | Version: 1.9.4
+**Last Updated:** July 28, 2026 | Version: 1.9.5
 
 *Made with ❤️ by the SharpCoreDB team*
 

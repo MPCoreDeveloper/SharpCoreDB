@@ -2,16 +2,16 @@
 
 **Distributed Database Extension for SharpCoreDB**
 
-[![NuGet](https://img.shields.io/badge/NuGet-1.9.0-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Distributed)
+[![NuGet](https://img.shields.io/badge/NuGet-1.9.5-blue.svg)](https://www.nuget.org/packages/SharpCoreDB.Distributed)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-## Patch updates in v1.9.0
+## Patch updates in v1.9.5
 
-- ✅ Aligned package metadata and version references to the synchronized 1.9.0 release line.
-- ✅ Release automation now publishes all packable SharpCoreDB packages in CI/CD.
-
-## Overview
+- ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
+- ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
+- ✅ **ULID encoding is now standards-compliant**: ULIDs follow the official Crockford Base32 spec and are interchangeable with Python/Java/Go implementations.
+- ✅ **NuGet dependencies updated** to their latest stable versions.
 
 SharpCoreDB.Distributed extends SharpCoreDB with enterprise-scale distributed capabilities:
 
@@ -121,13 +121,13 @@ await distributedDb.ExecuteAsync(
 
 MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) for details.
 
-# SharpCoreDB.Distributed v1.9.0
+# SharpCoreDB.Distributed v1.9.5
 
 **Enterprise Distributed Database Features**
 
 Multi-master replication, distributed transactions, and automatic sharding - Phase 10 complete with sub-100ms replication latency.
 
-## ✨ What's New in v1.9.0
+## ✨ What's New in v1.9.5
 
 - ✅ Phase 10.2: Multi-master replication with vector clocks
 - ✅ Phase 10.3: Distributed transactions with 2PC protocol
@@ -168,14 +168,14 @@ Multi-master replication, distributed transactions, and automatic sharding - Pha
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Distributed --version 1.9.4
+dotnet add package SharpCoreDB.Distributed --version 1.9.5
 ```
 
-**Requires:** SharpCoreDB v1.9.4+
+**Requires:** SharpCoreDB v1.9.5+
 
 ---
 
-**Version:** 1.9.0 | **Status:** ✅ Production Ready | **Phase:** 10 Complete
+**Version:** 1.9.5 | **Status:** ✅ Production Ready | **Phase:** 10 Complete
 
 
 

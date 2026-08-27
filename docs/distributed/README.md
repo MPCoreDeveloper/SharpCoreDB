@@ -1,10 +1,10 @@
 # SharpCoreDB.Distributed Documentation
 
-**Version line:** `v1.9.0`
+**Version line:** `v1.9.5`
 
-## v1.9.0 changes
+## v1.9.5 changes
 
-- Distributed package/docs synchronized to `v1.9.0`
+- Distributed package/docs synchronized to `v1.9.5`
 - Replication + transaction primitives aligned with current implementation
 - Documentation aligned with multi-master/vector-clock and 2PC-focused architecture
 - Cross-reference added to `../FEATURE_MATRIX_v1.9.0.md`

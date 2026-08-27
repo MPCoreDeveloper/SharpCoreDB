@@ -85,9 +85,11 @@ SharpCoreDB/
 │   └── SharpCoreDB.Profiling/    # Profiling tools
 └── tools/                        # Tools and utilities
     ├── SharpCoreDB.Demo/         # Demo application
-    ├── SharpCoreDB.Viewer/       # Database viewer
     └── SharpCoreDB.DebugBenchmark/ # Debug benchmarking
 ```
+
+> **Note:** the graphical UI (formerly `tools/SharpCoreDB.Viewer` and `tools/SharpCoreDB.WebViewer`) has
+> moved to the standalone repo **[MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS)**.
 
 ## Coding Standards
 

@@ -381,9 +381,11 @@ foreach (var row in recentErrors)
 }
 ```
 
-### Option 2: Using SharpCoreDB Viewer
+### Option 2: Using SCDMS (management UI)
 
-If SharpCoreDB has a viewer tool, you can open `metrics.scdb` directly.
+Open `metrics.scdb` in the **SCDMS** management UI — see
+[github.com/MPCoreDeveloper/SCDMS](https://github.com/MPCoreDeveloper/SCDMS) (formerly
+`SharpCoreDB.Viewer`/`SharpCoreDB.WebViewer` in this repo).
 
 ## 🧮 Performance Characteristics
 

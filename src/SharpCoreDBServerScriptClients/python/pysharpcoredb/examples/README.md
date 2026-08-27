@@ -15,9 +15,9 @@ Examples for the Python SharpCoreDB client.
 - Connection pooling usage
 - Latency and error handling checks
 
-## Changes in v1.9.0
+## Changes in v1.9.5
 
-- Example docs aligned with the `v1.9.0` release line
+- Example docs aligned with the `v1.9.5` release line
 - Notes updated for the current in-progress Python transport parity status
 
 ## Run examples
