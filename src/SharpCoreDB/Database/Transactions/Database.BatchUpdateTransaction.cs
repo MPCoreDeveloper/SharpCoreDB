@@ -112,15 +112,6 @@ public partial class Database
     {
         lock (_walLock)
         {
-            // DEBUG: Log transaction begin
-            try
-            {
-                var key = System.IO.Path.GetFullPath(_dbPath ?? string.Empty);
-                System.IO.File.AppendAllText("D:\\db_transaction.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: path={_dbPath}, key={key}, isActive={_batchUpdateActive}, hashCode={this.GetHashCode()}\n");
-            }
-            catch { /* Intentionally empty */ }
-
             if (_batchUpdateActive)
                 throw new InvalidOperationException("Batch update already active.");
 
@@ -130,14 +121,6 @@ public partial class Database
             storage.BeginTransaction();
             _batchInsertedRows.Clear();
             _batchUpdateActive = true;
-
-            // DEBUG: Log after setting active
-            try
-            {
-                System.IO.File.AppendAllText("D:\\db_transaction.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: After set, isActive={_batchUpdateActive}\n");
-            }
-            catch { /* Intentionally empty */ }
         }
     }
 

@@ -32,51 +32,16 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
 
-        // DEBUG
-        if (this.Name == "Blogs")
-        {
-            try
-            {
-                System.IO.File.AppendAllText("D:\\table_insert_debug.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] Table.Insert called for Blogs\n" +
-                    $"  row.Keys={string.Join(", ", row.Keys)}\n" +
-                    $"  Table.Columns={string.Join(", ", this.Columns)}\n");
-            }
-            catch { /* Intentionally empty */ }
-        }
-
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         for (int i = 0; i < this.Columns.Count; i++)
         {
             var col = this.Columns[i];
             if (!row.TryGetValue(col, out var val) || (this.IsAuto[i] && (val is null or DBNull)))
             {
-                // DEBUG
-                if (col == "BlogId")
-                {
-                    try
-                    {
-                        System.IO.File.AppendAllText("D:\\auto_debug.log",
-                            $"[{DateTime.Now:HH:mm:ss.fff}] BlogId missing/null: IsAuto[{i}]={this.IsAuto[i]}, ColumnType={this.ColumnTypes[i]}\n");
-                    }
-                    catch { /* Intentionally empty */ }
-                }
-
                 // ✅ AUTO-ROWID: Also auto-generate when the key exists but value is null/DBNull.
                 if (this.IsAuto[i])
                 {
                     row[col] = GenerateAutoValue(this.ColumnTypes[i], i);
-
-                    // DEBUG
-                    if (col == "BlogId")
-                    {
-                        try
-                        {
-                            System.IO.File.AppendAllText("D:\\auto_debug.log",
-                                $"[{DateTime.Now:HH:mm:ss.fff}] Generated BlogId={row[col]}\n");
-                        }
-                        catch { /* Intentionally empty */ }
-                    }
                 }
                 else if (this.DefaultExpressions[i] is not null)
                 {

@@ -348,34 +348,8 @@ public partial class SqlParser
             }
             FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
 
-            // DEBUG
-            if (tableName.Equals("Blogs", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    System.IO.File.AppendAllText("D:\\insert_debug.log",
-                        $"[{DateTime.Now:HH:mm:ss.fff}] Before table.Insert: row.Keys={string.Join(", ", row.Keys)}\n" +
-                        $"  table type: {table.GetType().Name}\n");
-                }
-                catch { /* Intentionally empty */ }
-            }
+            table.Insert(row);
 
-            try
-            {
-                table.Insert(row);
-            }
-            catch (Exception ex)
-            {
-                // DEBUG: Log exception
-                try
-                {
-                    System.IO.File.AppendAllText("D:\\insert_exception.log",
-                        $"[{DateTime.Now:HH:mm:ss.fff}] Exception in table.Insert for {tableName}: {ex.GetType().Name}: {ex.Message}\n" +
-                        $"  Stack: {ex.StackTrace}\n\n");
-                }
-                catch { /* Intentionally empty */ }
-                throw;
-            }
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
             insertedRows.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
         }
@@ -770,26 +744,6 @@ public partial class SqlParser
 
         // Deduplicate by primary key
         results = ((this.tables[tableName] as Table)?.DeduplicateByPrimaryKey(results)) ?? results;
-
-        // DEBUG: Log result shape
-        if (results.Count > 0)
-        {
-            try
-            {
-                var debugLog = new System.Text.StringBuilder();
-                debugLog.AppendLine($"[{DateTime.Now:HH:mm:ss.fff}] ExecuteSelectQuery completed");
-                debugLog.AppendLine($"SQL (first 100 chars): {sql.Substring(0, Math.Min(100, sql.Length))}");
-                debugLog.AppendLine($"Result count: {results.Count}");
-                var firstRow = results[0];
-                debugLog.AppendLine($"First row keys: {string.Join(", ", firstRow.Keys)}");
-                foreach (var kvp in firstRow)
-                {
-                    debugLog.AppendLine($"  [{kvp.Key}] = {kvp.Value?.GetType().Name ?? "NULL"} ({kvp.Value})");
-                }
-                System.IO.File.AppendAllText("D:\\core_debug.log", debugLog.ToString() + "\n");
-            }
-            catch { /* ignore debug errors */ }
-        }
 
         return results;
     }

@@ -113,15 +113,6 @@ public partial class Database
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        // DEBUG: Log all SQL commands
-        try
-        {
-            System.IO.File.AppendAllText("D:\\db_executesql.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteSQL: {sql.Substring(0, Math.Min(300, sql.Length))}\n" +
-                $"  Params: {string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"))}\n");
-        }
-        catch { /* Intentionally empty */ }
-
         SqlQueryValidator.ValidateQuery(
             sql, 
             parameters, 
