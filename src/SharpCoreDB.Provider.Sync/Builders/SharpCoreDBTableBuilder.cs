@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Dotmim.Sync;
 using Dotmim.Sync.Builders;
 using Dotmim.Sync.Manager;
@@ -157,6 +158,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     }
 
     /// <inheritdoc />
+    [SuppressMessage("Sonar", "S2077", Justification = "Identifiers are whitelisted via SqlIdentifier.EnsureSafe; SQL identifiers cannot be bound as query parameters.")]
     public override Task<DbCommand> GetCreateTrackingTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
         var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
@@ -171,7 +173,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $@" // NOSONAR:S2077 - identifiers whitelisted via SqlIdentifier.EnsureSafe
+        command.CommandText = $@"
             CREATE TABLE IF NOT EXISTS {trackingTableName} (
                 {pkColumn} {pkType} PRIMARY KEY NOT NULL,
                 update_scope_id TEXT,
