@@ -50,7 +50,7 @@ public class AppendOnlyEngine : IStorageEngine
         
         if (!Directory.Exists(databasePath)) // NOSONAR:S6549 - databasePath is the user-configured storage root.
         {
-            Directory.CreateDirectory(databasePath);
+            Directory.CreateDirectory(databasePath); // NOSONAR:S6549 - databasePath is the user-configured storage root.
         }
     }
 

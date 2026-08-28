@@ -235,7 +235,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         {
             // ✅ Legacy: Use IStorage (file-based)
             var metaPath = Path.Combine(_dbPath, PersistenceConstants.MetaFileName); // NOSONAR:S6549 - _dbPath is the user-configured storage root; derived paths use fixed filenames.
-            metaExists = File.Exists(metaPath);
+            metaExists = File.Exists(metaPath); // NOSONAR:S6549 - _dbPath is the user-configured storage root; derived paths use fixed filenames.
             
 #if DEBUG
             System.Diagnostics.Debug.WriteLine($"[Load] Loading metadata from: {metaPath}");
