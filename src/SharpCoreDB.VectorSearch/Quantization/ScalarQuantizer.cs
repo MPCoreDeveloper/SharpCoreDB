@@ -92,7 +92,7 @@ public sealed class ScalarQuantizer : IQuantizer
         var result = new byte[_dimensions];
         for (int d = 0; d < _dimensions; d++)
         {
-            float normalized = (vector[d] - _min![d]) * _scale![d];
+            float normalized = (vector[d] - _min[d]) * _scale[d];
             result[d] = (byte)Math.Clamp(normalized, 0f, 255f);
         }
 
@@ -111,7 +111,7 @@ public sealed class ScalarQuantizer : IQuantizer
         var result = new float[_dimensions];
         for (int d = 0; d < _dimensions; d++)
         {
-            result[d] = _min![d] + (quantized[d] * _invScale![d]);
+            result[d] = _min[d] + (quantized[d] * _invScale[d]);
         }
 
         return result;
@@ -179,7 +179,7 @@ public sealed class ScalarQuantizer : IQuantizer
 
         for (int d = 0; d < _dimensions; d++)
         {
-            float t = _min![d] + (quantizedTarget[d] * _invScale![d]);
+            float t = _min[d] + (quantizedTarget[d] * _invScale[d]);
             dot += query[d] * t;
             normQ += query[d] * query[d];
             normT += t * t;
@@ -196,7 +196,7 @@ public sealed class ScalarQuantizer : IQuantizer
 
         for (int d = 0; d < _dimensions; d++)
         {
-            float t = _min![d] + (quantizedTarget[d] * _invScale![d]);
+            float t = _min[d] + (quantizedTarget[d] * _invScale[d]);
             float diff = query[d] - t;
             sum += diff * diff;
         }
@@ -211,7 +211,7 @@ public sealed class ScalarQuantizer : IQuantizer
 
         for (int d = 0; d < _dimensions; d++)
         {
-            float t = _min![d] + (quantizedTarget[d] * _invScale![d]);
+            float t = _min[d] + (quantizedTarget[d] * _invScale[d]);
             dot += query[d] * t;
         }
 

@@ -16,7 +16,7 @@ namespace SharpCoreDB.Server.WebAdmin.Pages.Admin;
 [Authorize(AuthenticationSchemes = "WebAdmin", Roles = "admin")]
 public sealed class IndexModel(HealthCheckService healthCheckService) : PageModel
 {
-    public ServerHealthInfo Health { get; private set; } = null!;
+    public ServerHealthInfo Health { get; private set; } = null;
 
     public string UptimeDisplay { get; private set; } = string.Empty;
 

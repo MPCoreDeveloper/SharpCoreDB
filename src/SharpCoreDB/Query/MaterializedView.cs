@@ -89,7 +89,7 @@ public sealed class MaterializedView<T> : IRefreshable, IDisposable
                 Refresh();
             }
 
-            return _cachedData!.ToList(); // Return a copy
+            return _cachedData.ToList(); // Return a copy
         }
     }
 

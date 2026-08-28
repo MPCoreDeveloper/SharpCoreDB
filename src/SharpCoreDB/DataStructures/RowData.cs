@@ -87,7 +87,7 @@ public readonly ref struct RowData
         {
             if (_values[i] is not null)
             {
-                dict[_columnNames[i]] = _values[i]!;
+                dict[_columnNames[i]] = _values[i];
             }
         }
         return dict;

@@ -268,7 +268,7 @@ public sealed class HealthAlerts : IAsyncDisposable
     {
         try
         {
-            await subscription.Handler!(alert, cancellationToken);
+            await subscription.Handler(alert, cancellationToken);
         }
         catch (Exception)
         {

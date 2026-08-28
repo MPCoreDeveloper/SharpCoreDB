@@ -160,7 +160,7 @@ public class ThreadLocalPool<T> where T : class
         // Try thread-local cache first (zero contention)
         if (cache != null && cache.TryGet(out var obj))
         {
-            return obj!;
+            return obj;
         }
 
         // Fall back to global pool (lock-based)

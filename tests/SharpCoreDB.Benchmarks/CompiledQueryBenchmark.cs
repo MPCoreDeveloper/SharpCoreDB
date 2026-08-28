@@ -29,10 +29,10 @@ public class CompiledQueryBenchmark
         }
     }
 
-    private IDatabase _db = null!;
-    private PreparedStatement _compiledStmt = null!;
-    private string _sql = null!;
-    private string _dbPath = null!;
+    private IDatabase _db = null;
+    private PreparedStatement _compiledStmt = null;
+    private string _sql = null;
+    private string _dbPath = null;
 
     [Params(100, 1000, 5000)]
     public int QueryCount { get; set; }
@@ -119,11 +119,11 @@ public class CompiledQueryBenchmark
 [MemoryDiagnoser]
 public class CompiledQueryComplexityBenchmark
 {
-    private IDatabase _db = null!;
-    private PreparedStatement _simpleStmt = null!;
-    private PreparedStatement _complexStmt = null!;
-    private PreparedStatement _aggregateStmt = null!;
-    private string _dbPath = null!;
+    private IDatabase _db = null;
+    private PreparedStatement _simpleStmt = null;
+    private PreparedStatement _complexStmt = null;
+    private PreparedStatement _aggregateStmt = null;
+    private string _dbPath = null;
 
     [GlobalSetup]
     public void Setup()
@@ -192,10 +192,10 @@ public class CompiledQueryComplexityBenchmark
 [MemoryDiagnoser]
 public class CompiledQuery1000SelectsBenchmark
 {
-    private IDatabase _db = null!;
-    private PreparedStatement _compiledStmt = null!;
-    private string _sql = null!;
-    private string _dbPath = null!;
+    private IDatabase _db = null;
+    private PreparedStatement _compiledStmt = null;
+    private string _sql = null;
+    private string _dbPath = null;
 
     [GlobalSetup]
     public void Setup()

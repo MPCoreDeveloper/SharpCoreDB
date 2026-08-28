@@ -325,7 +325,7 @@ public sealed class BTreeIndexManager
 
         var indexType = GetBTreeIndexType(colType);
         var index = Activator.CreateInstance(indexType, columnName);
-        _btreeIndexes[columnName] = index!;
+        _btreeIndexes[columnName] = index;
     }
 
     /// <summary>

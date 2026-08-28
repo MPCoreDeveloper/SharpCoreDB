@@ -251,15 +251,15 @@ public sealed class ReplicationManager : IAsyncDisposable
             switch (command.Type)
             {
                 case ReplicationCommandType.AddReplica:
-                    await AddReplicaInternalAsync(command.MasterNodeId!, command.ReplicaNodeId!, cancellationToken);
+                    await AddReplicaInternalAsync(command.MasterNodeId, command.ReplicaNodeId, cancellationToken);
                     break;
 
                 case ReplicationCommandType.RemoveReplica:
-                    await RemoveReplicaInternalAsync(command.MasterNodeId!, command.ReplicaNodeId!, cancellationToken);
+                    await RemoveReplicaInternalAsync(command.MasterNodeId, command.ReplicaNodeId, cancellationToken);
                     break;
 
                 case ReplicationCommandType.PromoteReplica:
-                    await PromoteReplicaInternalAsync(command.ReplicaNodeId!, cancellationToken);
+                    await PromoteReplicaInternalAsync(command.ReplicaNodeId, cancellationToken);
                     break;
             }
         }

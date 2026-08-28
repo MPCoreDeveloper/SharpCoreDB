@@ -582,7 +582,7 @@ internal class BufferPatternModel
         Stats.TotalRentals = history.Count(r => r.EventType == BufferEventType.Rented);
         Stats.TotalReturns = history.Count(r => r.EventType == BufferEventType.Returned);
         Stats.AverageSize = history.Where(r => r.Size.HasValue).Any()
-            ? history.Where(r => r.Size.HasValue).Average(r => r.Size!.Value)
+            ? history.Where(r => r.Size.HasValue).Average(r => r.Size.Value)
             : 0;
 
         if (Stats.TotalRentals > 1)

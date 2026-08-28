@@ -21,10 +21,10 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2D_ModernSimdBenchmark
 {
-    private int[] testData = null!;
-    private int[] testData2 = null!;
-    private byte[] resultBuffer = null!;
-    private long[] multiplyAddResults = null!;
+    private int[] testData = null;
+    private int[] testData2 = null;
+    private byte[] resultBuffer = null;
+    private long[] multiplyAddResults = null;
     
     private const int DataSize = 10000;
 
@@ -151,7 +151,7 @@ public class Phase2D_ModernSimdBenchmark
 [MemoryDiagnoser]
 public class Phase2D_CacheAwareSimdBenchmark
 {
-    private int[] largeData = null!;
+    private int[] largeData = null;
     private const int LargeDataSize = 1000000;
 
     [GlobalSetup]
@@ -217,7 +217,7 @@ public class Phase2D_CacheAwareSimdBenchmark
 [MemoryDiagnoser]
 public class Phase2D_VectorThroughputBenchmark
 {
-    private int[] data = null!;
+    private int[] data = null;
     private const int DataSize = 100000;
 
     [GlobalSetup]
@@ -291,8 +291,8 @@ public class Phase2D_VectorThroughputBenchmark
 [MemoryDiagnoser]
 public class Phase2D_MemoryBandwidthBenchmark
 {
-    private int[] source = null!;
-    private int[] destination = null!;
+    private int[] source = null;
+    private int[] destination = null;
     private const int DataSize = 1000000;
 
     [GlobalSetup]

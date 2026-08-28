@@ -43,7 +43,7 @@ public class GrpcThroughputBenchmark
             Sql = "SELECT 1"
         };
 
-        var call = _client.ExecuteQuery(request, cancellationToken: _harness!.CancellationToken);
+        var call = _client.ExecuteQuery(request, cancellationToken: _harness.CancellationToken);
         var count = 0;
         while (await call.ResponseStream.MoveNext(_harness.CancellationToken).ConfigureAwait(false))
         {
@@ -61,7 +61,7 @@ public class GrpcThroughputBenchmark
             Sql = "CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)"
         };
 
-        await _client.ExecuteNonQueryAsync(request, cancellationToken: _harness!.CancellationToken).ConfigureAwait(false);
+        await _client.ExecuteNonQueryAsync(request, cancellationToken: _harness.CancellationToken).ConfigureAwait(false);
     }
 
     [Benchmark]
@@ -83,6 +83,6 @@ public class GrpcThroughputBenchmark
             Queries = { queries }
         };
 
-        await _client.ExecuteBatchAsync(request, cancellationToken: _harness!.CancellationToken).ConfigureAwait(false);
+        await _client.ExecuteBatchAsync(request, cancellationToken: _harness.CancellationToken).ConfigureAwait(false);
     }
 }

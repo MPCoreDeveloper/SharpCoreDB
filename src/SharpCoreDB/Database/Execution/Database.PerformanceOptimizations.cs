@@ -268,7 +268,7 @@ internal sealed class LruCache<TKey, TValue> where TKey : notnull
                 return true;
             }
 
-            value = default!;
+            value = default;
             return false;
         }
     }

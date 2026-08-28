@@ -14,8 +14,8 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2D_QueryPlanCacheBenchmark
 {
-    private QueryPlanCache cache = null!;
-    private string[] uniqueQueries = null!;
+    private QueryPlanCache cache = null;
+    private string[] uniqueQueries = null;
     private const int QueryCount = 1000;
     private const int UniqueQueries = 100;
 
@@ -140,7 +140,7 @@ public class Phase2D_QueryPlanCacheBenchmark
 [MemoryDiagnoser]
 public class Phase2D_CacheStatisticsBenchmark
 {
-    private QueryPlanCache cache = null!;
+    private QueryPlanCache cache = null;
     private const int QueryCount = 10000;
     private const int UniqueQueries = 100;
 
@@ -206,8 +206,8 @@ public class Phase2D_CacheStatisticsBenchmark
 [MemoryDiagnoser]
 public class Phase2D_CacheLatencyBenchmark
 {
-    private QueryPlanCache cache = null!;
-    private List<string> repeatedQueries = null!;
+    private QueryPlanCache cache = null;
+    private List<string> repeatedQueries = null;
     private const int QueryCount = 100000;
 
     [GlobalSetup]
@@ -272,7 +272,7 @@ public class Phase2D_CacheLatencyBenchmark
 [MemoryDiagnoser]
 public class Phase2D_ConcurrentCacheBenchmark
 {
-    private QueryPlanCache cache = null!;
+    private QueryPlanCache cache = null;
     private const int ThreadCount = 8;
     private const int OperationsPerThread = 10000;
     private const int UniqueQueries = 100;

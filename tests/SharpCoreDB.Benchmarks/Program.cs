@@ -91,7 +91,7 @@ Summary? summary = null;
 // ? GUARANTEED: Log file that ALWAYS gets written
 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 var logPath = Path.Combine("BenchmarkDotNet.Artifacts", "results", $"run_{timestamp}.log");
-Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 var logWriter = new StreamWriter(logPath, append: true) { AutoFlush = true };
 
 try

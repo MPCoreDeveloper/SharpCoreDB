@@ -13,8 +13,8 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2E_JitOptimizationBenchmark
 {
-    private int[] testData = null!;
-    private long[] longData = null!;
+    private int[] testData = null;
+    private long[] longData = null;
     private const int DataSize = 100000;
 
     [GlobalSetup]
@@ -158,7 +158,7 @@ public class Phase2E_JitOptimizationBenchmark
 [MemoryDiagnoser]
 public class Phase2E_ParallelReductionBenchmark
 {
-    private long[] data = null!;
+    private long[] data = null;
     private const int DataSize = 1000000;
 
     [GlobalSetup]
@@ -234,7 +234,7 @@ public class Phase2E_ParallelReductionBenchmark
 [MemoryDiagnoser]
 public class Phase2E_InstructionParallelismBenchmark
 {
-    private int[] data = null!;
+    private int[] data = null;
     private const int DataSize = 500000;
 
     [GlobalSetup]
@@ -311,7 +311,7 @@ public class Phase2E_InstructionParallelismBenchmark
 [MemoryDiagnoser]
 public class Phase2E_BranchPredictionBenchmark
 {
-    private int[] data = null!;
+    private int[] data = null;
     private const int DataSize = 1000000;
 
     [GlobalSetup]

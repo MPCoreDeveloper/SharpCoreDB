@@ -118,7 +118,7 @@ public static class DatabaseMigrator
 
                 // Verify checksum after migration
                 var verifyData = await targetProvider.ReadBlockAsync(blockName, cancellationToken);
-                var checksumAfter = SHA256.HashData(verifyData!);
+                var checksumAfter = SHA256.HashData(verifyData);
 
                 if (!checksumBefore.SequenceEqual(checksumAfter))
                 {
@@ -260,7 +260,7 @@ public static class DatabaseMigrator
 
                 // Verify
                 var verifyData = await targetProvider.ReadBlockAsync(blockName, cancellationToken);
-                var checksumAfter = SHA256.HashData(verifyData!);
+                var checksumAfter = SHA256.HashData(verifyData);
 
                 if (!checksumBefore.SequenceEqual(checksumAfter))
                 {

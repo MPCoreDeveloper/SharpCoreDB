@@ -89,7 +89,7 @@ public sealed class BlockMetadataCache
             // Evict LRU if cache is full
             if (_cache.Count >= MAX_CACHE_SIZE)
             {
-                var lru = _lru.Last!.Value;
+                var lru = _lru.Last.Value;
                 _cache.Remove(lru);
                 _lru.RemoveLast();
             }

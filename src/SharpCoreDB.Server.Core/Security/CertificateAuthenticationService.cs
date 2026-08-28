@@ -109,7 +109,7 @@ public sealed class CertificateAuthenticationService(
     {
         try
         {
-            var caPath = _config.Security.ClientCaCertificatePath!;
+            var caPath = _config.Security.ClientCaCertificatePath;
             if (!File.Exists(caPath))
             {
                 _logger.LogError("Client CA certificate not found at '{Path}'", caPath);

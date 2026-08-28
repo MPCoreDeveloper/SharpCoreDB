@@ -451,7 +451,7 @@ internal class BufferCheckState
     public string BufferId { get; init; } = string.Empty;
 
     /// <summary>Gets the buffer health instance.</summary>
-    public BufferHealth Health { get; init; } = null!;
+    public BufferHealth Health { get; init; } = null;
 
     /// <summary>Gets or sets the check priority.</summary>
     public CheckPriority Priority { get; set; }

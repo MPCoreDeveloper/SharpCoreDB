@@ -34,7 +34,7 @@ public sealed class ClockPageCache
     /// </summary>
     private sealed class CacheEntry
     {
-        public PageManager.Page? Page { get; set; } = null!;
+        public PageManager.Page? Page { get; set; } = null;
         public int ReferenceBit; // 0 = not referenced, 1 = referenced
         public int ArrayIndex { get; set; } // Position in clockArray
     }
@@ -203,7 +203,7 @@ public sealed class ClockPageCache
                 int index = entry.ArrayIndex;
                 if (index >= 0 && index < maxCapacity)
                 {
-                    clockArray[index] = null!;
+                    clockArray[index] = null;
                 }
 
                 Interlocked.Decrement(ref count);

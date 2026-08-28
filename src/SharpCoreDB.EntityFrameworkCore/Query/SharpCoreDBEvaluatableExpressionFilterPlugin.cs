@@ -13,7 +13,7 @@ public sealed class SharpCoreDBEvaluatableExpressionFilterPlugin : IEvaluatableE
     private static readonly MethodInfo _graphTraverseMethod =
         typeof(SharpCoreDBDbFunctionsExtensions)
             .GetMethod(nameof(SharpCoreDBDbFunctionsExtensions.GraphTraverse),
-                new[] { typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy) })!;
+                new[] { typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy) });
 
     /// <inheritdoc />
     public bool IsEvaluatableExpression(Expression expression)

@@ -158,7 +158,7 @@ public class BliteMixedWorkloadBenchmark : BenchmarkContext
         var id = _random.Next(1, _currentMaxId + 1);
         
         var opStart = Stopwatch.GetTimestamp();
-        _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE id = {id}");
+        _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE id = {id}");
         var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
         
         _readLatencies.Add(elapsed);
@@ -170,7 +170,7 @@ public class BliteMixedWorkloadBenchmark : BenchmarkContext
         var doc = DataGenerator.GenerateDocument();
         
         var opStart = Stopwatch.GetTimestamp();
-        _db!.ExecuteSQL(doc.ToInsertSQL(TableName));
+        _db.ExecuteSQL(doc.ToInsertSQL(TableName));
         var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
         
         _insertLatencies.Add(elapsed);
@@ -191,7 +191,7 @@ public class BliteMixedWorkloadBenchmark : BenchmarkContext
         var newScore = _random.NextDouble() * 100;
         
         var opStart = Stopwatch.GetTimestamp();
-        _db!.ExecuteSQL($"UPDATE {TableName} SET score = {newScore}, updated_at = '{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}' WHERE id = {id}");
+        _db.ExecuteSQL($"UPDATE {TableName} SET score = {newScore}, updated_at = '{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}' WHERE id = {id}");
         var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
         
         _updateLatencies.Add(elapsed);
@@ -211,7 +211,7 @@ public class BliteMixedWorkloadBenchmark : BenchmarkContext
         var maxAge = minAge + _random.Next(10, 40);
         
         var opStart = Stopwatch.GetTimestamp();
-        _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge}");
+        _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge}");
         var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
         
         _queryLatencies.Add(elapsed);

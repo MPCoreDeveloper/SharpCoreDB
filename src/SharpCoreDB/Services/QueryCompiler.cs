@@ -309,7 +309,7 @@ public static class QueryCompiler
         }
 
         var columnNameExpr = Expression.Constant(column.ColumnName);
-        var stringIndexer = typeof(IndexedRowData).GetProperty("Item", [typeof(string)])!;
+        var stringIndexer = typeof(IndexedRowData).GetProperty("Item", [typeof(string)]);
         return Expression.Property(rowParam, stringIndexer, columnNameExpr);
     }
 
@@ -400,7 +400,7 @@ public static class QueryCompiler
         ParameterExpression rowParam)
     {
         var columnNameExpr = Expression.Constant(column.ColumnName);
-        var indexerProperty = typeof(Dictionary<string, object>).GetProperty("Item")!;
+        var indexerProperty = typeof(Dictionary<string, object>).GetProperty("Item");
         return Expression.Property(rowParam, indexerProperty, columnNameExpr);
     }
 
@@ -427,7 +427,7 @@ public static class QueryCompiler
     private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
     {
         var compareMethod = typeof(QueryCompiler).GetMethod(nameof(CompareValuesRuntime),
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
         if (left.Type != typeof(object))
             left = Expression.Convert(left, typeof(object));

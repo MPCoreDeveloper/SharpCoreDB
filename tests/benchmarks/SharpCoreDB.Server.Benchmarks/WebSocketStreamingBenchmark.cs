@@ -32,7 +32,7 @@ public class WebSocketStreamingBenchmark
     [Benchmark]
     public async Task SendQueryMessageAsync()
     {
-        using var webSocket = await _harness!.CreateWebSocketClientAsync().ConfigureAwait(false);
+        using var webSocket = await _harness.CreateWebSocketClientAsync().ConfigureAwait(false);
 
         var message = Encoding.UTF8.GetBytes("{\"type\":\"query\",\"sql\":\"SELECT 1\",\"database\":\"test\"}");
         await webSocket.SendAsync(message, WebSocketMessageType.Text, true, _harness.CancellationToken).ConfigureAwait(false);
@@ -46,7 +46,7 @@ public class WebSocketStreamingBenchmark
     [Benchmark]
     public async Task SendNonQueryMessageAsync()
     {
-        using var webSocket = await _harness!.CreateWebSocketClientAsync().ConfigureAwait(false);
+        using var webSocket = await _harness.CreateWebSocketClientAsync().ConfigureAwait(false);
 
         var message = Encoding.UTF8.GetBytes("{\"type\":\"nonquery\",\"sql\":\"CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)\",\"database\":\"test\"}");
         await webSocket.SendAsync(message, WebSocketMessageType.Text, true, _harness.CancellationToken).ConfigureAwait(false);
@@ -60,7 +60,7 @@ public class WebSocketStreamingBenchmark
     [Benchmark]
     public async Task SendBatchMessageAsync()
     {
-        using var webSocket = await _harness!.CreateWebSocketClientAsync().ConfigureAwait(false);
+        using var webSocket = await _harness.CreateWebSocketClientAsync().ConfigureAwait(false);
 
         var statements = new List<string>();
         for (int i = 0; i < 100; i++)

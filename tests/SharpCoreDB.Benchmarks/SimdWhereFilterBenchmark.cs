@@ -93,7 +93,7 @@ public class SimdWhereFilterBenchmark
     {
         // SELECT * FROM users WHERE age > 40
         // Expected: 5-10ms (scalar evaluation)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbNoSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbNoSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 40");
         
         if (results.Count == 0)
@@ -105,7 +105,7 @@ public class SimdWhereFilterBenchmark
     {
         // SELECT * FROM users WHERE age > 40 (with SIMD)
         // Expected: < 1ms (6-10x faster than scalar)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 40");
         
         if (results.Count == 0)
@@ -116,7 +116,7 @@ public class SimdWhereFilterBenchmark
     public void SIMD_WhereAge_LessThan()
     {
         // SELECT * FROM users WHERE age < 35
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age < 35");
         
         if (results.Count == 0)
@@ -127,7 +127,7 @@ public class SimdWhereFilterBenchmark
     public void SIMD_WhereAge_Equals()
     {
         // SELECT * FROM users WHERE age = 30
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age = 30");
     }
 
@@ -135,7 +135,7 @@ public class SimdWhereFilterBenchmark
     public void SIMD_WhereAge_GreaterOrEqual()
     {
         // SELECT * FROM users WHERE age >= 45
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age >= 45");
         
         if (results.Count == 0)
@@ -146,7 +146,7 @@ public class SimdWhereFilterBenchmark
     public void SIMD_WhereAge_LessOrEqual()
     {
         // SELECT * FROM users WHERE age <= 30
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age <= 30");
         
         if (results.Count == 0)
@@ -160,7 +160,7 @@ public class SimdWhereFilterBenchmark
     {
         // Very selective query (< 1% of rows match)
         // SELECT * FROM users WHERE age > 60
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 60");
     }
 
@@ -169,7 +169,7 @@ public class SimdWhereFilterBenchmark
     {
         // Low selectivity query (> 90% of rows match)
         // SELECT * FROM users WHERE age > 25
-        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbSimd).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 25");
         
         if (results.Count < RECORD_COUNT / 2)

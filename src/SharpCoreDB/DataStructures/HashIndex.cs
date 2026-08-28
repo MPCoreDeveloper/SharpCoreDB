@@ -84,7 +84,7 @@ public class HashIndex : IDisposable
         if (_useUnsafeEqualityIndex && !_isUnique)
         {
             var keyBytes = BuildUnsafeKey(normalizedKey);
-            _unsafeIndex!.Add(keyBytes, position);
+            _unsafeIndex.Add(keyBytes, position);
             Interlocked.Increment(ref _unsafeTotalRows);
             return;
         }
@@ -102,7 +102,7 @@ public class HashIndex : IDisposable
                         $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
                 }
 
-                _unsafeIndex!.Add(keyBytes, position);
+                _unsafeIndex.Add(keyBytes, position);
                 _unsafeTotalRows++;
                 return;
             }
@@ -148,7 +148,7 @@ public class HashIndex : IDisposable
                 var positions = LookupUnsafePositions(keyBytes);
                 foreach (var rowId in positions)
                 {
-                    if (_unsafeIndex!.Remove(keyBytes, rowId))
+                    if (_unsafeIndex.Remove(keyBytes, rowId))
                     {
                         _unsafeTotalRows--;
                     }
@@ -186,7 +186,7 @@ public class HashIndex : IDisposable
             if (_useUnsafeEqualityIndex)
             {
                 var keyBytes = BuildUnsafeKey(normalizedKey);
-                if (_unsafeIndex!.Remove(keyBytes, position))
+                if (_unsafeIndex.Remove(keyBytes, position))
                 {
                     _unsafeTotalRows--;
                 }
@@ -233,7 +233,7 @@ public class HashIndex : IDisposable
                 if (_useUnsafeEqualityIndex)
                 {
                     var keyBytes = BuildUnsafeKey(normalizedKey);
-                    if (_unsafeIndex!.Remove(keyBytes, positions[i]))
+                    if (_unsafeIndex.Remove(keyBytes, positions[i]))
                     {
                         _unsafeTotalRows--;
                     }
@@ -291,7 +291,7 @@ public class HashIndex : IDisposable
 
                 if (validCount > 0)
                 {
-                    _unsafeIndex!.AddBatch(keyArrays, rowIdBuf, validCount);
+                    _unsafeIndex.AddBatch(keyArrays, rowIdBuf, validCount);
                     Interlocked.Add(ref _unsafeTotalRows, validCount);
                 }
             }
@@ -324,7 +324,7 @@ public class HashIndex : IDisposable
                         throw new InvalidOperationException(
                             $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
                     }
-                    _unsafeIndex!.Add(keyBytes, positions[i]);
+                    _unsafeIndex.Add(keyBytes, positions[i]);
                     _unsafeTotalRows++;
                     continue;
                 }
@@ -472,7 +472,7 @@ public class HashIndex : IDisposable
         {
             if (_useUnsafeEqualityIndex)
             {
-                _unsafeIndex!.Clear();
+                _unsafeIndex.Clear();
                 _unsafeTotalRows = 0;
                 return;
             }
@@ -498,7 +498,7 @@ public class HashIndex : IDisposable
         {
             if (_useUnsafeEqualityIndex)
             {
-                _unsafeIndex!.Clear();
+                _unsafeIndex.Clear();
                 _unsafeTotalRows = 0;
 
                 for (int i = 0; i < rows.Count; i++)
@@ -574,7 +574,7 @@ public class HashIndex : IDisposable
     private bool HasUnsafeRowsForKey(ReadOnlySpan<byte> keyBytes)
     {
         Span<long> probe = stackalloc long[1];
-        return _unsafeIndex!.GetRowIdsForValue(keyBytes, probe) > 0;
+        return _unsafeIndex.GetRowIdsForValue(keyBytes, probe) > 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -587,7 +587,7 @@ public class HashIndex : IDisposable
         {
             while (true)
             {
-                var count = _unsafeIndex!.GetRowIdsForValue(keyBytes, rented.AsSpan(0, capacity));
+                var count = _unsafeIndex.GetRowIdsForValue(keyBytes, rented.AsSpan(0, capacity));
                 if (count < capacity)
                 {
                     var result = new List<long>(count);

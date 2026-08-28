@@ -1728,7 +1728,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             #pragma warning disable S3011 // Reflection is safe here - we own both classes
             var fsField = typeof(SingleFileStorageProvider).GetField("_fileStream",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            fsField!.SetValue(this, newFileStream);
+            fsField.SetValue(this, newFileStream);
 
             // Recreate memory-mapped file if needed
             if (_options.EnableMemoryMapping)
@@ -1743,7 +1743,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
                 var mmfField = typeof(SingleFileStorageProvider).GetField("_memoryMappedFile",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                mmfField!.SetValue(this, mmf);
+                mmfField.SetValue(this, mmf);
             }
             #pragma warning restore S3011
 

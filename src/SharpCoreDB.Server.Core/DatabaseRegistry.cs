@@ -618,7 +618,7 @@ public sealed class ConnectionPool : IAsyncDisposable
     {
         try
         {
-            while (await _evictionTimer!.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            while (await _evictionTimer.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
                 var evicted = 0;
                 var snapshot = _availableConnections.Count;

@@ -566,7 +566,7 @@ public sealed class FunctionalDb(IDatabase inner)
             {
                 Guid g => g,
                 string s => Guid.Parse(s),
-                _ => new Guid(Convert.ToString(value, CultureInfo.InvariantCulture)!)
+                _ => new Guid(Convert.ToString(value, CultureInfo.InvariantCulture))
             };
         }
 

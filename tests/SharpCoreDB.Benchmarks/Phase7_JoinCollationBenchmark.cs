@@ -24,12 +24,12 @@ using SharpCoreDB.DataStructures;
 [ThreadingDiagnoser]
 public class Phase7_JoinCollationBenchmark
 {
-    private List<Dictionary<string, object>> _leftData = null!;
-    private List<Dictionary<string, object>> _rightData = null!;
-    private MockTable _leftTableBinary = null!;
-    private MockTable _leftTableNoCase = null!;
-    private MockTable _rightTableBinary = null!;
-    private MockTable _rightTableNoCase = null!;
+    private List<Dictionary<string, object>> _leftData = null;
+    private List<Dictionary<string, object>> _rightData = null;
+    private MockTable _leftTableBinary = null;
+    private MockTable _leftTableNoCase = null;
+    private MockTable _rightTableBinary = null;
+    private MockTable _rightTableNoCase = null;
     
     [Params(100, 1000, 10000)]
     public int RowCount { get; set; }

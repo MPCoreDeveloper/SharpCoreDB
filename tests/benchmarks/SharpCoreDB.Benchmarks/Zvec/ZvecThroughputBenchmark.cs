@@ -124,11 +124,11 @@ public class ZvecThroughputBenchmark : BenchmarkContext
                 
                 while (!cts.Token.IsCancellationRequested)
                 {
-                    var queryVector = _queryVectors![queryIndex % _queryVectors.Length];
+                    var queryVector = _queryVectors[queryIndex % _queryVectors.Length];
                     queryIndex++;
                     
                     var opStart = Stopwatch.GetTimestamp();
-                    var results = _index!.Search(queryVector.AsSpan(), K);
+                    var results = _index.Search(queryVector.AsSpan(), K);
                     var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
                     
                     allLatencies.Add(elapsed);

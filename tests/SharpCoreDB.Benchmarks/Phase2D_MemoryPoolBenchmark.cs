@@ -15,8 +15,8 @@ namespace SharpCoreDB.Benchmarks;
 public class Phase2D_MemoryPoolBenchmark
 {
     private const int IterationCount = 10000;
-    private ObjectPool<TestObject> objectPool = null!;
-    private BufferPool bufferPool = null!;
+    private ObjectPool<TestObject> objectPool = null;
+    private BufferPool bufferPool = null;
 
     [GlobalSetup]
     public void Setup()
@@ -175,7 +175,7 @@ public class Phase2D_MemoryPoolBenchmark
 public class Phase2D_GCPressureBenchmark
 {
     private const int OperationCount = 50000;
-    private ObjectPool<DataBuffer> pool = null!;
+    private ObjectPool<DataBuffer> pool = null;
 
     [GlobalSetup]
     public void Setup()
@@ -255,8 +255,8 @@ public class Phase2D_GCPressureBenchmark
 [MemoryDiagnoser]
 public class Phase2D_PoolStatisticsBenchmark
 {
-    private ObjectPool<StatisticsTestObject> objectPool = null!;
-    private BufferPool bufferPool = null!;
+    private ObjectPool<StatisticsTestObject> objectPool = null;
+    private BufferPool bufferPool = null;
 
     [GlobalSetup]
     public void Setup()
@@ -340,8 +340,8 @@ public class Phase2D_PoolStatisticsBenchmark
 [MemoryDiagnoser]
 public class Phase2D_ConcurrentPoolBenchmark
 {
-    private ObjectPool<ConcurrentTestObject> objectPool = null!;
-    private BufferPool bufferPool = null!;
+    private ObjectPool<ConcurrentTestObject> objectPool = null;
+    private BufferPool bufferPool = null;
     private const int ThreadCount = 8;
     private const int OperationsPerThread = 10000;
 

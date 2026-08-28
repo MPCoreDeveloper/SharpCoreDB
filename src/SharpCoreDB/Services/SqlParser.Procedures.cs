@@ -107,7 +107,7 @@ public partial class SqlParser
         StoredProcedureDefinition proc;
         lock (_procedureLock)
         {
-            if (!_procedures.TryGetValue(procName, out proc!))
+            if (!_procedures.TryGetValue(procName, out proc))
                 throw new InvalidOperationException($"Procedure '{procName}' not found");
         }
 

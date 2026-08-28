@@ -56,7 +56,7 @@ public partial class CryptoBufferPool : IDisposable
         }
         else
         {
-            this.threadLocalCache = null!;
+            this.threadLocalCache = null;
         }
     }
 

@@ -31,7 +31,7 @@ public class RestApiBenchmark
     [Benchmark]
     public async Task GetQueryAsync()
     {
-        var url = $"{_harness!.BaseAddress}api/query?sql=SELECT%201&database=test";
+        var url = $"{_harness.BaseAddress}api/query?sql=SELECT%201&database=test";
         using var response = await _harness.HttpClient.GetAsync(url, _harness.CancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         _ = await response.Content.ReadAsStringAsync(_harness.CancellationToken).ConfigureAwait(false);
@@ -40,7 +40,7 @@ public class RestApiBenchmark
     [Benchmark]
     public async Task PostNonQueryAsync()
     {
-        var url = $"{_harness!.BaseAddress}api/nonquery";
+        var url = $"{_harness.BaseAddress}api/nonquery";
         var content = JsonContent.Create(new
         {
             sql = "CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)",
@@ -54,7 +54,7 @@ public class RestApiBenchmark
     [Benchmark]
     public async Task PostBatchAsync()
     {
-        var url = $"{_harness!.BaseAddress}api/batch";
+        var url = $"{_harness.BaseAddress}api/batch";
         var statements = new List<string>();
         for (int i = 0; i < 100; i++)
         {

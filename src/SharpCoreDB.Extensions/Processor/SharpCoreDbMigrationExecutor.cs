@@ -167,7 +167,7 @@ public sealed class SharpCoreDbMigrationExecutor(IServiceProvider serviceProvide
             return true;
         }
 
-        executor = default!;
+        executor = default;
         return false;
     }
 
@@ -180,7 +180,7 @@ public sealed class SharpCoreDbMigrationExecutor(IServiceProvider serviceProvide
             return true;
         }
 
-        database = default!;
+        database = default;
         return false;
     }
 
@@ -193,7 +193,7 @@ public sealed class SharpCoreDbMigrationExecutor(IServiceProvider serviceProvide
             return true;
         }
 
-        connection = default!;
+        connection = default;
         return false;
     }
 

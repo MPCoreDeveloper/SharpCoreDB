@@ -34,21 +34,21 @@ public sealed class GraphTraversalMethodCallTranslator(ISqlExpressionFactory sql
         typeof(GraphTraversalQueryableExtensions)
             .GetMethods()
             .First(m => m.Name == nameof(GraphTraversalQueryableExtensions.Traverse)
-                && m.GetParameters().Length == 5)!;
+                && m.GetParameters().Length == 5);
 
     private static readonly MethodInfo _whereInMethod =
         typeof(GraphTraversalQueryableExtensions)
             .GetMethod(nameof(GraphTraversalQueryableExtensions.WhereIn), 
-                [typeof(IQueryable<>), typeof(IEnumerable<long>)])!;
+                [typeof(IQueryable<>), typeof(IEnumerable<long>)]);
 
     private static readonly MethodInfo _traverseWhereMethod =
         typeof(GraphTraversalQueryableExtensions)
-            .GetMethod(nameof(GraphTraversalQueryableExtensions.TraverseWhere))!;
+            .GetMethod(nameof(GraphTraversalQueryableExtensions.TraverseWhere));
 
     private static readonly MethodInfo _graphTraverseFunction =
         typeof(SharpCoreDBDbFunctionsExtensions)
             .GetMethod(nameof(SharpCoreDBDbFunctionsExtensions.GraphTraverse),
-                [typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy)])!;
+                [typeof(long), typeof(string), typeof(int), typeof(GraphTraversalStrategy)]);
 
     /// <inheritdoc />
     public SqlExpression? Translate(

@@ -221,7 +221,7 @@ public sealed class OrphanCleaner
                 }
                 
                 // Create target directory
-                Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath)!);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath));
                 
                 // Copy file
                 File.Copy(backupFilePath, targetFilePath, overwrite: true);

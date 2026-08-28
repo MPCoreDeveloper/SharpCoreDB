@@ -64,7 +64,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     /// <param name="Fail">Function invoked on failure.</param>
     /// <returns>The result of the matched branch.</returns>
     public TResult Match<TResult>(Func<T, TResult> Succ, Func<Error, TResult> Fail) =>
-        _isSucc ? Succ(_value!) : Fail(_error!);
+        _isSucc ? Succ(_value) : Fail(_error);
 
     /// <summary>
     /// Async pattern-match on this result.
@@ -74,7 +74,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     /// <param name="Fail">Async function invoked on failure.</param>
     /// <returns>The result of the matched branch.</returns>
     public Task<TResult> Match<TResult>(Func<T, Task<TResult>> Succ, Func<Error, Task<TResult>> Fail) =>
-        _isSucc ? Succ(_value!) : Fail(_error!);
+        _isSucc ? Succ(_value) : Fail(_error);
 
     /// <summary>
     /// Pattern-matches on this result, executing the appropriate action.
@@ -84,9 +84,9 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     public void Match(Action<T> Succ, Action<Error> Fail)
     {
         if (_isSucc)
-            Succ(_value!);
+            Succ(_value);
         else
-            Fail(_error!);
+            Fail(_error);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     /// <param name="map">The mapping function.</param>
     /// <returns>A new result with the mapped success value, or the original failure.</returns>
     public Fin<TResult> Map<TResult>(Func<T, TResult> map) =>
-        _isSucc ? Fin<TResult>.Succ(map(_value!)) : Fin<TResult>.Fail(_error!);
+        _isSucc ? Fin<TResult>.Succ(map(_value)) : Fin<TResult>.Fail(_error);
 
     /// <summary>
     /// Executes <paramref name="action"/> if this result is a success.
@@ -106,7 +106,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     public void IfSucc(Action<T> action)
     {
         if (_isSucc)
-            action(_value!);
+            action(_value);
     }
 
     /// <summary>
@@ -116,7 +116,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     public void IfFail(Action<Error> action)
     {
         if (!_isSucc)
-            action(_error!);
+            action(_error);
     }
 
     /// <summary>
@@ -127,7 +127,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     /// <param name="bind">The binding function.</param>
     /// <returns>The result of the bind, or the original failure.</returns>
     public Fin<TResult> Bind<TResult>(Func<T, Fin<TResult>> bind) =>
-        _isSucc ? bind(_value!) : Fin<TResult>.Fail(_error!);
+        _isSucc ? bind(_value) : Fin<TResult>.Fail(_error);
 
     /// <summary>
     /// Returns the success value or invokes <paramref name="handler"/> on the error.
@@ -136,7 +136,7 @@ public readonly struct Fin<T> : IEquatable<Fin<T>>
     /// <param name="handler">Handler invoked when this result is a failure.</param>
     /// <returns>The success value or the handler result.</returns>
     public T IfFail(Func<Error, T> handler) =>
-        _isSucc ? _value! : handler(_error!);
+        _isSucc ? _value : handler(_error);
 
     /// <summary>
     /// Implicit conversion from a value to a success result.

@@ -225,7 +225,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     public bool TryGetTable(string tableName, out ITable table)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
-        return _tables.TryGetValue(tableName, out table!);
+        return _tables.TryGetValue(tableName, out table);
     }
 
     /// <inheritdoc />

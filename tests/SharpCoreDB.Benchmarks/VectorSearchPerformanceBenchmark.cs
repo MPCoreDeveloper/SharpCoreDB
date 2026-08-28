@@ -37,10 +37,10 @@ using SharpCoreDB.VectorSearch;
 [Config(typeof(BenchmarkConfig))]
 public class VectorSearchPerformanceBenchmark
 {
-    private HnswIndex _hnswIndex = null!;
-    private FlatIndex _flatIndex = null!;
-    private float[][] _queryVectors = null!;
-    private Random _random = null!;
+    private HnswIndex _hnswIndex = null;
+    private FlatIndex _flatIndex = null;
+    private float[][] _queryVectors = null;
+    private Random _random = null;
 
     [Params(100, 1000, 10000)]
     public int VectorCount { get; set; }
@@ -297,11 +297,11 @@ public class VectorSearchPerformanceBenchmark
 [MemoryDiagnoser]
 public class VectorSearchLatencyBenchmark
 {
-    private HnswIndex _index = null!;
-    private float[][] _vectors = null!;
+    private HnswIndex _index = null;
+    private float[][] _vectors = null;
     private const int VectorCount = 10000;
     private const int Dimensions = 1536;
-    private Random _random = null!;
+    private Random _random = null;
 
     [GlobalSetup]
     public void Setup()

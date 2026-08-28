@@ -13,7 +13,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2E_CacheOptimizationBenchmark
 {
-    private int[] testData = null!;
+    private int[] testData = null;
     private const int DataSize = 10000000;
 
     [GlobalSetup]
@@ -113,9 +113,9 @@ public class Phase2E_CacheOptimizationBenchmark
 [MemoryDiagnoser]
 public class Phase2E_ColumnarStorageBenchmark
 {
-    private int[] col1 = null!;
-    private int[] col2 = null!;
-    private int[] col3 = null!;
+    private int[] col1 = null;
+    private int[] col2 = null;
+    private int[] col3 = null;
     private const int RowCount = 1000000;
 
     [GlobalSetup]
@@ -205,7 +205,7 @@ public class Phase2E_ColumnarStorageBenchmark
 [MemoryDiagnoser]
 public class Phase2E_TiledMatrixBenchmark
 {
-    private int[] matrix = null!;
+    private int[] matrix = null;
     private const int MATRIX_SIZE = 1024;
     private const int TILE_SIZE = 64;
 
@@ -276,8 +276,8 @@ public class Phase2E_TiledMatrixBenchmark
 [MemoryDiagnoser]
 public class Phase2E_CacheLineAlignmentBenchmark
 {
-    private CacheLineAlignedInt[] alignedData = null!;
-    private int[] unalignedData = null!;
+    private CacheLineAlignedInt[] alignedData = null;
+    private int[] unalignedData = null;
     private const int DataSize = 100000;
 
     [GlobalSetup]
@@ -340,9 +340,9 @@ public class Phase2E_CacheLineAlignmentBenchmark
 [MemoryDiagnoser]
 public class Phase2E_WorkingSetBenchmark
 {
-    private int[] smallData = null!;       // < L1 cache
-    private int[] mediumData = null!;      // L2 cache size
-    private int[] largeData = null!;       // > L3 cache
+    private int[] smallData = null;       // < L1 cache
+    private int[] mediumData = null;      // L2 cache size
+    private int[] largeData = null;       // > L3 cache
 
     [GlobalSetup]
     public void Setup()

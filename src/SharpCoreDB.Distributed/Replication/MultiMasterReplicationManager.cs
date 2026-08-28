@@ -180,7 +180,7 @@ public sealed class MultiMasterReplicationManager : IAsyncDisposable
         VectorClock nodeClock;
         lock (_stateLock)
         {
-            if (!_vectorClocks.TryGetValue(nodeId, out nodeClock!))
+            if (!_vectorClocks.TryGetValue(nodeId, out nodeClock))
             {
                 throw new InvalidOperationException($"Node '{nodeId}' not registered");
             }

@@ -91,7 +91,7 @@ public static class GraphTraversalQueryableExtensions
         var propertyAccess = Expression.Property(parameter, idProperty);
         var idList = Expression.Constant(ids);
 
-        var containsMethod = typeof(List<long>).GetMethod("Contains", [typeof(long)])!;
+        var containsMethod = typeof(List<long>).GetMethod("Contains", [typeof(long)]);
         var containsCall = Expression.Call(idList, containsMethod, propertyAccess);
 
         var lambda = Expression.Lambda<Func<TEntity, bool>>(containsCall, parameter);

@@ -215,7 +215,7 @@ public sealed class IndexManager : IDisposable
                 // by filtering out null values
                 var nonNullRow = update.Row
                     .Where(kvp => kvp.Value != null)
-                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!);
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
                 
                 index.Add(nonNullRow, update.Position);
             }
@@ -234,7 +234,7 @@ public sealed class IndexManager : IDisposable
             // by filtering out null values
             var nonNullRow = update.Row
                 .Where(kvp => kvp.Value != null)
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!);
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             
             index.Add(nonNullRow, update.Position);
         }

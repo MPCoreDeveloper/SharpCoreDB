@@ -24,8 +24,8 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2CInlineArraysBenchmark
 {
-    private int[] testData = null!;
-    private string[] testStrings = null!;
+    private int[] testData = null;
+    private string[] testStrings = null;
     private const int COLLECTION_SIZE = 100;
 
     [GlobalSetup]
@@ -128,8 +128,8 @@ public class Phase2CInlineArraysBenchmark
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2CCollectionExpressionsBenchmark
 {
-    private Dictionary<string, int> testDict = null!;
-    private List<(string key, int value)> testPairs = null!;
+    private Dictionary<string, int> testDict = null;
+    private List<(string key, int value)> testPairs = null;
 
     [GlobalSetup]
     public void Setup()
@@ -199,7 +199,7 @@ public class Phase2CCollectionExpressionsBenchmark
 [MemoryDiagnoser]
 public class Phase2CStackallocDetailedTest
 {
-    private int[] data = null!;
+    private int[] data = null;
 
     [GlobalSetup]
     public void Setup()
@@ -287,7 +287,7 @@ public class Phase2CStackallocDetailedTest
 [MemoryDiagnoser]
 public class Phase2CCollectionConcurrentTest
 {
-    private int[] testData = null!;
+    private int[] testData = null;
 
     [GlobalSetup]
     public void Setup()

@@ -164,7 +164,7 @@ public sealed class DistributedTransactionManager : IAsyncDisposable
         DistributedTransaction transaction;
         lock (_transactionLock)
         {
-            if (!_activeTransactions.TryGetValue(transactionId, out transaction!))
+            if (!_activeTransactions.TryGetValue(transactionId, out transaction))
             {
                 throw new InvalidOperationException($"Transaction '{transactionId}' not found");
             }
@@ -198,7 +198,7 @@ public sealed class DistributedTransactionManager : IAsyncDisposable
         DistributedTransaction transaction;
         lock (_transactionLock)
         {
-            if (!_activeTransactions.TryGetValue(transactionId, out transaction!))
+            if (!_activeTransactions.TryGetValue(transactionId, out transaction))
             {
                 throw new InvalidOperationException($"Transaction '{transactionId}' not found");
             }
@@ -241,7 +241,7 @@ public sealed class DistributedTransactionManager : IAsyncDisposable
         DistributedTransaction transaction;
         lock (_transactionLock)
         {
-            if (!_activeTransactions.TryGetValue(transactionId, out transaction!))
+            if (!_activeTransactions.TryGetValue(transactionId, out transaction))
             {
                 throw new InvalidOperationException($"Transaction '{transactionId}' not found");
             }

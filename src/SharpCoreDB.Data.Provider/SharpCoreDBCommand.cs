@@ -133,17 +133,17 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             if (parameters.Count > 0)
-                db.ExecuteSQL(CommandText!, parameters);
+                db.ExecuteSQL(CommandText, parameters);
             else
-                db.ExecuteSQL(CommandText!);
+                db.ExecuteSQL(CommandText);
 
             // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
             // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
-            var commandUpper = CommandText!.Trim().ToUpperInvariant();
+            var commandUpper = CommandText.Trim().ToUpperInvariant();
             if (commandUpper.StartsWith("INSERT") || 
                 commandUpper.StartsWith("UPDATE") || 
                 commandUpper.StartsWith("DELETE"))
@@ -169,11 +169,11 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             // 🔧 FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
-            var commandTextUpper = CommandText!.ToUpperInvariant().Trim();
+            var commandTextUpper = CommandText.ToUpperInvariant().Trim();
             if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
             {
                 return ExecuteSystemTableQuery(commandTextUpper, behavior);
@@ -181,11 +181,11 @@ public sealed class SharpCoreDBCommand : DbCommand
 
             List<Dictionary<string, object>> results;
             if (parameters.Count > 0)
-                results = db.ExecuteQuery(CommandText!, parameters);
+                results = db.ExecuteQuery(CommandText, parameters);
             else
-                results = db.ExecuteQuery(CommandText!);
+                results = db.ExecuteQuery(CommandText);
 
-            var optionalProjection = IsOptionalProjectionQuery(CommandText!);
+            var optionalProjection = IsOptionalProjectionQuery(CommandText);
             return new SharpCoreDBDataReader(results, behavior, optionalProjection);
         }
         catch (Exception ex)
@@ -221,7 +221,7 @@ public sealed class SharpCoreDBCommand : DbCommand
         
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             
             // Check if this is a table list query
             if (commandTextUpper.Contains("SELECT") && commandTextUpper.Contains("NAME"))
@@ -264,7 +264,7 @@ public sealed class SharpCoreDBCommand : DbCommand
             // Check if this is a column list query (pragma_table_info or similar)
             if (commandTextUpper.Contains("PRAGMA") || commandTextUpper.Contains("TABLE_INFO"))
             {
-                var tableName = ExtractTableNameFromPragma(CommandText!);
+                var tableName = ExtractTableNameFromPragma(CommandText);
 
                 if (!string.IsNullOrEmpty(tableName))
                 {
@@ -346,14 +346,14 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             List<Dictionary<string, object>> results;
             if (parameters.Count > 0)
-                results = db.ExecuteQuery(CommandText!, parameters);
+                results = db.ExecuteQuery(CommandText, parameters);
             else
-                results = db.ExecuteQuery(CommandText!);
+                results = db.ExecuteQuery(CommandText);
 
             if (results.Count == 0)
                 return null;
@@ -379,18 +379,18 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             if (parameters.Count > 0)
-                await db.ExecuteSQLAsync(CommandText!, parameters, cancellationToken);
+                await db.ExecuteSQLAsync(CommandText, parameters, cancellationToken);
             else
-                await db.ExecuteSQLAsync(CommandText!, cancellationToken);
+                await db.ExecuteSQLAsync(CommandText, cancellationToken);
 
             // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
             // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
             // This is essential for data durability - we want data on disk IMMEDIATELY.
-            var commandUpper = CommandText!.Trim().ToUpperInvariant();
+            var commandUpper = CommandText.Trim().ToUpperInvariant();
             if (commandUpper.StartsWith("INSERT") || 
                 commandUpper.StartsWith("UPDATE") || 
                 commandUpper.StartsWith("DELETE"))
@@ -415,16 +415,16 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             // ExecuteQuery doesn't have async version, so use Task.Run
             List<Dictionary<string, object>> results = await Task.Run(() =>
             {
                 if (parameters.Count > 0)
-                    return db.ExecuteQuery(CommandText!, parameters);
+                    return db.ExecuteQuery(CommandText, parameters);
                 else
-                    return db.ExecuteQuery(CommandText!);
+                    return db.ExecuteQuery(CommandText);
             }, cancellationToken);
 
             if (results.Count == 0)
@@ -451,11 +451,11 @@ public sealed class SharpCoreDBCommand : DbCommand
 
         try
         {
-            var db = Connection!.DbInstance!;
+            var db = Connection.DbInstance;
             var parameters = BuildParameterDictionary();
 
             // ? FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
-            var commandTextUpper = CommandText!.ToUpperInvariant().Trim();
+            var commandTextUpper = CommandText.ToUpperInvariant().Trim();
             if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
             {
                 return ExecuteSystemTableQuery(commandTextUpper, behavior);
@@ -465,9 +465,9 @@ public sealed class SharpCoreDBCommand : DbCommand
             var results = await Task.Run(() =>
             {
                 if (parameters.Count > 0)
-                    return db.ExecuteQuery(CommandText!, parameters);
+                    return db.ExecuteQuery(CommandText, parameters);
                 else
-                    return db.ExecuteQuery(CommandText!);
+                    return db.ExecuteQuery(CommandText);
             }, cancellationToken);
 
             return new SharpCoreDBDataReader(results, behavior);

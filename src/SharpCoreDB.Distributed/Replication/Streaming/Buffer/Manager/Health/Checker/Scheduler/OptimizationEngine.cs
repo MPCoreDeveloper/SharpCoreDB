@@ -209,7 +209,7 @@ internal sealed class OptimizationEngine
             : 0.0;
 
         profile.AverageSize = usageHistory.Any()
-            ? (long)usageHistory.Where(u => u.Size.HasValue).Average(u => u.Size!.Value)
+            ? (long)usageHistory.Where(u => u.Size.HasValue).Average(u => u.Size.Value)
             : 0L;
 
         profile.LastCorruptionTime = healthHistory

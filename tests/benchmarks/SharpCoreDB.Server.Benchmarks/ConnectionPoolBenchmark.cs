@@ -31,7 +31,7 @@ public class ConnectionPoolBenchmark
     [Benchmark]
     public async Task CreateAndDisposeGrpcChannelAsync()
     {
-        using var channel = _harness!.CreateGrpcChannel();
+        using var channel = _harness.CreateGrpcChannel();
         var client = new SharpCoreDB.Server.Protocol.DatabaseService.DatabaseServiceClient(channel);
 
         var request = new SharpCoreDB.Server.Protocol.QueryRequest
@@ -55,7 +55,7 @@ public class ConnectionPoolBenchmark
         {
             tasks.Add(Task.Run(async () =>
             {
-                using var channel = _harness!.CreateGrpcChannel();
+                using var channel = _harness.CreateGrpcChannel();
                 var client = new SharpCoreDB.Server.Protocol.DatabaseService.DatabaseServiceClient(channel);
 
                 var request = new SharpCoreDB.Server.Protocol.QueryRequest
@@ -78,7 +78,7 @@ public class ConnectionPoolBenchmark
     [Benchmark]
     public async Task CreateAndDisposeWebSocketAsync()
     {
-        using var webSocket = await _harness!.CreateWebSocketClientAsync().ConfigureAwait(false);
+        using var webSocket = await _harness.CreateWebSocketClientAsync().ConfigureAwait(false);
 
         var message = System.Text.Encoding.UTF8.GetBytes("{\"type\":\"query\",\"sessionId\":\"benchmark-session\",\"sql\":\"SELECT 1\"}");
         await webSocket.SendAsync(message, System.Net.WebSockets.WebSocketMessageType.Text, true, _harness.CancellationToken).ConfigureAwait(false);

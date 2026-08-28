@@ -188,7 +188,7 @@ public partial class Table
     private IEnumerable<StructRow> ScanColumnarStructRowsInternal(VariableLengthSchema schema, bool enableCaching)
     {
         // Read entire data file
-        var data = this.storage!.ReadBytes(this.DataFile, noEncrypt: false);
+        var data = this.storage.ReadBytes(this.DataFile, noEncrypt: false);
         if (data == null || data.Length == 0)
         {
             return Array.Empty<StructRow>();
@@ -263,7 +263,7 @@ public partial class Table
         bool enableCaching)
     {
         // Re-read data for Memory references (can't store Span)
-        var data = this.storage!.ReadBytes(this.DataFile, noEncrypt: false);
+        var data = this.storage.ReadBytes(this.DataFile, noEncrypt: false);
         if (data == null)
             yield break;
 

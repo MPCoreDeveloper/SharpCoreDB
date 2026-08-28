@@ -188,6 +188,6 @@ public class SharpCoreDBRelationalDatabase : RelationalDatabase
         string s => $"'{s.Replace("'", "''")}'",
         DateTime dt => $"'{dt:O}'",
         Guid g => $"'{g}'",
-        _ => value.ToString()!
+        _ => value.ToString()
     };
 }

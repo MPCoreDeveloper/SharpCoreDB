@@ -14,39 +14,39 @@ namespace SharpCoreDB.EntityFrameworkCore.Query;
 public class SharpCoreDBStringMethodCallTranslator(ISqlExpressionFactory sqlExpressionFactory) : IMethodCallTranslator
 {
     private static readonly MethodInfo _containsMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.Contains), [typeof(string)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.Contains), [typeof(string)]);
 
     private static readonly MethodInfo _startsWithMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.StartsWith), [typeof(string)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.StartsWith), [typeof(string)]);
 
     private static readonly MethodInfo _endsWithMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.EndsWith), [typeof(string)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.EndsWith), [typeof(string)]);
 
     private static readonly MethodInfo _toUpperMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.ToUpper), Type.EmptyTypes)!;
+        typeof(string).GetRuntimeMethod(nameof(string.ToUpper), Type.EmptyTypes);
 
     private static readonly MethodInfo _toLowerMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.ToLower), Type.EmptyTypes)!;
+        typeof(string).GetRuntimeMethod(nameof(string.ToLower), Type.EmptyTypes);
 
     private static readonly MethodInfo _trimMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.Trim), Type.EmptyTypes)!;
+        typeof(string).GetRuntimeMethod(nameof(string.Trim), Type.EmptyTypes);
 
     private static readonly MethodInfo _replaceMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.Replace), [typeof(string), typeof(string)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.Replace), [typeof(string), typeof(string)]);
 
     private static readonly MethodInfo _substringMethodOneArg =
-        typeof(string).GetRuntimeMethod(nameof(string.Substring), [typeof(int)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.Substring), [typeof(int)]);
 
     private static readonly MethodInfo _substringMethodTwoArgs =
-        typeof(string).GetRuntimeMethod(nameof(string.Substring), [typeof(int), typeof(int)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.Substring), [typeof(int), typeof(int)]);
 
     private static readonly MethodInfo _likeMethod =
         typeof(DbFunctionsExtensions).GetRuntimeMethod(
-            nameof(DbFunctionsExtensions.Like), [typeof(DbFunctions), typeof(string), typeof(string)])!;
+            nameof(DbFunctionsExtensions.Like), [typeof(DbFunctions), typeof(string), typeof(string)]);
 
     // ✅ EF Core COLLATE Phase 4: string.Equals(string, StringComparison)
     private static readonly MethodInfo _equalsWithComparisonMethod =
-        typeof(string).GetRuntimeMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)])!;
+        typeof(string).GetRuntimeMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)]);
 
     private readonly ISqlExpressionFactory _sqlExpressionFactory = sqlExpressionFactory
         ?? throw new ArgumentNullException(nameof(sqlExpressionFactory));

@@ -19,7 +19,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2AOptimizationBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
     private const int DATASET_SIZE = 10000;
 
     [GlobalSetup]

@@ -25,7 +25,7 @@ var json = await File.ReadAllTextAsync("companies.vacancies.seed.json");
 var seedData = JsonSerializer.Deserialize<SeedDataRoot>(json, new JsonSerializerOptions
 {
     PropertyNameCaseInsensitive = true
-})!;
+});
 
 Console.WriteLine($"   Loaded {seedData.Companies.Count} companies from seed file.\n");
 

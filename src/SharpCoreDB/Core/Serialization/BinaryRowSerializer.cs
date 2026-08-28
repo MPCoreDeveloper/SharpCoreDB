@@ -226,7 +226,7 @@ public static class BinaryRowSerializer
 
         return typeMarker switch
         {
-            0 => (null!, sizeof(byte)),
+            0 => (null, sizeof(byte)),
             1 => (BinaryPrimitives.ReadInt32LittleEndian(buffer[offset..]), sizeof(byte) + sizeof(int)),
             2 => (BinaryPrimitives.ReadInt64LittleEndian(buffer[offset..]), sizeof(byte) + sizeof(long)),
             3 => (BinaryPrimitives.ReadDoubleLittleEndian(buffer[offset..]), sizeof(byte) + sizeof(double)),

@@ -218,14 +218,14 @@ public static class ColumnCompression
             }
             else
             {
-                runs.Add(currentValue!);
+                runs.Add(currentValue);
                 runs.Add(currentCount);
                 currentValue = values[i];
                 currentCount = 1;
             }
         }
 
-        runs.Add(currentValue!);
+        runs.Add(currentValue);
         runs.Add(currentCount);
 
         // Calculate compression ratio

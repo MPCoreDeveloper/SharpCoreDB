@@ -21,7 +21,7 @@ public class PageBasedStorageBenchmark
     private const int RecordCount = 10_000; // ? REALISTIC: 10K records for production benchmarks
     private string baselinePath = string.Empty;
     private string optimizedPath = string.Empty;
-    private IServiceProvider services = null!;
+    private IServiceProvider services = null;
     private Database? baselineDb;
     private Database? optimizedDb;
 
@@ -151,7 +151,7 @@ public class PageBasedStorageBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             updates.Add($"UPDATE bench_data SET salary = {50000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
         }
-        baselineDb!.ExecuteBatchSQL(updates);
+        baselineDb.ExecuteBatchSQL(updates);
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public class PageBasedStorageBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             updates.Add($"UPDATE bench_data SET salary = {50000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
         }
-        optimizedDb!.ExecuteBatchSQL(updates);
+        optimizedDb.ExecuteBatchSQL(updates);
     }
 
     /// <summary>
@@ -181,7 +181,7 @@ public class PageBasedStorageBenchmark
     [BenchmarkCategory("Select")]
     public void Baseline_Select_FullScan()
     {
-        baselineDb!.ExecuteSQL("SELECT * FROM bench_data WHERE age > 30");
+        baselineDb.ExecuteSQL("SELECT * FROM bench_data WHERE age > 30");
     }
 
     /// <summary>
@@ -193,7 +193,7 @@ public class PageBasedStorageBenchmark
     [BenchmarkCategory("Select")]
     public void Optimized_Select_FullScan()
     {
-        optimizedDb!.ExecuteSQL("SELECT * FROM bench_data WHERE age > 30");
+        optimizedDb.ExecuteSQL("SELECT * FROM bench_data WHERE age > 30");
     }
 
     /// <summary>
@@ -211,7 +211,7 @@ public class PageBasedStorageBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             deletes.Add($"DELETE FROM bench_data WHERE id = {id}");
         }
-        baselineDb!.ExecuteBatchSQL(deletes);
+        baselineDb.ExecuteBatchSQL(deletes);
     }
 
     /// <summary>
@@ -230,7 +230,7 @@ public class PageBasedStorageBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             deletes.Add($"DELETE FROM bench_data WHERE id = {id}");
         }
-        optimizedDb!.ExecuteBatchSQL(deletes);
+        optimizedDb.ExecuteBatchSQL(deletes);
     }
 
     /// <summary>
@@ -250,22 +250,22 @@ public class PageBasedStorageBenchmark
                 if (op < 40)
                 {
                     var id = i % (RecordCount / 2);
-                    baselineDb!.ExecuteSQL($"SELECT * FROM bench_data WHERE id = {id}");
+                    baselineDb.ExecuteSQL($"SELECT * FROM bench_data WHERE id = {id}");
                 }
                 else if (op < 80)
                 {
                     var id = i % RecordCount;
-                    baselineDb!.ExecuteSQL($"UPDATE bench_data SET salary = {60000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
+                    baselineDb.ExecuteSQL($"UPDATE bench_data SET salary = {60000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
                 }
                 else if (op < 95)
                 {
                     var id = RecordCount + i;
-                    baselineDb!.ExecuteSQL($"INSERT INTO bench_data (id, name, email, age, salary, created) VALUES ({id}, 'New{id}', 'new{id}@test.com', 30, 40000, '2025-01-01')");
+                    baselineDb.ExecuteSQL($"INSERT INTO bench_data (id, name, email, age, salary, created) VALUES ({id}, 'New{id}', 'new{id}@test.com', 30, 40000, '2025-01-01')");
                 }
                 else
                 {
                     var id = (RecordCount / 2) + (i % (RecordCount / 2));
-                    baselineDb!.ExecuteSQL($"DELETE FROM bench_data WHERE id = {id}");
+                    baselineDb.ExecuteSQL($"DELETE FROM bench_data WHERE id = {id}");
                 }
             }
             catch (InvalidOperationException)
@@ -293,22 +293,22 @@ public class PageBasedStorageBenchmark
                 if (op < 40)
                 {
                     var id = i % (RecordCount / 2);
-                    optimizedDb!.ExecuteSQL($"SELECT * FROM bench_data WHERE id = {id}");
+                    optimizedDb.ExecuteSQL($"SELECT * FROM bench_data WHERE id = {id}");
                 }
                 else if (op < 80)
                 {
                     var id = i % RecordCount;
-                    optimizedDb!.ExecuteSQL($"UPDATE bench_data SET salary = {60000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
+                    optimizedDb.ExecuteSQL($"UPDATE bench_data SET salary = {60000 + id}, age = {25 + (id % 40)} WHERE id = {id}");
                 }
                 else if (op < 95)
                 {
                     var id = RecordCount + i;
-                    optimizedDb!.ExecuteSQL($"INSERT INTO bench_data (id, name, email, age, salary, created) VALUES ({id}, 'New{id}', 'new{id}@test.com', 30, 40000, '2025-01-01')");
+                    optimizedDb.ExecuteSQL($"INSERT INTO bench_data (id, name, email, age, salary, created) VALUES ({id}, 'New{id}', 'new{id}@test.com', 30, 40000, '2025-01-01')");
                 }
                 else
                 {
                     var id = (RecordCount / 2) + (i % (RecordCount / 2));
-                    optimizedDb!.ExecuteSQL($"DELETE FROM bench_data WHERE id = {id}");
+                    optimizedDb.ExecuteSQL($"DELETE FROM bench_data WHERE id = {id}");
                 }
             }
             catch (InvalidOperationException)

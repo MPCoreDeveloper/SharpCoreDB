@@ -1014,7 +1014,7 @@ public partial class Table
             if (StorageMode == StorageMode.Columnar)
             {
                 // Columnar: Read entire file and scan, filtering out deleted/stale rows
-                var data = this.storage!.ReadBytes(this.DataFile, noEncrypt);
+                var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
                 if (data != null && data.Length > 0)
                 {
                     results = ScanRowsWithSimdAndFilterStale(data, where);

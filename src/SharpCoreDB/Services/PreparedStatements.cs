@@ -493,7 +493,7 @@ internal static class ParameterBinder
             int i => i.ToString(),
             long l => l.ToString(),
             byte[] bytes => $"0x{System.Convert.ToHexString(bytes)}",
-            _ => $"'{EscapeSqlString(value.ToString()!)}'",
+            _ => $"'{EscapeSqlString(value.ToString())}'",
         };
     }
 

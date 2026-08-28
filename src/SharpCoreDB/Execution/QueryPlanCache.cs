@@ -199,7 +199,7 @@ public class QueryPlanCache
     /// </summary>
     private void EvictLRUEntry()
     {
-        string lruKey = null!;
+        string lruKey = null;
         long lruTime = long.MaxValue;
 
         foreach (var kvp in accessTimes)

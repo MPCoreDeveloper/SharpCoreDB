@@ -107,7 +107,7 @@ public sealed class FileStreamManager : IDisposable
             var finalMetaPath = GetMetaPath(fileId);
             
             // Ensure target directory exists
-            Directory.CreateDirectory(Path.GetDirectoryName(finalFilePath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(finalFilePath));
             
             // Move files (atomic operations)
             File.Move(tempFilePath, finalFilePath, overwrite: false);

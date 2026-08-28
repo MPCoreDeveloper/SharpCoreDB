@@ -295,7 +295,7 @@ public class SharpCoreDBMigrationsSqlGenerator : MigrationsSqlGenerator
             .Append("ALTER TABLE ")
             .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name, operation.Schema))
             .Append(" RENAME TO ")
-            .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.NewName!, operation.NewSchema));
+            .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.NewName, operation.NewSchema));
 
         builder.AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
         builder.EndCommand();

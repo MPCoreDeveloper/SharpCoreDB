@@ -48,7 +48,7 @@ public class PageSerializerPool : IDisposable
         }
         else
         {
-            this.threadLocalCache = null!;
+            this.threadLocalCache = null;
         }
     }
 
@@ -173,13 +173,13 @@ public class PageSerializerPool : IDisposable
                     {
                         buffers[j] = buffers[j + 1];
                     }
-                    buffers[--count] = null!;
+                    buffers[--count] = null;
                     
                     return true;
                 }
             }
 
-            buffer = null!;
+            buffer = null;
             return false;
         }
 

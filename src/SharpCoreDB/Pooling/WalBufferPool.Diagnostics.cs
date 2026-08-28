@@ -51,7 +51,7 @@ public partial class WalBufferPool
                 }
             }
 
-            buffer = null!;
+            buffer = null;
             return false;
         }
 

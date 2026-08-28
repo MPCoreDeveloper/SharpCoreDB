@@ -142,7 +142,7 @@ public sealed partial class PageCache
                 if (pageTable.TryRemove(pageId, out _))
                 {
                     // Clear frame slot
-                    Volatile.Write(ref frames[currentHand], null!);
+                    Volatile.Write(ref frames[currentHand], null);
                     Interlocked.Decrement(ref currentSize);
                     statistics.IncrementEvictions();
                     

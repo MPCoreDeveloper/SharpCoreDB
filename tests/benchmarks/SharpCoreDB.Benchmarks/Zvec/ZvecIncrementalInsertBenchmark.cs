@@ -65,7 +65,7 @@ public class ZvecIncrementalInsertBenchmark : BenchmarkContext
         
         for (int i = 0; i < InitialVectorCount; i++)
         {
-            _index.Add(i, _vectors![i].AsSpan());
+            _index.Add(i, _vectors[i].AsSpan());
         }
         Console.WriteLine($"[Z5] Initial index built");
         
@@ -82,7 +82,7 @@ public class ZvecIncrementalInsertBenchmark : BenchmarkContext
         for (int i = InitialVectorCount; i < TotalVectorCount; i++)
         {
             var opStart = Stopwatch.GetTimestamp();
-            _index.Add(i, _vectors![i].AsSpan());
+            _index.Add(i, _vectors[i].AsSpan());
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             insertLatencies.Add(elapsed);
             
@@ -115,9 +115,9 @@ public class ZvecIncrementalInsertBenchmark : BenchmarkContext
     {
         var recalls = new List<double>();
         
-        for (int i = 0; i < Math.Min(QueryCount, _queryVectors!.Length); i++)
+        for (int i = 0; i < Math.Min(QueryCount, _queryVectors.Length); i++)
         {
-            var results = _index!.Search(_queryVectors[i].AsSpan(), K);
+            var results = _index.Search(_queryVectors[i].AsSpan(), K);
             // Simplified: assume results are good (full recall measurement would need ground truth)
             recalls.Add(results.Count / (double)K);
         }

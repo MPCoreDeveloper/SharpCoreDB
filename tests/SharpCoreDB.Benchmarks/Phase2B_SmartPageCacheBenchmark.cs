@@ -21,8 +21,8 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2BSmartPageCacheBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
-    private SmartPageCache smartCache = null!;
+    private BenchmarkDatabaseHelper db = null;
+    private SmartPageCache smartCache = null;
     private const int DATASET_SIZE = 100000;
 
     [GlobalSetup]
@@ -178,7 +178,7 @@ public class Phase2BSmartPageCacheBenchmark
 [MemoryDiagnoser]
 public class SmartPageCacheBehaviorTest
 {
-    private SmartPageCache cache = null!;
+    private SmartPageCache cache = null;
 
     [GlobalSetup]
     public void Setup()

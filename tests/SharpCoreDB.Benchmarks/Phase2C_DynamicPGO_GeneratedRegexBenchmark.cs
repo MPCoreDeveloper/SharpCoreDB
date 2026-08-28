@@ -22,7 +22,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2CDynamicPGOBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
     private const int DATASET_SIZE = 10000;
     private const int ITERATIONS = 1000;  // Simulate hot path with many iterations
 
@@ -152,7 +152,7 @@ public partial class Phase2CGeneratedRegexBenchmark
     private string testEmail = "user@example.com";
     private string testSqlKeyword = "SELECT";
     private string testInvalidEmail = "not-an-email";
-    private string[] testEmails = null!;
+    private string[] testEmails = null;
 
     [GlobalSetup]
     public void Setup()
@@ -256,7 +256,7 @@ public partial class Phase2CGeneratedRegexBenchmark
 [MemoryDiagnoser]
 public partial class Phase2CCombinedBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
 
     [GlobalSetup]
     public void Setup()

@@ -61,7 +61,7 @@ public partial class TemporaryBufferPool : IDisposable
         }
         else
         {
-            this.threadLocalCache = null!;
+            this.threadLocalCache = null;
         }
     }
 

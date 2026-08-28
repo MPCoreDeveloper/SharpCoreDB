@@ -13,7 +13,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2E_HardwareOptimizationBenchmark
 {
-    private int[] testData = null!;
+    private int[] testData = null;
     private const int DataSize = 10000000;
 
     [GlobalSetup]
@@ -133,8 +133,8 @@ public class Phase2E_HardwareOptimizationBenchmark
 [MemoryDiagnoser]
 public class Phase2E_PlatformOptimizationBenchmark
 {
-    private int[] data1 = null!;
-    private int[] data2 = null!;
+    private int[] data1 = null;
+    private int[] data2 = null;
     private const int DataSize = 1000000;
 
     [GlobalSetup]
@@ -222,7 +222,7 @@ public class Phase2E_PlatformOptimizationBenchmark
 [MemoryDiagnoser]
 public class Phase2E_NUMAScalabilityBenchmark
 {
-    private int[] data = null!;
+    private int[] data = null;
     private const int DataSize = 5000000;
 
     [GlobalSetup]
@@ -279,7 +279,7 @@ public class Phase2E_NUMAScalabilityBenchmark
 [MemoryDiagnoser]
 public class Phase2E_CPUAffinityBenchmark
 {
-    private int[] data = null!;
+    private int[] data = null;
     private const int DataSize = 100000;
 
     [GlobalSetup]

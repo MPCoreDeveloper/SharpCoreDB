@@ -25,7 +25,7 @@ public static class TypeConverter
             return t;
 
         if (value == null || value == DBNull.Value)
-            return default!;
+            return default;
 
         try
         {
@@ -46,7 +46,7 @@ public static class TypeConverter
     /// <returns>True if conversion succeeded, otherwise false.</returns>
     public static bool TryConvert<T>(object? value, out T result)
     {
-        result = default!;
+        result = default;
 
         if (value is T t)
         {
@@ -56,7 +56,7 @@ public static class TypeConverter
 
         if (value == null || value == DBNull.Value)
         {
-            result = default!;
+            result = default;
             return true;
         }
 
@@ -601,7 +601,7 @@ public static class CachedTypeConverter
         
         // Handle null/DBNull
         if (value == null || value == DBNull.Value)
-            return default!;
+            return default;
         
         // Get or create converter for this type
         var type = typeof(T);
@@ -641,7 +641,7 @@ public static class CachedTypeConverter
                 return t;
             
             if (value == null || value == DBNull.Value)
-                return default!;
+                return default;
             
             try
             {
@@ -662,7 +662,7 @@ public static class CachedTypeConverter
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool TryConvertCached<T>(object? value, out T result) where T : notnull
     {
-        result = default!;
+        result = default;
         
         if (value is T t)
         {
@@ -672,7 +672,7 @@ public static class CachedTypeConverter
         
         if (value == null || value == DBNull.Value)
         {
-            result = default!;
+            result = default;
             return true;
         }
         

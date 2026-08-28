@@ -286,7 +286,7 @@ public static class SqlFunctions
                 ? StrFTime(dt2, fmt) : null,
             "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit
                 ? DateAdd(dt3, val, unit) : null,
-            "UNHEX" => arguments.Count >= 1 && arguments[0] is not null ? Unhex(arguments[0]!.ToString() ?? string.Empty) : null,
+            "UNHEX" => arguments.Count >= 1 && arguments[0] is not null ? Unhex(arguments[0].ToString() ?? string.Empty) : null,
             "QUOTE" => arguments.Count >= 1 ? Quote(arguments[0]) : "NULL",
             "CHAR" => Char([.. arguments.Select(ConvertToCharCodePoint)]),
             "UNICODE" => arguments.Count >= 1 ? Unicode(arguments[0]?.ToString()) : null,

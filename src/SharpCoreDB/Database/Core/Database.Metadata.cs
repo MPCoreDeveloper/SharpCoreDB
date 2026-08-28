@@ -25,7 +25,7 @@ public partial class Database : IMetadataProvider
     public bool TryGetTable(string tableName, out ITable table)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
-        return tables.TryGetValue(tableName, out table!);
+        return tables.TryGetValue(tableName, out table);
     }
 
     /// <inheritdoc />

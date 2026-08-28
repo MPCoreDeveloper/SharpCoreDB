@@ -52,7 +52,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="None">Function invoked when no value is present.</param>
     /// <returns>The result of the matched branch.</returns>
     public TResult Match<TResult>(Func<T, TResult> Some, Func<TResult> None) =>
-        _isSome ? Some(_value!) : None();
+        _isSome ? Some(_value) : None();
 
     /// <summary>
     /// Async pattern-match on this option.
@@ -62,7 +62,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="None">Async function invoked when no value is present.</param>
     /// <returns>The result of the matched branch.</returns>
     public Task<TResult> Match<TResult>(Func<T, Task<TResult>> Some, Func<Task<TResult>> None) =>
-        _isSome ? Some(_value!) : None();
+        _isSome ? Some(_value) : None();
 
     /// <summary>
     /// Executes <paramref name="action"/> if this option contains a value.
@@ -71,7 +71,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     public void IfSome(Action<T> action)
     {
         if (_isSome)
-            action(_value!);
+            action(_value);
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="map">The mapping function.</param>
     /// <returns>A new option containing the mapped value, or <c>None</c>.</returns>
     public Option<TResult> Map<TResult>(Func<T, TResult> map) =>
-        _isSome ? Option<TResult>.Some(map(_value!)) : Option<TResult>.None;
+        _isSome ? Option<TResult>.Some(map(_value)) : Option<TResult>.None;
 
     /// <summary>
     /// Flat-maps the contained value using <paramref name="bind"/>.
@@ -102,7 +102,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="bind">The binding function.</param>
     /// <returns>The result of the bind, or <c>None</c>.</returns>
     public Option<TResult> Bind<TResult>(Func<T, Option<TResult>> bind) =>
-        _isSome ? bind(_value!) : Option<TResult>.None;
+        _isSome ? bind(_value) : Option<TResult>.None;
 
     /// <summary>
     /// Returns the contained value or <paramref name="defaultValue"/> if empty.
@@ -110,7 +110,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="defaultValue">The fallback value.</param>
     /// <returns>The contained value or the default.</returns>
     public T IfNone(T defaultValue) =>
-        _isSome ? _value! : defaultValue;
+        _isSome ? _value : defaultValue;
 
     /// <summary>
     /// Returns the contained value or invokes <paramref name="defaultFactory"/> if empty.
@@ -118,7 +118,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
     /// <param name="defaultFactory">Factory for the fallback value.</param>
     /// <returns>The contained value or the factory result.</returns>
     public T IfNone(Func<T> defaultFactory) =>
-        _isSome ? _value! : defaultFactory();
+        _isSome ? _value : defaultFactory();
 
     /// <summary>
     /// Implicit conversion from a value to <c>Some(value)</c>.
@@ -137,7 +137,7 @@ public readonly struct Option<T> : IEquatable<Option<T>>
 
     /// <inheritdoc />
     public override int GetHashCode() =>
-        _isSome ? EqualityComparer<T>.Default.GetHashCode(_value!) : 0;
+        _isSome ? EqualityComparer<T>.Default.GetHashCode(_value) : 0;
 
     /// <summary>Equality operator.</summary>
     public static bool operator ==(Option<T> left, Option<T> right) => left.Equals(right);

@@ -191,7 +191,7 @@ internal sealed class InMemoryOrderWriteRepository
     public bool TryGet(string orderId, out OrderWriteModel order)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
-        return _orders.TryGetValue(orderId, out order!);
+        return _orders.TryGetValue(orderId, out order);
     }
 
     public void Save(OrderWriteModel order)

@@ -67,7 +67,7 @@ public abstract partial class SqlVisitorBase<TResult> : ISqlVisitor<TResult>
             RecordError($"{context}: {ex.Message}", node);
             if (_throwOnError)
                 throw;
-            return default!;
+            return default;
         }
     }
 }

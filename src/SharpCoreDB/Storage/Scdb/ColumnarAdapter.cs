@@ -310,7 +310,7 @@ public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
 
     private byte[] GetInt32ColumnBytes(string columnName)
     {
-        var column = _columnStore!.GetColumn<int>(columnName);
+        var column = _columnStore.GetColumn<int>(columnName);
         var data = column.GetData();
         var bytes = new byte[data.Length * sizeof(int)];
         
@@ -324,7 +324,7 @@ public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
 
     private byte[] GetInt64ColumnBytes(string columnName)
     {
-        var column = _columnStore!.GetColumn<long>(columnName);
+        var column = _columnStore.GetColumn<long>(columnName);
         var data = column.GetData();
         var bytes = new byte[data.Length * sizeof(long)];
         
@@ -338,7 +338,7 @@ public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
 
     private byte[] GetDoubleColumnBytes(string columnName)
     {
-        var column = _columnStore!.GetColumn<double>(columnName);
+        var column = _columnStore.GetColumn<double>(columnName);
         var data = column.GetData();
         var bytes = new byte[data.Length * sizeof(double)];
         
@@ -352,7 +352,7 @@ public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
 
     private byte[] GetDecimalColumnBytes(string columnName)
     {
-        var column = _columnStore!.GetColumn<decimal>(columnName);
+        var column = _columnStore.GetColumn<decimal>(columnName);
         var data = column.GetData();
         var bytes = new byte[data.Length * 16];
 

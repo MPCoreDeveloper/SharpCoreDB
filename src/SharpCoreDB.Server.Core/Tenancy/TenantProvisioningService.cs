@@ -565,7 +565,7 @@ public sealed class TenantProvisioningService(
             var lookupKey = BuildIdempotencyLookupKey(operationType, idempotencyKey);
             if (!_idempotencyOperationIds.TryGetValue(lookupKey, out var operationId))
             {
-                operation = null!;
+                operation = null;
                 return false;
             }
 
@@ -580,7 +580,7 @@ public sealed class TenantProvisioningService(
             }
 
             _idempotencyOperationIds.TryRemove(lookupKey, out _);
-            operation = null!;
+            operation = null;
             return false;
         }
     }

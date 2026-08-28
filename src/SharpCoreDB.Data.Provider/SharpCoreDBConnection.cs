@@ -242,7 +242,7 @@ public sealed class SharpCoreDBConnection : DbConnection
         var upper = collectionName.ToUpperInvariant();
         if (upper == "COLUMNS" && restrictionValues.Length > 0 && !string.IsNullOrWhiteSpace(restrictionValues[0]))
         {
-            return GetColumnsSchema(restrictionValues[0]!);
+            return GetColumnsSchema(restrictionValues[0]);
         }
 
         return GetSchema(collectionName);

@@ -845,10 +845,10 @@ public sealed class BinaryProtocolHandler(
         {
             var values = columns
                 .Select(col => row.TryGetValue(col, out var v) && v is not null
-                    ? Encoding.UTF8.GetBytes(v.ToString()!)
+                    ? Encoding.UTF8.GetBytes(v.ToString())
                     : null)
                 .ToArray();
-            await writer.WriteDataRowAsync(values!, cancellationToken);
+            await writer.WriteDataRowAsync(values, cancellationToken);
         }
 
         await writer.WriteCommandCompleteAsync($"SELECT {rows.Count}", cancellationToken);

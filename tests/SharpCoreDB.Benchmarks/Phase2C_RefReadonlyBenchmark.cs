@@ -22,7 +22,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2CRefReadonlyBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
     private const int DATASET_SIZE = 100000;
     private const int ITERATIONS = 1000;  // Simulate hot path
 
@@ -156,9 +156,9 @@ public class Phase2CRefReadonlyBenchmark
 [MemoryDiagnoser]
 public class Phase2CRefReadonlyDetailedTest
 {
-    private RowMaterializer materializer = null!;
-    private string[] columnNames = null!;
-    private Type[] columnTypes = null!;
+    private RowMaterializer materializer = null;
+    private string[] columnNames = null;
+    private Type[] columnTypes = null;
 
     [GlobalSetup]
     public void Setup()
@@ -244,7 +244,7 @@ public class Phase2CRefReadonlyDetailedTest
 [MemoryDiagnoser]
 public class Phase2CRefReadonlyConcurrentTest
 {
-    private ThreadSafeRowMaterializer materializer = null!;
+    private ThreadSafeRowMaterializer materializer = null;
 
     [GlobalSetup]
     public void Setup()

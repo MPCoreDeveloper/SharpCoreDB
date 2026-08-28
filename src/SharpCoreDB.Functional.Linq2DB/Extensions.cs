@@ -95,6 +95,6 @@ public static class Extensions
         {
             conn.Close(); // aggressively release file handle to mitigate Windows SQLite locking
         }
-        return conn!;
+        return conn;
     }
 }

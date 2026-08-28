@@ -10,7 +10,7 @@ using SharpCoreDB.DataStructures;
 public class HashIndexBackendBenchmark
 {
     private readonly List<Dictionary<string, object>> _rows = [];
-    private HashIndex _index = null!;
+    private HashIndex _index = null;
 
     [Params(false, true)]
     public bool UseUnsafeEqualityIndex { get; set; }

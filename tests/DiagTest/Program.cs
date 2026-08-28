@@ -23,7 +23,7 @@ foreach (var locale in testLocales)
         try
         {
             var dbPath = Path.Combine(Path.GetTempPath(), $"locale_test_{Guid.NewGuid()}");
-            var db = new SharpCoreDB.Database(null!, dbPath, "test", false, null, null);
+            var db = new SharpCoreDB.Database(null, dbPath, "test", false, null, null);
             db.ExecuteSQL($"CREATE TABLE test (col TEXT COLLATE LOCALE(\"{locale}\"))");
             Console.WriteLine($"  ✅ SharpCoreDB accepted locale");
             db.Dispose();

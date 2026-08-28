@@ -108,17 +108,17 @@ public class ZvecRecallLatencyBenchmark : BenchmarkContext
         // This benchmark measures with default ef_search behavior
         // For production use, different indexes would be created with different ef_search values
         
-        for (int i = 0; i < _queryVectors!.Length; i++)
+        for (int i = 0; i < _queryVectors.Length; i++)
         {
             var opStart = Stopwatch.GetTimestamp();
-            var results = _index!.Search(_queryVectors[i].AsSpan(), K);
+            var results = _index.Search(_queryVectors[i].AsSpan(), K);
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             latencies.Add(elapsed);
             
             // Calculate recall@K
             var predictedIds = results.Select(r => r.Id).ToHashSet();
-            var groundTruthIds = _groundTruth![i].ToHashSet();
+            var groundTruthIds = _groundTruth[i].ToHashSet();
             var intersection = predictedIds.Intersect(groundTruthIds).Count();
             var recall = intersection / (double)K;
             recalls.Add(recall);
@@ -149,13 +149,13 @@ public class ZvecRecallLatencyBenchmark : BenchmarkContext
     {
         var groundTruth = new List<List<long>>();
         
-        for (int q = 0; q < _queryVectors!.Length; q++)
+        for (int q = 0; q < _queryVectors.Length; q++)
         {
             var queryVector = _queryVectors[q];
             var distances = new List<(long Id, float Distance)>();
             
             // Brute-force: compute distance to all vectors
-            for (int i = 0; i < _vectors!.Length; i++)
+            for (int i = 0; i < _vectors.Length; i++)
             {
                 var distance = CosineSimilarity(queryVector, _vectors[i]);
                 distances.Add((i, distance));

@@ -16,7 +16,7 @@ namespace SharpCoreDB.Server.WebAdmin.Pages.Admin;
 [Authorize(AuthenticationSchemes = "WebAdmin", Roles = "admin")]
 public sealed class MetricsModel(MetricsCollector metricsCollector) : PageModel
 {
-    public MetricsSnapshot Snapshot { get; private set; } = null!;
+    public MetricsSnapshot Snapshot { get; private set; } = null;
 
     public void OnGet()
     {

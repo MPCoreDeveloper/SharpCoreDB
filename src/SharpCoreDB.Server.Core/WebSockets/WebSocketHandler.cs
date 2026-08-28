@@ -240,7 +240,7 @@ public sealed class WebSocketHandler(
             return;
         }
 
-        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal!, "/sharpcoredb.v1.DatabaseService/ExecuteQuery"))
+        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal, "/sharpcoredb.v1.DatabaseService/ExecuteQuery"))
         {
             await SendErrorAsync(webSocket, request.Id, "PERMISSION_DENIED",
                 "Insufficient permissions for query execution", cancellationToken).ConfigureAwait(false);
@@ -250,7 +250,7 @@ public sealed class WebSocketHandler(
         try
         {
             var start = Stopwatch.GetTimestamp();
-            await using var connection = await _session!.DatabaseInstance
+            await using var connection = await _session.DatabaseInstance
                 .GetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             var result = connection.Database.ExecuteQuery(request.Sql, request.Parameters);
@@ -320,7 +320,7 @@ public sealed class WebSocketHandler(
             return;
         }
 
-        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal!, "/sharpcoredb.v1.DatabaseService/ExecuteNonQuery"))
+        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal, "/sharpcoredb.v1.DatabaseService/ExecuteNonQuery"))
         {
             await SendErrorAsync(webSocket, request.Id, "PERMISSION_DENIED",
                 "Insufficient permissions for execute", cancellationToken).ConfigureAwait(false);
@@ -329,7 +329,7 @@ public sealed class WebSocketHandler(
 
         try
         {
-            await using var connection = await _session!.DatabaseInstance
+            await using var connection = await _session.DatabaseInstance
                 .GetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             connection.Database.ExecuteSQL(request.Sql, request.Parameters ?? new Dictionary<string, object?>());
@@ -360,7 +360,7 @@ public sealed class WebSocketHandler(
             return;
         }
 
-        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal!, "/sharpcoredb.v1.DatabaseService/ExecuteBatch"))
+        if (!_rbacService.AuthorizeGrpcCall(_authenticatedPrincipal, "/sharpcoredb.v1.DatabaseService/ExecuteBatch"))
         {
             await SendErrorAsync(webSocket, request.Id, "PERMISSION_DENIED",
                 "Insufficient permissions for batch execution", cancellationToken).ConfigureAwait(false);
@@ -369,7 +369,7 @@ public sealed class WebSocketHandler(
 
         try
         {
-            await using var connection = await _session!.DatabaseInstance
+            await using var connection = await _session.DatabaseInstance
                 .GetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             connection.Database.ExecuteBatchSQL(request.Statements);

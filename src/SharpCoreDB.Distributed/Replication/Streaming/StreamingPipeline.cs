@@ -240,18 +240,18 @@ public sealed class StreamingPipeline : IAsyncDisposable
             {
                 case StreamingCommandType.AddSession:
                     await AddSessionInternalAsync(
-                        command.ReplicaId!,
-                        command.WalFilePath!,
-                        command.ReplicationState!,
+                        command.ReplicaId,
+                        command.WalFilePath,
+                        command.ReplicationState,
                         cancellationToken);
                     break;
 
                 case StreamingCommandType.RemoveSession:
-                    await RemoveSessionInternalAsync(command.ReplicaId!, cancellationToken);
+                    await RemoveSessionInternalAsync(command.ReplicaId, cancellationToken);
                     break;
 
                 case StreamingCommandType.AcknowledgePosition:
-                    AcknowledgePositionInternal(command.ReplicaId!, command.Position!.Value);
+                    AcknowledgePositionInternal(command.ReplicaId, command.Position.Value);
                     break;
             }
         }

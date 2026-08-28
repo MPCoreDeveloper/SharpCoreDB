@@ -2026,7 +2026,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
         var tableAlias = string.IsNullOrWhiteSpace(from.Alias) ? from.TableName : from.Alias;
 
-        var result = tableRows.Select(row => QualifyRow(row, tableAlias!, from.TableName)).ToList();
+        var result = tableRows.Select(row => QualifyRow(row, tableAlias, from.TableName)).ToList();
 
         // Process JOINs parsed by EnhancedSqlParser
         foreach (var join in from.Joins)
@@ -2214,7 +2214,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
                     column.Alias,
                     outputNameCounts);
 
-                output[outputName] = value!;
+                output[outputName] = value;
             }
 
             projected.Add(output);
@@ -2414,12 +2414,12 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             else
             {
                 ordered = item.IsAscending
-                    ? ordered!.ThenBy(row => GetValue(row, item.Column), comparer)
-                    : ordered!.ThenByDescending(row => GetValue(row, item.Column), comparer);
+                    ? ordered.ThenBy(row => GetValue(row, item.Column), comparer)
+                    : ordered.ThenByDescending(row => GetValue(row, item.Column), comparer);
             }
         }
 
-        return [.. ordered!];
+        return [.. ordered];
     }
 
     private static List<Dictionary<string, object>> ApplyWindowing(List<Dictionary<string, object>> rows, int? offset, int? limit)

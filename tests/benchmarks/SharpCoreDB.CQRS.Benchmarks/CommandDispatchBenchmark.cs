@@ -31,9 +31,9 @@ using Microsoft.Extensions.DependencyInjection;
 [ShortRunJob]
 public class CommandDispatchBenchmark
 {
-    private ICommandDispatcher _serviceProviderDispatcher = null!;
-    private ICommandDispatcher _optimizedDispatcher = null!;
-    private ICommandDispatcher _inMemoryDispatcher = null!;
+    private ICommandDispatcher _serviceProviderDispatcher = null;
+    private ICommandDispatcher _optimizedDispatcher = null;
+    private ICommandDispatcher _inMemoryDispatcher = null;
 
     // Static command instances — no per-iteration allocation from command construction.
     private static readonly ClassCommand ClassCmd = new("bench");

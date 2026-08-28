@@ -23,7 +23,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Query;
 public class SharpCoreDBCollateTranslator : IMethodCallTranslator
 {
     private static readonly MethodInfo _collateMethod = typeof(SharpCoreDBDbFunctionsExtensions)
-        .GetRuntimeMethod(nameof(SharpCoreDBDbFunctionsExtensions.Collate), [typeof(DbFunctions), typeof(string), typeof(string)])!;
+        .GetRuntimeMethod(nameof(SharpCoreDBDbFunctionsExtensions.Collate), [typeof(DbFunctions), typeof(string), typeof(string)]);
 
     private readonly ISqlExpressionFactory _sqlExpressionFactory;
 

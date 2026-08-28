@@ -118,17 +118,17 @@ public sealed class ProductCrudService(IDatabase database)
     {
         return new Product
         {
-            Id = Guid.Parse(Convert.ToString(row["Id"], CultureInfo.InvariantCulture)!),
+            Id = Guid.Parse(Convert.ToString(row["Id"], CultureInfo.InvariantCulture)),
             Name = Convert.ToString(row["Name"], CultureInfo.InvariantCulture) ?? string.Empty,
             Description = row.TryGetValue("Description", out var description) && description is not DBNull
                 ? Convert.ToString(description, CultureInfo.InvariantCulture)
                 : null,
             Price = Convert.ToDecimal(row["Price"], CultureInfo.InvariantCulture),
             StockQuantity = Convert.ToInt32(row["StockQuantity"], CultureInfo.InvariantCulture),
-            CategoryId = Guid.Parse(Convert.ToString(row["CategoryId"], CultureInfo.InvariantCulture)!),
+            CategoryId = Guid.Parse(Convert.ToString(row["CategoryId"], CultureInfo.InvariantCulture)),
             IsActive = Convert.ToInt32(row["IsActive"], CultureInfo.InvariantCulture) == 1,
-            CreatedDate = DateTimeOffset.Parse(Convert.ToString(row["CreatedDate"], CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture),
-            LastUpdatedDate = DateTimeOffset.Parse(Convert.ToString(row["LastUpdatedDate"], CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture)
+            CreatedDate = DateTimeOffset.Parse(Convert.ToString(row["CreatedDate"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture),
+            LastUpdatedDate = DateTimeOffset.Parse(Convert.ToString(row["LastUpdatedDate"], CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
         };
     }
 
@@ -136,7 +136,7 @@ public sealed class ProductCrudService(IDatabase database)
     {
         return new Category
         {
-            Id = Guid.Parse(Convert.ToString(row["Id"], CultureInfo.InvariantCulture)!),
+            Id = Guid.Parse(Convert.ToString(row["Id"], CultureInfo.InvariantCulture)),
             Name = Convert.ToString(row["Name"], CultureInfo.InvariantCulture) ?? string.Empty,
             Description = row.TryGetValue("Description", out var description) && description is not DBNull
                 ? Convert.ToString(description, CultureInfo.InvariantCulture)

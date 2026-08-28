@@ -378,7 +378,7 @@ public class OperationMetrics
 
     /// <summary>Gets the average buffer size (if applicable).</summary>
     public double AverageSize => _sizes.Where(s => s.HasValue).Any()
-        ? _sizes.Where(s => s.HasValue).Average(s => s!.Value)
+        ? _sizes.Where(s => s.HasValue).Average(s => s.Value)
         : 0;
 
     /// <summary>

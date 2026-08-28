@@ -307,7 +307,7 @@ public sealed class NetworkServer(
                 _config.BindAddress, _config.BinaryProtocolPort);
 
             // Start accepting binary protocol connections
-            _ = Task.Run(() => AcceptBinaryConnectionsAsync(_shutdownCts!.Token), _shutdownCts!.Token);
+            _ = Task.Run(() => AcceptBinaryConnectionsAsync(_shutdownCts.Token), _shutdownCts.Token);
         }
         else
         {
@@ -326,7 +326,7 @@ public sealed class NetworkServer(
         {
             try
             {
-                var client = await _binaryProtocolListener!.AcceptTcpClientAsync(cancellationToken);
+                var client = await _binaryProtocolListener.AcceptTcpClientAsync(cancellationToken);
                 _ = Task.Run(() => HandleBinaryConnectionAsync(client, cancellationToken), cancellationToken);
             }
             catch (OperationCanceledException)

@@ -27,10 +27,10 @@ using System.Linq;
 [SimpleJob(RuntimeMoniker.Net80)]
 public class Phase5_CollationQueryPerformanceBenchmark
 {
-    private Table _table = null!;
-    private List<Dictionary<string, object>> _rows1K = null!;
-    private List<Dictionary<string, object>> _rows10K = null!;
-    private List<Dictionary<string, object>> _rows100K = null!;
+    private Table _table = null;
+    private List<Dictionary<string, object>> _rows1K = null;
+    private List<Dictionary<string, object>> _rows10K = null;
+    private List<Dictionary<string, object>> _rows100K = null;
 
     [GlobalSetup]
     public void Setup()

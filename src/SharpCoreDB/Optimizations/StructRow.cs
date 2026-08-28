@@ -131,7 +131,7 @@ public sealed class StructRow : IEquatable<StructRow>
         {
             if (Values[i] is not null)
             {
-                dict[Columns[i]] = Values[i]!;
+                dict[Columns[i]] = Values[i];
             }
         }
         return dict;
@@ -193,7 +193,7 @@ public sealed class StructRow : IEquatable<StructRow>
             {
                 hash = hash * 31 + Columns[i].GetHashCode();
                 if (Values[i] is not null)
-                    hash = hash * 31 + Values[i]!.GetHashCode();
+                    hash = hash * 31 + Values[i].GetHashCode();
             }
             return hash;
         }
@@ -244,7 +244,7 @@ public sealed class StructRowArrayBuilder : IDisposable
         if (values.Length != _columns.Length)
             throw new ArgumentException($"Row has {values.Length} values, expected {_columns.Length}");
 
-        if (_currentIndex >= _currentBuffer!.Length)
+        if (_currentIndex >= _currentBuffer.Length)
         {
             _rowBuffers.Add(_currentBuffer);
             _currentBuffer = ArrayPool<object?>.Shared.Rent(_bufferCapacity);
@@ -268,7 +268,7 @@ public sealed class StructRowArrayBuilder : IDisposable
         {
             for (int i = 0; i < buffer.Length && buffer[i] is not null; i++)
             {
-                var valueArray = (object?[])buffer[i]!;
+                var valueArray = (object?[])buffer[i];
                 allRows.Add(new StructRow
                 {
                     Columns = _columns,
@@ -279,9 +279,9 @@ public sealed class StructRowArrayBuilder : IDisposable
         }
 
         // Add rows from current buffer
-        for (int i = 0; i < _currentIndex && _currentBuffer![i] is not null; i++)
+        for (int i = 0; i < _currentIndex && _currentBuffer[i] is not null; i++)
         {
-            var valueArray = (object?[])_currentBuffer[i]!;
+            var valueArray = (object?[])_currentBuffer[i];
             allRows.Add(new StructRow
             {
                 Columns = _columns,

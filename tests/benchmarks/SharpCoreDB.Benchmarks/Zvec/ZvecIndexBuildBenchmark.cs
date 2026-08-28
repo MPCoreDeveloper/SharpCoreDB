@@ -101,7 +101,7 @@ public class ZvecIndexBuildBenchmark : BenchmarkContext
         var index = new HnswIndex(config);
         
         // Build index
-        for (int i = 0; i < _vectors!.Length; i++)
+        for (int i = 0; i < _vectors.Length; i++)
         {
             index.Add(i, _vectors[i].AsSpan());
             
@@ -133,7 +133,7 @@ public class ZvecIndexBuildBenchmark : BenchmarkContext
         var memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
         
         // Brute-force is just storing vectors in memory
-        var bruteForceIndex = new float[_vectors!.Length][];
+        var bruteForceIndex = new float[_vectors.Length][];
         Array.Copy(_vectors, bruteForceIndex, _vectors.Length);
         
         sw.Stop();

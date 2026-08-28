@@ -354,7 +354,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         {
             span.Slice(pos + 1, node.keysCount - pos - 1).CopyTo(span.Slice(pos, node.keysCount - pos - 1));
         }
-        node.keysArray[node.keysCount - 1] = default!;
+        node.keysArray[node.keysCount - 1] = default;
         node.keysCount--;
         
         // Keep valuesCount in sync with keysCount
@@ -365,7 +365,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
             {
                 valueSpan.Slice(pos + 1, node.valuesCount - pos - 1).CopyTo(valueSpan.Slice(pos, node.valuesCount - pos - 1));
             }
-            node.valuesArray[node.valuesCount - 1] = default!;
+            node.valuesArray[node.valuesCount - 1] = default;
             node.valuesCount--;
         }
     }
@@ -379,7 +379,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         {
             span.Slice(pos + 1, node.valuesCount - pos - 1).CopyTo(span.Slice(pos, node.valuesCount - pos - 1));
         }
-        node.valuesArray[node.valuesCount - 1] = default!;
+        node.valuesArray[node.valuesCount - 1] = default;
         node.valuesCount--;
     }
 
@@ -404,7 +404,7 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         {
             valueSpan.Slice(pos, node.valuesCount - pos).CopyTo(valueSpan.Slice(pos + 1, node.valuesCount - pos));
         }
-        node.valuesArray[pos] = default!;  // Internal nodes don't use values, but keep array consistent
+        node.valuesArray[pos] = default;  // Internal nodes don't use values, but keep array consistent
         node.valuesCount++;
     }
 

@@ -75,7 +75,7 @@ public sealed class VectorFunctionProvider : ICustomFunctionProvider
             string json => VectorSerializer.FromJson(json),
             float[] arr => arr,
             byte[] bytes => VectorSerializer.Deserialize(bytes),
-            _ => throw new ArgumentException($"vec_from_float32: unsupported argument type {arguments[0]!.GetType().Name}"),
+            _ => throw new ArgumentException($"vec_from_float32: unsupported argument type {arguments[0].GetType().Name}"),
         };
     }
 
@@ -115,7 +115,7 @@ public sealed class VectorFunctionProvider : ICustomFunctionProvider
         {
             float[] arr => arr.Length,
             byte[] bytes => VectorSerializer.GetDimensions(bytes),
-            _ => throw new ArgumentException($"vec_dimensions: unsupported argument type {arguments[0]!.GetType().Name}"),
+            _ => throw new ArgumentException($"vec_dimensions: unsupported argument type {arguments[0].GetType().Name}"),
         };
     }
 

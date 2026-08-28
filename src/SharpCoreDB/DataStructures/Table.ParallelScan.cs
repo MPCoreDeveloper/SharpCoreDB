@@ -126,7 +126,7 @@ public partial class Table
         if (this.StorageMode == StorageMode.Columnar)
         {
             // Columnar: Read entire file and scan in parallel, filtering out deleted/stale rows
-            var data = this.storage!.ReadBytes(this.DataFile, noEncrypt);
+            var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
             if (data != null && data.Length > 0)
             {
                 return ScanRowsParallel(data, where, orderBy, asc);

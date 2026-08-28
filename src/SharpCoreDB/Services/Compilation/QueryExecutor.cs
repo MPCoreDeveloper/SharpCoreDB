@@ -278,13 +278,13 @@ public sealed class QueryExecutor
         // Apply OFFSET
         if (plan.HasOffset)
         {
-            results = results.Skip(plan.Offset!.Value).ToList();
+            results = results.Skip(plan.Offset.Value).ToList();
         }
 
         // Apply LIMIT
         if (plan.HasLimit)
         {
-            results = results.Take(plan.Limit!.Value).ToList();
+            results = results.Take(plan.Limit.Value).ToList();
         }
 
         return results;

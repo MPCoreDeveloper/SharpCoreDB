@@ -37,7 +37,7 @@ public sealed class ServerBenchmarkHarness : IDisposable
     /// <summary>
     /// Gets the base address of the test server.
     /// </summary>
-    public Uri BaseAddress => _httpClient.BaseAddress!;
+    public Uri BaseAddress => _httpClient.BaseAddress;
 
     /// <summary>
     /// Gets a cancellation token for benchmark operations.

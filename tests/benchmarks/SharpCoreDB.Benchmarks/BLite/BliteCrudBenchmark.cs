@@ -135,9 +135,9 @@ public class BliteCrudBenchmark : BenchmarkContext
             if ((i + 1) % 10_000 == 0)
             {
                 // Execute batch
-                _db!.ExecuteBatchSQL(insertStatements);
+                _db.ExecuteBatchSQL(insertStatements);
                 insertStatements.Clear();
-                _db!.Flush();
+                _db.Flush();
                 Console.WriteLine($"[B1] Inserted {i + 1:N0}/{TotalInserts:N0} documents...");
             }
 
@@ -147,8 +147,8 @@ public class BliteCrudBenchmark : BenchmarkContext
         // Execute remaining
         if (insertStatements.Count > 0)
         {
-            _db!.ExecuteBatchSQL(insertStatements);
-            _db!.Flush();
+            _db.ExecuteBatchSQL(insertStatements);
+            _db.Flush();
         }
 
         sw.Stop();
@@ -165,7 +165,7 @@ public class BliteCrudBenchmark : BenchmarkContext
             var id = random.Next(1, TotalInserts + 1);
             var opStart = Stopwatch.GetTimestamp();
             
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE id = {id}");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE id = {id}");
             
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             _readLatencies.Add(elapsed);
@@ -191,7 +191,7 @@ public class BliteCrudBenchmark : BenchmarkContext
             var opStart = Stopwatch.GetTimestamp();
             
             // Query: age > 25 AND age < 75
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > 25 AND age < 75");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > 25 AND age < 75");
             
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             _filteredLatencies.Add(elapsed);
@@ -229,9 +229,9 @@ public class BliteCrudBenchmark : BenchmarkContext
             if ((i + 1) % 1_000 == 0)
             {
                 // Execute batch
-                _db!.ExecuteBatchSQL(updateStatements);
+                _db.ExecuteBatchSQL(updateStatements);
                 updateStatements.Clear();
-                _db!.Flush();
+                _db.Flush();
                 Console.WriteLine($"[B1] Updated {i + 1:N0}/{TotalUpdates:N0} documents...");
             }
 
@@ -241,8 +241,8 @@ public class BliteCrudBenchmark : BenchmarkContext
         // Execute remaining
         if (updateStatements.Count > 0)
         {
-            _db!.ExecuteBatchSQL(updateStatements);
-            _db!.Flush();
+            _db.ExecuteBatchSQL(updateStatements);
+            _db.Flush();
         }
 
         sw.Stop();
@@ -269,9 +269,9 @@ public class BliteCrudBenchmark : BenchmarkContext
             if ((i + 1) % 1_000 == 0)
             {
                 // Execute batch
-                _db!.ExecuteBatchSQL(deleteStatements);
+                _db.ExecuteBatchSQL(deleteStatements);
                 deleteStatements.Clear();
-                _db!.Flush();
+                _db.Flush();
                 Console.WriteLine($"[B1] Deleted {i + 1:N0}/{TotalDeletes:N0} documents...");
             }
 
@@ -281,8 +281,8 @@ public class BliteCrudBenchmark : BenchmarkContext
         // Execute remaining
         if (deleteStatements.Count > 0)
         {
-            _db!.ExecuteBatchSQL(deleteStatements);
-            _db!.Flush();
+            _db.ExecuteBatchSQL(deleteStatements);
+            _db.Flush();
         }
 
         sw.Stop();
@@ -293,7 +293,7 @@ public class BliteCrudBenchmark : BenchmarkContext
     {
         var sw = Stopwatch.StartNew();
         
-        _db!.ExecuteSQL($"SELECT COUNT(*) FROM {TableName}");
+        _db.ExecuteSQL($"SELECT COUNT(*) FROM {TableName}");
         
         sw.Stop();
         Console.WriteLine($"[B1] Full scan completed in {sw.Elapsed.TotalMilliseconds:F2}ms");

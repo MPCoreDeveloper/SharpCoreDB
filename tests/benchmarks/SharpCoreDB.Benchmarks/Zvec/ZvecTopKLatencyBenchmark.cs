@@ -92,10 +92,10 @@ public class ZvecTopKLatencyBenchmark : BenchmarkContext
         
         var sw = Stopwatch.StartNew();
         
-        for (int i = 0; i < _queryVectors!.Length; i++)
+        for (int i = 0; i < _queryVectors.Length; i++)
         {
             var opStart = Stopwatch.GetTimestamp();
-            var results = _index!.Search(_queryVectors[i].AsSpan(), k);
+            var results = _index.Search(_queryVectors[i].AsSpan(), k);
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             latencies.Add(elapsed);

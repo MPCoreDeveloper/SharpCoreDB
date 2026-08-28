@@ -19,7 +19,7 @@ public sealed class SharpCoreDBModelCustomizer(ModelCustomizerDependencies depen
 
         modelBuilder
             .HasDbFunction(typeof(SharpCoreDBDbFunctionsExtensions)
-                .GetMethod(nameof(SharpCoreDBDbFunctionsExtensions.GraphTraverse))!)
+                .GetMethod(nameof(SharpCoreDBDbFunctionsExtensions.GraphTraverse)))
             .HasName("GRAPH_TRAVERSE");
 
         // Automatically treat integer/long primary keys as server-generated.

@@ -277,7 +277,7 @@ public static class InsertBatchOptimized
                         }
                         else
                         {
-                            guidVal = Guid.Parse(value.ToString()!);
+                            guidVal = Guid.Parse(value.ToString());
                         }
                         bytesWritten += SerializeGuid(buffer.Slice(bytesWritten), guidVal);
                         break;
@@ -293,7 +293,7 @@ public static class InsertBatchOptimized
                         }
                         else
                         {
-                            ulidStr = value.ToString()!;
+                            ulidStr = value.ToString();
                         }
                         bytesWritten += SerializeUlid(buffer.Slice(bytesWritten), ulidStr);
                         break;

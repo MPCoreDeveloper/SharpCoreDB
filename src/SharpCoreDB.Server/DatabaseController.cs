@@ -62,10 +62,10 @@ public sealed class DatabaseController(
         try
         {
             await tenantQuotaEnforcementService
-                .EnsureRequestQuotaAsync(session!.TenantId, "REST/query", cancellationToken: cancellationToken)
+                .EnsureRequestQuotaAsync(session.TenantId, "REST/query", cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            await using var connection = await db!.GetConnectionAsync(cancellationToken);
+            await using var connection = await db.GetConnectionAsync(cancellationToken);
             var result = connection.Database.ExecuteQuery(request.Sql, request.Parameters ?? []);
 
             var columns = Array.Empty<ColumnInfo>();
@@ -110,7 +110,7 @@ public sealed class DatabaseController(
         }
         finally
         {
-            await sessionManager.RemoveSessionAsync(session!.SessionId, cancellationToken);
+            await sessionManager.RemoveSessionAsync(session.SessionId, cancellationToken);
         }
     }
 
@@ -134,7 +134,7 @@ public sealed class DatabaseController(
         try
         {
             await tenantQuotaEnforcementService
-                .EnsureRequestQuotaAsync(session!.TenantId, "REST/execute", cancellationToken: cancellationToken)
+                .EnsureRequestQuotaAsync(session.TenantId, "REST/execute", cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             await tenantQuotaEnforcementService
@@ -145,7 +145,7 @@ public sealed class DatabaseController(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            await using var connection = await db!.GetConnectionAsync(cancellationToken);
+            await using var connection = await db.GetConnectionAsync(cancellationToken);
             connection.Database.ExecuteSQL(request.Sql);
             var elapsed = Stopwatch.GetElapsedTime(start);
 
@@ -170,7 +170,7 @@ public sealed class DatabaseController(
         }
         finally
         {
-            await sessionManager.RemoveSessionAsync(session!.SessionId, cancellationToken);
+            await sessionManager.RemoveSessionAsync(session.SessionId, cancellationToken);
         }
     }
 
@@ -200,7 +200,7 @@ public sealed class DatabaseController(
         {
             await tenantQuotaEnforcementService
                 .EnsureRequestQuotaAsync(
-                    session!.TenantId,
+                    session.TenantId,
                     "REST/batch",
                     batchSize: request.Statements.Length,
                     cancellationToken: cancellationToken)
@@ -214,7 +214,7 @@ public sealed class DatabaseController(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            await using var connection = await db!.GetConnectionAsync(cancellationToken);
+            await using var connection = await db.GetConnectionAsync(cancellationToken);
             connection.Database.ExecuteBatchSQL(request.Statements);
             var elapsed = Stopwatch.GetElapsedTime(start);
 
@@ -240,7 +240,7 @@ public sealed class DatabaseController(
         }
         finally
         {
-            await sessionManager.RemoveSessionAsync(session!.SessionId, cancellationToken);
+            await sessionManager.RemoveSessionAsync(session.SessionId, cancellationToken);
         }
     }
 
@@ -347,7 +347,7 @@ public sealed class DatabaseController(
 
         return Ok(new LoginResponse
         {
-            Token = result.Token!,
+            Token = result.Token,
             Role = result.Role.ToString().ToLowerInvariant(),
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
         });

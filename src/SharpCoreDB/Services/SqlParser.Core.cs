@@ -68,7 +68,7 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <param name="queryCache">Optional shared query cache.</param>
     /// <param name="config">Optional database configuration.</param>
     internal SqlParser(Dictionary<string, ITable> tables, string dbPath, ITableFactory tableFactory, bool isReadOnly = false, QueryCache? queryCache = null, DatabaseConfig? config = null)
-        : this(tables, dbPath, (IStorage)null!, isReadOnly, queryCache, config)
+        : this(tables, dbPath, (IStorage)null, isReadOnly, queryCache, config)
     {
         // Override the directory-mode factory set by the primary constructor with the provided one.
         _tableFactory = tableFactory ?? throw new ArgumentNullException(nameof(tableFactory));
@@ -85,10 +85,10 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <param name="queryCache">Optional shared query cache.</param>
     /// <param name="config">Optional database configuration.</param>
     internal SqlParser(Dictionary<string, ITable> tables, string dbPath, bool isReadOnly = false, QueryCache? queryCache = null, DatabaseConfig? config = null)
-        : this(tables, dbPath, (IStorage)null!, isReadOnly, queryCache, config)
+        : this(tables, dbPath, (IStorage)null, isReadOnly, queryCache, config)
     {
         // No factory: DDL is not available without a storage provider.
-        _tableFactory = null!;
+        _tableFactory = null;
     }
 
     /// <summary>

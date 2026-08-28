@@ -21,7 +21,7 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 2, iterationCount: 3)]
 public class Phase2BLockContentionBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
     private const int DATASET_SIZE = 100000;
 
     [GlobalSetup]
@@ -215,7 +215,7 @@ public class Phase2BLockContentionBenchmark
 [MemoryDiagnoser]
 public class LockContentionAnalysisTest
 {
-    private BenchmarkDatabaseHelper db = null!;
+    private BenchmarkDatabaseHelper db = null;
 
     [GlobalSetup]
     public void Setup()

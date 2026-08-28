@@ -62,7 +62,7 @@ public sealed class ConflictResolver
     private static ConflictResolution ResolveLastWriteWins(DataConflict conflict)
     {
         var latestVersion = conflict.ConflictingVersions
-            .MaxBy(v => v.Timestamp)!;
+            .MaxBy(v => v.Timestamp);
 
         return new ConflictResolution
         {
@@ -81,7 +81,7 @@ public sealed class ConflictResolver
     private static ConflictResolution ResolveFirstWriteWins(DataConflict conflict)
     {
         var earliestVersion = conflict.ConflictingVersions
-            .MinBy(v => v.Timestamp)!;
+            .MinBy(v => v.Timestamp);
 
         return new ConflictResolution
         {

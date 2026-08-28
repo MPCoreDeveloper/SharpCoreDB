@@ -220,7 +220,7 @@ public sealed class TenantCatalogRepository(
                 var tenants = new List<TenantInfo>();
                 foreach (var row in ScanTable(table))
                 {
-                    if (statusFilter == null || Enum.Parse<TenantStatus>((string)row["status"]!) == statusFilter)
+                    if (statusFilter == null || Enum.Parse<TenantStatus>((string)row["status"]) == statusFilter)
                     {
                         tenants.Add(MapRowToTenant(row));
                     }

@@ -44,13 +44,13 @@ public partial class CryptoBufferPool
                     {
                         buffers[j] = buffers[j + 1];
                     }
-                    buffers[--count] = null!;
+                    buffers[--count] = null;
                     
                     return true;
                 }
             }
 
-            buffer = null!;
+            buffer = null;
             return false;
         }
 
@@ -74,7 +74,7 @@ public partial class CryptoBufferPool
                 if (buffers[i] is not null)  // ✅ C# 14: is not null
                 {
                     CryptographicOperations.ZeroMemory(buffers[i]);
-                    buffers[i] = null!;
+                    buffers[i] = null;
                 }
             }
             count = 0;
@@ -189,22 +189,22 @@ public ref struct RentedCryptoBuffer
     /// Gets a span view of the buffer.
     /// SECURITY: Data in span will be cleared on disposal.
     /// </summary>
-    public readonly Span<byte> AsSpan() => buffer!.AsSpan();
+    public readonly Span<byte> AsSpan() => buffer.AsSpan();
 
     /// <summary>
     /// Gets a span view of the used portion.
     /// </summary>
-    public readonly Span<byte> UsedSpan() => buffer!.AsSpan(0, usedSize);
+    public readonly Span<byte> UsedSpan() => buffer.AsSpan(0, usedSize);
 
     /// <summary>
     /// Gets a memory view of the buffer.
     /// </summary>
-    public readonly Memory<byte> AsMemory() => buffer!.AsMemory();
+    public readonly Memory<byte> AsMemory() => buffer.AsMemory();
 
     /// <summary>
     /// Gets a memory view of the used portion.
     /// </summary>
-    public readonly Memory<byte> UsedMemory() => buffer!.AsMemory(0, usedSize);
+    public readonly Memory<byte> UsedMemory() => buffer.AsMemory(0, usedSize);
 
     /// <summary>
     /// Returns the buffer to the pool with secure clearing.

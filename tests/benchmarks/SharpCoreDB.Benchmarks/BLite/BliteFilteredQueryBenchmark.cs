@@ -134,7 +134,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
             var age = random.Next(18, 101);
             
             var opStart = Stopwatch.GetTimestamp();
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE age = {age}");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE age = {age}");
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             _simpleFilterLatencies.Add(elapsed);
@@ -162,7 +162,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
             var maxAge = minAge + random.Next(10, 40);
             
             var opStart = Stopwatch.GetTimestamp();
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge}");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge}");
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             _rangeFilterLatencies.Add(elapsed);
@@ -192,7 +192,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
             var isActive = random.Next(0, 2);
             
             var opStart = Stopwatch.GetTimestamp();
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge} AND score > {minScore} AND is_active = {isActive}");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE age > {minAge} AND age < {maxAge} AND score > {minScore} AND is_active = {isActive}");
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             _multiFilterLatencies.Add(elapsed);
@@ -220,7 +220,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
             var pattern = patterns[random.Next(patterns.Length)];
             
             var opStart = Stopwatch.GetTimestamp();
-            _db!.ExecuteSQL($"SELECT * FROM {TableName} WHERE name LIKE '{pattern}'");
+            _db.ExecuteSQL($"SELECT * FROM {TableName} WHERE name LIKE '{pattern}'");
             var elapsed = (Stopwatch.GetTimestamp() - opStart) * 1000.0 / Stopwatch.Frequency;
             
             _likeFilterLatencies.Add(elapsed);

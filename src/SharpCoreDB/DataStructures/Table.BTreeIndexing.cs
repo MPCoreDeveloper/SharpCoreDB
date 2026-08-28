@@ -290,7 +290,7 @@ public partial class Table
 
             var positions = (IEnumerable<long>)findRangeMethod.Invoke(
                 btreeIndex,
-                new[] { startKey, endKey })!;
+                new[] { startKey, endKey });
 
             int positionCount = 0;
             foreach (var pos in positions)
@@ -542,7 +542,7 @@ public partial class Table
                 DataType.Real => Convert.ToDouble(value),
                 DataType.Decimal => Convert.ToDecimal(value),
                 DataType.String => value.ToString(),
-                DataType.DateTime => value is DateTime dt ? dt : DateTime.Parse(value.ToString()!, System.Globalization.CultureInfo.InvariantCulture),
+                DataType.DateTime => value is DateTime dt ? dt : DateTime.Parse(value.ToString(), System.Globalization.CultureInfo.InvariantCulture),
                 _ => value
             };
         }

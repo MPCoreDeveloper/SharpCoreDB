@@ -260,7 +260,7 @@ public sealed class OverflowPageManager : IDisposable
         CancellationToken cancellationToken)
     {
         var pagePath = GetPagePath(pageId);
-        Directory.CreateDirectory(Path.GetDirectoryName(pagePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(pagePath));
         
         // Rent buffer for page
         var buffer = ArrayPool<byte>.Shared.Rent(_pageSize);

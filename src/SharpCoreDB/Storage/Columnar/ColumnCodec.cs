@@ -421,7 +421,7 @@ public sealed class ColumnCodec(ColumnFormat format)
         for (int idx = 1; idx < values.Length; idx++)
         {
             var delta = reader.ReadInt32();
-            values[idx] = nullBitmap.IsNull(idx) ? null : (int)values[idx - 1]! + delta;
+            values[idx] = nullBitmap.IsNull(idx) ? null : (int)values[idx - 1] + delta;
         }
     }
 
@@ -478,7 +478,7 @@ public sealed class ColumnCodec(ColumnFormat format)
         for (int idx = 1; idx < values.Length; idx++)
         {
             var delta = reader.ReadInt64();
-            values[idx] = nullBitmap.IsNull(idx) ? null : (long)values[idx - 1]! + delta;
+            values[idx] = nullBitmap.IsNull(idx) ? null : (long)values[idx - 1] + delta;
         }
     }
 

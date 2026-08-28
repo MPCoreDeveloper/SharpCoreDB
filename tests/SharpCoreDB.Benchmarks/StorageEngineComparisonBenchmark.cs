@@ -42,7 +42,7 @@ public class StorageEngineComparisonBenchmark
     private string scSinglePlainPath = string.Empty;
     private string scSingleEncPath = string.Empty;
     
-    private IServiceProvider services = null!;
+    private IServiceProvider services = null;
     private Database? appendOnlyDb;
     private Database? pageBasedDb;
     private Database? scDirPlainDb;
@@ -192,18 +192,18 @@ public class StorageEngineComparisonBenchmark
         )";
 
         appendOnlyDb.ExecuteSQL(createTable);
-        pageBasedDb!.ExecuteSQL(createTable);
-        scDirPlainDb!.ExecuteSQL(createTable);
-        scDirEncDb!.ExecuteSQL(createTable);
-        scSinglePlainDb!.ExecuteSQL(createTable);
-        scSingleEncDb!.ExecuteSQL(createTable);
+        pageBasedDb.ExecuteSQL(createTable);
+        scDirPlainDb.ExecuteSQL(createTable);
+        scDirEncDb.ExecuteSQL(createTable);
+        scSinglePlainDb.ExecuteSQL(createTable);
+        scSingleEncDb.ExecuteSQL(createTable);
         
         // Index on age to avoid full table scans in SELECT age > X (dir-based engines only)
         var createAgeIndex = "CREATE INDEX idx_age ON bench_records (age);";
         try { appendOnlyDb.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
-        try { pageBasedDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
-        try { scDirPlainDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
-        try { scDirEncDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { pageBasedDb.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { scDirPlainDb.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { scDirEncDb.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
         // Single-file (.scdb) currently skips CREATE INDEX
 
         // Pre-populate for SELECT/UPDATE benchmarks
@@ -280,32 +280,32 @@ public class StorageEngineComparisonBenchmark
         }
         
         Console.WriteLine("[PrePopulate] Inserting into AppendOnly...");
-        appendOnlyDb!.ExecuteBatchSQL(inserts);
+        appendOnlyDb.ExecuteBatchSQL(inserts);
         
         Console.WriteLine("[PrePopulate] Inserting into PageBased...");
-        pageBasedDb!.ExecuteBatchSQL(inserts);
+        pageBasedDb.ExecuteBatchSQL(inserts);
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Dir (unencrypted)...");
-        scDirPlainDb!.ExecuteBatchSQL(inserts);
+        scDirPlainDb.ExecuteBatchSQL(inserts);
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Dir (encrypted)...");
-        scDirEncDb!.ExecuteBatchSQL(inserts);
+        scDirEncDb.ExecuteBatchSQL(inserts);
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Single (unencrypted)...");
-        scSinglePlainDb!.ExecuteBatchSQL(inserts);
+        scSinglePlainDb.ExecuteBatchSQL(inserts);
         // ✅ CRITICAL FIX: Explicit flush after pre-population to prevent checksum issues
         scSinglePlainDb.ForceSave();
         Console.WriteLine("[PrePopulate] ✅ Flushed SCDB Single (unencrypted)");
 
         Console.WriteLine("[PrePopulate] Inserting into SCDB Single (encrypted)...");
-        scSingleEncDb!.ExecuteBatchSQL(inserts);
+        scSingleEncDb.ExecuteBatchSQL(inserts);
         // ✅ CRITICAL FIX: Explicit flush after pre-population to prevent checksum issues
         scSingleEncDb.ForceSave();
         Console.WriteLine("[PrePopulate] ✅ Flushed SCDB Single (encrypted)");
 
         // SQLite transaction
         Console.WriteLine("[PrePopulate] Inserting into SQLite (transaction)...");
-        using var transaction = sqliteConn!.BeginTransaction();
+        using var transaction = sqliteConn.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
         cmd.CommandText = "INSERT INTO bench_records (id, name, email, age, salary, created) VALUES (@id, @name, @email, @age, @salary, @created)";
         var idParam = cmd.Parameters.Add("@id", SqliteType.Integer);
@@ -328,7 +328,7 @@ public class StorageEngineComparisonBenchmark
 
         // LiteDB bulk
         Console.WriteLine("[PrePopulate] Inserting into LiteDB...");
-        var liteCollection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
+        var liteCollection = liteDb.GetCollection<BenchmarkRecord>("bench_records");
         var records = new List<BenchmarkRecord>(RecordCount);
         for (int i = 0; i < RecordCount; i++)
         {
@@ -344,7 +344,7 @@ public class StorageEngineComparisonBenchmark
         }
         
         // Explicit transaction: LiteDatabase.BeginTrans returns bool, use liteDb.Commit()/Rollback()
-        var started = liteDb!.BeginTrans();
+        var started = liteDb.BeginTrans();
         try
         {
             liteCollection.InsertBulk(records);
@@ -408,7 +408,7 @@ public class StorageEngineComparisonBenchmark
             inserts.Add($@"INSERT INTO bench_records (id, name, email, age, salary, created) 
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
-        appendOnlyDb!.ExecuteBatchSQL(inserts);
+        appendOnlyDb.ExecuteBatchSQL(inserts);
         _appendOnlyInsertCounter++; // ensure next batch uses new ID range
     }
 
@@ -424,7 +424,7 @@ public class StorageEngineComparisonBenchmark
             inserts.Add($@"INSERT INTO bench_records (id, name, email, age, salary, created) 
                 VALUES ({id}, 'NewUser{id}', 'newuser{id}@test.com', {20 + (i % 50)}, {30000 + (i % 70000)}, '2025-01-01')");
         }
-        pageBasedDb!.ExecuteBatchSQL(inserts);
+        pageBasedDb.ExecuteBatchSQL(inserts);
         _pageBasedInsertCounter++;
     }
 
@@ -434,7 +434,7 @@ public class StorageEngineComparisonBenchmark
     {
         int startId = RecordCount + (_sqliteInsertCounter * InsertBatchSize);
         
-        using var transaction = sqliteConn!.BeginTransaction();
+        using var transaction = sqliteConn.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
         cmd.CommandText = "INSERT INTO bench_records (id, name, email, age, salary, created) VALUES (@id, @name, @email, @age, @salary, @created)";
         
@@ -465,7 +465,7 @@ public class StorageEngineComparisonBenchmark
     public void LiteDB_Insert()
     {
         int startId = RecordCount + (_liteDbInsertCounter * InsertBatchSize);
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
+        var collection = liteDb.GetCollection<BenchmarkRecord>("bench_records");
         
         var records = new List<BenchmarkRecord>(InsertBatchSize);
         for (int i = 0; i < InsertBatchSize; i++)
@@ -482,7 +482,7 @@ public class StorageEngineComparisonBenchmark
             });
         }
         
-        var started = liteDb!.BeginTrans();
+        var started = liteDb.BeginTrans();
         try
         {
             collection.InsertBulk(records);
@@ -501,7 +501,7 @@ public class StorageEngineComparisonBenchmark
     public void SCDB_Dir_Unencrypted_Insert()
     {
         int startId = RecordCount + (_scDirPlainInsertCounter * InsertBatchSize);
-        ExecuteSharpCoreInsert(scDirPlainDb!, startId);
+        ExecuteSharpCoreInsert(scDirPlainDb, startId);
         _scDirPlainInsertCounter++;
     }
 
@@ -510,7 +510,7 @@ public class StorageEngineComparisonBenchmark
     public void SCDB_Dir_Encrypted_Insert()
     {
         int startId = RecordCount + (_scDirEncInsertCounter * InsertBatchSize);
-        ExecuteSharpCoreInsert(scDirEncDb!, startId);
+        ExecuteSharpCoreInsert(scDirEncDb, startId);
         _scDirEncInsertCounter++;
     }
 
@@ -523,7 +523,7 @@ public class StorageEngineComparisonBenchmark
         // ✅ CRITICAL FIX: Ensure counter is incremented even on failure
         try
         {
-            ExecuteSharpCoreInsertIDatabase(scSinglePlainDb!, startId);
+            ExecuteSharpCoreInsertIDatabase(scSinglePlainDb, startId);
         }
         finally
         {
@@ -540,7 +540,7 @@ public class StorageEngineComparisonBenchmark
         // ✅ CRITICAL FIX: Ensure counter is incremented even on failure
         try
         {
-            ExecuteSharpCoreInsertIDatabase(scSingleEncDb!, startId);
+            ExecuteSharpCoreInsertIDatabase(scSingleEncDb, startId);
         }
         finally
         {
@@ -562,7 +562,7 @@ public class StorageEngineComparisonBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
         }
-        appendOnlyDb!.ExecuteBatchSQL(updates);
+        appendOnlyDb.ExecuteBatchSQL(updates);
     }
 
     [Benchmark(Baseline = true)]
@@ -575,14 +575,14 @@ public class StorageEngineComparisonBenchmark
             var id = Random.Shared.Next(0, RecordCount);
             updates.Add($"UPDATE bench_records SET salary = {50000 + id} WHERE id = {id}");
         }
-        pageBasedDb!.ExecuteBatchSQL(updates);
+        pageBasedDb.ExecuteBatchSQL(updates);
     }
 
     [Benchmark]
     [BenchmarkCategory("Update")]
     public void SQLite_Update()
     {
-        using var transaction = sqliteConn!.BeginTransaction();
+        using var transaction = sqliteConn.BeginTransaction();
         using var cmd = sqliteConn.CreateCommand();
         cmd.CommandText = "UPDATE bench_records SET salary = @salary WHERE id = @id";
         
@@ -603,7 +603,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Update")]
     public void LiteDB_Update()
     {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
+        var collection = liteDb.GetCollection<BenchmarkRecord>("bench_records");
         
         for (int i = 0; i < 500; i++)
         {
@@ -621,28 +621,28 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Update")]
     public void SCDB_Dir_Unencrypted_Update()
     {
-        ExecuteSharpCoreUpdate(scDirPlainDb!);
+        ExecuteSharpCoreUpdate(scDirPlainDb);
     }
 
     [Benchmark]
     [BenchmarkCategory("Update")]
     public void SCDB_Dir_Encrypted_Update()
     {
-        ExecuteSharpCoreUpdate(scDirEncDb!);
+        ExecuteSharpCoreUpdate(scDirEncDb);
     }
 
     [Benchmark]
     [BenchmarkCategory("Update")]
     public void SCDB_Single_Unencrypted_Update()
     {
-        ExecuteSharpCoreUpdateIDatabase(scSinglePlainDb!);
+        ExecuteSharpCoreUpdateIDatabase(scSinglePlainDb);
     }
 
     [Benchmark]
     [BenchmarkCategory("Update")]
     public void SCDB_Single_Encrypted_Update()
     {
-        ExecuteSharpCoreUpdateIDatabase(scSingleEncDb!);
+        ExecuteSharpCoreUpdateIDatabase(scSingleEncDb);
     }
 
     private static void ExecuteSharpCoreUpdate(Database db)
@@ -675,7 +675,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void AppendOnly_Select()
     {
-        var rows = appendOnlyDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        var rows = appendOnlyDb.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.ToList().Count; // materialize only for timing
     }
 
@@ -683,7 +683,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void PageBased_Select()
     {
-        var rows = pageBasedDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        var rows = pageBasedDb.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.ToList().Count;
     }
 
@@ -691,7 +691,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void SCDB_Dir_Unencrypted_Select()
     {
-        var rows = scDirPlainDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        var rows = scDirPlainDb.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.ToList().Count;
     }
 
@@ -699,7 +699,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void SCDB_Dir_Encrypted_Select()
     {
-        var rows = scDirEncDb!.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
+        var rows = scDirEncDb.ExecuteQueryStruct("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.ToList().Count;
     }
 
@@ -708,7 +708,7 @@ public class StorageEngineComparisonBenchmark
     public void SCDB_Single_Unencrypted_Select()
     {
         // Single-file IDatabase may not expose ExecuteQueryStruct; fall back to ExecuteQuery
-        var rows = scSinglePlainDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
+        var rows = scSinglePlainDb.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.Count;
     }
 
@@ -716,7 +716,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Select")]
     public void SCDB_Single_Encrypted_Select()
     {
-        var rows = scSingleEncDb!.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
+        var rows = scSingleEncDb.ExecuteQuery("SELECT * FROM bench_records WHERE age > 30");
         _ = rows.Count;
     }
 
@@ -730,7 +730,7 @@ public class StorageEngineComparisonBenchmark
     {
         if (columnarStore == null || columnarStore.RowCount == 0) return;
         
-        var totalSalary = columnarStore!.Sum<decimal>("Salary");
+        var totalSalary = columnarStore.Sum<decimal>("Salary");
         var avgAge = columnarStore.Average("Age");
         _ = totalSalary;
         _ = avgAge;
@@ -740,7 +740,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Analytics")]
     public void SQLite_Sum()
     {
-        using var cmd = sqliteConn!.CreateCommand();
+        using var cmd = sqliteConn.CreateCommand();
         cmd.CommandText = "SELECT SUM(salary), AVG(age) FROM bench_records";
         using var reader = cmd.ExecuteReader();
         reader.Read();
@@ -752,7 +752,7 @@ public class StorageEngineComparisonBenchmark
     [BenchmarkCategory("Analytics")]
     public void LiteDB_Sum()
     {
-        var collection = liteDb!.GetCollection<BenchmarkRecord>("bench_records");
+        var collection = liteDb.GetCollection<BenchmarkRecord>("bench_records");
         var allRecords = collection.FindAll().ToList();
         _ = allRecords.Sum(x => x.Salary);
         _ = allRecords.Average(x => x.Age);

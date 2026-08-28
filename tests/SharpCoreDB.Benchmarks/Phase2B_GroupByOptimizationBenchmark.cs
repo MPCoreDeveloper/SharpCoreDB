@@ -21,8 +21,8 @@ namespace SharpCoreDB.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class Phase2BGroupByOptimizationBenchmark
 {
-    private BenchmarkDatabaseHelper db = null!;
-    private AggregationOptimizer optimizer = null!;
+    private BenchmarkDatabaseHelper db = null;
+    private AggregationOptimizer optimizer = null;
     private const int DATASET_SIZE = 100000;
     private const int GROUP_COUNT = 50;
 
@@ -257,7 +257,7 @@ public class Phase2BGroupByOptimizationBenchmark
 [MemoryDiagnoser]
 public class AggregationOptimizerDetailedTest
 {
-    private AggregationOptimizer optimizer = null!;
+    private AggregationOptimizer optimizer = null;
     private List<Dictionary<string, object>>? testRows;
 
     [GlobalSetup]
@@ -280,7 +280,7 @@ public class AggregationOptimizerDetailedTest
     [Benchmark(Description = "GROUP BY single column (COUNT)")]
     public int GroupBySingleColumnCount()
     {
-        var result = optimizer.GroupAndAggregate(testRows!,
+        var result = optimizer.GroupAndAggregate(testRows,
             groupByColumns: ["Category"],
             aggregates: new[] {
                 new AggregateDefinition(AggregateType.Count)
@@ -296,7 +296,7 @@ public class AggregationOptimizerDetailedTest
     [Benchmark(Description = "GROUP BY single column (COUNT+SUM+AVG)")]
     public int GroupBySingleColumnMultipleAgg()
     {
-        var result = optimizer.GroupAndAggregate(testRows!,
+        var result = optimizer.GroupAndAggregate(testRows,
             groupByColumns: ["Category"],
             aggregates: new[] {
                 new AggregateDefinition(AggregateType.Count),
@@ -314,7 +314,7 @@ public class AggregationOptimizerDetailedTest
     [Benchmark(Description = "GROUP BY multiple columns")]
     public int GroupByMultipleColumns()
     {
-        var result = optimizer.GroupAndAggregate(testRows!,
+        var result = optimizer.GroupAndAggregate(testRows,
             groupByColumns: ["Category", "Status"],
             aggregates: new[] {
                 new AggregateDefinition(AggregateType.Count),

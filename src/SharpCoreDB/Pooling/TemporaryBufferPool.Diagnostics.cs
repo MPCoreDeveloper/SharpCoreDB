@@ -41,10 +41,10 @@ public partial class TemporaryBufferPool
     /// </summary>
     private sealed class TempBufferCache : IDisposable
     {
-        private readonly byte[][] smallByteBuffers = [null!, null!];  // ✅ C# 14: Collection expression
-        private readonly byte[][] mediumByteBuffers = [null!, null!];
-        private readonly byte[][] largeByteBuffers = [null!, null!];
-        private readonly char[][] charBuffers = [null!, null!, null!, null!];
+        private readonly byte[][] smallByteBuffers = [null, null];  // ✅ C# 14: Collection expression
+        private readonly byte[][] mediumByteBuffers = [null, null];
+        private readonly byte[][] largeByteBuffers = [null, null];
+        private readonly char[][] charBuffers = [null, null, null, null];
         
         private int smallByteCount;
         private int mediumByteCount;
@@ -65,7 +65,7 @@ public partial class TemporaryBufferPool
             if (minimumSize <= LargeBufferSize && TryGetFromArray(largeByteBuffers, ref largeByteCount, out buffer))
                 return true;
 
-            buffer = null!;
+            buffer = null;
             return false;
         }
 
@@ -105,26 +105,26 @@ public partial class TemporaryBufferPool
             // Clear byte buffers
             for (int i = 0; i < smallByteCount; i++)
             {
-                smallByteBuffers[i] = null!;
+                smallByteBuffers[i] = null;
             }
             smallByteCount = 0;
 
             for (int i = 0; i < mediumByteCount; i++)
             {
-                mediumByteBuffers[i] = null!;
+                mediumByteBuffers[i] = null;
             }
             mediumByteCount = 0;
 
             for (int i = 0; i < largeByteCount; i++)
             {
-                largeByteBuffers[i] = null!;
+                largeByteBuffers[i] = null;
             }
             largeByteCount = 0;
 
             // Clear char buffers
             for (int i = 0; i < charCount; i++)
             {
-                charBuffers[i] = null!;
+                charBuffers[i] = null;
             }
             charCount = 0;
         }
@@ -147,11 +147,11 @@ public partial class TemporaryBufferPool
             if (count > 0)
             {
                 item = array[--count];
-                array[count] = default!;
+                array[count] = default;
                 return !EqualityComparer<T>.Default.Equals(item, default);
             }
 
-            item = default!;
+            item = default;
             return false;
         }
 
@@ -221,17 +221,17 @@ public ref struct RentedTempBuffer
     /// Gets a span view of the buffer.
     /// ✅ C# 14: Null-forgiving operator with pattern.
     /// </summary>
-    public readonly Span<byte> AsSpan() => buffer!.AsSpan();
+    public readonly Span<byte> AsSpan() => buffer.AsSpan();
 
     /// <summary>
     /// Gets a span view of the used portion.
     /// </summary>
-    public readonly Span<byte> UsedSpan() => buffer!.AsSpan(0, usedSize);
+    public readonly Span<byte> UsedSpan() => buffer.AsSpan(0, usedSize);
 
     /// <summary>
     /// Gets a memory view of the buffer.
     /// </summary>
-    public readonly Memory<byte> AsMemory() => buffer!.AsMemory();
+    public readonly Memory<byte> AsMemory() => buffer.AsMemory();
 
     /// <summary>
     /// Returns the buffer to the pool.
@@ -290,18 +290,18 @@ public ref struct RentedTempCharBuffer
     /// <summary>
     /// Gets a span view of the buffer.
     /// </summary>
-    public readonly Span<char> AsSpan() => buffer!.AsSpan();
+    public readonly Span<char> AsSpan() => buffer.AsSpan();
 
     /// <summary>
     /// Gets a span view of the used portion.
     /// </summary>
-    public readonly Span<char> UsedSpan() => buffer!.AsSpan(0, usedSize);
+    public readonly Span<char> UsedSpan() => buffer.AsSpan(0, usedSize);
 
     /// <summary>
     /// Converts the used portion to a string.
     /// ALLOCATION: Creates a new string.
     /// </summary>
-    public readonly override string ToString() => new(buffer!, 0, usedSize);  // ✅ C# 14: new() for string
+    public readonly override string ToString() => new(buffer, 0, usedSize);  // ✅ C# 14: new() for string
 
     /// <summary>
     /// Returns the buffer to the pool.

@@ -80,7 +80,7 @@ public class SharpCoreDBRelationalConnection : IRelationalConnection
     public SemaphoreSlim Semaphore => _semaphore;
 
     /// <inheritdoc />
-    public DbContext Context { get; set; } = null!;
+    public DbContext Context { get; set; } = null;
 
     /// <inheritdoc />
     public void SetDbConnection(DbConnection? connection, bool contextOwnsConnection)

@@ -37,7 +37,7 @@ public sealed class SharpCoreCrudDatabaseService(
         ValidateConfiguration();
 
         var absolutePath = GetAbsolutePath();
-        Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
 
         var encryptionKey = SHA256.HashData(Encoding.UTF8.GetBytes(_databaseOptions.EncryptionPassword));
         var options = new DatabaseOptions

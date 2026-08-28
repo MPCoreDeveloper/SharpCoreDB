@@ -258,7 +258,7 @@ public partial class SqlParser
         foreignKeys.AddRange(colDefs
             .Where(def => def.Trim().ToUpper().StartsWith("FOREIGN KEY"))
             .Select(def => ParseForeignKeyFromString(def.Trim()))
-            .Where(fk => fk is not null)!);
+            .Where(fk => fk is not null));
 
         var rowRefColumns = columns
             .Where((_, index) => columnTypes[index] == DataType.RowRef)

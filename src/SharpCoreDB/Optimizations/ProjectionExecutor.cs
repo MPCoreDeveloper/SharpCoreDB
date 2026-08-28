@@ -48,7 +48,7 @@ public static class ProjectionExecutor
             results[i] = value switch
             {
                 T typed => typed,
-                null => default(T)!,
+                null => default(T),
                 _ => (T)Convert.ChangeType(value, typeof(T))
             };
         }

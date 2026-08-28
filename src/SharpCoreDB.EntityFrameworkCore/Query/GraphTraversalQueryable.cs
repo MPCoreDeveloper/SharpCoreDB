@@ -104,7 +104,7 @@ public sealed class GraphTraversalQueryable<TEntity> where TEntity : class
             }
 
             var optimizer = new TraversalStrategyOptimizer(
-                table: null!, // Resolved by traversal execution path
+                table: null, // Resolved by traversal execution path
                 _relationshipColumn,
                 _maxDepth,
                 stats,

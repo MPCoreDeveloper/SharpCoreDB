@@ -122,7 +122,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age > 30
         // Expected: ~30ms (full scan of 10k records)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbFullScan!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbFullScan).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 30");
         
         if (results.Count == 0)
@@ -134,7 +134,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age > 30 (with hash index)
         // Expected: ~30ms (hash index doesn't help with range queries, falls back to scan)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbHashIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbHashIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 30");
         
         if (results.Count == 0)
@@ -146,7 +146,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age > 30 (with B-tree index)
         // Expected: < 10ms (3-5x faster than full scan)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age > 30");
         
         if (results.Count == 0)
@@ -158,7 +158,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age BETWEEN 25 AND 35
         // Expected: < 15ms (selective range query)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age >= 25 AND age <= 35");
         
         if (results.Count == 0)
@@ -170,7 +170,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users ORDER BY age
         // Expected: < 5ms (B-tree provides sorted iteration, no external sort needed)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users ORDER BY age");
         
         if (results.Count != RECORD_COUNT)
@@ -182,7 +182,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users ORDER BY age (without B-tree index)
         // Expected: ~40ms (full scan + external sort overhead)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbFullScan!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbFullScan).database);
         var results = db.ExecuteQuery("SELECT * FROM users ORDER BY age");
         
         if (results.Count != RECORD_COUNT)
@@ -196,7 +196,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age = 30 (with hash index)
         // Expected: < 1ms (O(1) hash lookup)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbHashIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbHashIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age = 30");
     }
 
@@ -205,7 +205,7 @@ public class BTreeIndexRangeQueryBenchmark
     {
         // SELECT * FROM users WHERE age = 30 (with B-tree index)
         // Expected: ~2ms (O(log n) B-tree lookup, slower than hash but still fast)
-        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex!).database);
+        var db = ((SharpCoreDB.Database)((dynamic)_dbBTreeIndex).database);
         var results = db.ExecuteQuery("SELECT * FROM users WHERE age = 30");
     }
 }
