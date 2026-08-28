@@ -54,18 +54,6 @@ public static class MetricsQueryableExtensions
         var tcs = new TaskCompletionSource<MetricSnapshot>();
         metricsTask = tcs.Task;
 
-        // Store the task completion source in query state
-        // This will be resolved when the query materializes
-        var wrappedSource = source.AsEnumerable()
-            .ToAsyncEnumerable();
-
-        // Return original source; metrics will be captured via global collector
-        _ = Task.Run(() =>
-        {
-            // Defer until after query execution
-            System.Diagnostics.Debug.WriteLine("Metrics collection configured");
-        });
-
         // Immediately set the result with a deferred snapshot
         var snapshotTask = Task.Run(async () =>
         {

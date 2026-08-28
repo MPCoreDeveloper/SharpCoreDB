@@ -312,7 +312,7 @@ public static partial class SqlParserPerformanceOptimizations
                 var rowVal = Convert.ToDouble(value);
                 return Math.Abs(rowVal - numValue) < 0.0001;
             }
-            catch { }
+            catch { /* Intentionally empty */ }
         }
         
         return value.ToString() == valueStr;

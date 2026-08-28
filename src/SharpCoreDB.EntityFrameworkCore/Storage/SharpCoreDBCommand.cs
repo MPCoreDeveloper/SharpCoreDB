@@ -77,7 +77,7 @@ public class SharpCoreDBCommand : DbCommand
             System.IO.File.AppendAllText("D:\\ef_nonquery.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQuery: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         var parameters = BuildParameterDictionary();
 
@@ -97,7 +97,7 @@ public class SharpCoreDBCommand : DbCommand
                     $"  Rewritten: {rewritten}\n" +
                     $"  Parameters: {paramDump}\n\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
         }
 
         // DEBUG: Log rewritten SQL
@@ -106,7 +106,7 @@ public class SharpCoreDBCommand : DbCommand
             System.IO.File.AppendAllText("D:\\ef_nonquery.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         _connection.DbInstance.ExecuteSQL(rewritten, parameters);
 
@@ -162,7 +162,7 @@ public class SharpCoreDBCommand : DbCommand
             System.IO.File.AppendAllText("D:\\ef_commands.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] Command: {_commandText.Substring(0, Math.Min(200, _commandText.Length))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         // ✅ FIX: Rewrite alias-qualified column refs that SharpCoreDB parser cannot handle.
         // EF Core generates SELECT "b"."BlogId", "b"."Title" FROM "Blogs" AS "b".
@@ -227,7 +227,7 @@ public class SharpCoreDBCommand : DbCommand
                     $"  Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n" +
                     $"  DbTransaction: {(DbTransaction is null ? "null" : "present")}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             // DML without a trailing SELECT – run via ExecuteSQL (not ExecuteQuery)
 
@@ -242,7 +242,7 @@ public class SharpCoreDBCommand : DbCommand
                     $"PARAMETERS:\n{paramDump}\n" +
                     $"================================\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             _connection.DbInstance.ExecuteSQL(rewritten, parameters);
             if (DbTransaction is null)
@@ -269,7 +269,7 @@ public class SharpCoreDBCommand : DbCommand
             }
             System.IO.File.AppendAllText("D:\\query_results.log", debugInfo + "\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         // ✅ ROBUST EF PROVIDER: Always project when we have a clean column list.
         // Fallback to original results if projection fails (backwards safety).
@@ -609,7 +609,7 @@ public class SharpCoreDBCommand : DbCommand
             System.IO.File.AppendAllText("D:\\ef_nonquery_async.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQueryAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         var parameters = BuildParameterDictionary();
 
@@ -629,7 +629,7 @@ public class SharpCoreDBCommand : DbCommand
                 $"PARAMS: {paramDump}\n" +
                 $"====================================\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         await _connection.DbInstance.ExecuteSQLAsync(rewritten, parameters, cancellationToken).ConfigureAwait(false);
 
@@ -670,7 +670,7 @@ public class SharpCoreDBCommand : DbCommand
             System.IO.File.AppendAllText("D:\\ef_reader_async.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteDbDataReaderAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         // Delegate to the synchronous implementation which handles SQL rewriting
         return await Task.Run(() => ExecuteDbDataReader(behavior), cancellationToken).ConfigureAwait(false);

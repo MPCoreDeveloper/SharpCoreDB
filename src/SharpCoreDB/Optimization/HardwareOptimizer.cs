@@ -153,11 +153,6 @@ public static class HardwareOptimizer
     {
         try
         {
-            var currentProcess = Process.GetCurrentProcess();
-            
-            // Set affinity mask (1 << cpuId means only that CPU)
-            long affinityMask = 1L << cpuId;
-            
             // Note: ProcessThread API is Windows-specific
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {

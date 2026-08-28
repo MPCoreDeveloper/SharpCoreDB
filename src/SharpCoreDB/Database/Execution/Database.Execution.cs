@@ -120,7 +120,7 @@ public partial class Database
                 $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteSQL: {sql.Substring(0, Math.Min(300, sql.Length))}\n" +
                 $"  Params: {string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"))}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         SqlQueryValidator.ValidateQuery(
             sql, 

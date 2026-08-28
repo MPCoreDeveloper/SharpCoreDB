@@ -147,7 +147,7 @@ public static partial class SimdHelper
             int batches = results.Length / batchSize;
 
             fixed (byte* dataPtr = data)
-            fixed (long* resultPtr = results)
+
             {
                 for (int batch = 0; batch < batches; batch++)
                 {
@@ -184,7 +184,7 @@ public static partial class SimdHelper
             int batches = results.Length / batchSize;
 
             fixed (byte* dataPtr = data)
-            fixed (long* resultPtr = results)
+
             {
                 for (int batch = 0; batch < batches; batch++)
                 {

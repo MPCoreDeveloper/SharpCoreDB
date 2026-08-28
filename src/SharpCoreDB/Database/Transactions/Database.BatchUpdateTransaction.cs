@@ -119,7 +119,7 @@ public partial class Database
                 System.IO.File.AppendAllText("D:\\db_transaction.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: path={_dbPath}, key={key}, isActive={_batchUpdateActive}, hashCode={this.GetHashCode()}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             if (_batchUpdateActive)
                 throw new InvalidOperationException("Batch update already active.");
@@ -137,7 +137,7 @@ public partial class Database
                 System.IO.File.AppendAllText("D:\\db_transaction.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] BeginStorageTransactionOnly: After set, isActive={_batchUpdateActive}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
         }
     }
 
@@ -176,7 +176,7 @@ public partial class Database
                     _batchInsertedRows.TryGetValue(t.Name ?? string.Empty, out var insertedRows) &&
                     insertedRows.Count > 0)
                 {
-                    foreach (var (pk, position) in insertedRows)
+                    foreach (var (pk, _) in insertedRows)
                     {
                         try
                         {
@@ -271,7 +271,7 @@ public partial class Database
                     {
                         if (_batchInsertedRows.TryGetValue(t.Name ?? string.Empty, out var insertedRows) && insertedRows.Count > 0)
                         {
-                            foreach (var (pk, position) in insertedRows)
+                            foreach (var (pk, _) in insertedRows)
                             {
                                 try
                                 {
@@ -302,7 +302,7 @@ public partial class Database
                             t.ClearLogicalRowsForRollback();
                             t.InitializeStorageEngine();
                         }
-                        catch { }
+                        catch { /* Intentionally empty */ }
                     }
                 }
 

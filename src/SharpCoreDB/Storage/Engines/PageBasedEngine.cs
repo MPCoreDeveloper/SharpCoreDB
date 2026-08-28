@@ -252,6 +252,7 @@ public partial class PageBasedEngine : IStorageEngine
             // Flush all dirty pages to disk
             foreach (var (tableName, manager) in tableManagers)
             {
+                // NOSONAR:S1481 - 'tableName' is used in the #if DEBUG diagnostics below.
                 #if DEBUG
                 Console.WriteLine($"[PageBasedEngine.CommitAsync] Flushing dirty pages for table: {tableName}");
                 var (hits, misses, hitRate, size, _) = manager.GetCacheStats();

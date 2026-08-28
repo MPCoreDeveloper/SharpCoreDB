@@ -74,7 +74,7 @@ internal sealed class DemoRunner
         }
         finally
         {
-            try { File.Delete(path); } catch { }
+            try { File.Delete(path); } catch { /* Intentionally empty */ }
             (db as IDisposable)?.Dispose();
         }
     }

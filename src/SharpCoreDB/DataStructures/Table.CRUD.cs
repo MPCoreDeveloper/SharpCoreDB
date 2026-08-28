@@ -42,12 +42,10 @@ public partial class Table
                     $"  row.Keys={string.Join(", ", row.Keys)}\n" +
                     $"  Table.Columns={string.Join(", ", this.Columns)}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
         }
 
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
-        var columnIndexCache = GetColumnIndexCache();
-        
         for (int i = 0; i < this.Columns.Count; i++)
         {
             var col = this.Columns[i];
@@ -61,7 +59,7 @@ public partial class Table
                         System.IO.File.AppendAllText("D:\\auto_debug.log",
                             $"[{DateTime.Now:HH:mm:ss.fff}] BlogId missing/null: IsAuto[{i}]={this.IsAuto[i]}, ColumnType={this.ColumnTypes[i]}\n");
                     }
-                    catch { }
+                    catch { /* Intentionally empty */ }
                 }
 
                 // ✅ AUTO-ROWID: Also auto-generate when the key exists but value is null/DBNull.
@@ -77,7 +75,7 @@ public partial class Table
                             System.IO.File.AppendAllText("D:\\auto_debug.log",
                                 $"[{DateTime.Now:HH:mm:ss.fff}] Generated BlogId={row[col]}\n");
                         }
-                        catch { }
+                        catch { /* Intentionally empty */ }
                     }
                 }
                 else if (this.DefaultExpressions[i] is not null)
@@ -328,8 +326,6 @@ public partial class Table
         ValidateAndSerializeBatchOutsideLock(List<Dictionary<string, object>> rows)
     {
         // ✅ PERFORMANCE: Get column index cache once for entire batch
-        var columnIndexCache = GetColumnIndexCache();
-
         // Step 1: Validate all rows and fill defaults (OUTSIDE LOCK)
         for (int rowIdx = 0; rowIdx < rows.Count; rowIdx++)
         {

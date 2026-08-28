@@ -49,10 +49,6 @@ public partial class Database
         {
             try
             {
-                // ✅ Task 2.2: Extract parameter information if present
-                var hasParameters = ParameterExtractor.HasParameters(sql);
-                var parameters = hasParameters ? ParameterExtractor.ExtractParameters(sql) : [];
-                
                 // ✅ Task 2.2: Compile with parameter support
                 compiledPlan = QueryCompiler.Compile(sql);
                 
@@ -97,6 +93,7 @@ public partial class Database
                     }
                 }
             }
+            // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
             catch (Exception ex)
             {
                 // Compilation failed - fallback to normal execution

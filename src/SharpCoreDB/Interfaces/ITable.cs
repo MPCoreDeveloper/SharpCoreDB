@@ -98,28 +98,28 @@ public interface ITable
     /// Directory-mode tables use <see cref="StorageMode.Columnar"/> or <see cref="StorageMode.PageBased"/>.
     /// Single-file tables default to <see cref="StorageMode.Columnar"/> and the value is schema-only.
     /// </summary>
-    StorageMode StorageMode { get => StorageMode.Columnar; set { } }
+    StorageMode StorageMode { get => StorageMode.Columnar; set { /* Intentionally ignored in this implementation. */ } }
 
     /// <summary>
     /// Gets or sets the primary key B-tree index.
     /// Directory-mode tables use a full BTree; single-file tables use a no-op implementation.
     /// </summary>
-    IIndex<string, long> Index { get => NullIndex.Instance; set { } }
+    IIndex<string, long> Index { get => NullIndex.Instance; set { /* Intentionally ignored in this implementation. */ } }
 
     /// <summary>
     /// Gets or sets per-column DEFAULT expressions (SQL expression strings).
     /// </summary>
-    List<string?> DefaultExpressions { get => []; set { } }
+    List<string?> DefaultExpressions { get => []; set { /* Intentionally ignored in this implementation. */ } }
 
     /// <summary>
     /// Gets or sets per-column CHECK constraint expressions.
     /// </summary>
-    List<string?> ColumnCheckExpressions { get => []; set { } }
+    List<string?> ColumnCheckExpressions { get => []; set { /* Intentionally ignored in this implementation. */ } }
 
     /// <summary>
     /// Gets or sets table-level CHECK constraint expressions.
     /// </summary>
-    List<string> TableCheckConstraints { get => []; set { } }
+    List<string> TableCheckConstraints { get => []; set { /* Intentionally ignored in this implementation. */ } }
 
     /// <summary>
     /// Initializes (or re-initializes) the underlying storage engine for this table.

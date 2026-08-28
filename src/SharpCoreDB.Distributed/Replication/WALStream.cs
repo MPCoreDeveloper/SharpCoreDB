@@ -185,7 +185,7 @@ public sealed class WALStream : IAsyncDisposable
         {
             // Expected when stopping
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log error and complete channel
             // _logger?.LogError(ex, "Error streaming WAL entries to replica {ReplicaId}", ReplicaId);

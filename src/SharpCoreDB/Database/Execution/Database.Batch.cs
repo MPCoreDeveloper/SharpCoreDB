@@ -761,6 +761,7 @@ public partial class Database
             
             return (tableName, row);
         }
+            // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
         catch (Exception ex)
         {
             // ✅ FIX: Log parsing failures for debugging concurrent issues

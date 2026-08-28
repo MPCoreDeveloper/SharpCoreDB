@@ -248,7 +248,7 @@ public sealed class CorruptionDetector : IDisposable
         // For now, check if WAL manager is accessible
         try
         {
-            var walManager = _provider.WalManager;
+            _ = _provider.WalManager; // Touches the property to verify it is accessible
             // Basic validation: WAL manager exists and is functional
             // More detailed validation requires WAL internal access
         }

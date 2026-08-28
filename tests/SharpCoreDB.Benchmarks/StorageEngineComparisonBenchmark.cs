@@ -85,8 +85,8 @@ public class StorageEngineComparisonBenchmark
         scSinglePlainPath = Path.Combine(Path.GetTempPath(), $"scdb_single_plain_{Guid.NewGuid()}.scdb");
         scSingleEncPath = Path.Combine(Path.GetTempPath(), $"scdb_single_enc_{Guid.NewGuid()}.scdb");
 
-        try { if (File.Exists(sqlitePath)) File.Delete(sqlitePath); } catch { }
-        try { if (File.Exists(liteDbPath)) File.Delete(liteDbPath); } catch { }
+        try { if (File.Exists(sqlitePath)) File.Delete(sqlitePath); } catch { /* Intentionally empty */ }
+        try { if (File.Exists(liteDbPath)) File.Delete(liteDbPath); } catch { /* Intentionally empty */ }
 
         Directory.CreateDirectory(appendOnlyPath);
         Directory.CreateDirectory(pageBasedPath);
@@ -200,10 +200,10 @@ public class StorageEngineComparisonBenchmark
         
         // Index on age to avoid full table scans in SELECT age > X (dir-based engines only)
         var createAgeIndex = "CREATE INDEX idx_age ON bench_records (age);";
-        try { appendOnlyDb.ExecuteSQL(createAgeIndex); } catch { }
-        try { pageBasedDb!.ExecuteSQL(createAgeIndex); } catch { }
-        try { scDirPlainDb!.ExecuteSQL(createAgeIndex); } catch { }
-        try { scDirEncDb!.ExecuteSQL(createAgeIndex); } catch { }
+        try { appendOnlyDb.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { pageBasedDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { scDirPlainDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
+        try { scDirEncDb!.ExecuteSQL(createAgeIndex); } catch { /* Intentionally empty */ }
         // Single-file (.scdb) currently skips CREATE INDEX
 
         // Pre-populate for SELECT/UPDATE benchmarks

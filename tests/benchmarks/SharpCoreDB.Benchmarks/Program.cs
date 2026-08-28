@@ -193,7 +193,7 @@ class Program
                 }
             }
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         return "Unknown";
     }
@@ -222,7 +222,7 @@ class Program
                 }
             }
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         return 0;
     }
@@ -250,7 +250,7 @@ class Program
                 }
             }
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         return "Unknown";
     }

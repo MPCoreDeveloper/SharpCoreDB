@@ -106,7 +106,7 @@ public static class HnswPersistence
 
         // Graph state
         int nodeCount = reader.ReadInt32();
-        int maxLevel = reader.ReadInt32();
+        _ = reader.ReadInt32(); // maxLevel (reserved for future use; keeps stream position)
 
         var config = new HnswConfig
         {

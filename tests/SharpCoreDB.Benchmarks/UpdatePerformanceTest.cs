@@ -410,7 +410,7 @@ public static class UpdatePerformanceTest
                 {
                     Directory.Delete(tempPath, true);
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
             }
         }
     }

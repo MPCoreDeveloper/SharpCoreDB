@@ -387,7 +387,7 @@ public class SharpCoreDBDataReader : DbDataReader
                     $"[{DateTime.Now:HH:mm:ss.fff}] Out-of-range ordinal requested: {ordinal}, " +
                     $"we have {_columnNames.Count} columns. Keys: [{string.Join(", ", _columnNames)}]\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             return DBNull.Value;
         }

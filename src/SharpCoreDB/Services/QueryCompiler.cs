@@ -144,6 +144,7 @@ public static class QueryCompiler
                 columnIndices,  // ✅ PHASE 2.4: Pass column indices
                 useDirectColumnAccess: columnIndices.Count > 0);  // ✅ Enable if indices available
         }
+            // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
         catch (Exception ex)
         {
             // ✅ LOG: Compilation failure for debugging (Debug builds only)
@@ -502,6 +503,7 @@ public static class QueryCompiler
             }
             catch
             {
+                // Intentionally empty: comparison failures fall back to string comparison below.
             }
         }
 

@@ -177,7 +177,7 @@ public sealed class HealthAlerts : IAsyncDisposable
         {
             // Expected when stopping
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log error but continue processing
             // _logger?.LogError(ex, "Error processing health alert");
@@ -270,7 +270,7 @@ public sealed class HealthAlerts : IAsyncDisposable
         {
             await subscription.Handler!(alert, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log handler error but don't let it stop processing
             // _logger?.LogError(ex, "Error in alert handler for subscription {SubscriptionId}", subscription.Id);

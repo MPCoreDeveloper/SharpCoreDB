@@ -266,7 +266,7 @@ public sealed class TransactionLog : IAsyncDisposable
             // Clean up temp file
             if (File.Exists(tempPath))
             {
-                try { File.Delete(tempPath); } catch { }
+                try { File.Delete(tempPath); } catch { /* Intentionally empty */ }
             }
 
             throw;

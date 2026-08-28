@@ -116,7 +116,7 @@ public sealed class DeltaCompactor : IDisposable
         
         lock (_compactionLock)
         {
-            foreach (var (key, info) in _deltaChains)
+            foreach (var (_, info) in _deltaChains)
             {
                 int fullSize = fullRecordSizeGetter(info.TableName, info.RecordId);
                 if (NeedsCompaction(info.TableName, info.RecordId, fullSize))

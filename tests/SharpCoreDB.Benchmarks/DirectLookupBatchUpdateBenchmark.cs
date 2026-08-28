@@ -214,7 +214,7 @@ public static class DirectLookupBatchUpdateBenchmark
                 {
                     Directory.Delete(tempPath, true);
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
             }
         }
     }

@@ -7,7 +7,7 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add SharpCoreDB Server
-var server = builder.AddProject<Projects.SharpCoreDB_Server>("sharpcoredb-server")
+_ = builder.AddProject<Projects.SharpCoreDB_Server>("sharpcoredb-server")
     .WithHttpEndpoint(port: 8080, name: "http")
     .WithHttpsEndpoint(port: 5001, name: "grpc")
     .WithEnvironment("ASPNETCORE_URLS", "http://+:8080;https://+:5001");

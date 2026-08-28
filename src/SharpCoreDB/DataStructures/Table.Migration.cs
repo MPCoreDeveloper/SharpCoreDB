@@ -270,7 +270,7 @@ public partial class Table
         }
 
         // Rebuild hash indexes on this column
-        if (this.hashIndexes.TryGetValue(columnName, out var hashIndex))
+        if (this.hashIndexes.TryGetValue(columnName, out _))
         {
             // Mark index as stale - it will be rebuilt on next access
             if (this.registeredIndexes.ContainsKey(columnName))

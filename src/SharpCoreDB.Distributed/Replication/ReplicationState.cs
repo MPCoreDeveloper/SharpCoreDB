@@ -175,7 +175,6 @@ public sealed class ReplicationState(string masterNodeId, string replicaNodeId)
     {
         lock (_lock)
         {
-            var oldState = State;
             State = newState;
 
             if (newState == ReplicationProtocol.ReplicationState.Starting)

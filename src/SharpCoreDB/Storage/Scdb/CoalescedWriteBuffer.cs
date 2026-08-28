@@ -134,7 +134,7 @@ public sealed class CoalescedWriteBuffer : IDisposable
         {
             var result = new List<CoalescedWrite>(_blockBuffers.Count);
             
-            foreach (var (blockName, buffer) in _blockBuffers)
+            foreach (var (_, buffer) in _blockBuffers)
             {
                 result.Add(buffer.BuildCoalescedWrite());
             }

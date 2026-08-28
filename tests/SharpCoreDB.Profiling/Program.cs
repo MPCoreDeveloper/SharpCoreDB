@@ -240,7 +240,7 @@ internal class Program
         }
         finally
         {
-            try { Directory.Delete(dbPath, true); } catch { }
+            try { Directory.Delete(dbPath, true); } catch { /* Intentionally empty */ }
         }
     }
     
@@ -315,7 +315,7 @@ internal class Program
         }
         finally
         {
-            try { Directory.Delete(dbPath, true); } catch { }
+            try { Directory.Delete(dbPath, true); } catch { /* Intentionally empty */ }
         }
     }
     
@@ -390,7 +390,7 @@ internal class Program
         }
         finally
         {
-            try { Directory.Delete(dbPath, true); } catch { }
+            try { Directory.Delete(dbPath, true); } catch { /* Intentionally empty */ }
         }
     }
     
@@ -461,7 +461,7 @@ internal class Program
         }
         finally
         {
-            try { Directory.Delete(dbPath, true); } catch { }
+            try { Directory.Delete(dbPath, true); } catch { /* Intentionally empty */ }
         }
     }
     

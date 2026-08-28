@@ -92,7 +92,7 @@ public class SharpCoreDBRelationalDatabase : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_insert.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] INSERT SQL: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
 
@@ -110,6 +110,7 @@ public class SharpCoreDBRelationalDatabase : RelationalDatabase
                     }
                     catch
                     {
+                        // Intentionally empty: best-effort last-insert-rowid lookup.
                     }
                 }
 
@@ -141,7 +142,7 @@ public class SharpCoreDBRelationalDatabase : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_update.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] UPDATE SQL: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
         }
@@ -165,7 +166,7 @@ public class SharpCoreDBRelationalDatabase : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_delete.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] DELETE SQL: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
         }

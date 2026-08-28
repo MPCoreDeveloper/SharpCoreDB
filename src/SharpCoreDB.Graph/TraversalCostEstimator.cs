@@ -197,7 +197,6 @@ public sealed class TraversalCostEstimator
         if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
 
         // Dijkstra may visit all nodes (worst case)
-        var bfsCost = EstimateBfsCost(stats, maxDepth);
         var estimatedNodes = Math.Min(stats.TotalNodes, (long)Math.Pow(10, maxDepth));
 
         // Priority queue operations are O(log n)

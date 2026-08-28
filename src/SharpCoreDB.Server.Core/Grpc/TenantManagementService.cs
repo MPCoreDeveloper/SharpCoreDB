@@ -46,8 +46,6 @@ public sealed class TenantManagementGrpcService(
                 "gRPC CreateTenant request for tenant '{TenantKey}' (idempotency: {IdempotencyKey})",
                 tenantKey, idempotencyKey);
 
-            var metadata = metadataJson != null ? JsonDocument.Parse(metadataJson) : null;
-
             var (tenant, operation) = await provisioningService.CreateTenantAsync(
                 tenantKey,
                 displayName,

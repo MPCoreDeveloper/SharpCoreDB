@@ -304,7 +304,6 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         if (entry.Length > int.MaxValue)
         {
             // Fallback: regular read (allocates)
-            var largeLen = checked((long)entry.Length);
             var buffer = new byte[checked((int)Math.Min(entry.Length, (ulong)int.MaxValue))];
             _fileStream.Position = (long)entry.Offset;
             _fileStream.ReadExactly(buffer);

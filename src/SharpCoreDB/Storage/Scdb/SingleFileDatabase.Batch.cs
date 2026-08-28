@@ -218,7 +218,7 @@ internal static class SingleFileDatabaseBatchExtension
                         storageProvider.RollbackTransaction();
                     }
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
                 throw;
             }
             finally

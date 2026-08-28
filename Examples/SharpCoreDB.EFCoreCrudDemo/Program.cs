@@ -140,7 +140,7 @@ var final = await GetActiveWithVacanciesAsync(context);
 Console.WriteLine($"   Final result: {final.Count} companies with active vacancies.");
 
 // Cleanup
-try { File.Delete(dbPath); } catch { }
+try { File.Delete(dbPath); } catch { /* Intentionally empty */ }
 
 Console.WriteLine("\n? Full CRUD demo completed successfully!");
 Console.WriteLine("   (Using recommended reliable patterns for Guid-based relationships)");

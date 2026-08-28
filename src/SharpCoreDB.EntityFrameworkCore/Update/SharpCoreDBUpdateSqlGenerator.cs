@@ -37,7 +37,7 @@ public class SharpCoreDBUpdateSqlGenerator : UpdateSqlGenerator
                 $"[{DateTime.Now:HH:mm:ss.fff}] AppendInsertOperation Table={command.TableName} Pos={commandPosition}\n" +
                 $"  WriteColumns: {cols}\n\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         // ✅ FIX: SharpCoreDB does not support RETURNING clauses.
         // Pass an empty read-operations list so the base class emits a plain INSERT

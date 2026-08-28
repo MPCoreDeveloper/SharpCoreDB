@@ -47,7 +47,6 @@ public sealed class ArchivalManager : IDisposable
     public MaintenanceResult RunMaintenance(DateTime? asOfTime = null)
     {
         var now = asOfTime ?? DateTime.UtcNow;
-        var stats = _bucketManager.GetStats();
 
         int transitioned = 0;
         int archived = 0;

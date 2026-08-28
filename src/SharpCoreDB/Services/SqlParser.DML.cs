@@ -357,7 +357,7 @@ public partial class SqlParser
                         $"[{DateTime.Now:HH:mm:ss.fff}] Before table.Insert: row.Keys={string.Join(", ", row.Keys)}\n" +
                         $"  table type: {table.GetType().Name}\n");
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
             }
 
             try
@@ -373,7 +373,7 @@ public partial class SqlParser
                         $"[{DateTime.Now:HH:mm:ss.fff}] Exception in table.Insert for {tableName}: {ex.GetType().Name}: {ex.Message}\n" +
                         $"  Stack: {ex.StackTrace}\n\n");
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
                 throw;
             }
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
@@ -2537,7 +2537,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             LiteralNode literal => literal.Value,
             ColumnReferenceNode column => GetValue(row, column),
             ParameterNode parameter => ResolveParameter(parameter.ParameterName),
-            FunctionCallNode func => null, // Function calls in WHERE are handled by EvaluateBinaryExpression
+            FunctionCallNode => null, // Function calls in WHERE are handled by EvaluateBinaryExpression
             _ => throw new NotSupportedException($"Expression type '{expression.GetType().Name}' is not supported for value extraction.")
         };
     }

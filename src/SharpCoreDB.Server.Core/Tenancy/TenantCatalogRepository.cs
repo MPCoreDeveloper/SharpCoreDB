@@ -253,7 +253,7 @@ public sealed class TenantCatalogRepository(
         {
             try
             {
-                if (!masterDatabase.Database.TryGetTable("tenants", out var table))
+                if (!masterDatabase.Database.TryGetTable("tenants", out _))
                 {
                     throw new InvalidOperationException("Tenants table not found");
                 }

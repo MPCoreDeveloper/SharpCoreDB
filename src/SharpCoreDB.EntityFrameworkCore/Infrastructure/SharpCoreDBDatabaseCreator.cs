@@ -178,7 +178,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
                     System.IO.File.AppendAllText("D:\\create_table.log",
                         $"[{DateTime.Now:HH:mm:ss.fff}] {sql}\n");
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
 
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&
@@ -206,7 +206,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
             System.IO.File.AppendAllText("D:\\create_table.log",
                 $"[{DateTime.Now:HH:mm:ss.fff}] Creating tables for: {path}\n");
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         try
         {
@@ -226,7 +226,7 @@ public class SharpCoreDBDatabaseCreator : RelationalDatabaseCreator
                     System.IO.File.AppendAllText("D:\\create_table.log",
                         $"[{DateTime.Now:HH:mm:ss.fff}] {sql}\n");
                 }
-                catch { }
+                catch { /* Intentionally empty */ }
 
                 // Execute via the connection
                 if (_connection.DbConnection is SharpCoreDBConnection sharpConnection &&

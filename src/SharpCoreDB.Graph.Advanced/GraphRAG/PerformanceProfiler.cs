@@ -272,7 +272,7 @@ public static class PerformanceProfiler
         report.AppendLine($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
         report.AppendLine();
 
-        foreach (var (operation, metrics) in results.OrderBy(r => r.Key))
+        foreach (var (_, metrics) in results.OrderBy(r => r.Key))
         {
             report.AppendLine($"Operation: {metrics.OperationName}");
             report.AppendLine($"  Duration: {metrics.TotalDuration.TotalMilliseconds:F2}ms");

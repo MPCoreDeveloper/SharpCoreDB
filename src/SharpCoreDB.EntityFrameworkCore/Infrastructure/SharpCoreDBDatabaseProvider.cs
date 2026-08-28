@@ -116,7 +116,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] INSERT: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
 
@@ -131,7 +131,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
                         if (rows.Count > 0 && rows[0].TryGetValue("rowid", out var val) && val != null)
                             rowId = Convert.ToInt64(val);
                     }
-                    catch { }
+                    catch { /* Intentionally empty */ }
                 }
                 if (rowId > 0)
                     entry.SetStoreGeneratedValue(skippedAutoKeyProp, Convert.ChangeType(rowId, skippedAutoKeyProp.ClrType));
@@ -161,7 +161,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] UPDATE: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
         }
@@ -184,7 +184,7 @@ public class SharpCoreDBDatabaseProvider : RelationalDatabase
                 System.IO.File.AppendAllText("D:\\ef_dml_provider.log",
                     $"[{DateTime.Now:HH:mm:ss.fff}] DELETE: {sql}\n");
             }
-            catch { }
+            catch { /* Intentionally empty */ }
 
             conn.DbInstance.ExecuteSQL(sql);
         }

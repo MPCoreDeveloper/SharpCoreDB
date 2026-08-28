@@ -261,7 +261,7 @@ public static class GraphTraversalQueryableExtensions
             if (!string.IsNullOrEmpty(efSql) && !efSql.Contains("does not support generation", StringComparison.Ordinal))
                 return efSql;
         }
-        catch { }
+        catch { /* Intentionally empty */ }
 
         // Fall back to expression-tree analysis to generate the SQL directly.
         return BuildGraphTraversalSql(source.Expression);

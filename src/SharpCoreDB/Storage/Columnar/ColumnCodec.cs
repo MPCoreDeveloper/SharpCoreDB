@@ -86,7 +86,7 @@ public sealed class ColumnCodec(ColumnFormat format)
         var dataType = (ColumnFormat.ColumnType)reader.ReadByte();
         var encoding = (ColumnFormat.ColumnEncoding)reader.ReadByte();
         var valueCount = reader.ReadInt32();
-        var nullCount = reader.ReadInt32();
+        _ = reader.ReadInt32(); // nullCount (bitmap below carries the actual null mask)
 
         // Read null bitmap
         var bitmapSize = reader.ReadInt32();

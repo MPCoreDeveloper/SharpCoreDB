@@ -164,7 +164,7 @@ public sealed class LifecycleEvents : IAsyncDisposable
         {
             // Expected when stopping
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log error but continue processing
             // _logger?.LogError(ex, "Error processing lifecycle event");
@@ -224,7 +224,7 @@ public sealed class LifecycleEvents : IAsyncDisposable
         {
             await handler(@event, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log handler error but don't let it stop processing
             // _logger?.LogError(ex, "Error in lifecycle event handler for event {EventType}", @event.EventType);

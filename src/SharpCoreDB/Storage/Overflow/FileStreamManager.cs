@@ -123,11 +123,11 @@ public sealed class FileStreamManager : IDisposable
             // Rollback: delete temp files if they exist
             if (tempFilePath != null && File.Exists(tempFilePath))
             {
-                try { File.Delete(tempFilePath); } catch { }
+                try { File.Delete(tempFilePath); } catch { /* Intentionally empty */ }
             }
             if (tempMetaPath != null && File.Exists(tempMetaPath))
             {
-                try { File.Delete(tempMetaPath); } catch { }
+                try { File.Delete(tempMetaPath); } catch { /* Intentionally empty */ }
             }
             
             throw;

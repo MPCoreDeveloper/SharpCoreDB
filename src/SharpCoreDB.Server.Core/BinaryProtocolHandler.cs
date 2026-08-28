@@ -720,7 +720,6 @@ public sealed class BinaryProtocolHandler(
         var processId = session.SessionId.GetHashCode();
         if (message.Payload.Length > 0)
         {
-            var closeType = (char)message.Payload[0]; // 'S' = statement, 'P' = portal
             var reader = new MemoryStream(message.Payload, 1, message.Payload.Length - 1);
             var name = await ReadNullTerminatedStringAsync(reader);
 
@@ -746,13 +745,11 @@ public sealed class BinaryProtocolHandler(
             return;
         }
 
-        var describeType = (char)message.Payload[0]; // 'S' = statement, 'P' = portal
         var reader = new MemoryStream(message.Payload, 1, message.Payload.Length - 1);
         var name = await ReadNullTerminatedStringAsync(reader);
 
         var processId = session.SessionId.GetHashCode();
         PreparedPortal? portal = null;
-
         if (_preparedStatements.TryGetValue(processId, out var statements))
         {
             statements.TryGetValue(name, out portal);
@@ -803,7 +800,6 @@ public sealed class BinaryProtocolHandler(
         var buffer = new byte[8];
         await reader.ReadExactlyAsync(buffer);
         var processId = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(0, 4));
-        var secretKey = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(4, 4));
 
         if (_activeCancellations.TryGetValue(processId, out var cts))
         {
