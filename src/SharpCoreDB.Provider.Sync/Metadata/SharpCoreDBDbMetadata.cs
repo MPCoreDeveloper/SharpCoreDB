@@ -10,6 +10,8 @@ namespace SharpCoreDB.Provider.Sync.Metadata;
 /// </summary>
 public sealed class SharpCoreDBDbMetadata
 {
+    private SharpCoreDBDbMetadata() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Maps a SharpCoreDB DataType to the corresponding .NET DbType.
     /// </summary>

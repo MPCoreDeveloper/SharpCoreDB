@@ -30,6 +30,7 @@ foreach (var item in titles)
     Console.WriteLine($"  BlogId={item.BlogId}, Title={item.Title}");
 }
 
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class TestBlog
 {
     [Key]
@@ -44,6 +45,7 @@ public class TestBlog
     public DateTime CreatedAt { get; set; }
 }
 
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
     public DbSet<TestBlog> Blogs => Set<TestBlog>();

@@ -275,7 +275,7 @@ public sealed class SharpCoreDBDataReader : DbDataReader
             ParameterValue.ValueOneofCase.TimestampValue => value.TimestampValue.ToDateTime(),
             ParameterValue.ValueOneofCase.GuidValue => Guid.Parse(value.GuidValue),
             ParameterValue.ValueOneofCase.UlidValue => value.UlidValue,
-            ParameterValue.ValueOneofCase.VectorValue => value.VectorValue.Values.Select(v => (float)v).ToArray(),
+            ParameterValue.ValueOneofCase.VectorValue => value.VectorValue.Values.ToArray(),
             ParameterValue.ValueOneofCase.RowrefValue => $"{value.RowrefValue.TableName}:{value.RowrefValue.RowId}",
             _ => DBNull.Value
         };

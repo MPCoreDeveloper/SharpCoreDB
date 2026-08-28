@@ -9,8 +9,12 @@ using SharpCoreDB;
 using Serilog;
 using System.Diagnostics;
 
+namespace SharpCoreDB.Tools.Demo;
+
+
 class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     static void Main(string[] args)
     {
         // Configure Serilog

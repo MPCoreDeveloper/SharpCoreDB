@@ -110,6 +110,8 @@ public class CollectionOptimizer
     /// </summary>
     public class OptimizationPatterns
     {
+        private OptimizationPatterns() { } // Static utility class - prevent instantiation.
+
         /// <summary>
         /// Process collections using stackalloc for unmanaged types.
         /// </summary>

@@ -14,6 +14,7 @@ using System.Text.Json.Serialization;
 /// </summary>
 class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     static async Task<int> Main(string[] args)
     {
         Console.WriteLine("SharpCoreDB Benchmark Suite");

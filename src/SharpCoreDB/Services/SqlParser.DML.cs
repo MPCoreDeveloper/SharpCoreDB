@@ -884,10 +884,10 @@ public partial class SqlParser
         // General scalar function evaluation
         return functionCall.FunctionName.ToUpperInvariant() switch
         {
-            "COALESCE" => (object?)args.FirstOrDefault(arg => arg is not null),
-            "IFNULL" => args.Length == 2 ? (object?)(args[0] ?? args[1]) : throw new ArgumentException("IFNULL requires 2 arguments"),
-            "NULLIF" => args.Length == 2 ? (object?)(SqlParser.AreValuesEqual(args[0], args[1]) ? null : args[0]) : throw new ArgumentException("NULLIF requires 2 arguments"),
-            "IIF" => args.Length == 3 ? (object?)(args[0] is bool condition ? (condition ? args[1] : args[2]) : null) : throw new ArgumentException("IIF requires 3 arguments"),
+            "COALESCE" => args.FirstOrDefault(arg => arg is not null),
+            "IFNULL" => args.Length == 2 ? (args[0] ?? args[1]) : throw new ArgumentException("IFNULL requires 2 arguments"),
+            "NULLIF" => args.Length == 2 ? (SqlParser.AreValuesEqual(args[0], args[1]) ? null : args[0]) : throw new ArgumentException("NULLIF requires 2 arguments"),
+            "IIF" => args.Length == 3 ? (args[0] is bool condition ? (condition ? args[1] : args[2]) : null) : throw new ArgumentException("IIF requires 3 arguments"),
             "TYPEOF" => args.Length == 1 ? (object?)(args[0] switch
             {
                 null => "null",
@@ -929,8 +929,8 @@ public partial class SqlParser
                 long sl => Math.Sign(sl),
                 _ => 0
             }) : throw new ArgumentException("SIGN requires 1 argument"),
-            "MIN" => args.Length == 2 ? (object?)(args[0] is double mina && args[1] is double minb ? Math.Min(mina, minb) : args[0] is int minia && args[1] is int minib ? Math.Min(minia, minib) : args[0]) : throw new ArgumentException("MIN requires 2 arguments"),
-            "MAX" => args.Length == 2 ? (object?)(args[0] is double maxa && args[1] is double maxb ? Math.Max(maxa, maxb) : args[0] is int maxia && args[1] is int maxib ? Math.Max(maxia, maxib) : args[0]) : throw new ArgumentException("MAX requires 2 arguments"),
+            "MIN" => args.Length == 2 ? (args[0] is double mina && args[1] is double minb ? Math.Min(mina, minb) : args[0] is int minia && args[1] is int minib ? Math.Min(minia, minib) : args[0]) : throw new ArgumentException("MIN requires 2 arguments"),
+            "MAX" => args.Length == 2 ? (args[0] is double maxa && args[1] is double maxb ? Math.Max(maxa, maxb) : args[0] is int maxia && args[1] is int maxib ? Math.Max(maxia, maxib) : args[0]) : throw new ArgumentException("MAX requires 2 arguments"),
             "RANDOM" => (object?)Random.Shared.NextInt64(),
             _ => throw new NotSupportedException("Function '" + functionCall.FunctionName + "' is not supported.")
         };

@@ -6,6 +6,9 @@
 
 using System.Runtime.InteropServices;
 
+namespace SharpCoreDB.Tests.Manual.RefFieldDemo;
+
+
 /// IDEA
 /// using System;
 

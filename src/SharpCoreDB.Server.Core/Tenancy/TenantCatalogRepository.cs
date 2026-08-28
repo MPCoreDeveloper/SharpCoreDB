@@ -687,7 +687,7 @@ public sealed class TenantCatalogRepository(
     private static IEnumerable<Dictionary<string, object?>> ScanTable(ITable table)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return table.Select().Select(row => row.ToDictionary(static kvp => kvp.Key, static kvp => (object?)kvp.Value));
+        return table.Select().Select(row => row.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value));
     }
 
     /// <summary>

@@ -1,8 +1,12 @@
 using SharpCoreDB.Storage.Scdb;
 using System.Runtime.InteropServices;
 
+namespace SharpCoreDB.Tests.Manual.SingleFileTest;
+
+
 class SingleFileTest
 {
+    private SingleFileTest() { } // Static utility class - prevent instantiation.
     static void Main(string[] args)
     {
         Console.WriteLine("Testing SCDB Structures");

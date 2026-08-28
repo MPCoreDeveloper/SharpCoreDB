@@ -10,6 +10,8 @@ namespace SharpCoreDB.GraphRAG.AIAssistant.Data;
 /// </summary>
 public sealed class SampleDocumentation
 {
+    private SampleDocumentation() { } // Static utility class - prevent instantiation.
+
     private static readonly List<DocumentationArticle> Articles = 
     [
         // === Authentication & Security ===

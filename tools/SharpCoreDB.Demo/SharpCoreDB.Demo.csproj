@@ -6,7 +6,7 @@
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <StartupObject>SingleFileDemo</StartupObject>
+    <StartupObject>SharpCoreDB.Tools.Demo.SingleFileDemo</StartupObject>
     
     <!-- This is a demo app, not a NuGet package -->
     <IsPackable>false</IsPackable>

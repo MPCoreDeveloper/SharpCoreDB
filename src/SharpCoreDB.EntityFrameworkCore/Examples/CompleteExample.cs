@@ -12,6 +12,8 @@ namespace SharpCoreDB.EntityFrameworkCore.Examples;
 /// </summary>
 public class CompleteExample
 {
+    private CompleteExample() { } // Static utility class - prevent instantiation.
+
     public static async Task Main(string[] args)
     {
         Console.WriteLine("?? SharpCoreDB + Entity Framework Core Example\n");

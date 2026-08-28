@@ -14,6 +14,8 @@ namespace SharpCoreDB.Provider.Sync.Metadata;
 /// </summary>
 public sealed class SharpCoreDBSchemaReader
 {
+    private SharpCoreDBSchemaReader() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Gets all user tables in the database.
     /// Excludes internal tracking tables (suffix <c>_tracking</c>) and scope tables.

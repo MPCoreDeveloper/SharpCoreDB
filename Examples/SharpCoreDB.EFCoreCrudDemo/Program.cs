@@ -166,6 +166,7 @@ static async Task<List<Company>> GetActiveWithVacanciesAsync(CompanyVacancyConte
 // =====================================================================
 // Entity models (minimal for demo)
 // =====================================================================
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class Company
 {
     public Guid Id { get; set; }
@@ -174,6 +175,7 @@ public class Company
     public ICollection<Vacancy> Vacancies { get; set; } = [];
 }
 
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class Vacancy
 {
     public Guid Id { get; set; }
@@ -183,6 +185,7 @@ public class Vacancy
     public Guid CompanyId { get; set; }
 }
 
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class CompanyVacancyContext(DbContextOptions<CompanyVacancyContext> options) : DbContext(options)
 {
     public DbSet<Company> Companies => Set<Company>();
@@ -208,6 +211,9 @@ public class CompanyVacancyContext(DbContextOptions<CompanyVacancyContext> optio
 }
 
 // Seed DTOs
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class SeedDataRoot { public List<SeedCompany> Companies { get; set; } = []; }
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class SeedCompany { public string Name { get; set; } = ""; public string Address { get; set; } = ""; public List<SeedVacancy> Vacancies { get; set; } = []; }
+// NOSONAR:S3903 - top-level statement file; trailing demo types cannot be moved into a namespace.
 public class SeedVacancy { public string Title { get; set; } = ""; public string Description { get; set; } = ""; public bool IsActive { get; set; } }

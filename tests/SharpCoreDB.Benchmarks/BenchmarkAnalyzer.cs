@@ -14,6 +14,8 @@ namespace SharpCoreDB.Benchmarks;
 /// </summary>
 public class BenchmarkAnalyzer
 {
+    private BenchmarkAnalyzer() { } // Static utility class - prevent instantiation.
+
     private const string ResultsPath = "BenchmarkDotNet.Artifacts/results";
     
     public static void Main(string[] args)

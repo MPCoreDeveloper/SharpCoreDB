@@ -7,6 +7,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using SharpCoreDB.VectorSearch;
 
+namespace SharpCoreDB.Benchmarks.QuickZvecTest;
+
+
 /// <summary>
 /// SharpCoreDB HNSW Vector Benchmark Suite.
 /// Measures index build, search latency, throughput, and recall.
@@ -14,6 +17,7 @@ using SharpCoreDB.VectorSearch;
 /// </summary>
 class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     static void Main(string[] args)
     {
         Console.WriteLine("╔══════════════════════════════════════════════════╗");

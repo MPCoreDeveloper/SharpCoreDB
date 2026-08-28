@@ -11,6 +11,7 @@ namespace SharpCoreDB.GraphRAG.AIAssistant;
 
 internal sealed class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     private static ILogger<Program>? _logger;
     private static DocumentationService? _docService;
     private static AIService? _aiService;

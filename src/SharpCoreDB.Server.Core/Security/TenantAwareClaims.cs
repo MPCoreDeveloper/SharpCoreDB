@@ -324,6 +324,8 @@ public sealed class TenantAwareClaimsBuilder
 /// </summary>
 public sealed class TenantAwareTokenService
 {
+    private TenantAwareTokenService() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Creates a claims builder for constructing tenant-aware tokens.
     /// </summary>

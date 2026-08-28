@@ -13,11 +13,15 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 
+namespace SharpCoreDB.Benchmarks.Comparative;
+
+
 /// Comparative benchmark: SharpCoreDB vs BLite vs LiteDB vs SQLite.
 /// Identical document CRUD workloads on all four databases.
 /// </summary>
 class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     const int InsertCount = 100_000;
     const int BatchSize = 10_000;
     const int ReadCount = 10_000;
@@ -495,6 +499,8 @@ class Program
         try
         {
             using var db = new LiteDB.LiteDatabase(dbFile);
+
+
             var col = db.GetCollection<LiteDoc>("docs");
             col.EnsureIndex(x => x.Id);
 

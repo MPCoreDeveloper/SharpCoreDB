@@ -25,6 +25,8 @@ namespace SharpCoreDB.Graph.Advanced.SubgraphQueries;
 /// </summary>
 public sealed class KCoreDecomposition
 {
+    private KCoreDecomposition() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Decomposes a graph into k-cores.
     /// Returns the k-core value for each node.
@@ -127,6 +129,8 @@ public sealed class KCoreDecomposition
 /// </summary>
 public sealed class CliqueDetector
 {
+    private CliqueDetector() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Finds all maximal cliques using Bron-Kerbosch algorithm with pivoting.
     /// </summary>
@@ -228,6 +232,8 @@ public sealed class CliqueDetector
 /// </summary>
 public sealed class TriangleDetector
 {
+    private TriangleDetector() { } // Static utility class - prevent instantiation.
+
     /// <summary>
     /// Detects all triangles (3-cliques) in the graph.
     /// Returns list of (u, v, w) node triples that form triangles.

@@ -1463,7 +1463,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // Without this, FreeSpaceManager starts with _totalPages=0 and AllocatePages
         // returns offset 0 (the SCDB header page!). Data block writes then overwrite the
         // file header with table data (e.g. "SFT1" magic), corrupting the file.
-        var reservedPages = (ulong)(totalMetadataSize / (ulong)options.PageSize);
+        var reservedPages = totalMetadataSize / (ulong)options.PageSize;
         header.AllocatedPages = reservedPages;
 
         var fsmHeader = new FreeSpaceMapHeader

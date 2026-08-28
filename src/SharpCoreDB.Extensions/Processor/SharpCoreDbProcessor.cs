@@ -470,6 +470,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (row is IDictionary<string, object> objectDict)
         {
+            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
             return objectDict.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -480,6 +481,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (row is IEnumerable<KeyValuePair<string, object>> pairs)
         {
+            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
             return pairs.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -491,6 +493,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (valuesProperty?.GetValue(row) is IDictionary<string, object> objectRowValues)
         {
+            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
             return objectRowValues.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
         }
 

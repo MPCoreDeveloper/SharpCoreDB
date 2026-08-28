@@ -7,8 +7,12 @@ using SharpCoreDB;
 using System;
 using System.IO;
 
+namespace SharpCoreDB.Tools.Demo;
+
+
 class SingleFileDemo
 {
+    private SingleFileDemo() { } // Static utility class - prevent instantiation.
     static void Main()
     {
         Console.WriteLine("SharpCoreDB Single-File Database Demo");

@@ -30,6 +30,8 @@ namespace SharpCoreDB.EntityFrameworkCore.Examples;
 /// </summary>
 public class AspNetCoreExample
 {
+    private AspNetCoreExample() { } // Static utility class - prevent instantiation.
+
     // Example code for Program.cs in ASP.NET Core application
     public static string GetExampleProgramCs()
     {

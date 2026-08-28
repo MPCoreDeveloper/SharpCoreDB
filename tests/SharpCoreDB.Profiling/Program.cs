@@ -24,6 +24,7 @@ namespace SharpCoreDB.Profiling;
 /// </summary>
 internal class Program
 {
+    private Program() { } // Static utility class - prevent instantiation.
     private const int RecordCount = 10_000;
     private const int WarmupRuns = 3;
     
@@ -441,6 +442,7 @@ internal class Program
             int iteration = 0;
             var totalSw = Stopwatch.StartNew();
             
+                // NOSONAR:S2190 - intentional continuous-profiling loop; the documented exit is Ctrl+C.
             while (true)
             {
                 var rows = GenerateTestRows(1000, iteration * 1000);

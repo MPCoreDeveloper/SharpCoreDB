@@ -267,7 +267,7 @@ public sealed class WebSocketHandler(
 
                 for (var i = offset; i < offset + count; i++)
                 {
-                    rows.Add(result[i].ToDictionary(static kvp => kvp.Key, static kvp => (object?)kvp.Value));
+                    rows.Add(result[i].ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value));
                 }
 
                 var hasMore = offset + count < result.Count;
