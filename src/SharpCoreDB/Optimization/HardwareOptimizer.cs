@@ -132,7 +132,7 @@ public static class HardwareOptimizer
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                SetThreadAffinityWindows(cpuId);
+                SetThreadAffinityWindows();
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
@@ -149,7 +149,7 @@ public static class HardwareOptimizer
     /// <summary>
     /// Sets thread affinity on Windows.
     /// </summary>
-    private static void SetThreadAffinityWindows(int cpuId)
+    private static void SetThreadAffinityWindows()
     {
         try
         {
@@ -447,14 +447,14 @@ public static class PlatformOptimizer
         // The runtime (HardwareIntrinsics / JIT) selects SIMD-optimized code paths
         // automatically when the feature is available; no manual dispatch is needed.
         // Log the active feature set for diagnostics.
-        Debug.WriteLine(
-            info.HasAVX512
-                ? "PlatformOptimizer: AVX-512 code path available."
-                : info.HasAVX2
-                    ? "PlatformOptimizer: AVX2 code path available."
-                    : info.HasNEON
-                        ? "PlatformOptimizer: ARM NEON code path available."
-                        : "PlatformOptimizer: scalar fallback.");
+        var feature = info switch
+        {
+            { HasAVX512: true } => "PlatformOptimizer: AVX-512 code path available.",
+            { HasAVX2: true } => "PlatformOptimizer: AVX2 code path available.",
+            { HasNEON: true } => "PlatformOptimizer: ARM NEON code path available.",
+            _ => "PlatformOptimizer: scalar fallback.",
+        };
+        Debug.WriteLine(feature);
     }
 
     /// <summary>

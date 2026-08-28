@@ -99,9 +99,7 @@ public sealed class ScheduleOptimizer
         {
             return _bufferProfiles.Values
                 .Select(CreateRecommendation)
-                .Where(r => r is not null)
-                // NOSONAR:S1905 - Where does not narrow nullable; Cast<X> is required for the non-null result type.
-                .Cast<ScheduleOptimizationRecommendation>()
+                .OfType<ScheduleOptimizationRecommendation>()
                 .ToList();
         }
     }

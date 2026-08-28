@@ -335,7 +335,7 @@ public sealed class TenantBackupRestoreService(
     /// Ensures a value used as a single path segment (tenant/database identifier)
     /// contains no path separators, null characters, or parent references.
     /// </summary>
-    private static string EnsureSafePathSegment(string value, string paramName)
+    private static void EnsureSafePathSegment(string value, string paramName)
     {
         if (value.IndexOfAny(['/', '\\', '\0']) >= 0 || value.Contains("..", StringComparison.Ordinal))
         {
@@ -343,8 +343,6 @@ public sealed class TenantBackupRestoreService(
                 $"'{paramName}' must not contain path separators, null characters, or '..'.",
                 paramName);
         }
-
-        return value;
     }
 
     /// <summary>

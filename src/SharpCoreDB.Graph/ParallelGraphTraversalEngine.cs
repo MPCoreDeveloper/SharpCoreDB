@@ -233,7 +233,7 @@ public sealed class ParallelGraphTraversalEngine
     /// <summary>
     /// Worker task for channel-based parallel BFS.
     /// </summary>
-    private async Task WorkerTaskAsync(
+    private static async Task WorkerTaskAsync(
         ITable table,
         string relationshipColumn,
         int maxDepth,
@@ -287,7 +287,7 @@ public sealed class ParallelGraphTraversalEngine
     /// <summary>
     /// Sequential BFS fallback for small graphs.
     /// </summary>
-    private async Task<IReadOnlyCollection<long>> TraverseBfsSequentialAsync(
+    private static async Task<IReadOnlyCollection<long>> TraverseBfsSequentialAsync(
         ITable table,
         long startNodeId,
         string relationshipColumn,

@@ -279,7 +279,6 @@ public sealed class TraversalCostEstimator
         if (dfsCost.TotalCost < bestCost)
         {
             bestStrategy = GraphTraversalStrategy.Dfs;
-            bestCost = dfsCost.TotalCost;
         }
 
         return bestStrategy switch

@@ -149,7 +149,7 @@ public class AggregationOptimizer : IDisposable
     /// Updates aggregate values for a group based on current row values.
     /// No allocations needed - updates existing aggregate object.
     /// </summary>
-    private void UpdateAggregates(
+    private static void UpdateAggregates(
         Dictionary<string, object> row,
         GroupAggregates agg,
         AggregateDefinition[] aggregates)

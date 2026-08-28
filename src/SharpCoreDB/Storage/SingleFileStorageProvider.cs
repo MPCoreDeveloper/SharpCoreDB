@@ -1490,7 +1490,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             Span<byte> bitmapBuffer = stackalloc byte[256];
             var bitmapSlice = bitmapBuffer[..bitmapSizeBytes];
             bitmapSlice.Fill(0xFF);
-            var trailingBits = (int)(bitmapSizeBytes * 8 - (int)reservedPages);
+            var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
             if (trailingBits > 0 && bitmapSizeBytes > 0)
             {
                 bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
@@ -1504,7 +1504,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             {
                 var bitmapSpan = bitmapBuffer.AsSpan(0, bitmapSizeBytes);
                 bitmapSpan.Fill(0xFF);
-                var trailingBits = (int)(bitmapSizeBytes * 8 - (int)reservedPages);
+                var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
                 if (trailingBits > 0)
                 {
                     bitmapSpan[^1] = (byte)(0xFF >> trailingBits);

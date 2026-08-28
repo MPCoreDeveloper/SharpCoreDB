@@ -546,7 +546,7 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
         return pageData.AsSpan(recordOffset, recordLength).ToArray();
     }
 
-    private IEnumerable<(ushort slotIndex, byte[] data)> ExtractAllRecordsFromPage(byte[] pageData)
+    private static IEnumerable<(ushort slotIndex, byte[] data)> ExtractAllRecordsFromPage(byte[] pageData)
     {
         var header = ReadPageHeader(pageData);
         

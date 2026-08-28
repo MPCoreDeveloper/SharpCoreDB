@@ -262,7 +262,7 @@ public sealed class DownsamplingEngine : IDisposable
         return $"{tableName}_{suffix}";
     }
 
-    private IEnumerable<string> GetAllTableNames()
+    private static IEnumerable<string> GetAllTableNames()
     {
         // Table names are not tracked per bucket yet; return an empty set.
         return [];

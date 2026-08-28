@@ -19,7 +19,7 @@ public partial class SqlParser
     /// Executes a WITH [RECURSIVE] … SELECT statement.
     /// Supports a single CTE with optional RECURSIVE self-reference via UNION ALL.
     /// </summary>
-    private List<Dictionary<string, object>> ExecuteWithCte(string sql)
+    private static List<Dictionary<string, object>> ExecuteWithCte(string sql)
     {
         // Strip WITH / WITH RECURSIVE prefix
         var afterWith = Regex.Match(sql, @"^WITH\s+(?:RECURSIVE\s+)?(.+)$",

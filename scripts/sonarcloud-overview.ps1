@@ -213,15 +213,18 @@ $rows | Format-Table -AutoSize
 
 # Summary per organization
 Write-Host "=== Summary per organization ===" -ForegroundColor Cyan
-$rows | Group-Object Organization | ForEach-Object {
-    $bad = @($_.Group | Where-Object { $_.QualityGate -ne "OK" })
-    $red = @($_.Group | Where-Object { $_.Bugs -and [int]$_.Bugs -gt 0 })
-    $vul = @($_.Group | Where-Object { $_.Vulnerabilities -and [int]$_.Vulnerabilities -gt 0 })
-    [pscustomobject]@{
-        Organization      = $_.Name
-        Projects          = $_.Count
-        GateNotOK         = $bad.Count
-        WithBugs          = $red.Count
-        WithVulnerabilities = $vul.Count
-    }
-} | Format-Table -AutoSize
+$rows |
+    Group-Object Organization |
+    ForEach-Object {
+        $bad = @($_.Group | Where-Object { $_.QualityGate -ne "OK" })
+        $red = @($_.Group | Where-Object { $_.Bugs -and [int]$_.Bugs -gt 0 })
+        $vul = @($_.Group | Where-Object { $_.Vulnerabilities -and [int]$_.Vulnerabilities -gt 0 })
+        [pscustomobject]@{
+            Organization      = $_.Name
+            Projects          = $_.Count
+            GateNotOK         = $bad.Count
+            WithBugs          = $red.Count
+            WithVulnerabilities = $vul.Count
+        }
+    } |
+    Format-Table -AutoSize

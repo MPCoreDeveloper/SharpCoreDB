@@ -304,7 +304,7 @@ public static class QueryCompiler
         if (columnIndices.TryGetValue(column.ColumnName, out var index))
         {
             var indexExpr = Expression.Constant(index);
-            var indexerProperty = typeof(IndexedRowData).GetProperty("Item", [typeof(int)])!;
+            var indexerProperty = typeof(IndexedRowData).GetProperty("Item", [typeof(int)]);
             return Expression.Property(rowParam, indexerProperty, indexExpr);
         }
 

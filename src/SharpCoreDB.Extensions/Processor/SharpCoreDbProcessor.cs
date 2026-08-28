@@ -470,8 +470,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (row is IDictionary<string, object> objectDict)
         {
-            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
-            return objectDict.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
+            return objectDict.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
         if (row is IEnumerable<KeyValuePair<string, object?>> nullablePairs)
@@ -481,8 +480,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (row is IEnumerable<KeyValuePair<string, object>> pairs)
         {
-            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
-            return pairs.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
+            return pairs.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
         var valuesProperty = row.GetType().GetProperty("Values");
@@ -493,8 +491,7 @@ public sealed class SharpCoreDbProcessor(
 
         if (valuesProperty?.GetValue(row) is IDictionary<string, object> objectRowValues)
         {
-            // NOSONAR:S1905 - the (object?) cast forces Dictionary<string, object?> value type inference.
-            return objectRowValues.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
+            return objectRowValues.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
         }
 
         throw new NotSupportedException($"Unsupported data row type '{row.GetType().FullName}'.");

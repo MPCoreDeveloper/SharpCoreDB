@@ -81,11 +81,8 @@ public sealed class LouvainAlgorithm : ICommunityDetector
                         bestCommunity = neighborComm;
                     }
 
-                    // Restore old community for next test (only if it changed)
-                    if (communities[i] != oldComm)
-                    {
-                        communities[i] = oldComm;
-                    }
+                    // Restore old community for next test
+                    communities[i] = oldComm;
                 }
 
                 // Apply best move
