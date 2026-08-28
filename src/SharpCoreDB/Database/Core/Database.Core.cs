@@ -120,7 +120,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(masterPassword);
 
         _serviceProvider = services;
-        _dbPath = dbPath;
+        _dbPath = Path.GetFullPath(dbPath);
         this.isReadOnly = isReadOnly;
         this.config = config ?? DatabaseConfig.Default;
         _storageProvider = storageProvider;  // ✅ SCDB Phase 1: Store storage provider
@@ -596,7 +596,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// <returns>Base64-encoded salt string.</returns>
     private static string GetOrCreateDatabaseSalt(string dbPath)
     {
-        var saltFilePath = Path.Combine(dbPath, ".salt");
+        var saltFilePath = Path.Combine(Path.GetFullPath(dbPath), ".salt");
         
         try
         {

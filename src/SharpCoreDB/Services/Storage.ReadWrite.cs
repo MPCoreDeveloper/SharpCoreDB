@@ -20,6 +20,7 @@ public partial class Storage
     /// <inheritdoc />
     public void Write(string path, string data)
     {
+        path = Path.GetFullPath(path);
         var plain = Encoding.UTF8.GetBytes(data);
         
         // ✅ CRITICAL FIX: Check if in transaction - if so, buffer the write!
@@ -45,6 +46,8 @@ public partial class Storage
     /// <inheritdoc />
     public string? Read(string path)
     {
+        path = Path.GetFullPath(path);
+
         if (!File.Exists(path))
         {
             return null;

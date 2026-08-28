@@ -44,7 +44,7 @@ public class AppendOnlyEngine : IStorageEngine
     public AppendOnlyEngine(IStorage storage, string databasePath)
     {
         this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        this.databasePath = databasePath ?? throw new ArgumentNullException(nameof(databasePath));
+        this.databasePath = Path.GetFullPath(databasePath ?? throw new ArgumentNullException(nameof(databasePath)));
         
         if (!Directory.Exists(databasePath))
         {

@@ -54,7 +54,7 @@ public partial class PageBasedEngine : IStorageEngine
     /// <param name="config">Optional database configuration for auto-tuning.</param>
     public PageBasedEngine(string databasePath, DatabaseConfig? config = null)
     {
-        this.databasePath = databasePath ?? throw new ArgumentNullException(nameof(databasePath));
+        this.databasePath = Path.GetFullPath(databasePath ?? throw new ArgumentNullException(nameof(databasePath)));
         this.config = config; // ✅ NEW: Store config
         
         if (!Directory.Exists(databasePath))

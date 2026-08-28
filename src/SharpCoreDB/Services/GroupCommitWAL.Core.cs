@@ -78,7 +78,7 @@ public partial class GroupCommitWAL : IDisposable
         this.instanceId = instanceId ?? Guid.NewGuid().ToString("N");
         
         // Create instance-specific WAL filename
-        this.logPath = Path.Combine(dbPath, $"wal-{this.instanceId}.log");
+        this.logPath = Path.GetFullPath(Path.Combine(dbPath, $"wal-{this.instanceId}.log"));
         
         this.durabilityMode = durabilityMode;
         this.enableAdaptiveBatching = enableAdaptiveBatching;
