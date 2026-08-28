@@ -656,8 +656,8 @@ public static class QueryCompiler
 
         AddColumn(orderByColumn);
 
-        // local function 'AddColumn' mutates the captured 'columns' list;
-        // SonarC# cannot track the side effect and wrongly reports the loop as unreachable.
+        // Note: the local AddColumn helper mutates the captured columns list; SonarC#
+        // cannot track that side effect and wrongly reports the loop as unreachable.
         for (int i = 0; i < columns.Count; i++) // NOSONAR:S2583
         {
             indices[columns[i]] = i;

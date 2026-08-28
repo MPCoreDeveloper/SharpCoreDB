@@ -57,7 +57,7 @@ public partial class PageBasedEngine : IStorageEngine
         this.databasePath = Path.GetFullPath(databasePath ?? throw new ArgumentNullException(nameof(databasePath)));
         this.config = config; // ✅ NEW: Store config
         
-        if (!Directory.Exists(databasePath))
+        if (!Directory.Exists(databasePath)) // NOSONAR:S6549 - databasePath is the user-configured storage root.
         {
             Directory.CreateDirectory(databasePath);
         }

@@ -38,8 +38,8 @@ public sealed class HnswIndex : IVectorIndex
         ArgumentNullException.ThrowIfNull(config);
         config.Validate();
         _config = config;
-        // Random is used only for HNSW graph level assignment (non-security);
-        // a seed is supported for deterministic testing.
+        // Random is used only for HNSW level assignment (not security);
+        // a seed is supported for deterministic tests.
         _levelRng = seed.HasValue ? new Random(seed.Value) : new Random(); // NOSONAR:S2245
     }
 

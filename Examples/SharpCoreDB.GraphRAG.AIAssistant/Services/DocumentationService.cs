@@ -99,7 +99,7 @@ public sealed class DocumentationService(IDatabase database, ILogger<Documentati
     /// Performs vector similarity search using embeddings.
     /// </summary>
     private async Task<List<GraphRAGResult>> VectorSearchAsync(
-        string query, 
+        string query, // NOSONAR:S1172 - kept for API symmetry; the demo uses mock embeddings.
         int topK, 
         CancellationToken ct)
     {

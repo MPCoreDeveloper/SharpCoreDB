@@ -239,13 +239,13 @@ public static class DapperAsyncExtensions
             : null;
 
         // Get total count
-        var countSql = $"SELECT COUNT(*) FROM ({sql}) AS CountQuery"; // NOSONAR:S2077 - 'sql' is the caller's own (already parameterized) query wrapped in a COUNT(*) subquery; it cannot itself be bound as a parameter.
-        var totalCount = await connection.ExecuteScalarAsync<long>(countSql, parameters);
+        var countSql = $"SELECT COUNT(*) FROM ({sql}) AS CountQuery";
+        var totalCount = await connection.ExecuteScalarAsync<long>(countSql, parameters); // NOSONAR:S2077 - 'sql' is the caller's own (already parameterized) query wrapped in a COUNT(*) subquery; it cannot itself be bound as a parameter.
 
         // Get paged data
         var offset = (pageNumber - 1) * pageSize;
-        var pagedSql = $"{sql} LIMIT {pageSize} OFFSET {offset}"; // NOSONAR:S2077 - 'sql' is the caller's own query; pageSize/offset are validated integers.
-        var items = await connection.QueryAsync<T>(pagedSql, parameters);
+        var pagedSql = $"{sql} LIMIT {pageSize} OFFSET {offset}";
+        var items = await connection.QueryAsync<T>(pagedSql, parameters); // NOSONAR:S2077 - 'sql' is the caller's own query; pageSize/offset are validated integers.
 
         return new PagedResult<T>
         {

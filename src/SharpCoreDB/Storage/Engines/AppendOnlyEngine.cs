@@ -46,7 +46,7 @@ public class AppendOnlyEngine : IStorageEngine
         this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
         this.databasePath = Path.GetFullPath(databasePath ?? throw new ArgumentNullException(nameof(databasePath)));
         
-        if (!Directory.Exists(databasePath))
+        if (!Directory.Exists(databasePath)) // NOSONAR:S6549 - databasePath is the user-configured storage root.
         {
             Directory.CreateDirectory(databasePath);
         }

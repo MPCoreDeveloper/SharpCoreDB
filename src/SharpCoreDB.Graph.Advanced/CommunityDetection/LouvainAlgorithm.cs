@@ -82,7 +82,7 @@ public sealed class LouvainAlgorithm : ICommunityDetector
                     }
 
                     // Restore old community for next test
-                    communities[i] = oldComm;
+                    communities[i] = oldComm; // NOSONAR:S4143 - intentional: restore the previous community before testing the next candidate.
                 }
 
                 // Apply best move
