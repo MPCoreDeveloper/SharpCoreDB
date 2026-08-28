@@ -428,7 +428,7 @@ public partial class Table
                 if (!row.TryGetValue(columnName, out var idObj))
                     continue;
 
-                TId rowId = idObj is TId typedId ? typedId : (TId)Convert.ChangeType(idObj, typeof(TId));
+                TId rowId = idObj is TId typedId ? typedId : TypeConverter.Convert<TId>(idObj);
                 
                 if (!updateLookup.TryGetValue(rowId, out var newValue))
                     continue;
@@ -818,7 +818,7 @@ public partial class Table
                 if (!row.TryGetValue(idColumn, out var idObj))
                     continue;
 
-                TId rowId = idObj is TId typedId ? typedId : (TId)Convert.ChangeType(idObj, typeof(TId));
+                TId rowId = idObj is TId typedId ? typedId : TypeConverter.Convert<TId>(idObj);
                 
                 if (!updateLookup.TryGetValue(rowId, out var columnUpdates))
                     continue;

@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Linq;
 
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
 
@@ -28,6 +29,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
     /// </summary>
     /// <param name="expression">The LINQ expression.</param>
     /// <returns>Tuple of (SQL query, parameters).</returns>
+    [RequiresDynamicCode("LINQ-to-SQL translation builds expression trees and compiles delegates, which requires dynamic code and is not supported by Native AOT.")]
     public (string Sql, object?[] Parameters) Translate(Expression expression)
     {
         _sql.Clear();

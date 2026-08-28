@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using SharpCoreDB.Constants;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// SIMD-optimized aggregate function implementations for ColumnStore.
@@ -32,10 +33,10 @@ public sealed partial class ColumnStore<T>
 
         return buffer switch
         {
-            Int32ColumnBuffer intBuf => (TResult)Convert.ChangeType(SumInt32Adaptive(intBuf), typeof(TResult)),
-            Int64ColumnBuffer longBuf => (TResult)Convert.ChangeType(SumInt64Adaptive(longBuf), typeof(TResult)),
-            DoubleColumnBuffer doubleBuf => (TResult)Convert.ChangeType(DoubleColumnAdaptive(doubleBuf), typeof(TResult)),
-            DecimalColumnBuffer decBuf => (TResult)Convert.ChangeType(SumDecimal(decBuf), typeof(TResult)),
+            Int32ColumnBuffer intBuf => TypeConverter.Convert<TResult>(SumInt32Adaptive(intBuf)),
+            Int64ColumnBuffer longBuf => TypeConverter.Convert<TResult>(SumInt64Adaptive(longBuf)),
+            DoubleColumnBuffer doubleBuf => TypeConverter.Convert<TResult>(DoubleColumnAdaptive(doubleBuf)),
+            DecimalColumnBuffer decBuf => TypeConverter.Convert<TResult>(SumDecimal(decBuf)),
             _ => throw new NotSupportedException($"SUM not supported for column type")
         };
     }
@@ -73,10 +74,10 @@ public sealed partial class ColumnStore<T>
 
         return buffer switch
         {
-            Int32ColumnBuffer intBuf => (TResult)Convert.ChangeType(MinInt32Adaptive(intBuf), typeof(TResult)),
-            Int64ColumnBuffer longBuf => (TResult)Convert.ChangeType(MinInt64Adaptive(longBuf), typeof(TResult)),
-            DoubleColumnBuffer doubleBuf => (TResult)Convert.ChangeType(MinDoubleAdaptive(doubleBuf), typeof(TResult)),
-            DecimalColumnBuffer decBuf => (TResult)Convert.ChangeType(MinDecimal(decBuf), typeof(TResult)),
+            Int32ColumnBuffer intBuf => TypeConverter.Convert<TResult>(MinInt32Adaptive(intBuf)),
+            Int64ColumnBuffer longBuf => TypeConverter.Convert<TResult>(MinInt64Adaptive(longBuf)),
+            DoubleColumnBuffer doubleBuf => TypeConverter.Convert<TResult>(MinDoubleAdaptive(doubleBuf)),
+            DecimalColumnBuffer decBuf => TypeConverter.Convert<TResult>(MinDecimal(decBuf)),
             _ => throw new NotSupportedException($"MIN not supported for column type")
         };
     }
@@ -94,10 +95,10 @@ public sealed partial class ColumnStore<T>
 
         return buffer switch
         {
-            Int32ColumnBuffer intBuf => (TResult)Convert.ChangeType(MaxInt32Adaptive(intBuf), typeof(TResult)),
-            Int64ColumnBuffer longBuf => (TResult)Convert.ChangeType(MaxInt64Adaptive(longBuf), typeof(TResult)),
-            DoubleColumnBuffer doubleBuf => (TResult)Convert.ChangeType(MaxDoubleAdaptive(doubleBuf), typeof(TResult)),
-            DecimalColumnBuffer decBuf => (TResult)Convert.ChangeType(MaxDecimal(decBuf), typeof(TResult)),
+            Int32ColumnBuffer intBuf => TypeConverter.Convert<TResult>(MaxInt32Adaptive(intBuf)),
+            Int64ColumnBuffer longBuf => TypeConverter.Convert<TResult>(MaxInt64Adaptive(longBuf)),
+            DoubleColumnBuffer doubleBuf => TypeConverter.Convert<TResult>(MaxDoubleAdaptive(doubleBuf)),
+            DecimalColumnBuffer decBuf => TypeConverter.Convert<TResult>(MaxDecimal(decBuf)),
             _ => throw new NotSupportedException($"MAX not supported for column type")
         };
     }

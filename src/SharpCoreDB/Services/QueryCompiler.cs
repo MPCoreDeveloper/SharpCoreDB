@@ -10,6 +10,7 @@ using SharpCoreDB.Services.Compilation;
 using SharpCoreDB.Optimization;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
@@ -42,6 +43,7 @@ public static class QueryCompiler
     /// </summary>
     /// <param name="sql">The SQL SELECT statement.</param>
     /// <returns>A compiled query plan, or null if compilation fails.</returns>
+    [RequiresDynamicCode("QueryCompiler.Compile uses expression-tree compilation (Lambda.Compile), which is not supported by Native AOT. The non-compiled query execution path is used automatically.")]
     public static CompiledQueryPlan? Compile(string sql)
     {
         try

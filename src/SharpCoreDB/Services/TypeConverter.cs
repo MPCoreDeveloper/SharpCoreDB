@@ -29,12 +29,37 @@ public static class TypeConverter
 
         try
         {
-            return (T)System.Convert.ChangeType(value, typeof(T));
+            return (T)ConvertToType(value, typeof(T));
         }
         catch
         {
             throw new InvalidCastException($"Cannot convert {value.GetType()} to {typeof(T)}");
         }
+    }
+
+    /// <summary>
+    /// AOT-safe conversion to a target type. Avoids <c>Convert.ChangeType(object, Type)</c>
+    /// which requires dynamic code (IL3050 in Native AOT). Uses the IConvertible-based
+    /// <c>Convert.ToXxx</c> overloads which are Native AOT compatible.
+    /// </summary>
+    internal static object ConvertToType(object value, Type targetType)
+    {
+        if (targetType == typeof(int)) return System.Convert.ToInt32(value);
+        if (targetType == typeof(long)) return System.Convert.ToInt64(value);
+        if (targetType == typeof(short)) return System.Convert.ToInt16(value);
+        if (targetType == typeof(byte)) return System.Convert.ToByte(value);
+        if (targetType == typeof(uint)) return System.Convert.ToUInt32(value);
+        if (targetType == typeof(ulong)) return System.Convert.ToUInt64(value);
+        if (targetType == typeof(double)) return System.Convert.ToDouble(value);
+        if (targetType == typeof(float)) return System.Convert.ToSingle(value);
+        if (targetType == typeof(decimal)) return System.Convert.ToDecimal(value);
+        if (targetType == typeof(bool)) return System.Convert.ToBoolean(value);
+        if (targetType == typeof(string)) return System.Convert.ToString(value) ?? string.Empty;
+        if (targetType == typeof(DateTime)) return System.Convert.ToDateTime(value);
+        if (targetType == typeof(char)) return System.Convert.ToChar(value);
+        if (targetType == typeof(Guid)) return value is Guid guid ? guid : Guid.Parse(System.Convert.ToString(value) ?? string.Empty);
+        if (targetType == typeof(byte[])) return value is byte[] bytes ? bytes : throw new InvalidCastException($"Cannot convert {value.GetType().Name} to byte[]");
+        throw new InvalidCastException($"Cannot convert {value.GetType().Name} to {targetType.Name}");
     }
 
     /// <summary>
@@ -62,7 +87,7 @@ public static class TypeConverter
 
         try
         {
-            result = (T)System.Convert.ChangeType(value, typeof(T));
+            result = (T)ConvertToType(value, typeof(T));
             return true;
         }
         catch
@@ -645,7 +670,7 @@ public static class CachedTypeConverter
             
             try
             {
-                return (T)System.Convert.ChangeType(value, typeof(T));
+                return (T)TypeConverter.ConvertToType(value, typeof(T));
             }
             catch
             {

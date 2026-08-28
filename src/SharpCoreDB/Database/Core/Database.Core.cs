@@ -52,6 +52,19 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
     private IGraphRagProvider? _cachedGraphRagProvider;  // v2: cached DI resolution (avoids per-call GetService)
+
+    /// <summary>
+    /// v2 (Native AOT readiness): metadata JSON options. Uses the reflection resolver when
+    /// reflection is enabled (identical JIT behavior) and the source-generated
+    /// <see cref="SharpCoreDBJsonContext"/> under Native AOT where reflection-based
+    /// serialization is disabled.
+    /// </summary>
+    private static readonly JsonSerializerOptions MetadataJsonOptions = new()
+    {
+        TypeInfoResolver = JsonSerializer.IsReflectionEnabledByDefault
+            ? new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
+            : SharpCoreDBJsonContext.Default
+    };
     
     // ✅ SCDB Phase 1: Storage provider abstraction
     // Null when using legacy directory-based storage (IStorage)
@@ -287,7 +300,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         Dictionary<string, object>? meta;
         try
         {
-            meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson);
+            meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson, MetadataJsonOptions);
         }
         catch (JsonException ex)
         {
@@ -344,7 +357,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             return;
         }
 
-        var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString);
+        var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString, MetadataJsonOptions);
         if (tablesList is null)
         {
 #if DEBUG
@@ -359,7 +372,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 
         foreach (var tableDict in tablesList)
         {
-            var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict));
+            var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict, MetadataJsonOptions), MetadataJsonOptions);
             if (table is not null)  // ✅ C# 14: is not null pattern
             {
                 // Backward compatibility: older metadata may not include StorageMode.
@@ -481,29 +494,30 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// </summary>
     private void SaveMetadata()
     {
-        var tablesList = tables.Values.OfType<Table>().Select(t => new
+        // v2 (AOT readiness): strongly-typed DTO preserves the legacy anonymous-type JSON shape.
+        var tablesList = tables.Values.OfType<Table>().Select(t => new TableMetadataDto
         {
-            t.Name,
-            t.Columns,
-            t.ColumnTypes,
-            t.PrimaryKeyIndex,
-            t.HasInternalRowId,  // ✅ AUTO-ROWID: Persist internal _rowid flag
-            t.DataFile,
-            t.StorageMode,
-            t.IsAuto,
-            t.IsNotNull,
-            t.DefaultValues,
-            t.UniqueConstraints,
-            t.ForeignKeys,  // Added for Phase 1.2
-            t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
-            t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
+            Name = t.Name,
+            Columns = t.Columns,
+            ColumnTypes = t.ColumnTypes,
+            PrimaryKeyIndex = t.PrimaryKeyIndex,
+            HasInternalRowId = t.HasInternalRowId,  // ✅ AUTO-ROWID: Persist internal _rowid flag
+            DataFile = t.DataFile,
+            StorageMode = t.StorageMode,
+            IsAuto = t.IsAuto,
+            IsNotNull = t.IsNotNull,
+            DefaultValues = t.DefaultValues,
+            UniqueConstraints = t.UniqueConstraints,
+            ForeignKeys = t.ForeignKeys,  // Added for Phase 1.2
+            ColumnCollations = t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
+            AutoIncrementCounters = t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
         // ✅ 1.9.5: Persist the ULID-spec marker so reopened databases know whether they were created
         // by 1.9.5+ (spec-compliant ULIDs) or earlier (legacy ULIDs needing MigrateLegacyUlids()).
         meta[PersistenceConstants.UlidSpecMarkerKey] = _ulidSpec ?? true;
-        var metaJson = JsonSerializer.Serialize(meta);
+        var metaJson = JsonSerializer.Serialize(meta, MetadataJsonOptions);
         
         if (_storageProvider is not null)
         {

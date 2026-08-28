@@ -49,7 +49,7 @@ public static class ProjectionExecutor
             {
                 T typed => typed,
                 null => default(T),
-                _ => (T)Convert.ChangeType(value, typeof(T))
+                _ => TypeConverter.Convert<T>(value)
             };
         }
 

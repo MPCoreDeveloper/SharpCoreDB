@@ -182,7 +182,7 @@ public sealed class SharpCoreDBDataReader : DbDataReader
 
         if (_useOptionalProjection)
         {
-            return typeof(Option<>).MakeGenericType(_optionalFieldInnerTypes[ordinal]);
+            return GetOptionType(_optionalFieldInnerTypes[ordinal]);
         }
 
         if (_currentRow < 0 || _currentRow >= _results.Count)
@@ -310,34 +310,102 @@ public sealed class SharpCoreDBDataReader : DbDataReader
         return inferred;
     }
 
+    /// <summary>
+    /// Resolves the concrete <c>Option&lt;T&gt;</c> type for an inner type (AOT-safe:
+    /// no MakeGenericType — each instantiation is referenced statically).
+    /// </summary>
+    private static Type GetOptionType(Type innerType)
+    {
+        if (innerType == typeof(int)) return typeof(Option<int>);
+        if (innerType == typeof(long)) return typeof(Option<long>);
+        if (innerType == typeof(double)) return typeof(Option<double>);
+        if (innerType == typeof(decimal)) return typeof(Option<decimal>);
+        if (innerType == typeof(bool)) return typeof(Option<bool>);
+        if (innerType == typeof(DateTime)) return typeof(Option<DateTime>);
+        if (innerType == typeof(string)) return typeof(Option<string>);
+        if (innerType == typeof(Guid)) return typeof(Option<Guid>);
+        if (innerType == typeof(byte[])) return typeof(Option<byte[]>);
+        if (innerType == typeof(object)) return typeof(Option<object>);
+        throw new NotSupportedException($"Option<{innerType.Name}> is not supported by the AOT-safe reader path.");
+    }
+
+    /// <summary>
+    /// Creates an <c>Option&lt;T&gt;</c> value (AOT-safe: no reflection — every supported inner
+    /// type is handled by a static switch over the concrete <c>Option&lt;T&gt;</c> types).
+    /// </summary>
     private static object CreateOptionValue(Type innerType, object? raw)
     {
-        var optionType = typeof(Option<>).MakeGenericType(innerType);
-
-        if (raw is null or DBNull)
+        if (innerType == typeof(int))
         {
-            var noneProperty = optionType.GetProperty(nameof(Option<object>.None), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Failed to resolve None property for Option<{innerType.Name}>.");
-            return noneProperty.GetValue(null)
-                ?? throw new InvalidOperationException($"Failed to create None value for Option<{innerType.Name}>.");
+            return raw is null or DBNull
+                ? Option<int>.None
+                : Option<int>.Some(System.Convert.ToInt32(raw, System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        object converted;
-        if (innerType.IsAssignableFrom(raw.GetType()))
+        if (innerType == typeof(long))
         {
-            converted = raw;
-        }
-        else
-        {
-            converted = Convert.ChangeType(raw, innerType, System.Globalization.CultureInfo.InvariantCulture)
-                ?? throw new InvalidOperationException($"Failed to convert value for Option<{innerType.Name}>.");
+            return raw is null or DBNull
+                ? Option<long>.None
+                : Option<long>.Some(System.Convert.ToInt64(raw, System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        var someMethod = optionType.GetMethod(nameof(Option<object>.Some), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-            ?? throw new InvalidOperationException($"Failed to resolve Some method for Option<{innerType.Name}>.");
+        if (innerType == typeof(double))
+        {
+            return raw is null or DBNull
+                ? Option<double>.None
+                : Option<double>.Some(System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture));
+        }
 
-        return someMethod.Invoke(null, [converted])
-            ?? throw new InvalidOperationException($"Failed to create Some value for Option<{innerType.Name}>.");
+        if (innerType == typeof(decimal))
+        {
+            return raw is null or DBNull
+                ? Option<decimal>.None
+                : Option<decimal>.Some(System.Convert.ToDecimal(raw, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (innerType == typeof(bool))
+        {
+            return raw is null or DBNull
+                ? Option<bool>.None
+                : Option<bool>.Some(System.Convert.ToBoolean(raw, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (innerType == typeof(DateTime))
+        {
+            return raw is null or DBNull
+                ? Option<DateTime>.None
+                : Option<DateTime>.Some(System.Convert.ToDateTime(raw, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (innerType == typeof(string))
+        {
+            return raw is null or DBNull
+                ? Option<string>.None
+                : Option<string>.Some(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+        }
+
+        if (innerType == typeof(Guid))
+        {
+            return raw is null or DBNull
+                ? Option<Guid>.None
+                : Option<Guid>.Some(raw is Guid guid ? guid : Guid.Parse(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+        }
+
+        if (innerType == typeof(byte[]))
+        {
+            return raw is null or DBNull
+                ? Option<byte[]>.None
+                : Option<byte[]>.Some((byte[])raw!);
+        }
+
+        if (innerType == typeof(object))
+        {
+            return raw is null or DBNull
+                ? Option<object>.None
+                : Option<object>.Some(raw!);
+        }
+
+        throw new NotSupportedException($"Option<{innerType.Name}> is not supported by the AOT-safe reader path.");
     }
 
     /// <summary>
