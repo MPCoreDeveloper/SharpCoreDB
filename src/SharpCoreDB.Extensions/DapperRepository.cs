@@ -1,6 +1,7 @@
 using Dapper;
 using SharpCoreDB.Interfaces;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -121,6 +122,7 @@ public interface IDapperRepository<TEntity, TKey> where TEntity : class
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
+[SuppressMessage("Sonar", "S2077", Justification = "Interpolated identifiers are validated via SqlIdentifier.EnsureSafe (table/key column) or derived from entity-reflection metadata; all VALUES are bound as Dapper parameters.")]
 public class DapperRepository<TEntity, TKey>(IDatabase database, string tableName, string keyColumn = "Id")
     : IDapperRepository<TEntity, TKey> 
     where TEntity : class, new()
@@ -289,6 +291,7 @@ public class DapperRepository<TEntity, TKey>(IDatabase database, string tableNam
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
+[SuppressMessage("Sonar", "S2077", Justification = "Interpolated identifiers are validated via SqlIdentifier.EnsureSafe; all VALUES are bound as Dapper parameters.")]
 public class ReadOnlyDapperRepository<TEntity, TKey>(IDatabase database, string tableName, string keyColumn = "Id")
     where TEntity : class, new()
 {

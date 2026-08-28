@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Dotmim.Sync;
 using Dotmim.Sync.Builders;
 
@@ -10,6 +11,7 @@ namespace SharpCoreDB.Provider.Sync.Builders;
 /// Database-level provisioning for SharpCoreDB sync.
 /// Manages database existence checks, table enumeration, and schema-level operations.
 /// </summary>
+[SuppressMessage("Sonar", "S2077", Justification = "Interpolated identifiers are whitelisted via SqlIdentifier.EnsureSafe; SQL identifiers cannot be bound as query parameters.")]
 public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
 {
     /// <inheritdoc />

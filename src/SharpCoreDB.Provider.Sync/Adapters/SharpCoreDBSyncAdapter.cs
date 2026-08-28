@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Dotmim.Sync;
 using Dotmim.Sync.Builders;
 using SharpCoreDB.Data.Provider;
@@ -20,6 +21,7 @@ namespace SharpCoreDB.Provider.Sync.Adapters;
 /// 2. ApplyChanges: Apply incoming changes with conflict detection
 /// 3. Bulk Operations: Optimize multi-row INSERT/UPDATE/DELETE
 /// </remarks>
+[SuppressMessage("Sonar", "S2077", Justification = "Interpolated identifiers are whitelisted via SqlIdentifier.EnsureSafe; all VALUES are bound as parameters.")]
 public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo scopeInfo) : DbSyncAdapter(tableDescription, scopeInfo)
 {
     private readonly SyncTable _tableDescription = tableDescription ?? throw new ArgumentNullException(nameof(tableDescription));
