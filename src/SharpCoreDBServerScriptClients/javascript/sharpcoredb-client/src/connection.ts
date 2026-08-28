@@ -51,8 +51,12 @@ export class Connection extends EventEmitter {
     this._host = host;
     this._port = port;
     this._database = options.database || 'default';
-    this._username = options.username;
-    this._password = options.password;
+    if (options.username !== undefined) {
+      this._username = options.username;
+    }
+    if (options.password !== undefined) {
+      this._password = options.password;
+    }
     this._tls = options.tls !== false; // Default to true
     this._timeout = options.timeout || 30000;
     this._preferredProtocols = options.preferredProtocols || ['grpc', 'http', 'websocket'];
@@ -198,10 +202,10 @@ export class Connection extends EventEmitter {
       this.emit('error', error);
     }
 
-    this._grpcClient = undefined;
-    this._httpClient = undefined;
-    this._wsClient = undefined;
-    this._connectionInfo = undefined;
+    delete this._grpcClient;
+    delete this._httpClient;
+    delete this._wsClient;
+    delete this._connectionInfo;
 
     this.emit('disconnected', previousState);
   }
@@ -281,6 +285,9 @@ export async function connect(url: string, options: ConnectionOptions = {}): Pro
   }
 
   const [, protocol, host, portStr] = match;
+  if (!protocol || !host) {
+    throw new ConfigurationError(`Invalid connection URL: ${url}`);
+  }
   const port = portStr ? parseInt(portStr, 10) : undefined;
 
   // Determine default port based on protocol

@@ -133,8 +133,12 @@ export class ConnectionPool extends EventEmitter {
     this._host = host;
     this._port = port;
     this._database = options.database || 'default';
-    this._username = options.username;
-    this._password = options.password;
+    if (options.username !== undefined) {
+      this._username = options.username;
+    }
+    if (options.password !== undefined) {
+      this._password = options.password;
+    }
     this._tls = options.tls !== false;
 
     this._minConnections = options.minConnections || 1;
@@ -166,12 +170,17 @@ export class ConnectionPool extends EventEmitter {
 
     // Create new connection if under limit
     if (this._inUse.size < this._maxConnections) {
-      const connection = new Connection(this._host, this._port, {
+      const connectionOptions: ConnectionOptions = {
         database: this._database,
-        username: this._username,
-        password: this._password,
         tls: this._tls
-      });
+      };
+      if (this._username !== undefined) {
+        connectionOptions.username = this._username;
+      }
+      if (this._password !== undefined) {
+        connectionOptions.password = this._password;
+      }
+      const connection = new Connection(this._host, this._port, connectionOptions);
 
       await connection.connect();
 
