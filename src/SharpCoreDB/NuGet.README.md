@@ -4,8 +4,18 @@
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
+[![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
 ## What's New in v1.9.6
+
+### 🐛 Critical fix: WHERE IN (...) no longer returns ALL rows (Issue #339)
+
+- `IN` / `NOT IN` filters are now evaluated correctly in every path — single-file (`.scdb`) and directory
+  storage modes, string and non-string columns, literal and parameterized lists. Previously these filters
+  were silently ignored and returned the whole table.
+- Single-file parameterized queries (`IN (@p0, @p1)`) no longer throw "Missing required parameter".
+- 🎉 The project is now **continuously analyzed on SonarCloud** — quality gate, bug, vulnerability and
+  code-smell tracking are part of the normal workflow from this release onward.
 
 ### v1.9.6 to v1.9.6
 

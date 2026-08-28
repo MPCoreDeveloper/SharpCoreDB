@@ -13,6 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational?style=for-the-badge)](#)
 [![Roadmap](https://img.shields.io/badge/Roadmap-View%20Plan-blueviolet?style=for-the-badge)](./ROADMAP.md)
+[![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 </div>
 
 ---
@@ -58,7 +59,7 @@ A production-focused stack validated by **2,223 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.5
+dotnet add package SharpCoreDB --version 1.9.6
 ```
 
 ```csharp
@@ -86,8 +87,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.5
-dotnet add package SharpCoreDB.Client --version 1.9.5
+dotnet add package SharpCoreDB.Server --version 1.9.6
+dotnet add package SharpCoreDB.Client --version 1.9.6
 ```
 
 ---
@@ -109,7 +110,23 @@ dotnet add package SharpCoreDB.Client --version 1.9.5
 
 ---
 
-## v1.9.5 release (current)
+## v1.9.6 release (current)
+
+- **Fixed a critical `WHERE col IN (...)` regression** (Issue #339): `IN` / `NOT IN` filters were silently
+  ignored (returning **ALL rows**) because the predicate evaluators did not recognize the `IN` operator. Fixed
+  in every evaluation path — single-file (`.scdb`) and directory storage modes, string and non-string columns,
+  literal and parameterized lists. Single-file parameterized queries (`IN (@p0, @p1)`) also no longer throw
+  "Missing required parameter" (parameter-key normalization now routes through `ParameterBinder.Bind`).
+- **Now continuously analyzed on SonarCloud** 🎉: quality gate, bug, vulnerability and code-smell tracking are
+  part of the normal workflow from this release onward — see the [SonarCloud dashboard](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB).
+- **Tests**: full suite passes — **2,404 tests, 0 failures** across all 15 test projects, plus 16 JS and 17 Python
+  tests — including new regression tests for `IN` / `NOT IN` (literal + parameterized) in `WhereInRegressionTests`
+  and `WhereInRegressionEfCoreTests`.
+- **100% backward compatible** with the v1.9.5 release line.
+
+---
+
+## v1.9.5 release
 
 - **Full version synchronization to 1.9.5** across all packages (core, Server, Client, Analytics, VectorSearch, Graph, EF Core provider, Identity, EventSourcing, Projections, CQRS, Functional family including the new `SharpCoreDB.Functional.Linq2DB`, and more), internal project references, PackageReleaseNotes, and test projects.
 - **Bug fixes**:
@@ -223,42 +240,42 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 - **2,223 tests passing**
 - **100% backward compatible** across the v1.9.5 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.5
+- Zero breaking changes intended from v1.5.0 to v1.9.6
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.5)
+## Available NuGet packages (v1.9.6)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.5
+dotnet add package SharpCoreDB --version 1.9.6
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.5
-dotnet add package SharpCoreDB.Client --version 1.9.5
+dotnet add package SharpCoreDB.Server --version 1.9.6
+dotnet add package SharpCoreDB.Client --version 1.9.6
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.5
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.5
-dotnet add package SharpCoreDB.Graph --version 1.9.5
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.5
-dotnet add package SharpCoreDB.Distributed --version 1.9.5
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.5
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.5
-dotnet add package SharpCoreDB.Extensions --version 1.9.5
+dotnet add package SharpCoreDB.Analytics --version 1.9.6
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.6
+dotnet add package SharpCoreDB.Graph --version 1.9.6
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
+dotnet add package SharpCoreDB.Distributed --version 1.9.6
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.6
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.6
+dotnet add package SharpCoreDB.Extensions --version 1.9.6
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.5
-dotnet add package SharpCoreDB.Projections --version 1.9.5
-dotnet add package SharpCoreDB.CQRS --version 1.9.5
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.6
+dotnet add package SharpCoreDB.Projections --version 1.9.6
+dotnet add package SharpCoreDB.CQRS --version 1.9.6
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.5
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.5
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.5
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.5
+dotnet add package SharpCoreDB.Functional --version 1.9.6
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.6
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.6
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.6
 ```
 
 ---
@@ -273,7 +290,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.5
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.5 release (version bump prep, docs sync, test count 2,223, release readiness), see the v1.9.5 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.6 release (critical WHERE IN regression fix, SonarCloud onboarding, version bump), see the v1.9.6 section above and docs/CHANGELOG.md.
 
 ---
 
