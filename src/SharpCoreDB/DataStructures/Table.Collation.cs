@@ -86,7 +86,7 @@ public partial class Table
     /// Evaluates the IN operator: "column IN (val1, val2, val3)"
     /// Respects collation for each comparison.
     /// </summary>
-    private bool EvaluateInOperator(string? rowValue, string? listStr, CollationType collation)
+    private static bool EvaluateInOperator(string? rowValue, string? listStr, CollationType collation)
     {
         if (string.IsNullOrEmpty(listStr))
             return false;
@@ -370,7 +370,7 @@ public partial class Table
     /// <summary>
     /// Evaluates the IN operator with locale-aware comparison.
     /// </summary>
-    private bool EvaluateInOperatorWithLocale(string? rowValue, string? listStr, string localeName)
+    private static bool EvaluateInOperatorWithLocale(string? rowValue, string? listStr, string localeName)
     {
         if (string.IsNullOrEmpty(listStr))
             return false;

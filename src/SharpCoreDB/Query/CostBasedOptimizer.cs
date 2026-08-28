@@ -183,7 +183,7 @@ public sealed class CostBasedOptimizer
 
     // Private helpers
 
-    private double EstimateSelectivity(FilterExpression filter, TableStatistics stats)
+    private static double EstimateSelectivity(FilterExpression filter, TableStatistics stats)
     {
         return filter.Operator switch
         {

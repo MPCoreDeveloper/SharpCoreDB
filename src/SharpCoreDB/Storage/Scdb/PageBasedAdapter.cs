@@ -525,7 +525,7 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
         return slotIndex;
     }
 
-    private byte[]? ExtractRecordFromPage(byte[] pageData, ushort slotIndex)
+    private static byte[]? ExtractRecordFromPage(byte[] pageData, ushort slotIndex)
     {
         var header = ReadPageHeader(pageData);
         
@@ -560,7 +560,7 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
         }
     }
 
-    private byte[] UpdateRecordInPage(byte[] pageData, ushort slotIndex, byte[] newData)
+    private static byte[] UpdateRecordInPage(byte[] pageData, ushort slotIndex, byte[] newData)
     {
         var header = ReadPageHeader(pageData);
         
@@ -600,7 +600,7 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
         return pageData;
     }
 
-    private byte[] DeleteRecordInPage(byte[] pageData, ushort slotIndex)
+    private static byte[] DeleteRecordInPage(byte[] pageData, ushort slotIndex)
     {
         var header = ReadPageHeader(pageData);
 

@@ -302,7 +302,7 @@ public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
         };
     }
 
-    private Type GetColumnType(string columnName)
+    private static Type GetColumnType(string columnName)
     {
         var prop = typeof(T).GetProperty(columnName);
         return prop?.PropertyType ?? typeof(object);

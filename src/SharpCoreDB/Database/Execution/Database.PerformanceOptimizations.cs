@@ -126,7 +126,7 @@ public partial class Database
     /// This is still more efficient than the full Dictionary path because we only materialize
     /// the rows that match the WHERE clause.
     /// </summary>
-    private bool EvaluateWhereOnStructRow(
+    private static bool EvaluateWhereOnStructRow(
         StructRow row, 
         Func<Dictionary<string, object>, bool> wherePredicate,
         Table table)

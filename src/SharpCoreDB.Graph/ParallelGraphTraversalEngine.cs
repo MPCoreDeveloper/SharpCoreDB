@@ -324,7 +324,7 @@ public sealed class ParallelGraphTraversalEngine
     /// <summary>
     /// Gets neighbors of a node via ROWREF column.
     /// </summary>
-    private async Task<List<long>> GetNeighborsAsync(
+    private static async Task<List<long>> GetNeighborsAsync(
         ITable table,
         long nodeId,
         string relationshipColumn,

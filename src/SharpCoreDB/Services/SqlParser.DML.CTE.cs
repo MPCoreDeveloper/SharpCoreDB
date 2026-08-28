@@ -98,7 +98,7 @@ public partial class SqlParser
     /// <summary>
     /// Evaluates a single CTE SELECT (seed or recursive step) given the current CTE rows.
     /// </summary>
-    private List<Dictionary<string, object>> EvaluateCteQuery(
+    private static List<Dictionary<string, object>> EvaluateCteQuery(
         string querySql,
         string cteName,
         List<Dictionary<string, object>> currentRows,

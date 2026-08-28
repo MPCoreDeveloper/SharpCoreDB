@@ -55,7 +55,7 @@ public partial class SqlParser
         };
     }
 
-    private bool TryDetectInsertConflict(
+    private static bool TryDetectInsertConflict(
         ITable table,
         Dictionary<string, object> row,
         List<string> conflictTargetColumns,
@@ -128,7 +128,7 @@ public partial class SqlParser
     /// Supports excluded.col references (incoming values), bare column names (existing values), and literals.
     /// Optionally skips the update when doUpdateWhere evaluates to false.
     /// </summary>
-    private void HandleDoUpdateConflict(
+    private static void HandleDoUpdateConflict(
         string tableName,
         ITable table,
         object conflictingPrimaryKey,

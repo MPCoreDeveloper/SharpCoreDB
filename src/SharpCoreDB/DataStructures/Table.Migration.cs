@@ -366,7 +366,7 @@ public partial class Table
     /// Applies deduplication strategy by marking rows for deletion.
     /// Strategy determines which duplicates to keep.
     /// </summary>
-    private void ApplyDeduplicationStrategy(
+    private static void ApplyDeduplicationStrategy(
         string columnName,
         Dictionary<string, List<int>> duplicates,
         KeepDuplicateStrategy keepStrategy)

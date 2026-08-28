@@ -268,7 +268,7 @@ public sealed class RepairTool : IDisposable
         }
     }
 
-    private async Task<bool> RepairHeaderAsync(
+    private static async Task<bool> RepairHeaderAsync(
         CorruptionIssue issue,
         RepairOptions options,
         List<string> repairLog,
@@ -280,7 +280,7 @@ public sealed class RepairTool : IDisposable
         return false;
     }
 
-    private async Task<bool> RepairRegistryAsync(
+    private static async Task<bool> RepairRegistryAsync(
         CorruptionIssue issue,
         RepairOptions options,
         List<string> repairLog,

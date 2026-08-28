@@ -232,7 +232,7 @@ public sealed class TransactionParticipant : ITransactionParticipant
     /// <param name="transactionId">The transaction identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if the transaction can commit.</returns>
-    private async Task<bool> ValidateTransactionAsync(string transactionId, CancellationToken cancellationToken)
+    private static async Task<bool> ValidateTransactionAsync(string transactionId, CancellationToken cancellationToken)
     {
         // In a real implementation, this would:
         // - Check for constraint violations
@@ -253,7 +253,7 @@ public sealed class TransactionParticipant : ITransactionParticipant
     /// <param name="transactionId">The transaction identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task PerformCommitAsync(string transactionId, CancellationToken cancellationToken)
+    private static async Task PerformCommitAsync(string transactionId, CancellationToken cancellationToken)
     {
         // In SharpCoreDB, this would involve:
         // - Writing commit record to WAL
@@ -276,7 +276,7 @@ public sealed class TransactionParticipant : ITransactionParticipant
     /// <param name="transactionId">The transaction identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task PerformAbortAsync(string transactionId, CancellationToken cancellationToken)
+    private static async Task PerformAbortAsync(string transactionId, CancellationToken cancellationToken)
     {
         // In SharpCoreDB, this would involve:
         // - Rolling back transaction changes

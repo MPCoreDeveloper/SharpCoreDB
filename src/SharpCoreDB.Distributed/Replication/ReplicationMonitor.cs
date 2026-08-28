@@ -304,7 +304,7 @@ public sealed class ReplicationMonitor : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task CollectNodeMetricsAsync(CancellationToken cancellationToken)
+    private static async Task CollectNodeMetricsAsync(CancellationToken cancellationToken)
     {
         // In a real implementation, this would query each node for metrics
         // For now, just update internal counters

@@ -241,7 +241,7 @@ public class PoolDiagnostics
     /// <param name="metrics">Current metrics.</param>
     /// <param name="aggregated">Aggregated statistics.</param>
     /// <returns>Estimated throughput in operations per second.</returns>
-    private double CalculateThroughput(PoolMetrics metrics, PoolAggregatedStats aggregated)
+    private static double CalculateThroughput(PoolMetrics metrics, PoolAggregatedStats aggregated)
     {
         // Simplified throughput calculation based on allocation patterns
         if (aggregated.TimeSpan.TotalSeconds == 0)
@@ -258,7 +258,7 @@ public class PoolDiagnostics
     /// </summary>
     /// <param name="metrics">Current metrics.</param>
     /// <returns>Estimated latency.</returns>
-    private TimeSpan EstimateLatency(PoolMetrics metrics)
+    private static TimeSpan EstimateLatency(PoolMetrics metrics)
     {
         // Simplified latency estimation based on pool utilization
         var baseLatencyMs = 0.1; // Base allocation time
@@ -274,7 +274,7 @@ public class PoolDiagnostics
     /// <param name="metrics">Current metrics.</param>
     /// <param name="aggregated">Aggregated statistics.</param>
     /// <returns>List of identified bottlenecks.</returns>
-    private IReadOnlyList<string> IdentifyBottlenecks(PoolMetrics metrics, PoolAggregatedStats aggregated)
+    private static IReadOnlyList<string> IdentifyBottlenecks(PoolMetrics metrics, PoolAggregatedStats aggregated)
     {
         var bottlenecks = new List<string>();
 
@@ -304,7 +304,7 @@ public class PoolDiagnostics
     /// <param name="throughput">Calculated throughput.</param>
     /// <param name="latency">Estimated latency.</param>
     /// <returns>Performance score (0-100).</returns>
-    private double CalculatePerformanceScore(
+    private static double CalculatePerformanceScore(
         PoolMetrics metrics,
         PoolAggregatedStats aggregated,
         double throughput,
@@ -323,7 +323,7 @@ public class PoolDiagnostics
     /// <param name="issues">Detected issues.</param>
     /// <param name="performance">Performance analysis.</param>
     /// <returns>Overall health status.</returns>
-    private PoolHealthStatus DetermineOverallHealth(
+    private static PoolHealthStatus DetermineOverallHealth(
         IReadOnlyList<PoolIssue> issues,
         PoolPerformanceAnalysis performance)
     {

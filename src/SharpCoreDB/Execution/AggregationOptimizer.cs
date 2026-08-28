@@ -209,7 +209,7 @@ public class AggregationOptimizer : IDisposable
     /// <summary>
     /// Converts a value to double for numeric aggregation.
     /// </summary>
-    private double ConvertToDouble(object? value)
+    private static double ConvertToDouble(object? value)
     {
         if (value == null)
             return 0;
@@ -229,7 +229,7 @@ public class AggregationOptimizer : IDisposable
     /// <summary>
     /// Compares two values for MIN/MAX operations.
     /// </summary>
-    private int CompareValues(object? a, object? b)
+    private static int CompareValues(object? a, object? b)
     {
         if (a == null)
             return -1;
@@ -245,7 +245,7 @@ public class AggregationOptimizer : IDisposable
     /// <summary>
     /// Converts aggregated groups to result dictionaries.
     /// </summary>
-    private List<Dictionary<string, object>> ConvertToResults(
+    private static List<Dictionary<string, object>> ConvertToResults(
         Dictionary<string, GroupAggregates> groups,
         string[] groupByColumns,
         AggregateDefinition[] aggregates)

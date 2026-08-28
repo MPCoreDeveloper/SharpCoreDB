@@ -322,7 +322,7 @@ public sealed class LifecycleMetrics
     /// <param name="operationMetrics">The operation metrics.</param>
     /// <param name="throughput">The current throughput.</param>
     /// <returns>Health score.</returns>
-    private double CalculateHealthScore(IReadOnlyCollection<OperationMetrics> operationMetrics, double throughput)
+    private static double CalculateHealthScore(IReadOnlyCollection<OperationMetrics> operationMetrics, double throughput)
     {
         var score = 100.0;
 

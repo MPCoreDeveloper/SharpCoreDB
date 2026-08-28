@@ -61,7 +61,7 @@ public class CompiledQueryExecutor
     /// Executes a query using optimized IndexedRowData for direct column access.
     /// ✅ PHASE 2.4: Provides 1.5-2x improvement via array-based column lookups.
     /// </summary>
-    private List<Dictionary<string, object>> ExecuteWithIndexedRows(
+    private static List<Dictionary<string, object>> ExecuteWithIndexedRows(
         CompiledQueryPlan plan,
         ITable table)
     {
@@ -188,7 +188,7 @@ public class CompiledQueryExecutor
     /// Executes a query using traditional dictionary-based access.
     /// Used when column indices are not available (SELECT *).
     /// </summary>
-    private List<Dictionary<string, object>> ExecuteWithDictionaries(
+    private static List<Dictionary<string, object>> ExecuteWithDictionaries(
         CompiledQueryPlan plan,
         ITable table)
     {

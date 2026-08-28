@@ -855,7 +855,7 @@ public partial class SqlParser
     /// Evaluates a scalar function call with the given arguments.
     /// Includes COALESCE, IFNULL, NULLIF, IIF, TYPEOF, and more.
     /// </summary>
-    private object? EvaluateScalarFunction(FunctionCallNode functionCall, object?[] args)
+    private static object? EvaluateScalarFunction(FunctionCallNode functionCall, object?[] args)
     {
         // Normalize DBNull to null for consistency
         for (int i = 0; i < args.Length; i++)
@@ -1785,7 +1785,7 @@ public partial class SqlParser
     /// <summary>
     /// Attempts to execute a query using vector index optimization if available.
     /// </summary>
-    private List<Dictionary<string, object>>? TryExecuteVectorOptimized(string sql, string selectClause, string tableName, string? orderBy, int limit, bool noEncrypt)
+    private static List<Dictionary<string, object>>? TryExecuteVectorOptimized(string sql, string selectClause, string tableName, string? orderBy, int limit, bool noEncrypt)
     {
         // Return null if no vector optimization available; caller will use standard execution
         return null;

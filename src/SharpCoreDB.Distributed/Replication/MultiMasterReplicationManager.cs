@@ -236,7 +236,7 @@ public sealed class MultiMasterReplicationManager : IAsyncDisposable
     /// <param name="operation">The write operation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A list of detected conflicts.</returns>
-    private async Task<IReadOnlyList<DataConflict>> DetectConflictsAsync(WriteOperation operation, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<DataConflict>> DetectConflictsAsync(WriteOperation operation, CancellationToken cancellationToken)
     {
         // In a real implementation, this would check the operation against
         // recent operations from other nodes to detect conflicts
@@ -270,7 +270,7 @@ public sealed class MultiMasterReplicationManager : IAsyncDisposable
     /// <param name="resolution">The conflict resolution.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task ApplyConflictResolutionAsync(ConflictResolution resolution, CancellationToken cancellationToken)
+    private static async Task ApplyConflictResolutionAsync(ConflictResolution resolution, CancellationToken cancellationToken)
     {
         // In a real implementation, this would apply the resolved value
         // to all affected nodes

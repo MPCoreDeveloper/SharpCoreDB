@@ -383,7 +383,7 @@ public class StorageMigrator
         _ = tableName;
     }
 
-    private uint GetTableId(string tableName) => (uint)tableName.GetHashCode();
+    private static uint GetTableId(string tableName) => (uint)tableName.GetHashCode();
 
     private string GetPageBasedFilePath(string tableName) =>
         Path.Combine(databasePath, $"table_{GetTableId(tableName)}.pages");
