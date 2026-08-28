@@ -33,11 +33,13 @@ public class ZvecTopKLatencyBenchmark : BenchmarkContext
         // Generate dataset vectors
         Console.WriteLine($"[Z2] Generating {VectorCount:N0} dataset vectors...");
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         _vectors = GenerateVectors(VectorCount, Dimensions, random);
         
         // Generate query vectors
         Console.WriteLine($"[Z2] Generating {QueryCount:N0} query vectors...");
         _queryVectors = GenerateVectors(QueryCount, Dimensions, new Random(43));
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         
         // Build HNSW index
         Console.WriteLine($"[Z2] Building HNSW index...");

@@ -72,6 +72,7 @@ public static class SingleColumnUpdateBenchmark
             Console.WriteLine("Performing 5,000 random single-column updates...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             try

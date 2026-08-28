@@ -21,6 +21,7 @@ public class Phase2E_HardwareOptimizationBenchmark
     {
         testData = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             testData[i] = random.Next(-1000, 1000);
@@ -144,6 +145,7 @@ public class Phase2E_PlatformOptimizationBenchmark
         data2 = new int[DataSize];
 
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data1[i] = random.Next();
@@ -230,6 +232,7 @@ public class Phase2E_NUMAScalabilityBenchmark
     {
         data = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next();
@@ -287,6 +290,7 @@ public class Phase2E_CPUAffinityBenchmark
     {
         data = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next();

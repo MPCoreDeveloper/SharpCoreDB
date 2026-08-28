@@ -37,6 +37,7 @@ public class Phase2D_ModernSimdBenchmark
         multiplyAddResults = new long[DataSize];
         
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             testData[i] = random.Next(-1000, 1000);
@@ -159,6 +160,7 @@ public class Phase2D_CacheAwareSimdBenchmark
     {
         largeData = new int[LargeDataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < LargeDataSize; i++)
         {
             largeData[i] = random.Next();
@@ -225,6 +227,7 @@ public class Phase2D_VectorThroughputBenchmark
     {
         data = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next(-100, 100);
@@ -302,6 +305,7 @@ public class Phase2D_MemoryBandwidthBenchmark
         destination = new int[DataSize];
         
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             source[i] = random.Next();

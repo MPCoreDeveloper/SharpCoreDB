@@ -181,6 +181,7 @@ public class Phase2BLockContentionBenchmark
     private void PopulateTestData(int rowCount)
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         for (int i = 0; i < rowCount; i++)
         {
@@ -231,6 +232,7 @@ public class LockContentionAnalysisTest
         for (int i = 0; i < 50000; i++)
         {
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             db.Database.ExecuteSQL($@"
                 INSERT INTO users (id, name, email, age, created_at, is_active)
                 VALUES ({i}, 'User{i}', 'user{i}@test.com', {18 + random.Next(65)}, 

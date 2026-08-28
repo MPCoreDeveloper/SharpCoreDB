@@ -39,10 +39,12 @@ public class ZvecIncrementalInsertBenchmark : BenchmarkContext
         // Generate all vectors
         Console.WriteLine($"[Z5] Generating {TotalVectorCount:N0} vectors...");
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         _vectors = GenerateVectors(TotalVectorCount, Dimensions, random);
         
         // Generate query vectors
         _queryVectors = GenerateVectors(QueryCount, Dimensions, new Random(43));
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         
         Console.WriteLine($"[Z5] Setup complete");
     }

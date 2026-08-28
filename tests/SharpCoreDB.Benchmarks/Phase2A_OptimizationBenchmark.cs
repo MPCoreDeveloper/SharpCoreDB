@@ -132,6 +132,7 @@ public class Phase2AOptimizationBenchmark
     private void PopulateTestDataOnce()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         
         for (int i = 0; i < DATASET_SIZE; i++)
         {

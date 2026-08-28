@@ -210,6 +210,7 @@ public class Phase2BGroupByOptimizationBenchmark
     private void PopulateTestData(int rowCount)
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         for (int i = 0; i < rowCount; i++)
         {
@@ -238,6 +239,7 @@ public class Phase2BGroupByOptimizationBenchmark
     {
         var array = new double[size];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         
         for (int i = 0; i < size; i++)
         {
@@ -328,6 +330,7 @@ public class AggregationOptimizerDetailedTest
     {
         var rows = new List<Dictionary<string, object>>(count);
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         for (int i = 0; i < count; i++)
         {

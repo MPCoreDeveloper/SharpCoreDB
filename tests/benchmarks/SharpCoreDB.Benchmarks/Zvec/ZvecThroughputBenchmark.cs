@@ -46,11 +46,13 @@ public class ZvecThroughputBenchmark : BenchmarkContext
         // Generate dataset vectors
         Console.WriteLine($"[Z3] Generating {VectorCount:N0} dataset vectors...");
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         _vectors = GenerateVectors(VectorCount, Dimensions, random);
         
         // Generate query vectors (larger pool for concurrent access)
         Console.WriteLine($"[Z3] Generating 10,000 query vectors...");
         _queryVectors = GenerateVectors(10_000, Dimensions, new Random(43));
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         
         // Build HNSW index
         Console.WriteLine($"[Z3] Building HNSW index...");

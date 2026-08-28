@@ -94,6 +94,7 @@ public static class DirectLookupBatchUpdateBenchmark
             Console.WriteLine("Performing 5,000 random updates using db.ExecuteSQL()...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             try

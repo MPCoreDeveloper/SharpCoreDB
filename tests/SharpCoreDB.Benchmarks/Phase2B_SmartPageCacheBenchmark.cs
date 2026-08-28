@@ -144,6 +144,7 @@ public class Phase2BSmartPageCacheBenchmark
     private void PopulateTestData(int rowCount)
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         for (int i = 0; i < rowCount; i++)
         {
@@ -227,6 +228,7 @@ public class SmartPageCacheBehaviorTest
     {
         long totalLoads = 0;
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var pageOrder = new List<int>();
 
         for (int i = 0; i < 100; i++)

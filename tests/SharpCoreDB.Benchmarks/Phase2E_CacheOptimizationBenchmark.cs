@@ -21,6 +21,7 @@ public class Phase2E_CacheOptimizationBenchmark
     {
         testData = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             testData[i] = random.Next(-1000, 1000);
@@ -126,6 +127,7 @@ public class Phase2E_ColumnarStorageBenchmark
         col3 = new int[RowCount];
 
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < RowCount; i++)
         {
             col1[i] = random.Next();
@@ -214,6 +216,7 @@ public class Phase2E_TiledMatrixBenchmark
     {
         matrix = new int[MATRIX_SIZE * MATRIX_SIZE];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < matrix.Length; i++)
         {
             matrix[i] = random.Next();
@@ -287,6 +290,7 @@ public class Phase2E_CacheLineAlignmentBenchmark
         unalignedData = new int[DataSize * 8];
 
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             alignedData[i].Value1 = random.Next();
@@ -357,6 +361,7 @@ public class Phase2E_WorkingSetBenchmark
         largeData = new int[2500000];
 
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < smallData.Length; i++)
             smallData[i] = random.Next();
         for (int i = 0; i < mediumData.Length; i++)

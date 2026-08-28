@@ -133,6 +133,7 @@ public static class UpdatePerformanceTest
             Console.WriteLine("Performing 5,000 random updates without batch optimization...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var scenario1 = new ScenarioMetrics { Name = "Individual Updates (Baseline)", UpdateCount = 5000 };
             
             var stopwatch = Stopwatch.StartNew();
@@ -191,6 +192,7 @@ public static class UpdatePerformanceTest
             Console.WriteLine("Performing 5,000 random updates with batch optimization...\n");
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var scenario2 = new ScenarioMetrics { Name = "Batch Update API", UpdateCount = 5000 };
             
             stopwatch = Stopwatch.StartNew();
@@ -268,6 +270,7 @@ public static class UpdatePerformanceTest
             Console.WriteLine("Performing 5,000 random updates with ALL optimizations enabled...\n");
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var scenario3 = new ScenarioMetrics { Name = "Batch + Dirty Pages + Single Flush", UpdateCount = 5000 };
             
             stopwatch = Stopwatch.StartNew();

@@ -112,6 +112,7 @@ public class Phase2CDynamicPGOBenchmark
     private void PopulateTestData(int rowCount)
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         for (int i = 0; i < rowCount; i++)
         {
@@ -160,6 +161,7 @@ public partial class Phase2CGeneratedRegexBenchmark
         // Generate test data
         testEmails = new string[1000];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < testEmails.Length; i++)
         {
             testEmails[i] = $"user{random.Next(10000)}@example.com";

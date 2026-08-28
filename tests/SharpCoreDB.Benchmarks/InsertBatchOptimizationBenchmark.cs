@@ -112,6 +112,7 @@ public class InsertBatchOptimizationBenchmark
     {
         var rows = new List<Dictionary<string, object>>(count);
         var random = new Random(42); // Seed for reproducibility
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         var firstNames = new[] { "John", "Jane", "Michael", "Sarah", "David", "Emma", "James", "Olivia", "Robert", "Sophia" };
         var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez" };

@@ -201,6 +201,7 @@ class Program
                 {
                     int local = 0;
                     var rng = new Random(tid);
+                    // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
                     while (!cts.Token.IsCancellationRequested)
                     {
                         var q = queryVectors[rng.Next(queryVectors.Length)];
@@ -326,6 +327,7 @@ class Program
     static float[][] GenerateVectors(int count, int dimensions, int seed)
     {
         var random = new Random(seed);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var vectors = new float[count][];
         for (int i = 0; i < count; i++)
         {

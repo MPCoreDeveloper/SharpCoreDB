@@ -88,6 +88,7 @@ public static class BatchUpdateWalBenchmark
             Console.WriteLine("Performing 5,000 random UPDATEs WITHOUT batch WAL optimization...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             for (int i = 0; i < 5000; i++)
@@ -121,6 +122,7 @@ public static class BatchUpdateWalBenchmark
             Console.WriteLine("Performing 5,000 random UPDATEs WITH batch WAL buffering...\n");
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             stopwatch = Stopwatch.StartNew();
 
             try
@@ -196,6 +198,7 @@ public static class BatchUpdateWalBenchmark
                 }
 
                 random = new Random(42);
+                // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
                 stopwatch = Stopwatch.StartNew();
 
                 try

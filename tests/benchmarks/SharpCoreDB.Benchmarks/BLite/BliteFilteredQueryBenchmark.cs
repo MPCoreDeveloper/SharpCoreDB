@@ -127,6 +127,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
     private async Task RunSimpleFilterQueries()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < TotalQueries; i++)
@@ -154,6 +155,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
     private async Task RunRangeFilterQueries()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < TotalQueries; i++)
@@ -182,6 +184,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
     private async Task RunMultiFilterQueries()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < TotalQueries; i++)
@@ -213,6 +216,7 @@ public class BliteFilteredQueryBenchmark : BenchmarkContext
     {
         var patterns = new[] { "John%", "%Smith", "%son%", "M%a" };
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < TotalQueries; i++)

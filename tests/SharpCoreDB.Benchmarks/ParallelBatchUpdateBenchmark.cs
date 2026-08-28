@@ -72,6 +72,7 @@ public static class ParallelBatchUpdateBenchmark
             Console.WriteLine("Performing 5,000 random multi-column updates (sequential)...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             try
@@ -130,6 +131,7 @@ public static class ParallelBatchUpdateBenchmark
             Console.WriteLine("Performing 5,000 random multi-column updates (parallel)...\n");
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             stopwatch = Stopwatch.StartNew();
 
             try

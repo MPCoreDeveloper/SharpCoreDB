@@ -158,6 +158,7 @@ public class BliteCrudBenchmark : BenchmarkContext
     private async Task RunReadPhase()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < TotalReads; i++)
@@ -211,6 +212,7 @@ public class BliteCrudBenchmark : BenchmarkContext
     private async Task RunUpdatePhase()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
         var updateStatements = new List<string>();
 
@@ -252,6 +254,7 @@ public class BliteCrudBenchmark : BenchmarkContext
     private async Task RunDeletePhase()
     {
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var sw = Stopwatch.StartNew();
         var deleteStatements = new List<string>();
 

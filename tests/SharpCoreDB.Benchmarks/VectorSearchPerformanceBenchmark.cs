@@ -55,6 +55,7 @@ public class VectorSearchPerformanceBenchmark
     public void Setup()
     {
         _random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
 
         // Create HNSW index
         var config = new HnswConfig
@@ -307,6 +308,7 @@ public class VectorSearchLatencyBenchmark
     public void Setup()
     {
         _random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         var config = new HnswConfig
         {
             Dimensions = Dimensions,

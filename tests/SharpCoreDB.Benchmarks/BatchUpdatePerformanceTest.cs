@@ -72,6 +72,7 @@ public static class BatchUpdatePerformanceTest
             Console.WriteLine(new string('=', 70));
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             for (int i = 0; i < 5000; i++)
@@ -100,6 +101,7 @@ public static class BatchUpdatePerformanceTest
             Console.WriteLine(new string('=', 70));
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             stopwatch = Stopwatch.StartNew();
 
             try

@@ -24,6 +24,7 @@ public class Phase2E_JitOptimizationBenchmark
         longData = new long[DataSize];
 
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             testData[i] = random.Next(-10000, 10000);
@@ -166,6 +167,7 @@ public class Phase2E_ParallelReductionBenchmark
     {
         data = new long[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next(-100000, 100000);
@@ -242,6 +244,7 @@ public class Phase2E_InstructionParallelismBenchmark
     {
         data = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next();
@@ -319,6 +322,7 @@ public class Phase2E_BranchPredictionBenchmark
     {
         data = new int[DataSize];
         var random = new Random(42);
+        // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
         for (int i = 0; i < DataSize; i++)
         {
             data[i] = random.Next(-1000, 1000);

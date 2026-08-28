@@ -90,6 +90,7 @@ public static class BatchUpdateDeferredIndexBenchmark
             Console.WriteLine("Performing 5,000 random UPDATEs with immediate index maintenance...\n");
 
             var random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             var stopwatch = Stopwatch.StartNew();
 
             for (int i = 0; i < 5000; i++)
@@ -123,6 +124,7 @@ public static class BatchUpdateDeferredIndexBenchmark
             Console.WriteLine("Performing 5,000 random UPDATEs with deferred index updates...\n");
 
             random = new Random(42);
+            // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
             stopwatch = Stopwatch.StartNew();
 
             try
@@ -188,6 +190,7 @@ public static class BatchUpdateDeferredIndexBenchmark
             try
             {
                 random = new Random(42);
+                // NOSONAR:S2245 - fixed-seed Random for reproducible benchmark data (non-security).
                 for (int i = 0; i < 10000; i++)
                 {
                     int id = random.Next(1, 10001);
