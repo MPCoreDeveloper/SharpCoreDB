@@ -148,7 +148,8 @@ internal sealed class WalManager : IDisposable
                 }
             }
 
-            _pendingEntries.Clear();
+            // _pendingEntries is already empty here (the dequeue loop above drains it),
+            // so re-enqueue the entries that belong to other transactions.
             foreach (var entry in entriesToKeep)
             {
                 _pendingEntries.Enqueue(entry);
@@ -554,8 +555,13 @@ internal sealed class WalManager : IDisposable
             
             fileStream.Position = filePosition;
             var entryBuffer = new byte[WalEntry.SIZE];
-            await fileStream.ReadAsync(entryBuffer.AsMemory(), cancellationToken);
-            
+            var bytesRead = await fileStream.ReadAsync(entryBuffer.AsMemory(), cancellationToken);
+            if (bytesRead < entryBuffer.Length)
+            {
+                // Incomplete entry at the end of the log; nothing more to read.
+                break;
+            }
+
             var entry = DeserializeWalEntry(entryBuffer);
             
             // Validate checksum

@@ -23,7 +23,7 @@ public partial class SqlParser
     {
         // Strip WITH / WITH RECURSIVE prefix
         var afterWith = Regex.Match(sql, @"^WITH\s+(?:RECURSIVE\s+)?(.+)$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         if (!afterWith.Success)
             throw new InvalidOperationException($"Invalid WITH syntax: {sql}");
 
@@ -32,7 +32,7 @@ public partial class SqlParser
         // Parse: cteName(cols) AS ( … ) SELECT …
         var cteNameMatch = Regex.Match(body,
             @"^(\w+)\s*\(([^)]*)\)\s+AS\s*\((.+?)\)\s+(SELECT\s+.+)$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (!cteNameMatch.Success)
             throw new InvalidOperationException($"Unsupported WITH syntax (only single CTE supported): {body}");
@@ -110,14 +110,14 @@ public partial class SqlParser
             && !trimmed.StartsWith("SELECT " + cteName, StringComparison.OrdinalIgnoreCase))
         {
             // Seed: SELECT <literal_expr1>, <literal_expr2>, …
-            var selectClause = Regex.Replace(trimmed, @"^SELECT\s+", string.Empty, RegexOptions.IgnoreCase).Trim();
+            var selectClause = Regex.Replace(trimmed, @"^SELECT\s+", string.Empty, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Trim();
             return EvaluateLiteralCteRow(selectClause, colNames);
         }
 
         // Recursive step: SELECT expr FROM cteName WHERE …
         var fromMatch = Regex.Match(trimmed,
             @"^SELECT\s+(?<sel>.+?)\s+FROM\s+" + Regex.Escape(cteName) + @"(?:\s+WHERE\s+(?<where>.+))?$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         if (!fromMatch.Success)
             throw new InvalidOperationException($"Unsupported recursive CTE step: {trimmed}");
 
@@ -159,7 +159,7 @@ public partial class SqlParser
     private static bool EvaluateCteWhere(Dictionary<string, object> row, string where)
     {
         // Support simple: col op literal  (e.g.  n < 5)
-        var m = Regex.Match(where.Trim(), @"^(\w+)\s*(<=|>=|<>|!=|<|>|=)\s*(.+)$");
+        var m = Regex.Match(where.Trim(), @"^(\w+)\s*(<=|>=|<>|!=|<|>|=)\s*(.+)$", RegexOptions.None, TimeSpan.FromSeconds(1));
         if (!m.Success) return true;
         var col = m.Groups[1].Value;
         var op = m.Groups[2].Value;
@@ -176,8 +176,8 @@ public partial class SqlParser
             var r = Convert.ToDouble(rhs, CultureInfo.InvariantCulture);
             return op switch
             {
-                "=" => l == r,
-                "!=" or "<>" => l != r,
+                "=" => Math.Abs(l - r) < 1e-9,
+                "!=" or "<>" => Math.Abs(l - r) >= 1e-9,
                 "<" => l < r,
                 "<=" => l <= r,
                 ">" => l > r,
@@ -198,7 +198,7 @@ public partial class SqlParser
         if (row.TryGetValue(expr, out var direct)) return direct;
 
         // Arithmetic: colName +/- literal  (e.g. n+1)
-        var arith = Regex.Match(expr, @"^(\w+)\s*([+\-\*\/])\s*(.+)$");
+        var arith = Regex.Match(expr, @"^(\w+)\s*([+\-\*\/])\s*(.+)$", RegexOptions.None, TimeSpan.FromSeconds(1));
         if (arith.Success)
         {
             var colName = arith.Groups[1].Value;
@@ -251,7 +251,7 @@ public partial class SqlParser
         var m = Regex.Match(outerSelect,
             @"^SELECT\s+(?<sel>.+?)\s+FROM\s+" + Regex.Escape(cteName)
             + @"(?:\s+WHERE\s+(?<where>.+?))?(?:\s+LIMIT\s+(?<limit>\d+))?$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         if (!m.Success)
             throw new InvalidOperationException($"Unsupported outer CTE SELECT: {outerSelect}");
 

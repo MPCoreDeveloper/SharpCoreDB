@@ -66,7 +66,7 @@ public partial class Database
         }
         
         // Extract table name from SQL using regex
-        var tableMatch = new Regex(@"FROM\s+(\w+)", RegexOptions.IgnoreCase).Match(sql);
+        var tableMatch = new Regex(@"FROM\s+(\w+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Match(sql);
         
         if (!tableMatch.Success)
         {
@@ -94,7 +94,7 @@ public partial class Database
         }
         
         // Check for WHERE clause
-        var whereMatch = new Regex(@"WHERE\s+(.+?)(?:ORDER|GROUP|LIMIT|;|$)", RegexOptions.IgnoreCase).Match(sql);
+        var whereMatch = new Regex(@"WHERE\s+(.+?)(?:ORDER|GROUP|LIMIT|;|$)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Match(sql);
         var whereClause = whereMatch.Success ? whereMatch.Groups[1].Value.Trim() : string.Empty;
         
         // Execute using StructRow path (lightweight, memory-efficient, zero-copy)

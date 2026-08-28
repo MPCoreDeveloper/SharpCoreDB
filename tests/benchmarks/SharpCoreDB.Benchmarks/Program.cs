@@ -217,7 +217,7 @@ class Program
                     .FirstOrDefault(x => x.Contains("Total Physical Memory"));
                 if (line != null)
                 {
-                    var mb = int.Parse(System.Text.RegularExpressions.Regex.Replace(line, "[^0-9]", ""));
+                    var mb = int.Parse(System.Text.RegularExpressions.Regex.Replace(line, "[^0-9]", "", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)));
                     return mb / 1024;
                 }
             }
@@ -243,7 +243,7 @@ class Program
             if (process != null)
             {
                 var output = process.StandardOutput.ReadToEnd();
-                var match = System.Text.RegularExpressions.Regex.Match(output, @"(\d+)");
+                var match = System.Text.RegularExpressions.Regex.Match(output, @"(\d+)", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
                 if (match.Success)
                 {
                     return match.Groups[1].Value;

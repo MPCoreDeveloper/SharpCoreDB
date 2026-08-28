@@ -69,32 +69,32 @@ public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
 
     // Scalar function / expression patterns
     private static readonly Regex CurrentDatabasePattern =
-        new(@"\bcurrent_database\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bcurrent_database\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex VersionPattern =
-        new(@"\bversion\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bversion\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex CurrentUserPattern =
-        new(@"\bcurrent_user\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bcurrent_user\b", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex CurrentSchemaPattern =
-        new(@"\bcurrent_schema\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bcurrent_schema\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex SessionUserPattern =
-        new(@"\bsession_user\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bsession_user\b", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex PgPostmasterStartTimePattern =
-        new(@"\bpg_postmaster_start_time\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\bpg_postmaster_start_time\s*\(\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     // WHERE clause extraction helpers
     private static readonly Regex TableNameWherePattern =
-        new(@"table_name\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"table_name\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex TableSchemaWherePattern =
-        new(@"table_schema\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"table_schema\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static readonly Regex SchemaNameWherePattern =
-        new(@"schemaname\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"schemaname\s*=\s*'([^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// Tries to intercept a SQL query and produce catalog result rows.

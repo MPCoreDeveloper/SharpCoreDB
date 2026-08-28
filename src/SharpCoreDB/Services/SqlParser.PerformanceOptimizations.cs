@@ -246,7 +246,7 @@ public static partial class SqlParserPerformanceOptimizations
         condition = condition.Trim();
 
         // Check for IS NULL / IS NOT NULL first (no right-hand value)
-        var isNullPattern = new Regex(@"^(\w+)\s+IS\s+(NOT\s+)?NULL\s*$", RegexOptions.IgnoreCase);
+        var isNullPattern = new Regex(@"^(\w+)\s+IS\s+(NOT\s+)?NULL\s*$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         var isNullMatch = isNullPattern.Match(condition);
         if (isNullMatch.Success)
         {
@@ -261,7 +261,7 @@ public static partial class SqlParserPerformanceOptimizations
         // Operators: =, !=, >, <, >=, <=, IN, LIKE
 
         var operatorPattern = new Regex(@"(\w+)\s*(=|!=|>=|<=|>|<|IN|LIKE)\s*(.+)", 
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         var match = operatorPattern.Match(condition);
 
         if (!match.Success)

@@ -53,7 +53,7 @@ public class ReadmeUpdater
         var pattern = $@"{Regex.Escape(BenchmarkSectionMarker)}.*?{Regex.Escape(BenchmarkSectionEnd)}";
         var replacement = $"{BenchmarkSectionMarker}\n{benchmarkMarkdown}\n{BenchmarkSectionEnd}";
         
-        return Regex.Replace(content, pattern, replacement, RegexOptions.Singleline);
+        return Regex.Replace(content, pattern, replacement, RegexOptions.Singleline, TimeSpan.FromSeconds(1));
     }
 
     private string AppendNewSection(string content, string benchmarkMarkdown)

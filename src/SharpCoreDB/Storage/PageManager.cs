@@ -100,7 +100,7 @@ public partial class PageManager : IDisposable
 
     // Storage fields
     protected FileStream? pagesFile;
-    protected Lock writeLock = new();
+    protected readonly Lock writeLock = new();
     
     // Cache implementation
     private readonly Dictionary<ulong, Page> pageCache = new();

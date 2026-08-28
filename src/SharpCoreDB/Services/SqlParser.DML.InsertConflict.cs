@@ -199,14 +199,14 @@ public partial class SqlParser
     {
         whereExpr = whereExpr.Trim();
 
-        var isNotNullMatch = Regex.Match(whereExpr, @"^(\w+)\s+IS\s+NOT\s+NULL$", RegexOptions.IgnoreCase);
+        var isNotNullMatch = Regex.Match(whereExpr, @"^(\w+)\s+IS\s+NOT\s+NULL$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (isNotNullMatch.Success)
         {
             var col = isNotNullMatch.Groups[1].Value;
             return existingRow.TryGetValue(col, out var v) && v is not null and not DBNull;
         }
 
-        var isNullMatch = Regex.Match(whereExpr, @"^(\w+)\s+IS\s+NULL$", RegexOptions.IgnoreCase);
+        var isNullMatch = Regex.Match(whereExpr, @"^(\w+)\s+IS\s+NULL$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (isNullMatch.Success)
         {
             var col = isNullMatch.Groups[1].Value;
@@ -214,7 +214,7 @@ public partial class SqlParser
         }
 
         var excludedOpMatch = Regex.Match(
-            whereExpr, @"^(\w+)\s*([<>=!]+)\s*excluded\.(\w+)$", RegexOptions.IgnoreCase);
+            whereExpr, @"^(\w+)\s*([<>=!]+)\s*excluded\.(\w+)$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (excludedOpMatch.Success)
         {
             var leftCol  = excludedOpMatch.Groups[1].Value;
@@ -227,7 +227,7 @@ public partial class SqlParser
                 : ConflictCompareValues(leftVal, rightVal, op);
         }
 
-        var literalOpMatch = Regex.Match(whereExpr, @"^(\w+)\s*([<>=!]+)\s*(.+)$");
+        var literalOpMatch = Regex.Match(whereExpr, @"^(\w+)\s*([<>=!]+)\s*(.+)$", RegexOptions.None, TimeSpan.FromSeconds(1));
         if (literalOpMatch.Success)
         {
             var leftCol  = literalOpMatch.Groups[1].Value;

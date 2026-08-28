@@ -32,6 +32,12 @@ public sealed class TenantBackupRestoreService(
         ArgumentException.ThrowIfNullOrWhiteSpace(backupDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
 
+        // Path-traversal guard: tenant/database identifiers are used to build
+        // file system paths and must never contain separators or parent references.
+        EnsureSafePathSegment(tenantId, nameof(tenantId));
+        EnsureSafePathSegment(databaseName, nameof(databaseName));
+        backupDirectory = EnsureAbsolutePath(backupDirectory, nameof(backupDirectory));
+
         var mapping = await catalogRepository.GetTenantDatabaseAsync(tenantId, databaseName, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException(
@@ -109,6 +115,16 @@ public sealed class TenantBackupRestoreService(
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
         ArgumentException.ThrowIfNullOrWhiteSpace(backupPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+
+        // Path-traversal guard: tenant/database identifiers are used to build
+        // file system paths and must never contain separators or parent references.
+        EnsureSafePathSegment(tenantId, nameof(tenantId));
+        EnsureSafePathSegment(databaseName, nameof(databaseName));
+        backupPath = EnsureAbsolutePath(backupPath, nameof(backupPath));
+        if (targetDatabasePath is not null)
+        {
+            targetDatabasePath = EnsureAbsolutePath(targetDatabasePath, nameof(targetDatabasePath));
+        }
 
         if (!PathExists(backupPath))
         {
@@ -301,6 +317,35 @@ public sealed class TenantBackupRestoreService(
         return Path.Combine(
             backupDirectory,
             $"tenant-{tenantId}-{databaseName}-{DateTime.UtcNow:yyyyMMddHHmmss}.backup");
+    }
+
+    /// <summary>
+    /// Ensures a value used as a single path segment (tenant/database identifier)
+    /// contains no path separators, null characters, or parent references.
+    /// </summary>
+    private static string EnsureSafePathSegment(string value, string paramName)
+    {
+        if (value.IndexOfAny(['/', '\\', '\0']) >= 0 || value.Contains("..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"'{paramName}' must not contain path separators, null characters, or '..'.",
+                paramName);
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// Normalizes a path supplied by a caller to an absolute, well-formed path.
+    /// </summary>
+    private static string EnsureAbsolutePath(string path, string paramName)
+    {
+        if (path.IndexOf('\0') >= 0)
+        {
+            throw new ArgumentException($"'{paramName}' must not contain null characters.", paramName);
+        }
+
+        return Path.GetFullPath(path);
     }
 
     private static async Task ReplacePathAsync(string sourcePath, string targetPath, CancellationToken cancellationToken)

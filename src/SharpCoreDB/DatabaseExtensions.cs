@@ -376,7 +376,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         // PRAGMA table_info(tableName) — used by FluentMigrator ColumnExists / DefaultValueExists
-        var pragmaMatch = Regex.Match(sql.Trim(), @"^PRAGMA\s+table_info\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+        var pragmaMatch = Regex.Match(sql.Trim(), @"^PRAGMA\s+table_info\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (pragmaMatch.Success)
         {
             return ExecutePragmaTableInfo(pragmaMatch.Groups[1].Value);
@@ -767,14 +767,8 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             }
         }
 
-        if (_storageProvider is IAsyncDisposable asyncProvider)
-        {
-            await asyncProvider.DisposeAsync().ConfigureAwait(false);
-        }
-        else if (_storageProvider is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
+        // IStorageProvider always implements IAsyncDisposable, so the sync-dispose fallback was dead code.
+        await _storageProvider.DisposeAsync().ConfigureAwait(false);
     }
 
     private void LoadTables()
@@ -858,7 +852,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // ✅ Support IF NOT EXISTS and quoted table names (e.g. "__SharpMigrations")
         var ifNotExistsRegex = new Regex(
             @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?\s*\((.*)\)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         var match = ifNotExistsRegex.Match(sql);
         if (!match.Success)
@@ -904,7 +898,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             // Handle table-level FOREIGN KEY
             if (upper.StartsWith("FOREIGN KEY"))
             {
-                var fkMatch = Regex.Match(trimmed, @"FOREIGN\s+KEY\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)\s+REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+                var fkMatch = Regex.Match(trimmed, @"FOREIGN\s+KEY\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)\s+REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (fkMatch.Success)
                 {
                     foreignKeys.Add(new ForeignKeyConstraint
@@ -921,7 +915,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             // ✅ Support quoted column names: PRIMARY KEY ("Version")
             if (upper.StartsWith("PRIMARY KEY"))
             {
-                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase);
+                var pkMatch = Regex.Match(trimmed, @"PRIMARY\s+KEY\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (pkMatch.Success)
                 {
                     var pkColsStr = pkMatch.Groups[1].Value;
@@ -943,7 +937,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             // Handle table-level UNIQUE (col1, col2, ...)
             if (upper.StartsWith("UNIQUE"))
             {
-                var uniqueMatch = Regex.Match(trimmed, @"UNIQUE\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase);
+                var uniqueMatch = Regex.Match(trimmed, @"UNIQUE\s*\(\s*([^)]+)\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (uniqueMatch.Success)
                 {
                     var colsStr = uniqueMatch.Groups[1].Value;
@@ -987,7 +981,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             if (fkIndex >= 0)
             {
                 var fkPart = trimmed.Substring(fkIndex);
-                var fkMatch = Regex.Match(fkPart, @"REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase);
+                var fkMatch = Regex.Match(fkPart, @"REFERENCES\s+[""'`\[]?(\w+)[""'`\]]?\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (fkMatch.Success)
                 {
                     foreignKeys.Add(new ForeignKeyConstraint
@@ -1004,7 +998,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             if (checkIndex >= 0)
             {
                 var checkPart = trimmed.Substring(checkIndex);
-                var checkMatch = Regex.Match(checkPart, @"CHECK\s*\(\s*(.+?)\s*\)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                var checkMatch = Regex.Match(checkPart, @"CHECK\s*\(\s*(.+?)\s*\)", RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
                 if (checkMatch.Success)
                 {
                     columnCheckExpressions.Add(checkMatch.Groups[1].Value.Trim());
@@ -1169,7 +1163,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // Support both quoted and unquoted table names: DROP TABLE IF EXISTS "users_tracking"
         var regex = new Regex(
             @"DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[""'`\[\]]?(\w+)[""'`\[\]]?",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
         var match = regex.Match(sql);
         if (!match.Success)
@@ -1199,12 +1193,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // CREATE [UNIQUE] INDEX [IF NOT EXISTS] indexName ON tableName (columns)
         var m = Regex.Match(sql,
             @"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?\s+ON\s+[""'`\[]?(\w+)[""'`\]]?\s*\(([^)]+)\)",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (!m.Success) return;
 
         var indexName = m.Groups[1].Value;
         var tableName = m.Groups[2].Value;
-        var unique = Regex.IsMatch(sql, @"CREATE\s+UNIQUE\s+INDEX", RegexOptions.IgnoreCase);
+        var unique = Regex.IsMatch(sql, @"CREATE\s+UNIQUE\s+INDEX", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
         _indexRegistry[indexName] = new IndexRegistryEntry(indexName, tableName, unique);
     }
@@ -1214,7 +1208,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // DROP INDEX [IF EXISTS] indexName
         var m = Regex.Match(sql,
             @"DROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?[""'`\[]?(\w+)[""'`\]]?",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (m.Success)
             _indexRegistry.Remove(m.Groups[1].Value);
     }
@@ -1224,7 +1218,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // ALTER TABLE tableName RENAME TO newName
         var renameTo = Regex.Match(sql,
             @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+RENAME\s+TO\s+[""'`\[]?(\w+)[""'`\]]?",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (renameTo.Success)
         {
             var oldName = renameTo.Groups[1].Value;
@@ -1240,7 +1234,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // ALTER TABLE tableName RENAME COLUMN oldCol TO newCol
         var renameCol = Regex.Match(sql,
             @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+RENAME\s+COLUMN\s+[""'`\[]?(\w+)[""'`\]]?\s+TO\s+[""'`\[]?(\w+)[""'`\]]?",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (renameCol.Success)
         {
             var tableName = renameCol.Groups[1].Value;
@@ -1254,7 +1248,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // ALTER TABLE tableName ADD [COLUMN] colName TYPE ...
         var addCol = Regex.Match(sql,
             @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+ADD\s+(?:COLUMN\s+)?[""'`\[]?(\w+)[""'`\]]?\s+(\w+)",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (addCol.Success)
         {
             var tableName = addCol.Groups[1].Value;
@@ -1283,7 +1277,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // ALTER TABLE tableName DROP [COLUMN] colName
         var dropCol = Regex.Match(sql,
             @"ALTER\s+TABLE\s+[""'`\[]?(\w+)[""'`\]]?\s+DROP\s+(?:COLUMN\s+)?[""'`\[]?(\w+)[""'`\]]?",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (dropCol.Success)
         {
             var tableName = dropCol.Groups[1].Value;
@@ -1327,7 +1321,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     private List<Dictionary<string, object>> ExecuteSqliteMasterQuery(string sql)
     {
         // Only handle: SELECT ... FROM sqlite_master WHERE type = 'index' AND name = '...'
-        var nameMatch = Regex.Match(sql, @"name\s*=\s*'([^']+)'", RegexOptions.IgnoreCase);
+        var nameMatch = Regex.Match(sql, @"name\s*=\s*'([^']+)'", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (!nameMatch.Success)
             return [];
 
@@ -1357,7 +1351,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     {
         var regex = new Regex(
             @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         
         var match = regex.Match(sql);
         if (!match.Success)
@@ -1388,7 +1382,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
         // ✅ FIX: Support AND/OR logic for complex WHERE clauses
         // Split by AND (case-insensitive)
-        var andParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var andParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (andParts.Length > 1)
         {
             // All AND conditions must be true
@@ -1396,7 +1390,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         // Split by OR (case-insensitive)
-        var orParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+OR\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var orParts = System.Text.RegularExpressions.Regex.Split(condition, @"\s+OR\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (orParts.Length > 1)
         {
             // At least one OR condition must be true

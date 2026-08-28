@@ -211,12 +211,12 @@ public class ZvecRecallLatencyBenchmark : BenchmarkContext
         
         // Find best recall
         var bestRecall = _resultsByEfSearch.Values.Max(r => r.RecallAtK);
-        var bestRecallEf = _resultsByEfSearch.First(kvp => kvp.Value.RecallAtK == bestRecall).Key;
+        var bestRecallEf = _resultsByEfSearch.MaxBy(kvp => kvp.Value.RecallAtK).Key;
         Console.WriteLine($"  Best recall: {bestRecall:P2} at ef_search={bestRecallEf}");
         
         // Find best latency
         var bestLatency = _resultsByEfSearch.Values.Min(r => r.AvgLatency);
-        var bestLatencyEf = _resultsByEfSearch.First(kvp => kvp.Value.AvgLatency == bestLatency).Key;
+        var bestLatencyEf = _resultsByEfSearch.MinBy(kvp => kvp.Value.AvgLatency).Key;
         Console.WriteLine($"  Best latency: {bestLatency:F3}ms at ef_search={bestLatencyEf}");
         
         // Find sweet spot (>95% recall, lowest latency)

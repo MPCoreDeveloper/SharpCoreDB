@@ -264,10 +264,8 @@ public sealed class DownsamplingEngine : IDisposable
 
     private IEnumerable<string> GetAllTableNames()
     {
-        // Get unique table names from all buckets
-        return _bucketManager.GetStats().TotalBuckets > 0
-            ? [] // Would need to track table names separately
-            : [];
+        // Table names are not tracked per bucket yet; return an empty set.
+        return [];
     }
 
     /// <summary>

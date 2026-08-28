@@ -146,6 +146,7 @@ public class ZvecThroughputBenchmark : BenchmarkContext
         cts.Cancel();
         
         await Task.WhenAll(tasks);
+        cts.Dispose();
         sw.Stop();
         
         var memoryAfter = GC.GetTotalMemory(false);

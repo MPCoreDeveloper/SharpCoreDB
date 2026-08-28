@@ -553,7 +553,7 @@ public static class QueryCompiler
         // Check if this is a parameter placeholder (@0, @1, @param, etc.)
         if (literal.Value is string strValue)
         {
-            var paramMatch = Regex.Match(strValue, @"^@(\w+)$");
+            var paramMatch = Regex.Match(strValue, @"^@(\w+)$", RegexOptions.None, TimeSpan.FromSeconds(1));
             if (paramMatch.Success)
             {
                 // This is a parameter - we'll need to handle it differently
@@ -656,6 +656,8 @@ public static class QueryCompiler
 
         AddColumn(orderByColumn);
 
+        // NOSONAR:S2583 - local function 'AddColumn' mutates the captured 'columns' list;
+        // SonarC# cannot track the side effect and wrongly reports the loop as unreachable.
         for (int i = 0; i < columns.Count; i++)
         {
             indices[columns[i]] = i;

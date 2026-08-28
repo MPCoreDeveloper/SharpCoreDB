@@ -20,9 +20,9 @@ using System.Text.RegularExpressions;
 /// </summary>
 public partial class SqlParser
 {
-    private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+    private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
-    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// Detects actual SQL parameters (@p0, :param, ?) excluding @ symbols inside string literals.
@@ -635,7 +635,7 @@ public partial class SqlParser
         bool hasSubquery = System.Text.RegularExpressions.Regex.IsMatch(
             sql,
             @"\(\s*SELECT\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
         if (hasActualParameters || hasSubquery)
         {
@@ -916,8 +916,8 @@ public partial class SqlParser
             "SUBSTR" or "SUBSTRING" => args.Length >= 2 && args.Length <= 3 ? (object?)(args[0]?.ToString() is string sstr && args[1] is int sstart ? sstr.Length >= sstart && sstart > 0 ? sstr.Substring(sstart - 1, Math.Min(args.Length == 3 && args[2] is int sl ? sl : sstr.Length - sstart + 1, sstr.Length - sstart + 1)) : "" : null) : throw new ArgumentException("SUBSTR requires 2 or 3 arguments"),
             "REPLACE" => args.Length == 3 ? (object?)args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : throw new ArgumentException("REPLACE requires 3 arguments"),
             "INSTR" => args.Length == 2 ? (object?)(args[0]?.ToString() is string istr && args[1]?.ToString() is string isubstr ? (istr.IndexOf(isubstr, StringComparison.Ordinal) is int iidx && iidx >= 0 ? iidx + 1 : 0) : 0) : throw new ArgumentException("INSTR requires 2 arguments"),
-            "REGEXP" => args.Length == 2 ? (object?)(args[0]?.ToString() is string rpattern && args[1]?.ToString() is string rinput ? Regex.IsMatch(rinput, rpattern) : false) : throw new ArgumentException("REGEXP requires 2 arguments"),
-            "GLOB" => args.Length == 2 ? (object?)(args[0]?.ToString() is string gpattern && args[1]?.ToString() is string gstr ? Regex.IsMatch(gstr, "^" + Regex.Escape(gpattern).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase) : false) : throw new ArgumentException("GLOB requires 2 arguments"),
+            "REGEXP" => args.Length == 2 ? (object?)(args[0]?.ToString() is string rpattern && args[1]?.ToString() is string rinput ? Regex.IsMatch(rinput, rpattern, RegexOptions.None, TimeSpan.FromSeconds(1)) : false) : throw new ArgumentException("REGEXP requires 2 arguments"),
+            "GLOB" => args.Length == 2 ? (object?)(args[0]?.ToString() is string gpattern && args[1]?.ToString() is string gstr ? Regex.IsMatch(gstr, "^" + Regex.Escape(gpattern).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)) : false) : throw new ArgumentException("GLOB requires 2 arguments"),
             "NOT" when args.Length == 1 && args[0] is bool nb => (object?)!nb,
             "MOD" => args.Length == 2 ? (object?)(args[0] is double ma && args[1] is double mb && mb != 0 ? ma % mb : args[0] is int mia && args[1] is int mib && mib != 0 ? mia % mib : null) : throw new ArgumentException("MOD requires 2 arguments"),
             "POW" or "POWER" => args.Length == 2 && args[0] is double pa && args[1] is double pb ? (object?)Math.Pow(pa, pb) : null,
@@ -1008,7 +1008,7 @@ public partial class SqlParser
         // 1. Parse first table from FROM
         var fromMatch = System.Text.RegularExpressions.Regex.Match(
             sql, @"\bFROM\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
         if (!fromMatch.Success)
             throw new InvalidOperationException("Cannot parse FROM clause in JOIN query");
@@ -1032,7 +1032,7 @@ public partial class SqlParser
         var joinPattern = @"(LEFT|RIGHT|INNER|FULL\s+OUTER|CROSS)?\s*JOIN\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?\s+ON\s+(.*?)(?=(?:LEFT|RIGHT|INNER|FULL|CROSS)?\s*JOIN\b|WHERE\b|ORDER\b|LIMIT\b|GROUP\b|$)";
         var joinMatches = System.Text.RegularExpressions.Regex.Matches(
             sql, joinPattern,
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         foreach (System.Text.RegularExpressions.Match jm in joinMatches)
         {
@@ -1104,7 +1104,7 @@ public partial class SqlParser
         // 6. Apply SELECT column projection and aliases
         var selectMatch = System.Text.RegularExpressions.Regex.Match(
             sql, @"SELECT\s+(.*?)\s+FROM\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (selectMatch.Success)
         {
@@ -1136,7 +1136,7 @@ public partial class SqlParser
             // Check for "expr AS alias" pattern
             var asMatch = System.Text.RegularExpressions.Regex.Match(
                 trimmed, @"^(.+?)\s+(?:AS\s+)?(\w+)$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
             if (asMatch.Success)
             {
@@ -1203,7 +1203,7 @@ public partial class SqlParser
     private static Func<Dictionary<string, object>, Dictionary<string, object>, bool> BuildOnCondition(string onClause)
     {
         var predicates = System.Text.RegularExpressions.Regex
-            .Split(onClause, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Split(onClause, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
             .Select(static part => part.Trim())
             .Where(static part => part.Length > 0)
             .Select(part =>
@@ -1379,7 +1379,7 @@ public partial class SqlParser
         if (string.IsNullOrEmpty(where)) return true;
 
         // Handle AND conditions
-        var andParts = System.Text.RegularExpressions.Regex.Split(where, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var andParts = System.Text.RegularExpressions.Regex.Split(where, @"\s+AND\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         foreach (var part in andParts)
         {
             if (!EvaluateSingleJoinCondition(row, part.Trim()))
@@ -1452,17 +1452,17 @@ public partial class SqlParser
             var whereCl = sql[whereIdx..];
 
             // Extract type filter (e.g., type='table')
-            var typeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"type\s*=\s*'(\w+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var typeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"type\s*=\s*'(\w+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (typeMatch.Success)
                 typeFilter = typeMatch.Groups[1].Value.ToLowerInvariant();
 
             // Extract name filter (e.g., name='users')
-            var nameMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s*=\s*'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var nameMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s*=\s*'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (nameMatch.Success)
                 nameFilter = nameMatch.Groups[1].Value;
 
             // Extract LIKE filter (e.g., name LIKE 'trg_%')
-            var likeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s+LIKE\s+'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var likeMatch = System.Text.RegularExpressions.Regex.Match(whereCl, @"name\s+LIKE\s+'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (likeMatch.Success)
             {
                 var pattern = likeMatch.Groups[1].Value;
@@ -1478,7 +1478,7 @@ public partial class SqlParser
                 if (nameFilter != null)
                 {
                     var isMatch = nameFilter.Contains(".*")
-                        ? System.Text.RegularExpressions.Regex.IsMatch(tableName, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                        ? System.Text.RegularExpressions.Regex.IsMatch(tableName, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
                         : tableName.Equals(nameFilter, StringComparison.OrdinalIgnoreCase);
 
                     if (!isMatch)
@@ -1506,7 +1506,7 @@ public partial class SqlParser
                     if (nameFilter != null)
                     {
                         var isMatch = nameFilter.Contains(".*")
-                            ? System.Text.RegularExpressions.Regex.IsMatch(trigger.Name, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                            ? System.Text.RegularExpressions.Regex.IsMatch(trigger.Name, nameFilter, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
                             : trigger.Name.Equals(nameFilter, StringComparison.OrdinalIgnoreCase);
 
                         if (!isMatch)
@@ -1650,7 +1650,7 @@ public partial class SqlParser
     {
         var results = new List<Dictionary<string, object>>();
 
-        var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(\s*\*\s*\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var countMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(\s*\*\s*\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (countMatch.Success)
         {
             return ExecuteCountStar(parts);
@@ -1682,13 +1682,13 @@ public partial class SqlParser
                 if (groupByColumn is not null)
                     result[groupByColumn] = group.Key ?? "NULL";
 
-                var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (countMatch2.Success)
                 {
                     result["count"] = groupRows.Count;
                 }
 
-                var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (sumMatch.Success)
                 {
                     var columnName = sumMatch.Groups[1].Value;
@@ -1696,7 +1696,7 @@ public partial class SqlParser
                         .Sum(r => Convert.ToDecimal(r[columnName]));
                 }
 
-                var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (avgMatch.Success)
                 {
                     var columnName = avgMatch.Groups[1].Value;
@@ -1705,7 +1705,7 @@ public partial class SqlParser
                     result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
                 }
 
-                var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (maxMatch.Success)
                 {
                     var columnName = maxMatch.Groups[1].Value;
@@ -1713,7 +1713,7 @@ public partial class SqlParser
                     result["max"] = vals.Count > 0 ? vals.Max(r => Convert.ToDecimal(r[columnName])) : 0;
                 }
 
-                var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (minMatch.Success)
                 {
                     var columnName = minMatch.Groups[1].Value;
@@ -1728,13 +1728,13 @@ public partial class SqlParser
         {
             var result = new Dictionary<string, object>();
 
-            var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var countMatch2 = System.Text.RegularExpressions.Regex.Match(selectClause, @"COUNT\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (countMatch2.Success)
             {
                 result["count"] = allRows.Count;
             }
 
-            var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var sumMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"SUM\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (sumMatch.Success)
             {
                 var columnName = sumMatch.Groups[1].Value;
@@ -1742,7 +1742,7 @@ public partial class SqlParser
                     .Sum(r => Convert.ToDecimal(r[columnName]));
             }
 
-            var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var avgMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"AVG\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (avgMatch.Success)
             {
                 var columnName = avgMatch.Groups[1].Value;
@@ -1751,7 +1751,7 @@ public partial class SqlParser
                 result["avg"] = vals.Count > 0 ? vals.Sum() / vals.Count : 0;
             }
 
-            var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var maxMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MAX\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (maxMatch.Success)
             {
                 var columnName = maxMatch.Groups[1].Value;
@@ -1759,7 +1759,7 @@ public partial class SqlParser
                 result["max"] = vals.Count > 0 ? vals.Max(r => Convert.ToDecimal(r[columnName])) : 0;
             }
 
-            var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var minMatch = System.Text.RegularExpressions.Regex.Match(selectClause, @"MIN\(([a-zA-Z_]\w*)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (minMatch.Success)
             {
                 var columnName = minMatch.Groups[1].Value;
@@ -2493,8 +2493,8 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             "NOT LIKE" => !(leftValue?.ToString() is string nls && rightValue?.ToString() is string nrp && SqlLike(nls, nrp)),
             "GLOB" => leftValue?.ToString() is string gs && rightValue?.ToString() is string gp && SqlGlob(gs, gp),
             "NOT GLOB" => !(leftValue?.ToString() is string ngs && rightValue?.ToString() is string ngp && SqlGlob(ngs, ngp)),
-            "REGEXP" => leftValue?.ToString() is string rs && rightValue?.ToString() is string rpat && System.Text.RegularExpressions.Regex.IsMatch(rs, rpat),
-            "NOT REGEXP" => !(leftValue?.ToString() is string nrs && rightValue?.ToString() is string nrpat && System.Text.RegularExpressions.Regex.IsMatch(nrs, nrpat)),
+            "REGEXP" => leftValue?.ToString() is string rs && rightValue?.ToString() is string rpat && System.Text.RegularExpressions.Regex.IsMatch(rs, rpat, RegexOptions.None, TimeSpan.FromSeconds(1)),
+            "NOT REGEXP" => !(leftValue?.ToString() is string nrs && rightValue?.ToString() is string nrpat && System.Text.RegularExpressions.Regex.IsMatch(nrs, nrpat, RegexOptions.None, TimeSpan.FromSeconds(1))),
             "IS SOME" => leftValue is not null and not DBNull,
             "IS NONE" => leftValue is null or DBNull,
             "IS" => SqlParser.AreValuesEqual(leftValue, rightValue),
@@ -2651,7 +2651,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             .Replace("\\?", ".")
             .Replace("\\[", "[")
             .Replace("\\]", "]") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern);
+        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern, RegexOptions.None, TimeSpan.FromSeconds(1));
     }
 
     private static bool SqlLike(string value, string pattern)
@@ -2660,6 +2660,6 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
             .Replace("%", ".*")
             .Replace("_", ".") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     }
 }

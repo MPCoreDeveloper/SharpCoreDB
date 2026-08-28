@@ -184,7 +184,7 @@ public sealed class QueryPlanCache
         if (string.IsNullOrWhiteSpace(sql)) return string.Empty;
         var s = sql.Trim();
         // Collapse multiple spaces
-        s = System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ");
+        s = System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
         return s;
     }
 }

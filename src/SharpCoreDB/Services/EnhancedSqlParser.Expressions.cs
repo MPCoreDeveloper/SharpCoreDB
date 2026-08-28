@@ -139,12 +139,12 @@ public partial class EnhancedSqlParser
 
     private string? ParseComparisonOperator()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|NOT\s+REGEXP|NOT\s+LIKE|NOT\s+GLOB|REGEXP|LIKE|GLOB)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(<=|>=|<>|!=|=|<|>|NOT\s+REGEXP|NOT\s+LIKE|NOT\s+GLOB|REGEXP|LIKE|GLOB)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;
             // Normalize internal whitespace so "NOT  GLOB" becomes "NOT GLOB"
-            return Regex.Replace(match.Groups[1].Value.Trim(), @"\s+", " ").ToUpperInvariant();
+            return Regex.Replace(match.Groups[1].Value.Trim(), @"\s+", " ", RegexOptions.None, TimeSpan.FromSeconds(1)).ToUpperInvariant();
         }
         return null;
     }
@@ -244,11 +244,11 @@ public partial class EnhancedSqlParser
             return literal;
 
         // Check for function call
-        var funcMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)\s*\(", RegexOptions.IgnoreCase);
+        var funcMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)\s*\(", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (funcMatch.Success)
         {
             // Check for GRAPH_TRAVERSE specifically
-            var identifierMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase);
+            var identifierMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (identifierMatch.Success && identifierMatch.Groups[1].Value.Equals("GRAPH_TRAVERSE", StringComparison.OrdinalIgnoreCase))
             {
                 return ParseGraphTraverse();
@@ -284,7 +284,7 @@ public partial class EnhancedSqlParser
     private LiteralNode? ParseLiteral()
     {
         // Positional parameter placeholder (?)
-        var paramMatch = Regex.Match(_sql.Substring(_position), @"^\s*\?", RegexOptions.IgnoreCase);
+        var paramMatch = Regex.Match(_sql.Substring(_position), @"^\s*\?", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (paramMatch.Success)
         {
             _position += paramMatch.Length;
@@ -292,7 +292,7 @@ public partial class EnhancedSqlParser
         }
 
         // String literal
-        var stringMatch = Regex.Match(_sql.Substring(_position), @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase);
+        var stringMatch = Regex.Match(_sql.Substring(_position), @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (stringMatch.Success)
         {
             _position += stringMatch.Length;
@@ -301,7 +301,7 @@ public partial class EnhancedSqlParser
         }
 
         // Numeric literal
-        var numMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
+        var numMatch = Regex.Match(_sql.Substring(_position), @"^\s*(\d+(?:\.\d+)?)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (numMatch.Success)
         {
             _position += numMatch.Length;

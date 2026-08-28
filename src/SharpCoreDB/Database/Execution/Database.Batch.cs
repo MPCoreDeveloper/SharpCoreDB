@@ -446,7 +446,7 @@ public partial class Database
         // Use regex to extract parts: UPDATE <table> SET <sets> WHERE <where>
         var match = System.Text.RegularExpressions.Regex.Match(
             sql, @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (!match.Success)
             return false;
@@ -498,7 +498,7 @@ public partial class Database
         // Use regex: DELETE FROM <table> WHERE <where>
         var match = System.Text.RegularExpressions.Regex.Match(
             sql, @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (!match.Success)
             return false;
@@ -976,7 +976,7 @@ public partial class Database
         }
 
         int batchSize = (config?.HighSpeedInsertMode ?? false)
-            ? (config?.GroupCommitSize ?? 1000)
+            ? config.GroupCommitSize
             : 100;
 
         await Task.Run(() =>

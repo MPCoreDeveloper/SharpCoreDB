@@ -130,7 +130,8 @@ public sealed partial class PragmaIndexDetector
             }
 
             var uniqueCount = uniqueValues.Count;
-            var selectivity = totalRows > 0 ? (double)uniqueCount / totalRows : 0;
+            // totalRows is guaranteed > 0 here (early return above when it is 0).
+            var selectivity = (double)uniqueCount / totalRows;
             
             // Auto-index recommendation rules:
             // 1. High selectivity (> 0.5) = good for indexing

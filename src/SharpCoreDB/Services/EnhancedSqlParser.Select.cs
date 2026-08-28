@@ -401,7 +401,7 @@ public partial class EnhancedSqlParser
         var sqlSlice = _sql.Substring(_position);
 
         // Standard SQL string literal: '...'
-        var standard = Regex.Match(sqlSlice, @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase);
+        var standard = Regex.Match(sqlSlice, @"^\s*'([^']*(?:''[^']*)*)'", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (standard.Success)
         {
             _position += standard.Length;
@@ -409,7 +409,7 @@ public partial class EnhancedSqlParser
         }
 
         // Sanitized form produced by SQL sanitizer: ''...''
-        var doubled = Regex.Match(sqlSlice, @"^\s*''([^']*(?:''[^']*)*)''", RegexOptions.IgnoreCase);
+        var doubled = Regex.Match(sqlSlice, @"^\s*''([^']*(?:''[^']*)*)''", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (doubled.Success)
         {
             _position += doubled.Length;
@@ -459,7 +459,7 @@ public partial class EnhancedSqlParser
             var scalarMinMaxCheck = Regex.Match(
                 _sql.Substring(_position),
                 @"^\s*(MIN|MAX)\s*\(\s*[a-zA-Z_]\w*\s*,",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (scalarMinMaxCheck.Success)
             {
                 var funcExpr = ParseFunctionCall();
@@ -476,7 +476,7 @@ public partial class EnhancedSqlParser
             var funcMatch = Regex.Match(
                 _sql.Substring(_position),
                 @"^\s*(COUNT|SUM|AVG|MIN|MAX|STDDEV|STDDEV_SAMP|STDDEV_POP|VAR|VARIANCE|VAR_SAMP|VAR_POP|MEDIAN|PERCENTILE|MODE|CORR|CORRELATION|COVAR|COVARIANCE|COVAR_SAMP|COVAR_POP)\s*\(",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
             if (funcMatch.Success)
             {
@@ -544,7 +544,7 @@ public partial class EnhancedSqlParser
             var windowFuncMatch = Regex.Match(
                 _sql.Substring(_position),
                 @"^\s*(ROW_NUMBER|RANK|DENSE_RANK|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTILE|PERCENT_RANK|CUME_DIST)\s*\(",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (windowFuncMatch.Success)
             {
                 column.WindowFunction = windowFuncMatch.Groups[1].Value.ToUpperInvariant();
@@ -751,7 +751,7 @@ public partial class EnhancedSqlParser
             var scalarFuncMatch = Regex.Match(
                 remaining,
                 @"^\s*(\w+)\s*\(",
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             if (scalarFuncMatch.Success)
             {
                 // This is a scalar function — parse as expression
@@ -990,7 +990,7 @@ public partial class EnhancedSqlParser
             do
             {
                 // Peek ahead to check if it's a numeric column position
-                var numMatch = Regex.Match(_sql[_position..], @"^\s*(\d+)", RegexOptions.None);
+                var numMatch = Regex.Match(_sql[_position..], @"^\s*(\d+)", RegexOptions.None, TimeSpan.FromSeconds(1));
                 if (numMatch.Success && int.TryParse(numMatch.Groups[1].Value, out var ordinal))
                 {
                     _position += numMatch.Length;

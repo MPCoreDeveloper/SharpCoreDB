@@ -298,6 +298,8 @@ public sealed class DocumentationService(IDatabase database, ILogger<Documentati
         // Mock: simple hash-based embedding for demo
         // Production: Call embedding API or local model
         var hash = text.GetHashCode();
+        // NOSONAR:S2245 - Random is seeded from the text hash to build a stable mock
+        // embedding; this is demo data, not security-sensitive randomness.
         var random = new Random(hash);
         var embedding = new float[384]; // Common embedding dimension
 

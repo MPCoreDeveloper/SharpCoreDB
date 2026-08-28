@@ -175,7 +175,7 @@ public partial class Phase2CGeneratedRegexBenchmark
     public bool RegexTraditional_EmailValidation()
     {
         // Create regex every time (worst case, but shows runtime compilation)
-        var regex = new Regex(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}");
+        var regex = new Regex(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", RegexOptions.None, TimeSpan.FromSeconds(1));
         return regex.IsMatch(testEmail);
     }
 

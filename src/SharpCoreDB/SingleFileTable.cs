@@ -1108,7 +1108,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // ✅ Parity: support IS NULL / IS NOT NULL (previously ignored → all rows returned)
         var isNullMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+IS\s+(NOT\s+)?NULL$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            trimmed, @"^([A-Za-z_]\w*)\s+IS\s+(NOT\s+)?NULL$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (isNullMatch.Success)
         {
             var col = NormalizeColumnName(isNullMatch.Groups[1].Value);
@@ -1119,7 +1119,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // ✅ Parity: support LIKE (previously ignored)
         var likeMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+LIKE\s+'([^']*)'$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            trimmed, @"^([A-Za-z_]\w*)\s+LIKE\s+'([^']*)'$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (likeMatch.Success)
         {
             var col = NormalizeColumnName(likeMatch.Groups[1].Value);
@@ -1132,12 +1132,12 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
                 .Replace("%", ".*").Replace("_", ".") + "$";
             return System.Text.RegularExpressions.Regex.IsMatch(
-                v.ToString() ?? string.Empty, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                v.ToString() ?? string.Empty, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         }
 
         // ✅ Parity: support BETWEEN (previously ignored)
         var betweenMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+BETWEEN\s+([^\s]+)\s+AND\s+([^\s]+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            trimmed, @"^([A-Za-z_]\w*)\s+BETWEEN\s+([^\s]+)\s+AND\s+([^\s]+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (betweenMatch.Success)
         {
             var col = NormalizeColumnName(betweenMatch.Groups[1].Value);

@@ -449,22 +449,17 @@ public static class PlatformOptimizer
     {
         var info = HardwareOptimizer.GetHardwareInfo();
 
-        if (info.HasAVX512)
-        {
-            // Use AVX-512 code paths
-        }
-        else if (info.HasAVX2)
-        {
-            // Use AVX2 code paths
-        }
-        else if (info.HasNEON)
-        {
-            // Use ARM NEON code paths
-        }
-        else
-        {
-            // Use scalar fallback
-        }
+        // The runtime (HardwareIntrinsics / JIT) selects SIMD-optimized code paths
+        // automatically when the feature is available; no manual dispatch is needed.
+        // Log the active feature set for diagnostics.
+        Debug.WriteLine(
+            info.HasAVX512
+                ? "PlatformOptimizer: AVX-512 code path available."
+                : info.HasAVX2
+                    ? "PlatformOptimizer: AVX2 code path available."
+                    : info.HasNEON
+                        ? "PlatformOptimizer: ARM NEON code path available."
+                        : "PlatformOptimizer: scalar fallback.");
     }
 
     /// <summary>

@@ -132,7 +132,7 @@ public class CompiledQueryExecutor
         {
             window = new List<(Dictionary<string, object>, IndexedRowData)>(
                 Math.Min(Math.Max(indexedRows.Count - offset, 0), limit));
-            var end = Math.Min(offset + limit, indexedRows.Count);
+            var end = (int)Math.Min((long)offset + limit, indexedRows.Count);
 
             for (int i = offset; i < end; i++)
             {
@@ -243,7 +243,7 @@ public class CompiledQueryExecutor
         {
             // Only allocate if OFFSET/LIMIT applied
             results = new List<Dictionary<string, object>>(Math.Min(filtered.Count - offset, limit));
-            var end = Math.Min(offset + limit, filtered.Count);
+            var end = (int)Math.Min((long)offset + limit, filtered.Count);
 
             for (int i = offset; i < end; i++)
             {

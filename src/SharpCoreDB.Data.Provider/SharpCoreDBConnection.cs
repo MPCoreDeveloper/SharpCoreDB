@@ -161,7 +161,7 @@ public sealed class SharpCoreDBConnection : DbConnection
             // Release database reference from pool (decrements ref count)
             if (_database != null && !string.IsNullOrWhiteSpace(_connectionString) && !string.IsNullOrWhiteSpace(_password))
             {
-                SharpCoreDBInstancePool.Instance.ReleaseInstance(_connectionString, _password ?? "default");
+                SharpCoreDBInstancePool.Instance.ReleaseInstance(_connectionString, _password);
             }
             
             _database = null;

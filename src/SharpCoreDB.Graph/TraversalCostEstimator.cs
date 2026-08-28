@@ -265,23 +265,29 @@ public sealed class TraversalCostEstimator
         var dfsCost = EstimateDfsCost(stats, maxDepth);
         var bidirectionalCost = EstimateBidirectionalCost(stats, maxDepth);
 
-        // Cost comparison
-        var minCost = Math.Min(
-            Math.Min(bfsCost.TotalCost, dfsCost.TotalCost),
-            bidirectionalCost.TotalCost
-        );
+        // Cost comparison using strict less-than (no floating point equality).
+        // Tie-breaking matches the original order: BFS wins ties with DFS,
+        // and both win over Bidirectional.
+        var bestStrategy = GraphTraversalStrategy.Bidirectional;
+        var bestCost = bidirectionalCost.TotalCost;
 
-        if (bfsCost.TotalCost == minCost)
+        if (bfsCost.TotalCost < bestCost)
         {
-            return (GraphTraversalStrategy.Bfs, bfsCost);
+            bestStrategy = GraphTraversalStrategy.Bfs;
+            bestCost = bfsCost.TotalCost;
         }
-        else if (dfsCost.TotalCost == minCost)
+
+        if (dfsCost.TotalCost < bestCost)
         {
-            return (GraphTraversalStrategy.Dfs, dfsCost);
+            bestStrategy = GraphTraversalStrategy.Dfs;
+            bestCost = dfsCost.TotalCost;
         }
-        else
+
+        return bestStrategy switch
         {
-            return (GraphTraversalStrategy.Bidirectional, bidirectionalCost);
-        }
+            GraphTraversalStrategy.Bfs => (GraphTraversalStrategy.Bfs, bfsCost),
+            GraphTraversalStrategy.Dfs => (GraphTraversalStrategy.Dfs, dfsCost),
+            _ => (GraphTraversalStrategy.Bidirectional, bidirectionalCost),
+        };
     }
 }

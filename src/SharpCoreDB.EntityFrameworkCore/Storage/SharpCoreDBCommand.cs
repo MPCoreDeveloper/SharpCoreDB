@@ -365,7 +365,7 @@ public class SharpCoreDBCommand : DbCommand
     }
 
     // Matches a single double-quote for identifier de-quoting.
-    private static readonly Regex IdentifierDoubleQuotePattern = new("\"", RegexOptions.Compiled);
+    private static readonly Regex IdentifierDoubleQuotePattern = new("\"", RegexOptions.Compiled, System.TimeSpan.FromSeconds(1));
 
     private static List<string> SplitStatements(string sql)
     {

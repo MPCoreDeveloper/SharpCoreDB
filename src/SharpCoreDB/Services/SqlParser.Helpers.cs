@@ -579,8 +579,8 @@ public partial class SqlParser
             // ✅ Parity: NULL matches nothing (SQL) and %/_ patterns are honored
             "LIKE" => rowValueStr is not null && value is not null && LikeMatch(rowValueStr, value),
             "NOT LIKE" => rowValueStr is not null && value is not null && !LikeMatch(rowValueStr, value),
-            "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None),
-            "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None),
+            "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
+            "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
             "IN" => value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false,
             "NOT IN" => !(value?.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValueStr) ?? false),
             _ => throw new InvalidOperationException($"Unsupported operator {op}"),
@@ -638,7 +638,7 @@ public partial class SqlParser
     {
         var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
             .Replace("%", ".*").Replace("_", ".") + "$";
-        return Regex.IsMatch(input, regex, RegexOptions.IgnoreCase);
+        return Regex.IsMatch(input, regex, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     }
 
     /// <summary>

@@ -19,28 +19,28 @@ public static class SqlQueryValidator
     private static readonly Regex[] DangerousPatterns = 
     [
         // SQL comments used to bypass authentication
-        new Regex(@"--", RegexOptions.Compiled),
-        new Regex(@"/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Singleline),
+        new Regex(@"--", RegexOptions.Compiled, TimeSpan.FromSeconds(1)),
+        new Regex(@"/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Singleline, TimeSpan.FromSeconds(1)),
         
         // Multiple statements (; terminator followed by another statement)
-        new Regex(@";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
         
         // Common injection payloads
-        new Regex(@"'\s*(OR|AND)\s+('|1)\s*=\s*('|1)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-        new Regex(@"'\s*OR\s+'[^']*'\s*=\s*'", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@"'\s*(OR|AND)\s+('|1)\s*=\s*('|1)", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
+        new Regex(@"'\s*OR\s+'[^']*'\s*=\s*'", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
         
         // Union-based injection
-        new Regex(@"UNION\s+(ALL\s+)?SELECT", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@"UNION\s+(ALL\s+)?SELECT", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
         
         // Stacked queries
-        new Regex(@";\s*DROP\s+TABLE", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-        new Regex(@";\s*DELETE\s+FROM", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@";\s*DROP\s+TABLE", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
+        new Regex(@";\s*DELETE\s+FROM", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
         
         // Time-based blind injection
-        new Regex(@"(SLEEP|WAITFOR|BENCHMARK)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@"(SLEEP|WAITFOR|BENCHMARK)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
         
         // System functions/procedures
-        new Regex(@"(xp_cmdshell|sp_executesql|EXEC\s*\()", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new Regex(@"(xp_cmdshell|sp_executesql|EXEC\s*\()", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
     ];
 
     /// <summary>
@@ -111,7 +111,7 @@ public static class SqlQueryValidator
             int placeholderCount = sql.Count(c => c == '?');
             
             // Count @param placeholders (named parameters)
-            var namedMatches = System.Text.RegularExpressions.Regex.Matches(sql, @"@(\w+)");
+            var namedMatches = System.Text.RegularExpressions.Regex.Matches(sql, @"@(\w+)", RegexOptions.None, TimeSpan.FromSeconds(1));
             int namedPlaceholderCount = namedMatches.Count;
             
             if (placeholderCount > 0 && namedPlaceholderCount > 0)
@@ -231,7 +231,7 @@ public static class SqlQueryValidator
     private static bool ContainsStringLiterals(string sql)
     {
         // Look for quoted strings
-        return Regex.IsMatch(sql, @"'[^']*'");
+        return Regex.IsMatch(sql, @"'[^']*'", RegexOptions.None, TimeSpan.FromSeconds(1));
     }
 
     /// <summary>

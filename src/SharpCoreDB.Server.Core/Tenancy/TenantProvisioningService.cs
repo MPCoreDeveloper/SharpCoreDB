@@ -491,7 +491,7 @@ public sealed class TenantProvisioningService(
     private static string GenerateDatabaseName(string tenantKey)
     {
         // Replace invalid characters and ensure SQL-safe name
-        var sanitized = System.Text.RegularExpressions.Regex.Replace(tenantKey, @"[^a-zA-Z0-9_-]", "_");
+        var sanitized = System.Text.RegularExpressions.Regex.Replace(tenantKey, @"[^a-zA-Z0-9_-]", "_", RegexOptions.None, TimeSpan.FromSeconds(1));
         return $"tenant_{sanitized}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
     }
 

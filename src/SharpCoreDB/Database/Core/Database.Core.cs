@@ -773,13 +773,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             }
         }
 
-        if (_storageProvider is IAsyncDisposable asyncProvider)
+        if (_storageProvider is not null)
         {
-            await asyncProvider.DisposeAsync().ConfigureAwait(false);
-        }
-        else
-        {
-            _storageProvider?.Dispose();
+            await _storageProvider.DisposeAsync().ConfigureAwait(false);
         }
 
         storageEngine?.Dispose();

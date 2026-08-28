@@ -14,7 +14,7 @@ var createTableSql = @"CREATE TABLE bench_records (
 
 var regex = new Regex(
     @"CREATE\s+TABLE\s+(\w+)\s*\((.*)\)", 
-    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
 var match = regex.Match(createTableSql);
 if (match.Success)
@@ -31,7 +31,7 @@ else
 var insertSql = "INSERT INTO bench_records (id, name, email, age, salary, created) VALUES (1, 'User1', 'user1@test.com', 25, 50000, '2025-01-01')";
 var insertRegex = new Regex(
     @"INSERT\s+INTO\s+(\w+)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)",
-    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
 var insertMatch = insertRegex.Match(insertSql);
 if (insertMatch.Success)
@@ -49,7 +49,7 @@ else
 var selectSql = "SELECT * FROM bench_records WHERE age > 30";
 var selectRegex = new Regex(
     @"SELECT\s+(.*?)\s+FROM\s+(\w+)\s*(?:WHERE\s+(.*))?",
-    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
 var selectMatch = selectRegex.Match(selectSql);
 if (selectMatch.Success)

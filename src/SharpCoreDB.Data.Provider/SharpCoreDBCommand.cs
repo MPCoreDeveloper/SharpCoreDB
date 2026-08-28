@@ -311,7 +311,7 @@ public sealed class SharpCoreDBCommand : DbCommand
             var match = System.Text.RegularExpressions.Regex.Match(
                 sql, 
                 @"table_info\s*\(\s*['""]?(\w+)['""]?\s*\)", 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             
             if (match.Success && match.Groups.Count > 1)
             {
@@ -322,7 +322,7 @@ public sealed class SharpCoreDBCommand : DbCommand
             match = System.Text.RegularExpressions.Regex.Match(
                 sql,
                 @"pragma_table_info\s*\(\s*['""]?(\w+)['""]?\s*\)",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             
             if (match.Success && match.Groups.Count > 1)
             {

@@ -70,9 +70,9 @@ public partial class Table
 
             // REGEXP operator
             "REGEXP" => rowValueStr is not null && valueStr is not null
-                && System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr),
+                && System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)),
             "NOT REGEXP" => rowValueStr is null || valueStr is null
-                || !System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr),
+                || !System.Text.RegularExpressions.Regex.IsMatch(rowValueStr, valueStr, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)),
 
             // IN operator - check if value is in a comma-separated list
             "IN" => EvaluateInOperator(rowValueStr, valueStr, collation),

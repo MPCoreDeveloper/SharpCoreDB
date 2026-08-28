@@ -92,13 +92,13 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private string? PeekKeyword()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         return match.Success ? match.Groups[1].Value : null;
     }
 
     private void ConsumeKeyword()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\w+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;
@@ -107,7 +107,7 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private bool MatchKeyword(string keyword)
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(" + keyword + @")\b", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(" + keyword + @")\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;
@@ -118,7 +118,7 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private string? ConsumeIdentifier()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*([\w]+|""[^""]+""|\[[^\]]+\]|`[^`]+`)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*([\w]+|""[^""]+""|\[[^\]]+\]|`[^`]+`)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;
@@ -137,7 +137,7 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private bool MatchToken(string token)
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(" + Regex.Escape(token) + @")", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(" + Regex.Escape(token) + @")", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;
@@ -148,7 +148,7 @@ public partial class EnhancedSqlParser(ISqlDialect? dialect = null)
 
     private int? ParseInteger()
     {
-        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\d+)", RegexOptions.IgnoreCase);
+        var match = Regex.Match(_sql.Substring(_position), @"^\s*(\d+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (match.Success)
         {
             _position += match.Length;

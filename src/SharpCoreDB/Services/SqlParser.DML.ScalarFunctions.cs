@@ -47,7 +47,7 @@ public partial class SqlParser
         var functionMatch = Regex.Match(
             expression,
             @"^(?<name>[A-Za-z_][A-Za-z0-9_]*)\((?<args>.*)\)$",
-            RegexOptions.Singleline);
+            RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (!functionMatch.Success)
         {
@@ -75,7 +75,7 @@ public partial class SqlParser
         var aliasMatch = Regex.Match(
             expression,
             @"^(?<expr>.+?)\s+AS\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
         if (aliasMatch.Success)
         {
@@ -223,7 +223,7 @@ public partial class SqlParser
                 dt = new DateTime(dt.Year, dt.Month, dt.Day, 0, 0, 0, dt.Kind);
             else
             {
-                var m = Regex.Match(mod, @"^([+-]?\d+)\s+(day|month|year|hour|minute|second)s?$", RegexOptions.IgnoreCase);
+                var m = Regex.Match(mod, @"^([+-]?\d+)\s+(day|month|year|hour|minute|second)s?$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
                 if (m.Success)
                 {
                     int n = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);

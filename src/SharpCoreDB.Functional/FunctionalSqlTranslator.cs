@@ -168,11 +168,11 @@ public sealed partial class FunctionalSqlTranslator
         cleaned = MatchSomePattern().Replace(cleaned, string.Empty);
         cleaned = MatchNonePattern().Replace(cleaned, string.Empty);
 
-        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
-        cleaned = Regex.Replace(cleaned, @"\bWHERE\s+(AND|OR)\b", "WHERE", RegexOptions.IgnoreCase);
-        cleaned = Regex.Replace(cleaned, @"\b(AND|OR)\s+(AND|OR)\b", "$2", RegexOptions.IgnoreCase);
-        cleaned = Regex.Replace(cleaned, @"\bWHERE\s*$", string.Empty, RegexOptions.IgnoreCase).Trim();
-        cleaned = Regex.Replace(cleaned, @"\b(AND|OR)\s*$", string.Empty, RegexOptions.IgnoreCase).Trim();
+        cleaned = Regex.Replace(cleaned, @"\s+", " ", RegexOptions.None, TimeSpan.FromSeconds(1)).Trim();
+        cleaned = Regex.Replace(cleaned, @"\bWHERE\s+(AND|OR)\b", "WHERE", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        cleaned = Regex.Replace(cleaned, @"\b(AND|OR)\s+(AND|OR)\b", "$2", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        cleaned = Regex.Replace(cleaned, @"\bWHERE\s*$", string.Empty, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Trim();
+        cleaned = Regex.Replace(cleaned, @"\b(AND|OR)\s*$", string.Empty, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Trim();
 
         return cleaned;
     }

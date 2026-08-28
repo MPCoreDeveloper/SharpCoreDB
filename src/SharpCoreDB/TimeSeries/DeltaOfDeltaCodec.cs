@@ -103,9 +103,6 @@ public sealed class DeltaOfDeltaCodec
         // Read first timestamp
         result[0] = (long)reader.ReadBits(64);
 
-        if (count == 1)
-            return result;
-
         // Read first delta
         long firstDelta = (long)reader.ReadBits(64);
         result[1] = result[0] + firstDelta;

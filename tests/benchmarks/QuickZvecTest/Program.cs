@@ -212,6 +212,7 @@ class Program
             }
 
             Task.WaitAll(tasks);
+            cts.Dispose();
             var qps = totalQueries / (double)DurationSec;
             Console.WriteLine($"  {threads} threads: {qps:N0} QPS ({totalQueries:N0} queries in {DurationSec}s)");
 
