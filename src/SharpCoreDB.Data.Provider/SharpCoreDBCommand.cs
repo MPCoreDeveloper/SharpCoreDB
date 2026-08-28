@@ -143,10 +143,7 @@ public sealed class SharpCoreDBCommand : DbCommand
 
             // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
             // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
-            var commandUpper = CommandText.Trim().ToUpperInvariant();
-            if (commandUpper.StartsWith("INSERT") || 
-                commandUpper.StartsWith("UPDATE") || 
-                commandUpper.StartsWith("DELETE"))
+            if (IsWriteStatement(CommandText))
             {
                 db.Flush();
             }
@@ -173,10 +170,13 @@ public sealed class SharpCoreDBCommand : DbCommand
             var parameters = BuildParameterDictionary();
 
             // 🔧 FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
-            var commandTextUpper = CommandText.ToUpperInvariant().Trim();
-            if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
+            // v2: span-based check avoids a per-call ToUpperInvariant() allocation; the
+            // uppercase string is only materialized for the rare sqlite_master path.
+            var commandSpan = CommandText.AsSpan();
+            if (commandSpan.Contains("SQLITE_MASTER", StringComparison.OrdinalIgnoreCase) ||
+                commandSpan.Contains("SQLITE_SCHEMA", StringComparison.OrdinalIgnoreCase))
             {
-                return ExecuteSystemTableQuery(commandTextUpper, behavior);
+                return ExecuteSystemTableQuery(CommandText.ToUpperInvariant().Trim(), behavior);
             }
 
             List<Dictionary<string, object>> results;
@@ -198,6 +198,12 @@ public sealed class SharpCoreDBCommand : DbCommand
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
+        // v2 fast path: the OPTIONALLY keyword is what makes a projection optional, so a cheap
+        // text scan avoids a full SQL parse on every ExecuteReader call. When the keyword is
+        // present we still run the full parse to preserve exact semantics.
+        if (!sql.Contains("OPTIONALLY", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         try
         {
             var ast = SqlParser.ParseWithEnhancedParser(sql);
@@ -207,6 +213,18 @@ public sealed class SharpCoreDBCommand : DbCommand
         {
             return sql.Contains("OPTIONALLY", StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>
+    /// Determines whether a SQL statement is a write statement (INSERT/UPDATE/DELETE)
+    /// without allocating an upper-cased copy of the command text.
+    /// </summary>
+    private static bool IsWriteStatement(string sql)
+    {
+        var span = sql.AsSpan().TrimStart();
+        return span.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -390,10 +408,7 @@ public sealed class SharpCoreDBCommand : DbCommand
             // ? CRITICAL FIX: Flush data after non-query commands to ensure persistence!
             // Without this, INSERT/UPDATE/DELETE data only lives in memory until connection close.
             // This is essential for data durability - we want data on disk IMMEDIATELY.
-            var commandUpper = CommandText.Trim().ToUpperInvariant();
-            if (commandUpper.StartsWith("INSERT") || 
-                commandUpper.StartsWith("UPDATE") || 
-                commandUpper.StartsWith("DELETE"))
+            if (IsWriteStatement(CommandText))
             {
                 db.Flush();
             }
@@ -455,10 +470,12 @@ public sealed class SharpCoreDBCommand : DbCommand
             var parameters = BuildParameterDictionary();
 
             // ? FIX: Intercept SQLite system table queries and redirect to IMetadataProvider
-            var commandTextUpper = CommandText.ToUpperInvariant().Trim();
-            if (commandTextUpper.Contains("SQLITE_MASTER") || commandTextUpper.Contains("SQLITE_SCHEMA"))
+            // v2: span-based check avoids a per-call ToUpperInvariant() allocation.
+            var commandSpan = CommandText.AsSpan();
+            if (commandSpan.Contains("SQLITE_MASTER", StringComparison.OrdinalIgnoreCase) ||
+                commandSpan.Contains("SQLITE_SCHEMA", StringComparison.OrdinalIgnoreCase))
             {
-                return ExecuteSystemTableQuery(commandTextUpper, behavior);
+                return ExecuteSystemTableQuery(CommandText.ToUpperInvariant().Trim(), behavior);
             }
 
             // ExecuteQuery doesn't have async version, so use Task.Run
