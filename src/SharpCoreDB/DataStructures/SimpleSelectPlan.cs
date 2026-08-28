@@ -139,6 +139,10 @@ internal sealed class SimpleSelectPlan
                 if (value.Length == 0 || value.IndexOfAny(['(', ')', ',']) >= 0)
                     return null;
 
+                // Positional '?' placeholders require the parameter binder (legacy path).
+                if (value == "?")
+                    return null;
+
                 whereColumn = col;
                 if (value[0] == '@' || value[0] == ':')
                 {

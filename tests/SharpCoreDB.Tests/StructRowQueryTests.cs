@@ -138,6 +138,23 @@ public class StructRowQueryTests : IDisposable
     }
 
     [Fact]
+    public void ExecuteQuery_PositionalParameter_FallsBackToLegacyBinding()
+    {
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE docs (name TEXT, email TEXT, age INTEGER)");
+        db.ExecuteSQL("INSERT INTO docs VALUES ('User0', 'u0@x.com', 30)");
+        db.ExecuteSQL("INSERT INTO docs VALUES ('User1', 'u1@x.com', 31)");
+
+        // Positional '?' placeholders must fall back to the legacy parameter binder.
+        var rows = db.ExecuteQuery(
+            "SELECT name FROM docs WHERE name = ?",
+            new Dictionary<string, object?> { ["0"] = "User1" });
+
+        Assert.Single(rows);
+        Assert.Equal("User1", rows[0]["name"]);
+    }
+
+    [Fact]
     public void ExecuteQueryStruct_ComplexQuery_ThrowsNotSupported()
     {
         var db = _factory.Create(_testDbPath, "password");
