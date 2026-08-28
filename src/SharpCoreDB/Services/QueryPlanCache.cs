@@ -197,7 +197,30 @@ public sealed class QueryPlanCache
         if (string.IsNullOrWhiteSpace(sql))
             return string.Empty;
 
-        return CollapseWhitespace(sql.Trim());
+        // v2 fast path: if the string is already trimmed and contains no whitespace runs,
+        // return it unchanged (avoids an allocation on every cached-query call).
+        bool needsNormalization = false;
+        bool previousWasSpace = false;
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v')
+            {
+                if (previousWasSpace || i == 0 || i == sql.Length - 1)
+                {
+                    needsNormalization = true;
+                    break;
+                }
+
+                previousWasSpace = true;
+            }
+            else
+            {
+                previousWasSpace = false;
+            }
+        }
+
+        return needsNormalization ? CollapseWhitespace(sql.Trim()) : sql;
     }
 
     /// <summary>

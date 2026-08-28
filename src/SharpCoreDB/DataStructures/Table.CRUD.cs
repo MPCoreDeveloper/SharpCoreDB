@@ -1366,7 +1366,7 @@ public partial class Table
                             if (key != null)
                             {
                                 rows = [];
-                                foreach (var pos in hashIndex.LookupPositions(key))
+                                foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
                                 {
                                     var data = engine.Read(Name, pos);
                                     if (data != null)
@@ -1763,7 +1763,7 @@ public partial class Table
 
                             if (key != null)
                             {
-                                foreach (var pos in hashIndex.LookupPositions(key))
+                                foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
                                 {
                                     var data = engine.Read(Name, pos);
                                     if (data != null)

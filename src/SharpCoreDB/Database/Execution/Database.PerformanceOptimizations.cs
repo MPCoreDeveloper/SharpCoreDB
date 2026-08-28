@@ -28,6 +28,20 @@ using SharpCoreDB.DataStructures;
 public partial class Database
 {
     /// <summary>
+    /// v2: Pre-compiled regexes for <see cref="ExecuteQueryFast"/>.
+    /// Previously a new Regex was constructed on every call.
+    /// </summary>
+    private static readonly Regex FromTableFastRegex = new(
+        @"FROM\s+(\w+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    private static readonly Regex WhereClauseFastRegex = new(
+        @"WHERE\s+(.+?)(?:ORDER|GROUP|LIMIT|;|$)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    /// <summary>
     /// Cache for compiled WHERE clause expressions.
     /// Eliminates re-parsing overhead for repeated queries.
     /// 
@@ -66,7 +80,7 @@ public partial class Database
         }
         
         // Extract table name from SQL using regex
-        var tableMatch = new Regex(@"FROM\s+(\w+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Match(sql);
+        var tableMatch = FromTableFastRegex.Match(sql);
         
         if (!tableMatch.Success)
         {
@@ -94,7 +108,7 @@ public partial class Database
         }
         
         // Check for WHERE clause
-        var whereMatch = new Regex(@"WHERE\s+(.+?)(?:ORDER|GROUP|LIMIT|;|$)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Match(sql);
+        var whereMatch = WhereClauseFastRegex.Match(sql);
         var whereClause = whereMatch.Success ? whereMatch.Groups[1].Value.Trim() : string.Empty;
         
         // Execute using StructRow path (lightweight, memory-efficient, zero-copy)

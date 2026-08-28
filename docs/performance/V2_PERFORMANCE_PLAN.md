@@ -61,7 +61,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP3** | Allocation reduction | Reuse shared `SqlParser`; pool row dictionaries; remove redundant row copies; `StructRow`-based read option | ✅ **DONE in v2.0.0** (shared parser reuse, key-based hash-index Add/Remove, no full row copies in `UpdateMultiple`, `DeduplicateByPrimaryKey` early-exit) |
 | **WP4** | Batch UPDATE/DELETE regex → `[GeneratedRegex]` | Precompile `TryParseUpdateForBatch`/`TryParseDeleteForBatch`/`HasActualParameters`/subquery detection | ✅ **DONE in v2.0.0** (static compiled regexes + regex-free `NormalizeSql`) |
 | **WP5** | Cache DI lookups | Cache `IGraphRagProvider` resolution in `GetSharedSqlParser` | ✅ **DONE in v2.0.0** |
-| **WP6** | Storage/index tuning | AppendOnly/PageBased read path, page cache, hash/B-tree index maintenance batching | Planned (v2.0.x) |
+| **WP6** | Storage/index tuning | AppendOnly/PageBased read path, page cache, hash/B-tree index maintenance batching | ✅ **DONE in v2.0.0** (no-copy hash-index lookup for write-locked batch paths, `ExecuteQueryFast` precompiled regexes, `NormalizeSql` allocation short-circuit; storage read path already uses cached `SafeFileHandle` + `RandomAccess`) |
 | **WP7** | Provider fast paths | ADO.NET `SharpCoreDBCommand`/`DataReader`, YesSql, Sync provider materialization | Planned (v2.0.x) |
 | **WP8** | **.NET 11 / C# 15 migration** | Target `net11.0` + `LangVersion 15`; adopt runtime async, intrinsics, SIMD lane APIs | Planned (v2.1, after Nov 2026 GA) |
 

@@ -401,6 +401,40 @@ public class HashIndex : IDisposable
     }
 
     /// <summary>
+    /// Returns the internal position list WITHOUT copying (v2 allocation reduction).
+    /// <para>
+    /// SAFETY: the caller MUST hold the owning table's write lock so no concurrent writer can
+    /// mutate the returned list. Batch update/delete paths hold <c>Table.rwLock</c> in write
+    /// mode for their entire duration, so this is safe there. Do NOT use in lock-free reads
+    /// (e.g. <c>SelectInternal</c>) — those must keep using <see cref="LookupPositions"/>.
+    /// </para>
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal List<long> LookupPositionsUnsafe(object key)
+    {
+        if (key is null)
+            return [];
+
+        // ✅ COLLATE Phase 4: Normalize string keys based on collation
+        var normalizedKey = NormalizeKey(key);
+
+        _lock.EnterReadLock();
+        try
+        {
+            if (_useUnsafeEqualityIndex)
+            {
+                return LookupUnsafePositions(BuildUnsafeKey(normalizedKey));
+            }
+
+            return _index.TryGetValue(normalizedKey, out var list) ? list : [];
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
     /// Gets the number of unique keys in the index.
     /// Thread-safe operation using read lock.
     /// </summary>
