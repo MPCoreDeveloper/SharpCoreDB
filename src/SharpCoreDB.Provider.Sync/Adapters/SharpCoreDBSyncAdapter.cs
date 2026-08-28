@@ -108,12 +108,14 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetSelectChangesCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var trackingTableName = $"{tableName}_tracking";
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
-        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"t.[{c.ColumnName}]"));
+        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"t.[{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}]"));
         var trackingColumns = $"tt.[update_scope_id], tt.[timestamp], tt.[sync_row_is_tombstone], tt.[last_change_datetime]";
 
         var sql = $@"
@@ -140,11 +142,13 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetSelectRowCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
-        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"[{c.ColumnName}]"));
+        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"[{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}]"));
         var sql = $"SELECT {columns} FROM [{tableName}] WHERE [{pkColumn}] = @{pkColumn}";
 
         var command = connection.CreateCommand();
@@ -164,9 +168,9 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetInsertRowCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
-        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"[{c.ColumnName}]"));
-        var parameters = string.Join(", ", _tableDescription.Columns.Select(c => $"@{c.ColumnName}"));
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var columns = string.Join(", ", _tableDescription.Columns.Select(c => $"[{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}]"));
+        var parameters = string.Join(", ", _tableDescription.Columns.Select(c => $"@{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}"));
 
         var sql = $"INSERT OR REPLACE INTO [{tableName}] ({columns}) VALUES ({parameters})";
 
@@ -190,13 +194,15 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetUpdateRowCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
         var setClause = string.Join(", ", _tableDescription.Columns
             .Where(c => c.ColumnName != pkColumn)
-            .Select(c => $"[{c.ColumnName}] = @{c.ColumnName}"));
+            .Select(c => $"[{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}] = @{SqlIdentifier.EnsureSafe(c.ColumnName, nameof(c.ColumnName))}"));
 
         var sql = $"UPDATE [{tableName}] SET {setClause} WHERE [{pkColumn}] = @{pkColumn}";
 
@@ -220,9 +226,11 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetDeleteRowCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
         var sql = $"DELETE FROM [{tableName}] WHERE [{pkColumn}] = @{pkColumn}";
 
@@ -243,10 +251,12 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetUpdateMetadataCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var trackingTableName = $"{tableName}_tracking";
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
         var sql = $@"
             INSERT OR REPLACE INTO [{trackingTableName}] 
@@ -290,10 +300,12 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetDeleteMetadataCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var trackingTableName = $"{tableName}_tracking";
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
         var sql = $"DELETE FROM [{trackingTableName}] WHERE [{pkColumn}] = @{pkColumn}";
 
@@ -314,10 +326,12 @@ public sealed class SharpCoreDBSyncAdapter(SyncTable tableDescription, ScopeInfo
     /// </summary>
     private DbCommand GetSelectMetadataCommand(DbConnection connection, DbTransaction? transaction)
     {
-        var tableName = _tableDescription.TableName;
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var trackingTableName = $"{tableName}_tracking";
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key");
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key"),
+            "pkColumn");
 
         var sql = $@"
             SELECT [{pkColumn}], [update_scope_id], [timestamp], [sync_row_is_tombstone], [last_change_datetime]

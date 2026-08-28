@@ -126,8 +126,8 @@ public class DapperRepository<TEntity, TKey>(IDatabase database, string tableNam
     where TEntity : class, new()
 {
     protected readonly IDatabase Database = database ?? throw new ArgumentNullException(nameof(database));
-    protected readonly string TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-    protected readonly string KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
+    protected readonly string TableName = SqlIdentifier.EnsureSafe(tableName ?? throw new ArgumentNullException(nameof(tableName)), nameof(tableName));
+    protected readonly string KeyColumn = SqlIdentifier.EnsureSafe(keyColumn ?? throw new ArgumentNullException(nameof(keyColumn)), nameof(keyColumn));
 
     /// <inheritdoc />
     public virtual TEntity? GetById(TKey id)
@@ -293,8 +293,8 @@ public class ReadOnlyDapperRepository<TEntity, TKey>(IDatabase database, string 
     where TEntity : class, new()
 {
     protected readonly IDatabase Database = database ?? throw new ArgumentNullException(nameof(database));
-    protected readonly string TableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-    protected readonly string KeyColumn = keyColumn ?? throw new ArgumentNullException(nameof(keyColumn));
+    protected readonly string TableName = SqlIdentifier.EnsureSafe(tableName ?? throw new ArgumentNullException(nameof(tableName)), nameof(tableName));
+    protected readonly string KeyColumn = SqlIdentifier.EnsureSafe(keyColumn ?? throw new ArgumentNullException(nameof(keyColumn)), nameof(keyColumn));
 
     public virtual TEntity? GetById(TKey id)
     {

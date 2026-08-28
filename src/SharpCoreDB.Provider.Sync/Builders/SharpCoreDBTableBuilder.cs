@@ -72,9 +72,10 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetExistsTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{_tableDescription.TableName}'";
+        command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{tableName}'";
         return Task.FromResult(command);
     }
 
@@ -91,18 +92,20 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetDropTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"DROP TABLE IF EXISTS [{_tableDescription.TableName}]";
+        command.CommandText = $"DROP TABLE IF EXISTS [{tableName}]";
         return Task.FromResult(command);
     }
 
     /// <inheritdoc />
     public override Task<DbCommand> GetExistsColumnCommandAsync(string columnName, DbConnection connection, DbTransaction transaction)
     {
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"PRAGMA table_info([{_tableDescription.TableName}])";
+        command.CommandText = $"PRAGMA table_info([{tableName}])";
         return Task.FromResult(command);
     }
 
@@ -152,9 +155,12 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetCreateTrackingTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
-        var trackingTableName = $"{_tableDescription.TableName}_tracking";
-        var pkColumn = _tableDescription.PrimaryKeys.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Table '{_tableDescription.TableName}' must have a primary key.");
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var trackingTableName = $"{tableName}_tracking";
+        var pkColumn = SqlIdentifier.EnsureSafe(
+            _tableDescription.PrimaryKeys.FirstOrDefault()
+                ?? throw new InvalidOperationException($"Table '{tableName}' must have a primary key."),
+            "pkColumn");
 
         var pkSyncColumn = _tableDescription.Columns[pkColumn];
         var pkType = MapDbTypeToSqlType(pkSyncColumn.DbType);
@@ -175,7 +181,8 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetDropTrackingTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
-        var trackingTableName = $"{_tableDescription.TableName}_tracking";
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var trackingTableName = $"{tableName}_tracking";
         var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"DROP TABLE IF EXISTS [{trackingTableName}]";
@@ -185,7 +192,8 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetExistsTrackingTableCommandAsync(DbConnection connection, DbTransaction transaction)
     {
-        var trackingTableName = $"{_tableDescription.TableName}_tracking";
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
+        var trackingTableName = $"{tableName}_tracking";
         var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{trackingTableName}'";
@@ -195,11 +203,12 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetExistsTriggerCommandAsync(DbTriggerType triggerType, DbConnection connection, DbTransaction transaction)
     {
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var triggerName = triggerType switch
         {
-            DbTriggerType.Insert => $"trg_{_tableDescription.TableName}_insert_tracking",
-            DbTriggerType.Update => $"trg_{_tableDescription.TableName}_update_tracking",
-            DbTriggerType.Delete => $"trg_{_tableDescription.TableName}_delete_tracking",
+            DbTriggerType.Insert => $"trg_{tableName}_insert_tracking",
+            DbTriggerType.Update => $"trg_{tableName}_update_tracking",
+            DbTriggerType.Delete => $"trg_{tableName}_delete_tracking",
             _ => throw new ArgumentOutOfRangeException(nameof(triggerType))
         };
 
@@ -257,11 +266,12 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
     /// <inheritdoc />
     public override Task<DbCommand> GetDropTriggerCommandAsync(DbTriggerType triggerType, DbConnection connection, DbTransaction transaction)
     {
+        var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var triggerName = triggerType switch
         {
-            DbTriggerType.Insert => $"trg_{_tableDescription.TableName}_insert_tracking",
-            DbTriggerType.Update => $"trg_{_tableDescription.TableName}_update_tracking",
-            DbTriggerType.Delete => $"trg_{_tableDescription.TableName}_delete_tracking",
+            DbTriggerType.Insert => $"trg_{tableName}_insert_tracking",
+            DbTriggerType.Update => $"trg_{tableName}_update_tracking",
+            DbTriggerType.Delete => $"trg_{tableName}_delete_tracking",
             _ => throw new ArgumentOutOfRangeException(nameof(triggerType))
         };
 

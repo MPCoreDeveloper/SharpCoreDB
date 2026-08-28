@@ -409,9 +409,12 @@ class Program
                 for (int i = batch; i < end; i++)
                 {
                     using var cmd = conn.CreateCommand();
-                    cmd.CommandText = string.Format(CultureInfo.InvariantCulture,
-                        "INSERT INTO docs (name, email, age, score, data) VALUES ('User{0}', 'user{0}@test.com', {1}, {2:F1}, 'payload-{0}')",
-                        i, 20 + i % 60, i * 0.1);
+                    cmd.CommandText = "INSERT INTO docs (name, email, age, score, data) VALUES (@name, @email, @age, @score, @payload)";
+                    var pName = cmd.CreateParameter(); pName.ParameterName = "@name"; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
+                    var pEmail = cmd.CreateParameter(); pEmail.ParameterName = "@email"; pEmail.Value = $"user{i}@test.com"; cmd.Parameters.Add(pEmail);
+                    var pAge = cmd.CreateParameter(); pAge.ParameterName = "@age"; pAge.Value = 20 + i % 60; cmd.Parameters.Add(pAge);
+                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 0.1; cmd.Parameters.Add(pScore);
+                    var pPayload = cmd.CreateParameter(); pPayload.ParameterName = "@payload"; pPayload.Value = $"payload-{i}"; cmd.Parameters.Add(pPayload);
                     cmd.ExecuteNonQuery();
                 }
                 tx.Commit();
@@ -426,7 +429,8 @@ class Program
             for (int i = 1; i <= ReadCount; i++)
             {
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = $"SELECT * FROM docs WHERE id = {i}";
+                cmd.CommandText = "SELECT * FROM docs WHERE id = @id";
+                var p = cmd.CreateParameter(); p.ParameterName = "@id"; p.Value = i; cmd.Parameters.Add(p);
                 using var reader = cmd.ExecuteReader();
                 reader.Read();
             }
@@ -442,8 +446,9 @@ class Program
                 for (int i = 1; i <= UpdateCount; i++)
                 {
                     using var cmd = conn.CreateCommand();
-                    cmd.CommandText = string.Format(CultureInfo.InvariantCulture,
-                        "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i);
+                    cmd.CommandText = "UPDATE docs SET score = @score WHERE id = @id";
+                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 99.9; cmd.Parameters.Add(pScore);
+                    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = i; cmd.Parameters.Add(pId);
                     cmd.ExecuteNonQuery();
                 }
                 tx.Commit();
@@ -460,7 +465,8 @@ class Program
                 for (int i = 1; i <= DeleteCount; i++)
                 {
                     using var cmd = conn.CreateCommand();
-                    cmd.CommandText = $"DELETE FROM docs WHERE id = {i}";
+                    cmd.CommandText = "DELETE FROM docs WHERE id = @id";
+                    var p = cmd.CreateParameter(); p.ParameterName = "@id"; p.Value = i; cmd.Parameters.Add(p);
                     cmd.ExecuteNonQuery();
                 }
                 tx.Commit();

@@ -23,6 +23,7 @@ public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
     public override async Task<SyncTable> EnsureTableAsync(string tableName, string? schemaName, DbConnection connection, DbTransaction transaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        SqlIdentifier.EnsureSafe(tableName, nameof(tableName));
 
         var existsCommand = connection.CreateCommand();
         existsCommand.Transaction = transaction;
@@ -79,6 +80,7 @@ public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
     public override async Task<SyncTable> GetTableAsync(string tableName, string? schemaName, DbConnection connection, DbTransaction transaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        SqlIdentifier.EnsureSafe(tableName, nameof(tableName));
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -115,6 +117,7 @@ public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
     public override async Task<bool> ExistsTableAsync(string tableName, string? schemaName, DbConnection connection, DbTransaction transaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        SqlIdentifier.EnsureSafe(tableName, nameof(tableName));
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -128,6 +131,7 @@ public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
     public override async Task DropsTableIfExistsAsync(string tableName, string? schemaName, DbConnection connection, DbTransaction transaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        SqlIdentifier.EnsureSafe(tableName, nameof(tableName));
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -141,6 +145,8 @@ public sealed class SharpCoreDBDatabaseBuilder : DbDatabaseBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
         ArgumentException.ThrowIfNullOrWhiteSpace(newTableName);
+        SqlIdentifier.EnsureSafe(tableName, nameof(tableName));
+        SqlIdentifier.EnsureSafe(newTableName, nameof(newTableName));
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
