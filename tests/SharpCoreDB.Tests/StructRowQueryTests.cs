@@ -105,6 +105,39 @@ public class StructRowQueryTests : IDisposable
     }
 
     [Fact]
+    public void ExecuteQueryStruct_NumericWhere_FixedOffset_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO t VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO t VALUES (2, 'Bob')");
+        db.ExecuteSQL("INSERT INTO t VALUES (3, 'Carol')");
+
+        // id is a fixed-width INTEGER at a constant per-record offset → SIMD batch filter path.
+        var rows = db.ExecuteQueryStruct("SELECT * FROM t WHERE id = 2").ToList();
+
+        Assert.Single(rows);
+        var columns = rows[0].GetColumnNames();
+        int idIdx = Array.IndexOf(columns, "id");
+        int nameIdx = Array.IndexOf(columns, "name");
+        Assert.Equal(2, rows[0].GetValueBoxed(idIdx));
+        Assert.Equal("Bob", rows[0].GetValueBoxed(nameIdx));
+    }
+
+    [Fact]
+    public void ExecuteQueryStruct_NumericWhere_NoMatch_ReturnsEmpty()
+    {
+        var db = _factory.Create(_testDbPath, "password");
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER, name TEXT)");
+        db.ExecuteSQL("INSERT INTO t VALUES (1, 'Alice')");
+        db.ExecuteSQL("INSERT INTO t VALUES (2, 'Bob')");
+
+        var rows = db.ExecuteQueryStruct("SELECT * FROM t WHERE id = 999").ToList();
+
+        Assert.Empty(rows);
+    }
+
+    [Fact]
     public void ExecuteQueryStruct_ComplexQuery_ThrowsNotSupported()
     {
         var db = _factory.Create(_testDbPath, "password");

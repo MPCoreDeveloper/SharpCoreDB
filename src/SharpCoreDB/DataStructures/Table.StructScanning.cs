@@ -8,7 +8,10 @@ namespace SharpCoreDB.DataStructures;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 
@@ -197,6 +200,80 @@ public partial class Table
             yield break;
         }
 
+        // Fast path 3: fixed-width numeric equality — SIMD batch filter over extracted values
+        // (no deserialization, no boxing). Integer/Long use portable Vector<T>; Real uses
+        // direct per-record reads.
+        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) &&
+            TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
+        {
+            if (numericType == DataType.Integer || numericType == DataType.Long)
+            {
+                List<int>? intValues = numericType == DataType.Integer ? new List<int>(1024) : null;
+                List<long>? longValues = numericType == DataType.Long ? new List<long>(1024) : null;
+                var recordDatas = new List<byte[]>(1024);
+                var recordPositions = new List<long>(1024);
+
+                foreach (var (pos, rec) in engine.GetAllRecords(Name))
+                {
+                    if (rec is not { Length: > 0 } || !TryExtractNumericDirect(rec, numericOffset, numericType, out var val))
+                    {
+                        continue;
+                    }
+
+                    if (intValues is not null)
+                    {
+                        intValues.Add((int)val);
+                    }
+                    else
+                    {
+                        longValues!.Add((long)val);
+                    }
+
+                    recordDatas.Add(rec);
+                    recordPositions.Add(pos);
+                }
+
+                var matches = new List<int>(16);
+                if (intValues is not null)
+                {
+                    SimdFilterInt32Batch(CollectionsMarshal.AsSpan(intValues), (int)numericExpected, matches);
+                }
+                else
+                {
+                    SimdFilterInt64Batch(CollectionsMarshal.AsSpan(longValues!), (long)numericExpected, matches);
+                }
+
+                for (int mi = 0; mi < matches.Count; mi++)
+                {
+                    var rec = recordDatas[matches[mi]];
+                    if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]]))
+                    {
+                        continue;
+                    }
+
+                    yield return new StructRow(rec.AsMemory(), schema, enableCaching);
+                }
+            }
+            else
+            {
+                // Real (double): direct per-record reads.
+                foreach (var (recordPosition, data) in engine.GetAllRecords(Name))
+                {
+                    if (data is not { Length: > 0 } ||
+                        !MatchesNumericDirect(data, numericOffset, numericType, numericExpected) ||
+                        !TryValidateCurrentVersion(data, schema, recordPosition))
+                    {
+                        continue;
+                    }
+
+                    yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                }
+            }
+
+            yield break;
+        }
+
         // Fallback: full scan with a simple equality predicate (scalar, allocation-free per row).
         foreach (var row in ScanStructRows(enableCaching))
         {
@@ -204,6 +281,92 @@ public partial class Table
                 MatchesSimpleWhere(row, schema, simpleColumn, simpleValue))
             {
                 yield return row;
+            }
+        }
+    }
+
+    /// <summary>
+    /// SIMD-accelerated equality filter over a batch of int32 values (portable <c>Vector&lt;int&gt;</c>
+    /// with scalar fallback). Writes matching indices into <paramref name="matches"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SimdFilterInt32Batch(ReadOnlySpan<int> values, int expected, List<int> matches)
+    {
+        int vectorWidth = Vector<int>.Count;
+        int i = 0;
+
+        if (Vector.IsHardwareAccelerated)
+        {
+            var expectedVec = new Vector<int>(expected);
+            for (; i <= values.Length - vectorWidth; i += vectorWidth)
+            {
+                Vector<int> mask = Vector.Equals(new Vector<int>(values.Slice(i, vectorWidth)), expectedVec);
+                for (int lane = 0; lane < vectorWidth; lane++)
+                {
+                    if (mask[lane] != 0)
+                    {
+                        matches.Add(i + lane);
+                    }
+                }
+            }
+        }
+
+        for (; i < values.Length; i++)
+        {
+            if (values[i] == expected)
+            {
+                matches.Add(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// SIMD-accelerated equality filter over a batch of int64 values (portable <c>Vector&lt;long&gt;</c>
+    /// with scalar fallback). Writes matching indices into <paramref name="matches"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SimdFilterInt64Batch(ReadOnlySpan<long> values, long expected, List<int> matches)
+    {
+        int vectorWidth = Vector<long>.Count;
+        int i = 0;
+
+        if (Vector.IsHardwareAccelerated)
+        {
+            var expectedVec = new Vector<long>(expected);
+            for (; i <= values.Length - vectorWidth; i += vectorWidth)
+            {
+                Vector<long> mask = Vector.Equals(new Vector<long>(values.Slice(i, vectorWidth)), expectedVec);
+                for (int lane = 0; lane < vectorWidth; lane++)
+                {
+                    if (mask[lane] != 0)
+                    {
+                        matches.Add(i + lane);
+                    }
+                }
+            }
+        }
+
+        for (; i < values.Length; i++)
+        {
+            if (values[i] == expected)
+            {
+                matches.Add(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Equality filter over a batch of double values (scalar; <c>Vector&lt;double&gt;</c> is
+    /// avoided here for maximum portability). Writes matching indices into <paramref name="matches"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void SimdFilterDoubleBatch(ReadOnlySpan<double> values, double expected, List<int> matches)
+    {
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] == expected)
+            {
+                matches.Add(i);
             }
         }
     }
@@ -224,6 +387,140 @@ public partial class Table
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Stale-version guard: when the table has a PK, the PK index must point to
+    /// <paramref name="recordPosition"/> for the record to be the current version.
+    /// Returns true for tables without a PK (no version tracking).
+    /// </summary>
+    private bool TryValidateCurrentVersion(ReadOnlySpan<byte> recordData, VariableLengthSchema schema, long recordPosition)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return true;
+        }
+
+        var pkValue = ExtractPrimaryKeyValueFromSpan(recordData, schema);
+        if (pkValue is null)
+        {
+            return false;
+        }
+
+        var search = this.Index.Search(pkValue);
+        return search.Found && search.Value == recordPosition;
+    }
+
+    /// <summary>
+    /// Determines whether a column is a fixed-width numeric type (Integer/Long/Real) that sits
+    /// at a constant per-record byte offset (every preceding column is fixed-width). Returns the
+    /// offset of the column's null flag within the record data.
+    /// </summary>
+    private bool TryGetFixedNumericWhereInfo(string column, out int valueOffset, out DataType type)
+    {
+        valueOffset = 0;
+        type = DataType.String;
+
+        int colIdx = this.Columns.IndexOf(column);
+        if (colIdx < 0)
+            return false;
+
+        type = this.ColumnTypes[colIdx];
+        if (type != DataType.Integer && type != DataType.Long && type != DataType.Real)
+            return false;
+
+        for (int i = 0; i < colIdx; i++)
+        {
+            (int size, bool isVariable) = GetColumnSizeAndVariability(this.ColumnTypes[i]);
+            if (isVariable || size <= 0)
+                return false;
+
+            valueOffset += size;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a fixed-width numeric column directly from raw record data (no deserialization,
+    /// no boxing) and compares it against the expected value.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool MatchesNumericDirect(
+        ReadOnlySpan<byte> recordData,
+        int valueOffset,
+        DataType type,
+        object expected)
+    {
+        return TryExtractNumericDirect(recordData, valueOffset, type, out var value) &&
+            (type switch
+            {
+                DataType.Integer => (int)value == (int)expected,
+                DataType.Long => (long)value == (long)expected,
+                DataType.Real => (double)value == (double)expected,
+                _ => false
+            });
+    }
+
+    /// <summary>
+    /// Reads a fixed-width numeric column directly from raw record data (no deserialization,
+    /// no boxing). Returns false when the record is null or truncated.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryExtractNumericDirect(
+        ReadOnlySpan<byte> recordData,
+        int valueOffset,
+        DataType type,
+        out object value)
+    {
+        value = null!;
+
+        // valueOffset points at the null flag; value data starts at +1.
+        if (valueOffset + 1 >= recordData.Length)
+            return false;
+
+        if (recordData[valueOffset] == 0)
+            return false; // NULL.
+
+        ReadOnlySpan<byte> valueData = recordData.Slice(valueOffset + 1);
+        switch (type)
+        {
+            case DataType.Integer when valueData.Length >= 4:
+                value = BinaryPrimitives.ReadInt32LittleEndian(valueData);
+                return true;
+            case DataType.Long when valueData.Length >= 8:
+                value = BinaryPrimitives.ReadInt64LittleEndian(valueData);
+                return true;
+            case DataType.Real when valueData.Length >= 8:
+                value = BinaryPrimitives.ReadDoubleLittleEndian(valueData);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Parses a simple WHERE value into the expected fixed-width numeric type.
+    /// </summary>
+    private static bool TryParseNumericExpected(object? value, DataType type, out object expected)
+    {
+        expected = null!;
+        string text = value?.ToString() ?? string.Empty;
+
+        switch (type)
+        {
+            case DataType.Integer when int.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out int i):
+                expected = i;
+                return true;
+            case DataType.Long when long.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out long l):
+                expected = l;
+                return true;
+            case DataType.Real when double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out double d):
+                expected = d;
+                return true;
+            default:
+                return false;
+        }
     }
 
     #endregion

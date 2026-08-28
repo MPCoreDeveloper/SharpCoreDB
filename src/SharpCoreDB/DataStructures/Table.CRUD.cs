@@ -1031,6 +1031,21 @@ public partial class Table
             }
         }
 
+        // v2 (WP9-C): numeric early-WHERE — direct fixed-offset binary reads (no boxing/string
+        // allocation), enabled for fixed-width numeric columns at a constant per-record offset.
+        int earlyNumericOffset = -1;
+        DataType earlyNumericType = DataType.String;
+        object? earlyNumericExpected = null;
+        if (earlyWhereColIdx < 0 && !string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var ewCol2, out var ewVal2) &&
+            TryGetFixedNumericWhereInfo(ewCol2, out var ewOffset, out var ewType) &&
+            TryParseNumericExpected(ewVal2, ewType, out var ewExpected))
+        {
+            earlyNumericOffset = ewOffset;
+            earlyNumericType = ewType;
+            earlyNumericExpected = ewExpected;
+        }
+
         // Scan file with position tracking
         int filePosition = 0;
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
@@ -1070,7 +1085,16 @@ public partial class Table
             // ✅ PERF: Early WHERE check — read only columns 0..whereColIdx, then check the
             // predicate before full deserialization. Skips ~4 column reads for 99 999/100 000
             // non-matching rows in a typical point-lookup benchmark SELECT.
-            if (earlyWhereColIdx >= 0 && earlyWhereValue != null)
+            if (earlyNumericOffset >= 0 && earlyNumericExpected is not null)
+            {
+                // v2 (WP9-C): fixed-width numeric predicate via direct offset reads.
+                if (!MatchesNumericDirect(recordData, earlyNumericOffset, earlyNumericType, earlyNumericExpected))
+                {
+                    filePosition += 4 + recordLength;
+                    continue;
+                }
+            }
+            else if (earlyWhereColIdx >= 0 && earlyWhereValue != null)
             {
                 bool earlyMismatch = false;
                 int checkOffset = 0;
