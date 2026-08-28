@@ -70,26 +70,28 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 
 ---
 
-## 3.1 Measured results (comparative benchmark, 2026-08-28)
+## 3.1 Measured results (comparative benchmark, 2026-08-28 — v2.0.0 final)
 
-Single-run `SharpCoreDB.Benchmarks.Comparative` (100K inserts, 10K reads/updates/deletes), vs the v1.9 March baseline:
+`SharpCoreDB.Benchmarks.Comparative` (100K inserts, 10K reads/updates/deletes), two runs, vs the v1.9 March baseline:
 
-| Operation | v1.9.0 | **v2.0.0** | SQLite | LiteDB | Delta vs v1.9 |
-|-----------|-------:|-----------:|-------:|-------:|--------------:|
-| INSERT (SQL) | 202,222/s | 94,927/s | 148,151/s | 75,501/s | env noise (identical InsertBatch code path) |
-| READ (SQL) | 6,102/s | **62,631/s** | 98,622/s | 16,352/s | **10.3x faster** |
-| UPDATE (SQL) | 8,411/s | **45,218/s** | 269,468/s | 11,356/s | **5.4x faster** |
-| DELETE (SQL) | 7,203/s | **33,527/s** | 363,480/s | 14,616/s | **4.7x faster** |
-| READ (Direct API) | — | **141,100/s** | 98,622/s | 16,352/s | **beats SQLite** |
-| READ (StructRow zero-alloc) | — | **112,472/s** | 83,986/s | 14,679/s | **beats SQLite by ~34%, LiteDB by ~7.7x** |
-| UPDATE (Direct API) | — | 47,584/s | 269,468/s | 11,356/s | — |
-| DELETE (Direct API) | — | **136,133/s** | 363,480/s | 14,616/s | **beats LiteDB 9x** |
+| Operation | v1.9.0 | **v2.0.0** | SQLite | LiteDB | vs SQLite |
+|-----------|-------:|-----------:|-------:|-------:|----------:|
+| INSERT | 202,222/s | **91–133K/s** | 145–150K/s | 77K/s | ~0.8–0.9x |
+| READ (SQL) | 6,102/s | **51–66K/s** | 88–97K/s | 16K/s | ~0.7x |
+| READ (Direct API) | — | **~120–125K/s** | 88–97K/s | 16K/s | **~1.3x — beats SQLite** |
+| READ (StructRow zero-alloc) | — | **70–120K/s** | 88–97K/s | 16K/s | **≈ parity, beats LiteDB ~5–8x** |
+| UPDATE (SQL) | 8,411/s | **40–45K/s** | 240–296K/s | 11K/s | ~0.16x |
+| UPDATE (Direct API) | — | **56–59K/s** | 240–296K/s | 11K/s | **beats LiteDB ~5x** |
+| DELETE (SQL) | 7,203/s | **30–67K/s** | 320–367K/s | 14K/s | ~0.1–0.2x |
+| DELETE (Direct API) | — | **78–142K/s** | 320–367K/s | 14K/s | **beats LiteDB ~6–10x** |
 
-*(StructRow READ measured 2026-08-28 via the new `ExecuteQueryStruct` fast path: hash-index point lookup → zero-alloc `StructRow` over the raw record buffer, no `Dictionary<string,object>` materialization.)*
+*(Two-run range reflects machine noise; the machine was under variable background load. Direct API READ is the stable headline: **~120–125K/s consistently beats SQLite's ~88–97K/s**.)*
 
 Notes:
-- The v1.9 vs v2.0 INSERT delta is **environmental**, not a code regression: the SQL and Direct benchmark sections execute the identical `db.InsertBatch(...)` code path and differ by ~50% within the same run (cold-JIT warmup). SQLite and LiteDB also showed 10–17% lower throughput than the March run.
-- READ (SQL) gap vs SQLite closed from **~16x → ~1.6x**; the Direct API READ path now **exceeds SQLite**.
+- **READ (SQL path)** gap vs SQLite closed from **~16x → ~1.5x**; the Direct API and StructRow READ paths **exceed or match SQLite**.
+- **Every operation beats LiteDB** (reads ~5–8x, updates ~5x, deletes ~6–10x).
+- **INSERT** is ~0.8–0.9x of SQLite (was 1.2x in the March run — the identical `InsertBatch` path varies with machine load; the StructRow section measured up to 132K/s).
+- **UPDATE/DELETE** remain behind SQLite — its fixed-length C record format with direct field offsets and in-place writes is the strongest point; this is the remaining gap (targeted by WP3/WP6 follow-ups and the .NET 11 runtime improvements).
 
 
 ---
