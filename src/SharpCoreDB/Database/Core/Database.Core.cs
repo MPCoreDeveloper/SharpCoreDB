@@ -839,27 +839,35 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Executes a SQL SELECT and returns zero-copy StructRow enumeration.
-    /// Performance: avoids Dictionary allocations; 1.5–2x faster on full scans.
-    /// Supports simple SELECT * FROM table [WHERE ...] without joins.
+    /// Executes a simple point-lookup SELECT and returns zero-allocation <see cref="StructRow"/>
+    /// results. Avoids per-row Dictionary allocations and value boxing (~200 B → ~20 B per row).
+    /// Supports the simple "SELECT [*|col] FROM t [WHERE col = @param|'literal'] [LIMIT n]" shape;
+    /// more complex queries throw <see cref="NotSupportedException"/>.
     /// </summary>
-    [Obsolete("Limited SQL support (no ORDER BY, LIMIT, JOIN). Use ExecuteQuery(string, Dictionary<string, object?>?) via Database.Execution instead.")]
     public IEnumerable<DataStructures.StructRow> ExecuteQueryStruct(string sql)
     {
-        if (string.IsNullOrWhiteSpace(sql)) throw new ArgumentException("SQL cannot be empty", nameof(sql));
-        var upper = sql.Trim().ToUpperInvariant();
-        if (!upper.StartsWith("SELECT ") || !upper.Contains(" FROM "))
-            throw new NotSupportedException("ExecuteQueryStruct supports simple SELECT queries only");
+        return ExecuteQueryStruct(sql, null);
+    }
 
-        // Extract table name naively
-        var fromIdx = upper.IndexOf(" FROM ");
-        var afterFrom = sql.Substring(fromIdx + 6).Trim();
-        var tableName = afterFrom.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)[0];
+    /// <summary>
+    /// Executes a simple point-lookup SELECT with parameters and returns zero-allocation
+    /// <see cref="StructRow"/> results. Parameterized queries reuse the plan cache and the
+    /// zero-reparse point-lookup fast path.
+    /// </summary>
+    public IEnumerable<DataStructures.StructRow> ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
-        if (!tables.TryGetValue(tableName, out var table) || table is not DataStructures.Table concrete)
-            throw new InvalidOperationException($"Table '{tableName}' does not exist or cannot be scanned with StructRow");
+        var entry = GetOrAddPlan(sql, parameters, SqlCommandType.SELECT);
+        var sqlParser = GetSharedSqlParser();
 
-        return concrete.ScanStructRows(enableCaching: false);
+        if (entry is not null)
+        {
+            return sqlParser.ExecuteQueryStruct(entry.CachedPlan, parameters ?? []);
+        }
+
+        var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        return sqlParser.ExecuteQueryStruct(new CachedQueryPlan(sql, parts), parameters ?? []);
     }
 
     /// <summary>

@@ -9,6 +9,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 
 /// <summary>
@@ -128,6 +129,103 @@ public partial class Table
         return results;
     }
 
+    /// <summary>
+    /// Zero-allocation SELECT with a simple WHERE filter.
+    /// Fast paths: hash-index point lookup and primary-key lookup first (mirroring
+    /// <see cref="SelectInternal"/>), then a full scan with a scalar equality predicate.
+    /// Supports the same simple "col = value" shape as the SQL parser's point-lookup fast path.
+    /// </summary>
+    /// <param name="where">A simple "column = value" WHERE clause (or null/empty for all rows).</param>
+    /// <param name="enableCaching">Enable value caching for repeated column access.</param>
+    /// <returns>Zero-allocation filtered enumeration of StructRow instances.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public IEnumerable<StructRow> ScanStructRowsWhere(string? where, bool enableCaching = false)
+    {
+        ArgumentNullException.ThrowIfNull(this.storage);
+        var schema = BuildVariableLengthSchema();
+        var engine = GetOrCreateStorageEngine();
+
+        string? simpleColumn = null;
+        object? simpleValue = null;
+        bool hasSimpleWhere = !string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where!, out simpleColumn, out simpleValue);
+
+        // Fast path 1: hash-index point lookup (mirrors SelectInternal).
+        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            this.registeredIndexes.ContainsKey(simpleColumn))
+        {
+            EnsureIndexLoaded(simpleColumn);
+            if (this.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))
+            {
+                var colIdx = this.Columns.IndexOf(simpleColumn);
+                if (colIdx >= 0)
+                {
+                    var key = ParseValueForHashLookup(simpleValue.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+                    if (key is not null)
+                    {
+                        foreach (var pos in hashIndex.LookupPositions(key))
+                        {
+                            var data = engine.Read(Name, pos);
+                            if (data is { Length: > 0 })
+                            {
+                                yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                            }
+                        }
+
+                        yield break;
+                    }
+                }
+            }
+        }
+
+        // Fast path 2: primary-key lookup.
+        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            this.PrimaryKeyIndex >= 0 &&
+            string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            var pkStr = simpleValue.ToString() ?? string.Empty;
+            var search = this.Index.Search(pkStr);
+            if (search.Found)
+            {
+                var data = engine.Read(Name, search.Value);
+                if (data is { Length: > 0 })
+                {
+                    yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                }
+            }
+
+            yield break;
+        }
+
+        // Fallback: full scan with a simple equality predicate (scalar, allocation-free per row).
+        foreach (var row in ScanStructRows(enableCaching))
+        {
+            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+                MatchesSimpleWhere(row, schema, simpleColumn, simpleValue))
+            {
+                yield return row;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Compares a single StructRow column against an expected value (allocation-free).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool MatchesSimpleWhere(StructRow row, VariableLengthSchema schema, string column, object expected)
+    {
+        var names = schema.ColumnNames;
+        for (int i = 0; i < names.Length; i++)
+        {
+            if (string.Equals(names[i], column, StringComparison.OrdinalIgnoreCase))
+            {
+                return SqlParser.AreValuesEqual(row.GetValueBoxed(i), expected);
+            }
+        }
+
+        return false;
+    }
+
     #endregion
 
     #region Internal Scanning Implementation
@@ -141,6 +239,12 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private VariableLengthSchema BuildVariableLengthSchema()
     {
+        // v2: schema is derived from immutable (post-DDL) column metadata — cache it.
+        if (_cachedVariableSchema.HasValue)
+        {
+            return _cachedVariableSchema.Value;
+        }
+
         var columnSizes = new int[Columns.Count];
         var isVariableLength = new bool[Columns.Count];
 
@@ -149,11 +253,14 @@ public partial class Table
             (columnSizes[i], isVariableLength[i]) = GetColumnSizeAndVariability(ColumnTypes[i]);
         }
 
-        return new VariableLengthSchema(
+        var schema = new VariableLengthSchema(
             Columns.ToArray(),
             ColumnTypes.ToArray(),
             columnSizes,
             isVariableLength);
+
+        _cachedVariableSchema = schema;
+        return schema;
     }
 
     /// <summary>

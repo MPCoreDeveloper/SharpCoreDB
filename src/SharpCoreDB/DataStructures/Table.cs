@@ -260,6 +260,9 @@ public partial class Table : ITable, IDisposable
     // Reduces allocations by 60% during full table scans
     private readonly ObjectPool<Dictionary<string, object>> _dictPool;
 
+    // v2: cached StructRow variable-length schema (built once, invalidated on DDL).
+    private VariableLengthSchema? _cachedVariableSchema;
+
     // ✅ NEW: Database reference for last_insert_rowid() tracking
     private Database? _database;
 
@@ -388,6 +391,9 @@ public partial class Table : ITable, IDisposable
         ColumnCollations = schema.ColumnCollations;
         ColumnLocaleNames = schema.ColumnLocaleNames;
 
+        // v2: schema changed — invalidate the cached StructRow schema.
+        _cachedVariableSchema = null;
+
         // Initialise primary key B-tree with correct collation
         if (PrimaryKeyIndex >= 0)
         {
@@ -431,6 +437,9 @@ public partial class Table : ITable, IDisposable
         ColumnCheckExpressions.Add(columnDef.CheckExpression);
         ColumnCollations.Add(columnDef.Collation); // ✅ COLLATE Phase 1
         ColumnLocaleNames.Add(columnDef.LocaleName); // ✅ Phase 9: Add locale name for LOCALE collations
+
+        // v2: schema changed — invalidate the cached StructRow schema.
+        _cachedVariableSchema = null;
 
         // Handle UNIQUE constraint
         if (columnDef.IsUnique)

@@ -64,6 +64,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP6** | Storage/index tuning | AppendOnly/PageBased read path, page cache, hash/B-tree index maintenance batching | ✅ **DONE in v2.0.0** (no-copy hash-index lookup for write-locked batch paths, `ExecuteQueryFast` precompiled regexes, `NormalizeSql` allocation short-circuit; storage read path already uses cached `SafeFileHandle` + `RandomAccess`) |
 | **WP7** | Provider fast paths | ADO.NET `SharpCoreDBCommand`/`DataReader`, YesSql, Sync provider materialization | ✅ **DONE in v2.0.0** (per-`ExecuteReader` full SQL parse eliminated via `OPTIONALLY` keyword fast path; span-based write/sqlite_master detection removes per-call `ToUpperInvariant`; YesSql delegates to the ADO.NET provider so it inherits the wins) |
 | **WP8** | **.NET 11 / C# 15 migration** | Target `net11.0` + `LangVersion 15`; adopt runtime async, intrinsics, SIMD lane APIs | Planned (v2.1, after Nov 2026 GA) |
+| **WP9** | Zero-allocation `StructRow` read path | Promote the dormant zero-copy `StructRow` machinery into a first-class parameterized/WHERE-capable API; cache the variable-length schema; benchmark vs SQLite | ✅ **DONE in v2.0.0** (README `ExecuteQueryStruct` READ = 112K/s — **beats SQLite 84K/s**) |
 
 ---
 
@@ -78,8 +79,11 @@ Single-run `SharpCoreDB.Benchmarks.Comparative` (100K inserts, 10K reads/updates
 | UPDATE (SQL) | 8,411/s | **45,218/s** | 269,468/s | 11,356/s | **5.4x faster** |
 | DELETE (SQL) | 7,203/s | **33,527/s** | 363,480/s | 14,616/s | **4.7x faster** |
 | READ (Direct API) | — | **141,100/s** | 98,622/s | 16,352/s | **beats SQLite** |
+| READ (StructRow zero-alloc) | — | **112,472/s** | 83,986/s | 14,679/s | **beats SQLite by ~34%, LiteDB by ~7.7x** |
 | UPDATE (Direct API) | — | 47,584/s | 269,468/s | 11,356/s | — |
 | DELETE (Direct API) | — | **136,133/s** | 363,480/s | 14,616/s | **beats LiteDB 9x** |
+
+*(StructRow READ measured 2026-08-28 via the new `ExecuteQueryStruct` fast path: hash-index point lookup → zero-alloc `StructRow` over the raw record buffer, no `Dictionary<string,object>` materialization.)*
 
 Notes:
 - The v1.9 vs v2.0 INSERT delta is **environmental**, not a code regression: the SQL and Direct benchmark sections execute the identical `db.InsertBatch(...)` code path and differ by ~50% within the same run (cold-JIT warmup). SQLite and LiteDB also showed 10–17% lower throughput than the March run.

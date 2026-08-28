@@ -290,26 +290,8 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             return false;
 
         string whereStr;
-        if (simple.WhereParameter is not null)
-        {
-            if (parameters is null || parameters.Count == 0)
-                return false;
-
-            if (!TryResolveParameterValue(parameters, simple.WhereParameter, out var value) ||
-                value is null || value == DBNull.Value)
-            {
-                return false;
-            }
-
-            whereStr = simple.WhereColumn + " = " + ParameterBinder.FormatParameter(value);
-        }
-        else
-        {
-            if (simple.WhereLiteral is null)
-                return false;
-
-            whereStr = simple.WhereColumn + " = " + simple.WhereLiteral;
-        }
+        if (!TryBuildSimpleWhereStr(simple, parameters, out whereStr))
+            return false;
 
         var rows = table.Select(whereStr, simple.OrderByColumn, simple.OrderByAscending, noEncrypt: false);
 
@@ -347,6 +329,118 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
 
         value = null;
         return false;
+    }
+
+    /// <summary>
+    /// Builds the "column = value" WHERE string for a simple point-lookup plan, using the
+    /// exact same parameter formatting as the legacy binder so the parser sees identical text.
+    /// </summary>
+    private bool TryBuildSimpleWhereStr(
+        SimpleSelectPlan simple,
+        Dictionary<string, object?>? parameters,
+        out string whereStr)
+    {
+        whereStr = string.Empty;
+
+        // The Dictionary-based fast path is a point lookup — a full scan without WHERE
+        // must fall back to the legacy parser.
+        if (simple.WhereColumn is null)
+            return false;
+
+        if (simple.WhereParameter is not null)
+        {
+            if (parameters is null || parameters.Count == 0)
+                return false;
+
+            if (!TryResolveParameterValue(parameters, simple.WhereParameter, out var value) ||
+                value is null || value == DBNull.Value)
+            {
+                return false;
+            }
+
+            whereStr = simple.WhereColumn + " = " + ParameterBinder.FormatParameter(value);
+            return true;
+        }
+
+        if (simple.WhereLiteral is null)
+            return false;
+
+        whereStr = simple.WhereColumn + " = " + simple.WhereLiteral;
+        return true;
+    }
+
+    /// <summary>
+    /// Executes a simple point-lookup SELECT and returns zero-allocation <see cref="StructRow"/>
+    /// results. Only the simple "SELECT [*|col] FROM t WHERE col = @param|'literal'" shape is
+    /// supported; any other query shape throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    public IEnumerable<DataStructures.StructRow> ExecuteQueryStruct(
+        CachedQueryPlan plan,
+        Dictionary<string, object?>? parameters = null)
+    {
+        if (plan.SimpleSelect is null)
+        {
+            var simple = SimpleSelectPlan.TryCreate(plan.Parts);
+            if (simple is not null)
+                plan.SimpleSelect = simple;
+        }
+
+        if (plan.SimpleSelect is not null)
+        {
+            return ExecuteSimpleSelectStruct(plan.SimpleSelect, parameters);
+        }
+
+        throw new NotSupportedException(
+            "ExecuteQueryStruct supports simple point-lookup SELECTs only. Use ExecuteQuery for full SQL support.");
+    }
+
+    /// <summary>
+    /// Zero-allocation execution of a pre-parsed simple point-lookup plan.
+    /// </summary>
+    private IEnumerable<DataStructures.StructRow> ExecuteSimpleSelectStruct(
+        SimpleSelectPlan simple,
+        Dictionary<string, object?>? parameters)
+    {
+        if (!this.tables.TryGetValue(simple.TableName, out var table) || table is not Table concrete)
+        {
+            yield break;
+        }
+
+        // Full scan (no WHERE) is supported by the zero-alloc StructRow path.
+        string? whereStr;
+        if (simple.WhereColumn is null)
+        {
+            whereStr = null;
+        }
+        else if (!TryBuildSimpleWhereStr(simple, parameters, out var built))
+        {
+            yield break;
+        }
+        else
+        {
+            whereStr = built;
+        }
+
+        int index = 0;
+        int skipped = simple.Offset ?? 0;
+        int? limit = simple.Limit;
+
+        foreach (var row in concrete.ScanStructRowsWhere(whereStr))
+        {
+            if (index < skipped)
+            {
+                index++;
+                continue;
+            }
+
+            if (limit.HasValue && index - skipped >= limit.Value)
+            {
+                yield break;
+            }
+
+            index++;
+            yield return row;
+        }
     }
 
     /// <summary>

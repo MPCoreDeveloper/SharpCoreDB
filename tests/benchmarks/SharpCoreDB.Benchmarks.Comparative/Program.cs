@@ -53,6 +53,11 @@ class Program
         results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi();
         Console.WriteLine();
 
+        // ── SharpCoreDB StructRow (zero-alloc read path) ──
+        Console.WriteLine("━━━ SharpCoreDB (StructRow) ━━━");
+        results["SharpCoreDB (StructRow)"] = RunSharpCoreDBStruct();
+        Console.WriteLine();
+
         // ── SQLite ──
         Console.WriteLine("━━━ SQLite ━━━");
         results["SQLite"] = RunSQLite();
@@ -355,6 +360,134 @@ class Program
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(dbPath))
+                {
+                    Directory.Delete(dbPath, true);
+                }
+            }
+            catch
+            {
+                // Temp benchmark cleanup best-effort
+            }
+        }
+
+        return result;
+    }
+
+    // ══════════════════════════════════════
+    // SharpCoreDB StructRow (zero-alloc read path)
+    // ══════════════════════════════════════
+    static BenchmarkResult RunSharpCoreDBStruct()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var sp = services.BuildServiceProvider();
+
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = new DatabaseConfig
+            {
+                NoEncryptMode = true,
+                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
+                UseGroupCommitWal = false,
+                EnableAdaptiveWalBatching = false,
+                HighSpeedInsertMode = true,
+                GroupCommitSize = 1000,
+                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+                EnablePageCache = true,
+                PageCacheCapacity = 10_000,
+                UseMemoryMapping = true,
+                UseBufferedIO = true,
+                EnableHashIndexes = true,
+                EnableQueryCache = true,
+                QueryCacheSize = 4096,
+                EnableCompiledPlanCache = true,
+                EnableBTreeSelection = true,
+                EnableSimdAndProjectionPushdown = true,
+                WalBufferSize = 8 * 1024 * 1024,
+                BufferPoolSize = 128 * 1024 * 1024,
+                CollectGCAfterBatches = false,
+                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                StrictParameterValidation = false
+            };
+
+            using var db = (SharpCoreDB.Database)factory.Create(
+                dbPath: dbPath,
+                masterPassword: "bench123",
+                isReadOnly: false,
+                config: config);
+
+            db.ExecuteSQL(@"CREATE TABLE docs (
+                name TEXT NOT NULL,
+                email TEXT,
+                age INTEGER,
+                score REAL,
+                data TEXT
+            )");
+
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+            // INSERT (same batched API as the other SharpCoreDB rows)
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                var rows = new List<Dictionary<string, object>>(end - batch);
+                for (int i = batch; i < end; i++)
+                {
+                    rows.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = $"User{i}",
+                        ["email"] = $"user{i}@test.com",
+                        ["age"] = 20 + i % 60,
+                        ["score"] = i * 0.1,
+                        ["data"] = $"payload-{i}"
+                    });
+                }
+                db.InsertBatch("docs", rows);
+            }
+            db.Flush();
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ (zero-alloc StructRow point lookups via the plan-cache fast path)
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                var parameters = new Dictionary<string, object?> { ["@name"] = $"User{i}" };
+                int matched = 0;
+                foreach (var row in db.ExecuteQueryStruct("SELECT * FROM docs WHERE name = @name", parameters))
+                {
+                    matched++;
+                }
+
+                if (matched == 0)
+                {
+                    throw new InvalidOperationException($"StructRow read returned no rows for User{i}.");
+                }
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE/DELETE intentionally omitted — they use identical code paths to the
+            // Direct API row; this row focuses on the zero-allocation READ path.
+            result.UpdateTime = 0d;
+            result.UpdateOpsPerSec = 0;
+            result.DeleteTime = 0d;
+            result.DeleteOpsPerSec = 0;
         }
         finally
         {

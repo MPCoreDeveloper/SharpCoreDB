@@ -20,8 +20,8 @@ internal sealed class SimpleSelectPlan
     /// <summary>Gets the main table name.</summary>
     public required string TableName { get; init; }
 
-    /// <summary>Gets the WHERE column name (equality predicate).</summary>
-    public required string WhereColumn { get; init; }
+    /// <summary>Gets the WHERE column name (equality predicate), or null for a full scan.</summary>
+    public required string? WhereColumn { get; init; }
 
     /// <summary>Gets the WHERE parameter token (e.g. "@name"), or null when a literal is used.</summary>
     public string? WhereParameter { get; init; }
@@ -205,9 +205,21 @@ internal sealed class SimpleSelectPlan
             }
         }
 
-        // A point lookup requires a WHERE predicate.
+        // A point lookup requires a WHERE predicate; without one this is a full scan
+        // (supported by the StructRow path, which scans all rows).
         if (whereColumn is null)
-            return null;
+        {
+            return new SimpleSelectPlan
+            {
+                TableName = tableName,
+                WhereColumn = null,
+                IsSelectAll = isSelectAll,
+                OrderByColumn = orderByColumn,
+                OrderByAscending = orderAscending,
+                Limit = limit,
+                Offset = offset
+            };
+        }
 
         return new SimpleSelectPlan
         {
