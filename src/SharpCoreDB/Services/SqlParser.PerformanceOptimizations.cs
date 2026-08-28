@@ -425,7 +425,8 @@ public static partial class SqlParserPerformanceOptimizations
             return System.Text.RegularExpressions.Regex.IsMatch(
                 value.ToString() ?? string.Empty,
                 pattern,
-                RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase,
+                TimeSpan.FromSeconds(1));
         }
         catch { return false; }
     }
