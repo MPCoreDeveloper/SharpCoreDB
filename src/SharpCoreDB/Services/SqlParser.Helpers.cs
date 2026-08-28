@@ -581,8 +581,8 @@ public partial class SqlParser
             "NOT LIKE" => rowValueStr is not null && value is not null && !LikeMatch(rowValueStr, value),
             "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
             "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
-            "IN" => EvaluateInList(rowValueStr, value),
-            "NOT IN" => !EvaluateInList(rowValueStr, value),
+            "IN" => SqlInPredicate.ValueInList(rowValueStr, value),
+            "NOT IN" => !SqlInPredicate.ValueInList(rowValueStr, value),
             _ => throw new InvalidOperationException($"Unsupported operator {op}"),
         };
     }
@@ -639,26 +639,6 @@ public partial class SqlParser
         var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
             .Replace("%", ".*").Replace("_", ".") + "$";
         return Regex.IsMatch(input, regex, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-    }
-
-    /// <summary>
-    /// Evaluates an IN value list: "('a', 'b')" or "(1,2,3)".
-    /// Strips surrounding parentheses (if present), splits on commas and trims quotes.
-    /// </summary>
-    private static bool EvaluateInList(string? rowValue, string? listValue)
-    {
-        if (listValue is null)
-        {
-            return false;
-        }
-
-        var trimmed = listValue.Trim();
-        if (trimmed.StartsWith('(') && trimmed.EndsWith(')'))
-        {
-            trimmed = trimmed[1..^1];
-        }
-
-        return trimmed.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValue);
     }
 
     /// <summary>

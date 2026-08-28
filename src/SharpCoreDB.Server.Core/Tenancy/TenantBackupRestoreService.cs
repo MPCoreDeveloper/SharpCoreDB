@@ -314,9 +314,21 @@ public sealed class TenantBackupRestoreService(
 
     private static string BuildBackupPath(string backupDirectory, string tenantId, string databaseName)
     {
-        return Path.Combine(
-            backupDirectory,
-            $"tenant-{tenantId}-{databaseName}-{DateTime.UtcNow:yyyyMMddHHmmss}.backup");
+        // tenantId/databaseName were validated by EnsureSafePathSegment (single path segment, no
+        // separators or '..'); Path.GetFileName is applied again as belt-and-braces so no traversal
+        // can survive into the backup file name.
+        var fileName = $"tenant-{Path.GetFileName(tenantId)}-{Path.GetFileName(databaseName)}-{DateTime.UtcNow:yyyyMMddHHmmss}.backup";
+        var fullPath = Path.GetFullPath(Path.Combine(backupDirectory, fileName));
+
+        // Defense in depth: the resolved path must stay inside the configured backup directory.
+        if (!IsPathWithinRoot(backupDirectory, fullPath))
+        {
+            throw new ArgumentException(
+                "The backup path escapes the configured backup directory.",
+                nameof(backupDirectory));
+        }
+
+        return fullPath;
     }
 
     /// <summary>
@@ -348,6 +360,15 @@ public sealed class TenantBackupRestoreService(
         return Path.GetFullPath(path);
     }
 
+    /// <summary>
+    /// Returns true when <paramref name="candidatePath"/> resolves inside <paramref name="rootPath"/>.
+    /// </summary>
+    private static bool IsPathWithinRoot(string rootPath, string candidatePath)
+    {
+        var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return candidatePath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task ReplacePathAsync(string sourcePath, string targetPath, CancellationToken cancellationToken)
     {
         if (PathExists(targetPath))
@@ -362,6 +383,10 @@ public sealed class TenantBackupRestoreService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+
+        // Normalize to absolute, well-formed paths before any filesystem operation.
+        sourcePath = Path.GetFullPath(sourcePath);
+        targetPath = Path.GetFullPath(targetPath);
 
         if (Directory.Exists(sourcePath))
         {
@@ -398,6 +423,8 @@ public sealed class TenantBackupRestoreService(
 
     private static long GetPathSizeBytes(string path)
     {
+        path = Path.GetFullPath(path);
+
         if (File.Exists(path))
         {
             return new FileInfo(path).Length;
@@ -416,6 +443,8 @@ public sealed class TenantBackupRestoreService(
 
     private static void DeletePath(string path)
     {
+        path = Path.GetFullPath(path);
+
         if (File.Exists(path))
         {
             File.Delete(path);
@@ -432,6 +461,10 @@ public sealed class TenantBackupRestoreService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+
+        // Normalize to absolute, well-formed paths before any filesystem operation.
+        sourcePath = Path.GetFullPath(sourcePath);
+        targetPath = Path.GetFullPath(targetPath);
 
         await using var source = new FileStream(
             sourcePath,

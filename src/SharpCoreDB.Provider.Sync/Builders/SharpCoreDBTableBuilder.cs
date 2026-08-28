@@ -75,7 +75,11 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
         var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{tableName}'";
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name";
+        var nameParam = command.CreateParameter();
+        nameParam.ParameterName = "@name";
+        nameParam.Value = tableName;
+        command.Parameters.Add(nameParam);
         return Task.FromResult(command);
     }
 
@@ -95,7 +99,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
         var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"DROP TABLE IF EXISTS [{tableName}]";
+        command.CommandText = $"DROP TABLE IF EXISTS [{tableName}]"; // NOSONAR:S2077 - {tableName} whitelisted via SqlIdentifier.EnsureSafe
         return Task.FromResult(command);
     }
 
@@ -105,7 +109,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
         var tableName = SqlIdentifier.EnsureSafe(_tableDescription.TableName, nameof(_tableDescription.TableName));
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"PRAGMA table_info([{tableName}])";
+        command.CommandText = $"PRAGMA table_info([{tableName}])"; // NOSONAR:S2077 - {tableName} whitelisted via SqlIdentifier.EnsureSafe
         return Task.FromResult(command);
     }
 
@@ -167,7 +171,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $@"
+        command.CommandText = $@" // NOSONAR:S2077 - identifiers whitelisted via SqlIdentifier.EnsureSafe
             CREATE TABLE IF NOT EXISTS {trackingTableName} (
                 {pkColumn} {pkType} PRIMARY KEY NOT NULL,
                 update_scope_id TEXT,
@@ -185,7 +189,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
         var trackingTableName = $"{tableName}_tracking";
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"DROP TABLE IF EXISTS [{trackingTableName}]";
+        command.CommandText = $"DROP TABLE IF EXISTS [{trackingTableName}]"; // NOSONAR:S2077 - {trackingTableName} whitelisted via SqlIdentifier.EnsureSafe
         return Task.FromResult(command);
     }
 
@@ -196,7 +200,11 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
         var trackingTableName = $"{tableName}_tracking";
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{trackingTableName}'";
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name";
+        var nameParam = command.CreateParameter();
+        nameParam.ParameterName = "@name";
+        nameParam.Value = trackingTableName;
+        command.Parameters.Add(nameParam);
         return Task.FromResult(command);
     }
 
@@ -214,7 +222,11 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='{triggerName}'";
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name=@name";
+        var nameParam = command.CreateParameter();
+        nameParam.ParameterName = "@name";
+        nameParam.Value = triggerName;
+        command.Parameters.Add(nameParam);
         return Task.FromResult(command);
     }
 
@@ -277,7 +289,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"DROP TRIGGER IF EXISTS [{triggerName}]";
+        command.CommandText = $"DROP TRIGGER IF EXISTS [{triggerName}]"; // NOSONAR:S2077 - {triggerName} whitelisted via SqlIdentifier.EnsureSafe
         return Task.FromResult(command);
     }
 

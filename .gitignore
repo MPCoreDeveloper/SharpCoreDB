@@ -421,3 +421,7 @@ packages/
 dist/
 *.tsbuildinfo
 .pytest_cache/
+
+# SonarScanner local analysis artifacts
+.sonarqube/
+.scannerwork/
