@@ -102,9 +102,9 @@ public sealed class GraphRagSqlProvider(
         const int dims = 16;
         var vector = new float[dims];
         var seed = question.GetHashCode(StringComparison.Ordinal);
-        // NOSONAR:S2245 - Random is seeded deterministically from the question text
-        // to produce a stable fallback embedding; no security value involved.
-        var random = new Random(seed);
+        // Random is seeded deterministically from the question text to produce a
+        // stable fallback embedding; no security value involved.
+        var random = new Random(seed); // NOSONAR:S2245
 
         for (int i = 0; i < dims; i++)
         {

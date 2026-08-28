@@ -177,8 +177,8 @@ public static class VectorSearchIntegration
         ArgumentNullException.ThrowIfNull(nodeIds);
         if (dimensions <= 0) throw new ArgumentOutOfRangeException(nameof(dimensions));
 
-        // NOSONAR:S2245 - Random is used to generate deterministic mock/test data, not secrets.
-        var random = new Random(seed);
+        // Random is used to generate deterministic mock/test data, not secrets.
+        var random = new Random(seed); // NOSONAR:S2245
         var embeddings = new List<NodeEmbedding>();
 
         foreach (var nodeId in nodeIds)

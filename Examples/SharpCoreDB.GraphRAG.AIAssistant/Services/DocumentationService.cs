@@ -104,7 +104,6 @@ public sealed class DocumentationService(IDatabase database, ILogger<Documentati
         CancellationToken ct)
     {
         // Generate embedding for query (simplified - using mock embeddings)
-        var queryEmbedding = GenerateEmbedding(query);
 
         // In production, this would use SharpCoreDB.VectorSearch for efficient similarity search
         // For demo purposes, we'll simulate with direct SQL queries (mock scores based on ID)
@@ -298,9 +297,9 @@ public sealed class DocumentationService(IDatabase database, ILogger<Documentati
         // Mock: simple hash-based embedding for demo
         // Production: Call embedding API or local model
         var hash = text.GetHashCode();
-        // NOSONAR:S2245 - Random is seeded from the text hash to build a stable mock
-        // embedding; this is demo data, not security-sensitive randomness.
-        var random = new Random(hash);
+        // Random is seeded from the text hash to build a stable mock embedding;
+        // this is demo data, not security-sensitive randomness.
+        var random = new Random(hash); // NOSONAR:S2245
         var embedding = new float[384]; // Common embedding dimension
 
         for (int i = 0; i < embedding.Length; i++)

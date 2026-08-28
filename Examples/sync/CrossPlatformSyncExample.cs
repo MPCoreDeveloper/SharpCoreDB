@@ -114,12 +114,6 @@ public static class CrossPlatformSyncExample
     /// </summary>
     public static async Task EnterpriseSyncExampleAsync()
     {
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
-
         var sharpcoredbProvider = new SharpCoreDBSyncProvider("Data Source=enterprise.db");
         var sqlServerProvider = new SqlSyncProvider("Server=prod-sql;Database=enterprise;Trusted_Connection=True;");
 

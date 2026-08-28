@@ -46,13 +46,6 @@ public static class SyncExample
             ConflictResolutionPolicy = ConflictResolutionPolicy.ServerWins
         };
 
-        // Add logger for monitoring
-        var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
-
         agent.LocalOrchestrator.OnSyncProgress += (args) =>
         {
             Console.WriteLine($"Sync Progress: {args.ProgressPercentage}% - {args.Message}");

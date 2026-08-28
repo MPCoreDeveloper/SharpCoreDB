@@ -10,7 +10,6 @@ Directory.CreateDirectory(sitePath);
 
 // Connection string for SharpCoreDB single-file storage
 var defaultConnection = $"Data Source={Path.Combine(sitePath, "DemoSharpCoreDB.scdb")};Password=orchardcore";
-var connectionString = builder.Configuration.GetConnectionString("OrchardCore") ?? defaultConnection;
 
 // Register SharpCoreDB provider factory BEFORE OrchardCore
 // This makes SharpCoreDB available as a database provider

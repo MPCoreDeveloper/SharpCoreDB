@@ -65,7 +65,7 @@ public static class DapperUsageExamples
         }
 
         // Single result
-        var firstUser = await database.QueryFirstOrDefaultAsync<User>(
+        await database.QueryFirstOrDefaultAsync<User>(
             "SELECT * FROM Users WHERE Id = @Id",
             new { Id = 1 });
     }
@@ -324,7 +324,7 @@ public static class DapperUsageExamples
     /// </summary>
     public static void TimeoutWarningExample(IDatabase database)
     {
-        var results = database.QueryWithTimeout<User>(
+        database.QueryWithTimeout<User>(
             "SELECT * FROM Users",
             timeout: TimeSpan.FromSeconds(1),
             onTimeout: elapsed =>
@@ -379,7 +379,7 @@ public static class DapperUsageExamples
         using var connection = database.GetDapperConnection();
         connection.Open();
 
-        var users = connection.Query<User>(
+        connection.Query<User>(
             "SELECT user_id, user_name, user_email FROM Users");
     }
 
