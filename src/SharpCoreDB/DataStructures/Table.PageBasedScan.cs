@@ -51,8 +51,7 @@ public partial class Table
             
             // Iterate all records using the engine
             int recordCount = 0;
-            // NOSONAR:S1481 - counter is used in #if DEBUG diagnostics only.
-            int deserializeFailureCount = 0;
+            int deserializeFailureCount = 0; // NOSONAR:S1481 - counter is used in #if DEBUG diagnostics only.
             foreach (var (_, data) in engine.GetAllRecords(Name))
             {
                 recordCount++;

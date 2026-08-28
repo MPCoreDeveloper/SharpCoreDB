@@ -93,8 +93,7 @@ public partial class Database
                     }
                 }
             }
-            // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
-            catch (Exception ex)
+            catch (Exception ex) // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
             {
                 // Compilation failed - fallback to normal execution
                 #if DEBUG

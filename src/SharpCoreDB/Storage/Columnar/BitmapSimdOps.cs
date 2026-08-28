@@ -53,8 +53,6 @@ public static class BitmapSimdOps
 
                     for (; i < limit; i += 32)
                     {
-                        var vec = Avx.LoadVector256(ptr + i);
-
                         // Manual popcount for each byte using built-in BitOperations
                         // (uses POPCNT instruction if available on CPU)
                         for (int j = 0; j < 32; j++)

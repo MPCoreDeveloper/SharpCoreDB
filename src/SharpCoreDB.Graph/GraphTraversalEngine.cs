@@ -296,9 +296,8 @@ public sealed partial class GraphTraversalEngine(GraphSearchOptions options)
             Enqueue(startNodeId, 0);
             visited.Add(startNodeId);
 
-            // NOSONAR:S2583 - local function 'Enqueue' mutates captured 'count'; loop is reachable (SonarC# false positive).
-
-            while (count > 0)
+            // local function 'Enqueue' mutates captured 'count'; loop is reachable (SonarC# false positive).
+            while (count > 0) // NOSONAR:S2583
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -407,9 +406,8 @@ public sealed partial class GraphTraversalEngine(GraphSearchOptions options)
         {
             Push(startNodeId, 0);
 
-            // NOSONAR:S2583 - local function 'Push' mutates captured 'count'; loop is reachable (SonarC# false positive).
-
-            while (count > 0)
+            // local function 'Push' mutates captured 'count'; loop is reachable (SonarC# false positive).
+            while (count > 0) // NOSONAR:S2583
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -518,9 +516,8 @@ public sealed partial class GraphTraversalEngine(GraphSearchOptions options)
             Enqueue(startNodeId, 0);
             visited.Add(startNodeId);
 
-            // NOSONAR:S2583 - local function 'Enqueue' mutates captured 'count'; loop is reachable (SonarC# false positive).
-
-            while (count > 0)
+            // local function 'Enqueue' mutates captured 'count'; loop is reachable (SonarC# false positive).
+            while (count > 0) // NOSONAR:S2583
             {
                 cancellationToken.ThrowIfCancellationRequested();
 

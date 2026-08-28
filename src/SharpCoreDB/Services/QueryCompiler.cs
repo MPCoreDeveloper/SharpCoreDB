@@ -144,8 +144,7 @@ public static class QueryCompiler
                 columnIndices,  // ✅ PHASE 2.4: Pass column indices
                 useDirectColumnAccess: columnIndices.Count > 0);  // ✅ Enable if indices available
         }
-            // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
-        catch (Exception ex)
+        catch (Exception ex) // NOSONAR:S1481 - exception variable is used in #if DEBUG logging
         {
             // ✅ LOG: Compilation failure for debugging (Debug builds only)
             #if DEBUG
@@ -426,8 +425,7 @@ public static class QueryCompiler
     /// </summary>
     private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
     {
-        var compareMethod = typeof(QueryCompiler).GetMethod(nameof(CompareValuesRuntime),
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var compareMethod = new Func<object?, object?, string, bool>(CompareValuesRuntime).Method;
 
         if (left.Type != typeof(object))
             left = Expression.Convert(left, typeof(object));
@@ -658,9 +656,9 @@ public static class QueryCompiler
 
         AddColumn(orderByColumn);
 
-        // NOSONAR:S2583 - local function 'AddColumn' mutates the captured 'columns' list;
+        // local function 'AddColumn' mutates the captured 'columns' list;
         // SonarC# cannot track the side effect and wrongly reports the loop as unreachable.
-        for (int i = 0; i < columns.Count; i++)
+        for (int i = 0; i < columns.Count; i++) // NOSONAR:S2583
         {
             indices[columns[i]] = i;
         }
