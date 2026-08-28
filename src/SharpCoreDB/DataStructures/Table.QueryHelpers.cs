@@ -219,7 +219,9 @@ public partial class Table
     /// </summary>
     internal List<Dictionary<string, object>> DeduplicateByPrimaryKey(List<Dictionary<string, object>> results)
     {
-        if (this.PrimaryKeyIndex < 0 || results.Count == 0)
+        // v2: 0-1 rows can never contain duplicates — return as-is to avoid HashSet/List allocations
+        // on every point lookup (the common read path).
+        if (this.PrimaryKeyIndex < 0 || results.Count <= 1)
             return results;
 
         var pkCol = this.Columns[this.PrimaryKeyIndex];

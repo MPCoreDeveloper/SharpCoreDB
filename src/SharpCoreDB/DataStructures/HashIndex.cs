@@ -77,6 +77,16 @@ public class HashIndex : IDisposable
         if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
+        Add(key, position);
+    }
+
+    /// <summary>
+    /// Adds a key to the index at the specified position (key-based, avoids a row dictionary allocation).
+    /// </summary>
+    /// <param name="key">The indexed key value (must be non-null).</param>
+    /// <param name="position">The file position of the row.</param>
+    internal void Add(object key, long position)
+    {
         // ✅ COLLATE Phase 4: Normalize string keys based on collation
         var normalizedKey = NormalizeKey(key);
 
@@ -177,6 +187,16 @@ public class HashIndex : IDisposable
         if (!row.TryGetValue(_columnName, out var key) || key is null)
             return;
 
+        Remove(key, position);
+    }
+
+    /// <summary>
+    /// Removes a specific position for a key from the index (key-based, avoids a row dictionary allocation).
+    /// </summary>
+    /// <param name="key">The indexed key value (must be non-null).</param>
+    /// <param name="position">The position to remove.</param>
+    internal void Remove(object key, long position)
+    {
         // ✅ COLLATE Phase 4: Normalize string keys based on collation
         var normalizedKey = NormalizeKey(key);
 

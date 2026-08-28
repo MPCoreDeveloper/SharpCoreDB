@@ -119,7 +119,7 @@ public partial class Database
         var parts = stmt.Plan.Parts;
         if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(stmt.Plan, parameters, null);
             return;
         }
@@ -127,7 +127,7 @@ public partial class Database
         // ✅ UNIFIED: All DML goes through unified storage engine
         lock (_walLock)
         {
-            var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+            var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(stmt.Plan, parameters, null);
             
             if (!isReadOnly)
@@ -151,7 +151,7 @@ public partial class Database
         {
             await Task.Run(() =>
             {
-                var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
+                var sqlParser = GetSharedSqlParser();
                 sqlParser.Execute(stmt.Plan, parameters, null);
             }, cancellationToken).ConfigureAwait(false);
             return;

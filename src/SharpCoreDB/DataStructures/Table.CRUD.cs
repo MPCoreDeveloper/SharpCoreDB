@@ -1384,7 +1384,22 @@ public partial class Table
 
                 foreach (var row in rows)
                 {
-                    var oldRow = new Dictionary<string, object>(row);
+                    // v2: capture the old PK and indexed-column values BEFORE applying updates,
+                    // avoiding a full row dictionary copy per row (WP3 allocation reduction).
+                    object? oldPkValue = this.PrimaryKeyIndex >= 0
+                        ? row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pk) ? pk : null
+                        : null;
+
+                    Dictionary<string, object?>? oldHashValues = null;
+                    if (this.hashIndexes.Count > 0)
+                    {
+                        oldHashValues = new Dictionary<string, object?>(this.hashIndexes.Count, StringComparer.OrdinalIgnoreCase);
+                        foreach (var hashIndex in this.hashIndexes)
+                        {
+                            if (row.TryGetValue(hashIndex.Key, out var oldVal) && oldVal is not null)
+                                oldHashValues[hashIndex.Key] = oldVal;
+                        }
+                    }
 
                     foreach (var update in updates)
                         row[update.Key] = update.Value;
@@ -1447,7 +1462,7 @@ public partial class Table
                             long oldPosition = -1;
                             if (this.PrimaryKeyIndex >= 0)
                             {
-                                var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                var pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
                                     oldPosition = searchResult.Value;
@@ -1462,11 +1477,18 @@ public partial class Table
                                 this.Index.Insert(pkVal, newPosition);
                             }
 
-                            foreach (var hashIndex in this.hashIndexes.Values)
+                            foreach (var hashIndex in this.hashIndexes)
                             {
-                                if (oldPosition >= 0)
-                                    hashIndex.Remove(oldRow, oldPosition);
-                                hashIndex.Add(row, newPosition);
+                                if (oldPosition >= 0 &&
+                                    oldHashValues is not null &&
+                                    oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                    oldKey is not null)
+                                {
+                                    hashIndex.Value.Remove(oldKey, oldPosition);
+                                }
+
+                                if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                    hashIndex.Value.Add(newKey, newPosition);
                             }
 
                             updatedInBatch++;
@@ -1475,17 +1497,24 @@ public partial class Table
                         {
                             if (this.PrimaryKeyIndex >= 0)
                             {
-                                var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                var pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
                                 {
                                     long position = searchResult.Value;
                                     engine.Update(Name, position, rowData);
 
-                                    foreach (var hashIndex in this.hashIndexes.Values)
+                                    foreach (var hashIndex in this.hashIndexes)
                                     {
-                                        hashIndex.Remove(oldRow, position);
-                                        hashIndex.Add(row, position);
+                                        if (oldHashValues is not null &&
+                                            oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                            oldKey is not null)
+                                        {
+                                            hashIndex.Value.Remove(oldKey, position);
+                                        }
+
+                                        if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                            hashIndex.Value.Add(newKey, position);
                                     }
                                 }
                             }
