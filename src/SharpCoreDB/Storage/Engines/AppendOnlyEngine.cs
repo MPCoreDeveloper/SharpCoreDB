@@ -10,6 +10,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -41,6 +42,7 @@ public class AppendOnlyEngine : IStorageEngine
     /// </summary>
     /// <param name="storage">The underlying storage implementation.</param>
     /// <param name="databasePath">Path to the database directory.</param>
+    [SuppressMessage("Security", "S6549", Justification = "databasePath is the user-configured storage root.")]
     public AppendOnlyEngine(IStorage storage, string databasePath)
     {
         this.storage = storage ?? throw new ArgumentNullException(nameof(storage));

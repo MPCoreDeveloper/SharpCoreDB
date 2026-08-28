@@ -13,6 +13,7 @@ namespace SharpCoreDB;
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Core.Cache;
 using SharpCoreDB.Storage;
+using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB.Storage.Engines;
 using System.Collections.Concurrent;
 using System.IO.Compression;
@@ -187,6 +188,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// ✅ SCDB Phase 1: Uses IStorageProvider when available, falls back to IStorage for legacy mode
     /// ✅ FIX: Handles compressed metadata with auto-detection
     /// </summary>
+    /// <summary>
+    /// Loads database metadata.
+    /// </summary>
+    [SuppressMessage("Security", "S6549", Justification = "Database path is the user-configured storage root; derived metadata paths use fixed filenames.")]
     private void Load()
     {
         string? metaJson;

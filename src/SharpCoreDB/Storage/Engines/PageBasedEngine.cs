@@ -10,6 +10,7 @@ using SharpCoreDB.Storage.Hybrid;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -52,6 +53,7 @@ public partial class PageBasedEngine : IStorageEngine
     /// </summary>
     /// <param name="databasePath">Path to the database directory.</param>
     /// <param name="config">Optional database configuration for auto-tuning.</param>
+    [SuppressMessage("Security", "S6549", Justification = "databasePath is the user-configured storage root.")]
     public PageBasedEngine(string databasePath, DatabaseConfig? config = null)
     {
         this.databasePath = Path.GetFullPath(databasePath ?? throw new ArgumentNullException(nameof(databasePath)));
