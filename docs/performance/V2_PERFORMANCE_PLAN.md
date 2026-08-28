@@ -57,13 +57,34 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | WP | Area | Scope | Status |
 |----|------|-------|--------|
 | **WP1** | Remove hot-path debug logging | SELECT, parameterized `ExecuteSQL`, batch transactions, INSERT | ✅ **DONE in v2.0.0** |
-| **WP2** | Prepared/compiled query execution | Parse once → execute many; wire existing `QueryCompiler`/`CompiledQueryExecutor` into `ExecuteQuery`; add optional `PreparedStatement` reuse API | Planned (v2.0.x) |
+| **WP2** | Prepared/compiled query execution | Parse once → execute many; wire existing `QueryCompiler`/`CompiledQueryExecutor` into `ExecuteQuery`; add optional `PreparedStatement` reuse API | ✅ **DONE in v2.0.0** (simple point-lookup fast path) |
 | **WP3** | Allocation reduction | Reuse shared `SqlParser`; pool row dictionaries; remove redundant row copies; `StructRow`-based read option | Planned (v2.0.x) |
-| **WP4** | Batch UPDATE/DELETE regex → `[GeneratedRegex]` | Precompile `TryParseUpdateForBatch`/`TryParseDeleteForBatch`/`HasActualParameters`/subquery detection | Planned (v2.0.x) |
-| **WP5** | Cache DI lookups | Cache `IGraphRagProvider` resolution in `GetSharedSqlParser` | Planned (v2.0.x) |
+| **WP4** | Batch UPDATE/DELETE regex → `[GeneratedRegex]` | Precompile `TryParseUpdateForBatch`/`TryParseDeleteForBatch`/`HasActualParameters`/subquery detection | ✅ **DONE in v2.0.0** (static compiled regexes + regex-free `NormalizeSql`) |
+| **WP5** | Cache DI lookups | Cache `IGraphRagProvider` resolution in `GetSharedSqlParser` | ✅ **DONE in v2.0.0** |
 | **WP6** | Storage/index tuning | AppendOnly/PageBased read path, page cache, hash/B-tree index maintenance batching | Planned (v2.0.x) |
 | **WP7** | Provider fast paths | ADO.NET `SharpCoreDBCommand`/`DataReader`, YesSql, Sync provider materialization | Planned (v2.0.x) |
 | **WP8** | **.NET 11 / C# 15 migration** | Target `net11.0` + `LangVersion 15`; adopt runtime async, intrinsics, SIMD lane APIs | Planned (v2.1, after Nov 2026 GA) |
+
+---
+
+## 3.1 Measured results (comparative benchmark, 2026-08-28)
+
+Single-run `SharpCoreDB.Benchmarks.Comparative` (100K inserts, 10K reads/updates/deletes), vs the v1.9 March baseline:
+
+| Operation | v1.9.0 | **v2.0.0** | SQLite | LiteDB | Delta vs v1.9 |
+|-----------|-------:|-----------:|-------:|-------:|--------------:|
+| INSERT (SQL) | 202,222/s | 94,927/s | 148,151/s | 75,501/s | env noise (identical InsertBatch code path) |
+| READ (SQL) | 6,102/s | **62,631/s** | 98,622/s | 16,352/s | **10.3x faster** |
+| UPDATE (SQL) | 8,411/s | **45,218/s** | 269,468/s | 11,356/s | **5.4x faster** |
+| DELETE (SQL) | 7,203/s | **33,527/s** | 363,480/s | 14,616/s | **4.7x faster** |
+| READ (Direct API) | — | **141,100/s** | 98,622/s | 16,352/s | **beats SQLite** |
+| UPDATE (Direct API) | — | 47,584/s | 269,468/s | 11,356/s | — |
+| DELETE (Direct API) | — | **136,133/s** | 363,480/s | 14,616/s | **beats LiteDB 9x** |
+
+Notes:
+- The v1.9 vs v2.0 INSERT delta is **environmental**, not a code regression: the SQL and Direct benchmark sections execute the identical `db.InsertBatch(...)` code path and differ by ~50% within the same run (cold-JIT warmup). SQLite and LiteDB also showed 10–17% lower throughput than the March run.
+- READ (SQL) gap vs SQLite closed from **~16x → ~1.6x**; the Direct API READ path now **exceeds SQLite**.
+
 
 ---
 

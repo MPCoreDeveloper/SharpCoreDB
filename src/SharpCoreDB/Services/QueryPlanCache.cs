@@ -166,6 +166,17 @@ public sealed class QueryPlanCache
     {
         if (parameters is null || parameters.Count == 0)
             return normalizedSql + "|p:none";
+
+        // v2 fast path: a single parameter avoids the OrderBy + list allocation.
+        if (parameters.Count == 1)
+        {
+            foreach (var single in parameters)
+            {
+                var typeName = single.Value?.GetType().Name ?? "null";
+                return normalizedSql + "|p:" + single.Key + ":" + typeName;
+            }
+        }
+
         var parts = new List<string>(parameters.Count);
         foreach (var kv in parameters.OrderBy(k => k.Key))
         {
@@ -176,15 +187,49 @@ public sealed class QueryPlanCache
     }
 
     /// <summary>
-    /// Normalizes SQL by trimming, collapsing whitespace, and uppercasing keywords.
+    /// Normalizes SQL by trimming and collapsing whitespace.
     /// Lightweight to maximize hit rate without changing semantics.
+    /// v2: manual whitespace collapse — the previous Regex.Replace allocated a Regex
+    /// instance and intermediate strings on every query (hot path).
     /// </summary>
     public static string NormalizeSql(string sql)
     {
-        if (string.IsNullOrWhiteSpace(sql)) return string.Empty;
-        var s = sql.Trim();
-        // Collapse multiple spaces
-        s = System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
-        return s;
+        if (string.IsNullOrWhiteSpace(sql))
+            return string.Empty;
+
+        return CollapseWhitespace(sql.Trim());
+    }
+
+    /// <summary>
+    /// Collapses runs of whitespace into a single space with zero regex/LINQ allocations.
+    /// </summary>
+    private static string CollapseWhitespace(string value)
+    {
+        if (value.Length == 0)
+            return value;
+
+        var buffer = new char[value.Length];
+        int write = 0;
+        bool previousWasSpace = false;
+
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v')
+            {
+                if (!previousWasSpace)
+                {
+                    buffer[write++] = ' ';
+                    previousWasSpace = true;
+                }
+            }
+            else
+            {
+                buffer[write++] = c;
+                previousWasSpace = false;
+            }
+        }
+
+        return new string(buffer, 0, write);
     }
 }

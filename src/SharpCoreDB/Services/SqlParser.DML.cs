@@ -25,6 +25,15 @@ public partial class SqlParser
     private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     /// <summary>
+    /// v2: Pre-compiled regex used to detect subqueries in SELECT routing.
+    /// Previously a per-query Regex cache lookup/creation was incurred.
+    /// </summary>
+    private static readonly Regex SubqueryStartRegex = new(
+        @"\(\s*SELECT\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    /// <summary>
     /// Detects actual SQL parameters (@p0, :param, ?) excluding @ symbols inside string literals.
     /// CRITICAL: Prevents false positives from email addresses like 'test@example.com'.
     /// Handles both single quotes and escaped quotes ('') from SanitizeSql.
@@ -606,10 +615,7 @@ public partial class SqlParser
         // CRITICAL FIX: Must detect actual parameters, not @ symbols in string literals (e.g., 'test@example.com')
         // CRITICAL FIX: Must detect actual subqueries (SELECT in parens), not function calls like UNIXEPOCH(...)
         bool hasActualParameters = HasActualParameters(sql);
-        bool hasSubquery = System.Text.RegularExpressions.Regex.IsMatch(
-            sql,
-            @"\(\s*SELECT\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        bool hasSubquery = SubqueryStartRegex.IsMatch(sql);
 
         if (hasActualParameters || hasSubquery)
         {

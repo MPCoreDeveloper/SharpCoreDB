@@ -12,6 +12,7 @@ namespace SharpCoreDB;
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB.Core.Cache;
+using SharpCoreDB.Interfaces;
 using SharpCoreDB.Storage;
 using System.Diagnostics.CodeAnalysis;
 using SharpCoreDB.Storage.Engines;
@@ -50,6 +51,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
+    private IGraphRagProvider? _cachedGraphRagProvider;  // v2: cached DI resolution (avoids per-call GetService)
     
     // ✅ SCDB Phase 1: Storage provider abstraction
     // Null when using legacy directory-based storage (IStorage)

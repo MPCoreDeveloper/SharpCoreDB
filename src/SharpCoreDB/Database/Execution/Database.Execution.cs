@@ -31,13 +31,18 @@ public partial class Database
         {
             _sharedSqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             _sharedSqlParser.Database = this;
-        }
 
-        // Optional GRAPH_RAG provider wiring from DI (zero overhead if not registered)
-        var graphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
-        if (graphRagProvider is not null)
-        {
-            _sharedSqlParser.SetGraphRagProvider(graphRagProvider);
+            // v2: resolve the optional GRAPH_RAG provider once and cache it for the parser
+            // lifetime. Previously this DI lookup ran on every ExecuteSQL/ExecuteQuery call.
+            if (_cachedGraphRagProvider is null)
+            {
+                _cachedGraphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
+            }
+
+            if (_cachedGraphRagProvider is not null)
+            {
+                _sharedSqlParser.SetGraphRagProvider(_cachedGraphRagProvider);
+            }
         }
 
         return _sharedSqlParser;

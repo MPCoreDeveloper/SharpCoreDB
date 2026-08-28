@@ -239,6 +239,21 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(CachedQueryPlan plan, Dictionary<string, object?>? parameters = null)
     {
+        // v2 fast path: pre-parsed simple point-lookup plans skip parameter binding,
+        // tokenization, and SQL re-parsing entirely on repeat executions.
+        if (plan.SimpleSelect is null)
+        {
+            var simple = SimpleSelectPlan.TryCreate(plan.Parts);
+            if (simple is not null)
+                plan.SimpleSelect = simple;
+        }
+
+        if (plan.SimpleSelect is not null &&
+            TryExecuteSimpleSelect(plan.SimpleSelect, parameters, out var fastResults))
+        {
+            return fastResults;
+        }
+
         string sql;
         string[] parts;
 
@@ -257,6 +272,81 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         }
 
         return this.ExecuteQueryInternal(sql, parts);
+    }
+
+    /// <summary>
+    /// Executes a pre-parsed simple point-lookup plan directly against the table.
+    /// Returns false (falling back to the full parser) for any condition that cannot be
+    /// handled with exact parity to the legacy string-based path.
+    /// </summary>
+    private bool TryExecuteSimpleSelect(
+        SimpleSelectPlan simple,
+        Dictionary<string, object?>? parameters,
+        out List<Dictionary<string, object>> results)
+    {
+        results = [];
+
+        if (!this.tables.TryGetValue(simple.TableName, out var table))
+            return false;
+
+        string whereStr;
+        if (simple.WhereParameter is not null)
+        {
+            if (parameters is null || parameters.Count == 0)
+                return false;
+
+            if (!TryResolveParameterValue(parameters, simple.WhereParameter, out var value) ||
+                value is null || value == DBNull.Value)
+            {
+                return false;
+            }
+
+            whereStr = simple.WhereColumn + " = " + ParameterBinder.FormatParameter(value);
+        }
+        else
+        {
+            if (simple.WhereLiteral is null)
+                return false;
+
+            whereStr = simple.WhereColumn + " = " + simple.WhereLiteral;
+        }
+
+        var rows = table.Select(whereStr, simple.OrderByColumn, simple.OrderByAscending, noEncrypt: false);
+
+        // Apply LIMIT/OFFSET exactly like the legacy ExecuteSelectQuery path.
+        if (simple.Offset.HasValue && simple.Offset.Value > 0)
+            rows = [.. rows.Skip(simple.Offset.Value)];
+
+        if (simple.Limit.HasValue && simple.Limit.Value > 0)
+            rows = [.. rows.Take(simple.Limit.Value)];
+
+        results = table is Table concreteTable ? concreteTable.DeduplicateByPrimaryKey(rows) : rows;
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a parameter token ("@name", "name", or ":name") against the supplied dictionary.
+    /// </summary>
+    private static bool TryResolveParameterValue(
+        Dictionary<string, object?> parameters,
+        string token,
+        out object? value)
+    {
+        if (parameters.TryGetValue(token, out value))
+            return true;
+
+        var stripped = token.TrimStart('@', ':');
+        if (parameters.TryGetValue(stripped, out value))
+            return true;
+
+        if (parameters.TryGetValue("@" + stripped, out value))
+            return true;
+
+        if (parameters.TryGetValue(":" + stripped, out value))
+            return true;
+
+        value = null;
+        return false;
     }
 
     /// <summary>

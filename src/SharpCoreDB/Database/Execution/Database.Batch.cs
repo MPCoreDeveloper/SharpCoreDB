@@ -12,6 +12,7 @@ namespace SharpCoreDB;
 
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 
@@ -28,6 +29,23 @@ using SharpCoreDB.Services;
 /// </summary>
 public partial class Database
 {
+    /// <summary>
+    /// v2: Pre-compiled regex for batch UPDATE statement parsing.
+    /// Previously a per-statement Regex cache lookup/creation was incurred for every statement.
+    /// </summary>
+    private static readonly Regex BatchUpdateRegex = new(
+        @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// v2: Pre-compiled regex for batch DELETE statement parsing.
+    /// </summary>
+    private static readonly Regex BatchDeleteRegex = new(
+        @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
     #region Phase 3: Prepared Insert Statement Cache
     
     /// <summary>
@@ -444,9 +462,7 @@ public partial class Database
             return false;
 
         // Use regex to extract parts: UPDATE <table> SET <sets> WHERE <where>
-        var match = System.Text.RegularExpressions.Regex.Match(
-            sql, @"UPDATE\s+(\w+)\s+SET\s+(.*?)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+        var match = BatchUpdateRegex.Match(sql);
 
         if (!match.Success)
             return false;
@@ -496,9 +512,7 @@ public partial class Database
             return false;
 
         // Use regex: DELETE FROM <table> WHERE <where>
-        var match = System.Text.RegularExpressions.Regex.Match(
-            sql, @"DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.*)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+        var match = BatchDeleteRegex.Match(sql);
 
         if (!match.Success)
             return false;

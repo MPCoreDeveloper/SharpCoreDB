@@ -477,7 +477,7 @@ internal static class ParameterBinder
 
     /// <summary>Formats a parameter value for SQL substitution.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string FormatParameter(object? value)
+    internal static string FormatParameter(object? value)
     {
         if (value == null || value == DBNull.Value)
             return "NULL";
