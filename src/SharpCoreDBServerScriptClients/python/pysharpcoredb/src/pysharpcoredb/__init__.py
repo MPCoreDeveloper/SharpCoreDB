@@ -11,7 +11,7 @@ Example:
     ...     print(result.rows)
 """
 
-__version__ = "1.5.0"
+__version__ = "1.9.6"
 __author__ = "MPCoreDeveloper"
 __license__ = "MIT"
 

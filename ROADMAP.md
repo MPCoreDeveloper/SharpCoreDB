@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v1.9.5 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v1.9.6 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 

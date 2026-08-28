@@ -1160,6 +1160,30 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                    string.CompareOrdinal(rowVal.ToString(), highStr) <= 0;
         }
 
+        // ✅ Issue #339: support IN / NOT IN lists (previously not in the operator list,
+        // so the condition fell through to "accept all rows").
+        var inMatch = System.Text.RegularExpressions.Regex.Match(
+            trimmed, @"^(.+?)\s+(NOT\s+)?IN\s*\((.*)\)\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline,
+            TimeSpan.FromSeconds(1));
+        if (inMatch.Success)
+        {
+            var inCol = NormalizeColumnName(inMatch.Groups[1].Value);
+            var negated = inMatch.Groups[2].Success;
+            if (!row.TryGetValue(inCol, out var inRowVal) || inRowVal is null or DBNull)
+            {
+                return false;
+            }
+
+            var inItems = inMatch.Groups[3].Value
+                .Split(',')
+                .Select(v => v.Trim().Trim('\'', '"'))
+                .ToList();
+
+            var matched = inItems.Contains(inRowVal.ToString() ?? string.Empty);
+            return negated ? !matched : matched;
+        }
+
         var operators = new[] { ">=", "<=", "!=", "<>", "=", ">", "<" };
         string? op = null;
         int opIndex = -1;

@@ -7,7 +7,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>SharpCoreDB.Serilog.Sinks</PackageId>
-    <Version>1.9.5</Version>
+    <Version>1.9.6</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Serilog.Sinks</Product>
@@ -24,7 +24,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.9.5: Fixes parameterized query binding (token-aware named-parameter replacement, resolving @t/@tid collisions), forwards request parameters through the server (gRPC, binary protocol, WebSocket), makes ULID encoding standards-compliant (Crockford Base32 per the ULID spec), removes the legacy UI (moved to SCDMS), documentation is now English-only, and NuGet dependencies updated.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.6: Fixes the critical WHERE IN (...) regression (#339) that silently returned ALL rows: IN / NOT IN are now evaluated correctly for literal and parameterized lists across single-file and directory mode, and single-file parameterized queries normalize @-prefixed parameter names. Includes all v1.9.5 fixes (token-aware parameter binding resolving @t/@tid collisions, server parameter pass-through, standards-compliant ULID encoding, legacy UI removal, English-only documentation, updated dependencies).</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

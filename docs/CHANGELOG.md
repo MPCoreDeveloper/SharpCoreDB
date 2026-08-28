@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.6] - 2026-08-28
+
+### Fixed
+- **Issue 339 — `WHERE col IN (...)` silently returned ALL rows (regression)**: every `IN` variant
+  (literal lists, parameterized lists, single-value lists, `NOT IN`) was ignored by the predicate
+  evaluators and fell through to an "accept all" path:
+  - `SingleFileTable.EvaluateSingleCondition` did not recognize `IN`/`NOT IN` at all (single-file
+    `.scdb` mode) and returned `true` for every row.
+  - `Table.EvaluateWhere` (directory mode) split the value list on spaces — `IN ('a', 'b')` lost
+    everything after the first value — and non-string columns fell into the switch's `default:
+    return true`.
+  - `SqlParser.EvaluateOperator` (enhanced/AST path) did not strip the surrounding parentheses from
+    the value list.
+  All three paths now evaluate `IN`/`NOT IN` from the full parenthesized list (quote-trimmed,
+  comma-separated) for both string and non-string columns.
+- **Single-file parameterized queries threw "Missing required parameter"**: `SingleFileDatabase.BindPreparedSql`
+  bound parameters with a local implementation that did not normalize `@`-prefixed keys, so `IN (@p0, @p1)`
+  failed against names extracted without the `@` prefix. It now delegates to `ParameterBinder.Bind`, the
+  single source of truth for parameter binding.
+
+### Added
+- **Regression tests for issue 339**: `WhereInRegressionTests` (12 tests) assert `IN`/`NOT IN` row
+  counts for literal and parameterized lists in both single-file and directory mode, and
+  `WhereInRegressionEfCoreTests` (2 tests) reproduce the reporter's exact `SharpCoreDBConnection` +
+  `.scdb` scenario end-to-end.
+
 ## [1.9.5] - 2026-08-27
 
 ### Added

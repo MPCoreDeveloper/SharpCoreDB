@@ -11,7 +11,7 @@
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
 
     <PackageId>SharpCoreDB.CQRS</PackageId>
-    <Version>1.9.5</Version>
+    <Version>1.9.6</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.CQRS</Product>
@@ -24,7 +24,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v1.9.5: Fixes parameterized query binding (token-aware named-parameter replacement, resolving @t/@tid collisions), forwards request parameters through the server (gRPC, binary protocol, WebSocket), makes ULID encoding standards-compliant (Crockford Base32 per the ULID spec), removes the legacy UI (moved to SCDMS), documentation is now English-only, and NuGet dependencies updated.</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.6: Fixes the critical WHERE IN (...) regression (#339) that silently returned ALL rows: IN / NOT IN are now evaluated correctly for literal and parameterized lists across single-file and directory mode, and single-file parameterized queries normalize @-prefixed parameter names. Includes all v1.9.5 fixes (token-aware parameter binding resolving @t/@tid collisions, server parameter pass-through, standards-compliant ULID encoding, legacy UI removal, English-only documentation, updated dependencies).</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

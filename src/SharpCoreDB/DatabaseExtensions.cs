@@ -1504,100 +1504,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             return sql;
         }
 
-        var positionalParameterPositions = GetPositionalParameterPositions(sql);
-        if (positionalParameterPositions.Length > 0)
-        {
-            var orderedParameters = new object?[positionalParameterPositions.Length];
-            for (var i = 0; i < orderedParameters.Length; i++)
-            {
-                if (!parameters.TryGetValue(i.ToString(), out var value))
-                {
-                    throw new ArgumentException($"Missing required positional parameter: {i}", nameof(parameters));
-                }
-
-                orderedParameters[i] = value;
-            }
-
-            return Services.ParameterBinder.BindPositionalParameters(sql, positionalParameterPositions, orderedParameters);
-        }
-
-        var namedParameters = GetNamedParameters(sql);
-        return namedParameters.Count == 0
-            ? sql
-            : Services.ParameterBinder.BindNamedParameters(sql, namedParameters, parameters);
-    }
-
-    private static int[] GetPositionalParameterPositions(string sql)
-    {
-        List<int> positions = [];
-        var inString = false;
-        var stringChar = '\0';
-
-        for (var i = 0; i < sql.Length; i++)
-        {
-            var character = sql[i];
-            if ((character == '\'' || character == '"') && (i == 0 || sql[i - 1] != '\\'))
-            {
-                if (!inString)
-                {
-                    inString = true;
-                    stringChar = character;
-                }
-                else if (character == stringChar)
-                {
-                    inString = false;
-                }
-            }
-
-            if (!inString && character == '?')
-            {
-                positions.Add(i);
-            }
-        }
-
-        return [.. positions];
-    }
-
-    private static Dictionary<string, int> GetNamedParameters(string sql)
-    {
-        Dictionary<string, int> parameters = [];
-        var inString = false;
-        var stringChar = '\0';
-
-        for (var i = 0; i < sql.Length; i++)
-        {
-            var character = sql[i];
-            if ((character == '\'' || character == '"') && (i == 0 || sql[i - 1] != '\\'))
-            {
-                if (!inString)
-                {
-                    inString = true;
-                    stringChar = character;
-                }
-                else if (character == stringChar)
-                {
-                    inString = false;
-                }
-
-                continue;
-            }
-
-            if (!inString && character == '@' && i + 1 < sql.Length && char.IsLetter(sql[i + 1]))
-            {
-                var nameStart = i + 1;
-                var nameEnd = nameStart;
-                while (nameEnd < sql.Length && (char.IsLetterOrDigit(sql[nameEnd]) || sql[nameEnd] == '_'))
-                {
-                    nameEnd++;
-                }
-
-                var parameterName = sql[nameStart..nameEnd];
-                parameters.TryAdd(parameterName, i);
-                i = nameEnd - 1;
-            }
-        }
-
-        return parameters;
+        // ✅ Issue #339: delegate to ParameterBinder.Bind — the single source of truth for
+        // parameter binding. The previous local implementation did not normalize keys, so
+        // '@p0' (EF Core convention) failed to resolve against names extracted without the
+        // '@' prefix, and single-file IN (@p0, @p1) queries threw "Missing required parameter".
+        return Services.ParameterBinder.Bind(sql, parameters);
     }
 }
 

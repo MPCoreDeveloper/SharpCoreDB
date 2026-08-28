@@ -217,6 +217,41 @@ public partial class Table
             return SqlParser.EvaluateJoinWhere(row, where);
         }
 
+        // ✅ Issue #339: support IN / NOT IN lists for all column types.
+        // Previously the list was split on spaces (losing everything after the first
+        // comma when the SQL contains spaces, e.g. IN ('a', 'b')), and non-string
+        // columns fell through the switch's default → accept-all. Extract the full
+        // parenthesized list via regex and evaluate it as a whole.
+        var inMatch = System.Text.RegularExpressions.Regex.Match(
+            where, @"^(.+?)\s+(NOT\s+)?IN\s*\((.*)\)\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline,
+            TimeSpan.FromSeconds(1));
+        if (inMatch.Success)
+        {
+            var inCol = inMatch.Groups[1].Value.Trim();
+            var inDotIdx = inCol.LastIndexOf('.');
+            if (inDotIdx >= 0 && inDotIdx < inCol.Length - 1)
+            {
+                inCol = inCol[(inDotIdx + 1)..];
+            }
+
+            inCol = inCol.Trim('"', '[', ']', '`');
+            var negated = inMatch.Groups[2].Success;
+
+            if (!row.TryGetValue(inCol, out var inRowVal) || inRowVal is null or DBNull)
+            {
+                return false;
+            }
+
+            var inItems = inMatch.Groups[3].Value
+                .Split(',')
+                .Select(v => v.Trim().Trim('\'', '"'))
+                .ToList();
+
+            var matched = inItems.Contains(inRowVal.ToString() ?? string.Empty);
+            return negated ? !matched : matched;
+        }
+
         // ✅ Parity: delegate LIKE / NOT LIKE / BETWEEN (single-condition form) to the shared
         // SqlParser evaluator, which now implements SQL-correct semantics (NULL never matches
         // LIKE, %/_ patterns, BETWEEN as inclusive range). Previously these fell through the
