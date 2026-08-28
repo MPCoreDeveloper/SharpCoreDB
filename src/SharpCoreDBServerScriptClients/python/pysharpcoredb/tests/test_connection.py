@@ -36,8 +36,15 @@ class TestConnection:
 
     @pytest.mark.asyncio
     async def test_connection_without_server(self):
-        """Test connection failure when server is not available."""
+        """Test Connection raises ConnectionError when all transports fail.
+
+        The transport clients are stubbed (no live server in unit tests),
+        so we simulate every protocol failing to exercise the error path.
+        """
         conn = Connection("nonexistent.host", 5001, "testdb")
+        conn._connect_grpc = AsyncMock(side_effect=ConnectionError("grpc unavailable"))
+        conn._connect_http = AsyncMock(side_effect=ConnectionError("http unavailable"))
+        conn._connect_websocket = AsyncMock(side_effect=ConnectionError("websocket unavailable"))
 
         with pytest.raises(ConnectionError):
             await conn.connect()

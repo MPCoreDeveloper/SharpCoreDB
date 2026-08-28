@@ -16,7 +16,7 @@ __author__ = "MPCoreDeveloper"
 __license__ = "MIT"
 
 from .connection import Connection, connect
-from .exceptions import SharpCoreDBError, ConnectionError, AuthenticationError, QueryError
+from .exceptions import SharpCoreDBError, ConnectionError, AuthenticationError, QueryError, ConfigurationError, TimeoutError
 from .types import Row, ResultSet
 from .pool import ConnectionPool, create_pool
 
@@ -29,6 +29,8 @@ __all__ = [
     "ConnectionError",
     "AuthenticationError",
     "QueryError",
+    "ConfigurationError",
+    "TimeoutError",
     "Row",
     "ResultSet",
 ]
