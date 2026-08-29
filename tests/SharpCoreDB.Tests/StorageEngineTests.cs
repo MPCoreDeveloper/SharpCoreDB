@@ -379,4 +379,89 @@ public class StorageEngineTests : IDisposable
         Assert.NotNull(engine);
         Assert.Equal(StorageEngineType.AppendOnly, engine.EngineType);
     }
+
+    [Fact]
+    public void PageBasedEngine_Update_ShrinkAndSameSize_KeepReference()
+    {
+        using var engine = new PageBasedEngine(testDbPath);
+
+        var data = new byte[] { 1, 2, 3, 4, 5 };
+        var reference = engine.Insert("test_table", data);
+
+        // Same-size overwrite stays in place.
+        long sameSizeRef = engine.Update("test_table", reference, new byte[] { 9, 9, 9, 9, 9 });
+        Assert.Equal(reference, sameSizeRef);
+
+        // Shrink stays in place.
+        long shrinkRef = engine.Update("test_table", reference, new byte[] { 7 });
+        Assert.Equal(reference, shrinkRef);
+        Assert.Equal(new byte[] { 7 }, engine.Read("test_table", reference));
+    }
+
+    [Fact]
+    public void PageBasedEngine_Update_WithinPageGrowth_KeepsReference()
+    {
+        using var engine = new PageBasedEngine(testDbPath);
+
+        var small = new byte[100];
+        var reference = engine.Insert("test_table", small);
+
+        // Growth that still fits at the end of the page relocates within the page;
+        // the slot index (and therefore the storage reference) is unchanged.
+        var grown = new byte[3000];
+        long newRef = engine.Update("test_table", reference, grown);
+
+        Assert.Equal(reference, newRef);
+        Assert.Equal(grown, engine.Read("test_table", reference));
+    }
+
+    [Fact]
+    public void PageBasedEngine_Update_CrossPageGrowth_Relocates_ReturnsNewReference()
+    {
+        using var engine = new PageBasedEngine(testDbPath);
+
+        // A page holds at most ~8156 bytes of record data. Fill most of it with one record,
+        // then grow a second record beyond the remaining space to force a cross-page
+        // relocation (the WP10 fix: Update returns the new storage reference).
+        var small = new byte[100];
+        var filler = new byte[8000];
+        var smallRef = engine.Insert("test_table", small);
+        var fillerRef = engine.Insert("test_table", filler);
+
+        var grown = new byte[8000];
+        long newRef = engine.Update("test_table", smallRef, grown);
+
+        Assert.NotEqual(smallRef, newRef); // relocated to a new page
+
+        var readGrown = engine.Read("test_table", newRef);
+        Assert.NotNull(readGrown);
+        Assert.Equal(grown, readGrown);
+
+        // The old slot was marked deleted.
+        Assert.Null(engine.Read("test_table", smallRef));
+
+        // The neighbour record is untouched by the relocation.
+        Assert.Equal(filler, engine.Read("test_table", fillerRef));
+    }
+
+    [Fact]
+    public void AppendOnlyEngine_Update_ReturnsNewReference()
+    {
+        var crypto = new CryptoService();
+        var key = new byte[32];
+        var config = new DatabaseConfig { NoEncryptMode = true };
+        var storage = new Services.Storage(crypto, key, config, null);
+
+        using var engine = new AppendOnlyEngine(storage, testDbPath);
+
+        var original = new byte[] { 1, 2, 3 };
+        var reference = engine.Insert("test_table", original);
+
+        // Append-only always writes a new version at a new offset.
+        var updated = new byte[] { 4, 5, 6 };
+        long newRef = engine.Update("test_table", reference, updated);
+
+        Assert.NotEqual(reference, newRef);
+        Assert.Equal(updated, engine.Read("test_table", newRef));
+    }
 }

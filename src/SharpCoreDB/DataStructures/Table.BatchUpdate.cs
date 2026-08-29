@@ -44,14 +44,14 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            
+
             // ✅ Start transaction
             bool needsTransaction = !engine.IsInTransaction;
             if (needsTransaction)
             {
                 engine.BeginTransaction();
             }
-            
+
             try
             {
                 // ✅ Defer B-tree index updates if requested
@@ -59,7 +59,7 @@ public partial class Table
                 {
                     _btreeManager.BeginDeferredUpdates();
                 }
-                
+
                 // ✅ Get matching rows
                 var matchingRows = Select(whereClause);
                 if (matchingRows.Count == 0)
@@ -70,36 +70,52 @@ public partial class Table
                     }
                     return 0;
                 }
-                
+
                 // ✅ Batch serialize all updates
-                var serializedUpdates = new List<(long oldPosition, long newPosition, Dictionary<string, object> row, byte[] data)>();
-                
+                var serializedUpdates = new List<(long oldPosition, string? oldPkValue, long newPosition, Dictionary<string, object> row, byte[] data)>();
+
                 foreach (var row in matchingRows)
                 {
                     // Get old position
                     long oldPosition = GetRowPosition(row);
-                    
+
+                    // Capture the pre-update PK so indexes can be re-pointed if the
+                    // storage engine relocates a growing record (engine.Update returns
+                    // the new storage reference on relocation).
+                    string? oldPkValue = PrimaryKeyIndex >= 0
+                        ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                        : null;
+
                     // Apply updates to row
                     foreach (var kvp in updates.Where(kvp => Columns.Contains(kvp.Key)))
                     {
                         row[kvp.Key] = kvp.Value;
                     }
-                    
+
                     // Serialize updated row
                     byte[] data = SerializeRowOptimized(row);
-                    
-                    serializedUpdates.Add((oldPosition, -1, row, data));
+
+                    serializedUpdates.Add((oldPosition, oldPkValue, -1, row, data));
                 }
-                
+
                 // ✅ Batch write to storage
                 int updatedCount = 0;
-                
+
                 if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
                 {
-                    // PageBased: In-place updates
-                    foreach (var (oldPos, _, _, data) in serializedUpdates)
+                    // PageBased: In-place updates (or relocation when a growing record
+                    // no longer fits its page — the engine returns a new storage ref).
+                    foreach (var (oldPos, oldPkValue, _, row, data) in serializedUpdates)
                     {
-                        engine.Update(Name, oldPos, data);
+                        long updatedPos = engine.Update(Name, oldPos, data);
+                        if (updatedPos != oldPos)
+                        {
+                            string? newPkValue = PrimaryKeyIndex >= 0
+                                ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                                : null;
+                            RepointIndexesAfterRelocation(oldPos, updatedPos, oldPkValue, newPkValue);
+                        }
+
                         updatedCount++;
                     }
                 }
@@ -108,31 +124,31 @@ public partial class Table
                     // Columnar: Append new versions
                     for (int i = 0; i < serializedUpdates.Count; i++)
                     {
-                        var (oldPos, _, row, data) = serializedUpdates[i];
-                        
+                        var (oldPos, oldPkValue, _, row, data) = serializedUpdates[i];
+
                         // Insert new version
                         long newPos = engine.Insert(Name, data);
-                        
+
                         // Update tracking
-                        serializedUpdates[i] = (oldPos, newPos, row, data);
+                        serializedUpdates[i] = (oldPos, oldPkValue, newPos, row, data);
                         updatedCount++;
                     }
-                    
+
                     // ✅ Batch update primary key index
                     if (PrimaryKeyIndex >= 0)
                     {
-                        foreach (var (_, newPos, row, _) in serializedUpdates)
+                        foreach (var (_, _, newPos, row, _) in serializedUpdates)
                         {
                             var pkVal = row[Columns[PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                             Index.Delete(pkVal);
                             Index.Insert(pkVal, newPos);
                         }
                     }
-                    
+
                     // ✅ Batch update hash indexes
                     foreach (var hashIndex in hashIndexes.Values)
                     {
-                        foreach (var (oldPos, newPos, row, _) in serializedUpdates)
+                        foreach (var (oldPos, _, newPos, row, _) in serializedUpdates)
                         {
                             if (oldPos >= 0)
                             {
@@ -141,29 +157,29 @@ public partial class Table
                             hashIndex.Add(row, newPos);
                         }
                     }
-                    
+
                     // Update stats
                     Interlocked.Add(ref _updatedRowCount, updatedCount);
                 }
-                
+
                 // ✅ Flush deferred B-tree index updates
                 if (deferIndexes && _btreeManager != null)
                 {
                     _btreeManager.FlushDeferredUpdates();
                 }
-                
+
                 // ✅ Commit transaction (single flush!)
                 if (needsTransaction)
                 {
                     engine.CommitAsync().GetAwaiter().GetResult();
                 }
-                
+
                 // Auto-compact if threshold reached
                 if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar)
                 {
                     TryAutoCompact();
                 }
-                
+
                 return updatedCount;
             }
             catch
@@ -173,7 +189,7 @@ public partial class Table
                 {
                     _btreeManager.CancelDeferredUpdates();
                 }
-                
+
                 if (needsTransaction)
                 {
                     engine.Rollback();
@@ -281,7 +297,7 @@ public partial class Table
         where TValue : notnull
     {
         int updatedCount = 0;
-        var serializedData = new List<(long position, byte[] data, Dictionary<string, object> row)>();
+        var serializedData = new List<(long position, string? oldPkValue, byte[] data, Dictionary<string, object> row)>();
 
         // ✅ OPTIMIZATION 1: Direct position lookup (no SELECT!)
         foreach (var (id, newValue) in updateList)
@@ -289,7 +305,7 @@ public partial class Table
             // Direct index lookup - O(1) hash index lookup
             var pkVal = FormatValue(id);
             var searchResult = Index.Search(pkVal);
-            
+
             if (!searchResult.Found)
                 continue;
 
@@ -305,21 +321,35 @@ public partial class Table
             if (row == null)
                 continue;
 
+            // Capture the pre-update PK for index re-pointing on relocation.
+            string? oldPkValue = PrimaryKeyIndex >= 0
+                ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                : null;
+
             // Apply update
             row[updateColumnName] = newValue;
 
             // Serialize updated row
             byte[] updatedData = SerializeRowOptimized(row);
-            serializedData.Add((position, updatedData, row));
+            serializedData.Add((position, oldPkValue, updatedData, row));
         }
 
         // ✅ OPTIMIZATION 3: Batch write to storage
         if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
         {
-            // PageBased: In-place updates (fastest!)
-            foreach (var (pos, data, _) in serializedData)
+            // PageBased: In-place updates (or relocation when a growing record
+            // no longer fits its page - the engine returns a new storage ref).
+            foreach (var (pos, oldPkValue, data, row) in serializedData)
             {
-                engine.Update(Name, pos, data);
+                long updatedPos = engine.Update(Name, pos, data);
+                if (updatedPos != pos)
+                {
+                    string? newPkValue = PrimaryKeyIndex >= 0
+                        ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                        : null;
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                }
+
                 updatedCount++;
             }
         }
@@ -327,8 +357,8 @@ public partial class Table
         {
             // Columnar: Append new versions
             var newPositions = new List<long>();
-            
-            foreach (var (_, data, _) in serializedData)
+
+            foreach (var (_, _, data, _) in serializedData)
             {
                 long newPos = engine.Insert(Name, data);
                 newPositions.Add(newPos);
@@ -338,7 +368,7 @@ public partial class Table
             // Batch update primary key index
             for (int i = 0; i < serializedData.Count; i++)
             {
-                var (_, _, row) = serializedData[i];
+                var (_, _, _, row) = serializedData[i];
                 var pkVal = row[Columns[PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                 Index.Delete(pkVal);
                 Index.Insert(pkVal, newPositions[i]);
@@ -349,8 +379,8 @@ public partial class Table
             {
                 for (int i = 0; i < serializedData.Count; i++)
                 {
-                    var (oldPos, _, row) = serializedData[i];
-                    
+                    var (oldPos, _, _, row) = serializedData[i];
+
                     if (oldPos >= 0)
                     {
                         hashIndex.Remove(row, oldPos);
@@ -394,24 +424,24 @@ public partial class Table
         // ✅ OPTIMIZATION 1: Bulk SELECT instead of per-row
         // Build WHERE clause for all IDs at once: "id IN (1, 2, 3, ...)"
         var idValues = updateList.Select(u => FormatValue(u.id)).ToList();
-        
+
         // ✅ OPTIMIZATION 1.5: Chunk large IN clauses (avoid parser overhead)
         const int MAX_IN_CLAUSE_SIZE = 1000;
         int totalUpdated = 0;
-        
+
         for (int chunkStart = 0; chunkStart < idValues.Count; chunkStart += MAX_IN_CLAUSE_SIZE)
         {
             var chunkSize = Math.Min(MAX_IN_CLAUSE_SIZE, idValues.Count - chunkStart);
             var chunkValues = idValues.Skip(chunkStart).Take(chunkSize).ToList();
             var chunkUpdates = updateList.Skip(chunkStart).Take(chunkSize).ToList();
-            
-            string bulkWhere = chunkValues.Count == 1 
+
+            string bulkWhere = chunkValues.Count == 1
                 ? $"{columnName} = {chunkValues[0]}"
                 : $"{columnName} IN ({string.Join(", ", chunkValues)})";
-            
+
             // Single SELECT for this chunk
             var matchingRows = Select(bulkWhere);
-            
+
             if (matchingRows.Count == 0)
                 continue;
 
@@ -420,7 +450,7 @@ public partial class Table
                 u => u.id,
                 u => u.newValue);
 
-            var serializedData = new List<(long position, byte[] data)>();
+            var serializedData = new List<(long position, string? oldPkValue, byte[] data, Dictionary<string, object> row)>();
 
             foreach (var row in matchingRows)
             {
@@ -429,35 +459,47 @@ public partial class Table
                     continue;
 
                 TId rowId = idObj is TId typedId ? typedId : TypeConverter.Convert<TId>(idObj);
-                
+
                 if (!updateLookup.TryGetValue(rowId, out var newValue))
                     continue;
+
+                // Capture the storage position and pre-update PK before mutation so a
+                // relocated (growing) record can re-point the primary key index.
+                long oldPosition = GetRowPosition(row);
+                string? oldPkValue = PrimaryKeyIndex >= 0
+                    ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                    : null;
 
                 // Apply update
                 row[updateColumnName] = newValue;
 
-                // Get old position
-                long oldPosition = GetRowPosition(row);
-
                 // Serialize updated row
                 byte[] data = SerializeRowOptimized(row);
-                serializedData.Add((oldPosition, data));
+                serializedData.Add((oldPosition, oldPkValue, data, row));
             }
 
             // ✅ Batch write to storage
             if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
             {
-                foreach (var (pos, data) in serializedData)
+                foreach (var (pos, oldPkValue, data, row) in serializedData)
                 {
-                    engine.Update(Name, pos, data);
+                    long updatedPos = engine.Update(Name, pos, data);
+                    if (updatedPos != pos)
+                    {
+                        string? newPkValue = PrimaryKeyIndex >= 0
+                            ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                            : null;
+                        RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    }
+
                     totalUpdated++;
                 }
             }
             else // Columnar
             {
                 var newPositions = new List<long>();
-                
-                foreach (var (_, data) in serializedData)
+
+                foreach (var (_, _, data, _) in serializedData)
                 {
                     long newPos = engine.Insert(Name, data);
                     newPositions.Add(newPos);
@@ -480,9 +522,9 @@ public partial class Table
                 {
                     for (int i = 0; i < matchingRows.Count; i++)
                     {
-                        var (oldPos, _) = serializedData[i];
+                        var (oldPos, _, _, _) = serializedData[i];
                         var row = matchingRows[i];
-                        
+
                         if (oldPos >= 0)
                         {
                             hashIndex.Remove(row, oldPos);
@@ -517,7 +559,7 @@ public partial class Table
     {
         if (PrimaryKeyIndex < 0)
             return -1;
-        
+
         var pkVal = row[Columns[PrimaryKeyIndex]]?.ToString() ?? string.Empty;
         var searchResult = Index.Search(pkVal);
         return searchResult.Found ? searchResult.Value : -1;
@@ -532,7 +574,7 @@ public partial class Table
     {
         int estimatedSize = EstimateRowSize(row);
         byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-        
+
         try
         {
             if (SimdHelper.IsSimdSupported)
@@ -546,9 +588,9 @@ public partial class Table
 
             int bytesWritten = 0;
             Span<byte> bufferSpan = buffer.AsSpan();
-            
+
             var columnIndexCache = GetColumnIndexCache();
-            
+
             foreach (var col in Columns)
             {
                 int colIdx = columnIndexCache[col];
@@ -619,7 +661,7 @@ public partial class Table
                 .SelectMany(u => u.columnUpdates.Keys)
                 .Distinct()
                 .ToList();
-            
+
             var missingColumns = allUpdateColumns.Where(col => !Columns.Contains(col)).ToList();
             if (missingColumns.Count > 0)
             {
@@ -672,7 +714,7 @@ public partial class Table
         where TId : notnull
     {
         int updatedCount = 0;
-        var serializedData = new List<(long position, byte[] data, Dictionary<string, object> row)>();
+        var serializedData = new List<(long position, string? oldPkValue, byte[] data, Dictionary<string, object> row)>();
 
         // ✅ OPTIMIZATION 1: Direct position lookup (no SELECT!)
         foreach (var (id, columnUpdates) in updateList)
@@ -680,7 +722,7 @@ public partial class Table
             // Direct index lookup - O(1) hash index lookup
             var pkVal = FormatValue(id);
             var searchResult = Index.Search(pkVal);
-            
+
             if (!searchResult.Found)
                 continue;
 
@@ -696,6 +738,11 @@ public partial class Table
             if (row == null)
                 continue;
 
+            // Capture the pre-update PK for index re-pointing on relocation.
+            string? oldPkValue = PrimaryKeyIndex >= 0
+                ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                : null;
+
             // Apply all column updates
             foreach (var (column, value) in columnUpdates)
             {
@@ -704,16 +751,25 @@ public partial class Table
 
             // Serialize updated row
             byte[] updatedData = SerializeRowOptimized(row);
-            serializedData.Add((position, updatedData, row));
+            serializedData.Add((position, oldPkValue, updatedData, row));
         }
 
         // ✅ OPTIMIZATION 3: Batch write to storage
         if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
         {
-            // PageBased: In-place updates (fastest!)
-            foreach (var (pos, data, _) in serializedData)
+            // PageBased: In-place updates (or relocation when a growing record
+            // no longer fits its page - the engine returns a new storage ref).
+            foreach (var (pos, oldPkValue, data, row) in serializedData)
             {
-                engine.Update(Name, pos, data);
+                long updatedPos = engine.Update(Name, pos, data);
+                if (updatedPos != pos)
+                {
+                    string? newPkValue = PrimaryKeyIndex >= 0
+                        ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                        : null;
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                }
+
                 updatedCount++;
             }
         }
@@ -721,8 +777,8 @@ public partial class Table
         {
             // Columnar: Append new versions
             var newPositions = new List<long>();
-            
-            foreach (var (_, data, _) in serializedData)
+
+            foreach (var (_, _, data, _) in serializedData)
             {
                 long newPos = engine.Insert(Name, data);
                 newPositions.Add(newPos);
@@ -732,7 +788,7 @@ public partial class Table
             // Batch update primary key index
             for (int i = 0; i < serializedData.Count; i++)
             {
-                var (_, _, row) = serializedData[i];
+                var (_, _, _, row) = serializedData[i];
                 var pkVal = row[Columns[PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                 Index.Delete(pkVal);
                 Index.Insert(pkVal, newPositions[i]);
@@ -743,8 +799,8 @@ public partial class Table
             {
                 for (int i = 0; i < serializedData.Count; i++)
                 {
-                    var (oldPos, _, row) = serializedData[i];
-                    
+                    var (oldPos, _, _, row) = serializedData[i];
+
                     if (oldPos >= 0)
                     {
                         hashIndex.Remove(row, oldPos);
@@ -784,24 +840,24 @@ public partial class Table
     {
         // Build WHERE clause for all IDs: "id IN (1, 2, 3, ...)"
         var idValues = updateList.Select(u => FormatValue(u.id)).ToList();
-        
+
         // Chunk large IN clauses
         const int MAX_IN_CLAUSE_SIZE = 1000;
         int totalUpdated = 0;
-        
+
         for (int chunkStart = 0; chunkStart < idValues.Count; chunkStart += MAX_IN_CLAUSE_SIZE)
         {
             var chunkSize = Math.Min(MAX_IN_CLAUSE_SIZE, idValues.Count - chunkStart);
             var chunkValues = idValues.Skip(chunkStart).Take(chunkSize).ToList();
             var chunkUpdates = updateList.Skip(chunkStart).Take(chunkSize).ToList();
-            
-            string bulkWhere = chunkValues.Count == 1 
+
+            string bulkWhere = chunkValues.Count == 1
                 ? $"{idColumn} = {chunkValues[0]}"
                 : $"{idColumn} IN ({string.Join(", ", chunkValues)})";
-            
+
             // Single SELECT for this chunk
             var matchingRows = Select(bulkWhere);
-            
+
             if (matchingRows.Count == 0)
                 continue;
 
@@ -810,7 +866,7 @@ public partial class Table
                 u => u.id,
                 u => u.columnUpdates);
 
-            var serializedData = new List<(long position, byte[] data)>();
+            var serializedData = new List<(long position, string? oldPkValue, byte[] data, Dictionary<string, object> row)>();
 
             foreach (var row in matchingRows)
             {
@@ -819,9 +875,16 @@ public partial class Table
                     continue;
 
                 TId rowId = idObj is TId typedId ? typedId : TypeConverter.Convert<TId>(idObj);
-                
+
                 if (!updateLookup.TryGetValue(rowId, out var columnUpdates))
                     continue;
+
+                // Capture the storage position and pre-update PK before mutation so a
+                // relocated (growing) record can re-point the primary key index.
+                long oldPosition = GetRowPosition(row);
+                string? oldPkValue = PrimaryKeyIndex >= 0
+                    ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                    : null;
 
                 // Apply all column updates
                 foreach (var (column, value) in columnUpdates)
@@ -829,28 +892,33 @@ public partial class Table
                     row[column] = value;
                 }
 
-                // Get old position
-                long oldPosition = GetRowPosition(row);
-
                 // Serialize updated row
                 byte[] data = SerializeRowOptimized(row);
-                serializedData.Add((oldPosition, data));
+                serializedData.Add((oldPosition, oldPkValue, data, row));
             }
 
             // Batch write to storage
             if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
             {
-                foreach (var (pos, data) in serializedData)
+                foreach (var (pos, oldPkValue, data, row) in serializedData)
                 {
-                    engine.Update(Name, pos, data);
+                    long updatedPos = engine.Update(Name, pos, data);
+                    if (updatedPos != pos)
+                    {
+                        string? newPkValue = PrimaryKeyIndex >= 0
+                            ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                            : null;
+                        RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    }
+
                     totalUpdated++;
                 }
             }
             else // Columnar
             {
                 var newPositions = new List<long>();
-                
-                foreach (var (_, data) in serializedData)
+
+                foreach (var (_, _, data, _) in serializedData)
                 {
                     long newPos = engine.Insert(Name, data);
                     newPositions.Add(newPos);
@@ -873,9 +941,9 @@ public partial class Table
                 {
                     for (int i = 0; i < matchingRows.Count; i++)
                     {
-                        var (oldPos, _) = serializedData[i];
+                        var (oldPos, _, _, _) = serializedData[i];
                         var row = matchingRows[i];
-                        
+
                         if (oldPos >= 0)
                         {
                             hashIndex.Remove(row, oldPos);

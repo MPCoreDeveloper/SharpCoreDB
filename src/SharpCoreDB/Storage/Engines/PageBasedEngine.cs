@@ -160,16 +160,18 @@ public partial class PageBasedEngine : IStorageEngine
 
         var manager = GetOrCreatePageManager(tableName);
         var (pageId, recordId) = DecodeStorageReference(storageReference);
-        var newRecordId = manager.UpdateRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
+        var (newPage, newRecordId) = manager.UpdateRecord(
+            new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
 
         Interlocked.Increment(ref totalUpdates);
         Interlocked.Add(ref bytesWritten, newData.Length);
 
-        // In-place or within-page relocation keeps the slot index, so the storage
-        // reference is unchanged. Only a cross-page relocation returns a new reference.
-        return newRecordId.SlotIndex == recordId
+        // In-place and within-page relocations keep page + slot index, so the storage
+        // reference is unchanged. A cross-page relocation returns a new reference that
+        // points at the record's new page + slot.
+        return newPage.Value == pageId && newRecordId.SlotIndex == recordId
             ? storageReference
-            : EncodeStorageReference(pageId, newRecordId.SlotIndex);
+            : EncodeStorageReference(newPage.Value, newRecordId.SlotIndex);
     }
 
     /// <inheritdoc />

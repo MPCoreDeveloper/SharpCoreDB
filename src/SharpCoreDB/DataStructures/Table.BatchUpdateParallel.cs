@@ -107,7 +107,7 @@ public partial class Table
         where TId : notnull
     {
         // 🔥 PHASE 1: Parallel deserialization + update (75% of time)
-        var serializedData = new ConcurrentBag<(long position, byte[] data, Dictionary<string, object> row)>();
+        var serializedData = new ConcurrentBag<(long position, string? oldPkValue, byte[] data, Dictionary<string, object> row)>();
         var lockObjDict = new object(); // For thread-safe Index.Search if needed
 
         int degreeOfParallelism = Math.Min(
@@ -120,12 +120,12 @@ public partial class Table
             update =>
             {
                 var (id, columnUpdates) = update;
-                
+
                 try
                 {
                     // Direct index lookup - O(1) hash lookup
                     var pkVal = FormatValue(id);
-                    
+
                     // ⚠️ CRITICAL: Index.Search may not be thread-safe
                     // Lock only the search operation, not the entire update
                     (bool found, long position) searchResult;
@@ -133,7 +133,7 @@ public partial class Table
                     {
                         searchResult = Index.Search(pkVal);
                     }
-                    
+
                     if (!searchResult.found)
                         return;
 
@@ -147,6 +147,11 @@ public partial class Table
                     if (row == null)
                         return;
 
+                    // Capture the pre-update PK for index re-pointing on relocation.
+                    string? oldPkValue = PrimaryKeyIndex >= 0
+                        ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                        : null;
+
                     // Apply all column updates
                     foreach (var (column, value) in columnUpdates)
                     {
@@ -155,7 +160,7 @@ public partial class Table
 
                     // Serialize updated row
                     byte[] updatedData = SerializeRowOptimized(row);
-                    serializedData.Add((searchResult.position, updatedData, row));
+                    serializedData.Add((searchResult.position, oldPkValue, updatedData, row));
                 }
                 catch
                 {
@@ -168,10 +173,19 @@ public partial class Table
 
         if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
         {
-            // PageBased: In-place updates (fastest!)
-            foreach (var (pos, data, _) in serializedData)
+            // PageBased: In-place updates (or relocation when a growing record
+            // no longer fits its page - the engine returns a new storage ref).
+            foreach (var (pos, oldPkValue, data, row) in serializedData)
             {
-                engine.Update(Name, pos, data);
+                long updatedPos = engine.Update(Name, pos, data);
+                if (updatedPos != pos)
+                {
+                    string? newPkValue = PrimaryKeyIndex >= 0
+                        ? row[Columns[PrimaryKeyIndex]]?.ToString()
+                        : null;
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                }
+
                 updatedCount++;
             }
         }
@@ -179,8 +193,8 @@ public partial class Table
         {
             // Columnar: Append new versions
             var newPositions = new List<long>();
-            
-            foreach (var (_, data, _) in serializedData)
+
+            foreach (var (_, _, data, _) in serializedData)
             {
                 long newPos = engine.Insert(Name, data);
                 newPositions.Add(newPos);
@@ -191,7 +205,7 @@ public partial class Table
             for (int i = 0; i < serializedData.Count; i++)
             {
                 var items = serializedData.ToList();
-                var (_, _, row) = items[i];
+                var (_, _, _, row) = items[i];
                 var pkVal = row[Columns[PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                 Index.Delete(pkVal);
                 Index.Insert(pkVal, newPositions[i]);
@@ -202,11 +216,11 @@ public partial class Table
             {
                 var items = serializedData.ToList();
                 var newPositions2 = newPositions;
-                
+
                 for (int i = 0; i < items.Count; i++)
                 {
-                    var (oldPos, _, row) = items[i];
-                    
+                    var (oldPos, _, _, row) = items[i];
+
                     if (oldPos >= 0)
                     {
                         hashIndex.Remove(row, oldPos);

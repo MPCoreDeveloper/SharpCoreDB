@@ -513,10 +513,10 @@ public partial class PageManager : IDisposable
     /// The record's current slot. Equal to <paramref name="recordId"/> when the storage
     /// reference is unchanged; a different slot when the record was relocated to another page.
     /// </returns>
-    public virtual RecordId UpdateRecord(PageId pageId, RecordId recordId, byte[] newData)
+    public virtual (PageId Page, RecordId Record) UpdateRecord(PageId pageId, RecordId recordId, byte[] newData)
     {
         if (pageId.Value == 0 || recordId.SlotIndex >= ushort.MaxValue || newData.Length > MAX_RECORD_SIZE)
-            return recordId;
+            return (pageId, recordId);
 
         lock (writeLock)
         {
@@ -524,13 +524,13 @@ public partial class PageManager : IDisposable
             {
                 page = ReadPage(pageId);
                 if (page.PageId == 0)
-                    return recordId;
+                    return (pageId, recordId);
 
                 pageCache[pageId.Value] = page;
             }
 
             if (recordId.SlotIndex >= page.Slots.Count)
-                return recordId;
+                return (pageId, recordId);
 
             var slot = page.Slots[recordId.SlotIndex];
             var dataSpan = page.Data.Span;
@@ -544,7 +544,7 @@ public partial class PageManager : IDisposable
                 pageCache[pageId.Value] = page;
                 dirtyPages.Add(pageId.Value);
                 RecomputeFreeSpace(page);
-                return recordId;
+                return (pageId, recordId);
             }
 
             // Growth: relocate within the same page when there is room at the end of the
@@ -561,7 +561,7 @@ public partial class PageManager : IDisposable
                 pageCache[pageId.Value] = page;
                 dirtyPages.Add(pageId.Value);
                 RecomputeFreeSpace(page);
-                return recordId;
+                return (pageId, recordId);
             }
 
             // Growth with a full page: mark the old slot deleted and relocate to another page.
@@ -572,7 +572,8 @@ public partial class PageManager : IDisposable
             dirtyPages.Add(pageId.Value);
 
             var newPageId = FindPageWithSpace(page.TableId, newData.Length);
-            return InsertRecord(newPageId, newData);
+            var newRecordId = InsertRecord(newPageId, newData);
+            return (newPageId, newRecordId);
         }
     }
 

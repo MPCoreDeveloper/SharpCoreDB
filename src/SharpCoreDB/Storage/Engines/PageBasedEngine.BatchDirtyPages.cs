@@ -227,11 +227,11 @@ public partial class PageBasedEngine
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var manager = GetOrCreatePageManager(tableName);
 
-        // Update the record
-        manager.UpdateRecord(new Storage.Hybrid.PageManager.PageId(pageId), new Storage.Hybrid.PageManager.RecordId(recordId), newData);
+        // Update the record (may relocate to a new page when it grows)
+        var (newPage, _) = manager.UpdateRecord(new Storage.Hybrid.PageManager.PageId(pageId), new Storage.Hybrid.PageManager.RecordId(recordId), newData);
 
-        // CRITICAL: Track dirty page (O(1))
-        MarkPageDirtyInBatch(pageId);
+        // CRITICAL: Track dirty page (O(1)) - the record's actual page after the update
+        MarkPageDirtyInBatch(newPage.Value);
 
         // IMPORTANT: NO flush here - deferred until batch ends!
     }
@@ -253,10 +253,10 @@ public partial class PageBasedEngine
         foreach (var (storageRef, data) in updates)
         {
             var (pageId, recordId) = DecodeStorageReference(storageRef);
-            manager.UpdateRecord(new Storage.Hybrid.PageManager.PageId(pageId), new Storage.Hybrid.PageManager.RecordId(recordId), data);
+            var (newPage, _) = manager.UpdateRecord(new Storage.Hybrid.PageManager.PageId(pageId), new Storage.Hybrid.PageManager.RecordId(recordId), data);
 
-            // CRITICAL: Track dirty page (O(1))
-            MarkPageDirtyInBatch(pageId);
+            // CRITICAL: Track dirty page (O(1)) - the record's actual page after the update
+            MarkPageDirtyInBatch(newPage.Value);
         }
 
         // IMPORTANT: All updates buffered - NO flush yet!
