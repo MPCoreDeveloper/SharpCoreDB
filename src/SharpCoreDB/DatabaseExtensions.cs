@@ -198,6 +198,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         LoadTables();
     }
 
+    /// <summary>
+    /// Internal accessor for the table directory manager (issue #343: AOT-safe batch flushing
+    /// without reflection + dynamic dispatch, which fail under Native AOT / trimming).
+    /// </summary>
+    internal TableDirectoryManager TableDirectoryManager => _tableDirectoryManager;
+
     public Dictionary<string, ITable> Tables => _tables;
     public string DbPath => _dbPath;
     public DatabaseOptions Options => _options;

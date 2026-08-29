@@ -275,6 +275,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal TableDirectoryManager TableDirectoryManager => _tableDirectoryManager;
 
+/// <summary>
+/// Internal accessor for the block registry (issue #343: AOT-safe batch flushing without
+/// reflection + dynamic dispatch, which fail under Native AOT / trimming).
+/// </summary>
+internal BlockRegistry BlockRegistry => _blockRegistry;
+
     /// <summary>
     /// Gets the WAL manager for transaction operations.
     /// ✅ Phase 3: Exposed for crash recovery testing.
