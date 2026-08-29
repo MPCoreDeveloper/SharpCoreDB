@@ -58,18 +58,16 @@ internal static class SingleFileDatabaseBatchExtension
         lock (_staticBatchLock)
         {
             var storageProvider = database.StorageProvider;
-            var tableDirectoryManager = database.GetType()
-                .GetField("_tableDirectoryManager", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?.GetValue(database) as dynamic;
+            // Issue #343: direct internal accessor instead of reflection + dynamic dispatch,
+            // which fail under Native AOT / trimming.
+            var tableDirectoryManager = database.TableDirectoryManager;
 
             var isInTransactionBefore = storageProvider.IsInTransaction;
             
             // ✅ Phase 4.2: Begin BlockRegistry batch to defer all flushes until end
             if (storageProvider is SingleFileStorageProvider singleFileProvider)
             {
-                var blockRegistry = singleFileProvider.GetType()
-                    .GetField("_blockRegistry", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.GetValue(singleFileProvider) as dynamic;
+                var blockRegistry = singleFileProvider.BlockRegistry;
                 
                 blockRegistry?.BeginBatch();
             }
@@ -232,9 +230,7 @@ internal static class SingleFileDatabaseBatchExtension
                 // ✅ Phase 4.2: End BlockRegistry batch - triggers single flush for all updates
                 if (storageProvider is SingleFileStorageProvider sfProvider)
                 {
-                    var blockRegistry = sfProvider.GetType()
-                        .GetField("_blockRegistry", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        ?.GetValue(sfProvider) as dynamic;
+                    var blockRegistry = sfProvider.BlockRegistry;
                     
                     blockRegistry?.EndBatchAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                 }
