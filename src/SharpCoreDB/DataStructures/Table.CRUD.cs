@@ -1239,111 +1239,125 @@ public partial class Table
                     }
                 }
 
-                // Serialize updated row
-                int estimatedSize = EstimateRowSize(row);
-                byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-
-                try
+                // WP11: serialize the full row lazily. The common PageBased case overwrites
+                // only the updated fields at their cached fixed column offsets instead.
+                byte[] SerializeFullRow()
                 {
-                    // ✅ PERF: No ZeroBuffer — WriteTypedValueToSpan overwrites every written byte.
-                    int bytesWritten = 0;
-                    Span<byte> bufferSpan = buffer.AsSpan();
+                    int estimatedSize = EstimateRowSize(row);
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
 
-                    // ✅ PERFORMANCE: Get column index cache once
-                    var columnIndexCache = GetColumnIndexCache();
-
-                    foreach (var col in this.Columns)
+                    try
                     {
-                        // ✅ PERFORMANCE: Use cached index instead of IndexOf
-                        int colIdx = columnIndexCache[col];
-                        
-                        // ✅ FIX: Bounds check before accessing ColumnTypes
-                        if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
+                        // ✅ PERF: No ZeroBuffer — WriteTypedValueToSpan overwrites every written byte.
+                        int bytesWritten = 0;
+                        Span<byte> bufferSpan = buffer.AsSpan();
+
+                        // ✅ PERFORMANCE: Get column index cache once
+                        var columnIndexCache = GetColumnIndexCache();
+
+                        foreach (var col in this.Columns)
                         {
-                            throw new InvalidOperationException(
-                                $"Column index {colIdx} out of bounds for column '{col}'. " +
-                                $"ColumnTypes.Count={this.ColumnTypes.Count}");
+                            // ✅ PERFORMANCE: Use cached index instead of IndexOf
+                            int colIdx = columnIndexCache[col];
+
+                            // ✅ FIX: Bounds check before accessing ColumnTypes
+                            if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Column index {colIdx} out of bounds for column '{col}'. " +
+                                    $"ColumnTypes.Count={this.ColumnTypes.Count}");
+                            }
+
+                            int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
+                            bytesWritten += written;
                         }
-                        
-                        int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                        bytesWritten += written;
+
+                        return buffer.AsSpan(0, bytesWritten).ToArray();
                     }
-
-                    var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-                    if (StorageMode == StorageMode.Columnar)
+                    finally
                     {
-                        // Columnar: Append new version (old ref becomes stale)
-                        // Get old position from primary key index
-                        long oldPosition = -1;
-                        if (this.PrimaryKeyIndex >= 0)
-                        {
-                            var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                            var searchResult = this.Index.Search(pkVal);
-                            if (searchResult.Found)
-                            {
-                                oldPosition = searchResult.Value;
-                            }
-                        }
-
-                        // Insert new version
-                        long newPosition = engine.Insert(Name, rowData);
-
-                        // Update indexes to point to new position
-                        if (this.PrimaryKeyIndex >= 0)
-                        {
-                            var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                            this.Index.Insert(pkVal, newPosition);
-                        }
-
-                        // Update hash indexes
-                        foreach (var hashIndex in this.hashIndexes.Values)
-                        {
-                            if (oldPosition >= 0)
-                            {
-                                hashIndex.Remove(oldRow, oldPosition); // Remove old ref
-                            }
-                            hashIndex.Add(row, newPosition); // Add new ref
-                        }
-
-                        // ✅ NEW: Track updates for compaction
-                        Interlocked.Increment(ref _updatedRowCount);
-                    }
-                    else // PageBased
-                    {
-                        // Page-based: In-place update (or relocation when the record grows).
-                        if (this.PrimaryKeyIndex >= 0)
-                        {
-                            var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                            var searchResult = this.Index.Search(pkVal);
-                            if (searchResult.Found)
-                            {
-                                long position = searchResult.Value;
-                                long newPosition = engine.Update(Name, position, rowData);
-
-                                if (newPosition != position)
-                                {
-                                    // Record was relocated to another page (growing record on a
-                                    // full page): re-point the PK index and rebuild hash indexes.
-                                    var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
-                                }
-                                else
-                                {
-                                    // In-place update keeps the position; move hash entries in place.
-                                    foreach (var hashIndex in this.hashIndexes.Values)
-                                    {
-                                        hashIndex.Remove(oldRow, position);
-                                        hashIndex.Add(row, position);
-                                    }
-                                }
-                            }
-                        }
+                        ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
                     }
                 }
-                finally
+
+                if (StorageMode == StorageMode.Columnar)
                 {
-                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+                    var rowData = SerializeFullRow();
+
+                    // Columnar: Append new version (old ref becomes stale)
+                    // Get old position from primary key index
+                    long oldPosition = -1;
+                    if (this.PrimaryKeyIndex >= 0)
+                    {
+                        var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        var searchResult = this.Index.Search(pkVal);
+                        if (searchResult.Found)
+                        {
+                            oldPosition = searchResult.Value;
+                        }
+                    }
+
+                    // Insert new version
+                    long newPosition = engine.Insert(Name, rowData);
+
+                    // Update indexes to point to new position
+                    if (this.PrimaryKeyIndex >= 0)
+                    {
+                        var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        this.Index.Insert(pkVal, newPosition);
+                    }
+
+                    // Update hash indexes
+                    foreach (var hashIndex in this.hashIndexes.Values)
+                    {
+                        if (oldPosition >= 0)
+                        {
+                            hashIndex.Remove(oldRow, oldPosition); // Remove old ref
+                        }
+                        hashIndex.Add(row, newPosition); // Add new ref
+                    }
+
+                    // ✅ NEW: Track updates for compaction
+                    Interlocked.Increment(ref _updatedRowCount);
+                }
+                else // PageBased
+                {
+                    // Page-based: In-place update (or relocation when the record grows).
+                    // WP11: overwrite only the updated fields at their cached fixed column
+                    // offsets (no deserialize → re-serialize round trip) when they fit;
+                    // fall back to full serialization otherwise.
+                    if (this.PrimaryKeyIndex >= 0)
+                    {
+                        var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        var searchResult = this.Index.Search(pkVal);
+                        if (searchResult.Found)
+                        {
+                            long position = searchResult.Value;
+                            byte[]? existingData = engine.Read(Name, position);
+                            byte[] rowData = existingData != null && TryOverwriteFieldsInPlace(existingData, updates) is { } patched
+                                ? patched
+                                : SerializeFullRow();
+
+                            long newPosition = engine.Update(Name, position, rowData);
+
+                            if (newPosition != position)
+                            {
+                                // Record was relocated to another page (growing record on a
+                                // full page): re-point the PK index and rebuild hash indexes.
+                                var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                            }
+                            else
+                            {
+                                // In-place update keeps the position; move hash entries in place.
+                                foreach (var hashIndex in this.hashIndexes.Values)
+                                {
+                                    hashIndex.Remove(oldRow, position);
+                                    hashIndex.Add(row, position);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

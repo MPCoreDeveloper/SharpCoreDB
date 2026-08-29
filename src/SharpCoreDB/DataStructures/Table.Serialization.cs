@@ -29,6 +29,12 @@ public partial class Table
     /// Flag indicating if this table has a benchmark-compatible schema.
     /// </summary>
     private bool? _isBenchmarkSchema;
+
+    /// <summary>Cache of per-column byte offsets in a serialized row (schema-keyed, WP11).</summary>
+    private int[]? _cachedColumnOffsets;
+
+    /// <summary>Schema signature the <see cref="_cachedColumnOffsets"/> cache was built for.</summary>
+    private string? _cachedColumnOffsetsSig;
     
     /// <summary>
     /// ✅ PHASE 4: Detects if the table uses a common benchmark schema.
@@ -94,6 +100,163 @@ public partial class Table
         return _cachedSchemaSignature;
     }
     
+    #endregion
+
+    #region WP11: In-place field overwrite with cached fixed column offsets
+
+    /// <summary>
+    /// Gets the cached per-column byte offsets of a serialized row. An offset is -1 when the
+    /// column (or any preceding column) has a variable encoded size (string/blob), because its
+    /// position then depends on runtime data and cannot be resolved from the schema alone.
+    /// </summary>
+    private int[] GetColumnOffsetsCached()
+    {
+        var sig = GetSchemaSignature();
+        if (_cachedColumnOffsets != null && _cachedColumnOffsetsSig == sig)
+            return _cachedColumnOffsets;
+
+        var offsets = new int[Columns.Count];
+        int offset = 0;
+        bool unstable = false;
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            if (unstable)
+            {
+                offsets[i] = -1;
+                continue;
+            }
+
+            offsets[i] = offset;
+            int size = GetFixedEncodedSize(ColumnTypes[i]);
+            if (size < 0)
+            {
+                unstable = true; // variable-length column: following offsets are runtime-only
+            }
+            else
+            {
+                offset += size;
+            }
+        }
+
+        _cachedColumnOffsets = offsets;
+        _cachedColumnOffsetsSig = sig;
+        return offsets;
+    }
+
+    /// <summary>Fixed encoded size of a column (1 null flag + payload), or -1 for variable-length types.</summary>
+    private static int GetFixedEncodedSize(DataType type) => type switch
+    {
+        DataType.Integer => 5,
+        DataType.Long => 9,
+        DataType.RowRef => 9,
+        DataType.Real => 9,
+        DataType.Boolean => 2,
+        DataType.DateTime => 9,
+        DataType.Decimal => 17,
+        DataType.Ulid => 31,
+        DataType.Guid => 17,
+        _ => -1, // String, Blob, other: variable
+    };
+
+    /// <summary>Encoded size (in bytes) of a value for the given column type.</summary>
+    private static int GetEncodedSize(object? value, DataType type)
+    {
+        if (value == null || value == DBNull.Value)
+            return 1;
+
+        switch (type)
+        {
+            case DataType.Integer:
+            case DataType.Long:
+            case DataType.RowRef:
+            case DataType.Real:
+            case DataType.Boolean:
+            case DataType.DateTime:
+            case DataType.Decimal:
+            case DataType.Ulid:
+            case DataType.Guid:
+                return GetFixedEncodedSize(type);
+            case DataType.String:
+                return 5 + System.Text.Encoding.UTF8.GetByteCount((string)value);
+            case DataType.Blob:
+                return 5 + ((byte[])value).Length;
+            default:
+                return 5 + System.Text.Encoding.UTF8.GetByteCount(value.ToString() ?? string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Reads the encoded size of the column at <paramref name="offset"/> in a serialized row.
+    /// </summary>
+    private static int ReadColumnEncodedSize(ReadOnlySpan<byte> row, int offset, DataType type)
+    {
+        if (row[offset] == 0)
+            return 1; // null flag only
+
+        int fixedSize = GetFixedEncodedSize(type);
+        if (fixedSize >= 0)
+            return fixedSize;
+
+        // Variable-length (string/blob/other): 1 null + 4-byte length + payload.
+        int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(row.Slice(offset + 1, 4));
+        return 5 + length;
+    }
+
+    /// <summary>
+    /// WP11: overwrites the fields listed in <paramref name="updates"/> directly in an existing
+    /// serialized row at their cached column offsets, avoiding the deserialize → mutate →
+    /// re-serialize round trip. Returns null when a field cannot be overwritten in place
+    /// (unstable offset, or the new value is larger than the previous encoding and would shift
+    /// every following column); callers then fall back to full serialization.
+    /// </summary>
+    private byte[]? TryOverwriteFieldsInPlace(byte[] existingRow, Dictionary<string, object> updates)
+    {
+        if (existingRow == null || existingRow.Length == 0 || updates.Count == 0)
+            return null;
+
+        var offsets = GetColumnOffsetsCached();
+        var columnIndexCache = GetColumnIndexCache();
+
+        // Pass 1: every updated column must have a stable offset and fit in its old slot.
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx) || colIdx < 0 || colIdx >= offsets.Length)
+                return null;
+
+            int offset = offsets[colIdx];
+            if (offset < 0 || offset >= existingRow.Length)
+                return null;
+
+            int newSize = GetEncodedSize(value, ColumnTypes[colIdx]);
+            int oldSize = ReadColumnEncodedSize(existingRow.AsSpan(), offset, ColumnTypes[colIdx]);
+            if (newSize > oldSize)
+                return null; // would overflow the field
+
+            // A variable-length field before the last column changes the byte position of
+            // every following column; overwriting it in place is only safe when its encoding
+            // keeps the exact same size. Fixed-size fields never change size, and the last
+            // column has no followers to shift.
+            if (GetFixedEncodedSize(ColumnTypes[colIdx]) < 0 && colIdx < Columns.Count - 1 && newSize != oldSize)
+                return null;
+        }
+
+        // Pass 2: copy the row and overwrite only the updated fields.
+        var result = new byte[existingRow.Length];
+        existingRow.CopyTo(result, 0);
+        var span = result.AsSpan();
+
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx))
+                return null;
+
+            int offset = offsets[colIdx];
+            _ = WriteTypedValueToSpan(span.Slice(offset), value, ColumnTypes[colIdx]);
+        }
+
+        return result;
+    }
+
     #endregion
 
     #region Phase 4: Schema-Specific Fast Paths
