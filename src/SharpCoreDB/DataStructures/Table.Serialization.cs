@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Buffers;
 using SharpCoreDB.Services;
+using SharpCoreDB.Storage.Scdb;
 using System.Text;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -255,6 +256,103 @@ public partial class Table
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// WP13: computes the exact encoded size of a row so serialization can allocate the
+    /// final array once (no ArrayPool.Rent + ToArray double allocation, no copy).
+    /// Uses the same size model as <see cref="GetEncodedSize"/> so it matches what
+    /// <see cref="WriteTypedValueToSpan"/> will actually write.
+    /// </summary>
+    private int ComputeExactRowSize(Dictionary<string, object> row)
+    {
+        var columnIndexCache = GetColumnIndexCache();
+        int size = 0;
+        foreach (var col in this.Columns)
+        {
+            int colIdx = columnIndexCache[col];
+            row.TryGetValue(col, out var value);
+            size += GetEncodedSize(value, this.ColumnTypes[colIdx]);
+        }
+
+        return size;
+    }
+
+    /// <summary>
+    /// WP13: serializes a row directly into a freshly allocated array of the exact encoded
+    /// size. Replaces the ArrayPool.Rent + Span.ToArray() double allocation (one less
+    /// allocation and no intermediate copy). Falls back to an exact-length copy on the
+    /// (theoretical) mismatch between the size estimate and the actual bytes written.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private byte[] SerializeRowExact(Dictionary<string, object> row)
+    {
+        byte[] buffer = new byte[ComputeExactRowSize(row)];
+        int bytesWritten = WriteRowOptimized(buffer.AsSpan(), row);
+        return bytesWritten == buffer.Length
+            ? buffer
+            : buffer.AsSpan(0, bytesWritten).ToArray();
+    }
+
+    #endregion
+
+    #region WP13: Delta update wiring
+
+    private long _deltaUpdateCount;
+    private long _deltaBytesSaved;
+
+    /// <summary>WP13: number of in-place updates encoded as schema-aware deltas (monitoring).</summary>
+    public long TotalDeltaUpdates => Interlocked.Read(ref _deltaUpdateCount);
+
+    /// <summary>WP13: bytes saved by delta encoding (full record bytes minus delta bytes).</summary>
+    public long DeltaBytesSaved => Interlocked.Read(ref _deltaBytesSaved);
+
+    /// <summary>
+    /// Reads the actual encoded size of every field in a serialized row, in column order.
+    /// </summary>
+    private int[] GetRowFieldSizes(byte[] row)
+    {
+        var sizes = new int[Columns.Count];
+        int offset = 0;
+        for (int i = 0; i < Columns.Count && offset < row.Length; i++)
+        {
+            int size = ReadColumnEncodedSize(row.AsSpan(), offset, ColumnTypes[i]);
+            sizes[i] = size;
+            offset += size;
+        }
+
+        return sizes;
+    }
+
+    /// <summary>
+    /// WP13: encodes a schema-aware delta between the original and the updated row bytes.
+    /// </summary>
+    private byte[] EncodeRowDelta(byte[] oldRow, byte[] newRow)
+    {
+        var fieldSizes = GetRowFieldSizes(oldRow);
+        // Safe upper bound: header (4) + per changed field a 4-byte index plus the value,
+        // so the delta can exceed the record when many fields change.
+        var buffer = new byte[oldRow.Length + 4 + (4 * Columns.Count)];
+        int written = DeltaCodec.EncodeDelta(oldRow, newRow, fieldSizes, buffer);
+        return buffer.AsSpan(0, written).ToArray();
+    }
+
+    /// <summary>
+    /// WP13: records delta-encoding statistics for an in-place update when the storage engine
+    /// advertises delta support. Best-effort monitoring; never fails the update itself.
+    /// </summary>
+    private void RecordDeltaUpdate(byte[] oldRow, byte[] newRow)
+    {
+        try
+        {
+            var delta = EncodeRowDelta(oldRow, newRow);
+            Interlocked.Increment(ref _deltaUpdateCount);
+            Interlocked.Add(ref _deltaBytesSaved, oldRow.Length - delta.Length);
+        }
+        catch
+        {
+            // Delta encoding is best-effort; the update itself must not be affected.
+        }
     }
 
     #endregion
@@ -605,9 +703,12 @@ public partial class Table
                 break;
                 
             case DataType.DateTime:
-                if (buffer.Length < bytesWritten + 9) // 1 byte null flag + 8 bytes ToBinary
+                // bytesWritten already includes the 1-byte null flag, so only the 8-byte
+                // ToBinary payload remains to check (previously required one byte too many,
+                // which exact-size row buffers exposed).
+                if (buffer.Length < bytesWritten + 8)
                     throw new InvalidOperationException(
-                        $"Buffer too small for DateTime write: need {bytesWritten + 9} bytes, have {buffer.Length - bytesWritten}");
+                        $"Buffer too small for DateTime write: need {bytesWritten + 8} bytes, have {buffer.Length - bytesWritten}");
                 
                 // ✅ EFFICIENT BINARY: Use ToBinary() format (8 bytes) instead of ISO8601 (28+ bytes)
                 var dateTimeValue = (DateTime)value;

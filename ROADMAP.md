@@ -87,6 +87,11 @@
 - ✅ **SIMD numeric WHERE filters** — `Vector<T>` batch predicates for Integer/Long columns
 - ✅ **Compiled regexes** on all hot paths; regex-free `NormalizeSql` with allocation short-circuit
 - ✅ **Keyed index maintenance** — `HashIndex.Add/Remove` without full row copies; no `new Dictionary(row)` in `UpdateMultiple`
+- ✅ **Cross-page record relocation on UPDATE (WP10)** — the engine returns the actual post-write `(page, slot)` reference so the PK index and dirty-tracking re-point to the real record after a growing update moves it
+- ✅ **In-place fixed-size UPDATE patches (WP11)** — single-row UPDATE and PK-lookup batch paths overwrite only the changed fields at cached fixed column offsets instead of a deserialize → re-serialize round trip (safe fallback to full serialization for growing variable-length fields)
+- ✅ **Unified DELETE core (WP12)** — shared `DeleteRecordsCore` + key-only hash index cleanup; `DeleteByPrimaryKey` skips row reads when no hash indexes are loaded
+- ✅ **Exact-size row serialization (WP13)** — one allocation per insert/update instead of `ArrayPool.Rent` + `Span.ToArray()` (double allocation + extra copy); per-update index maintenance snapshots only the PK + indexed keys instead of a full row dictionary copy
+- ✅ **Schema-aware delta codec (WP13)** — `DeltaCodec.EncodeDelta/ApplyDelta` operate on the real field layout (no more fixed 8-byte blocks); `EnableDeltaUpdates` wiring records per-update delta byte savings (`TotalDeltaUpdates` / `DeltaBytesSaved`) for monitoring
 - ✅ **`LookupPositionsUnsafe`** — no-copy position lookup with explicit write-lock contract
 - ✅ **Cached DI** — `IGraphRagProvider` resolved once, not per call
 - ✅ **Removed hot-path debug I/O** — no more stray `D:\*.log` writes per SELECT/execute/transaction/INSERT

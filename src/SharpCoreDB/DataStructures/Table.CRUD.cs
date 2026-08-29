@@ -117,21 +117,13 @@ public partial class Table
             }
         }
 
-        // Serialize row data (outside lock)
-        int estimatedSize = EstimateRowSize(row);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
+        // Serialize row data (outside lock) - WP13: exact-size allocation, no pool + copy.
+        var rowData = SerializeRowExact(row);
+
+        // ✅ MINIMAL CRITICAL SECTION: Lock only for PK check, insert, and index updates
+        this.rwLock.EnterWriteLock();
         try
         {
-            // PERF: Use schema-optimized writer or direct index loop (no dictionary lookup)
-            Span<byte> bufferSpan = buffer.AsSpan();
-            int bytesWritten = WriteRowOptimized(bufferSpan, row);
-
-            var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-            // ✅ MINIMAL CRITICAL SECTION: Lock only for PK check, insert, and index updates
-            this.rwLock.EnterWriteLock();
-            try
-            {
                 // Primary key check (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
@@ -234,15 +226,10 @@ public partial class Table
                 
                 // ✅ NEW: Update cached row count
                 Interlocked.Increment(ref _cachedRowCount);
-            }
-            finally
-            {
-                this.rwLock.ExitWriteLock();
-            }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
+            this.rwLock.ExitWriteLock();
         }
     }
 
@@ -341,75 +328,30 @@ public partial class Table
             }
         }
 
-        // Step 2: ✅ PHASE 1 OPTIMIZATION: Bulk buffer allocation
-        // Calculate total size upfront to minimize allocations
-        int totalEstimatedSize = 0;
-        int[] rowSizesArray = new int[rows.Count];
-        
-        for (int i = 0; i < rows.Count; i++)
-        {
-            rowSizesArray[i] = EstimateRowSize(rows[i]);
-            totalEstimatedSize += rowSizesArray[i];
-        }
-
-        // ✅ NEW OPTIMIZATION: Parallel serialization for very large batches (>10k rows)
-        // This leverages multi-core CPUs for serialization overhead reduction
+        // Step 2: WP13 - serialize each row directly into an exact-size array.
+        // (Previously: bulk buffer + ArrayPool.Rent + Span.ToArray() = double allocation
+        // and an extra copy per row. SerializeRowExact allocates the final array once.)
         var serializedRows = new List<byte[]>(rows.Count);
         
         if (rows.Count > 10000)
         {
-            // Parallel serialization for massive batches
+            // Parallel serialization for massive batches (WP13: exact-size allocation)
             var parallelResults = new byte[rows.Count][];
             System.Threading.Tasks.Parallel.For(0, rows.Count, i =>
             {
-                var row = rows[i];
-                int estimatedSize = rowSizesArray[i];
-                byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-                try
-                {
-                    Span<byte> rowBuffer = buffer.AsSpan(0, estimatedSize);
-                    int bytesWritten = WriteRowOptimized(rowBuffer, row);
-
-                    parallelResults[i] = rowBuffer.Slice(0, bytesWritten).ToArray();
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-                }
+                parallelResults[i] = SerializeRowExact(rows[i]);
             });
             
             return (parallelResults.ToList(), rows);
         }
         
         // Sequential serialization for normal batches (<10k rows)
-        byte[] batchBuffer = ArrayPool<byte>.Shared.Rent(totalEstimatedSize);
-
-        try
+        for (int i = 0; i < rows.Count; i++)
         {
-            int bufferOffset = 0;
-
-            for (int i = 0; i < rows.Count; i++)
-            {
-                var row = rows[i];
-                int estimatedSize = rowSizesArray[i];
-                
-                // PERF: Use schema-optimized writer
-                Span<byte> rowBuffer = batchBuffer.AsSpan(bufferOffset, estimatedSize);
-                int bytesWritten = WriteRowOptimized(rowBuffer, row);
-
-                // Copy serialized data to final array (required for engine.InsertBatch)
-                var rowData = rowBuffer.Slice(0, bytesWritten).ToArray();
-                serializedRows.Add(rowData);
-                
-                bufferOffset += estimatedSize;
-            }
-
-            return (serializedRows, rows);
+            serializedRows.Add(SerializeRowExact(rows[i]));
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(batchBuffer, clearArray: false);
-        }
+
+        return (serializedRows, rows);
     }
 
     /// <summary>
@@ -591,38 +533,8 @@ public partial class Table
 
             foreach (var row in rows)
             {
-                int estimatedSize = EstimateRowSize(row);
-                byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-
-                try
-                {
-                    if (SimdHelper.IsSimdSupported)
-                    {
-                        SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-                    }
-                    else
-                    {
-                        Array.Clear(buffer, 0, estimatedSize);
-                    }
-
-                    int bytesWritten = 0;
-                    Span<byte> bufferSpan = buffer.AsSpan();
-
-                    foreach (var col in this.Columns)
-                    {
-                        // ✅ PERFORMANCE: Use cached index instead of IndexOf
-                        int colIdx = columnIndexCache[col];
-                        int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                        bytesWritten += written;
-                    }
-
-                    var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-                    serializedRows.Add(rowData);
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-                }
+                // WP13: exact-size allocation, no pool + copy.
+                serializedRows.Add(SerializeRowExact(row));
             }
 
             // Step 3: ✅ ROUTE TO ENGINE: Single InsertBatch() call (within transaction)!
@@ -1201,8 +1113,22 @@ public partial class Table
 
             foreach (var row in rows)
             {
-                // Store old values for CASCADE operations
-                var oldRow = new Dictionary<string, object>(row);
+                // WP13: capture only what index maintenance needs instead of copying the
+                // whole row (CASCADE is not wired in this path).
+                string? oldPkValue = this.PrimaryKeyIndex >= 0
+                    ? row[this.Columns[this.PrimaryKeyIndex]]?.ToString()
+                    : null;
+
+                // Snapshot old values of hash-indexed columns for key-only removal.
+                Dictionary<string, object>? oldHashKeys = null;
+                foreach (var kvp in this.hashIndexes)
+                {
+                    if (row.TryGetValue(kvp.Key, out var oldVal))
+                    {
+                        oldHashKeys ??= new Dictionary<string, object>();
+                        oldHashKeys[kvp.Key] = oldVal;
+                    }
+                }
 
                 // Apply updates to the row
                 foreach (var update in updates)
@@ -1243,41 +1169,8 @@ public partial class Table
                 // only the updated fields at their cached fixed column offsets instead.
                 byte[] SerializeFullRow()
                 {
-                    int estimatedSize = EstimateRowSize(row);
-                    byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-
-                    try
-                    {
-                        // ✅ PERF: No ZeroBuffer — WriteTypedValueToSpan overwrites every written byte.
-                        int bytesWritten = 0;
-                        Span<byte> bufferSpan = buffer.AsSpan();
-
-                        // ✅ PERFORMANCE: Get column index cache once
-                        var columnIndexCache = GetColumnIndexCache();
-
-                        foreach (var col in this.Columns)
-                        {
-                            // ✅ PERFORMANCE: Use cached index instead of IndexOf
-                            int colIdx = columnIndexCache[col];
-
-                            // ✅ FIX: Bounds check before accessing ColumnTypes
-                            if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Column index {colIdx} out of bounds for column '{col}'. " +
-                                    $"ColumnTypes.Count={this.ColumnTypes.Count}");
-                            }
-
-                            int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                            bytesWritten += written;
-                        }
-
-                        return buffer.AsSpan(0, bytesWritten).ToArray();
-                    }
-                    finally
-                    {
-                        ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-                    }
+                    // WP13: exact-size allocation - no ArrayPool.Rent + ToArray double allocation.
+                    return SerializeRowExact(row);
                 }
 
                 if (StorageMode == StorageMode.Columnar)
@@ -1289,7 +1182,7 @@ public partial class Table
                     long oldPosition = -1;
                     if (this.PrimaryKeyIndex >= 0)
                     {
-                        var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        var pkVal = oldPkValue ?? string.Empty;
                         var searchResult = this.Index.Search(pkVal);
                         if (searchResult.Found)
                         {
@@ -1307,14 +1200,14 @@ public partial class Table
                         this.Index.Insert(pkVal, newPosition);
                     }
 
-                    // Update hash indexes
-                    foreach (var hashIndex in this.hashIndexes.Values)
+                    // Update hash indexes (key-only removal of the old value)
+                    foreach (var kvp in this.hashIndexes)
                     {
-                        if (oldPosition >= 0)
+                        if (oldPosition >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                         {
-                            hashIndex.Remove(oldRow, oldPosition); // Remove old ref
+                            kvp.Value.Remove(oldKey, oldPosition); // Remove old ref
                         }
-                        hashIndex.Add(row, newPosition); // Add new ref
+                        kvp.Value.Add(row, newPosition); // Add new ref
                     }
 
                     // ✅ NEW: Track updates for compaction
@@ -1328,15 +1221,27 @@ public partial class Table
                     // fall back to full serialization otherwise.
                     if (this.PrimaryKeyIndex >= 0)
                     {
-                        var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        var pkVal = oldPkValue ?? string.Empty;
                         var searchResult = this.Index.Search(pkVal);
                         if (searchResult.Found)
                         {
                             long position = searchResult.Value;
                             byte[]? existingData = engine.Read(Name, position);
-                            byte[] rowData = existingData != null && TryOverwriteFieldsInPlace(existingData, updates) is { } patched
-                                ? patched
-                                : SerializeFullRow();
+                            byte[] rowData;
+                            if (existingData != null && TryOverwriteFieldsInPlace(existingData, updates) is { } patched)
+                            {
+                                rowData = patched;
+                                if (engine.SupportsDeltaUpdates)
+                                {
+                                    // WP13: wire the schema-aware delta codec - record
+                                    // delta savings when the engine advertises delta support.
+                                    RecordDeltaUpdate(existingData, patched);
+                                }
+                            }
+                            else
+                            {
+                                rowData = SerializeFullRow();
+                            }
 
                             long newPosition = engine.Update(Name, position, rowData);
 
@@ -1350,10 +1255,13 @@ public partial class Table
                             else
                             {
                                 // In-place update keeps the position; move hash entries in place.
-                                foreach (var hashIndex in this.hashIndexes.Values)
+                                foreach (var kvp in this.hashIndexes)
                                 {
-                                    hashIndex.Remove(oldRow, position);
-                                    hashIndex.Add(row, position);
+                                    if (oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                                    {
+                                        kvp.Value.Remove(oldKey, position);
+                                    }
+                                    kvp.Value.Add(row, position);
                                 }
                             }
                         }
@@ -1514,29 +1422,8 @@ public partial class Table
                         }
                     }
 
-                    // Serialize
-                    int estimatedSize = EstimateRowSize(row);
-                    byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-
-                    try
-                    {
-                        int bytesWritten = 0;
-                        Span<byte> bufferSpan = buffer.AsSpan();
-
-                        foreach (var col in this.Columns)
-                        {
-                            int colIdx = columnIndexCache[col];
-                            if (colIdx < 0 || colIdx >= this.ColumnTypes.Count)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Column index {colIdx} out of bounds for column '{col}'.");
-                            }
-
-                            int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                            bytesWritten += written;
-                        }
-
-                        var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
+                    // Serialize (WP13: exact-size allocation, no pool + copy)
+                    var rowData = SerializeRowExact(row);
 
                         if (StorageMode == StorageMode.Columnar)
                         {
@@ -1613,11 +1500,6 @@ public partial class Table
                                 }
                             }
                         }
-                    }
-                    finally
-                    {
-                        ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-                    }
                 }
             }
 
@@ -2187,7 +2069,16 @@ public partial class Table
             if (row == null)
                 return false;
 
-            var oldRow = new Dictionary<string, object>(row);
+            // WP13: capture only what index maintenance needs instead of copying the whole row.
+            Dictionary<string, object>? oldHashKeys = null;
+            foreach (var kvp in this.hashIndexes)
+            {
+                if (row.TryGetValue(kvp.Key, out var oldVal))
+                {
+                    oldHashKeys ??= new Dictionary<string, object>();
+                    oldHashKeys[kvp.Key] = oldVal;
+                }
+            }
 
             // Apply updates
             foreach (var update in updates)
@@ -2215,59 +2106,45 @@ public partial class Table
                 }
             }
 
-            // Serialize updated row
-            int estimatedSize = EstimateRowSize(row);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-            try
+            // Serialize updated row (WP13: exact-size allocation, no pool + copy)
+            var rowData = SerializeRowExact(row);
+
+            if (StorageMode == StorageMode.Columnar)
             {
-                int bytesWritten = 0;
-                Span<byte> bufferSpan = buffer.AsSpan();
-                var columnIndexCache = GetColumnIndexCache();
+                long newPosition = engine.Insert(Name, rowData);
+                this.Index.Insert(pkStr, newPosition);
 
-                foreach (var col in this.Columns)
+                foreach (var kvp in this.hashIndexes)
                 {
-                    int colIdx = columnIndexCache[col];
-                    int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], this.ColumnTypes[colIdx]);
-                    bytesWritten += written;
-                }
-
-                var rowData = buffer.AsSpan(0, bytesWritten).ToArray();
-
-                if (StorageMode == StorageMode.Columnar)
-                {
-                    long newPosition = engine.Insert(Name, rowData);
-                    this.Index.Insert(pkStr, newPosition);
-
-                    foreach (var hashIndex in this.hashIndexes.Values)
+                    if (oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                     {
-                        hashIndex.Remove(oldRow, storagePosition);
-                        hashIndex.Add(row, newPosition);
+                        kvp.Value.Remove(oldKey, storagePosition);
                     }
+                    kvp.Value.Add(row, newPosition);
+                }
+            }
+            else
+            {
+                long newPosition = engine.Update(Name, storagePosition, rowData);
+
+                if (newPosition != storagePosition)
+                {
+                    // Record was relocated to another page: re-point the PK index and
+                    // rebuild hash indexes lazily.
+                    var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                    RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
                 }
                 else
                 {
-                    long newPosition = engine.Update(Name, storagePosition, rowData);
-
-                    if (newPosition != storagePosition)
+                    foreach (var kvp in this.hashIndexes)
                     {
-                        // Record was relocated to another page: re-point the PK index and
-                        // rebuild hash indexes lazily.
-                        var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                        RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
-                    }
-                    else
-                    {
-                        foreach (var hashIndex in this.hashIndexes.Values)
+                        if (oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                         {
-                            hashIndex.Remove(oldRow, storagePosition);
-                            hashIndex.Add(row, storagePosition);
+                            kvp.Value.Remove(oldKey, storagePosition);
                         }
+                        kvp.Value.Add(row, storagePosition);
                     }
                 }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
             }
 
             if (StorageMode == StorageMode.Columnar)

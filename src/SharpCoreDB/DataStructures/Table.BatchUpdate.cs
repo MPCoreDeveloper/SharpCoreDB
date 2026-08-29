@@ -576,39 +576,9 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte[] SerializeRowOptimized(Dictionary<string, object> row)
     {
-        int estimatedSize = EstimateRowSize(row);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(estimatedSize);
-
-        try
-        {
-            if (SimdHelper.IsSimdSupported)
-            {
-                SimdHelper.ZeroBuffer(buffer.AsSpan(0, estimatedSize));
-            }
-            else
-            {
-                Array.Clear(buffer, 0, estimatedSize);
-            }
-
-            int bytesWritten = 0;
-            Span<byte> bufferSpan = buffer.AsSpan();
-
-            var columnIndexCache = GetColumnIndexCache();
-
-            foreach (var col in Columns)
-            {
-                int colIdx = columnIndexCache[col];
-                int written = WriteTypedValueToSpan(bufferSpan.Slice(bytesWritten), row[col], ColumnTypes[colIdx]);
-                bytesWritten += written;
-            }
-
-            // Return copy (buffer will be returned to pool)
-            return buffer.AsSpan(0, bytesWritten).ToArray();
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
-        }
+        // WP13: exact-size allocation - no ArrayPool.Rent + ToArray double allocation.
+        // Reuses the schema-specific fast paths inside WriteRowOptimized.
+        return SerializeRowExact(row);
     }
 
     /// <summary>

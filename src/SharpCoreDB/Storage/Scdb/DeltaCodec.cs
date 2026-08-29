@@ -66,6 +66,94 @@ public static class DeltaCodec
     }
 
     /// <summary>
+    /// WP13: schema-aware delta encoding. Encodes only changed fields using an explicit
+    /// per-field byte layout instead of the previous fixed 8-byte assumption, so it works
+    /// on real SharpCoreDB serialized rows (1-byte null flag + variable payload per field).
+    /// Format: [changedCount:4][fieldIndex:4][valueBytes:fieldSize]... per changed field.
+    /// </summary>
+    /// <param name="oldData">Original record data.</param>
+    /// <param name="newData">Updated record data (must be same size as <paramref name="oldData"/>).</param>
+    /// <param name="fieldSizes">Encoded byte size of each field in the record layout.</param>
+    /// <param name="destination">Buffer to write the delta to (must fit the encoded delta).</param>
+    /// <returns>Number of bytes written to destination.</returns>
+    public static int EncodeDelta(ReadOnlySpan<byte> oldData, ReadOnlySpan<byte> newData, ReadOnlySpan<int> fieldSizes, Span<byte> destination)
+    {
+        if (oldData.Length != newData.Length)
+            throw new ArgumentException("Record sizes must match for delta encoding");
+
+        var writer = new SpanWriter(destination);
+
+        var changedCountPos = writer.Position;
+        writer.Write(0); // Placeholder for count
+
+        int changedCount = 0;
+        int offset = 0;
+
+        for (int i = 0; i < fieldSizes.Length && offset < oldData.Length; i++)
+        {
+            int size = fieldSizes[i];
+            if (size <= 0 || offset + size > oldData.Length)
+                throw new ArgumentException($"Invalid field size {size} at field {i}");
+
+            if (!oldData.Slice(offset, size).SequenceEqual(newData.Slice(offset, size)))
+            {
+                writer.Write(i);        // Field index
+                writer.Write(newData.Slice(offset, size)); // New value
+                changedCount++;
+            }
+
+            offset += size;
+        }
+
+        var endPos = writer.Position;
+        writer.Position = changedCountPos;
+        writer.Write(changedCount);
+        writer.Position = endPos;
+
+        return writer.Position;
+    }
+
+    /// <summary>
+    /// WP13: schema-aware delta application. Applies a delta encoded with
+    /// <see cref="EncodeDelta(ReadOnlySpan{byte}, ReadOnlySpan{byte}, ReadOnlySpan{int}, Span{byte})"/>
+    /// to <paramref name="oldData"/> and writes the result to <paramref name="result"/>.
+    /// </summary>
+    /// <param name="oldData">Original record data.</param>
+    /// <param name="delta">Encoded delta.</param>
+    /// <param name="fieldSizes">Encoded byte size of each field in the record layout.</param>
+    /// <param name="result">Buffer for the result (must be same size as <paramref name="oldData"/>).</param>
+    public static void ApplyDelta(ReadOnlySpan<byte> oldData, ReadOnlySpan<byte> delta, ReadOnlySpan<int> fieldSizes, Span<byte> result)
+    {
+        if (result.Length != oldData.Length)
+            throw new ArgumentException("Result buffer must match old data size");
+
+        oldData.CopyTo(result);
+        var reader = new SpanReader(delta);
+
+        int changedCount = reader.ReadInt32();
+        for (int i = 0; i < changedCount; i++)
+        {
+            int fieldIndex = reader.ReadInt32();
+            if ((uint)fieldIndex >= (uint)fieldSizes.Length)
+                throw new InvalidDataException("Invalid field index in delta");
+
+            int size = fieldSizes[fieldIndex];
+            int offset = 0;
+            for (int f = 0; f < fieldIndex; f++)
+            {
+                offset += fieldSizes[f];
+            }
+
+            if (offset + size > result.Length)
+                throw new InvalidDataException("Invalid field index in delta");
+
+            var newField = delta.Slice(reader.Position, size);
+            newField.CopyTo(result.Slice(offset, size));
+            reader.Position += size;
+        }
+    }
+
+    /// <summary>
     /// Applies delta to old data to get new data.
     /// </summary>
     /// <param name="oldData">Original record data</param>
@@ -139,7 +227,11 @@ internal ref struct SpanWriter
         Position = 0;
     }
     
-    public void Write(int value) => BinaryPrimitives.WriteInt32LittleEndian(_buffer.Slice(Position), value);
+    public void Write(int value)
+    {
+        BinaryPrimitives.WriteInt32LittleEndian(_buffer.Slice(Position), value);
+        Position += sizeof(int);
+    }
     public void Write(ReadOnlySpan<byte> data)
     {
         data.CopyTo(_buffer.Slice(Position));

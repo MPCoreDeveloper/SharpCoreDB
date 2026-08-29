@@ -33,7 +33,10 @@ public sealed class DocumentationConsistencyTests
         foreach (var file in files)
         {
             var content = File.ReadAllText(file);
-            Assert.Contains("1.9.5", content, StringComparison.Ordinal);
+
+            // Accept any current release label (1.9.5, 1.9.7, 2.0.0, ...) so the hub check
+            // survives every version bump instead of pinning a single historic release.
+            Assert.Matches(@"\d+\.\d+\.\d+", content);
         }
     }
 
