@@ -28,8 +28,17 @@ class Program
     const int UpdateCount = 10_000;
     const int DeleteCount = 10_000;
 
-    static async Task Main()
+    static async Task Main(string[] args)
     {
+        // Optional: --engine=appendonly (default) | --engine=pagebased
+        // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
+        var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+        var engineType = engineArg is not null
+            && engineArg.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
+                : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+
         Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
         Console.WriteLine("║  SharpCoreDB vs BLite vs LiteDB vs SQLite               ║");
         Console.WriteLine("║  Comparative Document CRUD Benchmark                     ║");
@@ -38,6 +47,7 @@ class Program
         Console.WriteLine($"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
         Console.WriteLine($"OS:      {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
         Console.WriteLine($"Cores:   {Environment.ProcessorCount}");
+        Console.WriteLine($"Engine:  {engineLabel} (use --engine=pagebased for the in-place-update engine)");
         Console.WriteLine($"Inserts: {InsertCount:N0}  Reads: {ReadCount:N0}  Updates: {UpdateCount:N0}  Deletes: {DeleteCount:N0}");
         Console.WriteLine();
 
@@ -45,17 +55,17 @@ class Program
 
         // ── SharpCoreDB ──
         Console.WriteLine("━━━ SharpCoreDB (SQL) ━━━");
-        results["SharpCoreDB (SQL)"] = RunSharpCoreDB();
+        results["SharpCoreDB (SQL)"] = RunSharpCoreDB(engineType);
         Console.WriteLine();
 
         // ── SharpCoreDB Direct API ──
         Console.WriteLine("━━━ SharpCoreDB (Direct API) ━━━");
-        results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi();
+        results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi(engineType);
         Console.WriteLine();
 
         // ── SharpCoreDB StructRow (zero-alloc read path) ──
         Console.WriteLine("━━━ SharpCoreDB (StructRow) ━━━");
-        results["SharpCoreDB (StructRow)"] = RunSharpCoreDBStruct();
+        results["SharpCoreDB (StructRow)"] = RunSharpCoreDBStruct(engineType);
         Console.WriteLine();
 
         // ── SQLite ──
@@ -95,7 +105,36 @@ class Program
     // ══════════════════════════════════════
     // SharpCoreDB
     // ══════════════════════════════════════
-    static BenchmarkResult RunSharpCoreDB()
+    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        return new DatabaseConfig
+        {
+            NoEncryptMode = true,
+            StorageEngineType = engineType,
+            UseGroupCommitWal = false,
+            EnableAdaptiveWalBatching = false,
+            HighSpeedInsertMode = true,
+            GroupCommitSize = 1000,
+            WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+            EnablePageCache = true,
+            PageCacheCapacity = 10_000,
+            UseMemoryMapping = true,
+            UseBufferedIO = true,
+            EnableHashIndexes = true,
+            EnableQueryCache = true,
+            QueryCacheSize = 4096,
+            EnableCompiledPlanCache = true,
+            EnableBTreeSelection = true,
+            EnableSimdAndProjectionPushdown = true,
+            WalBufferSize = 8 * 1024 * 1024,
+            BufferPoolSize = 128 * 1024 * 1024,
+            CollectGCAfterBatches = false,
+            SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+            StrictParameterValidation = false
+        };
+    }
+
+    static BenchmarkResult RunSharpCoreDB(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -107,31 +146,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = new DatabaseConfig
-            {
-                NoEncryptMode = true,
-                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
-                UseGroupCommitWal = false,
-                EnableAdaptiveWalBatching = false,
-                HighSpeedInsertMode = true,
-                GroupCommitSize = 1000,
-                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
-                EnablePageCache = true,
-                PageCacheCapacity = 10_000,
-                UseMemoryMapping = true,
-                UseBufferedIO = true,
-                EnableHashIndexes = true,
-                EnableQueryCache = true,
-                QueryCacheSize = 4096,
-                EnableCompiledPlanCache = true,
-                EnableBTreeSelection = true,
-                EnableSimdAndProjectionPushdown = true,
-                WalBufferSize = 8 * 1024 * 1024,
-                BufferPoolSize = 128 * 1024 * 1024,
-                CollectGCAfterBatches = false,
-                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
-                StrictParameterValidation = false
-            };
+            var config = BuildConfig(engineType);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -239,7 +254,7 @@ class Program
     // ══════════════════════════════════════
     // SharpCoreDB (Direct API — no SQL parsing)
     // ══════════════════════════════════════
-    static BenchmarkResult RunSharpCoreDBDirectApi()
+    static BenchmarkResult RunSharpCoreDBDirectApi(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -251,31 +266,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = new DatabaseConfig
-            {
-                NoEncryptMode = true,
-                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
-                UseGroupCommitWal = false,
-                EnableAdaptiveWalBatching = false,
-                HighSpeedInsertMode = true,
-                GroupCommitSize = 1000,
-                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
-                EnablePageCache = true,
-                PageCacheCapacity = 10_000,
-                UseMemoryMapping = true,
-                UseBufferedIO = true,
-                EnableHashIndexes = true,
-                EnableQueryCache = true,
-                QueryCacheSize = 4096,
-                EnableCompiledPlanCache = true,
-                EnableBTreeSelection = true,
-                EnableSimdAndProjectionPushdown = true,
-                WalBufferSize = 8 * 1024 * 1024,
-                BufferPoolSize = 128 * 1024 * 1024,
-                CollectGCAfterBatches = false,
-                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
-                StrictParameterValidation = false
-            };
+            var config = BuildConfig(engineType);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -382,7 +373,7 @@ class Program
     // ══════════════════════════════════════
     // SharpCoreDB StructRow (zero-alloc read path)
     // ══════════════════════════════════════
-    static BenchmarkResult RunSharpCoreDBStruct()
+    static BenchmarkResult RunSharpCoreDBStruct(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -394,31 +385,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = new DatabaseConfig
-            {
-                NoEncryptMode = true,
-                StorageEngineType = SharpCoreDB.Interfaces.StorageEngineType.AppendOnly,
-                UseGroupCommitWal = false,
-                EnableAdaptiveWalBatching = false,
-                HighSpeedInsertMode = true,
-                GroupCommitSize = 1000,
-                WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
-                EnablePageCache = true,
-                PageCacheCapacity = 10_000,
-                UseMemoryMapping = true,
-                UseBufferedIO = true,
-                EnableHashIndexes = true,
-                EnableQueryCache = true,
-                QueryCacheSize = 4096,
-                EnableCompiledPlanCache = true,
-                EnableBTreeSelection = true,
-                EnableSimdAndProjectionPushdown = true,
-                WalBufferSize = 8 * 1024 * 1024,
-                BufferPoolSize = 128 * 1024 * 1024,
-                CollectGCAfterBatches = false,
-                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
-                StrictParameterValidation = false
-            };
+            var config = BuildConfig(engineType);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
