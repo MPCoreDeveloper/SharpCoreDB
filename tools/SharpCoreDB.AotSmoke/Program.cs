@@ -12,11 +12,11 @@
 //
 // Exercises the core paths that must work under Native AOT:
 //   CREATE TABLE / CREATE INDEX, InsertBatch, parameterized ExecuteQuery,
-//   and the zero-allocation ExecuteQueryStruct fast path.
+//   the zero-allocation ExecuteQueryStruct fast path, reopen, and single-file
+//   full VACUUM (issue #343).
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
-using System.Runtime.CompilerServices;
 
 var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}");
 var scdbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}.scdb");
@@ -114,44 +114,33 @@ try
 
     // Issue #343: full VACUUM on a single-file (.scdb) database must survive .NET trimming /
     // Native AOT. Previously the stream swap used reflection (GetField on a private readonly
-    // field), which returns null under AOT and crashed with ObjectDisposedException.
-    //
-    // NOTE: the single-file row cache (SingleFileTable.FlushCache) uses System.Text.Json
-    // reflection serialization, which is disabled under Native AOT. That is a separate,
-    // pre-existing limitation (tracked alongside issue #343); under AOT we skip this section
-    // so the smoke test still exits 0, while JIT runs exercise the full-vacuum path.
-    if (RuntimeFeature.IsDynamicCodeSupported)
+    // field), which returns null under AOT and crashed with ObjectDisposedException. The row
+    // cache JSON serialization is AOT-safe through the source-generated SingleFileTableJsonContext.
+    var scdbOptions = SharpCoreDB.DatabaseOptions.CreateSingleFileDefault();
+    await using (var scdb = factory.CreateWithOptions(scdbPath, "aot123", scdbOptions))
     {
-        var scdbOptions = SharpCoreDB.DatabaseOptions.CreateSingleFileDefault();
-        await using (var scdb = factory.CreateWithOptions(scdbPath, "aot123", scdbOptions))
+        scdb.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+        var inserts = new List<string>(50);
+        for (int i = 0; i < 50; i++)
         {
-            scdb.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
-            var inserts = new List<string>(50);
-            for (int i = 0; i < 50; i++)
-            {
-                inserts.Add($"INSERT INTO t (id, name) VALUES ({i}, 'User{i}')");
-            }
-            scdb.ExecuteBatchSQL(inserts);
-            scdb.Flush();
-
-            var vacuum = await scdb.VacuumAsync(VacuumMode.Full, CancellationToken.None);
-            if (!vacuum.Success)
-            {
-                Console.WriteLine($"FAIL: VacuumAsync(VacuumMode.Full) failed: {vacuum.ErrorMessage}");
-                return 1;
-            }
-
-            var rowsAfter = scdb.ExecuteQuery("SELECT * FROM t");
-            if (rowsAfter.Count != 50)
-            {
-                Console.WriteLine($"FAIL: After full vacuum expected 50 rows, got {rowsAfter.Count}.");
-                return 1;
-            }
+            inserts.Add($"INSERT INTO t (id, name) VALUES ({i}, 'User{i}')");
         }
-    }
-    else
-    {
-        Console.WriteLine("SKIP: single-file VACUUM smoke not run under Native AOT (SingleFileTable uses System.Text.Json reflection serialization - separate pre-existing issue).");
+        scdb.ExecuteBatchSQL(inserts);
+        scdb.Flush();
+
+        var vacuum = await scdb.VacuumAsync(VacuumMode.Full, CancellationToken.None);
+        if (!vacuum.Success)
+        {
+            Console.WriteLine($"FAIL: VacuumAsync(VacuumMode.Full) failed: {vacuum.ErrorMessage}");
+            return 1;
+        }
+
+        var rowsAfter = scdb.ExecuteQuery("SELECT * FROM t");
+        if (rowsAfter.Count != 50)
+        {
+            Console.WriteLine($"FAIL: After full vacuum expected 50 rows, got {rowsAfter.Count}.");
+            return 1;
+        }
     }
 
     Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum).");
