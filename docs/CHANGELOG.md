@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Issue #343 — `VacuumAsync(VacuumMode.Full)` crashed with `ObjectDisposedException` under .NET 10
+  trimming / Native AOT** (same fix set as the v1.9.8 line on `master`):
+  - the full-vacuum stream swap uses direct field assignment (`SwapFileStream`) instead of reflection,
+    and error paths read the file size safely (`GetFileSizeSafely`, `-1` fallback);
+  - the temp-file extension mismatch that broke full vacuum (`<file>.vacuum.tmp.scdb` vs `<file>.vacuum.tmp`)
+    is fixed;
+  - single-file (`.scdb`) mode is now fully Native AOT-safe: the row-cache JSON serialization uses the
+    source-generated `SingleFileTableJsonContext` + `PolymorphicObjectConverter` (byte-for-byte identical
+    output, existing files stay readable), and the batch-flush reflection + `dynamic` calls were replaced
+    with internal `TableDirectoryManager`/`BlockRegistry` accessors;
+  - regression test `SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen`; `SharpCoreDB.AotSmoke`
+    publishes with `PublishAot=true` and runs exit 0 including the single-file full-vacuum path.
+
 ## [2.0.0] - 2026-08-28
 
 ### Performance-first release 🚀
