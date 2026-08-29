@@ -7,6 +7,10 @@ on:
         description: 'Reason for manual publish'
         required: false
         default: 'Manual publish'
+      versionSuffix:
+        description: 'NuGet pre-release suffix (e.g. "preview.1" → 2.0.0-preview.1). Leave empty for a stable 2.0.0 publish.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -41,7 +45,20 @@ jobs:
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
 
     - name: Pack NuGet packages
-      run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts /p:ContinuousIntegrationBuild=true --configfile NuGet.Config
+      shell: bash
+      env:
+        VERSION_SUFFIX: ${{ github.event.inputs.versionSuffix }}
+      run: |
+        PACK_VERSION="2.0.0"
+        if [ -n "$VERSION_SUFFIX" ]; then
+          PACK_VERSION="2.0.0-${VERSION_SUFFIX}"
+          echo "::warning::Publishing PRE-RELEASE NuGet version ${PACK_VERSION}"
+        fi
+        echo "::group::Pack NuGet packages (${PACK_VERSION})"
+        dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts \
+          /p:ContinuousIntegrationBuild=true /p:Version="$PACK_VERSION" \
+          --configfile NuGet.Config
+        echo "::endgroup::"
 
     - name: Publish packages in dependency order
       shell: bash
