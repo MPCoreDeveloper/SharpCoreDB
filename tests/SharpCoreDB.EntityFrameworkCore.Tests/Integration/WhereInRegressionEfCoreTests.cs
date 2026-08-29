@@ -142,4 +142,137 @@ public sealed class WhereInRegressionEfCoreTests : IDisposable
             Assert.Equal(1, rows);
         }
     }
+
+    // --- Issue #340: discriminating provider cases. The IN filter must return a subset
+    // (never the whole table), and the SQLite VALUES / tuple forms must work. ---
+
+    [Fact]
+    public void WhereIn_ParameterizedList_SubsetFilter_DoesNotReturnAllRows()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        using var c = conn.CreateCommand();
+        c.CommandText = "SELECT id FROM kg_nodes_test WHERE node_type IN (@p0, @p1)";
+        AddParameter(c, "@p0", "WorkItem");
+        AddParameter(c, "@p1", "DoesNotExist");
+        using var r = c.ExecuteReader();
+        int rows = 0;
+        while (r.Read())
+        {
+            rows++;
+        }
+
+        // The second list item matches nothing: a working filter returns the 2 WorkItem
+        // rows. Returning 3 would mean the predicate is ignored (the regression).
+        Assert.Equal(2, rows);
+    }
+
+    [Fact]
+    public void WhereIn_VALUESForm_ReturnsMatchingRows()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0))";
+            AddParameter(c, "@p0", "WorkItem");
+            using var r = c.ExecuteReader();
+            int rows = 0;
+            while (r.Read())
+            {
+                rows++;
+            }
+
+            Assert.Equal(2, rows);
+        }
+
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0), (@p1))";
+            AddParameter(c, "@p0", "WorkItem");
+            AddParameter(c, "@p1", "Person");
+            using var r = c.ExecuteReader();
+            int rows = 0;
+            while (r.Read())
+            {
+                rows++;
+            }
+
+            Assert.Equal(3, rows);
+        }
+    }
+
+    [Fact]
+    public void ExecuteNonQuery_ReturnsAffectedRows()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        // Sanity: how many rows does a plain SELECT find for node_type = 'WorkItem'?
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "SELECT id FROM kg_nodes_test WHERE node_type = 'WorkItem'";
+            using var r = c.ExecuteReader();
+            int rows = 0;
+            while (r.Read())
+            {
+                rows++;
+            }
+
+            Assert.Equal(2, rows);
+        }
+
+        // UPDATE must report the number of matching rows (2 WorkItem rows).
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "UPDATE kg_nodes_test SET external_id = 'x' WHERE node_type = 'WorkItem'";
+            Assert.Equal(2, c.ExecuteNonQuery());
+        }
+
+        // DELETE must report the number of deleted rows, not a constant 1.
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "DELETE FROM kg_nodes_test WHERE node_type = 'Person'";
+            Assert.Equal(1, c.ExecuteNonQuery());
+        }
+
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "DELETE FROM kg_nodes_test WHERE node_type = 'WorkItem'";
+            Assert.Equal(2, c.ExecuteNonQuery());
+        }
+
+        // Nothing left: DELETE over an empty result must report 0.
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "DELETE FROM kg_nodes_test WHERE node_type = 'WorkItem'";
+            Assert.Equal(0, c.ExecuteNonQuery());
+        }
+    }
+
+    [Fact]
+    public void WhereIn_TupleValuesForm_ReturnsMatchingRows()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        using var c = conn.CreateCommand();
+        c.CommandText = "SELECT id FROM kg_nodes_test WHERE (node_type, external_id) IN (VALUES (@nt, @ei))";
+        AddParameter(c, "@nt", "WorkItem");
+        AddParameter(c, "@ei", "WI-1");
+        using var r = c.ExecuteReader();
+        int rows = 0;
+        while (r.Read())
+        {
+            rows++;
+        }
+
+        Assert.Equal(1, rows);
+    }
 }

@@ -106,6 +106,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// <inheritdoc />
     public long GetLastInsertRowId() => Interlocked.Read(ref _lastInsertRowIdVal);
 
+    /// <inheritdoc />
+    public int GetLastChanges() => _sharedSqlParser?.LastChanges ?? 0;
+
     /// <summary>
     /// Sets the last insert rowid (called by insert operations).
     /// Internal method - not part of public API.

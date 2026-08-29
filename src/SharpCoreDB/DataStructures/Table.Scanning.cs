@@ -217,20 +217,16 @@ public partial class Table
             return SqlParser.EvaluateJoinWhere(row, where);
         }
 
-        // ✅ Issue #339: support IN / NOT IN lists for all column types.
-        // Previously the list was split on spaces (losing everything after the first
-        // comma when the SQL contains spaces, e.g. IN ('a', 'b')), and non-string
-        // columns fell through the switch's default → accept-all. Parsing is shared via
-        // SqlInPredicate so every path evaluates the full parenthesized list.
-        if (SqlInPredicate.TryParseCondition(where, out var inCol, out var inNegated, out var inItems))
+        // ✅ Issue #339/#340: support IN / NOT IN lists for all column types, including
+        // SQLite VALUES forms and tuple predicates. Previously the list was split on spaces
+        // (losing everything after the first comma when the SQL contains spaces, e.g.
+        // IN ('a', 'b')), and non-string columns fell through the switch's default →
+        // accept-all. Parsing is shared via SqlInPredicate so every path evaluates the full
+        // parenthesized list.
+        if (SqlInPredicate.TryParsePredicate(where, out var inPredicate))
         {
-            if (!row.TryGetValue(inCol, out var inRowVal) || inRowVal is null or DBNull)
-            {
-                return false;
-            }
-
-            var matched = SqlInPredicate.IsMatch(inRowVal, inItems);
-            return inNegated ? !matched : matched;
+            var matched = SqlInPredicate.IsMatch(row, inPredicate);
+            return inPredicate.Negated ? !matched : matched;
         }
 
         // ✅ Parity: delegate LIKE / NOT LIKE / BETWEEN (single-condition form) to the shared

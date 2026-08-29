@@ -14,7 +14,7 @@ using System.Text.RegularExpressions;
 /// Shared IN / NOT IN predicate parsing and evaluation, used by every WHERE evaluation path
 /// (single-file <see cref="SingleFileTable"/>, directory-mode <see cref="DataStructures.Table"/>
 /// and the enhanced AST evaluator). Centralizing the logic here prevents the value-list
-/// parsing from drifting between paths (GitHub issue #339).
+/// parsing from drifting between paths (GitHub issues #339 and #340).
 /// </summary>
 internal static class SqlInPredicate
 {
@@ -24,20 +24,29 @@ internal static class SqlInPredicate
         TimeSpan.FromSeconds(1));
 
     /// <summary>
-    /// Parses a single-condition IN / NOT IN clause: <c>col IN ('a', 'b')</c> or
-    /// <c>col NOT IN (1, 2)</c>. Returns the normalized column name (alias-qualified and
-    /// quoted references are stripped), whether the clause is negated, and the trimmed items.
+    /// A parsed IN / NOT IN predicate. Supports a scalar column
+    /// (<c>node_type IN ('a', 'b')</c>) and a tuple column
+    /// (<c>(node_type, external_id) IN (VALUES ('a','x'), ('b','y'))</c>).
+    /// </summary>
+    /// <param name="Columns">The normalized column names (1 for scalar, N for a tuple).</param>
+    /// <param name="Rows">The candidate value rows; each row has exactly <see cref="Columns"/> entries.</param>
+    /// <param name="Negated">True when the clause is <c>NOT IN</c>.</param>
+    public readonly record struct ParsedInPredicate(string[] Columns, List<string[]> Rows, bool Negated)
+    {
+        public bool IsScalar => Columns.Length == 1;
+    }
+
+    /// <summary>
+    /// Parses a single-condition IN / NOT IN clause, including SQLite-style <c>IN (VALUES (...))</c>
+    /// and tuple forms. Returns the normalized column names (alias-qualified and quoted references
+    /// are stripped), whether the clause is negated, and the trimmed value rows.
     /// </summary>
     /// <param name="condition">The condition text, e.g. <c>node_type IN ('WorkItem', 'Person')</c>.</param>
-    /// <param name="column">The normalized column name.</param>
-    /// <param name="negated">True when the clause is <c>NOT IN</c>.</param>
-    /// <param name="items">The trimmed, quote-stripped list items.</param>
+    /// <param name="parsed">The parsed predicate when the condition is a well-formed IN/NOT IN clause.</param>
     /// <returns>True when the condition is a well-formed IN/NOT IN clause.</returns>
-    public static bool TryParseCondition(string condition, out string column, out bool negated, out List<string> items)
+    public static bool TryParsePredicate(string condition, out ParsedInPredicate parsed)
     {
-        column = string.Empty;
-        negated = false;
-        items = [];
+        parsed = default;
 
         var match = InConditionPattern.Match(condition);
         if (!match.Success)
@@ -45,28 +54,98 @@ internal static class SqlInPredicate
             return false;
         }
 
-        column = NormalizeColumn(match.Groups[1].Value);
-        negated = match.Groups[2].Success;
-        items = match.Groups[3].Value
-            .Split(',')
-            .Select(v => v.Trim().Trim('\'', '"'))
-            .ToList();
+        var columnPart = match.Groups[1].Value.Trim();
+        var listPart = match.Groups[3].Value;
+        bool negated = match.Groups[2].Success;
 
+        var columns = ParseColumns(columnPart);
+        if (columns.Length == 0)
+        {
+            return false;
+        }
+
+        var rows = ParseValueRows(listPart);
+        if (rows.Count == 0)
+        {
+            return false;
+        }
+
+        parsed = new ParsedInPredicate(columns, rows, negated);
         return true;
     }
 
     /// <summary>
-    /// Evaluates a row value against an already-parsed IN list by comparing <see cref="object.ToString"/>.
+    /// Legacy scalar-only wrapper kept for callers that only need a single-column IN list.
     /// </summary>
-    /// <param name="rowValue">The row value to test.</param>
-    /// <param name="items">The parsed list items.</param>
-    /// <returns>True when the row value is contained in the list.</returns>
+    public static bool TryParseCondition(string condition, out string column, out bool negated, out List<string> items)
+    {
+        column = string.Empty;
+        negated = false;
+        items = [];
+
+        if (!TryParsePredicate(condition, out var parsed) || parsed.Columns.Length != 1)
+        {
+            return false;
+        }
+
+        column = parsed.Columns[0];
+        negated = parsed.Negated;
+        items = parsed.Rows.Select(r => r[0]).ToList();
+        return true;
+    }
+
+    /// <summary>
+    /// Evaluates a row against a parsed IN/NOT IN predicate. For a scalar predicate every column
+    /// value must equal the single list item; for a tuple predicate every column value must equal
+    /// the corresponding tuple slot. A row matches when any candidate row matches.
+    /// </summary>
+    /// <param name="row">The row to test.</param>
+    /// <param name="parsed">The parsed predicate.</param>
+    /// <returns>True when the row matches the predicate (before negation is applied).</returns>
+    public static bool IsMatch(Dictionary<string, object> row, ParsedInPredicate parsed)
+    {
+        foreach (var values in parsed.Rows)
+        {
+            if (values.Length != parsed.Columns.Length)
+            {
+                continue;
+            }
+
+            bool allMatch = true;
+            for (int i = 0; i < parsed.Columns.Length; i++)
+            {
+                if (!row.TryGetValue(parsed.Columns[i], out var v) || v is null or DBNull)
+                {
+                    allMatch = false;
+                    break;
+                }
+
+                if (!string.Equals(v.ToString(), values[i], StringComparison.Ordinal))
+                {
+                    allMatch = false;
+                    break;
+                }
+            }
+
+            if (allMatch)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Legacy scalar matcher: compares a single row value against an already-parsed list.
+    /// </summary>
     public static bool IsMatch(object? rowValue, IEnumerable<string> items)
         => items.Contains(rowValue?.ToString() ?? string.Empty);
 
     /// <summary>
-    /// Evaluates a raw IN value list (e.g. <c>('a', 'b')</c> or <c>(1,2,3)</c>) against a row value.
-    /// Strips surrounding parentheses (when present), splits on commas and trims quotes.
+    /// Evaluates a raw IN value list (e.g. <c>('a', 'b')</c>, <c>(1,2,3)</c> or
+    /// <c>(VALUES ('a'), ('b'))</c>) against a single row value. Commas inside parentheses
+    /// (tuple rows) do not split the list, and a leading <c>VALUES</c> keyword is ignored.
     /// </summary>
     /// <param name="rowValue">The row value to test.</param>
     /// <param name="listValue">The raw value list text.</param>
@@ -78,13 +157,154 @@ internal static class SqlInPredicate
             return false;
         }
 
-        var trimmed = listValue.Trim();
-        if (trimmed.StartsWith('(') && trimmed.EndsWith(')'))
+        var list = listValue.Trim();
+        if (list.StartsWith('(') && list.EndsWith(')'))
         {
-            trimmed = trimmed[1..^1];
+            list = list[1..^1];
         }
 
-        return trimmed.Split(',').Select(v => v.Trim().Trim('\'', '"')).Contains(rowValue);
+        if (list.StartsWith("VALUES", StringComparison.OrdinalIgnoreCase))
+        {
+            list = list["VALUES".Length..].Trim();
+        }
+
+        return SplitTopLevel(list)
+            .Select(item => item.Trim())
+            .Where(item => item.Length > 0)
+            .Select(StripSingleValue)
+            .Any(item => string.Equals(item, rowValue, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Strips the wrapping parentheses (for single-value items such as <c>('a')</c>) and the
+    /// surrounding quotes from one list item. Tuple items (<c>('a','b')</c>) are left as-is so
+    /// they can never accidentally match a scalar column value.
+    /// </summary>
+    private static string StripSingleValue(string item)
+    {
+        if (item.StartsWith('(') && item.EndsWith(')') && !item[1..^1].Contains(','))
+        {
+            item = item[1..^1];
+        }
+
+        return item.Trim().Trim('\'', '"');
+    }
+
+    /// <summary>
+    /// Parses the column part of an IN predicate: a bare column or a parenthesized tuple.
+    /// </summary>
+    private static string[] ParseColumns(string columnPart)
+    {
+        if (columnPart.StartsWith('(') && columnPart.EndsWith(')'))
+        {
+            return SplitTopLevel(columnPart[1..^1])
+                .Select(NormalizeColumn)
+                .Where(c => c.Length > 0)
+                .ToArray();
+        }
+
+        var col = NormalizeColumn(columnPart);
+        return col.Length > 0 ? [col] : [];
+    }
+
+    /// <summary>
+    /// Parses the value-list part of an IN predicate (the content between the outer parentheses)
+    /// into rows of values. Handles bare lists, SQLite <c>VALUES</c> rows and tuple rows.
+    /// </summary>
+    private static List<string[]> ParseValueRows(string listPart)
+    {
+        var list = listPart.Trim();
+
+        // SQLite-style: IN (VALUES (v1), (v2)) — drop the keyword, keep the rows.
+        if (list.StartsWith("VALUES", StringComparison.OrdinalIgnoreCase))
+        {
+            list = list["VALUES".Length..].Trim();
+        }
+
+        var rows = new List<string[]>();
+        foreach (var item in SplitTopLevel(list))
+        {
+            var t = item.Trim();
+            if (t.Length == 0)
+            {
+                continue;
+            }
+
+            if (t.StartsWith('(') && t.EndsWith(')'))
+            {
+                // Tuple row: (v1, v2) — split the inner list on top-level commas.
+                rows.Add(SplitTopLevel(t[1..^1])
+                    .Select(v => v.Trim().Trim('\'', '"'))
+                    .Where(v => v.Length > 0)
+                    .ToArray());
+            }
+            else
+            {
+                rows.Add([t.Trim('\'', '"')]);
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Splits a string on commas that are not inside parentheses or string literals. This is what
+    /// lets <c>IN (VALUES ('a', 'x'), ('b', 'y'))</c> be split into two tuple rows instead of four
+    /// scalar values.
+    /// </summary>
+    private static List<string> SplitTopLevel(string text)
+    {
+        var parts = new List<string>();
+        int depth = 0;
+        bool inString = false;
+        char quote = '\0';
+        int start = 0;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (inString)
+            {
+                if (c == quote)
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (c == '\'' || c == '"')
+            {
+                inString = true;
+                quote = c;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (c == ')')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                continue;
+            }
+
+            if (c == ',' && depth == 0)
+            {
+                parts.Add(text[start..i]);
+                start = i + 1;
+            }
+        }
+
+        parts.Add(text[start..]);
+        return parts;
     }
 
     /// <summary>

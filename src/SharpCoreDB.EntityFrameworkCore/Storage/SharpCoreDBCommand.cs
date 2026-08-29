@@ -71,42 +71,9 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        // DEBUG: Log DML commands
-        try
-        {
-            System.IO.File.AppendAllText("D:\\ef_nonquery.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQuery: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
-        }
-        catch { /* Intentionally empty */ }
-
         var parameters = BuildParameterDictionary();
 
         var rewritten = RewriteAliasQualifiedSql(_commandText);
-
-        // DETAILED DIAGNOSTIC for Guid relationship DML issues (Company/Vacancy)
-        if (rewritten.Contains("Vacancies", StringComparison.OrdinalIgnoreCase) ||
-            rewritten.Contains("Companies", StringComparison.OrdinalIgnoreCase) ||
-            rewritten.Contains("CompanyId", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                var paramDump = string.Join(", ", parameters.Select(kv => $"{kv.Key}={kv.Value?.GetType().Name}:{kv.Value}"));
-                System.IO.File.AppendAllText("D:\\ef_relationship_dml.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] DML for relationship table\n" +
-                    $"  Original: {_commandText}\n" +
-                    $"  Rewritten: {rewritten}\n" +
-                    $"  Parameters: {paramDump}\n\n");
-            }
-            catch { /* Intentionally empty */ }
-        }
-
-        // DEBUG: Log rewritten SQL
-        try
-        {
-            System.IO.File.AppendAllText("D:\\ef_nonquery.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n");
-        }
-        catch { /* Intentionally empty */ }
 
         _connection.DbInstance.ExecuteSQL(rewritten, parameters);
 
@@ -122,7 +89,9 @@ public class SharpCoreDBCommand : DbCommand
             _connection.DbInstance.Flush();
         }
 
-        return 1;
+        // ✅ Issue #340: return the real affected-row count (SQLite changes() parity).
+        // Previously this hardcoded 1, breaking DELETE/UPDATE affected counts.
+        return _connection.DbInstance.GetLastChanges();
     }
 
     /// <inheritdoc />
@@ -155,14 +124,6 @@ public class SharpCoreDBCommand : DbCommand
             throw new InvalidOperationException("Database instance is not initialized.");
 
         var parameters = BuildParameterDictionary();
-
-        // DEBUG: Log all commands
-        try
-        {
-            System.IO.File.AppendAllText("D:\\ef_commands.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] Command: {_commandText.Substring(0, Math.Min(200, _commandText.Length))}\n");
-        }
-        catch { /* Intentionally empty */ }
 
         // ✅ FIX: Rewrite alias-qualified column refs that SharpCoreDB parser cannot handle.
         // EF Core generates SELECT "b"."BlogId", "b"."Title" FROM "Blogs" AS "b".
@@ -218,32 +179,7 @@ public class SharpCoreDBCommand : DbCommand
         var upper0 = rewritten.TrimStart().ToUpperInvariant();
         if (upper0.StartsWith("INSERT") || upper0.StartsWith("UPDATE") || upper0.StartsWith("DELETE"))
         {
-            // DEBUG: Log DML execution
-            try
-            {
-                System.IO.File.AppendAllText("D:\\ef_dml.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] DML ExecuteDbDataReader:\n" +
-                    $"  Original: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n" +
-                    $"  Rewritten: {rewritten.Substring(0, Math.Min(300, rewritten.Length))}\n" +
-                    $"  DbTransaction: {(DbTransaction is null ? "null" : "present")}\n");
-            }
-            catch { /* Intentionally empty */ }
-
             // DML without a trailing SELECT – run via ExecuteSQL (not ExecuteQuery)
-
-            // === DEEP DIAGNOSTIC — LOG EVERY DML (especially for relationship troubleshooting) ===
-            try
-            {
-                var paramDump = string.Join(" | ", parameters.Select(kv => $"{kv.Key}={kv.Value}"));
-                System.IO.File.AppendAllText("D:\\ef_deep_dml.log",
-                    $"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] === DML EXECUTED ===\n" +
-                    $"ORIGINAL:\n{_commandText}\n\n" +
-                    $"REWRITTEN:\n{rewritten}\n\n" +
-                    $"PARAMETERS:\n{paramDump}\n" +
-                    $"================================\n");
-            }
-            catch { /* Intentionally empty */ }
-
             _connection.DbInstance.ExecuteSQL(rewritten, parameters);
             if (DbTransaction is null)
                 _connection.DbInstance.Flush();
@@ -252,24 +188,6 @@ public class SharpCoreDBCommand : DbCommand
 
         // Single statement – execute as query directly (SELECT path)
         var queryResults = _connection.DbInstance.ExecuteQuery(rewritten, parameters);
-
-        // DEBUG: Log what the engine returned
-        try
-        {
-            var debugInfo = $"[{DateTime.Now:HH:mm:ss.fff}] Query Results:\n" +
-                            $"  SQL: {rewritten}\n" +
-                            $"  Row count: {queryResults.Count}\n";
-            if (queryResults.Count > 0)
-            {
-                debugInfo += $"  First row keys: {string.Join(", ", queryResults[0].Keys)}\n";
-                foreach (var kvp in queryResults[0])
-                {
-                    debugInfo += $"    {kvp.Key} = {kvp.Value?.ToString() ?? "NULL"} (type: {kvp.Value?.GetType().Name ?? "null"})\n";
-                }
-            }
-            System.IO.File.AppendAllText("D:\\query_results.log", debugInfo + "\n");
-        }
-        catch { /* Intentionally empty */ }
 
         // ✅ ROBUST EF PROVIDER: Always project when we have a clean column list.
         // Fallback to original results if projection fails (backwards safety).
@@ -603,33 +521,12 @@ public class SharpCoreDBCommand : DbCommand
         if (_connection.DbInstance is null)
             throw new InvalidOperationException("Database instance is not initialized.");
 
-        // DEBUG: Log DML commands
-        try
-        {
-            System.IO.File.AppendAllText("D:\\ef_nonquery_async.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteNonQueryAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
-        }
-        catch { /* Intentionally empty */ }
-
         var parameters = BuildParameterDictionary();
 
         // ✅ FIX: Rewrite EF Core SQL before executing (same as ExecuteDbDataReader)
         // EF Core generates: DELETE FROM "Blogs" WHERE "b"."BlogId" = @p0
         // SharpCoreDB needs: DELETE FROM Blogs WHERE BlogId = @p0
         var rewritten = RewriteAliasQualifiedSql(_commandText);
-
-        // === DEEP DIAGNOSTIC — NON-QUERY DML PATH ===
-        try
-        {
-            var paramDump = string.Join(" | ", parameters.Select(kv => $"{kv.Key}={kv.Value}"));
-            System.IO.File.AppendAllText("D:\\ef_deep_dml.log",
-                $"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] === NON-QUERY DML (ExecuteNonQueryAsync) ===\n" +
-                $"ORIGINAL:\n{_commandText}\n\n" +
-                $"REWRITTEN:\n{rewritten}\n\n" +
-                $"PARAMS: {paramDump}\n" +
-                $"====================================\n");
-        }
-        catch { /* Intentionally empty */ }
 
         await _connection.DbInstance.ExecuteSQLAsync(rewritten, parameters, cancellationToken).ConfigureAwait(false);
 
@@ -643,7 +540,8 @@ public class SharpCoreDBCommand : DbCommand
             _connection.DbInstance.Flush();
         }
 
-        return 1;
+        // ✅ Issue #340: return the real affected-row count (SQLite changes() parity).
+        return _connection.DbInstance.GetLastChanges();
     }
 
     /// <inheritdoc />
@@ -664,14 +562,6 @@ public class SharpCoreDBCommand : DbCommand
     /// </remarks>
     protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
     {
-        // DEBUG: Log async DML path
-        try
-        {
-            System.IO.File.AppendAllText("D:\\ef_reader_async.log",
-                $"[{DateTime.Now:HH:mm:ss.fff}] ExecuteDbDataReaderAsync: {_commandText.Substring(0, Math.Min(300, _commandText.Length))}\n");
-        }
-        catch { /* Intentionally empty */ }
-
         // Delegate to the synchronous implementation which handles SQL rewriting
         return await Task.Run(() => ExecuteDbDataReader(behavior), cancellationToken).ConfigureAwait(false);
     }

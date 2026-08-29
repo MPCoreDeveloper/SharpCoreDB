@@ -97,6 +97,12 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private int _lastChanges;
 
     /// <summary>
+    /// Gets the number of rows affected by the most recently executed DML statement
+    /// (INSERT/UPDATE/DELETE). Returns 0 for DDL and for statements that affected no rows.
+    /// </summary>
+    public int LastChanges => _lastChanges;
+
+    /// <summary>
     /// Cumulative number of rows changed since the connection was opened (for TOTAL_CHANGES() function).
     /// </summary>
     private int _totalChanges;

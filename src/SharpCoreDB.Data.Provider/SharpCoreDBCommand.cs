@@ -148,8 +148,11 @@ public sealed class SharpCoreDBCommand : DbCommand
                 db.Flush();
             }
 
-            // SharpCoreDB doesn't return rows affected, return -1 as per ADO.NET convention
-            return -1;
+            // ✅ Issue #340: return the real affected-row count (SQLite changes() parity).
+            // For INSERT/UPDATE/DELETE this is the number of rows written/changed; for DDL
+            // it is 0. Previously the provider always returned -1 / 1, breaking callers that
+            // depend on ExecuteNonQuery's return value (e.g. EF Core SaveChanges).
+            return db.GetLastChanges();
         }
         catch (Exception ex)
         {
@@ -413,7 +416,8 @@ public sealed class SharpCoreDBCommand : DbCommand
                 db.Flush();
             }
 
-            return -1;
+            // ✅ Issue #340: return the real affected-row count (SQLite changes() parity).
+            return db.GetLastChanges();
         }
         catch (Exception ex)
         {

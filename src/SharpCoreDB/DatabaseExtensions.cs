@@ -208,6 +208,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     public long GetLastInsertRowId() => _lastInsertRowId;
     internal void SetLastInsertRowId(long rowId) => _lastInsertRowId = rowId;
 
+    /// <inheritdoc />
+    public int GetLastChanges() => _sqlParser?.LastChanges ?? 0;
+
     /// <summary>
     /// Returns (or lazily creates) the shared <see cref="Services.SqlParser"/> that handles DML and SELECT statements for this single-file database.
     /// </summary>

@@ -1090,16 +1090,99 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return EvaluateSingleCondition(row, trimmedCondition);
         }
 
-        var parts = trimmedCondition.Split([" AND ", " and "], StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
+        // ✅ Issue #340: handle OR chains (e.g. col = @p0 OR col = @p1). Split on top-level
+        // OR first — any matching branch makes the whole condition true.
+        var orParts = SplitTopLevelLogical(trimmedCondition, "OR");
+        if (orParts.Count > 1)
         {
-            if (!EvaluateSingleCondition(row, part.Trim()))
-            {
-                return false;
-            }
+            return orParts.Any(part => EvaluateCondition(row, part));
         }
 
-        return true;
+        var parts = SplitTopLevelLogical(trimmedCondition, "AND");
+        if (parts.Count > 1)
+        {
+            return parts.All(part => EvaluateCondition(row, part));
+        }
+
+        return EvaluateSingleCondition(row, trimmedCondition);
+    }
+
+    /// <summary>
+    /// Splits a condition on a logical keyword (AND / OR) that appears at the top level only —
+    /// i.e. not inside parentheses or string literals. This keeps <c>IN ('a', 'b')</c> and
+    /// <c>(a = 1 OR b = 2)</c> intact while still splitting <c>col = 1 OR col = 2</c>.
+    /// </summary>
+    private static List<string> SplitTopLevelLogical(string text, string keyword)
+    {
+        var parts = new List<string>();
+        int depth = 0;
+        bool inString = false;
+        char quote = '\0';
+        int start = 0;
+        int i = 0;
+
+        while (i < text.Length)
+        {
+            char c = text[i];
+            if (inString)
+            {
+                if (c == quote)
+                {
+                    inString = false;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c == '\'' || c == '"')
+            {
+                inString = true;
+                quote = c;
+                i++;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+                i++;
+                continue;
+            }
+
+            if (c == ')')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                i++;
+                continue;
+            }
+
+            // Word-boundary match for the keyword at the top level: surrounded by whitespace.
+            if (depth == 0 && c is ' ' or '\t' &&
+                i + 1 + keyword.Length < text.Length &&
+                text.AsSpan(i + 1, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                char.IsWhiteSpace(text[i + 1 + keyword.Length]))
+            {
+                parts.Add(text[start..i].Trim());
+                i += 1 + keyword.Length;
+                while (i < text.Length && char.IsWhiteSpace(text[i]))
+                {
+                    i++;
+                }
+
+                start = i;
+                continue;
+            }
+
+            i++;
+        }
+
+        parts.Add(text[start..].Trim());
+        return parts;
     }
 
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
@@ -1160,17 +1243,13 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                    string.CompareOrdinal(rowVal.ToString(), highStr) <= 0;
         }
 
-        // ✅ Issue #339: support IN / NOT IN lists (previously not in the operator list,
-        // so the condition fell through to "accept all rows").
-        if (SqlInPredicate.TryParseCondition(trimmed, out var inCol, out var inNegated, out var inItems))
+        // ✅ Issue #339/#340: support IN / NOT IN lists, SQLite VALUES forms and tuple
+        // predicates (previously not in the operator list, so the condition fell through
+        // to "accept all rows"; the VALUES/tuple shapes returned 0 rows).
+        if (SqlInPredicate.TryParsePredicate(trimmed, out var inPredicate))
         {
-            if (!row.TryGetValue(inCol, out var inRowVal) || inRowVal is null or DBNull)
-            {
-                return false;
-            }
-
-            var matched = SqlInPredicate.IsMatch(inRowVal, inItems);
-            return inNegated ? !matched : matched;
+            var matched = SqlInPredicate.IsMatch(row, inPredicate);
+            return inPredicate.Negated ? !matched : matched;
         }
 
         var operators = new[] { ">=", "<=", "!=", "<>", "=", ">", "<" };
