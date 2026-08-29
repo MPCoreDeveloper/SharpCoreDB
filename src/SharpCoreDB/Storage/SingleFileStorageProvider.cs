@@ -295,7 +295,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // the file; materialize and decrypt the block instead.
         if (_encryption is not null)
         {
-            var data = ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
             return data is null ? null : new MemoryStream(data);
         }
 
@@ -316,7 +316,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // ✅ Issue #341: encrypted blocks are materialized + decrypted (no zero-copy span).
         if (_encryption is not null)
         {
-            var data = ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
             return data is null ? ReadOnlySpan<byte>.Empty : data.AsSpan();
         }
 
@@ -436,8 +436,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         // ✅ Issue #341: encrypt block data at rest before computing the checksum and
-        // queuing the write. The on-disk block is ciphertext (nonce + ciphertext + tag);
-        // the checksum and registry length describe the ciphertext.
+        // queuing the write. The on-disk block is ciphertext (nonce, ciphertext, tag)
+        // and the checksum plus registry length describe that ciphertext, not the plaintext.
         if (_encryption is not null)
         {
             data = _encryption.Encrypt(data.ToArray());

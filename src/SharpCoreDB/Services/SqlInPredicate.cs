@@ -23,6 +23,9 @@ internal static class SqlInPredicate
         RegexOptions.IgnoreCase | RegexOptions.Singleline,
         TimeSpan.FromSeconds(1));
 
+    /// <summary>SQLite <c>IN (VALUES (...))</c> keyword stripped before list parsing.</summary>
+    private const string ValuesKeyword = "VALUES";
+
     /// <summary>
     /// A parsed IN / NOT IN predicate. Supports a scalar column
     /// (<c>node_type IN ('a', 'b')</c>) and a tuple column
@@ -163,9 +166,9 @@ internal static class SqlInPredicate
             list = list[1..^1];
         }
 
-        if (list.StartsWith("VALUES", StringComparison.OrdinalIgnoreCase))
+        if (list.StartsWith(ValuesKeyword, StringComparison.OrdinalIgnoreCase))
         {
-            list = list["VALUES".Length..].Trim();
+            list = list[ValuesKeyword.Length..].Trim();
         }
 
         return SplitTopLevel(list)
@@ -216,9 +219,9 @@ internal static class SqlInPredicate
         var list = listPart.Trim();
 
         // SQLite-style: IN (VALUES (v1), (v2)) — drop the keyword, keep the rows.
-        if (list.StartsWith("VALUES", StringComparison.OrdinalIgnoreCase))
+        if (list.StartsWith(ValuesKeyword, StringComparison.OrdinalIgnoreCase))
         {
-            list = list["VALUES".Length..].Trim();
+            list = list[ValuesKeyword.Length..].Trim();
         }
 
         var rows = new List<string[]>();
@@ -265,38 +268,24 @@ internal static class SqlInPredicate
             char c = text[i];
             if (inString)
             {
-                if (c == quote)
-                {
-                    inString = false;
-                }
-
+                inString = c != quote; // closing quote exits the string literal
                 continue;
             }
 
-            if (c == '\'' || c == '"')
+            if (c is '\'' or '"')
             {
                 inString = true;
                 quote = c;
-                continue;
             }
-
-            if (c == '(')
+            else if (c == '(')
             {
                 depth++;
-                continue;
             }
-
-            if (c == ')')
+            else if (c == ')')
             {
-                if (depth > 0)
-                {
-                    depth--;
-                }
-
-                continue;
+                depth = Math.Max(0, depth - 1);
             }
-
-            if (c == ',' && depth == 0)
+            else if (c == ',' && depth == 0)
             {
                 parts.Add(text[start..i]);
                 start = i + 1;

@@ -1126,46 +1126,25 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             char c = text[i];
             if (inString)
             {
-                if (c == quote)
-                {
-                    inString = false;
-                }
-
+                inString = c != quote; // closing quote exits the string literal
                 i++;
                 continue;
             }
 
-            if (c == '\'' || c == '"')
+            if (c is '\'' or '"')
             {
                 inString = true;
                 quote = c;
-                i++;
-                continue;
             }
-
-            if (c == '(')
+            else if (c == '(')
             {
                 depth++;
-                i++;
-                continue;
             }
-
-            if (c == ')')
+            else if (c == ')')
             {
-                if (depth > 0)
-                {
-                    depth--;
-                }
-
-                i++;
-                continue;
+                depth = Math.Max(0, depth - 1);
             }
-
-            // Word-boundary match for the keyword at the top level: surrounded by whitespace.
-            if (depth == 0 && c is ' ' or '\t' &&
-                i + 1 + keyword.Length < text.Length &&
-                text.AsSpan(i + 1, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase) &&
-                char.IsWhiteSpace(text[i + 1 + keyword.Length]))
+            else if (IsLogicalKeywordAt(text, i, keyword, depth))
             {
                 parts.Add(text[start..i].Trim());
                 i += 1 + keyword.Length;
@@ -1183,6 +1162,23 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         parts.Add(text[start..].Trim());
         return parts;
+    }
+
+    /// <summary>
+    /// True when <paramref name="keyword"/> (OR / AND) starts right after a top-level space at
+    /// <paramref name="index"/> and is followed by whitespace, e.g. <c>"col = 1 OR col = 2"</c>.
+    /// </summary>
+    private static bool IsLogicalKeywordAt(string text, int index, string keyword, int depth)
+    {
+        if (depth != 0 || text[index] is not (' ' or '\t'))
+        {
+            return false;
+        }
+
+        var after = index + 1 + keyword.Length;
+        return after < text.Length
+            && text.AsSpan(index + 1, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase)
+            && char.IsWhiteSpace(text[after]);
     }
 
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
