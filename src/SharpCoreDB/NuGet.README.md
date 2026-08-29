@@ -45,7 +45,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - 🎉 The project is now **continuously analyzed on SonarCloud** — quality gate, bug, vulnerability and
   code-smell tracking are part of the normal workflow from this release onward.
 
-### v1.9.6 to v1.9.6
+### v1.9.6 highlights
 
 - **Auto-ROWID**: Tables without an explicit `PRIMARY KEY` get a hidden `_rowid` column (ULID). SQLite rowid semantics.
 - **GRAPH_RAG SQL clause**: New `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, `TOP_K`.
@@ -58,7 +58,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - Bug fixes: IS NULL/IS NOT NULL unification, COALESCE() in SELECT, LINQ Convert, German locale matching, PAGE_BASED mixed-predicate scan.
 
 ### 🔄 Synchronized 1.9.6 Release
-now ship on the same `1.9.6` release line
+All optional packages now ship on the same `1.9.6` release line
 - **Documentation Refresh** - Installation guidance and package docs were updated to match the current feature and fix set
 - **Optional Package Maturity** - Event Sourcing, Projections, and CQRS docs now highlight durable snapshots, checkpointing, persistent outbox support, retry handling, and hosted workers
 
@@ -87,7 +87,7 @@ now ship on the same `1.9.6` release line
 ✅ **High Performance** - 6.5x faster than SQLite for bulk operations  
 ✅ **Modern C# 14** - Latest language features, NativeAOT ready  
 ✅ **Cross-Platform** - Windows, Linux, macOS, ARM64 native  
-✅ **Production Ready** - 1,468+ tests, zero known critical bugs  
+✅ **Production Ready** - 2,500+ tests, zero known critical bugs  
 ✅ **Multi-Language** - .NET, Python, JavaScript/TypeScript clients  
 
 ## 📊 Performance
@@ -247,7 +247,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 **Latest Version:** 1.9.7 (August 29, 2026)  
 **Target:** .NET 10 / C# 14  
-**Tests:** 1,521+ core / 114 EF Core (100% passing)  
+**Tests:** 2,520+ across all suites (1,521 core / 114 EF Core), 100% passing  
 **Status:** ✅ Production Ready
 
 

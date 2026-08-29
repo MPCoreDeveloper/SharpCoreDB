@@ -24,7 +24,7 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-A production-focused stack validated by **2,223 tests** and **backward compatibility**
+A production-focused stack validated by **2,520 tests** and **backward compatibility**
 
 > Full documentation: **`docs/INDEX.md`**
 
@@ -59,7 +59,7 @@ A production-focused stack validated by **2,223 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 1.9.7
 ```
 
 ```csharp
@@ -87,8 +87,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.6
-dotnet add package SharpCoreDB.Client --version 1.9.6
+dotnet add package SharpCoreDB.Server --version 1.9.7
+dotnet add package SharpCoreDB.Client --version 1.9.7
 ```
 
 ---
@@ -110,7 +110,31 @@ dotnet add package SharpCoreDB.Client --version 1.9.6
 
 ---
 
-## v1.9.6 release (current)
+## v1.9.7 release (current)
+
+- **Fixed the `WHERE IN (...)` regression across every application-critical form** (Issue #340): `IN` / `NOT IN`
+  predicates now evaluate correctly for multi-value parameter lists (`IN (@p0, @p1)`), SQLite `VALUES` forms
+  (`IN (VALUES (@p0), (@p1))`), composite-key tuple rows (`(a, b) IN (VALUES (@a, @b))`) and `OR`-chained
+  predicates in single-file (`.scdb`) mode — previously these returned 0 rows or fell through to "accept all".
+  Regression coverage reproduces the reporter's exact `SharpCoreDBConnection` + `.scdb` probe.
+- **`ExecuteNonQuery` now returns the real affected-row count**: both the ADO.NET `SharpCoreDB.Data.Provider` and
+  the EF Core provider report the actual rows changed (a `DELETE` of 2 rows returns `2`, not `-1`/`1`) via the
+  new `IDatabase.GetLastChanges()` API (SQLite `changes()` parity).
+- **Single-file (`.scdb`) encryption now actually encrypts** (Issue #341): `DatabaseOptions.EncryptionKey` is
+  honored at last — every block (table rows, table directory, column/index definitions, WAL records) is encrypted
+  with **AES-256-GCM** at rest, and opening with a **wrong key now fails** (GCM authentication error or empty
+  schema). Directory mode already encrypted; this closes the single-file gap.
+- **EF Core provider no longer writes debug log files** on every command (`ef_commands`, `ef_dml`, `ef_deep_dml`,
+  `query_results`, `ef_reader_async`, `ef_nonquery`).
+- **Tests**: **2,520 tests, 0 failures** across all 15 .NET test projects (core engine 1,521, EF Core 114,
+  vector search 143, plus provider, identity, analytics, CQRS, event-sourcing, functional and server suites).
+- **SonarCloud quality gate green** ✅ — the release line is continuously analyzed; the v1.9.7 fix set cleared all
+  new-code findings. See the [SonarCloud dashboard](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB).
+- **100% backward compatible** with the v1.9.6 release line.
+
+---
+
+## v1.9.6 release
 
 - **Fixed a critical `WHERE col IN (...)` regression** (Issue #339): `IN` / `NOT IN` filters were silently
   ignored (returning **ALL rows**) because the predicate evaluators did not recognize the `IN` operator. Fixed
@@ -238,44 +262,44 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 ### Quality and compatibility
 
-- **2,223 tests passing**
-- **100% backward compatible** across the v1.9.5 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.6
+- **2,520 tests passing**
+- **100% backward compatible** across the v1.9.6 release line
+- Zero breaking changes intended from v1.5.0 to v1.9.7
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.6)
+## Available NuGet packages (v1.9.7)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 1.9.7
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.6
-dotnet add package SharpCoreDB.Client --version 1.9.6
+dotnet add package SharpCoreDB.Server --version 1.9.7
+dotnet add package SharpCoreDB.Client --version 1.9.7
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.6
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.6
-dotnet add package SharpCoreDB.Graph --version 1.9.6
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
-dotnet add package SharpCoreDB.Distributed --version 1.9.6
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.6
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.6
-dotnet add package SharpCoreDB.Extensions --version 1.9.6
+dotnet add package SharpCoreDB.Analytics --version 1.9.7
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.7
+dotnet add package SharpCoreDB.Graph --version 1.9.7
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.7
+dotnet add package SharpCoreDB.Distributed --version 1.9.7
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.7
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.7
+dotnet add package SharpCoreDB.Extensions --version 1.9.7
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.6
-dotnet add package SharpCoreDB.Projections --version 1.9.6
-dotnet add package SharpCoreDB.CQRS --version 1.9.6
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.7
+dotnet add package SharpCoreDB.Projections --version 1.9.7
+dotnet add package SharpCoreDB.CQRS --version 1.9.7
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.6
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.6
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.6
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.6
+dotnet add package SharpCoreDB.Functional --version 1.9.7
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.7
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.7
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.7
 ```
 
 ---
@@ -290,7 +314,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.6
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.6 release (critical WHERE IN regression fix, SonarCloud onboarding, version bump), see the v1.9.6 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.7 release (WHERE IN regression fixed across all forms, single-file `.scdb` encryption, real `ExecuteNonQuery` affected counts, SonarCloud onboarding), see the v1.9.7 section above and docs/CHANGELOG.md.
 
 ---
 
