@@ -26,9 +26,12 @@ Use it when you need:
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
 - A production-focused stack validated by **2,412 tests** and **backward compatibility**
 
-> **v2.0 — the performance-first release.** Point reads now **beat SQLite** (~120–125K ops/s vs ~88–97K),
-> every CRUD operation **beats LiteDB**, SIMD columnar analytics run **~682x faster than SQLite** on `GROUP BY`
-> SUM, and the engine is **Native AOT-ready**. Full results: [docs/manual/performance.md](docs/manual/performance.md).
+> **v2.0 — the performance-first release.** Point reads **beat SQLite** on the default engine, batch INSERTs
+> **beat SQLite** on the PageBased engine (**194–206K vs 109K ops/s**), every CRUD operation **beats LiteDB**,
+> and the v2.0 storage-engine roadmap (WP10–WP13) narrowed single-row UPDATE/DELETE from ~5–7x behind SQLite
+> to **~2.5–4x** (in-place field patches + unified delete core). SIMD columnar analytics run **~682x faster
+> than SQLite** on `GROUP BY` SUM, and the engine is **Native AOT-ready**. Full results:
+> [docs/manual/performance.md](docs/manual/performance.md).
 
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**
 
@@ -60,18 +63,29 @@ Use it when you need:
 
 ## What's new in v2.0 (performance-first)
 
-The benchmark gap that made v1.x **16–52x slower than SQLite** on point reads/updates/deletes is closed:
+The benchmark gap that made v1.x **16–52x slower than SQLite** on point reads/updates/deletes is closed.
+Latest runs (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative`, 100K inserts + 10K reads/updates/deletes,
+2026-08-29): the default **AppendOnly** engine and the **PageBased** storage-engine roadmap (WP10–WP13):
 
-| Operation (ops/sec, two-run range) | **v2.0** | SQLite | LiteDB |
-|---|---|---|---|
-| **READ — Direct / StructRow** | **70–126K** | 87–97K | 14–16K |
-| **READ — SQL** | 51–59K | 87–97K | 14–16K |
-| **INSERT** | 91–133K | 145–150K | 66–77K |
-| **UPDATE** | 41–59K | 241–296K | 10–11K |
-| **DELETE** | 30–142K | 320–367K | 13–14K |
+| Operation (ops/sec, latest runs) | **v2.0 — AppendOnly** | **v2.0 — PageBased** | SQLite | LiteDB |
+|---|---|---|---|---|
+| **READ — Direct** | **114K** | 34K | 99K | 16K |
+| **READ — SQL / StructRow** | 64–93K | 30–36K | 99K | 16K |
+| **INSERT — batch (Direct/StructRow)** | 100–103K | **194–206K** | 109–144K | 75K |
+| **UPDATE** | 42–50K | **58–65K** | 239–279K | 10–11K |
+| **DELETE** | 29–128K | **107–129K** | 317–376K | 13–14K |
+
+🔧 **Storage-engine roadmap (WP10–WP13) head-to-head** (PageBased vs AppendOnly, same API):
+INSERT **+89%** (103K→194K Direct), UPDATE **+31–39%** (42–50K→58–65K, in-place field patches),
+DELETE **+271%** on the SQL path (29K→107K, unified delete core). The remaining UPDATE/DELETE gap vs SQLite
+(**~2.5–4x**) is the tracked v2.1 target in the [V2 performance plan](docs/performance/V2_PERFORMANCE_PLAN.md).
 
 Headline changes:
 - ⚡ **Zero-allocation reads** — first-class `ExecuteQueryStruct(sql, params)` API + `VariableLengthSchema` cache
+- ⚡ **In-place UPDATE patches (WP11)** — single-row UPDATE overwrites changed fields at cached fixed column offsets
+  (no deserialize → re-serialize round trip); growing records relocate across pages with correct PK/hash re-pointing
+- ⚡ **Unified DELETE core (WP12)** — one shared delete path with key-only hash index cleanup
+- ⚡ **Exact-size row serialization (WP13)** — one allocation per insert/update (no `ArrayPool.Rent` + `ToArray()` double allocation)
 - ⚡ **Zero-reparse SELECT fast path** — `SimpleSelectPlan` resolves simple point-lookup plans without re-lexing
 - ⚡ **SIMD numeric WHERE filters** — `Vector<T>` batch filtering for Integer/Long columns
 - ⚡ **Compiled regexes everywhere** on hot paths; regex-free `NormalizeSql`; cached DI

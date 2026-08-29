@@ -12,37 +12,37 @@
 
 ---
 
-## 7.1 The measured v2.0.0 numbers (ops/sec, two-run range)
+## 7.1 The measured v2.0.0 numbers (ops/sec, latest runs)
 
-Reference machine: Intel i7-10850H (6C/12T), 32 GB RAM, Windows 10, NVMe SSD, .NET 10.0.3.
+Latest runs (2026-08-29, 12 cores, .NET 10.0.11, Windows 11, NVMe SSD) with
+`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release, `--engine=appendonly|pagebased`).
 Schema: 5 columns (`name TEXT`, `email TEXT`, `age INTEGER`, `score REAL`, `data TEXT`);
-100K inserts in 10K batches, 10K reads/updates/deletes. No secondary indexes.
+100K inserts in 10K batches, 10K reads/updates/deletes.
 
-| Operation | **SharpCoreDB v2.0** | SQLite | LiteDB | vs SQLite | vs LiteDB |
-|-----------|----------------------|--------|--------|-----------|-----------|
-| **READ – Direct API** | **120–126K** | 87–97K | 14–16K | ✅ **1.3–1.4x faster** | ~8x faster |
-| **READ – StructRow** | 70–100K | 87–97K | 14–16K | ~parity | ~5–6x faster |
-| **READ – SQL** | 51–59K | 87–97K | 14–16K | ~0.6x (was 0.06x) | ~3.5–4x faster |
-| **INSERT** | 91–133K | 145–150K | 66–77K | ~0.8x | ~1.3–1.9x faster |
-| **UPDATE** | 41–59K | 241–296K | 10–11K | ~0.15x | ~4–5x faster |
-| **DELETE** | 30–142K | 320–367K | 13–14K | ~0.1–0.2x | ~2–10x faster |
+| Operation | **v2.0 — AppendOnly** | **v2.0 — PageBased** | SQLite | LiteDB |
+|-----------|-----------------------|----------------------|--------|--------|
+| **READ – Direct** | **114K** | 34K | 99K | 16K |
+| **READ – StructRow** | 93K | 36K | 99K | 16K |
+| **READ – SQL** | 64K | 30K | 99K | 16K |
+| **INSERT – batch (Direct/StructRow)** | 100–103K | **194–206K** | 109–144K | 75K |
+| **UPDATE** | 42–50K | **58–65K** | 239–279K | 10–11K |
+| **DELETE** | 29–128K | **107–129K** | 317–376K | 13–14K |
 
 **Read the table honestly:**
 
-- ✅ **Point reads now beat SQLite** — but only through the **Direct** and **StructRow** APIs
-  (`FindByPrimaryKey`/`FindByIndex`, `ExecuteQueryStruct`). Plain `ExecuteQuery` (SQL +
-  `Dictionary` rows) is still ~0.6x of SQLite: the SQL string path costs a row-materialization
-  allocation per row.
+- ✅ **Point reads beat SQLite on the default engine** — through the **Direct** API (114K vs 99K).
+  `ExecuteQuery` (SQL + `Dictionary` rows) still costs a row-materialization allocation (~0.65x).
+- ✅ **Batch INSERT beats SQLite on the PageBased engine** — 194–206K vs 109K (Direct/StructRow paths).
 - ✅ **Every operation beats LiteDB** — sometimes by an order of magnitude.
-- ⚠️ **Single-row UPDATE/DELETE are still slower than SQLite.** SQLite writes records in-place
-  in fixed-length C structs; SharpCoreDB v2.0 still uses append-on-update for row stores. This
-  is the single remaining gap and the top v2.1 priority.
+- ⚠️ **Single-row UPDATE/DELETE are ~2.5–4x behind SQLite.** The WP10–WP13 storage-engine roadmap
+  (in-place field patches, unified delete core, exact-size serialization) narrowed this from the
+  original ~5–7x; closing the remaining gap (fixed-width record layouts) is the tracked v2.1 target.
 - ✅ **Analytics are the crown jewel** — SIMD columnar aggregates run **~682x faster than
   SQLite** on `GROUP BY` SUM workloads (see §7.5).
 
 > The comparative harness and raw JSON results live in
-> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/` (final run
-> `comparative_20260828_*.json`).
+> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/` (latest runs
+> `comparative_20260829_135914.json` AppendOnly, `comparative_20260829_140203.json` PageBased).
 
 ---
 
