@@ -1,17 +1,37 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v1.9.5`)
+**Status:** Active documentation set (`v2.0.0`)
+
+## 0. Manual (start here)
+
+The full feature manual with an index of every capability, code examples, and the performance
+guide explaining when SharpCoreDB is fastest.
+
+- `manual/README.md` — **Manual index** (table of contents)
+- `manual/quickstart.md` — first CRUD in 30 seconds
+- `manual/overview.md` — every feature at a glance
+- `manual/database.md` — storage, transactions & WAL, encryption
+- `manual/data-modeling.md` — types, ULID/rowid keys, constraints, collation
+- `manual/indexing.md` — hash, B-tree, expression, partial indexes
+- `manual/query.md` — SQL dialect, aggregates, window functions, joins, subqueries
+- `manual/performance.md` — ⭐ **Performance Guide** (measured v2.0 numbers, API ladder, examples)
+- `manual/simd-vector.md` — SIMD analytics, vector search, GraphRAG, time-series
+- `manual/server.md` — gRPC/REST server, security, multitenancy, observability
+- `manual/providers.md` — ADO.NET, EF Core, Dapper, linq2db, YesSql, Sync
+- `manual/ecosystem.md` — EventSourcing, CQRS, Projections, Distributed, Functional
+- `manual/migration.md` — migrate from SQLite / LiteDB / RavenDB
 
 ## 1. Project Entry Points
 
 - `../README.md`
 - `README.md`
-- `FEATURE_MATRIX_v1.7.2.md`
+- `FEATURE_MATRIX.md`
 - `PROJECT_STATUS.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
 - `UseCases.md`
-- `USER_MANUAL.md`
+- `manual/README.md` — the v2.0 manual (see Section 0)
+
 
 ## 2. Package Documentation (src)
 
@@ -81,8 +101,8 @@
 - `scdb/PRODUCTION_GUIDE.md`
 - `serialization/README.md`
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
-- `storage/QUICK_REFERENCE_v1.7.2.md`
-- `storage/METADATA_IMPROVEMENTS_v1.7.2.md`
+- `storage/QUICK_REFERENCE_v1.7.0.md`
+- `storage/METADATA_IMPROVEMENTS_v1.7.0.md`
 - `storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 
 ## 6. Engine Implementation Notes
@@ -120,9 +140,18 @@
 
 ## 10. Benchmarks & Performance
 
-- `BENCHMARK_RESULTS.md`
+- `manual/performance.md` — ⭐ **Performance Guide**: when SharpCoreDB is fastest + v2.0 results
+- `performance/V2_PERFORMANCE_PLAN.md` — v2.x performance roadmap, root-cause analysis, .NET 11 plan
+- `benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md` — comparative report vs SQLite/LiteDB/BLite
+- `BENCHMARK_RESULTS.md` — micro-benchmark suite report (v1.x-era, with v2.0 update)
+- `benchmarks/BENCHMARK_METHOD.md`
+- `benchmarks/BENCHMARK_SCENARIOS_FINAL.md`
+- `benchmarks/SHARPCOREDB_VS_ZVEC_COMPARISON.md`
+- `benchmarks/ZVEC_BENCHMARKS_COMPLETE.md`
+- `performance/graphrag-performance-tuning.md`
 - `QUERY_PLAN_CACHE.md`
-- `../tests/SharpCoreDB.Benchmarks/FAIR_COMPARISON_TEMPLATE.md`
+- `../tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/` — runnable harness + `results/*.json`
+
 
 ## 11. Developer Standards
 

@@ -32,7 +32,7 @@ The SharpCoreDB Analytics Engine provides high-performance data aggregation, win
 ### Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.9.6
+dotnet add package SharpCoreDB.Analytics --version 2.0.0
 ```
 
 ### Basic Aggregation
@@ -664,7 +664,7 @@ var gaps = await database.QueryAsync(
 
 ## See Also
 
-- [User Manual](../USER_MANUAL.md) - Complete feature guide
+- [User Manual](../manual/README.md) - Complete feature guide
 - [Vector Search](../vectors/README.md) - Embedding storage
 - [Graph Algorithms](../graph/README.md) - Path finding
 - [Performance Guide](../PERFORMANCE.md) - Optimization techniques

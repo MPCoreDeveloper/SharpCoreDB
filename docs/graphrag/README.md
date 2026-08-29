@@ -16,7 +16,7 @@ The current `v1.9.5` line is centered on these maintained building blocks:
 - `SharpCoreDB.Graph` for traversal, A* pathfinding, and graph query execution primitives.
 - `SharpCoreDB.VectorSearch` for embeddings storage, similarity search, and semantic retrieval workflows.
 
-For package-level mapping, see `../FEATURE_MATRIX_v1.9.0.md`.
+For package-level mapping, see `../FEATURE_MATRIX.md`.
 
 ---
 
@@ -49,9 +49,9 @@ For package-level mapping, see `../FEATURE_MATRIX_v1.9.0.md`.
 ## Quick start
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.5
-dotnet add package SharpCoreDB.Graph --version 1.9.5
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.5
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
+dotnet add package SharpCoreDB.Graph --version 2.0.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
 ```
 
 ```csharp
@@ -97,7 +97,7 @@ GraphRAG behavior is covered by targeted tests in the SharpCoreDB test suite, in
 - `00_START_HERE.md`
 - `GRAPH_RAG_SINGLE_SQL.md`
 - `METRICS_AND_OBSERVABILITY_GUIDE.md`
-- `../FEATURE_MATRIX_v1.9.0.md`
+- `../FEATURE_MATRIX.md`
 - `../../src/SharpCoreDB.Graph.Advanced/README.md`
 
 

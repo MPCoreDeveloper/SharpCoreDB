@@ -27,7 +27,7 @@ Dotmim.Sync provider package for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.5
+dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0
 ```
 
 ## Documentation

@@ -24,7 +24,7 @@ linq2db adapter for `SharpCoreDB.Functional`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.5
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0
 ```
 
 ---
@@ -80,7 +80,7 @@ insertResult.IfSucc(count => Console.WriteLine($"Inserted {count} rows"))
 
 - Full API in `FunctionalLinq2DbContext.cs` and `Extensions.cs`
 - Test coverage: `tests/SharpCoreDB.Functional.Linq2DB.Tests/`
-- See also: `docs/FEATURE_MATRIX_v1.7.2.md`, `docs/functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md`, `docs/graphrag/LINQ_API_GUIDE.md`
+- See also: `docs/FEATURE_MATRIX.md`, `docs/functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md`, `docs/graphrag/LINQ_API_GUIDE.md`
 - 🔗 [SharpCoreDB GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
 
 ---

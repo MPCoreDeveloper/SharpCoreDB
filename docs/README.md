@@ -1,14 +1,17 @@
 # SharpCoreDB Documentation
 
-This folder contains the maintained documentation set for SharpCoreDB (`v1.9.5`).
+This folder contains the maintained documentation set for SharpCoreDB (`v2.0.0`).
 
 ## Start Here
 
+- `manual/README.md` — **Manual index** — the full feature manual with an index of every capability
+- `manual/performance.md` — **Performance Guide** — when SharpCoreDB is fastest, with measured v2.0 numbers and code examples
 - `INDEX.md` - Canonical documentation index.
-- `FEATURE_MATRIX_v1.7.2.md` - Consolidated feature coverage by package.
+- `FEATURE_MATRIX.md` - Consolidated feature coverage by package.
 - `PROJECT_STATUS.md` - Current project status and upcoming roadmap TODOs.
 - `CHANGELOG.md` - Release notes and notable behavior changes.
 - `../README.md` - Product overview and quick start.
+
 
 ## Maintained documentation areas
 
@@ -37,7 +40,7 @@ This folder contains the maintained documentation set for SharpCoreDB (`v1.9.5`)
 
 - `sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
 - `graphrag/GRAPH_RAG_SINGLE_SQL.md` - Single-statement GraphRAG SQL syntax and DI integration.
-- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.9.0.md` - Option<T> mapping semantics and usage patterns.
+- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md` - Option<T> mapping semantics and usage patterns.
 
 ## Migration and compatibility docs
 

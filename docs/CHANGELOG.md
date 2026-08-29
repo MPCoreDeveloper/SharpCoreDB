@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-28
+
+### Performance-first release 🚀
+
+The v2.0 release closes the v1.x benchmark gap (was **16–52x slower than SQLite** on point reads,
+updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
+
+| Operation | v2.0 | SQLite | LiteDB |
+|-----------|-----:|-------:|-------:|
+| READ — Direct / StructRow | 70–126K ops/s | 87–97K | 14–16K |
+| READ — SQL | 51–59K ops/s | 87–97K | 14–16K |
+| INSERT (batch) | 91–133K ops/s | 145–150K | 66–77K |
+| UPDATE (batch) | 41–59K ops/s | 241–296K | 10–11K |
+| DELETE (batch) | 30–142K ops/s | 320–367K | 13–14K |
+
+### Added
+- **`ExecuteQueryStruct(sql, params)`** — first-class zero-allocation struct-row SQL reads with a
+  cached `VariableLengthSchema` (column layout parsed once, not per row).
+- **`FindByPrimaryKey(table, key)` / `FindByIndex(table, col, value)` direct reads** — no-SQL
+  point lookups (Direct API tier, the benchmark's "Direct" path).
+- **`SimpleSelectPlan` zero-reparse SELECT fast path** — simple `SELECT … WHERE key = @p` plans
+  resolve from the query plan cache without re-lexing or re-parsing.
+- **SIMD numeric WHERE batch filters** — `Vector<T>` batch predicate evaluation for Integer/Long
+  columns plus a fixed-offset numeric predicate fast path in columnar scans.
+- **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader,
+  `[RequiresDynamicCode]` annotations, source-generated `TableMetadataDto` and
+  `SharpCoreDBJsonContext`. `tools/SharpCoreDB.AotSmoke` publishes and runs successfully
+  (CREATE/INSERT/query/StructRow/reopen, exit 0).
+- **New benchmark APIs & tests** — `ExecuteQueryStruct` benchmark path + 5 tests;
+  regression test for positional `?` placeholders falling back to the legacy binder.
+
+### Changed
+- **Removed hot-path debug file I/O** — unconditional `File.AppendAllText` writes to `D:\*.log`
+  (per SELECT, per ExecuteSQL, per transaction, per INSERT) are gone. This single artifact was the
+  dominant v1.x read bottleneck.
+- **`NormalizeSql` is regex-free** with an allocation short-circuit for query-plan-cache keys.
+- **All hot-path regexes are compiled** (batch UPDATE/DELETE parsing, provider detection,
+  `ExecuteQueryFast`).
+- **`HashIndex.Add/Remove` operate on the key only** — no full row copies during index maintenance.
+- **`UpdateMultiple` no longer copies rows** (`new Dictionary(row)` removed);
+  `DeduplicateByPrimaryKey` early-exits on redundant keys.
+- **`LookupPositionsUnsafe`** — no-copy position lookup under an explicit write-lock contract.
+- **DI cached** — `IGraphRagProvider` is resolved once instead of per call in
+  `GetSharedSqlParser`.
+- **Provider fast paths** — `OPTIONALLY` keyword check avoids a full parse per `ExecuteReader`;
+  span-based single-file and `sqlite_master` detection.
+- **Fixed regression** — positional `?` placeholders now fall back to the legacy parameter binder
+  (previously treated as SQL literals by the fast path).
+
+### Compatibility
+- **100% backward compatible** with v1.9.x — no public API breaking changes; the fast-path APIs are additive.
+- Toolchain locked to **.NET 10 / C# 14** for v2.0.x; .NET 11 / C# 15 planned for v2.1.
+
+### Validation
+- **2,412 tests / 0 failures** across all 15 test projects.
+- Comparative benchmark recorded after every phase:
+  `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/comparative_20260828_*.json`.
+- Plan and results: `docs/performance/V2_PERFORMANCE_PLAN.md`.
+
 ## [1.9.6] - 2026-08-28
 
 ### Fixed

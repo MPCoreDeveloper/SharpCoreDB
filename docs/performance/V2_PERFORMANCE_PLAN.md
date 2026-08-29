@@ -1,8 +1,8 @@
 # SharpCoreDB v2.x — Performance-First Roadmap
 
-**Status:** Active development
+**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · remaining items target v2.1
 **Branch:** `release/v2.0.0.0`
-**Target version:** 2.0.0.0
+**Target version:** 2.0.0.0 (shipped) → 2.1.0.0 (next)
 **Current toolchain:** .NET 10 / C# 14 (locked for v2.0.x)
 **Next toolchain:** .NET 11 / C# 15 — mainstream November 2026 (planned for v2.1+)
 **Last updated:** August 2026

@@ -28,7 +28,7 @@ Dapper adapter for `SharpCoreDB.Functional`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.5
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0
 ```
 
 ## Documentation

@@ -8,7 +8,7 @@ This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
 ## Install
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.5
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0
 dotnet add package Microsoft.EntityFrameworkCore.Design
 ```
 
@@ -99,5 +99,5 @@ Data Source=<path>;Password=<password>;Pooling=true
 - `README.md`
 - `NuGet.README.md`
 - `../../docs/INDEX.md`
-- `../../docs/FEATURE_MATRIX_v1.7.0.md`
+- `../../docs/FEATURE_MATRIX.md`
 

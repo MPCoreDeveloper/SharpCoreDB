@@ -1,41 +1,48 @@
 # SharpCoreDB Project Status
 
-**Version:** 1.7.2  
-**Status:** ✅ Production Ready (Core .NET packages) / ⚠️ SDK parity in progress  
-**Last Updated:** April 28, 2026
+**Version:** 2.0.0  
+**Status:** ✅ Production Ready (core .NET packages) · ✅ Performance-first release shipped  
+**Last Updated:** August 28, 2026
 
 ## Current Status
 
-SharpCoreDB core .NET packages are release-labeled on `1.7.2` and build successfully, including:
+SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successfully, including:
 
-- `SharpCoreDB`
-- `SharpCoreDB.Server`
-- `SharpCoreDB.Client`
+- `SharpCoreDB` (embedded engine — v2.0 performance release)
+- `SharpCoreDB.Server` / `SharpCoreDB.Client`
+- `SharpCoreDB.Data.Provider` / `SharpCoreDB.EntityFrameworkCore`
 - `SharpCoreDB.Extensions` (including FluentMigrator integration)
-- Optional Event Sourcing, Projections, CQRS, Graph, Analytics, and VectorSearch packages
+- `SharpCoreDB.Analytics`, `SharpCoreDB.VectorSearch`, `SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced`
+- Optional Event Sourcing, Projections, CQRS, Distributed, Functional family packages
 
-## Implementation Completeness Audit
+## v2.0 Release Status
 
-A repository-wide scan was performed for partial implementation markers (`TODO`, `NotImplemented`, `WIP`, `TBD`).
+- ✅ **Performance-first release shipped** — benchmark gap vs SQLite closed (16–52x → parity/win)
+- ✅ **2,412 tests / 0 failures** across all 15 test projects
+- ✅ **Native AOT smoke** publishes + runs (exit 0)
+- ✅ **100% backward compatible** with v1.9.x
 
-### Findings
+| Measured (two-run range) | v2.0 | SQLite | LiteDB |
+|--------------------------|-----:|-------:|-------:|
+| READ — Direct / StructRow | 70–126K ops/s | 87–97K | 14–16K |
+| READ — SQL | 51–59K ops/s | 87–97K | 14–16K |
+| INSERT (batch) | 91–133K ops/s | 145–150K | 66–77K |
+| UPDATE (batch) | 41–59K ops/s | 241–296K | 10–11K |
+| DELETE (batch) | 30–142K ops/s | 320–367K | 13–14K |
 
-- Core/server .NET runtime paths are implemented and buildable.
-- Remaining partial implementations are concentrated in the Python SDK (`pysharpcoredb`) and selected non-production benchmark/test scaffolding.
+> Full analysis: [`docs/manual/performance.md`](manual/performance.md) ·
+> plan: [`docs/performance/V2_PERFORMANCE_PLAN.md`](performance/V2_PERFORMANCE_PLAN.md)
 
-Detailed findings are documented in:
-
-- `docs/IMPLEMENTATION_AUDIT_v1.7.2.md`
-
-## FluentMigrator Status in v1.7.2
+## FluentMigrator Status
 
 - Embedded mode integration: available
 - gRPC migration mode integration: available
-- `IMigrationProcessorOptions` obsolete usage was reduced to required FluentMigrator interface bridge points; processor code now uses concrete options internally.
+- See `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md` and
+  `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
 ## Documentation Governance
 
-- Canonical docs entry points: `README.md`, `docs/INDEX.md`, `docs/README.md`
+- Canonical docs entry points: `README.md`, `docs/INDEX.md`, `docs/README.md`, `docs/manual/README.md`
 - Obsolete/superseded phase-planning artifacts are removed during documentation maintenance.
 
 ## Roadmap Issue Closure Tracking
@@ -46,9 +53,18 @@ Detailed findings are documented in:
 - ✅ `#122` Runtime tenant database provisioning APIs (gRPC + REST) — completed and closed.
 - ✅ `#121` Tenant catalog in master database for SaaS lifecycle metadata — completed and closed.
 
-## Roadmap / TODO (v1.7.2)
+## Roadmap / TODO (v2.1)
 
-- [ ] **Single-file metadata parity:** Make `SingleFileDatabase` explicitly implement `IMetadataProvider` to align metadata discovery behavior with directory-mode `Database`.
-  - **Why:** some consumers probe metadata with `db is IMetadataProvider`; explicit implementation improves compatibility and predictability.
-  - **Scope:** keep `IDatabase.GetTables()` / `GetColumns()` as canonical path, add explicit `IMetadataProvider` contract on single-file runtime type.
-  - **Acceptance:** probing via `IMetadataProvider` works consistently for both directory and single-file databases.
+- [ ] **Close UPDATE/DELETE gap vs SQLite** — in-place record updates, fixed-width record layout
+  for hot tables, eliminate read-modify-write in `UpdateMultiple`.
+- [ ] **.NET 11 / C# 15 migration** (after Nov 2026 GA) — Runtime Async, AVX-VNNI-512/SVE2 behind
+  `SIMD_ENABLED`, optional Zstandard compression.
+- [ ] **Native AOT warning cleanup** — interface-based B-tree factory (replace `GetMethod`/
+  `Activator.CreateInstance`), source-gen `.scdb`/`ParseVectorValue` JSON.
+- [ ] **Single-file metadata parity:** make `SingleFileDatabase` explicitly implement
+  `IMetadataProvider` to align metadata discovery with directory-mode `Database`.
+  - **Why:** some consumers probe metadata with `db is IMetadataProvider`; explicit implementation
+    improves compatibility and predictability.
+  - **Acceptance:** probing via `IMetadataProvider` works consistently for both directory and
+    single-file databases.
+

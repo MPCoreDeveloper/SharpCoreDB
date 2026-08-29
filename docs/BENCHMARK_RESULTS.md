@@ -6,7 +6,26 @@
 - RAM: 16GB
 - Runtime: .NET 10.0.4, RyuJIT x86-64-v3
 - Benchmark Tool: BenchmarkDotNet v0.15.8
-- **Last Updated: March 14, 2026**
+- **Last Updated: March 14, 2026** · **v2.0.0 update: August 28, 2026**
+
+---
+
+## ⚡ v2.0.0 Update (August 28, 2026)
+
+This report covers the v1.x-era BenchmarkDotNet micro-benchmark suite. The **v2.0 performance-first
+release** additionally closed the comparative CRUD gap against SQLite/LiteDB — measured on the
+`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` harness:
+
+- **Point reads now beat SQLite** — Direct API ~121–126K ops/s vs SQLite ~87–97K
+- **Every CRUD operation beats LiteDB** — reads ~5–8x, updates ~5x, deletes ~2–10x
+- **Batch INSERT is SQLite-competitive** — 91–133K vs 145–150K ops/s
+- **SIMD columnar analytics remain dominant** — `GROUP BY` SUM over 10M rows in ~2 ms
+
+Remaining known gap: single-row UPDATE/DELETE vs SQLite (append-on-update vs in-place C records) —
+top v2.1 priority.
+
+> Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
+> comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
 
 ---
 

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v1.9.6 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v2.0.0 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 
@@ -18,13 +18,14 @@
 |--------|---------|
 | ✅ | Shipped and production-ready |
 | 🔶 | Partially implemented — foundation exists, full feature in progress |
-| 🗓️ | Planned near-term (target: v2.0 / v2.1) |
+| 🗓️ | Planned near-term (target: v2.1 / v2.2) |
 | 🔭 | Long-term research / high-complexity item |
 | 💬 | Needs community input before scoping |
 
 ---
 
-## ✅ Already Shipped (≤ v1.9.3)
+## ✅ Already Shipped (≤ v1.9.6)
+
 
 ### Core Engine
 - ✅ **AES-256-GCM single-file encrypted database**
@@ -76,7 +77,30 @@
 
 ---
 
+## ✅ Shipped in v2.0 (performance-first release)
+
+> v2.0 closes the v1.x benchmark gap (was **16–52x slower than SQLite** on point reads/updates/deletes).
+> Measured results: **point reads beat SQLite**, every CRUD op beats LiteDB, SIMD analytics ~682x vs SQLite.
+
+- ✅ **Zero-allocation reads** — first-class `ExecuteQueryStruct(sql, params)` + cached `VariableLengthSchema`; Direct API (`FindByPrimaryKey`/`FindByIndex`) point reads
+- ✅ **Zero-reparse SELECT fast path** — `SimpleSelectPlan` resolves `SELECT … WHERE key = @p` from the plan cache without re-lexing
+- ✅ **SIMD numeric WHERE filters** — `Vector<T>` batch predicates for Integer/Long columns
+- ✅ **Compiled regexes** on all hot paths; regex-free `NormalizeSql` with allocation short-circuit
+- ✅ **Keyed index maintenance** — `HashIndex.Add/Remove` without full row copies; no `new Dictionary(row)` in `UpdateMultiple`
+- ✅ **`LookupPositionsUnsafe`** — no-copy position lookup with explicit write-lock contract
+- ✅ **Cached DI** — `IGraphRagProvider` resolved once, not per call
+- ✅ **Removed hot-path debug I/O** — no more stray `D:\*.log` writes per SELECT/execute/transaction/INSERT
+- ✅ **Provider fast paths** — `OPTIONALLY` keyword check, span-based single-file/sqlite_master detection
+- ✅ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, source-gen DTOs/JSON; `tools/SharpCoreDB.AotSmoke` publishes + runs (exit 0)
+- ✅ **2,412 tests / 0 failures** across all 15 test projects
+- ✅ **Fixed regression** — positional `?` placeholders now fall back to the legacy binder (were treated as literals)
+
+> 📊 Full details + honest guidance: [`docs/manual/performance.md`](docs/manual/performance.md) · plan: [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
+
+---
+
 ## 🔶 In Progress
+
 
 ### Visual Query Execution Plan Explorer
 - **Status:** Plan cache and optimizer internals exist; SCDMS UI not built yet
@@ -89,7 +113,38 @@
 
 ---
 
-## 🗓️ Near-Term Roadmap (v2.0 / v2.1)
+## 🗓️ Near-Term Roadmap (v2.1 / v2.2)
+
+### Performance: Close the UPDATE/DELETE gap vs SQLite (v2.1)
+>> **Why:** v2.0 closed the read/insert gap; single-row UPDATE/DELETE is still ~5–7x behind SQLite
+>> because row-store writes are append-on-update instead of in-place.
+
+- In-place record updates (avoid append-on-update) for row stores
+- Fixed-width record layout for hot tables (SQLite-style C record format)
+- Eliminate read-modify-write in `UpdateMultiple`
+- Track in [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
+
+---
+
+### .NET 11 / C# 15 migration (v2.1, after Nov 2026 GA)
+>> **Why:** Runtime Async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 are
+>> automatic wins on hot paths. v2.0.x stays on .NET 10 / C# 14 (locked).
+
+- `LangVersion` 14 → 15; keep `net10.0` via `TargetFrameworks` during transition
+- Adopt Runtime Async in async hot paths; AVX-VNNI-512/SVE2 behind `SIMD_ENABLED` guards
+- Optional Zstandard WAL/page compression flag (default off)
+
+---
+
+### Clean remaining Native AOT warnings (v2.1)
+>> **Why:** AOT smoke passes; remaining non-blocking warnings are B-tree reflection
+>> (`TryBTreeRangeScan`/`BTreeIndexManager` via `GetMethod`/`Activator.CreateInstance`),
+>> `.scdb` single-file JSON reflection, and `ParseVectorValue`.
+
+- Refactor B-tree index activation from reflection to an interface-based factory
+- Move `.scdb` / `ParseVectorValue` JSON to source-generated context
+
+---
 
 ### Let's Encrypt / ACME Auto-Renewal
 > **Why:** Today the server requires manual PFX/PEM cert paths. Self-hosted deployments must manage certificate rotation by hand.
@@ -229,10 +284,10 @@ These are ideas raised by the community that need more design work or votes befo
 
 | Version | Focus |
 |---------|-------|
-| **v2.0** | Let's Encrypt/ACME, Visual EXPLAIN in SCDMS, Column-Level Security |
-| **v2.1** | Enterprise Backup Orchestrator, Backup retention + remote targets |
-| **v2.2** | PITR (requires v2.1 backup foundation) |
-| **v2.x** | Automated Data Tiering, full OTel distributed tracing, advanced plan profiling |
+| **v2.0** ✅ | **Performance-first release** — closed the 16–52x benchmark gap (point reads beat SQLite, all ops beat LiteDB), zero-allocation reads, SIMD filters, Native AOT readiness |
+| **v2.1** | Close UPDATE/DELETE gap vs SQLite (in-place writes, fixed-width records), .NET 11 / C# 15 migration, AOT warning cleanup, Let's Encrypt/ACME |
+| **v2.2** | Enterprise Backup Orchestrator, backup retention + remote targets, Column-Level Security |
+| **v2.x** | PITR (requires backup foundation), Automated Data Tiering, full OTel distributed tracing, advanced plan profiling |
 
 > Targets are indicative. Issues and PRs from the community can accelerate any item.
 

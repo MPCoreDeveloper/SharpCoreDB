@@ -22,7 +22,7 @@ In server mode, SharpCoreDB runs as a network service instead of an in-process e
 
 ## Start Here
 
-- `../FEATURE_MATRIX_v1.9.0.md` — package feature coverage
+- `../FEATURE_MATRIX.md` — package feature coverage
 - `QUICKSTART.md` — first server startup in minutes
 - `INSTALLATION.md` — platform-specific installation and service setup
 - `CONFIGURATION_SCHEMA.md` — full server configuration reference

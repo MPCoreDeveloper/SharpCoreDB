@@ -159,7 +159,7 @@ Explicitly configured provider switches are preserved.
 ### Scenario 5: Migrate Regular RDBMS Data
 **Goal:** Move relational data from SQLite/LiteDB  
 **Approach:** Custom SQL script using INSERT/SELECT  
-**Resources:** [User Manual](../USER_MANUAL.md)
+**Resources:** [Manual](../manual/README.md)
 
 ---
 
@@ -191,7 +191,7 @@ Explicitly configured provider switches are preserved.
 | [FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md](./FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md) | Server migration architecture (host + gRPC) | DevOps/Architects | 12-18 min |
 | [SQLITE_VECTORS_TO_SHARPCORE.md](./SQLITE_VECTORS_TO_SHARPCORE.md) | Vector migration (9 steps) | DevOps/Architects | 15-20 min |
 | [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) | Storage format migration | DevOps | 10-15 min |
-| [../USER_MANUAL.md](../USER_MANUAL.md) | General database usage | Developers | 30-40 min |
+| [../manual/README.md](../manual/README.md) | General database usage | Developers | 30-40 min |
 | [../Vectors/README.md](../Vectors/README.md) | Vector API & features | Developers | 20-30 min |
 | [../collation/COLLATION_GUIDE.md](../collation/COLLATION_GUIDE.md) | JOIN & collation support | Developers | 10-15 min |
 
@@ -305,7 +305,7 @@ A: Verify source data is not being modified. Retry migration.
 
 - [Vector Search Feature Guide](../Vectors/README.md)
 - [JOIN & Collation Support](../collation/COLLATION_GUIDE.md)
-- [SharpCoreDB User Manual](../USER_MANUAL.md)
+- [SharpCoreDB Manual](../manual/README.md)
 - [Project Status](../PROJECT_STATUS.md)
 
 ---

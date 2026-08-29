@@ -52,7 +52,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 1.9.5
+dotnet add package SharpCoreDB.Data.Provider --version 2.0.0
 ```
 
 **Requirements:** .NET 10.0+
@@ -236,7 +236,7 @@ public async Task<DataSet> GetUserDataSetAsync()
 - **[Core SharpCoreDB](../SharpCoreDB/README.md)** - Database engine
 - **[Extensions](../SharpCoreDB.Extensions/README.md)** - Dapper, repositories
 - **[Entity Framework Core](../SharpCoreDB.EntityFrameworkCore/README.md)** - EF Core provider
-- **[User Manual](../../docs/USER_MANUAL.md)** - Complete guide
+- **[Manual](../../docs/manual/README.md)** - Complete guide
 
 ---
 

@@ -168,7 +168,7 @@ Multi-master replication, distributed transactions, and automatic sharding - Pha
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Distributed --version 1.9.5
+dotnet add package SharpCoreDB.Distributed --version 2.0.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

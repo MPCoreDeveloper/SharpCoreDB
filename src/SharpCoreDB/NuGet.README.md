@@ -181,16 +181,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 2.0.0
 ```
 
 **Optional companion packages introduced or highlighted in v1.9.6:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.9.6
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.6
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.6
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
+dotnet add package SharpCoreDB.Functional --version 2.0.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
 ```
 
 ## 🔄 Upgrade from v1.3.5
@@ -198,7 +198,7 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
 **100% backward compatible** - No breaking changes!
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 2.0.0
 ```
 
 Your existing databases work as-is. New metadata is automatically compressed.

@@ -134,7 +134,7 @@ See [Collation Guide](../collation/COLLATION_GUIDE.md) for complete documentatio
 
 ### New to SharpCoreDB?
 1. **Start here:** [Main README](../../README.md)
-2. **Learn the API:** [User Manual](../USER_MANUAL.md)
+2. **Learn the API:** [Manual](../manual/README.md)
 3. **Understand features:** This page
 
 ### Using Vector Search?

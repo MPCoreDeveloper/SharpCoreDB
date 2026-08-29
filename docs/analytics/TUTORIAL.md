@@ -567,7 +567,7 @@ The Analytics Engine in SharpCoreDB v1.3.5 provides:
 
 For more information, see:
 - [Analytics README](README.md) - Feature overview
-- [User Manual](../USER_MANUAL.md) - Complete guide
+- [Manual](../manual/README.md) - Complete guide
 - [CHANGELOG](../CHANGELOG.md) - Version history
 
 ---

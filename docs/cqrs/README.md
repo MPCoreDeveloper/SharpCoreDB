@@ -1,4 +1,4 @@
-# SharpCoreDB.CQRS Guide (v1.9.5)
+# SharpCoreDB.CQRS Guide (v2.0.0)
 
 This guide documents the optional `SharpCoreDB.CQRS` package and how to use it with SharpCoreDB Event Sourcing.
 
@@ -54,7 +54,7 @@ Non-goals:
 ## 2. Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 1.9.5
+dotnet add package SharpCoreDB.CQRS --version 2.0.0
 ```
 
 ---

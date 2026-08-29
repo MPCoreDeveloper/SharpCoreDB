@@ -74,10 +74,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 1.9.5
+dotnet add package SharpCoreDB --version 2.0.0
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.5
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
 ```
 
 ### 2. Register Vector Search
@@ -423,6 +423,6 @@ A: Check your insert statements. NULLs are not indexed and won't appear in dista
 - [Vector Technical Specification](TECHNICAL_SPEC.md)
 - [Vector Performance Tuning](PERFORMANCE_TUNING.md)
 - [SQLite → SharpCoreDB Migration](../migration/SQLITE_VECTORS_TO_SHARPCORE.md)
-- [SharpCoreDB User Manual](../USER_MANUAL.md)
+- [SharpCoreDB Manual](../manual/README.md)
 
 

@@ -41,7 +41,7 @@ Entity Framework Core 10 provider for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.5
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0
 ```
 
 ## DateTime Handling (Reliable Pattern)
@@ -159,7 +159,7 @@ Common settings:
 - `USAGE.md` - Maintained usage guide with end-to-end setup notes
 - `NuGet.README.md` - Package summary for NuGet consumers
 - `../../docs/INDEX.md` - Canonical documentation hub
-- `../../docs/FEATURE_MATRIX_v1.9.0.md` - Package ecosystem coverage
+- `../../docs/FEATURE_MATRIX.md` - Package ecosystem coverage
 
 ## Notes
 
