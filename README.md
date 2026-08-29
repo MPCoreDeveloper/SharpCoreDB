@@ -59,7 +59,7 @@ A production-focused stack validated by **2,520 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.7
+dotnet add package SharpCoreDB --version 1.9.8
 ```
 
 ```csharp
@@ -87,8 +87,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.7
-dotnet add package SharpCoreDB.Client --version 1.9.7
+dotnet add package SharpCoreDB.Server --version 1.9.8
+dotnet add package SharpCoreDB.Client --version 1.9.8
 ```
 
 ---
@@ -110,7 +110,26 @@ dotnet add package SharpCoreDB.Client --version 1.9.7
 
 ---
 
-## v1.9.7 release (current)
+## v1.9.8 release (current)
+
+- **`VacuumAsync(VacuumMode.Full)` no longer crashes under .NET 10 trimming / Native AOT** (Issue #343):
+  the full-vacuum stream swap used reflection on `private readonly` fields (`GetField("_fileStream")`),
+  which returns `null` under trimming and cascaded into an `ObjectDisposedException`. The swap now assigns
+  the fields directly (`SwapFileStream`), error paths read the file size safely (`-1` fallback), and the
+  temp-file extension mismatch that broke full vacuum (`<file>.vacuum.tmp.scdb` vs `<file>.vacuum.tmp`)
+  is fixed.
+- **Single-file (`.scdb`) mode is now fully Native AOT-safe** (Issue #343): the row-cache JSON
+  serialization uses a source-generated `JsonSerializerContext` (byte-for-byte identical output, so
+  existing files stay readable) and the batch-flush reflection + `dynamic` calls were replaced with
+  internal accessors — verified by an extended `SharpCoreDB.AotSmoke` run (1000 inserts, point lookups,
+  StructRow, reopen, full vacuum) that publishes and runs with exit 0.
+- **Tests**: regression coverage `SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen` (writes 100
+  rows, runs a full vacuum, reopens and verifies the data survived the stream swap).
+- **100% backward compatible** with the v1.9.7 release line.
+
+---
+
+## v1.9.7 release
 
 - **Fixed the `WHERE IN (...)` regression across every application-critical form** (Issue #340): `IN` / `NOT IN`
   predicates now evaluate correctly for multi-value parameter lists (`IN (@p0, @p1)`), SQLite `VALUES` forms
@@ -264,42 +283,42 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 - **2,520 tests passing**
 - **100% backward compatible** across the v1.9.6 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.7
+- Zero breaking changes intended from v1.5.0 to v1.9.8
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.7)
+## Available NuGet packages (v1.9.8)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.7
+dotnet add package SharpCoreDB --version 1.9.8
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.7
-dotnet add package SharpCoreDB.Client --version 1.9.7
+dotnet add package SharpCoreDB.Server --version 1.9.8
+dotnet add package SharpCoreDB.Client --version 1.9.8
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.7
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.7
-dotnet add package SharpCoreDB.Graph --version 1.9.7
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.7
-dotnet add package SharpCoreDB.Distributed --version 1.9.7
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.7
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.7
-dotnet add package SharpCoreDB.Extensions --version 1.9.7
+dotnet add package SharpCoreDB.Analytics --version 1.9.8
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.8
+dotnet add package SharpCoreDB.Graph --version 1.9.8
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.8
+dotnet add package SharpCoreDB.Distributed --version 1.9.8
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.8
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.8
+dotnet add package SharpCoreDB.Extensions --version 1.9.8
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.7
-dotnet add package SharpCoreDB.Projections --version 1.9.7
-dotnet add package SharpCoreDB.CQRS --version 1.9.7
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.8
+dotnet add package SharpCoreDB.Projections --version 1.9.8
+dotnet add package SharpCoreDB.CQRS --version 1.9.8
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.7
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.7
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.7
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.7
+dotnet add package SharpCoreDB.Functional --version 1.9.8
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.8
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.8
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.8
 ```
 
 ---
@@ -314,7 +333,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.7
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.7 release (WHERE IN regression fixed across all forms, single-file `.scdb` encryption, real `ExecuteNonQuery` affected counts, SonarCloud onboarding), see the v1.9.7 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.8 release (Native AOT-safe `VacuumAsync(Full)` + single-file mode, Issue #343), see the v1.9.8 section above and docs/CHANGELOG.md.
 
 ---
 

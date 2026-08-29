@@ -5,7 +5,28 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.8] - 2026-08-29
+
+### Fixed
+- **Issue #343 — `VacuumAsync(VacuumMode.Full)` crashed with `ObjectDisposedException` under .NET 10
+  trimming / Native AOT**: the full-vacuum stream swap mutated `private readonly` fields through
+  reflection (`GetField("_fileStream")` / `GetField("_memoryMappedFile")`), which returns `null` under
+  trimming and cascaded into an `ObjectDisposedException` on the just-closed stream. The swap now
+  assigns the fields directly (`SwapFileStream`), and the `VacuumAsync`/`VacuumFullAsync` error paths
+  read the file size safely (`GetFileSizeSafely`, `-1` fallback) instead of touching a possibly-closed
+  stream. Also fixed the temp-file extension mismatch (`<file>.vacuum.tmp.scdb` vs `<file>.vacuum.tmp`)
+  that made full vacuum throw `FileNotFoundException` once the reflection path was removed.
+- **Issue #343 (follow-on) — single-file (`.scdb`) mode was not fully usable under Native AOT**:
+  - `SingleFileTable.FlushCache`/`EnsureCacheLoaded` used reflection-based `System.Text.Json`
+    serialization, which is disabled under AOT. Replaced with the source-generated
+    `SingleFileTableJsonContext` + `PolymorphicObjectConverter`; the JSON output is byte-for-byte
+    identical, so existing `.scdb` files remain readable.
+  - `SingleFileDatabaseBatchExtension` called `Flush`/`BeginBatch`/`EndBatchAsync` through
+    `GetField(...) + dynamic`, which throws `RuntimeBinderException` under AOT. Replaced with internal
+    `TableDirectoryManager`/`BlockRegistry` accessors and direct typed calls (also removes the
+    IL2075 trim-analysis warnings for these fields).
+- Regression coverage: `SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen` (writes 100 rows,
+  runs a full vacuum, reopens and verifies the data survived the stream swap).
 
 ## [1.9.7] - 2026-08-29
 

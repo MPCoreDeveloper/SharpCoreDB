@@ -9,7 +9,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.Sync</PackageId>
-    <Version>1.9.7</Version>
+    <Version>1.9.8</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.Sync</Product>
