@@ -1,10 +1,38 @@
-# SharpCoreDB v1.9.6 - Production Database Engine
+# SharpCoreDB v1.9.7 - Production Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in v1.9.7
+
+### 🐛 Critical fix: WHERE IN (...) regression fully resolved (Issues #339 / #340)
+
+- `IN` / `NOT IN` are now evaluated correctly in **every** SQL shape, including the forms reported against
+  the 1.9.6 package: multi-value lists `IN (@p0, @p1)`, SQLite `VALUES` forms `IN (VALUES (@p0), (@p1))`,
+  composite-key tuple rows `(a, b) IN (VALUES (@a, @b))`, and `OR`-chained predicates in single-file (`.scdb`)
+  mode (previously collapsed into a single bogus comparison returning 0 rows).
+- `ExecuteNonQuery` (ADO.NET provider **and** EF Core provider) now returns the **real affected-row count**
+  (`DELETE 2 rows` now reports `2`, not `-1`/`1`), via the new `IDatabase.GetLastChanges()` API
+  (SQLite `changes()` parity).
+- Debug log files are no longer written to disk on every command in the EF Core provider.
+
+### 🔐 Critical fix: single-file (.scdb) encryption now actually encrypts (Issue #341)
+
+- `DatabaseOptions.EncryptionKey` is now honored in single-file mode: every block written through
+  `WriteBlockAsync` (table rows, table directory, column/index definitions, WAL records) is encrypted
+  with **AES-256-GCM** at rest, and every read path (`ReadBlockAsync`, `GetReadStream`, `GetReadSpan`)
+  decrypts it.
+- Opening an encrypted database with a **wrong key now fails** (GCM authentication error or empty schema) —
+  previously any key opened the file because no cipher was ever applied.
+- Directory storage mode already encrypted; this closes the single-file gap (see
+  [issue #341](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/341) and
+  [PR #342](https://github.com/MPCoreDeveloper/SharpCoreDB/pull/342)).
+- The file header, block registry and free-space map remain plaintext metadata (table/index block names,
+  offsets) so blocks can be located after a crash; encrypting those regions is on the
+  [v2.0 roadmap](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/ROADMAP.md).
 
 ## What's New in v1.9.6
 
@@ -181,16 +209,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 1.9.7
 ```
 
 **Optional companion packages introduced or highlighted in v1.9.6:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 1.9.6
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.6
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.6
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
+dotnet add package SharpCoreDB.Functional --version 1.9.7
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.7
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.7
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.7
 ```
 
 ## 🔄 Upgrade from v1.3.5
@@ -198,7 +226,7 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.6
 **100% backward compatible** - No breaking changes!
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.6
+dotnet add package SharpCoreDB --version 1.9.7
 ```
 
 Your existing databases work as-is. New metadata is automatically compressed.
@@ -217,9 +245,9 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.9.6 (April 26, 2026)  
+**Latest Version:** 1.9.7 (August 29, 2026)  
 **Target:** .NET 10 / C# 14  
-**Tests:** 1,468+ (100% passing)  
+**Tests:** 1,521+ core / 114 EF Core (100% passing)  
 **Status:** ✅ Production Ready
 
 

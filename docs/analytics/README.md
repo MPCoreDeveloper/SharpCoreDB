@@ -1,13 +1,13 @@
 # SharpCoreDB Analytics Engine
 
-**Version:** 1.9.6  
+**Version:** 1.9.7  
 **Status:** Production Ready ✅
 
-## v1.9.6 changes
+## v1.9.7 changes
 
-- Package line synchronized to `v1.9.6`
+- Package line synchronized to `v1.9.7`
 - Analytics docs aligned with the current 100+ aggregate + window-function scope
-- Inherits core reliability improvements from SharpCoreDB v1.9.6 (metadata/parser paths)
+- Inherits core reliability improvements from SharpCoreDB v1.9.7 (WHERE IN evaluation, single-file `.scdb` encryption at rest)
 
 ## Overview
 
@@ -32,7 +32,7 @@ The SharpCoreDB Analytics Engine provides high-performance data aggregation, win
 ### Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 1.9.6
+dotnet add package SharpCoreDB.Analytics --version 1.9.7
 ```
 
 ### Basic Aggregation

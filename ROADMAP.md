@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v1.9.6 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v1.9.7 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 
@@ -138,6 +138,24 @@
 - Built-in masking functions: `default()`, `email()`, `partial()`, `random()`
 - Policy enforcement inside the SQL execution engine (not at API proxy layer)
 - `GRANT UNMASK` privilege to bypass masking for privileged roles
+
+---
+
+### Encrypt Block Registry & On-Disk Metadata (full at-rest confidentiality)
+> **Why:** Since v1.9.7, single-file (`.scdb`) **block data** is encrypted with AES-256-GCM, but the
+> file header, block registry and free-space map remain plaintext by design — the registry must stay
+> readable to *locate* ciphertext blocks after a crash. Anyone with the file can still see table/index
+> block names (`table:customers`, `sys:indexdefs:customers`), layout offsets and file statistics.
+
+- **Bootstrap super-block scheme:** a fixed-size plaintext super-block points at an *encrypted* block
+  registry region; the master key unwraps a per-file data key (HKDF + AES-GCM key wrap) so the registry,
+  free-space map and `sys:tabledir` payloads are encrypted like block data.
+- Keep only the ~256-byte super-block and header magic/version in plaintext.
+- Add `EncryptionFormatVersion` to the header so v1.9.7-era files open read-only and can be re-encrypted
+  in place via `Vacuum` (backward compatible migration path).
+- Wrong-key behavior unchanged: GCM authentication failure or empty schema.
+- **Tracking:** follow-up to [issue #341](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/341);
+  target v2.0.
 
 ---
 

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.7] - 2026-08-29
+
+### Fixed
+- **Issue #340 — `WHERE IN (...)` regression from 1.9.5 still present in every application-critical form**:
+  the `SqlInPredicate` parser split value lists naively on commas and could not handle SQLite `VALUES`,
+  parenthesized tuple rows, or multi-value parameter lists, and the single-file evaluator collapsed
+  `OR`-chained predicates into a single bogus comparison (0 rows):
+  - `IN` / `NOT IN` lists are now parsed with top-level-comma awareness (respecting parentheses and strings),
+    with SQLite `VALUES` stripped and tuple-column / tuple-row forms supported; both single-file and
+    directory scan paths use the tuple-aware API.
+  - `SingleFileTable.EvaluateCondition` now splits on top-level `OR` and `AND` (previously `OR` chains
+    returned 0 rows in `.scdb` mode).
+  - Regression coverage: `WhereInRegressionTests` (discriminating subsets, `VALUES`, tuple, `OR` chain)
+    and `WhereInRegressionEfCoreTests` reproduce the reporter's exact `SharpCoreDBConnection` + `.scdb` probe.
+- **Issue #341 — single-file (`.scdb`) mode ignored `DatabaseOptions.EncryptionKey`, writing data in plaintext**:
+  `SingleFileStorageProvider` accepted the options but never instantiated a cipher. It now creates
+  `AesGcmEncryption` from the caller-supplied key and encrypts/decrypts every block I/O path
+  (`WriteBlockAsync`, `ReadBlockAsync`, `GetReadStream`, `GetReadSpan`) with AES-256-GCM. Wrong keys now
+  fail (GCM authentication error or empty schema); `ValidateHeader` enforces encryption-mode consistency
+  on reopen; `UpdateBlockAsync`/`GetWriteStream` throw `NotSupportedException` when encrypted (GCM
+  ciphertext regions are not positionally independent). The WAL region also receives ciphertext.
+  Regression coverage: `SingleFileEncryptionTests` (no plaintext on disk, correct-key round-trip,
+  wrong-key rejection, open-without-encryption rejected).
+- **`ExecuteNonQuery` returned hardcoded `-1`/`1`**: both the ADO.NET `SharpCoreDB.Data.Provider` and the
+  EF Core provider now return the real affected-row count via the new `IDatabase.GetLastChanges()`
+  (SQLite `changes()` parity).
+- **EF Core provider wrote debug log files on every command** (`ef_commands`, `ef_dml`, `ef_deep_dml`,
+  `query_results`, `ef_reader_async`, `ef_nonquery`) — removed.
+
+### Added
+- `IDatabase.GetLastChanges()` — returns the number of rows changed by the last `INSERT`/`UPDATE`/`DELETE`.
+- v2.0 roadmap item: **block registry / on-disk metadata encryption** (encrypt table/index names and
+  layout metadata at rest; bootstrap super-block scheme) — see `ROADMAP.md`.
+
 ## [1.9.6] - 2026-08-28
 
 ### Fixed
