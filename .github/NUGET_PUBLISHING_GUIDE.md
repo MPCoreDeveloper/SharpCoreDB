@@ -51,31 +51,33 @@ Every push to `master` that passes all tests will automatically:
 
 **When to use**: For CI/CD continuous delivery
 
-### Scenario B: Manual Publishing (Optional)
+### Scenario B: Manual Publishing (Current Setup)
 
-If you prefer to manually trigger publishing, create a separate workflow file `.github/workflows/publish-manual.yml`:
+The repo ships with `.github/workflows/publish-manual.yml` (**"Manual NuGet Publish"**), triggerable from the
+Actions tab with a **`workflow_dispatch`** input. It builds and pushes all packages to NuGet.org in dependency
+order (with `--skip-duplicate`):
 
-```yaml
-name: Manual NuGet Publish
+| Input | Description |
+|---|---|
+| `reason` | Free-text note shown in the run summary |
+| `versionSuffix` | Optional NuGet pre-release suffix. **Empty** → stable version from the `.csproj` files (e.g. `2.0.0`). **`preview.1`**, **`rc.1`**, **`beta.1`** → `2.0.0-preview.1` etc. |
 
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Package version to publish'
-        required: false
+### Scenario B2: Publishing a v2.0 Pre-release (click-by-click)
 
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - run: dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts
-      - run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-```
+1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
+2. In the left sidebar, select **"Manual NuGet Publish"**
+3. Click the blue **"Run workflow"** button (top right)
+4. In the dialog:
+   - **Branch**: `release/v2.0.0.0` (the v2.0 line — or `master` for the 1.9.x line)
+   - **versionSuffix**: `preview.1` (must include a number; a bare `preview` is rejected by NuGet.org)
+   - **reason**: e.g. `v2.0 preview.1 – storage engine WP10–WP13`
+5. Click **"Run workflow"**
+6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
+   dependency layers (core → dependents → mid-level → top-level).
+7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — tick **"Include prerelease"** to see `2.0.0-preview.1`.
+
+> **Requires** the `NUGET_API_KEY` repository secret (`Settings → Secrets and variables → Actions`). If it was
+> used for the 1.9.7 publish it is already configured.
 
 ### Scenario C: Tag-Based Release Publishing
 
@@ -171,12 +173,18 @@ Create GitHub Releases for each version:
 
 ### 3. Pre-release Packages
 
-For beta/preview versions, use:
-```xml
-<Version>1.7.0-beta.1</Version>
+For v2.0 pre-releases (e.g. `2.0.0-preview.1`), **do not edit the `.csproj` files** — trigger the
+"Manual NuGet Publish" workflow with a `versionSuffix` (see Scenario B2). The workflow passes
+`/p:Version=2.0.0-<suffix>` to the whole solution, so every package and every internal
+`ProjectReference` dependency stays consistent on the same pre-release version.
+
+Consumers opt in explicitly — pre-release packages are **not** selected by default:
+
+```bash
+dotnet add package SharpCoreDB --version 2.0.0-preview.1
 ```
 
-Pre-release packages won't be automatically installed by default but are searchable on NuGet.org.
+Or in Visual Studio: **Manage NuGet Packages → tick "Include prerelease"**.
 
 ### 4. Package Metadata
 
