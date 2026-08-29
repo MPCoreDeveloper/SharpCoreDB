@@ -1634,6 +1634,79 @@ public partial class Table
     }
 
     /// <summary>
+    /// WP12: shared delete core used by every delete path (<see cref="Delete"/>, DeleteMultiple,
+    /// <see cref="DeleteByPrimaryKey"/>). Performs physical engine deletes, primary-key B-tree
+    /// cleanup, key-only hash-index cleanup (single lock per index) and row-count bookkeeping.
+    /// </summary>
+    /// <param name="recordsToDelete">The storage positions and their deserialized rows.</param>
+    private void DeleteRecordsCore(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete)
+    {
+        if (recordsToDelete.Count == 0)
+            return;
+
+        var engine = GetOrCreateStorageEngine();
+
+        // Physical deletes (PageBased marks slots deleted; Columnar/AppendOnly are logical).
+        if (StorageMode == StorageMode.PageBased)
+        {
+            foreach (var (storagePosition, _) in recordsToDelete)
+                engine.Delete(Name, storagePosition);
+        }
+
+        // Primary-key B-tree cleanup.
+        if (this.PrimaryKeyIndex >= 0)
+        {
+            var pkCol = this.Columns[this.PrimaryKeyIndex];
+            foreach (var (_, row) in recordsToDelete)
+            {
+                if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                {
+                    this.Index.Delete(pkValue.ToString() ?? string.Empty);
+                }
+            }
+        }
+
+        // Key-only hash-index cleanup: extract each indexed column's key once per row and
+        // remove all positions in a single lock per index.
+        var positions = new long[recordsToDelete.Count];
+        for (int i = 0; i < recordsToDelete.Count; i++)
+        {
+            positions[i] = recordsToDelete[i].storagePosition;
+        }
+
+        foreach (var kvp in this.hashIndexes)
+        {
+            if (!this.loadedIndexes.Contains(kvp.Key))
+                continue;
+
+            var keys = new object?[recordsToDelete.Count];
+            for (int i = 0; i < recordsToDelete.Count; i++)
+            {
+                recordsToDelete[i].row.TryGetValue(kvp.Key, out keys[i]);
+            }
+
+            kvp.Value.RemoveBatchKeys(keys, positions);
+        }
+
+        // Unloaded indexes rebuild lazily (columnar only - page-based indexes stay in sync).
+        if (StorageMode == StorageMode.Columnar)
+        {
+            foreach (var col in this.registeredIndexes.Keys)
+            {
+                if (!this.loadedIndexes.Contains(col))
+                {
+                    this.staleIndexes.Add(col);
+                    _indexReadyCache.TryRemove(col, out _);
+                }
+            }
+
+            TryAutoCompact();
+        }
+
+        Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
+    }
+
+    /// <summary>
     /// Deletes rows from the table that match the WHERE condition.
     /// Routes through storage engine with different semantics:
     /// - Columnar: Logical delete (remove from indexes, physical delete during compaction)
@@ -1749,70 +1822,8 @@ public partial class Table
                 }
             }
 
-            // ✅ Now delete all records in one batch - no more scanning between deletes
-            int deletedCount = recordsToDelete.Count;
-
-            // PageBased: route physical deletes to engine
-            if (StorageMode == StorageMode.PageBased)
-            {
-                foreach (var (storagePosition, _) in recordsToDelete)
-                {
-                    engine.Delete(Name, storagePosition);
-                }
-            }
-
-            // Remove from PK B-tree index
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                var pkCol = this.Columns[this.PrimaryKeyIndex];
-                foreach (var (_, row) in recordsToDelete)
-                {
-                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-                    {
-                        this.Index.Delete(pkValue.ToString() ?? string.Empty);
-                    }
-                }
-            }
-
-            // Remove from hash indexes - batch (single lock per index)
-            if (recordsToDelete.Count > 0)
-            {
-                // Pre-collect rows and positions for batch removal
-                var batchRows = new List<Dictionary<string, object>>(recordsToDelete.Count);
-                var batchPositions = new long[recordsToDelete.Count];
-                for (int i = 0; i < recordsToDelete.Count; i++)
-                {
-                    batchRows.Add(recordsToDelete[i].row);
-                    batchPositions[i] = recordsToDelete[i].storagePosition;
-                }
-
-                foreach (var kvp in this.hashIndexes)
-                {
-                    if (this.loadedIndexes.Contains(kvp.Key))
-                    {
-                        kvp.Value.RemoveBatch(batchRows, batchPositions);
-                    }
-                }
-
-            }
-
-            // Mark unloaded indexes as stale ONCE (not per-row)
-            if (StorageMode == StorageMode.Columnar && deletedCount > 0)
-            {
-                foreach (var col in this.registeredIndexes.Keys)
-                {
-                    if (!this.loadedIndexes.Contains(col))
-                    {
-                        this.staleIndexes.Add(col);
-                        _indexReadyCache.TryRemove(col, out _);
-                    }
-                }
-
-                TryAutoCompact();
-            }
-
-            // ✅ NEW: Update cached row count
-            Interlocked.Add(ref _cachedRowCount, -deletedCount);
+            // ✅ WP12: unified delete core - engine deletes, PK and key-only hash index cleanup.
+            DeleteRecordsCore(recordsToDelete);
         }
         finally
         {
@@ -1900,59 +1911,8 @@ public partial class Table
 
             if (recordsToDelete.Count == 0) return;
 
-            int deletedCount = recordsToDelete.Count;
-
-            // PageBased: route physical deletes
-            if (StorageMode == StorageMode.PageBased)
-            {
-                foreach (var (pos, _) in recordsToDelete)
-                    engine.Delete(Name, pos);
-            }
-
-            // Remove from PK B-tree
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                var pkCol = this.Columns[this.PrimaryKeyIndex];
-                foreach (var (_, row) in recordsToDelete)
-                {
-                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-                        this.Index.Delete(pkValue.ToString() ?? string.Empty);
-                }
-            }
-
-            // Batch remove from hash indexes (single lock per index)
-            var batchRows = new List<Dictionary<string, object>>(deletedCount);
-            var batchPositions = new long[deletedCount];
-            for (int i = 0; i < deletedCount; i++)
-            {
-                batchRows.Add(recordsToDelete[i].row);
-                batchPositions[i] = recordsToDelete[i].storagePosition;
-            }
-
-            foreach (var kvp in this.hashIndexes)
-            {
-                if (this.loadedIndexes.Contains(kvp.Key))
-                {
-                    kvp.Value.RemoveBatch(batchRows, batchPositions);
-                }
-            }
-
-            // Mark unloaded indexes as stale ONCE
-            if (StorageMode == StorageMode.Columnar)
-            {
-                foreach (var col in this.registeredIndexes.Keys)
-                {
-                    if (!this.loadedIndexes.Contains(col))
-                    {
-                        this.staleIndexes.Add(col);
-                        _indexReadyCache.TryRemove(col, out _);
-                    }
-                }
-
-                TryAutoCompact();
-            }
-
-            Interlocked.Add(ref _cachedRowCount, -deletedCount);
+            // ✅ WP12: unified delete core - engine deletes, PK and key-only hash index cleanup.
+            DeleteRecordsCore(recordsToDelete);
         }
         finally
         {
@@ -2351,51 +2311,33 @@ public partial class Table
 
             long storagePosition = searchResult.Value;
 
-            // Read row for hash index removal
-            var data = engine.Read(Name, storagePosition);
-            Dictionary<string, object>? row = null;
-            if (data != null)
+            // WP12: read the row only when loaded hash indexes need their indexed column
+            // values. A PK delete without loaded hash indexes is key-only: no storage read.
+            Dictionary<string, object> row;
+            bool needsRow = false;
+            foreach (var kvp in this.hashIndexes)
             {
-                row = DeserializeRow(data);
-            }
-
-            // Delete from storage
-            if (StorageMode == StorageMode.PageBased)
-            {
-                engine.Delete(Name, storagePosition);
-            }
-
-            // Remove from PK index
-            this.Index.Delete(pkStr);
-
-            // Remove from hash indexes
-            if (row != null)
-            {
-                foreach (var kvp in this.hashIndexes)
+                if (this.loadedIndexes.Contains(kvp.Key))
                 {
-                    if (this.loadedIndexes.Contains(kvp.Key))
-                    {
-                        kvp.Value.Remove(row, storagePosition);
-                    }
+                    needsRow = true;
+                    break;
                 }
             }
 
-            // Mark unloaded indexes as stale (columnar)
-            if (StorageMode == StorageMode.Columnar)
+            if (needsRow)
             {
-                foreach (var col in this.registeredIndexes.Keys)
-                {
-                    if (!this.loadedIndexes.Contains(col))
-                    {
-                        this.staleIndexes.Add(col);
-                        _indexReadyCache.TryRemove(col, out _);
-                    }
-                }
-
-                TryAutoCompact();
+                var data = engine.Read(Name, storagePosition);
+                var rowObj = data != null ? DeserializeRow(data) : null;
+                row = rowObj ?? new Dictionary<string, object>(1) { [this.Columns[this.PrimaryKeyIndex]] = key };
+            }
+            else
+            {
+                // Key-only: only the primary-key value is needed for the PK B-tree cleanup.
+                row = new Dictionary<string, object>(1) { [this.Columns[this.PrimaryKeyIndex]] = key };
             }
 
-            Interlocked.Decrement(ref _cachedRowCount);
+            // ✅ WP12: unified delete core - engine delete, PK and key-only hash index cleanup.
+            DeleteRecordsCore(new List<(long storagePosition, Dictionary<string, object> row)> { (storagePosition, row) });
             return true;
         }
         finally

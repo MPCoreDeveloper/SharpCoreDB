@@ -277,6 +277,56 @@ public class HashIndex : IDisposable
     }
 
     /// <summary>
+    /// WP12: removes multiple key-position pairs in a single lock acquisition.
+    /// Key-based overload of <see cref="RemoveBatch(List{Dictionary{string, object}}, long[])"/>:
+    /// callers that already know each indexed column's key (or intentionally build a
+    /// key-only row) skip the per-row dictionary lookup inside the lock.
+    /// </summary>
+    /// <param name="keys">The indexed key values (null entries are skipped).</param>
+    /// <param name="positions">Corresponding storage positions.</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal void RemoveBatchKeys(object?[] keys, long[] positions)
+    {
+        if (keys.Length == 0) return;
+
+        _lock.EnterWriteLock();
+        try
+        {
+            for (int i = 0; i < keys.Length; i++)
+            {
+                var key = keys[i];
+                if (key is null)
+                    continue;
+
+                var normalizedKey = NormalizeKey(key);
+
+                if (_useUnsafeEqualityIndex)
+                {
+                    var keyBytes = BuildUnsafeKey(normalizedKey);
+                    if (_unsafeIndex.Remove(keyBytes, positions[i]))
+                    {
+                        _unsafeTotalRows--;
+                    }
+                    continue;
+                }
+
+                if (_index.TryGetValue(normalizedKey, out var list))
+                {
+                    list.Remove(positions[i]);
+                    if (list.Count == 0)
+                    {
+                        _index.Remove(normalizedKey);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Adds multiple rows to the index in a single lock acquisition.
     /// ✅ PERF: Acquires write lock once for entire batch instead of per-row.
     /// Reduces lock contention by ~95% for batch inserts.
