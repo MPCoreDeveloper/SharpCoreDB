@@ -329,8 +329,12 @@ public partial class Table
             // Apply update
             row[updateColumnName] = newValue;
 
-            // Serialize updated row
-            byte[] updatedData = SerializeRowOptimized(row);
+            // WP11: overwrite only the updated field in the existing row bytes when safe
+            // (PageBased with stable fixed offsets) instead of re-serializing every column.
+            byte[] updatedData = StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased
+                && TryOverwriteFieldsInPlace(existingData, new Dictionary<string, object>(1) { [updateColumnName] = newValue }) is { } patched
+                ? patched
+                : SerializeRowOptimized(row);
             serializedData.Add((position, oldPkValue, updatedData, row));
         }
 
@@ -749,8 +753,12 @@ public partial class Table
                 row[column] = value;
             }
 
-            // Serialize updated row
-            byte[] updatedData = SerializeRowOptimized(row);
+            // WP11: overwrite only the updated fields in the existing row bytes when safe
+            // (PageBased with stable fixed offsets) instead of re-serializing every column.
+            byte[] updatedData = StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased
+                && TryOverwriteFieldsInPlace(existingData, columnUpdates) is { } patched
+                ? patched
+                : SerializeRowOptimized(row);
             serializedData.Add((position, oldPkValue, updatedData, row));
         }
 

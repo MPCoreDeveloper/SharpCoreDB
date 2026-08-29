@@ -171,4 +171,36 @@ public sealed class InPlaceUpdateTests : IDisposable
         table.Update("id = 1", new Dictionary<string, object> { ["score"] = 8.75 });
         Assert.Equal(8.75, (double)table.Select("id = 1").Single()["score"]);
     }
+
+    [Fact]
+    public void UpdateBatchMultiColumn_FixedSizeField_OverwritesInPlace()
+    {
+        var table = CreatePageBasedTable(t =>
+        {
+            t.AddColumn(new ColumnDefinition { Name = "id", DataType = "INTEGER", IsNotNull = true, IsPrimaryKey = true });
+            t.AddColumn(new ColumnDefinition { Name = "age", DataType = "INTEGER" });
+            t.AddColumn(new ColumnDefinition { Name = "score", DataType = "REAL" });
+        });
+
+        table.Insert(new Dictionary<string, object> { ["id"] = 1, ["age"] = 30, ["score"] = 4.25 });
+        table.Insert(new Dictionary<string, object> { ["id"] = 2, ["age"] = 40, ["score"] = 8.5 });
+
+        // PK-lookup batch update of a fixed-size field: the WP11 patch overwrites the
+        // fields in the existing row bytes instead of re-serializing every column.
+        int updated = table.UpdateBatchMultiColumn(
+            "id",
+            new (int id, Dictionary<string, object> columnUpdates)[]
+            {
+                (1, new Dictionary<string, object> { ["age"] = 99 }),
+                (2, new Dictionary<string, object> { ["age"] = 55 }),
+            });
+
+        Assert.Equal(2, updated);
+        var row1 = table.Select("id = 1").Single();
+        Assert.Equal(99, row1["age"]);
+        Assert.Equal(4.25, (double)row1["score"]); // untouched
+        var row2 = table.Select("id = 2").Single();
+        Assert.Equal(55, row2["age"]);
+        Assert.Equal(8.5, (double)row2["score"]); // untouched
+    }
 }
