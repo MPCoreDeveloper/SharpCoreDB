@@ -249,6 +249,14 @@ public interface IDatabase : IAsyncDisposable
     long GetLastInsertRowId();
 
     /// <summary>
+    /// Gets the number of rows affected by the most recently executed DML statement
+    /// (INSERT/UPDATE/DELETE). Returns 0 for DDL and for statements that affected no rows.
+    /// Compatible with SQLite's changes() function.
+    /// </summary>
+    /// <returns>The affected-row count of the last DML statement, or 0.</returns>
+    int GetLastChanges();
+
+    /// <summary>
     /// Attempts to get a table by name.
     /// </summary>
     /// <param name="tableName">The table name.</param>

@@ -89,6 +89,93 @@ public sealed class WhereInRegressionTests : IDisposable
         }
     }
 
+    // --- Issue #340: discriminating cases. These fail when the IN filter is ignored
+    // (returning ALL rows) or mangled, even though the list matches only a subset.
+
+    [Fact]
+    public void SingleFile_WhereIn_Parameterized_SubsetFilter_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_scdbPath, "pw");
+        try
+        {
+            Seed(db);
+            // @p1 matches nothing: a working IN filter must return the 2 WorkItem rows,
+            // never all 3 rows.
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (@p0, @p1)",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "DoesNotExist" });
+            Assert.Equal(2, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SingleFile_WhereIn_VALUES_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_scdbPath, "pw");
+        try
+        {
+            Seed(db);
+            // SQLite-style single-row VALUES form: IN (VALUES (@p0)).
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0))",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem" });
+            Assert.Equal(2, rows.Count);
+
+            // Multi-row VALUES form: IN (VALUES (@p0), (@p1)).
+            rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0), (@p1))",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "Person" });
+            Assert.Equal(3, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SingleFile_WhereIn_TupleValues_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_scdbPath, "pw");
+        try
+        {
+            Seed(db);
+            // Composite-key IN over a single VALUES row: (node_type, external_id) IN (VALUES (@nt, @ei)).
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE (node_type, external_id) IN (VALUES (@nt, @ei))",
+                new Dictionary<string, object?> { ["@nt"] = "WorkItem", ["@ei"] = "WI-1" });
+            Assert.Equal(1, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    // --- Issue #340 (same area): an OR chain of equality predicates must not drop all rows. ---
+
+    [Fact]
+    public void SingleFile_Where_OrChain_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_scdbPath, "pw");
+        try
+        {
+            Seed(db);
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type = @p0 OR node_type = @p1",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "Person" });
+            Assert.Equal(3, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
     // --- Directory mode ---
 
     [Theory]
@@ -122,6 +209,68 @@ public sealed class WhereInRegressionTests : IDisposable
                 "SELECT id FROM kg_nodes_test WHERE node_type IN (@p0, @p1)",
                 new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "Person" });
             Assert.Equal(3, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    // --- Issue #340: directory-mode discriminating cases (IN must filter to a subset,
+    // and the SQLite VALUES/tuple forms must work). ---
+
+    [Fact]
+    public void Directory_WhereIn_Parameterized_SubsetFilter_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_dirPath, "pw");
+        try
+        {
+            Seed(db);
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (@p0, @p1)",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "DoesNotExist" });
+            Assert.Equal(2, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Directory_WhereIn_VALUES_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_dirPath, "pw");
+        try
+        {
+            Seed(db);
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0))",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem" });
+            Assert.Equal(2, rows.Count);
+
+            rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE node_type IN (VALUES (@p0), (@p1))",
+                new Dictionary<string, object?> { ["@p0"] = "WorkItem", ["@p1"] = "Person" });
+            Assert.Equal(3, rows.Count);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Directory_WhereIn_TupleValues_ReturnsMatchingRows()
+    {
+        var db = _factory.Create(_dirPath, "pw");
+        try
+        {
+            Seed(db);
+            var rows = db.ExecuteQuery(
+                "SELECT id FROM kg_nodes_test WHERE (node_type, external_id) IN (VALUES (@nt, @ei))",
+                new Dictionary<string, object?> { ["@nt"] = "WorkItem", ["@ei"] = "WI-1" });
+            Assert.Equal(1, rows.Count);
         }
         finally
         {
