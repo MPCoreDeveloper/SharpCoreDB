@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ciphertext regions are not positionally independent). The WAL region also receives ciphertext.
   Regression coverage: `SingleFileEncryptionTests` (no plaintext on disk, correct-key round-trip,
   wrong-key rejection, open-without-encryption rejected).
+  *Analysis and proposed fix by **@saltus7** ([PR #342](https://github.com/MPCoreDeveloper/SharpCoreDB/pull/342));
+  the shipped implementation follows the integration points they identified.*
 - **`ExecuteNonQuery` returned hardcoded `-1`/`1`**: both the ADO.NET `SharpCoreDB.Data.Provider` and the
   EF Core provider now return the real affected-row count via the new `IDatabase.GetLastChanges()`
   (SQLite `changes()` parity).

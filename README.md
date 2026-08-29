@@ -347,6 +347,10 @@ Contributions are welcome. Please open an issue for ideas, bug reports, and feat
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
+## Contributors
+
+See [CONTRIBUTORS.md](./CONTRIBUTORS.md) for community acknowledgements.
+
 ---
 
 **Made with ❤️ for the .NET community**

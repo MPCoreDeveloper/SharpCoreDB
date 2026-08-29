@@ -33,6 +33,9 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - The file header, block registry and free-space map remain plaintext metadata (table/index block names,
   offsets) so blocks can be located after a crash; encrypting those regions is on the
   [v2.0 roadmap](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/ROADMAP.md).
+- With thanks to **@saltus7** for independently root-causing this bug and submitting a complete
+  proposed fix ([PR #342](https://github.com/MPCoreDeveloper/SharpCoreDB/pull/342)) — the shipped
+  implementation follows the integration points they identified.
 
 ## What's New in v1.9.6
 
