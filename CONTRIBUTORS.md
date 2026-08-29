@@ -18,6 +18,16 @@ core maintainers.
   saltus7 identified.
 - We merged our own implementation rather than the PR to keep the release moving, but this
   contributor deserves full credit for the diagnosis and the reference implementation.
+- **Issue #343 — `VacuumAsync(VacuumMode.Full)` throws `ObjectDisposedException` under .NET 10
+  Trimming / Native AOT**: saltus7 reproduced the crash in a `PublishTrimmed` single-file build and
+  root-caused it precisely — the full-vacuum stream swap mutated `private readonly` fields through
+  reflection (`GetField("_fileStream")`), which returns `null` under trimming and cascades into the
+  catch block reading the closed stream's `.Length`. Their proposed fix (a `ReplaceFileStream`-style
+  method / no reflection) and safe-error-handling guidance were both correct. Shipped in **v1.9.8**
+  (and carried into the upcoming v2.0 preview): reflection-free `SwapFileStream`, `GetFileSizeSafely()`
+  on the error paths, plus the source-generated JSON context and internal accessors that make
+  single-file (`.scdb`) mode fully Native AOT-safe — verified by `SharpCoreDB.AotSmoke` publishing
+  with `PublishAot=true` and running exit 0 including the single-file full-VACUUM path.
 
 ---
 
