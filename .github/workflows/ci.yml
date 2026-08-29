@@ -268,7 +268,7 @@ jobs:
               dotnet nuget push "$pkg" \
                 --api-key "$NUGET_API_KEY" \
                 --source "$NUGET_SOURCE" \
-                --skip-duplicate || true
+                --skip-duplicate
             done
           done
           echo "::endgroup::"
