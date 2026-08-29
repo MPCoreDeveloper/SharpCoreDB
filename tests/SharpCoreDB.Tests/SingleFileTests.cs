@@ -79,6 +79,50 @@ public class SingleFileTests : IDisposable
     }
 
     [Fact]
+    public async Task SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen()
+    {
+        // Issue #343 regression: VacuumAsync(VacuumMode.Full) crashed with ObjectDisposedException
+        // under .NET trimming / Native AOT (reflection-based field swap returned null). The full
+        // vacuum path must complete, swap the underlying file stream, and remain readable.
+        // Arrange
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        var db = (SharpCoreDB.SingleFileDatabase)_factory.CreateWithOptions(_testFilePath, "test_password", options);
+
+        db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, age INTEGER)");
+        var statements = new List<string>(100);
+        for (int i = 0; i < 100; i++)
+        {
+            statements.Add($"INSERT INTO docs (name, age) VALUES ('User{i}', {20 + i})");
+        }
+        db.ExecuteBatchSQL(statements);
+        db.Flush();
+
+        // Act: full vacuum rewrites the file to a temp file and swaps the stream
+        var result = await db.VacuumAsync(VacuumMode.Full, CancellationToken.None);
+
+        // Assert
+        Assert.True(result.Success, $"VacuumFull failed: {result.ErrorMessage}");
+        Assert.Equal(VacuumMode.Full, result.Mode);
+        Assert.True(result.FileSizeAfter >= 0, "FileSizeAfter must not be negative on success");
+        Assert.True(result.BytesReclaimed >= 0);
+        Assert.True(result.BlocksMoved >= 1, $"Expected blocks to be moved, got {result.BlocksMoved}");
+
+        // The stream swap must not corrupt the database: reopen and read the data back.
+        (db as IDisposable)?.Dispose();
+        var reopened = (SharpCoreDB.SingleFileDatabase)_factory.CreateWithOptions(_testFilePath, "test_password", options);
+        try
+        {
+            var all = reopened.ExecuteQuery("SELECT * FROM docs");
+            Assert.Equal(100, all.Count);
+            Assert.Equal("User42", reopened.ExecuteQuery("SELECT * FROM docs WHERE name = 'User42'").Single()["name"]);
+        }
+        finally
+        {
+            (reopened as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
     public void SingleFileDatabase_GetStorageStatistics_Works()
     {
         // Arrange
