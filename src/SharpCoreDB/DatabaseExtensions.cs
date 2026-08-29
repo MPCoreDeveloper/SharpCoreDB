@@ -1,4 +1,4 @@
-// <copyright file="DatabaseExtensions.cs" company="MPCoreDeveloper">
+// src\SharpCoreDB\DatabaseExtensions.cs
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -81,6 +81,7 @@ public class DatabaseFactory(IServiceProvider services)
 
         return options.StorageMode switch
         {
+            // ✅ ENCRYPTION: Pass 'this' to access instance method (needed for DI resolution)
             StorageMode.SingleFile => CreateSingleFileDatabase(dbPath, masterPassword, options),
             StorageMode.Directory => CreateDirectoryDatabase(dbPath, masterPassword, options),
             _ => throw new ArgumentException($"Invalid storage mode: {options.StorageMode}")
@@ -94,7 +95,8 @@ public class DatabaseFactory(IServiceProvider services)
         return new Database(services, dbPath, masterPassword, options.IsReadOnly, config);
     }
 
-    private static IDatabase CreateSingleFileDatabase(string dbPath, string masterPassword, DatabaseOptions options)
+    // ✅ ENCRYPTION: Changed from static to instance method to access DI services
+    private IDatabase CreateSingleFileDatabase(string dbPath, string masterPassword, DatabaseOptions options)
     {
         if (options.DatabaseConfig is not null)
         {
@@ -102,7 +104,19 @@ public class DatabaseFactory(IServiceProvider services)
         }
         options.WalBufferSizePages = options.WalBufferSizePages > 0 ? options.WalBufferSizePages : 2048;
         options.FileShareMode = System.IO.FileShare.ReadWrite;
-        var provider = SingleFileStorageProvider.Open(dbPath, options);
+        
+        // ✅ ENCRYPTION: Resolve ICryptoService from DI and pass to provider
+        SharpCoreDB.Interfaces.ICryptoService? cryptoService = null;
+        if (options.EnableEncryption)
+        {
+            cryptoService = services.GetService<SharpCoreDB.Interfaces.ICryptoService>();
+            if (cryptoService is null)
+                throw new InvalidOperationException(
+                    "ICryptoService must be registered in DI when EnableEncryption is true. " +
+                    "Call services.AddSharpCoreDB() or register ICryptoService manually.");
+        }
+        
+        var provider = SingleFileStorageProvider.Open(dbPath, options, cryptoService);
         return new SingleFileDatabase(provider, dbPath, masterPassword, options);
     }
 

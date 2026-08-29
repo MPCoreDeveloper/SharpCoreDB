@@ -1,4 +1,4 @@
-// <copyright file="SingleFileTable.cs" company="MPCoreDeveloper">
+// src\SharpCoreDB\SingleFileTable.cs
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>

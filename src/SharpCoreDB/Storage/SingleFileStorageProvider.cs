@@ -1,4 +1,4 @@
-// <copyright file="SingleFileStorageProvider.cs" company="MPCoreDeveloper">
+// src\SharpCoreDB\Storage\SingleFileStorageProvider.cs
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -96,6 +96,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private const int WRITE_BATCH_SIZE = 200;          // Batch 200 writes together (increased from 50)
     private const int WRITE_BATCH_TIMEOUT_MS = 200;    // Or flush after 200ms (increased from 50ms)
     
+    // ✅ ENCRYPTION: AES-256-GCM instance for block-level encryption at rest
+    // Null when encryption is disabled. When non-null, all block reads/writes
+    // pass through Encrypt/Decrypt to ensure data is encrypted on disk.
+    private readonly SharpCoreDB.Services.AesGcmEncryption? _encryption;
+    
     private bool _isInTransaction;
     private bool _disposed;
     private ScdbFileHeader _header;
@@ -109,13 +114,14 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// <param name="mmf">Optional memory-mapped file</param>
     /// <param name="header">File header structure</param>
     private SingleFileStorageProvider(string filePath, DatabaseOptions options, FileStream fileStream, 
-        MemoryMappedFile? mmf, ScdbFileHeader header)
+        MemoryMappedFile? mmf, ScdbFileHeader header, SharpCoreDB.Services.AesGcmEncryption? encryption = null)
     {
         _filePath = filePath;
         _options = options;
         _fileStream = fileStream;
         _memoryMappedFile = mmf;
         _header = header;
+        _encryption = encryption;
         _blockCache = new ConcurrentDictionary<string, BlockMetadata>();
 
         // Initialize subsystems
@@ -134,12 +140,26 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// <param name="filePath">Path to .scdb file</param>
     /// <param name="options">Database options</param>
     /// <returns>Initialized provider</returns>
-    public static SingleFileStorageProvider Open(string filePath, DatabaseOptions options)
+    public static SingleFileStorageProvider Open(string filePath, DatabaseOptions options, SharpCoreDB.Interfaces.ICryptoService? cryptoService = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(options);
         
         options.Validate();
+
+        // ✅ ENCRYPTION: Initialize AES-256-GCM if encryption is requested
+        SharpCoreDB.Services.AesGcmEncryption? encryption = null;
+        if (options.EnableEncryption)
+        {
+            if (cryptoService is null)
+                throw new InvalidOperationException(
+                    "ICryptoService must be registered in DI when EnableEncryption is true. " +
+                    "Call services.AddSharpCoreDB() or register ICryptoService manually.");
+            if (options.EncryptionKey is null || options.EncryptionKey.Length != 32)
+                throw new InvalidOperationException(
+                    "EncryptionKey must be exactly 32 bytes (256 bits) when EnableEncryption is true.");
+            encryption = cryptoService.GetAesGcmEncryption(options.EncryptionKey);
+        }
 
         // Ensure .scdb extension
         if (!filePath.EndsWith(".scdb", StringComparison.OrdinalIgnoreCase))
@@ -200,7 +220,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             }
         }
 
-        return new SingleFileStorageProvider(filePath, options, fileStream, mmf, header);
+        return new SingleFileStorageProvider(filePath, options, fileStream, mmf, header, encryption);
     }
 
     /// <summary>
@@ -280,7 +300,19 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             return null;
         }
 
-        // Create a sub-stream view of the block
+        // ✅ ENCRYPTION: If encryption is enabled, read the full block, decrypt,
+        // and return a read-only MemoryStream over the plaintext.
+        // BlockStream cannot decrypt in-place, so we must materialize the block.
+        if (_encryption is not null)
+        {
+            var encryptedData = new byte[(int)entry.Length];
+            _fileStream.Position = (long)entry.Offset;
+            _fileStream.ReadExactly(encryptedData);
+            var plaintextData = _encryption.Decrypt(encryptedData);
+            return new MemoryStream(plaintextData, index: 0, count: plaintextData.Length, writable: false);
+        }
+
+        // Create a sub-stream view of the block (unencrypted path)
         return new BlockStream(_fileStream, entry.Offset, entry.Length, FileAccess.Read);
     }
 
@@ -307,12 +339,19 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             var buffer = new byte[checked((int)Math.Min(entry.Length, (ulong)int.MaxValue))];
             _fileStream.Position = (long)entry.Offset;
             _fileStream.ReadExactly(buffer);
+            // ✅ ENCRYPTION: Decrypt if encryption is enabled
+            if (_encryption is not null)
+            {
+                return _encryption.Decrypt(buffer);
+            }
             return buffer;
         }
 
         // Use memory-mapped file for zero-copy access
-        if (_memoryMappedFile != null)
+        if (_memoryMappedFile != null && _encryption is null)
         {
+            // ✅ ENCRYPTION: Only use zero-copy mmap when encryption is disabled.
+            // Encrypted data must be read into a buffer and decrypted.
             try
             {
                 var viewOffset = checked((long)entry.Offset);
@@ -341,6 +380,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         var buffer2 = new byte[(int)entry.Length];
         _fileStream.Position = (long)entry.Offset;
         _fileStream.ReadExactly(buffer2);
+        
+        // ✅ ENCRYPTION: Decrypt block data after reading from disk
+        if (_encryption is not null)
+        {
+            return _encryption.Decrypt(buffer2);
+        }
         return buffer2;
     }
 
@@ -461,6 +506,21 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             // ✅ Convert to array immediately (before async operations)
             var checksumArray = checksumSpan.ToArray();
 
+            // ✅ ENCRYPTION: Encrypt block data before writing to disk
+            // Checksum is computed on PLAINTEXT (above) so we can verify integrity after decryption.
+            // The on-disk bytes are [Nonce][Ciphertext][Tag] when encryption is enabled.
+            byte[] dataToStore;
+            if (_encryption is not null)
+            {
+                dataToStore = _encryption.Encrypt(data.ToArray());
+                // Update entry length to reflect encrypted size (plaintext + 12 nonce + 16 tag)
+                entry = entry with { Length = (ulong)dataToStore.Length, Flags = entry.Flags | (uint)BlockFlags.Dirty };
+            }
+            else
+            {
+                dataToStore = data.ToArray();
+            }
+
             // Write to WAL first (crash safety)
             if (_isInTransaction)
             {
@@ -468,11 +528,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             }
 
             // ✅ Phase 1 Task 1.3: Queue write instead of direct I/O
-            // Copy data to array (required for safe batching)
             var writeOp = new WriteOperation
             {
                 BlockName = blockName,
-                Data = data.ToArray(),
+                Data = dataToStore,
                 Checksum = checksumArray,
                 Offset = offset,
                 Entry = SetChecksum(entry, checksumArray)
@@ -712,11 +771,25 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 _fileStream.Position = (long)entry.Offset;
                 await _fileStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
 
-                // Validate checksum; if mismatch, attempt self-heal
-                if (!ValidateChecksum(entry, buffer.Span))
+                // ✅ ENCRYPTION: Decrypt block data after reading from disk
+                // The on-disk bytes are [Nonce][Ciphertext][Tag] when encryption is enabled.
+                // We decrypt first, THEN validate the checksum against the plaintext.
+                byte[] plaintextBytes;
+                if (_encryption is not null)
+                {
+                    plaintextBytes = _encryption.Decrypt(buffer.ToArray());
+                }
+                else
+                {
+                    plaintextBytes = new byte[entry.Length];
+                    buffer.Span.CopyTo(plaintextBytes);
+                }
+
+                // Validate checksum against PLAINTEXT; if mismatch, attempt self-heal
+                if (!ValidateChecksum(entry, plaintextBytes))
                 {
                     Console.WriteLine($"[SingleFileStorageProvider] Checksum mismatch for block '{blockName}', attempting self-heal");
-                    var repairedEntry = SetChecksum(entry, SHA256.HashData(buffer.Span));
+                    var repairedEntry = SetChecksum(entry, SHA256.HashData(plaintextBytes));
                     _blockRegistry.AddOrUpdateBlock(blockName, repairedEntry);
                     await _blockRegistry.FlushAsync(cancellationToken).ConfigureAwait(false);
                     
@@ -736,10 +809,8 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                     };
                 }
 
-                // ✅ Phase 3.3: Copy to result array (caller owns this memory)
-                var result = new byte[entry.Length];
-                buffer.Span.CopyTo(result);
-                return result;
+                // Return the decrypted plaintext to the caller
+                return plaintextBytes;
             }
             finally
             {

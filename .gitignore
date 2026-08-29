@@ -425,3 +425,5 @@ dist/
 # SonarScanner local analysis artifacts
 .sonarqube/
 .scannerwork/
+
+*.scdb
