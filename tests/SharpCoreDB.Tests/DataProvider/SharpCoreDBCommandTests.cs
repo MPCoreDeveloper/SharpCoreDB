@@ -91,7 +91,7 @@ public sealed class SharpCoreDBCommandTests : IDisposable
         var affected = cmd.ExecuteNonQuery();
 
         // Assert
-        Assert.Equal(-1, affected); // convention for this provider
+        Assert.Equal(1, affected); // rows affected by the single INSERT (issue #340)
 
         // Verify round-trip via reader (also exercises BuildParameterDictionary on SELECT)
         using var verify = _connection.CreateCommand();
