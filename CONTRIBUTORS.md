@@ -21,4 +21,25 @@ core maintainers.
 
 ---
 
+## YBazanPro
+
+Consistent, high-quality bug reporter — 10 issues filed (all resolved), several of which drove
+critical fixes in the 1.9.5 → 1.9.7 release line:
+
+- **Issue #340 — `WHERE IN (...)` regression still present in 1.9.6**: the detailed
+  `SharpCoreDBConnection` + `.scdb` verification probe (multi-value lists, SQLite `VALUES`,
+  tuple rows, `OR` chains, real `ExecuteNonQuery` counts) that became the permanent
+  `WhereInRegressionTests` / `WhereInRegressionEfCoreTests` regression coverage shipped in
+  **v1.9.7**.
+- **Issue #339 — `WHERE IN (...)` regression in 1.9.5** (returned ALL rows): fixed in v1.9.6.
+- **Issue #337 — Server dropped `request.Parameters`** (gRPC + binary protocol): parameter
+  forwarding fix in v1.9.5.
+- **Issue #336 — `INSERT` with 4+ ADO.NET parameters bound to wrong columns**: token-aware
+  parameter binding fix in v1.9.5.
+- **Earlier findings**: FluentMigrator processor SQL-generation bugs (#221), quoted-identifier
+  handling in single-file DDL (#227), `SharpCoreDBDataReader` aliased-column behavior with EF
+  Core (#218), missing NuGet packages (#216), and migration-process feedback (#92, #148).
+
+---
+
 *Want to see your name here? Open a pull request — every contribution, big or small, is welcome.*
