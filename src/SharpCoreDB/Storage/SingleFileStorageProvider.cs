@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Storage;
 
+using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Scdb;
 using System;
 using System.Buffers;
@@ -100,6 +101,13 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private bool _disposed;
     private ScdbFileHeader _header;
 
+    // ✅ Issue #341: AES-256-GCM encryption for block data at rest. Created from
+    // DatabaseOptions.EncryptionKey when EnableEncryption is true. The header, block
+    // registry and free-space map remain plaintext (metadata only); every block written
+    // through WriteBlockAsync/UpdateBlockAsync is encrypted, and every block read through
+    // ReadBlockAsync/GetReadStream/GetReadSpan is decrypted (wrong keys throw).
+    private readonly AesGcmEncryption? _encryption;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SingleFileStorageProvider"/> class.
     /// </summary>
@@ -117,6 +125,14 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _memoryMappedFile = mmf;
         _header = header;
         _blockCache = new ConcurrentDictionary<string, BlockMetadata>();
+
+        // ✅ Issue #341: create the AES-256-GCM cipher from the caller-supplied key.
+        // Must be created before any subsystem loads block data (table directory,
+        // metadata, registry reads) so encrypted blocks decrypt on first access.
+        _encryption = options.EnableEncryption
+            ? new AesGcmEncryption(options.EncryptionKey ?? throw new InvalidOperationException(
+                "EncryptionKey is required when EnableEncryption is true."))
+            : null;
 
         // Initialize subsystems
         _blockRegistry = new BlockRegistry(this, header.BlockRegistryOffset, header.BlockRegistryLength);
@@ -206,7 +222,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// <summary>
     /// Gets whether delta-updates are supported and enabled (Phase 3.3).
     /// </summary>
-    internal bool SupportsDeltaUpdates => _header.SupportsDeltaUpdates && _options.EnableDeltaUpdates;
+    internal bool SupportsDeltaUpdates => _header.SupportsDeltaUpdates && _options.EnableDeltaUpdates && _encryption is null;
 
     /// <summary>
     /// Gets whether the file stores ULIDs in the ULID-spec-compliant encoding (1.9.5+).
@@ -274,7 +290,15 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     public Stream? GetReadStream(string blockName)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        
+
+        // ✅ Issue #341: encrypted blocks cannot be served as a zero-copy sub-stream of
+        // the file; materialize and decrypt the block instead.
+        if (_encryption is not null)
+        {
+            var data = ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            return data is null ? null : new MemoryStream(data);
+        }
+
         if (!_blockRegistry.TryGetBlock(blockName, out var entry))
         {
             return null;
@@ -288,6 +312,13 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     public unsafe ReadOnlySpan<byte> GetReadSpan(string blockName)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // ✅ Issue #341: encrypted blocks are materialized + decrypted (no zero-copy span).
+        if (_encryption is not null)
+        {
+            var data = ReadBlockAsync(blockName).GetAwaiter().GetResult();
+            return data is null ? ReadOnlySpan<byte>.Empty : data.AsSpan();
+        }
 
         if (!_blockRegistry.TryGetBlock(blockName, out var entry))
         {
@@ -349,6 +380,13 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // ✅ Issue #341: a raw write stream would bypass encryption.
+        if (_encryption is not null)
+        {
+            throw new NotSupportedException(
+                "Raw write streams (GetWriteStream) are not supported on encrypted databases; use WriteBlockAsync.");
+        }
+
         ulong offset;
         ulong length;
 
@@ -396,6 +434,14 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     public async Task WriteBlockAsync(string blockName, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // ✅ Issue #341: encrypt block data at rest before computing the checksum and
+        // queuing the write. The on-disk block is ciphertext (nonce + ciphertext + tag);
+        // the checksum and registry length describe the ciphertext.
+        if (_encryption is not null)
+        {
+            data = _encryption.Encrypt(data.ToArray());
+        }
 
         await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -537,7 +583,16 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             {
                 throw new InvalidOperationException($"Cannot update non-existent block '{blockName}'. Use WriteBlockAsync to create new blocks.");
             }
-            
+
+            // ✅ Issue #341: in-place delta writes are incompatible with block-level
+            // AES-GCM (ciphertext regions are not positionally independent). Encrypted
+            // databases must rewrite full blocks via WriteBlockAsync.
+            if (_encryption is not null)
+            {
+                throw new NotSupportedException(
+                    "In-place block updates (UpdateBlockAsync) are not supported on encrypted databases; use WriteBlockAsync to rewrite the full block.");
+            }
+
             // ✅ Validate bounds
             if (offset + data.Length > (long)entry.Length)
             {
@@ -615,7 +670,16 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             {
                 throw new InvalidOperationException($"Cannot update non-existent block '{blockName}'. Use WriteBlockAsync to create new blocks.");
             }
-            
+
+            // ✅ Issue #341: in-place delta writes are incompatible with block-level
+            // AES-GCM (ciphertext regions are not positionally independent). Encrypted
+            // databases must rewrite full blocks via WriteBlockAsync.
+            if (_encryption is not null)
+            {
+                throw new NotSupportedException(
+                    "In-place block updates (UpdateBlockAsync) are not supported on encrypted databases; use WriteBlockAsync to rewrite the full block.");
+            }
+
             long totalBytesWritten = 0;
             
             // ✅ Write each dirty range sequentially
@@ -739,6 +803,14 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 // ✅ Phase 3.3: Copy to result array (caller owns this memory)
                 var result = new byte[entry.Length];
                 buffer.Span.CopyTo(result);
+
+                // ✅ Issue #341: decrypt the block. A wrong key throws an AES-GCM
+                // authentication exception instead of silently returning garbage.
+                if (_encryption is not null)
+                {
+                    result = _encryption.Decrypt(result);
+                }
+
                 return result;
             }
             finally
@@ -1356,6 +1428,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             _memoryMappedFile?.Dispose();
             _fileStream?.Dispose();
 
+            // ✅ Issue #341: dispose the cipher to zeroize the in-memory key.
+            _encryption?.Dispose();
+
             _writeCts?.Dispose();
             _flushSignal?.Dispose();
         }
@@ -1552,6 +1627,18 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         {
             throw new InvalidOperationException(
                 $"Page size mismatch: file has {header.PageSize}, options specify {options.PageSize}");
+        }
+
+        // ✅ Issue #341: enforce encryption-mode consistency. A file that was created
+        // encrypted must be reopened with EnableEncryption + the correct key; a plaintext
+        // file must not be opened with EnableEncryption = true.
+        bool fileEncrypted = header.EncryptionMode != 0;
+        if (fileEncrypted != options.EnableEncryption)
+        {
+            throw new InvalidOperationException(
+                fileEncrypted
+                    ? "This SCDB file is encrypted; open it with EnableEncryption = true and the correct EncryptionKey."
+                    : "This SCDB file is not encrypted; open it with EnableEncryption = false.");
         }
     }
 
