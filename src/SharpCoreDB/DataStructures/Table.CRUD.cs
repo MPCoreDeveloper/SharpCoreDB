@@ -1311,7 +1311,7 @@ public partial class Table
                     }
                     else // PageBased
                     {
-                        // Page-based: In-place update
+                        // Page-based: In-place update (or relocation when the record grows).
                         if (this.PrimaryKeyIndex >= 0)
                         {
                             var pkVal = oldRow[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
@@ -1319,13 +1319,23 @@ public partial class Table
                             if (searchResult.Found)
                             {
                                 long position = searchResult.Value;
-                                engine.Update(Name, position, rowData);
+                                long newPosition = engine.Update(Name, position, rowData);
 
-                                // Update hash indexes with same position (in-place update keeps position)
-                                foreach (var hashIndex in this.hashIndexes.Values)
+                                if (newPosition != position)
                                 {
-                                    hashIndex.Remove(oldRow, position);
-                                    hashIndex.Add(row, position);
+                                    // Record was relocated to another page (growing record on a
+                                    // full page): re-point the PK index and rebuild hash indexes.
+                                    var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                                }
+                                else
+                                {
+                                    // In-place update keeps the position; move hash entries in place.
+                                    foreach (var hashIndex in this.hashIndexes.Values)
+                                    {
+                                        hashIndex.Remove(oldRow, position);
+                                        hashIndex.Add(row, position);
+                                    }
                                 }
                             }
                         }
@@ -1346,6 +1356,39 @@ public partial class Table
         finally
         {
             this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Re-points indexes after the storage engine relocated a record to another page
+    /// (a growing record on a full page). The PK index is re-pointed precisely; hash
+    /// indexes are marked stale so they rebuild lazily on next use.
+    /// </summary>
+    /// <param name="oldPosition">The storage position before relocation.</param>
+    /// <param name="newPosition">The storage position after relocation.</param>
+    /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
+    /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
+    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue)
+    {
+        if (this.PrimaryKeyIndex >= 0)
+        {
+            if (!string.IsNullOrEmpty(oldPkValue))
+            {
+                this.Index.Delete(oldPkValue);
+            }
+
+            if (!string.IsNullOrEmpty(newPkValue))
+            {
+                this.Index.Insert(newPkValue, newPosition);
+            }
+        }
+
+        // Hash indexes are keyed by (column value → positions); without the pre-update row
+        // values a precise repoint is not possible, so invalidate for a lazy rebuild.
+        foreach (var col in this.loadedIndexes)
+        {
+            this.staleIndexes.Add(col);
+            this._indexReadyCache.TryRemove(col, out _);
         }
     }
 
@@ -1526,19 +1569,32 @@ public partial class Table
                                 if (searchResult.Found)
                                 {
                                     long position = searchResult.Value;
-                                    engine.Update(Name, position, rowData);
+                                    long newPosition = engine.Update(Name, position, rowData);
 
-                                    foreach (var hashIndex in this.hashIndexes)
+                                    if (newPosition != position)
                                     {
-                                        if (oldHashValues is not null &&
-                                            oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
-                                            oldKey is not null)
+                                        // Record was relocated to another page: re-point the PK
+                                        // index and rebuild hash indexes lazily.
+                                        var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
+                                            ? newPk?.ToString() ?? string.Empty
+                                            : string.Empty;
+                                        RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                                    }
+                                    else
+                                    {
+                                        // In-place update keeps the position; move hash entries in place.
+                                        foreach (var hashIndex in this.hashIndexes)
                                         {
-                                            hashIndex.Value.Remove(oldKey, position);
-                                        }
+                                            if (oldHashValues is not null &&
+                                                oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                                oldKey is not null)
+                                            {
+                                                hashIndex.Value.Remove(oldKey, position);
+                                            }
 
-                                        if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
-                                            hashIndex.Value.Add(newKey, position);
+                                            if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                                hashIndex.Value.Add(newKey, position);
+                                        }
                                     }
                                 }
                             }
@@ -2216,12 +2272,22 @@ public partial class Table
                 }
                 else
                 {
-                    engine.Update(Name, storagePosition, rowData);
+                    long newPosition = engine.Update(Name, storagePosition, rowData);
 
-                    foreach (var hashIndex in this.hashIndexes.Values)
+                    if (newPosition != storagePosition)
                     {
-                        hashIndex.Remove(oldRow, storagePosition);
-                        hashIndex.Add(row, storagePosition);
+                        // Record was relocated to another page: re-point the PK index and
+                        // rebuild hash indexes lazily.
+                        var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                        RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
+                    }
+                    else
+                    {
+                        foreach (var hashIndex in this.hashIndexes.Values)
+                        {
+                            hashIndex.Remove(oldRow, storagePosition);
+                            hashIndex.Add(row, storagePosition);
+                        }
                     }
                 }
             }

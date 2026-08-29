@@ -38,7 +38,13 @@ public interface IStorageEngine : IDisposable
     /// <param name="tableName">Name of the table.</param>
     /// <param name="storageReference">Storage location of the record.</param>
     /// <param name="newData">New record data.</param>
-    void Update(string tableName, long storageReference, byte[] newData);
+    /// <returns>
+    /// The record's storage reference after the update. When the update is in-place this is
+    /// the same as <paramref name="storageReference"/>; when the engine relocated the record
+    /// (e.g. the new data no longer fit), the returned reference differs and callers must
+    /// re-point indexes to it.
+    /// </returns>
+    long Update(string tableName, long storageReference, byte[] newData);
 
     /// <summary>
     /// Deletes a record at the specified storage reference.

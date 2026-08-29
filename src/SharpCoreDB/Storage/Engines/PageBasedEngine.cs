@@ -154,16 +154,22 @@ public partial class PageBasedEngine : IStorageEngine
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Update(string tableName, long storageReference, byte[] newData)
+    public long Update(string tableName, long storageReference, byte[] newData)
     {
         ArgumentNullException.ThrowIfNull(newData);
 
         var manager = GetOrCreatePageManager(tableName);
         var (pageId, recordId) = DecodeStorageReference(storageReference);
-        manager.UpdateRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
+        var newRecordId = manager.UpdateRecord(new PageManager.PageId(pageId), new PageManager.RecordId(recordId), newData);
 
         Interlocked.Increment(ref totalUpdates);
         Interlocked.Add(ref bytesWritten, newData.Length);
+
+        // In-place or within-page relocation keeps the slot index, so the storage
+        // reference is unchanged. Only a cross-page relocation returns a new reference.
+        return newRecordId.SlotIndex == recordId
+            ? storageReference
+            : EncodeStorageReference(pageId, newRecordId.SlotIndex);
     }
 
     /// <inheritdoc />

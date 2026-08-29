@@ -470,18 +470,14 @@ public partial class PageManager : IDisposable
             if (page.FreeSpace < requiredSpace)
                 throw new InvalidOperationException("Page full");
             
-            // Insert record - calculate offset from start of data area
+            // Insert record - calculate offset from start of data area.
+            // Records append at the end of the used data area. Using GetUsedDataEnd (max
+            // active offset + length) rather than the last list slot is required once records
+            // can be relocated within a page (a relocated record keeps its list position but
+            // moves to a higher data offset).
             var recordId = new RecordId(page.RecordCount);
             var dataSpan = page.Data.Span;
-            
-            // Calculate offset (grow from beginning of data area)
-            ushort dataOffset = 0;
-            if (page.Slots.Count > 0)
-            {
-                // Find the end of the last record
-                var lastSlot = page.Slots[page.Slots.Count - 1];
-                dataOffset = (ushort)(lastSlot.offset + lastSlot.length);
-            }
+            ushort dataOffset = (ushort)GetUsedDataEnd(page);
             
             // Copy data
             data.CopyTo(dataSpan.Slice(dataOffset, data.Length));
@@ -502,41 +498,113 @@ public partial class PageManager : IDisposable
         }
     }
     
-    public virtual void UpdateRecord(PageId pageId, RecordId recordId, byte[] newData)
+    /// <summary>
+    /// Updates a record in place when it fits, or relocates it when it grows.
+    /// - Same-size or smaller: overwrite in place (fast path, storage reference unchanged).
+    /// - Larger with room in the same page: relocate within the page (slot pointer moves,
+    ///   storage reference unchanged).
+    /// - Larger with a full page: relocate to another page (old slot marked deleted;
+    ///   a NEW RecordId is returned so callers can re-point indexes).
+    /// </summary>
+    /// <param name="pageId">The page containing the record.</param>
+    /// <param name="recordId">The slot of the record to update.</param>
+    /// <param name="newData">The new record bytes.</param>
+    /// <returns>
+    /// The record's current slot. Equal to <paramref name="recordId"/> when the storage
+    /// reference is unchanged; a different slot when the record was relocated to another page.
+    /// </returns>
+    public virtual RecordId UpdateRecord(PageId pageId, RecordId recordId, byte[] newData)
     {
-        if (pageId.Value == 0 || recordId.SlotIndex >= ushort.MaxValue)
-            return;
-            
+        if (pageId.Value == 0 || recordId.SlotIndex >= ushort.MaxValue || newData.Length > MAX_RECORD_SIZE)
+            return recordId;
+
         lock (writeLock)
         {
             if (!pageCache.TryGetValue(pageId.Value, out var page))
             {
                 page = ReadPage(pageId);
                 if (page.PageId == 0)
-                    return;
-                    
+                    return recordId;
+
                 pageCache[pageId.Value] = page;
             }
-            
+
             if (recordId.SlotIndex >= page.Slots.Count)
-                return;
-            
+                return recordId;
+
             var slot = page.Slots[recordId.SlotIndex];
-            
-            // Simple in-place update (assumes same size for now)
+            var dataSpan = page.Data.Span;
+
             if (newData.Length <= slot.length)
             {
-                var dataSpan = page.Data.Span;
+                // Same-size or smaller: in-place overwrite.
                 newData.CopyTo(dataSpan.Slice(slot.offset, newData.Length));
-                
-                // Update slot if size changed
                 page.Slots[recordId.SlotIndex] = (slot.offset, (ushort)newData.Length, slot.flags);
-                
                 page.IsDirty = true;
                 pageCache[pageId.Value] = page;
                 dirtyPages.Add(pageId.Value);
+                RecomputeFreeSpace(page);
+                return recordId;
+            }
+
+            // Growth: relocate within the same page when there is room at the end of the
+            // used data area. The slot pointer moves, so the storage reference stays valid.
+            int dataEnd = GetUsedDataEnd(page);
+            int slotAreaSize = page.Slots.Count * SLOT_SIZE;
+            int availableAtEnd = PAGE_SIZE - PAGE_HEADER_SIZE - slotAreaSize - dataEnd;
+
+            if (newData.Length <= availableAtEnd)
+            {
+                newData.CopyTo(dataSpan.Slice(dataEnd, newData.Length));
+                page.Slots[recordId.SlotIndex] = ((ushort)dataEnd, (ushort)newData.Length, slot.flags);
+                page.IsDirty = true;
+                pageCache[pageId.Value] = page;
+                dirtyPages.Add(pageId.Value);
+                RecomputeFreeSpace(page);
+                return recordId;
+            }
+
+            // Growth with a full page: mark the old slot deleted and relocate to another page.
+            page.Slots[recordId.SlotIndex] = (slot.offset, slot.length, RecordFlags.Deleted);
+            page.IsDirty = true;
+            RecomputeFreeSpace(page);
+            pageCache[pageId.Value] = page;
+            dirtyPages.Add(pageId.Value);
+
+            var newPageId = FindPageWithSpace(page.TableId, newData.Length);
+            return InsertRecord(newPageId, newData);
+        }
+    }
+
+    /// <summary>
+    /// Computes the end of the used data area (the highest byte offset of any active record).
+    /// Records are packed from the start of the data area, so this is where new data appends.
+    /// </summary>
+    private static int GetUsedDataEnd(Page page)
+    {
+        int dataEnd = 0;
+        foreach (var s in page.Slots)
+        {
+            if (!s.flags.HasFlag(RecordFlags.Deleted))
+            {
+                dataEnd = Math.Max(dataEnd, s.offset + s.length);
             }
         }
+
+        return dataEnd;
+    }
+
+    /// <summary>
+    /// Recomputes the contiguous free space at the end of the page's data area.
+    /// The append-only allocator can only use contiguous space, so FreeSpace must never
+    /// include middle-of-page holes left by shrunk, deleted, or relocated records.
+    /// </summary>
+    private static void RecomputeFreeSpace(Page page)
+    {
+        int slotAreaSize = page.Slots.Count * SLOT_SIZE;
+        int dataEnd = GetUsedDataEnd(page);
+        int free = PAGE_SIZE - PAGE_HEADER_SIZE - slotAreaSize - dataEnd;
+        page.FreeSpace = (ushort)Math.Max(0, free);
     }
     
     public virtual void DeleteRecord(PageId pageId, RecordId recordId)

@@ -98,16 +98,19 @@ public class AppendOnlyEngine : IStorageEngine
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Update(string tableName, long storageReference, byte[] newData)
+    public long Update(string tableName, long storageReference, byte[] newData)
     {
         ArgumentNullException.ThrowIfNull(newData);
 
-        // Append-only: append new version, old ref becomes stale
+        // Append-only: append new version, old ref becomes stale.
+        // The returned offset is the new storage reference; callers must re-point indexes.
         var filePath = GetTableFilePath(tableName);
-        _ = storage.AppendBytes(filePath, newData);
+        long newReference = storage.AppendBytes(filePath, newData);
 
         Interlocked.Increment(ref totalUpdates);
         Interlocked.Add(ref bytesWritten, newData.Length);
+
+        return newReference;
     }
 
     /// <inheritdoc />

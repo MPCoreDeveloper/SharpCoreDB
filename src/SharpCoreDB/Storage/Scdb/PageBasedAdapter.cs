@@ -158,7 +158,7 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public void Update(string tableName, long storageReference, byte[] newData)
+    public long Update(string tableName, long storageReference, byte[] newData)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(newData);
@@ -175,7 +175,8 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
                 throw new InvalidOperationException($"Page {pageId} not found for table {tableName}");
             }
             
-            // Update record in page
+            // Update record in page (relocates within the page when the record grows;
+            // the slot pointer moves but the storage reference stays valid).
             var updatedPage = UpdateRecordInPage(pageData, slotIndex, newData);
             
             // Write back
@@ -183,6 +184,8 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
             
             Interlocked.Increment(ref _totalUpdates);
             Interlocked.Add(ref _bytesWritten, newData.Length);
+            
+            return storageReference;
         }
     }
 
