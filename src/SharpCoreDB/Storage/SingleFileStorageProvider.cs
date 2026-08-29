@@ -66,8 +66,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 {
     private readonly string _filePath;
     private readonly DatabaseOptions _options;
-    private readonly FileStream _fileStream;
-    private readonly MemoryMappedFile? _memoryMappedFile;
+    // Issue #343: NOT readonly — VacuumFullAsync swaps the stream after the file move.
+    // (Readonly was enforced via reflection before, which breaks under .NET trimming/AOT.)
+    private FileStream _fileStream;
+    private MemoryMappedFile? _memoryMappedFile;
     private readonly BlockRegistry _blockRegistry;
     private readonly FreeSpaceManager _freeSpaceManager;
     private readonly WalManager _walManager;
@@ -1260,7 +1262,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 Mode = mode,
                 DurationMs = sw.ElapsedMilliseconds,
                 FileSizeBefore = fileSizeBefore,
-                FileSizeAfter = _fileStream.Length,
+                FileSizeAfter = GetFileSizeSafely(),
                 FragmentationBefore = fragmentationBefore,
                 FragmentationAfter = stats.FragmentationPercent,
                 Success = false,
@@ -1754,7 +1756,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private async Task<VacuumResult> VacuumFullAsync(StorageStatistics stats, Stopwatch sw, CancellationToken cancellationToken)
     {
         // Full: Rewrite entire file compactly to temporary file, then swap
-        var tempPath = _filePath + ".vacuum.tmp";
+        // Issue #343: temp file must end in ".scdb" — SingleFileStorageProvider.Open appends the
+        // extension to paths without it, which previously created "<file>.vacuum.tmp.scdb" while
+        // the later File.Move tried to move "<file>.vacuum.tmp" (FileNotFoundException).
+        var tempPath = _filePath + ".vacuum.tmp.scdb";
         var blocksMoved = 0;
         
         try
@@ -1811,28 +1816,21 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 bufferSize: 0,
                 FileOptions.RandomAccess);
 
-            // Update internal state
-            #pragma warning disable S3011 // Reflection is safe here - we own both classes
-            var fsField = typeof(SingleFileStorageProvider).GetField("_fileStream",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            fsField.SetValue(this, newFileStream);
-
-            // Recreate memory-mapped file if needed
+            // Update internal state (Issue #343: direct assignment — reflection-based field
+            // mutation breaks under .NET trimming / Native AOT where GetField returns null)
+            MemoryMappedFile? newMmf = null;
             if (_options.EnableMemoryMapping)
             {
-                var mmf = MemoryMappedFile.CreateFromFile(
+                newMmf = MemoryMappedFile.CreateFromFile(
                     newFileStream,
                     mapName: null,
                     capacity: 0,
                     MemoryMappedFileAccess.Read,
                     HandleInheritability.None,
                     leaveOpen: true);
-
-                var mmfField = typeof(SingleFileStorageProvider).GetField("_memoryMappedFile",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                mmfField.SetValue(this, mmf);
             }
-            #pragma warning restore S3011
+
+            SwapFileStream(newFileStream, newMmf);
 
             // Reload header
             _header = LoadHeader(newFileStream);
@@ -1870,7 +1868,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
                 Mode = VacuumMode.Full,
                 DurationMs = sw.ElapsedMilliseconds,
                 FileSizeBefore = stats.TotalSize,
-                FileSizeAfter = _fileStream.Length,
+                FileSizeAfter = GetFileSizeSafely(),
                 BytesReclaimed = 0,
                 FragmentationBefore = stats.FragmentationPercent,
                 FragmentationAfter = stats.FragmentationPercent,
@@ -1912,6 +1910,33 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// Gets the underlying FileStream for internal use by subsystems.
     /// </summary>
     internal FileStream GetInternalFileStream() => _fileStream;
+
+    /// <summary>
+    /// Issue #343: swaps the underlying file stream (and optional memory-mapped file) after a
+    /// full VACUUM file move. Direct field assignment instead of reflection, which is trimmed
+    /// under .NET Native AOT / PublishTrimmed (GetField returns null for private fields).
+    /// </summary>
+    private void SwapFileStream(FileStream newStream, MemoryMappedFile? newMmf)
+    {
+        _fileStream = newStream;
+        _memoryMappedFile = newMmf;
+    }
+
+    /// <summary>
+    /// Issue #343: returns the current file size, or -1 when the stream is unavailable or
+    /// already closed (e.g. from an error path after the old stream was disposed mid-vacuum).
+    /// </summary>
+    private long GetFileSizeSafely()
+    {
+        try
+        {
+            return _fileStream.Length;
+        }
+        catch
+        {
+            return -1L;
+        }
+    }
 }
 
 /// <summary>
