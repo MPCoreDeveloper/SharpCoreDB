@@ -18,6 +18,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Runtime.InteropServices;
 
@@ -28,6 +29,23 @@ using System.Runtime.InteropServices;
 /// </summary>
 public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable, ITableSchemaApplicator
 {
+    /// <summary>
+    /// AOT-safe JSON options for the row cache: source-generated resolver plus the
+    /// polymorphic object converter (issue #343 / single-file support under Native AOT).
+    /// Produces the exact same JSON as the previous reflection-based serializer.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            TypeInfoResolver = SingleFileTableJsonContext.Default,
+        };
+        options.Converters.Add(PolymorphicObjectConverter.Instance);
+        return options;
+    }
+
     private readonly IStorageProvider _storageProvider = storageProvider ?? throw new ArgumentNullException(nameof(storageProvider));
     private readonly DatabaseConfig? _config;
     private readonly Lock _tableLock = new();
@@ -539,7 +557,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
 
         // Serialize to byte array to get exact length
-        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows);
+        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
 
         // Write using WriteBlockAsync to properly track data length
         _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
@@ -665,7 +683,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             }
             
             var trimmedJsonBytes = jsonBytes.AsSpan(0, endIndex);
-            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes);
+            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
             _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
             _cacheLoaded = true;
         }
