@@ -176,8 +176,35 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         return Path.Combine(tempDirectory, $"sfd_batch_{hash}.log");
     }
 
+    // Opt-in single-file batch/debug log. The default is NO disk I/O on the hot path —
+    // an unconditional FileStream + StreamWriter per ExecuteQuery/ExecuteSQL/BatchUpdate
+    // call was a major single-file performance and allocation regression (per-op file
+    // open/write/close plus string allocations), the same class of bug v2.0 removed from
+    // directory mode. Enable with SHARPCOREDB_BATCH_LOG=1 (and optionally
+    // SHARPCOREDB_BATCH_LOG_PATH to redirect the log file).
+    private static bool? _batchLogEnabled;
+
+    private static bool IsBatchLogEnabled()
+    {
+        if (_batchLogEnabled is not null)
+        {
+            return _batchLogEnabled.Value;
+        }
+
+        var flag = Environment.GetEnvironmentVariable("SHARPCOREDB_BATCH_LOG");
+        var path = Environment.GetEnvironmentVariable("SHARPCOREDB_BATCH_LOG_PATH");
+        _batchLogEnabled = string.Equals(flag, "1", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(path);
+        return _batchLogEnabled.Value;
+    }
+
     private void WriteBatchLog(string message)
     {
+        if (!IsBatchLogEnabled())
+        {
+            return;
+        }
+
         lock (_batchLogLock)
         {
             var logPath = GetBatchLogPath();

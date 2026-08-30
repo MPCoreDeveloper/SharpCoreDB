@@ -68,7 +68,10 @@ public sealed class QueryPlanCache
         {
             Interlocked.Increment(ref hits);
             entry.Touch();
-            UpdateLru(key);
+            // PERF: no LRU reorder on the hit path — it took lruLock and did an O(n)
+            // LinkedList scan on every query (scalability bottleneck for concurrent
+            // readers). LRU now reflects insertion order, which is sufficient for the
+            // plan-cache eviction policy.
             return entry;
         }
 
@@ -126,19 +129,6 @@ public sealed class QueryPlanCache
         }
     }
 
-    private void UpdateLru(string key)
-    {
-        lock (lruLock)
-        {
-            var node = lru.Find(key);
-            if (node is not null)
-            {
-                lru.Remove(node);
-                lru.AddFirst(node);
-            }
-        }
-    }
-
     private void InsertLru(string key)
     {
         lock (lruLock)
@@ -165,7 +155,11 @@ public sealed class QueryPlanCache
     public static string BuildKey(string normalizedSql, Dictionary<string, object?>? parameters)
     {
         if (parameters is null || parameters.Count == 0)
-            return normalizedSql + "|p:none";
+        {
+            // No-parameter queries use the normalized SQL itself as the cache key,
+            // avoiding a per-call string concatenation on the hot path.
+            return normalizedSql;
+        }
 
         // v2 fast path: a single parameter avoids the OrderBy + list allocation.
         if (parameters.Count == 1)
