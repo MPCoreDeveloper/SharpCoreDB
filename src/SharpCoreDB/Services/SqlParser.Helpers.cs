@@ -300,6 +300,10 @@ public partial class SqlParser
             return true;
         }
 
+        // ✅ Issue #348: strip redundant outer parentheses so "(a = 1 OR b = 2)" evaluates
+        // like "a = 1 OR b = 2" (a leading "(" would otherwise stick to the column name).
+        where = SqlInPredicate.StripOuterParentheses(where);
+
         var parts = where.Split(' ');
         if (parts.Length <= 3)
         {

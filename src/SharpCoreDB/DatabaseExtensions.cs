@@ -1473,7 +1473,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
         if (op == null || opIndex < 0)
         {
-            return true;
+            return false;
         }
 
         var columnName = condition.Substring(0, opIndex).Trim();
