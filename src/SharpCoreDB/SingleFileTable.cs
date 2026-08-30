@@ -1102,101 +1102,32 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         var trimmedCondition = condition.Trim();
 
+        // ✅ Issue #348: strip redundant outer parentheses so "(a = 1 OR b = 2)" is split on
+        // OR like the unparenthesized form instead of being treated as one condition with a
+        // malformed column name ("(a").
+        trimmedCondition = SqlInPredicate.StripOuterParentheses(trimmedCondition);
+
         // ✅ Parity: BETWEEN contains " AND " as part of its syntax; don't split on it.
         if (trimmedCondition.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase))
         {
             return EvaluateSingleCondition(row, trimmedCondition);
         }
 
-        // ✅ Issue #340: handle OR chains (e.g. col = @p0 OR col = @p1). Split on top-level
+        // ✅ Issue #348: handle OR chains (e.g. col = @p0 OR col = @p1). Split on top-level
         // OR first — any matching branch makes the whole condition true.
-        var orParts = SplitTopLevelLogical(trimmedCondition, "OR");
+        var orParts = SqlInPredicate.SplitTopLevelLogical(trimmedCondition, "OR");
         if (orParts.Count > 1)
         {
             return orParts.Any(part => EvaluateCondition(row, part));
         }
 
-        var parts = SplitTopLevelLogical(trimmedCondition, "AND");
+        var parts = SqlInPredicate.SplitTopLevelLogical(trimmedCondition, "AND");
         if (parts.Count > 1)
         {
             return parts.All(part => EvaluateCondition(row, part));
         }
 
         return EvaluateSingleCondition(row, trimmedCondition);
-    }
-
-    /// <summary>
-    /// Splits a condition on a logical keyword (AND / OR) that appears at the top level only —
-    /// i.e. not inside parentheses or string literals. This keeps <c>IN ('a', 'b')</c> and
-    /// <c>(a = 1 OR b = 2)</c> intact while still splitting <c>col = 1 OR col = 2</c>.
-    /// </summary>
-    private static List<string> SplitTopLevelLogical(string text, string keyword)
-    {
-        var parts = new List<string>();
-        int depth = 0;
-        bool inString = false;
-        char quote = '\0';
-        int start = 0;
-        int i = 0;
-
-        while (i < text.Length)
-        {
-            char c = text[i];
-            if (inString)
-            {
-                inString = c != quote; // closing quote exits the string literal
-                i++;
-                continue;
-            }
-
-            if (c is '\'' or '"')
-            {
-                inString = true;
-                quote = c;
-            }
-            else if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                depth = Math.Max(0, depth - 1);
-            }
-            else if (IsLogicalKeywordAt(text, i, keyword, depth))
-            {
-                parts.Add(text[start..i].Trim());
-                i += 1 + keyword.Length;
-                while (i < text.Length && char.IsWhiteSpace(text[i]))
-                {
-                    i++;
-                }
-
-                start = i;
-                continue;
-            }
-
-            i++;
-        }
-
-        parts.Add(text[start..].Trim());
-        return parts;
-    }
-
-    /// <summary>
-    /// True when <paramref name="keyword"/> (OR / AND) starts right after a top-level space at
-    /// <paramref name="index"/> and is followed by whitespace, e.g. <c>"col = 1 OR col = 2"</c>.
-    /// </summary>
-    private static bool IsLogicalKeywordAt(string text, int index, string keyword, int depth)
-    {
-        if (depth != 0 || text[index] is not (' ' or '\t'))
-        {
-            return false;
-        }
-
-        var after = index + 1 + keyword.Length;
-        return after < text.Length
-            && text.AsSpan(index + 1, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase)
-            && char.IsWhiteSpace(text[after]);
     }
 
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
@@ -1282,7 +1213,10 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         if (op == null || opIndex < 0)
         {
-            return true;
+            // ✅ Issue #348: fail closed — an unrecognized condition must NOT accept every
+            // row (the old "return true" turned malformed/unsupported predicates into a
+            // tautology that silently returned the whole table).
+            return false;
         }
 
         var columnName = condition[..opIndex].Trim();
