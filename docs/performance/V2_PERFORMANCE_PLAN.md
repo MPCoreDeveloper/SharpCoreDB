@@ -168,7 +168,7 @@ Observations:
 ### 4.5 Migration plan (for v2.1)
 1. ✅ **DONE (Phase 0, on `release/v2.1.0.0`)** — toolchain centralized: `TargetFramework` net11.0 + `LangVersion latest` in `Directory.Build.props` (root + nested `src/SharpCoreDB`); SDK `11.0.100-preview.7` via `global.json`; CI/workflows on `11.0.x` (preview quality); net10 stays on `release/v2.0.0.0`.
 2. Re-run benchmarks on .NET 11; measure runtime-async + JIT wins (was already planned; the v2.0.0 baseline numbers are in §3.1).
-3. Adopt SIMD lane composition APIs (`Zip`/`Unzip`/`CreateGeometricSequence`/`Concat`) in columnar codecs + row scanning behind the existing `SIMD_ENABLED` / `IsSupported` guards; enable SVE2 when it leaves evaluation-only status.
+3. ✅ **Partial (WP11 done)** — guarded `Vector512` fast paths added to all 18 column-store SUM/MIN/MAX aggregates; `Table.StructScanning` already uses portable `Vector<T>` (auto-scales to 512 on AVX-512). **Deferred:** SIMD lane composition APIs (`Zip`/`Unzip`/`CreateGeometricSequence`/`Concat`) — verified available in preview 7, but the current bit-level time-series/columnar codecs (Gorilla/XorFloat/DeltaOfDelta, RLE, bit-packing) are inherently sequential; a clean integration needs a columnar-layout refactor, not a point edit. SVE2 stays deferred until it leaves evaluation-only status.
 4. Add optional Zstandard page compression behind a new config flag (default off) **once `ZstdCompressor` lands in the runtime** (not in preview 7).
 5. C# 15 union types / closed hierarchies for the SQL AST — after the preview compiler stabilizes (Phase 4).
 
