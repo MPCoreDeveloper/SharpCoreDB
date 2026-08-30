@@ -9,7 +9,7 @@
     
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Server.Core</AssemblyName>
-    <Version>1.9.8</Version>
+    <Version>1.9.9</Version>
     <Description>Core server infrastructure for SharpCoreDB network server</Description>
 
     <!-- NuGet Package Properties -->
@@ -26,7 +26,7 @@
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v1.9.7: Fixes the WHERE IN (...) regression (#340) for SQLite VALUES lists, tuple rows, multi-value parameters and OR-chained predicates; ExecuteNonQuery now returns real affected-row counts via IDatabase.GetLastChanges(); single-file (.scdb) mode now encrypts block data with AES-256-GCM when DatabaseOptions.EncryptionKey is set (#341) and wrong keys are rejected. Includes all v1.9.6 fixes (the critical WHERE IN (#339) regression that silently returned ALL rows: IN / NOT IN evaluated correctly across single-file and directory mode, single-file parameterized queries normalize @-prefixed parameter names, token-aware parameter binding, server parameter pass-through, standards-compliant ULID encoding, updated dependencies).</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.9.9: Fixes the parenthesized OR/AND WHERE regression (#348) — "(col = @p0 OR col = @p1)" and "a = 1 AND (b = 2 OR c = 3)" now evaluate correctly in single-file and directory mode (previously returned 0 rows); unrecognized WHERE predicates now fail closed instead of silently accepting every row; discriminating regression tests cover multi-value IN / VALUES / OR / parenthesized OR / AND+OR across the SQL and EF Core provider paths. Includes all v1.9.8 fixes (full-vacuum Native AOT safety, Brotli/GZip block compression, configurable single-file metadata region sizes, Unicode/large-blob regression coverage) and v1.9.7 fixes (the WHERE IN (...) regression for SQLite VALUES lists, tuple rows, multi-value parameters and OR-chained predicates; real ExecuteNonQuery affected-row counts; AES-256-GCM single-file encryption when DatabaseOptions.EncryptionKey is set).</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

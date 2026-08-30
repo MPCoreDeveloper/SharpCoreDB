@@ -5,7 +5,20 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.9] - 2026-08-30
+
+### Fixed
+- **Issue #348 — parenthesized `OR`/`AND` WHERE predicates returned 0 rows**: `(col = @p0 OR col = @p1)`,
+  `a = 1 AND (b = 2 OR c = 3)` and double-wrapped `((...))` forms evaluated as one malformed condition
+  (a leading `(` was treated as part of the column name) in both single-file (`.scdb`) and directory
+  mode. Redundant outer parentheses are now stripped (parenthesis- and string-literal-aware) on every
+  WHERE evaluation path, and parenthesized sub-expressions are split and evaluated recursively.
+  Unrecognized predicates now fail closed (return false) instead of silently accepting every row.
+- **Verification**: the reporter's exact `SharpCoreDBConnection` probe was run against the published
+  1.9.8 NuGet artifacts (parenthesized-OR failures reproduced) and against locally packed 1.9.9
+  packages (all forms pass). New discriminating regression tests
+  (`WherePredicateDiscriminatingTests`, 18 tests, single-file + directory; plus EF Core provider
+  tests) assert subset counts with non-matching values.
 
 ### Added
 - **Block-level Brotli/GZip compression for single-file (`.scdb`) storage** (#344) — transparent

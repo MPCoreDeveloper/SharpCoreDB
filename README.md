@@ -59,7 +59,7 @@ A production-focused stack validated by **2,520 tests** and **backward compatibi
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 1.9.8
+dotnet add package SharpCoreDB --version 1.9.9
 ```
 
 ```csharp
@@ -87,8 +87,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 1.9.8
-dotnet add package SharpCoreDB.Client --version 1.9.8
+dotnet add package SharpCoreDB.Server --version 1.9.9
+dotnet add package SharpCoreDB.Client --version 1.9.9
 ```
 
 ---
@@ -110,7 +110,29 @@ dotnet add package SharpCoreDB.Client --version 1.9.8
 
 ---
 
-## v1.9.8 release (current)
+## v1.9.9 release (current)
+
+- **Fixed parenthesized `OR`/`AND` WHERE predicates** (Issue #348): `(col = @p0 OR col = @p1)` and
+  `a = 1 AND (b = 2 OR c = 3)` previously returned **0 rows** in both single-file (`.scdb`) and
+  directory mode because redundant outer parentheses were not stripped before the `OR`/`AND` split —
+  the whole expression was evaluated as one malformed condition with a column name like `"(col"`.
+  Redundant outer parentheses are now stripped (parenthesis- and string-literal-aware) on every WHERE
+  evaluation path, and parenthesized sub-expressions evaluate recursively.
+- **Unrecognized WHERE predicates now fail closed**: a condition the evaluator does not recognize no
+  longer falls through to "accept every row" (`return true`); it evaluates to false instead.
+- **Verified against the published 1.9.8 artifacts**: the reporter's exact `SharpCoreDBConnection`
+  probe (multi-value `IN`, `VALUES`, tuple-IN, `OR`, DELETE affected count) was run against the 1.9.8
+  NuGet packages and against locally packed 1.9.9 packages — the 1.9.8 parenthesized-OR failures
+  (0 rows) are all fixed in 1.9.9. The reporter's multi-value `IN`/`OR` forms with all-matching values
+  were already correct (3 rows for a 2× WorkItem + 1× Person seed).
+- **New discriminating regression coverage**: `WherePredicateDiscriminatingTests` (18 tests, single-file
+  + directory) and EF Core provider tests assert subset counts with NON-matching values, so a
+  "returns all rows" regression can never pass silently.
+- **100% backward compatible** with the v1.9.8 release line.
+
+---
+
+## v1.9.8 release
 
 - **`VacuumAsync(VacuumMode.Full)` no longer crashes under .NET 10 trimming / Native AOT** (Issue #343):
   the full-vacuum stream swap used reflection on `private readonly` fields (`GetField("_fileStream")`),
@@ -292,42 +314,42 @@ Full benchmark details: `docs/BENCHMARK_RESULTS.md`
 
 - **2,520 tests passing**
 - **100% backward compatible** across the v1.9.6 release line
-- Zero breaking changes intended from v1.5.0 to v1.9.8
+- Zero breaking changes intended from v1.5.0 to v1.9.9
 
 For deep technical details (audit reports, threat model, runbooks, compatibility matrices), use the docs hub: `docs/INDEX.md`.
 
 ---
 
-## Available NuGet packages (v1.9.8)
+## Available NuGet packages (v1.9.9)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 1.9.8
+dotnet add package SharpCoreDB --version 1.9.9
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 1.9.8
-dotnet add package SharpCoreDB.Client --version 1.9.8
+dotnet add package SharpCoreDB.Server --version 1.9.9
+dotnet add package SharpCoreDB.Client --version 1.9.9
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 1.9.8
-dotnet add package SharpCoreDB.VectorSearch --version 1.9.8
-dotnet add package SharpCoreDB.Graph --version 1.9.8
-dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.8
-dotnet add package SharpCoreDB.Distributed --version 1.9.8
-dotnet add package SharpCoreDB.Provider.Sync --version 1.9.8
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.8
-dotnet add package SharpCoreDB.Extensions --version 1.9.8
+dotnet add package SharpCoreDB.Analytics --version 1.9.9
+dotnet add package SharpCoreDB.VectorSearch --version 1.9.9
+dotnet add package SharpCoreDB.Graph --version 1.9.9
+dotnet add package SharpCoreDB.Graph.Advanced --version 1.9.9
+dotnet add package SharpCoreDB.Distributed --version 1.9.9
+dotnet add package SharpCoreDB.Provider.Sync --version 1.9.9
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 1.9.9
+dotnet add package SharpCoreDB.Extensions --version 1.9.9
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 1.9.8
-dotnet add package SharpCoreDB.Projections --version 1.9.8
-dotnet add package SharpCoreDB.CQRS --version 1.9.8
+dotnet add package SharpCoreDB.EventSourcing --version 1.9.9
+dotnet add package SharpCoreDB.Projections --version 1.9.9
+dotnet add package SharpCoreDB.CQRS --version 1.9.9
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 1.9.8
-dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.8
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.8
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.8
+dotnet add package SharpCoreDB.Functional --version 1.9.9
+dotnet add package SharpCoreDB.Functional.Dapper --version 1.9.9
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 1.9.9
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.9
 ```
 
 ---
@@ -342,7 +364,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 1.9.8
 - All builds and test packages validated (`SharpCoreDB.1.9.1.nupkg` successfully produced)
 - Zero breaking changes – 100% backward compatible with previous 1.9.x line
 
-> For changes in the current 1.9.8 release (Native AOT-safe `VacuumAsync(Full)` + single-file mode, Issue #343), see the v1.9.8 section above and docs/CHANGELOG.md.
+> For changes in the current 1.9.9 release (parenthesized `OR`/`AND` WHERE predicates, Issue #348), see the v1.9.9 section above and docs/CHANGELOG.md.
 
 ---
 
