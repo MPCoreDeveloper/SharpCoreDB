@@ -30,37 +30,46 @@ public partial class Table
         if (string.IsNullOrWhiteSpace(where))
             return false;
 
+        ReadOnlySpan<char> span = where;
+
         // ✅ FIX: Do NOT attempt to parse compound WHERE clauses (AND/OR).
         // Splitting on '=' would include the rest of the compound expression in the value,
         // causing the early-WHERE optimization to use a corrupted comparison value and
         // incorrectly skip matching records.
-        var whereUpper = where.ToUpperInvariant();
-        if (whereUpper.Contains(" AND ") || whereUpper.Contains(" OR "))
-            return false;
-
-        // Handle: column = value
-        if (where.Contains('='))
+        // PERF: span scan — no ToUpperInvariant allocation on the point-lookup hot path.
+        if (span.Contains(" AND ", StringComparison.OrdinalIgnoreCase) ||
+            span.Contains(" OR ", StringComparison.OrdinalIgnoreCase))
         {
-            var parts = where.Split('=', 2);
-            if (parts.Length == 2)
-            {
-                column = parts[0].Trim().Trim('"', '[', ']', '`');
-
-                // Normalize alias-qualified references (e.g., b.Url -> Url)
-                // so simple-WHERE fast paths (hash index / PK lookup) can match
-                // actual table column names.
-                var dotIdx = column.LastIndexOf('.');
-                if (dotIdx >= 0 && dotIdx < column.Length - 1)
-                {
-                    column = column[(dotIdx + 1)..].Trim('"', '[', ']', '`');
-                }
-
-                value = parts[1].Trim().Trim('\'', '"');
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        // Handle: column = value (must contain exactly one '=' like the old Split('=', 2) behavior)
+        int eq = span.IndexOf('=');
+        if (eq <= 0 || span[(eq + 1)..].IndexOf('=') >= 0)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> colSpan = span[..eq].Trim().Trim("\"[]`".AsSpan());
+        ReadOnlySpan<char> valSpan = span[(eq + 1)..].Trim().Trim("'\"".AsSpan());
+
+        if (colSpan.IsEmpty || valSpan.IsEmpty)
+        {
+            return false;
+        }
+
+        // Normalize alias-qualified references (e.g., b.Url -> Url)
+        // so simple-WHERE fast paths (hash index / PK lookup) can match
+        // actual table column names.
+        int dotIdx = colSpan.LastIndexOf('.');
+        if (dotIdx >= 0 && dotIdx < colSpan.Length - 1)
+        {
+            colSpan = colSpan[(dotIdx + 1)..].Trim("\"[]`".AsSpan());
+        }
+
+        column = colSpan.ToString();
+        value = valSpan.ToString();
+        return true;
     }
 
     /// <summary>

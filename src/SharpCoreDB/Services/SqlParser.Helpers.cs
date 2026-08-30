@@ -16,13 +16,41 @@ using System.Text.RegularExpressions;
 public partial class SqlParser
 {
     /// <summary>
-    /// Extracts the main query's table name from the FROM clause, ignoring subqueries.
-    /// This handles cases like: SELECT c.name, (SELECT MAX(amount) FROM orders) FROM customers
-    /// Returns: "customers" (not "orders)" which is inside a subquery)
+    /// Detects the "( SELECT" subquery-start pattern without allocating a Regex Match.
+    /// Span scan replicating SubqueryStartRegex: "\(\s*SELECT\b" (IgnoreCase, CultureInvariant).
     /// </summary>
-    /// <param name="sql">The SQL query string.</param>
-    /// <param name="fromKeywordIndex">The starting position after SELECT keyword.</param>
-    /// <returns>The main table name, or null if not found.</returns>
+    private static bool HasSubqueryStart(ReadOnlySpan<char> sql)
+    {
+        for (int i = 0; i < sql.Length; i++)
+        {
+            if (sql[i] != '(')
+                continue;
+
+            int j = i + 1;
+            while (j < sql.Length && char.IsWhiteSpace(sql[j]))
+            {
+                j++;
+            }
+
+            if (j + 6 > sql.Length || !sql.Slice(j, 6).Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Word boundary after "SELECT": next char is absent or not a word char.
+            int k = j + 6;
+            if (k >= sql.Length || (!char.IsLetterOrDigit(sql[k]) && sql[k] != '_'))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Extracts the main query's table name from the FROM clause, ignoring subqueries.
+    /// Handles cases like: SELECT c.name, (SELECT MAX(amount) FROM orders) FROM customers
+    /// Returns: "customers" (not "orders" which is inside a subquery).
+    /// </summary>
     private static string? ExtractMainTableNameFromSql(string sql, int fromKeywordIndex)
     {
         int parenthesisDepth = 0;
@@ -43,9 +71,11 @@ public partial class SqlParser
             }
             else if (parenthesisDepth == 0 && i + 4 <= sql.Length)
             {
-                // Check for FROM keyword at depth 0
-                string substr = sql.Substring(i, 4).ToUpperInvariant();
-                if (substr == "FROM" && (i == 0 || char.IsWhiteSpace(sql[i - 1])) && 
+                // Check for FROM keyword at depth 0.
+                // PERF: span equality — the previous sql.Substring(i, 4).ToUpperInvariant()
+                // allocated twice per scanned character position.
+                if (sql.AsSpan(i, 4).Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase) &&
+                    (i == 0 || char.IsWhiteSpace(sql[i - 1])) && 
                     (i + 4 >= sql.Length || char.IsWhiteSpace(sql[i + 4])))
                 {
                     fromPosition = i + 4;
@@ -71,39 +101,28 @@ public partial class SqlParser
             return null;
         }
         
-        // Extract identifier (table name)
-        var tableNameBuilder = new System.Text.StringBuilder();
-        while (fromPosition < sql.Length)
+        // Extract identifier (table name): stops at whitespace or special characters.
+        // PERF: single span scan + one Substring — the previous StringBuilder.Append-per-char
+        // loop was allocation-heavy on the legacy SELECT path.
+        int end = fromPosition;
+        while (end < sql.Length && !char.IsWhiteSpace(sql[end]) && sql[end] != ',' && sql[end] != '(' && sql[end] != ')' && sql[end] != ';')
         {
-            char c = sql[fromPosition];
-            
-            // Stop at whitespace or special characters
-            if (char.IsWhiteSpace(c) || c == ',' || c == '(' || c == ')' || c == ';')
-            {
-                break;
-            }
-            
-            tableNameBuilder.Append(c);
-            fromPosition++;
+            end++;
         }
         
-        string tableName = tableNameBuilder.ToString().Trim();
-
-        // Remove any trailing punctuation (like parenthesis, comma, etc.)
-        tableName = tableName.TrimEnd(')', ',', ';');
-
-        // Strip SQL identifier quotes: "name", [name], `name`
-        if (tableName.Length >= 2)
+        // Strip SQL identifier quotes: "name", [name], `name` (same behavior as the legacy builder).
+        ReadOnlySpan<char> name = sql.AsSpan(fromPosition, end - fromPosition).Trim();
+        if (name.Length >= 2)
         {
-            if ((tableName[0] == '"' && tableName[^1] == '"') ||
-                (tableName[0] == '[' && tableName[^1] == ']') ||
-                (tableName[0] == '`' && tableName[^1] == '`'))
+            if ((name[0] == '"' && name[^1] == '"') ||
+                (name[0] == '[' && name[^1] == ']') ||
+                (name[0] == '`' && name[^1] == '`'))
             {
-                tableName = tableName[1..^1];
+                name = name[1..^1];
             }
         }
 
-        return string.IsNullOrEmpty(tableName) ? null : tableName;
+        return name.IsEmpty ? null : name.ToString();
     }
 
     /// <summary>
