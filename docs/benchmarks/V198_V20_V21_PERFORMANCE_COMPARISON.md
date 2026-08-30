@@ -82,28 +82,49 @@
 ## 5. Conclusions
 
 1. **V1.9.8 → V2.0 is a real, measurable win on the SQL read path (~8×)**, plus the new StructRow zero-alloc API. Other CRUD operations are essentially unchanged in this benchmark.
-2. **V2.0 → V2.1 shows no measurable win on the I/O-bound CRUD workload, but a real ~12–17% JIT win on CPU-bound code and ~2–4% lower per-operation allocations** (see §6). The full benefit still requires AVX-512 hardware, the GA .NET 11 runtime, and the deferred C# 15 feature work.
+2. **V2.0 → V2.1 shows no measurable win on the I/O-bound CRUD workload; the real wins are allocation reductions (single-file point lookup −99%, directory CRUD −4–5%) and a small consistent ~5–6% JIT gain on string processing** (see §6). SIMD-kernel JIT differences are within machine noise on this AVX2 machine; the Vector512 paths still need AVX-512 hardware, and C# 15 feature work is deferred.
 3. **The remaining bottleneck across all versions is UPDATE/DELETE vs SQLite** — a structural engine issue, not a toolchain issue.
 
 ---
 
 ## 6. Targeted micro-benchmarks — where .NET 11 / C# 15 already differs
 
-The CRUD harness above is synchronous and I/O-bound, so it hides the runtime-level differences. A focused micro-benchmark (identical source compiled against each version's own build; 20,000 ops per section; `GC.GetTotalAllocatedBytes` deltas) isolates the CPU/alloc/async behaviour:
+The CRUD harness above is synchronous and I/O-bound, so it hides the runtime-level differences. Focused micro-benchmarks (identical source compiled against each version's own build; `GC.GetTotalAllocatedBytes` deltas) isolate the alloc/CPU/async behaviour:
+
+### 6.1 Per-operation allocations (directory mode, 20,000 ops)
 
 | Metric | **V2.0** (net10.0.11) | **V2.1** (net11 preview 7) | Difference |
 |---|---:|---:|---:|
-| Sync INSERT — ops/sec | 1.55K – 1.64K | 1.43K – 1.60K | ≈ (noise) |
-| Sync INSERT — allocated | 11.33K – 11.35K B/op | 11.06K – 11.07K B/op | **−2.4%** |
-| Sync READ (point lookup) — ops/sec | 35.8K – 36.6K | 32.6K – 33.4K | ≈ (noise) |
-| Async INSERT — ops/sec | 2.10K – 2.13K | 1.97K – 2.12K | ≈ (noise) |
-| Async INSERT — allocated | 9.96K B/op | 9.67K B/op | **−3.0%** (Runtime Async) |
-| **JIT: Vector256 SIMD sum (4M ints × 50)** | **40.6 – 43.2 ms** | **35.6 – 36.7 ms** | **~12–17% faster** |
+| Sync INSERT — allocated | 11.33K – 11.35K B/op | 10.91K – 10.92K B/op | **−4%** |
+| Sync READ (point lookup) — allocated | 2.10K – 2.13K B/op | 2.01K – 2.02K B/op | **−5%** |
+| Async INSERT — allocated | 9.96K B/op | 9.53K B/op | **−4%** (Runtime Async + dispatch) |
+| CRUD ops/sec | — | — | ≈ (noise) |
+
+### 6.2 Single-file (.scdb) point lookup — the big win (v2.0 → v2.1)
+
+| Metric | **V2.0** (net10) | **V2.1** (net11) | Difference |
+|---|---:|---:|---:|
+| Allocated per `SELECT … WHERE id = X` (1000-row cache) | 578,688 B/op | **2,937 B/op** | **−99%** |
+| Throughput | ~441 ops/sec | **~17,900 ops/sec** | **~40×** |
+
+Three fixes landed on the v2.1 branch made this possible (all validated by 1,509 tests):
+1. **`SingleFileDatabase.WriteBatchLog` was unconditional hot-path debug I/O** — it opened a `FileStream` + `StreamWriter` on *every* `ExecuteQuery`/`ExecuteSQL` (the same class of bug v2.0 removed from directory mode). Now opt-in via `SHARPCOREDB_BATCH_LOG=1` / `SHARPCOREDB_BATCH_LOG_PATH`.
+2. **`SingleFileTable.Select` copied the entire row cache before filtering** — now WHERE/ORDER BY are evaluated against the cached rows (read-only) and only the surviving rows are defensively copied.
+3. **The WHERE condition was re-parsed per row** (3 non-compiled regexes + IN-predicate + AND/OR parsing per row) — a simple `col op value` condition is now parsed once per query with a fast per-row predicate using the exact same type cascade.
+
+### 6.3 CPU-bound hot paths (net11 vs net10, warm)
+
+| Benchmark (warm, 2 runs) | **V2.0** (net10.0.11) | **V2.1** (net11 preview 7) | Difference |
+|---|---:|---:|---:|
+| `NormalizeSql` ×2M | 82.6 – 89.1 ms | 78.5 – 83.9 ms | **~5–6% faster (consistent)** |
+| `SimdWhereFilter.FilterInt64` 1M×200 | 620 – 782 ms | 695 – 718 ms | ≈ (noise) |
+| `DistanceMetrics.CosineDistance` 256-dim×200K | 8.1 – 13.7 ms | 8.5 – 11.9 ms | ≈ (noise) |
+| Raw `Vector256` sum (4M ints × 50) | 40.6 – 43.2 ms | 35.6 – 36.7 ms | ~10% (partly warm-up) |
 
 Key reading:
-- **The .NET 11 JIT is measurably faster on identical CPU-bound SIMD code: ~12–17%** (35.6–36.7 ms vs 40.6–43.2 ms for the same `Vector256` loop). This is the "free" .NET 11 win — but it only shows where the work is **CPU-bound**.
-- **Per-operation allocations are ~2–4% lower on net11** (SQL-verb dispatch refactor + Runtime Async state-machine savings). The absolute per-op allocation (2–11 KB) is still dominated by the row materialization / WAL encoding, which is identical in both versions.
-- **DB CRUD throughput does not move** because those operations are **I/O + allocation bound**, not CPU bound — the JIT win is hidden behind the WAL/FSM writes and per-row dictionary materialization.
+- **After proper warm-up, the only consistent .NET 11 JIT win is on string processing (`NormalizeSql`, ~5–6%)**; the SIMD kernels are within machine noise run-to-run (some runs favour net10, some net11). The headline "12–17%" from a cold run earlier was largely JIT warm-up noise — cold-run numbers overstate the difference.
+- **Per-operation allocations are ~4–5% lower on net11** for the directory-mode CRUD paths (SQL-verb dispatch + `BuildKey` + Runtime Async), and the **single-file point lookup is ~99% lower** thanks to the v2.1 allocation work (§6.2).
+- **DB CRUD throughput does not move** because the work is **I/O + allocation bound**; the JIT win is hidden behind WAL/FSM writes and row materialization.
 - **C# 15 language features are not yet used** in the v2.1 code: the branch compiles with the C# 15 preview compiler (`LangVersion latest`) but the source is still C# 14 style. The planned C# 15 work (union types/closed hierarchies for the SQL AST, extension indexers) is Phase 4 and deliberately deferred until the preview compiler stabilizes — so "no C# 15 difference yet" is by design, not by failure.
 
 ### Recommendations for a follow-up benchmark
