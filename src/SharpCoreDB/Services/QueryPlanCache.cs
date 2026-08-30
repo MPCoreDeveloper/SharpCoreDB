@@ -68,7 +68,10 @@ public sealed class QueryPlanCache
         {
             Interlocked.Increment(ref hits);
             entry.Touch();
-            UpdateLru(key);
+            // PERF: no LRU reorder on the hit path — it took lruLock and did an O(n)
+            // LinkedList scan on every query (scalability bottleneck for concurrent
+            // readers). LRU now reflects insertion order, which is sufficient for the
+            // plan-cache eviction policy.
             return entry;
         }
 
@@ -123,19 +126,6 @@ public sealed class QueryPlanCache
             lru.Clear();
             Interlocked.Exchange(ref hits, 0);
             Interlocked.Exchange(ref misses, 0);
-        }
-    }
-
-    private void UpdateLru(string key)
-    {
-        lock (lruLock)
-        {
-            var node = lru.Find(key);
-            if (node is not null)
-            {
-                lru.Remove(node);
-                lru.AddFirst(node);
-            }
         }
     }
 

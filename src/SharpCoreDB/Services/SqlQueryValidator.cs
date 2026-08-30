@@ -43,6 +43,10 @@ public static class SqlQueryValidator
         new Regex(@"(xp_cmdshell|sp_executesql|EXEC\s*\()", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)),
     ];
 
+    // Compiled regex for @param placeholder extraction (hot path for parameterized queries).
+    private static readonly Regex NamedParameterRegex = new(
+        @"@(\w+)", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     /// <summary>
     /// Validation modes for SQL queries.
     /// </summary>
@@ -79,7 +83,9 @@ public static class SqlQueryValidator
             return;
         }
 
-        var warnings = new List<string>();
+        // Allocate the warnings list lazily — the common (clean-query) path allocates nothing.
+        List<string>? warnings = null;
+        void Warn(string message) => (warnings ??= []).Add(message);
 
         // Check 1: Missing parameters for non-SELECT queries with values
         if (parameters == null || parameters.Count == 0)
@@ -87,7 +93,7 @@ public static class SqlQueryValidator
             // S1066 Fix: Merge nested if statement
             if (ContainsStringLiterals(sql) && !IsSafeStatement(sql))
             {
-                warnings.Add("Query contains string literals but no parameters - potential SQL injection risk");
+                Warn("Query contains string literals but no parameters - potential SQL injection risk");
             }
         }
 
@@ -95,13 +101,13 @@ public static class SqlQueryValidator
         // S3267 Fix: Use LINQ Where to filter and iterate
         foreach (var pattern in DangerousPatterns.Where(p => p.IsMatch(sql)))
         {
-            warnings.Add($"Detected potentially dangerous SQL pattern: {pattern}");
+            Warn($"Detected potentially dangerous SQL pattern: {pattern}");
         }
 
         // Check 3: Look for concatenation patterns
         if (sql.Contains("'") && sql.Contains("+"))
         {
-            warnings.Add("Query appears to use string concatenation - use parameterized queries instead");
+            Warn("Query appears to use string concatenation - use parameterized queries instead");
         }
 
         // Check 4: Validate parameter placeholders match usage
@@ -111,19 +117,19 @@ public static class SqlQueryValidator
             int placeholderCount = sql.Count(c => c == '?');
             
             // Count @param placeholders (named parameters)
-            var namedMatches = System.Text.RegularExpressions.Regex.Matches(sql, @"@(\w+)", RegexOptions.None, TimeSpan.FromSeconds(1));
+            var namedMatches = NamedParameterRegex.Matches(sql);
             int namedPlaceholderCount = namedMatches.Count;
             
             if (placeholderCount > 0 && namedPlaceholderCount > 0)
             {
-                warnings.Add($"Mixed parameter styles detected: {placeholderCount} '?' and {namedPlaceholderCount} '@param' placeholders");
+                Warn($"Mixed parameter styles detected: {placeholderCount} '?' and {namedPlaceholderCount} '@param' placeholders");
             }
             else if (placeholderCount > 0)
             {
                 // Positional parameters - keys should be "0", "1", "2", etc.
                 if (placeholderCount != parameters.Count)
                 {
-                    warnings.Add($"Parameter count mismatch: {parameters.Count} parameters provided but {placeholderCount} placeholders found");
+                    Warn($"Parameter count mismatch: {parameters.Count} parameters provided but {placeholderCount} placeholders found");
                 }
             }
             else if (namedPlaceholderCount > 0 && strictParameterValidation)
@@ -158,7 +164,7 @@ public static class SqlQueryValidator
                 var missingParams = paramNames.Where(p => !normalizedKeys.Contains(p)).ToList();
                 if (missingParams.Any())
                 {
-                    warnings.Add($"Missing parameters for placeholders: {string.Join(", ", missingParams.Select(p => $"@{p}"))}");
+                    Warn($"Missing parameters for placeholders: {string.Join(", ", missingParams.Select(p => $"@{p}"))}");
                 }
                 
                 // Check for unused parameters (key provided but not in SQL)
@@ -167,7 +173,7 @@ public static class SqlQueryValidator
                 var unusedParams = parameters.Keys.Where(k => !paramNames.Contains(NormalizeKey(k))).ToList();
                 if (unusedParams.Any() && unusedParams.Count >= paramNames.Count)
                 {
-                    warnings.Add($"Unused parameters provided (not in SQL): {string.Join(", ", unusedParams)}");
+                    Warn($"Unused parameters provided (not in SQL): {string.Join(", ", unusedParams)}");
                 }
             }
             // else: no placeholders but parameters provided - likely already bound, skip warning
@@ -175,7 +181,7 @@ public static class SqlQueryValidator
 
 
         // Handle warnings based on mode
-        if (warnings.Any())
+        if (warnings is { Count: > 0 })
         {
             var message = $"SQL Security Validation Warnings:\n{string.Join("\n", warnings.Select((w, i) => $"  {i + 1}. {w}"))}";
             
@@ -203,21 +209,24 @@ public static class SqlQueryValidator
 
     /// <summary>
     /// Checks if a SQL statement is considered safe (DDL, simple SELECTs without user input).
+    /// Allocation-free: case-insensitive span comparisons instead of Trim + ToUpperInvariant.
     /// </summary>
     private static bool IsSafeStatement(string sql)
     {
-        var trimmed = sql.Trim().ToUpperInvariant();
-        
+        var trimmed = sql.AsSpan().Trim();
+
         // CREATE TABLE and other DDL statements with literals are typically safe
-        if (trimmed.StartsWith("CREATE TABLE") || 
-            trimmed.StartsWith("CREATE INDEX") ||
-            trimmed.StartsWith("ALTER TABLE"))
+        if (trimmed.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("CREATE INDEX", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("ALTER TABLE", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         // Simple SELECT * without WHERE is safe
-        if (trimmed == "SELECT *" || trimmed.StartsWith("SELECT * FROM") && !trimmed.Contains("WHERE"))
+        if (trimmed.Equals("SELECT *", StringComparison.OrdinalIgnoreCase) ||
+            (trimmed.StartsWith("SELECT * FROM", StringComparison.OrdinalIgnoreCase) &&
+             !trimmed.Contains("WHERE", StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
@@ -226,12 +235,33 @@ public static class SqlQueryValidator
     }
 
     /// <summary>
-    /// Checks if a SQL query contains string literals (potential user input).
+    /// Checks if a SQL query contains single-quoted string literals (potential user input).
+    /// Span-based scan (no regex, no allocation) with the same semantics as the previous
+    /// <c>Regex.IsMatch(sql, "'[^']*'")</c>: a quote pair with any non-quote content.
     /// </summary>
     private static bool ContainsStringLiterals(string sql)
     {
-        // Look for quoted strings
-        return Regex.IsMatch(sql, @"'[^']*'", RegexOptions.None, TimeSpan.FromSeconds(1));
+        var span = sql.AsSpan();
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i] == '\'')
+            {
+                int j = i + 1;
+                while (j < span.Length && span[j] != '\'')
+                {
+                    j++;
+                }
+
+                if (j < span.Length)
+                {
+                    return true; // matching closing quote found
+                }
+
+                break; // unclosed quote — no literal
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
