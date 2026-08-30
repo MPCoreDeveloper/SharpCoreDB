@@ -341,9 +341,12 @@ internal sealed class FreeSpaceManager : IDisposable
         // Write to file OUTSIDE lock
         try
         {
+            // ✅ Issue #345: write at the FSM offset under the provider's write-batch lock so the
+            // shared FileStream.Position can never be raced by the background write worker
+            // (previously FSM/registry data could be written over data pages and vice versa).
+            _provider.WriteAt((long)_fsmOffset, buffer.AsSpan(0, totalSize));
+
             var fileStream = GetFileStream();
-            fileStream.Position = (long)_fsmOffset;
-            await fileStream.WriteAsync(buffer.AsMemory(0, totalSize), cancellationToken);
             await fileStream.FlushAsync(cancellationToken);
         }
         finally

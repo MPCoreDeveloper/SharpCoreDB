@@ -987,7 +987,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // ✅ Sort coalesced writes by offset for sequential I/O (reduces disk seeks)
         coalescedWrites.Sort((a, b) => a.Entry.Offset.CompareTo(b.Entry.Offset));
 
-        // ✅ Write all coalesced operations sequentially within a lock
+        // ✅ Write all coalesced operations sequentially within a lock, then update the
+        // registry + cache under the SAME lock. Keeping (data write + registry update)
+        // atomic guarantees consistency even when the async flush below is cancelled
+        // during Dispose (previously the registry update was skipped -> block lost /
+        // data/registry mismatch on reopen). Issue #345.
         lock (_writeBatchLock)
         {
             foreach (var coalesced in coalescedWrites)
@@ -1013,31 +1017,34 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     #endif
                 }
             }
-        }
 
-        // ✅ Phase 3: Async flush outside lock for better concurrency
-        await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-        // ✅ Update registry and cache (no immediate flush - batched by BlockRegistry)
-        foreach (var coalesced in coalescedWrites)
-        {
-            _blockRegistry.AddOrUpdateBlock(coalesced.BlockName, coalesced.Entry);
-
-            // Compute checksum for cache
-            var checksum = SHA256.HashData(coalesced.Data);
-            
-            _blockCache[coalesced.BlockName] = new BlockMetadata
+            // Update registry + cache (fast, in-memory) under the same lock so the
+            // on-disk data and the registry entry can never diverge.
+            foreach (var coalesced in coalescedWrites)
             {
-                Name = coalesced.BlockName,
-                BlockType = coalesced.Entry.BlockType,
-                Size = (long)coalesced.Entry.Length,
-                Offset = (long)coalesced.Entry.Offset,
-                Checksum = checksum,
-                IsEncrypted = _options.EnableEncryption,
-                IsDirty = (coalesced.Entry.Flags & (uint)BlockFlags.Dirty) != 0,
-                LastModified = DateTime.UtcNow,
-            };
+                _blockRegistry.AddOrUpdateBlock(coalesced.BlockName, coalesced.Entry);
+
+                // Compute checksum for cache
+                var checksum = SHA256.HashData(coalesced.Data);
+                
+                _blockCache[coalesced.BlockName] = new BlockMetadata
+                {
+                    Name = coalesced.BlockName,
+                    BlockType = coalesced.Entry.BlockType,
+                    Size = (long)coalesced.Entry.Length,
+                    Offset = (long)coalesced.Entry.Offset,
+                    Checksum = checksum,
+                    IsEncrypted = _options.EnableEncryption,
+                    IsDirty = (coalesced.Entry.Flags & (uint)BlockFlags.Dirty) != 0,
+                    LastModified = DateTime.UtcNow,
+                };
+            }
         }
+
+        // ✅ Phase 3: Async flush outside lock for better concurrency.
+        // The data + registry are already updated above, so a cancellation here
+        // (e.g. during Dispose) does not lose the block.
+        await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
         await Task.Yield(); // ✅ Allow other work between batches
     }
@@ -1109,6 +1116,12 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         {
             await WriteBatchToDiskAsync(pendingOps, cancellationToken).ConfigureAwait(false);
         }
+
+        // ✅ Synchronize with the background worker: it may have dequeued operations
+        // concurrently with our drain and be mid-batch. Since the worker holds
+        // _writeBatchLock across (data write + registry update), acquiring it here
+        // guarantees any in-flight batch has fully completed before we flush / return.
+        lock (_writeBatchLock) { }
 
         if (flushToDisk)
         {
@@ -1462,18 +1475,27 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 // Best effort — subsystems may already be partially torn down
             }
 
-            _blockRegistry?.Dispose();
-            _freeSpaceManager?.Dispose();
-            _walManager?.Dispose();
-            _tableDirectoryManager?.Dispose();
-            _memoryMappedFile?.Dispose();
-            _fileStream?.Dispose();
+            // ✅ CRITICAL (issue #345): always close the file stream, even if a subsystem
+            // Dispose() throws. If the stream is not closed the file handle leaks and a
+            // subsequent Open()/reopen on Windows fails with IOException "file in use".
+            try
+            {
+                _blockRegistry?.Dispose();
+                _freeSpaceManager?.Dispose();
+                _walManager?.Dispose();
+                _tableDirectoryManager?.Dispose();
+                _memoryMappedFile?.Dispose();
+            }
+            finally
+            {
+                try { _fileStream?.Dispose(); } catch { /* best effort */ }
+            }
 
             // ✅ Issue #341: dispose the cipher to zeroize the in-memory key.
-            _encryption?.Dispose();
+            try { _encryption?.Dispose(); } catch { /* best effort */ }
 
-            _writeCts?.Dispose();
-            _flushSignal?.Dispose();
+            try { _writeCts?.Dispose(); } catch { /* best effort */ }
+            try { _flushSignal?.Dispose(); } catch { /* best effort */ }
         }
         catch
         {
@@ -1962,6 +1984,23 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     /// <summary>
     /// Gets the underlying FileStream for internal use by subsystems.
     /// </summary>
+    /// <summary>
+    /// Writes <paramref name="data"/> at an explicit file offset under the write-batch lock.
+    /// All writers that share the single-file <see cref="_fileStream"/> (background write worker,
+    /// block-registry flush, free-space-map flush, WAL, table directory) must go through this
+    /// method so the shared <see cref="FileStream.Position"/> can never be raced — previously a
+    /// metadata-region flush could set Position and have the worker move it before the write
+    /// executed, corrupting data pages with registry/FSM content (issue #345).
+    /// </summary>
+    internal void WriteAt(long position, ReadOnlySpan<byte> data)
+    {
+        lock (_writeBatchLock)
+        {
+            _fileStream.Position = position;
+            _fileStream.Write(data);
+        }
+    }
+
     internal FileStream GetInternalFileStream() => _fileStream;
 
     /// <summary>
