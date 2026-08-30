@@ -1,4 +1,4 @@
-# SharpCoreDB v2.0.0-preview.2 - Performance-First Database Engine
+# SharpCoreDB v2.0.0-preview.3 - Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
@@ -6,7 +6,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
-## What's New in v2.0.0-preview.2
+## What's New in v2.0.0-preview.3
 
 ### 🚀 Performance-first engine
 - v2.0 closes the v1.x benchmark gap: point reads **beat SQLite** on the default engine, batch INSERTs
@@ -203,7 +203,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.0.0-preview.2 (August 30, 2026)  
+**Latest Version:** 2.0.0-preview.3 (August 30, 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,600+ (100% passing)  
 **Status:** ✅ Preview 2 — performance-first v2.0 line

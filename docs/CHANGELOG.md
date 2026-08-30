@@ -71,6 +71,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     publishes with `PublishAot=true` and runs exit 0 including the single-file full-vacuum path.
   - **Follow-up:** full VACUUM now reloads the block registry / FSM / WAL after the file swap so
     in-memory offsets match the compacted file (fixes stale-offset writes after vacuum).
+- **Issue #344 — compressed single-file (`.scdb`) databases crashed on reopen + SELECT with
+  `JsonException: '0x0B' is an invalid start of a value`**:
+  - `WriteBlockAsync` only stamped the per-block `Compressed` flag for brand-new blocks; a table
+    row-cache block that was rewritten while it already existed (auto-flush as the JSON grows past
+    the compression threshold, or a grow/realloc) was stored compressed **without** the flag, so on
+    reopen the raw Brotli/GZip bytes were handed to the JSON parser;
+  - `SingleFileTable.EnsureCacheLoaded` now reads the row-cache block through `ReadBlockAsync`
+    (which decrypts and decompresses transparently) instead of `GetReadStream` (which returns raw
+    on-disk bytes when encryption is off);
+  - regression tests `DatabaseFactory_Compression_GrowingTable_ReopenSelectShouldSurvive` and
+    `DatabaseFactory_CompressionPlusEncryption_GrowingTable_ReopenSelectShouldSurvive` cover the
+    reopen + SELECT path for compression alone and compression + encryption.
 
 ## [2.0.0] - 2026-08-28
 

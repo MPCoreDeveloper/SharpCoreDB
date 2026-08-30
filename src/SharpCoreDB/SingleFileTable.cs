@@ -655,19 +655,18 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 return;
             }
 
-            using var stream = _storageProvider.GetReadStream(_dataBlockName);
-            if (stream is null)
+            // Read through ReadBlockAsync so encryption AND block-level compression (#344)
+            // are both transparently handled. GetReadStream returns the raw on-disk bytes
+            // when encryption is off, which would hand compressed data (Brotli/GZip marker
+            // bytes) to the JSON parser on reopen — breaking SELECT after reopen.
+            var jsonBytes = _storageProvider.ReadBlockAsync(_dataBlockName, CancellationToken.None).GetAwaiter().GetResult();
+            if (jsonBytes is null || jsonBytes.Length == 0)
             {
                 _rowCache = [];
                 _cacheLoaded = true;
                 return;
             }
 
-            // Read the stream into bytes and trim trailing null bytes
-            using var memoryStream = new MemoryStream();
-            stream.CopyTo(memoryStream);
-            var jsonBytes = memoryStream.ToArray();
-            
             // Trim trailing null bytes
             var endIndex = jsonBytes.Length;
             while (endIndex > 0 && jsonBytes[endIndex - 1] == 0)

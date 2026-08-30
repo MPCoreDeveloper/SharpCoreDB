@@ -450,6 +450,65 @@ public sealed class SingleFileCompressionTests
     }
 
     [Fact]
+    public void DatabaseFactory_Compression_GrowingTable_ReopenSelectShouldSurvive()
+    {
+        // REGRESSION (#344): a table whose row-cache block is rewritten while it already
+        // exists lost its Compressed flag, so reopening and running SELECT parsed raw
+        // Brotli bytes as JSON (JsonException "'0x0B' is an invalid start of a value").
+        var factory = BuildFactory();
+        var options = CreateCompressedOptions(BlockCompressionMode.Brotli);
+
+        // Auto-flush rewrites the row-cache block as it grows past the compression
+        // threshold — exercising the existing-block rewrite path that lost the flag.
+        var db = factory.CreateWithOptions(_testDbPath, "unused", options);
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, payload TEXT)");
+        for (int i = 0; i < 500; i++)
+        {
+            db.ExecuteSQL($"INSERT INTO t VALUES ({i}, 'user{i}', '{new string('x', 32)}')");
+        }
+        db.Flush();
+        db.ForceSave();
+        DisposeDatabase(db);
+
+        // Reopen and SELECT must survive with the data intact.
+        var db2 = factory.CreateWithOptions(_testDbPath, "unused", options);
+        var results = db2.ExecuteQuery("SELECT * FROM t ORDER BY id");
+        Assert.Equal(500, results.Count);
+        Assert.Equal("user42", results[42]["name"]?.ToString());
+        Assert.Equal("user499", results[499]["name"]?.ToString());
+        DisposeDatabase(db2);
+    }
+
+    [Fact]
+    public void DatabaseFactory_CompressionPlusEncryption_GrowingTable_ReopenSelectShouldSurvive()
+    {
+        // Same regression as above but with full at-rest encryption combined with
+        // block compression (compression + encryption on the existing-block path).
+        var factory = BuildFactory();
+        var options = CreateCompressedOptions(BlockCompressionMode.Brotli);
+        options.EnableEncryption = true;
+        options.EncryptionKey = RandomNumberGenerator.GetBytes(32);
+
+        var db = factory.CreateWithOptions(_testDbPath, "unused", options);
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, payload TEXT)");
+        for (int i = 0; i < 500; i++)
+        {
+            db.ExecuteSQL($"INSERT INTO t VALUES ({i}, 'user{i}', '{new string('y', 32)}')");
+        }
+        db.Flush();
+        db.ForceSave();
+        DisposeDatabase(db);
+
+        var db2 = factory.CreateWithOptions(_testDbPath, "unused", options);
+        var results = db2.ExecuteQuery("SELECT * FROM t ORDER BY id");
+        Assert.Equal(500, results.Count);
+        Assert.Equal("user7", results[7]["name"]?.ToString());
+        Assert.Equal("user499", results[499]["name"]?.ToString());
+        DisposeDatabase(db2);
+    }
+
+
+    [Fact]
     public void DatabaseFactory_WrongCompressionModeOnReopen_ShouldThrow()
     {
         var factory = BuildFactory();

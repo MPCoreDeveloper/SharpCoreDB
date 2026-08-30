@@ -794,7 +794,19 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         {
             // Calculate required pages
             var requiredPages = (data.Length + _header.PageSize - 1) / _header.PageSize;
-            
+
+            // ✅ Compression (#344): the Compressed flag must reflect the state of THIS write.
+            // A previous write may have stored the block compressed or uncompressed; the flag is
+            // recomputed here so an updated (rewritten/grown) block always carries the correct
+            // marker. The earlier code only set the flag for brand-new blocks, so an existing
+            // block that got compressed lost its Compressed bit and reopen read raw Brotli/GZip
+            // bytes as JSON (JsonException "invalid start of a value").
+            uint flags = (uint)BlockFlags.Dirty;
+            if (isCompressed)
+            {
+                flags |= (uint)BlockFlags.Compressed;
+            }
+
             ulong offset;
             BlockEntry entry;
 
@@ -806,14 +818,14 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 {
                     // Fits in existing space
                     offset = existingEntry.Offset;
-                    entry = existingEntry with { Length = (ulong)data.Length, Flags = existingEntry.Flags | (uint)BlockFlags.Dirty };
+                    entry = existingEntry with { Length = (ulong)data.Length, Flags = flags };
                 }
                 else
                 {
                     // Need more space: free old, allocate new
                     _freeSpaceManager.FreePages(existingEntry.Offset, (int)existingPages);
                     offset = _freeSpaceManager.AllocatePages(requiredPages);
-                    entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = (uint)BlockFlags.Dirty };
+                    entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = flags };
                 }
             }
             else
@@ -833,13 +845,6 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 if (offset < registryEnd)
                 {
                     offset = registryEnd;
-                }
-
-                // ✅ Compression: set the Compressed flag if this block was compressed.
-                var flags = (uint)BlockFlags.Dirty;
-                if (isCompressed)
-                {
-                    flags |= (uint)BlockFlags.Compressed;
                 }
 
                 entry = new BlockEntry
