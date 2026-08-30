@@ -258,8 +258,8 @@ Encrypted regions use the in-place page cipher (`[nonce(12)][ciphertext][tag(16)
 
 | Region | Encryption scope | Notes |
 |---|---|---|
-| `BlockRegistry` | entire fixed region | written as one full-size ciphertext blob; GCM auth failure on open ⇒ `CryptographicException` |
-| `FreeSpaceMap` | entire fixed region | header + L1 bitmap + extents encrypted together |
+| `BlockRegistry` | root block (grows by relocation, issue #345) | written as one full-size ciphertext blob; GCM auth failure on open ⇒ `CryptographicException` |
+| `FreeSpaceMap` | named block `sys:fsm` (grows by relocation) | header + L1 bitmap + extents encrypted together |
 | `WAL` | each 4096-byte entry slot | WAL header stays plaintext (head/tail offsets); payload capped at 3972 B to leave room for the GCM overhead |
 | Header | bootstrap only | magic/version/mode/key-id + KDF salt + wrapped DEK |
 

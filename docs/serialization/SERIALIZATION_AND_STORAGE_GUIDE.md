@@ -94,10 +94,10 @@ public struct ScdbFileHeader
     public fixed byte Nonce[12];  // 0x0014: AES-GCM nonce
 
     // === Region Offsets (64 bytes) ===
-    public ulong BlockRegistryOffset;  // 0x0020: Where registry starts
-    public ulong BlockRegistryLength;  // 0x0028: Size in bytes
-    public ulong FsmOffset;            // 0x0030: Free Space Map
-    public ulong FsmLength;            // 0x0038: FSM size
+    public ulong RegistryRootOffset;  // 0x0020: Root registry block (format v2, issue #345)
+    public ulong RegistryRootLength;  // 0x0028: Root registry block size (grows by relocation)
+    public ulong ReservedRegion0;     // 0x0030: (format v1: FsmOffset)
+    public ulong ReservedRegion1;     // 0x0038: (format v1: FsmLength)
     public ulong WalOffset;            // 0x0040: Write-Ahead Log
     public ulong WalLength;            // 0x0048: WAL size
     public ulong TableDirOffset;       // 0x0050: Table schemas

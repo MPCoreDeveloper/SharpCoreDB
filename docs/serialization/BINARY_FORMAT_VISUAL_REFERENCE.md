@@ -59,10 +59,10 @@ Offset   Size   Field Name                Value
 0x0012   2      EncryptionKeyId           Key derivation ID
 0x0014   12     Nonce                     AES-GCM nonce
 
-0x0020   8      BlockRegistryOffset       Start of registry
-0x0028   8      BlockRegistryLength       Registry size
-0x0030   8      FsmOffset                 Start of FSM
-0x0038   8      FsmLength                 FSM size
+0x0020   8      RegistryRootOffset        Start of root registry block (format v2, issue #345)
+0x0028   8      RegistryRootLength        Root registry block size (v2; 1 page, grows by relocation)
+0x0030   8      Reserved0                 (format v1: FsmOffset)
+0x0038   8      Reserved1                 (format v1: FsmLength)
 0x0040   8      WalOffset                 Start of WAL
 0x0048   8      WalLength                 WAL size
 0x0050   8      TableDirOffset            Start of table dir
@@ -332,10 +332,10 @@ Real-world file layout (not contiguous):
 Byte Position    Block              Size    Status
 ────────────────────────────────────────────────────
 0                 [Header]           512    Fixed
-512               [Registry]         50KB   Fixed
-51,712            [FSM]              10KB   Fixed
-61,952            [WAL]              1MB    Fixed
-1,110,016         [Table Directory]  100KB  Fixed
+512               [WAL]              1MB    Fixed
+1,050,112         [Table Directory]  100KB  Fixed
+1,150,112         [Registry block]   4KB    Grows (relocates, issue #345)
+1,154,208         [FSM block]        10KB   Grows (relocates, issue #345)
 
 1,310,016         Row_001            50B    Allocated
 1,310,066         Row_002            100B   Allocated
