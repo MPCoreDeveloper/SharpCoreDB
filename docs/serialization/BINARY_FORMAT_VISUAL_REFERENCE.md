@@ -60,7 +60,7 @@ Offset   Size   Field Name                Value
 0x0014   12     Nonce                     AES-GCM nonce
 
 0x0020   8      RegistryRootOffset        Start of root registry block (format v2, issue #345)
-0x0028   8      RegistryRootLength        Root registry block size (v2; 1 page, grows by relocation)
+0x0028   8      RegistryRootLength        Root registry block size (v2; initial = BlockRegistrySizePages pages, grows by relocation)
 0x0030   8      Reserved0                 (format v1: FsmOffset)
 0x0038   8      Reserved1                 (format v1: FsmLength)
 0x0040   8      WalOffset                 Start of WAL

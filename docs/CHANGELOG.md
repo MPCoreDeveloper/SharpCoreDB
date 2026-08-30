@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - the FSM is a named block (`sys:fsm`) tracked in the registry; its serialized bitmap relocates
     (grows) automatically when the database outgrows the initial `FsmSizePages` capacity;
   - `FormatVersion` is bumped to **2** (`FEATURE_DYNAMIC_METADATA`); `BlockRegistrySizePages`
-    no longer sizes a fixed region (the registry grows on demand);
+    sizes the **initial** registry block (default 4 pages ≈ 170 entries; the registry still
+    grows on demand beyond that);
   - **automatic v1 → v2 migration on open**: legacy files with fixed-offset metadata are rebuilt
     via a crash-safe temp-file swap (data blocks are never moved — checksums/ciphertexts stay
     valid) and the original is preserved as `<file>.backup`;

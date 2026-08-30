@@ -1868,7 +1868,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         header.TableDirOffset = header.WalOffset + header.WalLength;
         header.TableDirLength = (ulong)options.PageSize * (ulong)options.TableDirectorySizePages;
 
-        var registryRootLength = (ulong)options.PageSize; // 1 page holds 42 entries + chunk header
+        // Initial registry block size (issue #345): BlockRegistrySizePages pages. The registry
+        // still grows (relocates) automatically when it outgrows this initial capacity.
+        var registryRootLength = (ulong)options.PageSize * (ulong)options.BlockRegistrySizePages;
         header.RegistryRootOffset = AlignToPage(header.TableDirOffset + header.TableDirLength, options.PageSize);
         header.RegistryRootLength = registryRootLength;
 
@@ -2069,8 +2071,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         var newWalOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, pageSize);
         var newTableDirOffset = newWalOffset + oldWalLength;
         var registryNeeded = (ulong)(RegistryChunkHeader.SIZE + ((entries.Count + 1L) * BlockEntry.SIZE));
+        var configuredRoot = (ulong)options.PageSize * (ulong)options.BlockRegistrySizePages;
         var newRegistryOffset = AlignToPage(newTableDirOffset + oldTableDirLength, pageSize);
-        var newRegistryLength = AlignToPage(registryNeeded, pageSize);
+        var newRegistryLength = AlignToPage(Math.Max(configuredRoot, registryNeeded), pageSize);
         var newFsmOffset = newRegistryOffset + newRegistryLength;
 
         var bitmapBytes = (int)((totalPages + 7) / 8);

@@ -9,6 +9,7 @@ using System.IO;
 using System.Threading.Tasks;
 using SharpCoreDB;
 using SharpCoreDB.Storage;
+using SharpCoreDB.Storage.Scdb;
 using Xunit;
 
 /// <summary>
@@ -48,7 +49,7 @@ public sealed class MetadataSizingTests : IDisposable
         options.PageSize = 4096;
         options.WalBufferSizePages = 64;
         options.EnableMemoryMapping = false;
-        options.BlockRegistrySizePages = 8; // legacy option: ignored in the dynamic layout
+        options.BlockRegistrySizePages = 8; // initial registry block = 8 pages
         options.FsmSizePages = 16;
         options.TableDirectorySizePages = 12;
 
@@ -68,23 +69,25 @@ public sealed class MetadataSizingTests : IDisposable
         fs.Position = 0x58; // TableDirLength
         var tableDirLength = reader.ReadUInt64();
 
-        // The registry is dynamic: the root chunk is always one page; growth relocates it.
-        Assert.Equal((ulong)options.PageSize, registryRootLength);
+        // The registry is dynamic: its initial block is sized by BlockRegistrySizePages and
+        // grows (relocates) automatically when it outgrows that capacity.
+        Assert.Equal((ulong)(options.PageSize * options.BlockRegistrySizePages), registryRootLength);
 
         // The FSM is a named block (sys:fsm) whose entry lives in the root registry chunk.
-        var fsmLength = ReadFsmEntryLength(fs, registryRootOffset);
+        var fsmLength = ReadFsmEntryLength(fs, registryRootOffset, registryRootLength);
         Assert.Equal((ulong)(options.PageSize * options.FsmSizePages), fsmLength);
         Assert.Equal((ulong)(options.PageSize * options.TableDirectorySizePages), tableDirLength);
     }
 
     /// <summary>
-    /// Reads the length of the sys:fsm entry from the root registry chunk.
+    /// Reads the length of the sys:fsm entry from the root registry block.
     /// Registry format v2: [RegistryChunkHeader(64)][BlockEntry(96)...] (plaintext file).
     /// BlockEntry layout: Name[32] @ 0x00, BlockType @ 0x20, Offset @ 0x24, Length @ 0x2C.
     /// </summary>
-    private static ulong ReadFsmEntryLength(FileStream fs, ulong registryRootOffset)
+    private static ulong ReadFsmEntryLength(FileStream fs, ulong registryRootOffset, ulong registryRootLength)
     {
-        for (var i = 0; i < 42; i++)
+        var capacity = (int)(((long)registryRootLength - RegistryChunkHeader.SIZE) / BlockEntry.SIZE);
+        for (var i = 0; i < capacity; i++)
         {
             var entryStart = (long)registryRootOffset + 64 + (i * 96);
             fs.Position = entryStart;
@@ -112,15 +115,17 @@ public sealed class MetadataSizingTests : IDisposable
 
 
     [Fact]
-    public async Task ManyBlocks_WithLargerRegistry_ShouldRoundtrip()
+    public async Task ManyBlocks_RegistryGrows_AndRoundtrips()
     {
+        // Issue #345 Phase 2: with a 1-page initial registry (~42 entries) the Block Registry
+        // must relocate (grow) once more blocks are registered; data must round-trip across it.
         var options = DatabaseOptions.CreateSingleFileDefault();
         options.PageSize = 4096;
         options.WalBufferSizePages = 64;
         options.EnableMemoryMapping = false;
-        options.BlockRegistrySizePages = 16; // 64 KB registry ≈ 680 entries
+        options.BlockRegistrySizePages = 1; // tiny initial registry → forces growth
 
-        const int blockCount = 300; // exceeds the default 4-page (~170) capacity
+        const int blockCount = 300; // far exceeds the 1-page (~42) initial capacity
         var payload = new byte[64];
         for (var i = 0; i < payload.Length; i++)
         {
@@ -137,6 +142,16 @@ public sealed class MetadataSizingTests : IDisposable
             // ForceFlushAsync = registry force flush + WAL checkpoint (full durability),
             // avoiding a race between the periodic registry flusher and the reopen below.
             await provider.ForceFlushAsync();
+        }
+
+        // The registry must have grown (relocated) past its initial single page.
+        using (var fs = new FileStream(_testDbPath, FileMode.Open, FileAccess.Read))
+        {
+            fs.Position = 0x28; // RegistryRootLength
+            var registryRootLength = ReadUInt64(fs);
+            Assert.True(
+                registryRootLength > (ulong)options.PageSize,
+                $"Registry should have grown past 1 page, got {registryRootLength}");
         }
 
         using var reopened = SingleFileStorageProvider.Open(_testDbPath, options);
@@ -177,13 +192,15 @@ public sealed class MetadataSizingTests : IDisposable
             await provider.ForceFlushAsync();
         }
 
-        // The FSM must have grown: its serialized bitmap no longer fits in a single page.
+        // The FSM must have grown: its serialized bitmap no longer fits in the initial block.
         using (var fs = new FileStream(_testDbPath, FileMode.Open, FileAccess.Read))
         {
             fs.Position = 0x20;
             var registryRootOffset = ReadUInt64(fs);
-            var fsmLength = ReadFsmEntryLength(fs, registryRootOffset);
-            Assert.True(fsmLength > (ulong)options.PageSize, $"FSM block should have grown past 1 page, got {fsmLength}");
+            fs.Position = 0x28;
+            var registryRootLength = ReadUInt64(fs);
+            var fsmLength = ReadFsmEntryLength(fs, registryRootOffset, registryRootLength);
+            Assert.True(fsmLength > (ulong)(options.PageSize * options.FsmSizePages), $"FSM block should have grown past its initial size, got {fsmLength}");
         }
 
         using var reopened = SingleFileStorageProvider.Open(_testDbPath, options);
