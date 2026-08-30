@@ -45,7 +45,9 @@ internal sealed class FreeSpaceManager : IDisposable
     private ulong _freePages;
 
     // ✅ C# 14: Pre-allocation settings for optimal file growth - Phase 3 optimized
-    private const int MIN_EXTENSION_PAGES = 2560;      // 10 MB @ 4KB pages (Phase 3: increased from 512 = 2MB)
+    // Minimum file extension is byte-based so it stays ~10 MB regardless of PageSize;
+    // a fixed page count would scale linearly (40 MB @ 16 KB, 80 MB @ 32 KB) - issue #345.
+    private const long MIN_EXTENSION_BYTES = 10L * 1024 * 1024;
     private const int EXTENSION_GROWTH_FACTOR = 2;     // Double size each time (exponential growth)
     private ulong _preallocatedPages = 0;
 
@@ -201,8 +203,10 @@ internal sealed class FreeSpaceManager : IDisposable
                 // ✅ Calculate extension size (grow exponentially)
                 var requiredPages = (ulong)count;
                 var currentSize = _totalPages;
+                // Minimum extension is byte-based (issue #345): ~10 MB regardless of PageSize.
+                var minExtensionPages = (ulong)Math.Max(1, (int)(MIN_EXTENSION_BYTES / _pageSize));
                 var extensionSize = Math.Max(
-                    MIN_EXTENSION_PAGES,
+                    minExtensionPages,
                     Math.Max(requiredPages, currentSize / EXTENSION_GROWTH_FACTOR)
                 );
                 

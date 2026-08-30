@@ -117,6 +117,26 @@ public sealed class DatabaseOptions
     public int CompressionThreshold { get; set; } = 256;
 
     /// <summary>
+    /// Number of pages allocated for the SingleFile Block Registry.
+    /// Each block entry is 96 bytes; the default 4 pages @ 4KB supports ~170 blocks.
+    /// Increase for databases that store many named blocks (default: 4, backward compatible).
+    /// </summary>
+    public int BlockRegistrySizePages { get; set; } = 4;
+
+    /// <summary>
+    /// Number of pages allocated for the SingleFile Free Space Map (FSM).
+    /// The FSM tracks one bit per data page; the default 4 pages @ 4KB supports ~512 MB
+    /// of file data. Increase for databases expected to grow beyond that (default: 4, backward compatible).
+    /// </summary>
+    public int FsmSizePages { get; set; } = 4;
+
+    /// <summary>
+    /// Number of pages allocated for the SingleFile table directory (schema metadata).
+    /// Default: 4 (backward compatible).
+    /// </summary>
+    public int TableDirectorySizePages { get; set; } = 4;
+
+    /// <summary>
     /// Gets or sets whether to enable memory-mapped I/O for reads.
     /// Default: true (enables zero-copy reads).
     /// Disable for: Very small databases (less than 1MB) or high write workloads.
@@ -245,6 +265,25 @@ public sealed class DatabaseOptions
         {
             throw new ArgumentException(
                 $"WalBufferSizePages must be between 64 and 65536. Got: {WalBufferSizePages}");
+        }
+
+        // Validate metadata region sizes (SingleFile storage layout, issue #345)
+        if (BlockRegistrySizePages < 1 || BlockRegistrySizePages > 65536)
+        {
+            throw new ArgumentException(
+                $"BlockRegistrySizePages must be between 1 and 65536. Got: {BlockRegistrySizePages}");
+        }
+
+        if (FsmSizePages < 1 || FsmSizePages > 65536)
+        {
+            throw new ArgumentException(
+                $"FsmSizePages must be between 1 and 65536. Got: {FsmSizePages}");
+        }
+
+        if (TableDirectorySizePages < 1 || TableDirectorySizePages > 65536)
+        {
+            throw new ArgumentException(
+                $"TableDirectorySizePages must be between 1 and 65536. Got: {TableDirectorySizePages}");
         }
 
         // Validate fragmentation threshold

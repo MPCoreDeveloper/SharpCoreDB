@@ -1708,22 +1708,21 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         }
 
         // Initialize block registry at next page boundary
-        // ✅ Phase 3: Allocate 4 pages (16KB) to support up to ~250 block entries
-        // Calculation: (16384 - 64 header) / 64 per entry = 255 max entries
+        // Configurable region size (issue #345): BlockRegistrySizePages pages.
         header.BlockRegistryOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, options.PageSize);
-        header.BlockRegistryLength = (ulong)options.PageSize * 4;
+        header.BlockRegistryLength = (ulong)options.PageSize * (ulong)options.BlockRegistrySizePages;
 
-        // Initialize FSM at pages 5-8 (4 pages)
+        // Initialize FSM right after the registry (configurable region size)
         header.FsmOffset = header.BlockRegistryOffset + header.BlockRegistryLength;
-        header.FsmLength = (ulong)options.PageSize * 4; // 4 pages for FSM
+        header.FsmLength = (ulong)options.PageSize * (ulong)options.FsmSizePages; // FSM tracks 1 bit/page
 
-        // Initialize WAL at pages 9+ (configurable)
+        // Initialize WAL at the next page boundary (configurable)
         header.WalOffset = header.FsmOffset + header.FsmLength;
         header.WalLength = (ulong)options.PageSize * (ulong)options.WalBufferSizePages;
 
-        // Initialize table directory after WAL
+        // Initialize table directory after WAL (configurable region size)
         header.TableDirOffset = header.WalOffset + header.WalLength;
-        header.TableDirLength = (ulong)options.PageSize * 4; // 4 pages for table directory
+        header.TableDirLength = (ulong)options.PageSize * (ulong)options.TableDirectorySizePages;
 
         // Allocate space for metadata structures
         var totalMetadataSize = header.TableDirOffset + header.TableDirLength;

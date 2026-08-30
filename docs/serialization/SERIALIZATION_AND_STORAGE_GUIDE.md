@@ -532,8 +532,10 @@ public ulong AllocatePages(int count)
         if (startPage == ulong.MaxValue)
         {
             // 2. No space found? Extend file exponentially
+            // Minimum extension is byte-based (issue #345): ~10 MB regardless of PageSize.
+            var minExtensionPages = Math.Max(1, (int)(MIN_EXTENSION_BYTES / _pageSize));
             var extensionSize = Math.Max(
-                MIN_EXTENSION_PAGES,           // 2560 pages = 10MB (Phase 3)
+                minExtensionPages,
                 Math.Max(count, currentSize / EXTENSION_GROWTH_FACTOR)
             );
             
