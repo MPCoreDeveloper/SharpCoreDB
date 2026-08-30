@@ -48,6 +48,32 @@ public partial class Database
         return _sharedSqlParser;
     }
 
+
+    /// <summary>
+    /// Returns the first whitespace-delimited token of a SQL statement as a span
+    /// without allocating — replaces the hot-path <c>Trim().Split(' ')[0]</c> verb
+    /// dispatch (which allocated a Trim substring, a string[] and one string per
+    /// token on every ExecuteSQL/ExecuteNonQuery call). Matches Trim() semantics:
+    /// leading whitespace is skipped, then the token runs until the next whitespace.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ReadOnlySpan<char> FirstToken(ReadOnlySpan<char> sql)
+    {
+        int i = 0;
+        while (i < sql.Length && char.IsWhiteSpace(sql[i]))
+        {
+            i++;
+        }
+
+        int start = i;
+        while (i < sql.Length && !char.IsWhiteSpace(sql[i]))
+        {
+            i++;
+        }
+
+        return sql[start..i];
+    }
+
     /// <inheritdoc />
     public void ExecuteSQL(string sql)
     {
@@ -59,8 +85,7 @@ public partial class Database
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
 
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             // ✅ CRITICAL FIX: Flush dirty data BEFORE SELECT
             // This ensures SELECT sees all uncommitted inserts/updates/deletes
@@ -75,15 +100,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.INSERT);
         }
-        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
         }
-        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
@@ -124,8 +149,7 @@ public partial class Database
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
 
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             // ✅ CRITICAL FIX: Flush dirty data BEFORE SELECT
             // This ensures SELECT sees all uncommitted inserts/updates/deletes
@@ -140,15 +164,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
         }
-        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
         }
-        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
@@ -199,24 +223,23 @@ public partial class Database
     public async Task ExecuteSQLAsync(string sql, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
-        
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
+
+        if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, null, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.INSERT);
         }
-        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
         }
-        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
@@ -252,24 +275,23 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
-        
-        var parts = sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts[0].Equals(SqlConstants.SELECT, StringComparison.OrdinalIgnoreCase))
+
+        if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (parts[0].Equals("INSERT", StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
         }
-        else if (parts[0].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
         }
-        else if (parts[0].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }

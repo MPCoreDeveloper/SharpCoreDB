@@ -67,6 +67,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP9** | Zero-allocation `StructRow` read path | Promote the dormant zero-copy `StructRow` machinery into a first-class parameterized/WHERE-capable API; cache the variable-length schema; benchmark vs SQLite | ✅ **DONE in v2.0.0** (`ExecuteQueryStruct` READ = 112K/s — **beats SQLite 84K/s**) |
 | **WP9-B/C** | SIMD in the row scan path | Fixed-offset numeric WHERE fast path: direct binary reads (no boxing/string) + portable `Vector<T>` SIMD batch equality filter for Integer/Long in `ScanStructRowsWhere`; numeric early-WHERE in the columnar full scan | ✅ **DONE in v2.0.0** (point-lookup read unaffected; numeric full-scan WHERE now SIMD-filtered, verified by tests) |
 | **WP9-E** | Native AOT readiness | `[RequiresDynamicCode]` on `QueryCompiler.Compile` + LINQ translator; AOT-safe `TypeConverter` (no `Convert.ChangeType`); AOT-safe `Option<T>` reader (no reflection); source-generated metadata JSON via `TableMetadataDto` + `SharpCoreDBJsonContext` with a JIT/AOT conditional resolver | ✅ **DONE in v2.0.0** (`tools/SharpCoreDB.AotSmoke` publishes with `PublishAot=true` and **runs: 1000 inserts, point lookup, StructRow point + full scan, reopen — exit 0**) |
+| **WP10** | .NET 11 SQL-verb allocation refactor | Replace the hot-path `sql.Trim().Split(' ')[0]` verb dispatch (Trim substring + `string[]` + one string/token per `ExecuteSQL`/`ExecuteNonQuery`/`ExecuteSQLAsync`) with an allocation-free `FirstToken(ReadOnlySpan<char>)` span dispatch | ✅ **DONE on `release/v2.1.0.0`** — 1,509 tests green; **DELETE (SQL) ≈2×** (22.4K → 46.7K ops/sec) in a single-run comparison |
 
 ---
 
@@ -92,6 +93,33 @@ Notes:
 - **Every operation beats LiteDB** (reads ~5–8x, updates ~5x, deletes ~6–10x).
 - **INSERT** is ~0.8–0.9x of SQLite (was 1.2x in the March run — the identical `InsertBatch` path varies with machine load; the StructRow section measured up to 132K/s).
 - **UPDATE/DELETE** remain behind SQLite — its fixed-length C record format with direct field offsets and in-place writes is the strongest point; this is the remaining gap (targeted by WP3/WP6 follow-ups and the .NET 11 runtime improvements).
+
+### 3.2 .NET 11 preview-7 measurements (branch `release/v2.1.0.0`, 2026-08-30)
+
+Single-run numbers on the same machine (AppendOnly engine) after the net11.0 retarget
+(Phase 0) and the Phase 5 SQL-verb allocation refactor (`FirstToken` span dispatch —
+removes the `Trim().Split(' ')[0]` string[] + per-token allocations from every
+`ExecuteSQL` / `ExecuteNonQuery` / `ExecuteSQLAsync` call):
+
+| Operation | net10 baseline (§3.1) | net11 run A (pre-refactor) | net11 run B (post-refactor) |
+|-----------|----------------------:|---------------------------:|----------------------------:|
+| INSERT (SQL) | 91–133K | 73.1K | 75.8K |
+| READ (SQL) | 51–66K | 64.0K | 59.2K |
+| UPDATE (SQL) | 40–45K | 37.7K | 42.4K |
+| **DELETE (SQL)** | 30–67K | 22.4K | **46.7K** |
+| READ (Direct) | ~120–125K | 104.9K | 96.6K |
+| DELETE (Direct) | 78–142K | 117.2K | 104.7K |
+| READ (StructRow) | 70–120K | 87.7K | 91.9K |
+
+Observations:
+- **DELETE (SQL) ≈2× (22.4K → 46.7K ops/sec)** after the Phase 5 allocation refactor —
+  the per-row `ExecuteNonQuery` DELETE path previously allocated a Trim substring +
+  `string[]` + one string per token on every call; the span-based verb dispatch removed
+  those allocations entirely (validated by the full 1,509-test suite, 0 failures).
+- Single runs are noisy (SQLite/LiteDB also varied run-to-run on this machine); a
+  controlled two-run before/after (net10 vs net11) on a quiet machine is still pending.
+- The remaining UPDATE/DELETE gap vs SQLite is structural (row-copy based updates/deletes)
+  and is targeted by the v2.1 in-place-update / fixed-width-record work.
 
 
 ---
