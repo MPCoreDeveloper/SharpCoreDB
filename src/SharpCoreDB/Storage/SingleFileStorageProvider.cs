@@ -1437,7 +1437,10 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // This fixes the Phase3 performance test failure (2922ms → <300ms)
         await FlushPendingWritesAsync(cancellationToken, flushToDisk: false).ConfigureAwait(false);
 
-        if (_blockRegistry.HasDirtyEntries)
+        // ✅ Issue #345: entries can be added to the registry while a flush is writing (the
+        // background worker updates data + registry under _writeBatchLock). Loop a bounded
+        // number of times so the final registry write is never missing trailing entries.
+        for (var i = 0; i < 4 && _blockRegistry.HasDirtyEntries; i++)
         {
             if (flushToDisk)
             {
