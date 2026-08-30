@@ -275,4 +275,71 @@ public sealed class WhereInRegressionEfCoreTests : IDisposable
 
         Assert.Equal(1, rows);
     }
+
+    [Fact]
+    public void WhereIn_ParameterizedList_SubsetFilter_DoesNotReturnAllRows_MultiValue()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        // 5-value list with a single matching value: a "returns all rows" bug would give 3,
+        // the correct filter gives the 2 WorkItem rows.
+        using var c = conn.CreateCommand();
+        c.CommandText = "SELECT id FROM kg_nodes_test WHERE node_type IN (@p0, @p1, @p2, @p3, @p4)";
+        AddParameter(c, "@p0", "DoesNotExist0");
+        AddParameter(c, "@p1", "WorkItem");
+        AddParameter(c, "@p2", "DoesNotExist2");
+        AddParameter(c, "@p3", "DoesNotExist3");
+        AddParameter(c, "@p4", "DoesNotExist4");
+        using var r = c.ExecuteReader();
+        int rows = 0;
+        while (r.Read())
+        {
+            rows++;
+        }
+
+        Assert.Equal(2, rows);
+    }
+
+    [Fact]
+    public void Where_ParenthesizedOr_ReturnsMatchingRows_NotZero()
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+        SeedNodes(conn);
+
+        // Issue #348: "(a OR b)" must filter like "a OR b". With a non-matching second
+        // operand this must return the 2 WorkItem rows, never 0 (the pre-fix behavior).
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "SELECT id FROM kg_nodes_test WHERE (node_type = @p0 OR node_type = @p1)";
+            AddParameter(c, "@p0", "WorkItem");
+            AddParameter(c, "@p1", "DoesNotExist");
+            using var r = c.ExecuteReader();
+            int rows = 0;
+            while (r.Read())
+            {
+                rows++;
+            }
+
+            Assert.Equal(2, rows);
+        }
+
+        // Parenthesized OR where both operands match → full table (3).
+        using (var c = conn.CreateCommand())
+        {
+            c.CommandText = "SELECT id FROM kg_nodes_test WHERE (node_type = @p0 OR node_type = @p1)";
+            AddParameter(c, "@p0", "WorkItem");
+            AddParameter(c, "@p1", "Person");
+            using var r = c.ExecuteReader();
+            int rows = 0;
+            while (r.Read())
+            {
+                rows++;
+            }
+
+            Assert.Equal(3, rows);
+        }
+    }
 }

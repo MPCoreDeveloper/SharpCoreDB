@@ -146,6 +146,148 @@ internal static class SqlInPredicate
         => items.Contains(rowValue?.ToString() ?? string.Empty);
 
     /// <summary>
+    /// Removes redundant outer parentheses from a logical condition so that
+    /// <c>"(a = 1 OR b = 2)"</c> evaluates exactly like <c>"a = 1 OR b = 2"</c>.
+    /// Only parentheses that enclose the WHOLE expression are stripped (e.g.
+    /// <c>"(a = 1) OR (b = 2)"</c> is left intact), and parentheses inside string
+    /// literals are ignored. Used by every WHERE evaluation path so parenthesized
+    /// OR/AND predicates filter correctly (GitHub issue #348).
+    /// </summary>
+    public static string StripOuterParentheses(string condition)
+    {
+        var trimmed = condition.Trim();
+
+        while (trimmed.Length >= 2 && trimmed[0] == '(' && trimmed[^1] == ')')
+        {
+            int depth = 0;
+            bool inString = false;
+            char quote = '\0';
+            bool fullyWrapped = true;
+
+            // Scan up to (but excluding) the final ')' — if the depth returns to 0 before
+            // the end, the outer parens do not wrap the whole expression and must be kept.
+            for (int i = 0; i < trimmed.Length - 1; i++)
+            {
+                char c = trimmed[i];
+
+                if (inString)
+                {
+                    inString = c != quote; // closing quote exits the string literal
+                    continue;
+                }
+
+                if (c is '\'' or '"')
+                {
+                    inString = true;
+                    quote = c;
+                    continue;
+                }
+
+                if (c == '(')
+                {
+                    depth++;
+                }
+                else if (c == ')')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        fullyWrapped = false;
+                        break;
+                    }
+                }
+            }
+
+            // The scan excludes the final ')' (which balances the outer '('), so a fully
+            // wrapped expression leaves exactly ONE unmatched '(' (depth == 1). If the depth
+            // returns to 0 before the end, the outer parens do not wrap the whole expression
+            // and must be kept.
+            if (!fullyWrapped || depth != 1)
+            {
+                break;
+            }
+
+            trimmed = trimmed[1..^1].Trim();
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Splits a condition on a logical keyword (AND / OR) that appears at the top level only —
+    /// i.e. not inside parentheses or string literals. This keeps <c>IN ('a', 'b')</c> and
+    /// <c>(a = 1 OR b = 2)</c> intact while still splitting <c>col = 1 OR col = 2</c>.
+    /// </summary>
+    public static List<string> SplitTopLevelLogical(string text, string keyword)
+    {
+        var parts = new List<string>();
+        int depth = 0;
+        bool inString = false;
+        char quote = '\0';
+        int start = 0;
+        int i = 0;
+
+        while (i < text.Length)
+        {
+            char c = text[i];
+            if (inString)
+            {
+                inString = c != quote; // closing quote exits the string literal
+                i++;
+                continue;
+            }
+
+            if (c is '\'' or '"')
+            {
+                inString = true;
+                quote = c;
+            }
+            else if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth = Math.Max(0, depth - 1);
+            }
+            else if (IsLogicalKeywordAt(text, i, keyword, depth))
+            {
+                parts.Add(text[start..i].Trim());
+                i += 1 + keyword.Length;
+                while (i < text.Length && char.IsWhiteSpace(text[i]))
+                {
+                    i++;
+                }
+
+                start = i;
+                continue;
+            }
+
+            i++;
+        }
+
+        parts.Add(text[start..].Trim());
+        return parts;
+    }
+
+    /// <summary>
+    /// True when <paramref name="keyword"/> (OR / AND) starts right after a top-level space at
+    /// <paramref name="index"/> and is followed by whitespace, e.g. <c>"col = 1 OR col = 2"</c>.
+    /// </summary>
+    private static bool IsLogicalKeywordAt(string text, int index, string keyword, int depth)
+    {
+        if (depth != 0 || text[index] is not (' ' or '\t'))
+        {
+            return false;
+        }
+
+        var after = index + 1 + keyword.Length;
+        return after < text.Length
+            && text.AsSpan(index + 1, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase)
+            && char.IsWhiteSpace(text[after]);
+    }
+
+    /// <summary>
     /// Evaluates a raw IN value list (e.g. <c>('a', 'b')</c>, <c>(1,2,3)</c> or
     /// <c>(VALUES ('a'), ('b'))</c>) against a single row value. Commas inside parentheses
     /// (tuple rows) do not split the list, and a leading <c>VALUES</c> keyword is ignored.

@@ -206,15 +206,34 @@ public partial class Table
     {
         if (string.IsNullOrEmpty(where)) return true;
 
+        // ✅ Issue #348: strip redundant outer parentheses so "(a = 1 OR b = 2)" and
+        // "(a = 1 AND b = 2)" evaluate like their unparenthesized forms (the legacy
+        // split-based evaluator treats a leading "(" as part of the column name).
+        where = SqlInPredicate.StripOuterParentheses(where);
+
         var parts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3) return true;
 
-        // ✅ FIX: Detect complex WHERE clauses (contains AND/OR) and delegate to SqlParser.EvaluateJoinWhere
-        // which has full support for compound conditions
-        var whereUpper = where.ToUpperInvariant();
-        if (whereUpper.Contains(" AND ") || whereUpper.Contains(" OR "))
+        // ✅ Issue #348: split compound conditions on top-level AND/OR and evaluate each
+        // operand recursively (via the full single-condition evaluator below). The previous
+        // delegation to SqlParser.EvaluateJoinWhere was a space-token walker that could not
+        // handle parenthesized sub-expressions such as "a = 1 AND (b = 2 OR c = 3)".
+        // BETWEEN contains "AND" as part of its syntax, so it is excluded from the split
+        // (same guard as SingleFileTable.EvaluateCondition).
+        bool hasBetween = where.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase);
+        if (!hasBetween)
         {
-            return SqlParser.EvaluateJoinWhere(row, where);
+            var orParts = SqlInPredicate.SplitTopLevelLogical(where, "OR");
+            if (orParts.Count > 1)
+            {
+                return orParts.Any(part => EvaluateWhere(row, part));
+            }
+
+            var andParts = SqlInPredicate.SplitTopLevelLogical(where, "AND");
+            if (andParts.Count > 1)
+            {
+                return andParts.All(part => EvaluateWhere(row, part));
+            }
         }
 
         // ✅ Issue #339/#340: support IN / NOT IN lists for all column types, including
