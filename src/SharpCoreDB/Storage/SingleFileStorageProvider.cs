@@ -1,4 +1,4 @@
-// <copyright file="SingleFileStorageProvider.cs" company="MPCoreDeveloper">
+// src\SharpCoreDB\Storage\SingleFileStorageProvider.cs
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -110,6 +110,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     // ReadBlockAsync/GetReadStream/GetReadSpan is decrypted (wrong keys throw).
     private readonly AesGcmEncryption? _encryption;
 
+    // ✅ Compression: block-level compression mode. Compression is applied before encryption
+    // on write, and removed after decryption on read. Per-block Compressed flag tracks state.
+    private readonly BlockCompressionMode _compressionMode;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SingleFileStorageProvider"/> class.
     /// </summary>
@@ -135,6 +139,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             ? new AesGcmEncryption(options.EncryptionKey ?? throw new InvalidOperationException(
                 "EncryptionKey is required when EnableEncryption is true."))
             : null;
+
+        // ✅ Compression: store the compression mode for use in write/read paths.
+        _compressionMode = options.BlockCompression;
 
         // Initialize subsystems
         _blockRegistry = new BlockRegistry(this, header.BlockRegistryOffset, header.BlockRegistryLength);
@@ -443,6 +450,19 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // ✅ Compression: compress before encrypt (ciphertext is incompressible).
+        // Only compress if above threshold and compression actually reduces size.
+        bool isCompressed = false;
+        if (_compressionMode != BlockCompressionMode.None && data.Length >= _options.CompressionThreshold)
+        {
+            var compressedData = BlockCompressor.Compress(data.Span, _compressionMode);
+            if (compressedData.Length < data.Length)
+            {
+                data = compressedData;
+                isCompressed = true;
+            }
+        }
+
         // ✅ Issue #341: encrypt block data at rest before computing the checksum and
         // queuing the write. The on-disk block is ciphertext (nonce, ciphertext, tag)
         // and the checksum plus registry length describe that ciphertext, not the plaintext.
@@ -493,12 +513,19 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     offset = registryEnd;
                 }
 
+                // ✅ Compression: set the Compressed flag if this block was compressed.
+                var flags = (uint)BlockFlags.Dirty;
+                if (isCompressed)
+                {
+                    flags |= (uint)BlockFlags.Compressed;
+                }
+
                 entry = new BlockEntry
                 {
                     BlockType = (uint)Scdb.BlockType.TableData,
                     Offset = offset,
                     Length = (ulong)data.Length,
-                    Flags = (uint)BlockFlags.Dirty
+                    Flags = flags
                 };
             }
 
@@ -817,6 +844,12 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 if (_encryption is not null)
                 {
                     result = _encryption.Decrypt(result);
+                }
+
+                // ✅ Compression: decompress after decrypt if the block was compressed.
+                if ((entry.Flags & (uint)BlockFlags.Compressed) != 0)
+                {
+                    result = BlockCompressor.Decompress(result, _compressionMode);
                 }
 
                 return result;
@@ -1479,6 +1512,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             }
         }
 
+        // ✅ Compression: set compression mode in header
+        header.CompressionMode = (byte)options.BlockCompression;
+
         static ulong AlignToPage(ulong value, int pageSize)
         {
             var pageSizeUlong = (ulong)pageSize;
@@ -1648,6 +1684,16 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     ? "This SCDB file is encrypted; open it with EnableEncryption = true and the correct EncryptionKey."
                     : "This SCDB file is not encrypted; open it with EnableEncryption = false.");
         }
+
+        // ✅ Compression: enforce compression-mode consistency. A file created with compression
+        // must be reopened with the same mode (decompression requires the matching algorithm).
+        if (header.CompressionMode != (byte)options.BlockCompression)
+        {
+            throw new InvalidOperationException(
+                header.CompressionMode != 0
+                    ? $"This SCDB file uses {(BlockCompressionMode)header.CompressionMode} compression; open it with BlockCompression = {(BlockCompressionMode)header.CompressionMode}."
+                    : "This SCDB file is not compressed; open it with BlockCompression = None.");
+        }
     }
 
     private async Task WriteHeaderAsync(CancellationToken cancellationToken)
@@ -1778,7 +1824,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 EnableEncryption = _options.EnableEncryption,
                 EncryptionKey = _options.EncryptionKey,
                 EnableMemoryMapping = false, // Don't use mmap for temp file
-                CreateImmediately = true
+                CreateImmediately = true,
+                BlockCompression = _options.BlockCompression,
+                CompressionThreshold = _options.CompressionThreshold
             };
 
             using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))

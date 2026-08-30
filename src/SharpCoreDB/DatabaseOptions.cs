@@ -1,4 +1,4 @@
-// <copyright file="DatabaseOptions.cs" company="MPCoreDeveloper">
+// src\SharpCoreDB\DatabaseOptions.cs
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -81,6 +81,21 @@ public sealed class DatabaseOptions
     /// Required when EnableEncryption = true.
     /// </summary>
     public byte[]? EncryptionKey { get; set; }
+
+    /// <summary>
+    /// Compression mode for block data in SingleFile storage.
+    /// Compression is applied before encryption on write, and removed after decryption on read.
+    /// No effect in Directory storage mode.
+    /// Default: None (backward compatible).
+    /// </summary>
+    public Storage.BlockCompressionMode BlockCompression { get; set; } = Storage.BlockCompressionMode.None;
+
+    /// <summary>
+    /// Minimum block size (in bytes) to attempt compression.
+    /// Blocks smaller than this are stored uncompressed to avoid overhead.
+    /// Default: 256 bytes.
+    /// </summary>
+    public int CompressionThreshold { get; set; } = 256;
 
     /// <summary>
     /// Gets or sets whether to enable memory-mapped I/O for reads.
