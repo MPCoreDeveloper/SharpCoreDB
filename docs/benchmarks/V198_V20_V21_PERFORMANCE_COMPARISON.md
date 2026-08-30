@@ -104,10 +104,10 @@ The CRUD harness above is synchronous and I/O-bound, so it hides the runtime-lev
 
 | Metric | **V2.0** (net10) | **V2.1** (net11) | Difference |
 |---|---:|---:|---:|
-| Allocated per `SELECT … WHERE id = X` (1000-row cache) | 578,688 B/op | **2,937 B/op** | **−99%** |
-| Throughput | ~441 ops/sec | **~17,900 ops/sec** | **~40×** |
+| Allocated per `SELECT … WHERE id = X` (1000-row cache) | 578,688 B/op | **1,540 B/op** | **−99.7%** |
+| Throughput | ~441 ops/sec | **~19,700 ops/sec** | **~45×** |
 
-Three fixes landed on the v2.1 branch made this possible (all validated by 1,509 tests):
+Three fixes landed on the v2.1 branch made this possible (all validated by 1,612 tests):
 1. **`SingleFileDatabase.WriteBatchLog` was unconditional hot-path debug I/O** — it opened a `FileStream` + `StreamWriter` on *every* `ExecuteQuery`/`ExecuteSQL` (the same class of bug v2.0 removed from directory mode). Now opt-in via `SHARPCOREDB_BATCH_LOG=1` / `SHARPCOREDB_BATCH_LOG_PATH`.
 2. **`SingleFileTable.Select` copied the entire row cache before filtering** — now WHERE/ORDER BY are evaluated against the cached rows (read-only) and only the surviving rows are defensively copied.
 3. **The WHERE condition was re-parsed per row** (3 non-compiled regexes + IN-predicate + AND/OR parsing per row) — a simple `col op value` condition is now parsed once per query with a fast per-row predicate using the exact same type cascade.
@@ -126,6 +126,45 @@ Key reading:
 - **Per-operation allocations are ~4–5% lower on net11** for the directory-mode CRUD paths (SQL-verb dispatch + `BuildKey` + Runtime Async), and the **single-file point lookup is ~99% lower** thanks to the v2.1 allocation work (§6.2).
 - **DB CRUD throughput does not move** because the work is **I/O + allocation bound**; the JIT win is hidden behind WAL/FSM writes and row materialization.
 - **C# 15 language features are not yet used** in the v2.1 code: the branch compiles with the C# 15 preview compiler (`LangVersion latest`) but the source is still C# 14 style. The planned C# 15 work (union types/closed hierarchies for the SQL AST, extension indexers) is Phase 4 and deliberately deferred until the preview compiler stabilizes — so "no C# 15 difference yet" is by design, not by failure.
+
+### 6.4 v2.1 #5 allocation cuts (row materialization + query-path fixed costs)
+
+The #5 pass removed per-operation allocations from the row-materialization and SQL hot
+paths (all backported to v2.0). Measured on the same micro-bench harness, Release, net11
+(pre-#5 → post-#5, single run):
+
+| Metric | Pre-#5 | **Post-#5** | Δ |
+|---|---:|---:|---:|
+| Directory READ (varying SQL) — allocated | 2,044 B/op | **1,684 B/op** | **−18%** |
+| Directory READ (identical SQL) — allocated | 1,237 B/op | **911 B/op** | **−26%** |
+| Directory `ExecuteQueryStruct` — allocated | 1,336 B/op | **976 B/op** | **−27%** |
+| Single-file point lookup (varying) — allocated | 3,211 B/op | **2,293 B/op** | **−29%** |
+| Single-file point lookup (identical SQL) — allocated | 2,447 B/op | **1,540 B/op** | **−37%** |
+
+Changes landed:
+1. **`DeserializeRowWithSimd`** (directory point lookup): the `_dictPool.Get()` was a leak —
+   pooled dicts were handed to callers and never returned on the success path. Replaced with
+   a fresh pre-sized `Dictionary<string, object>(Columns.Count)` (no pool overhead, no resizes).
+2. **`TryParseSimpleWhereClause`** — zero-alloc span rewrite (was `ToUpperInvariant` + `Split`
+   + trims on every point lookup across directory, StructRow, and single-file paths).
+3. **`ExecuteSelectQuery`** — removed per-query `ToUpperInvariant`, the `fromParts`
+   `Skip/TakeWhile/ToUpper/ToArray`, and the `SubqueryStartRegex` Match (compiled-regex
+   replaced by a span scan).
+4. **`ExtractMainTableNameFromSql`** — span-based (was `Substring(i,4).ToUpperInvariant()`
+   per scanned position + a StringBuilder per char).
+5. **`parameters ?? []`** — four call sites dropped the empty-`Dictionary` allocation on every
+   `ExecuteQuery`/`ExecuteQueryStruct`/`ExecuteCompiled` call (the callee handles null).
+6. **Single-file `ExecuteQuery`** — the `PRAGMA table_info` regex was instantiated per query
+   (uncached `Regex.Match(sql, pattern, …)`); hoisted to a compiled `static readonly` field,
+   and `sql.Trim().ToUpperInvariant()` replaced with case-insensitive span checks.
+
+Note on row-dictionary pooling (#5 headline): pooling `Dictionary<string, object>` rows is
+structurally unsafe for the existing API — callers retain the returned rows, so a shared pool
+would corrupt data across queries. The measured "zero-alloc" `ExecuteQueryStruct` path is still
+~1 KB/op on a point lookup: two yield-iterator state machines plus the plan-cache key, the
+WHERE-string build and `engine.Read`'s per-read byte[] dominate. A struct-enumerator refactor
+of `ExecuteSimpleSelectStruct`/`ScanStructRowsWhere` is the remaining path to genuinely
+allocation-free point lookups (deferred — public-API surface change, higher risk).
 
 ### Recommendations for a follow-up benchmark
 - Run on a quiet machine with ≥5 repetitions per version and report medians.
