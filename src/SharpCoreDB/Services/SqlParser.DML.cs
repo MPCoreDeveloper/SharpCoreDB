@@ -615,7 +615,7 @@ public partial class SqlParser
         // CRITICAL FIX: Must detect actual parameters, not @ symbols in string literals (e.g., 'test@example.com')
         // CRITICAL FIX: Must detect actual subqueries (SELECT in parens), not function calls like UNIXEPOCH(...)
         bool hasActualParameters = HasActualParameters(sql);
-        bool hasSubquery = SubqueryStartRegex.IsMatch(sql);
+        bool hasSubquery = HasSubqueryStart(sql);
 
         if (hasActualParameters || hasSubquery)
         {
@@ -648,16 +648,14 @@ public partial class SqlParser
 
         var selectClause = string.Join(" ", parts.Skip(1).TakeWhile(p => !p.Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase)));
 
-        // ✅ C# 14: Collection expressions for parameter lists
-        var keywords = new[] { "WHERE", "ORDER", "LIMIT" };
-
-        // Check for aggregate functions
-        var selectUpper = selectClause.ToUpperInvariant();
-        if (selectUpper.Contains("COUNT(*)"))
+        // Check for aggregate functions (case-insensitive, without a ToUpperInvariant allocation)
+        if (selectClause.Contains("COUNT(*)", StringComparison.OrdinalIgnoreCase))
             return ExecuteCountStar(parts);
-        else if (selectUpper.Contains("COUNT(") || selectUpper.Contains("SUM(") ||
-                 selectUpper.Contains("AVG(") || selectUpper.Contains("MAX(") ||
-                 selectUpper.Contains("MIN("))
+        else if (selectClause.Contains("COUNT(", StringComparison.OrdinalIgnoreCase) ||
+                 selectClause.Contains("SUM(", StringComparison.OrdinalIgnoreCase) ||
+                 selectClause.Contains("AVG(", StringComparison.OrdinalIgnoreCase) ||
+                 selectClause.Contains("MAX(", StringComparison.OrdinalIgnoreCase) ||
+                 selectClause.Contains("MIN(", StringComparison.OrdinalIgnoreCase))
             return ExecuteAggregateQuery(selectClause, parts);
 
         var fromIdx = Array.IndexOf(parts, SqlConstants.FROM);
@@ -666,7 +664,14 @@ public partial class SqlParser
             return ExecuteSelectLiteralQuery(selectClause);
         }
 
-        var fromParts = parts.Skip(fromIdx + 1).TakeWhile(p => !keywords.Contains(p.ToUpper())).ToArray();
+        // ✅ Handle derived tables (subqueries in FROM): the first token after FROM is "(".
+        // PERF: inline check — the previous fromParts (Skip + TakeWhile + ToUpper + ToArray)
+        // allocated per query on the legacy SELECT path.
+        if (fromIdx + 1 < parts.Length && parts[fromIdx + 1].StartsWith('('))
+        {
+            return HandleDerivedTable(sql, noEncrypt);
+        }
+
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
         var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
         var limitIdx = Array.IndexOf(parts, "LIMIT");
@@ -711,10 +716,6 @@ public partial class SqlParser
         }
 
         (int? limit, int? offset) = ParseLimitClause(parts, limitIdx);
-
-        // ✅ Handle derived tables (subqueries)
-        if (fromParts.Length > 0 && fromParts[0].StartsWith('('))
-            return HandleDerivedTable(sql, noEncrypt);
 
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");

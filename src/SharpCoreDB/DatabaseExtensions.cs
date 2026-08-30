@@ -184,6 +184,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     // SHARPCOREDB_BATCH_LOG_PATH to redirect the log file).
     private static bool? _batchLogEnabled;
 
+    // Compiled ONCE (not per query): the previous Regex.Match(sql, pattern, ...) call here
+    // created a new Regex instance for EVERY single-file SELECT — a per-operation allocation
+    // of several hundred bytes on the single-file hot path.
+    private static readonly Regex PragmaTableInfoRegex = new(
+        @"^PRAGMA\s+table_info\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
     private static bool IsBatchLogEnabled()
     {
         if (_batchLogEnabled is not null)
@@ -393,9 +401,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     {
         WriteBatchLog($"[{DateTime.Now:HH:mm:ss.fff}] ExecuteQuery: {sql.Substring(0, Math.Min(100, sql.Length))}\n");
 
-        var upperSql = sql.Trim().ToUpperInvariant();
+        // PERF: case-insensitive span checks — the previous sql.Trim().ToUpperInvariant()
+        // allocated an upper-cased copy of the SQL on every single-file query.
+        ReadOnlySpan<char> sqlSpan = sql;
 
-        if (upperSql.Contains("FROM STORAGE") || upperSql.Contains("FROM[STORAGE]"))
+        if (sqlSpan.Contains("FROM STORAGE", StringComparison.OrdinalIgnoreCase) || sqlSpan.Contains("FROM[STORAGE]", StringComparison.OrdinalIgnoreCase))
         {
             var stats = GetStorageStatistics();
             return
@@ -412,19 +422,19 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         // PRAGMA table_info(tableName) — used by FluentMigrator ColumnExists / DefaultValueExists
-        var pragmaMatch = Regex.Match(sql.Trim(), @"^PRAGMA\s+table_info\s*\(\s*[""'`\[]?(\w+)[""'`\]]?\s*\)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        var pragmaMatch = PragmaTableInfoRegex.Match(sql.Trim());
         if (pragmaMatch.Success)
         {
             return ExecutePragmaTableInfo(pragmaMatch.Groups[1].Value);
         }
 
         // sqlite_master index queries — used by FluentMigrator IndexExists
-        if (upperSql.Contains("SQLITE_MASTER") || upperSql.Contains("SQLITE_SCHEMA"))
+        if (sqlSpan.Contains("SQLITE_MASTER", StringComparison.OrdinalIgnoreCase) || sqlSpan.Contains("SQLITE_SCHEMA", StringComparison.OrdinalIgnoreCase))
         {
             return ExecuteSqliteMasterQuery(sql);
         }
 
-        if (upperSql.Contains("SELECT"))
+        if (sqlSpan.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
         {
             // Bind parameters before executing SELECT to support parameterized queries
             var boundSql = BindPreparedSql(sql, parameters);

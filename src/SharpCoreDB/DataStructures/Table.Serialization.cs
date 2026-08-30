@@ -1381,31 +1381,28 @@ public partial class Table
     private Dictionary<string, object> DeserializeRowWithSimd(ReadOnlySpan<byte> data)
     {
         if (data.IsEmpty)
-            return _dictPool.Get(); // Return empty dict from pool
+            return new Dictionary<string, object>(Columns.Count);
 
-        var row = _dictPool.Get();
+        // PERF: the returned row is handed to the caller (ExecuteQuery returns
+        // List<Dictionary<string, object>>) and retained by them, so a pool cannot
+        // safely reuse it — the previous _dictPool.Get() leaked (nothing returned it on
+        // the success path) and added pool overhead. A fresh pre-sized dictionary avoids
+        // both the pool cost and hash-table resizes during deserialization.
+        var row = new Dictionary<string, object>(Columns.Count);
         int offset = 0;
 
-        try
+        // Fallback to scalar deserialization (currently the only working implementation)
+        for (int i = 0; i < Columns.Count; i++)
         {
-            // Fallback to scalar deserialization (currently the only working implementation)
-            for (int i = 0; i < Columns.Count; i++)
-            {
-                if (offset >= data.Length)
-                    throw new InvalidOperationException("Data truncated during deserialization");
+            if (offset >= data.Length)
+                throw new InvalidOperationException("Data truncated during deserialization");
 
-                var value = ReadTypedValueFromSpan(data.Slice(offset), ColumnTypes[i], out int bytesRead);
-                row[Columns[i]] = value;
-                offset += bytesRead;
-            }
+            var value = ReadTypedValueFromSpan(data.Slice(offset), ColumnTypes[i], out int bytesRead);
+            row[Columns[i]] = value;
+            offset += bytesRead;
+        }
 
-            return row;
-        }
-        catch
-        {
-            _dictPool.Return(row);
-            throw;
-        }
+        return row;
     }
 
     /// <summary>

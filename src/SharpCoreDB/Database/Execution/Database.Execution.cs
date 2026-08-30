@@ -358,8 +358,8 @@ public partial class Database
         var entry = GetOrAddPlan(sql, parameters, SqlCommandType.SELECT);
         var sqlParser = GetSharedSqlParser();
         if (entry is not null)
-            return sqlParser.ExecuteQuery(entry.CachedPlan, parameters ?? []);
-        return sqlParser.ExecuteQuery(sql, parameters ?? []);
+            return sqlParser.ExecuteQuery(entry.CachedPlan, parameters);
+        return sqlParser.ExecuteQuery(sql, parameters);
     }
 
     /// <summary>
@@ -393,7 +393,7 @@ public partial class Database
     {
         var cached = new CachedQueryPlan(plan.Sql, plan.Sql.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var sqlParser = GetSharedSqlParser();
-        return sqlParser.ExecuteQuery(cached, parameters ?? []);
+        return sqlParser.ExecuteQuery(cached, parameters);
     }
 
     /// <summary>
@@ -435,7 +435,7 @@ public partial class Database
             _sharedSqlParser.Database = this;
         }
 
-        return _sharedSqlParser.ExecuteQuery(stmt.Plan, parameters ?? []);
+        return _sharedSqlParser.ExecuteQuery(stmt.Plan, parameters);
     }
 
     /// <inheritdoc />

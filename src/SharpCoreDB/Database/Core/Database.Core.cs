@@ -880,11 +880,11 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 
         if (entry is not null)
         {
-            return sqlParser.ExecuteQueryStruct(entry.CachedPlan, parameters ?? []);
+            return sqlParser.ExecuteQueryStruct(entry.CachedPlan, parameters);
         }
 
         var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-        return sqlParser.ExecuteQueryStruct(new CachedQueryPlan(sql, parts), parameters ?? []);
+        return sqlParser.ExecuteQueryStruct(new CachedQueryPlan(sql, parts), parameters);
     }
 
     /// <summary>
