@@ -98,6 +98,7 @@ guide explaining when SharpCoreDB is fastest.
 
 - `scdb/README.md`
 - `scdb/README_INDEX.md`
+- `scdb/ENCRYPTION.md` — full at-rest encryption, key model, password/key rotation, worked example
 - `scdb/PRODUCTION_GUIDE.md`
 - `serialization/README.md`
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`

@@ -248,6 +248,28 @@ public interface IDatabase : IAsyncDisposable
     Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Changes the encryption password of an encrypted single-file database (envelope-encryption
+    /// mode). The data-encryption-key is unchanged — only the wrapped-DEK password bundle is
+    /// re-wrapped, so this is an O(1) operation that does not rewrite any data.
+    /// </summary>
+    /// <param name="newPassword">The new password/passphrase.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Rotation result.</returns>
+    Task<EncryptionRotationResult> ChangeEncryptionPasswordAsync(string newPassword, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Rotates the data-encryption-key of an encrypted single-file database (full re-key).
+    /// Every block plus the block registry, free-space map and WAL are re-encrypted under a
+    /// new key. Provide exactly one of <paramref name="newKey"/> (raw-key mode) or
+    /// <paramref name="newPassword"/> (password mode).
+    /// </summary>
+    /// <param name="newKey">New raw 32-byte encryption key (raw-key mode).</param>
+    /// <param name="newPassword">New password (password mode) — a fresh DEK is generated and wrapped.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Rotation result.</returns>
+    Task<EncryptionRotationResult> RotateEncryptionKeyAsync(byte[]? newKey = null, string? newPassword = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the database storage mode (Directory or SingleFile).
     /// </summary>
     StorageMode StorageMode { get; }

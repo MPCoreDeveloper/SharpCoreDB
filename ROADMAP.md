@@ -28,7 +28,10 @@
 
 
 ### Core Engine
-- ✅ **AES-256-GCM single-file encrypted database**
+- ✅ **AES-256-GCM single-file encrypted database** — full at-rest encryption: block data AND
+  the block registry, free-space map and WAL are ciphertext (no metadata leakage); envelope
+  key model (password → PBKDF2 → wrapped DEK) with password/key rotation APIs
+  (`ChangeEncryptionPasswordAsync` / `RotateEncryptionKeyAsync`)
 - ✅ **ACID transactions + WAL** (`RecoveryManager`, crash recovery tests passing)
 - ✅ **B-tree and hash indexing**
 - ✅ **Full-text search**

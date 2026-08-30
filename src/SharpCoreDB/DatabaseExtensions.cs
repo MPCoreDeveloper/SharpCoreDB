@@ -634,6 +634,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
     public Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default)
         => _storageProvider.VacuumAsync(mode, cancellationToken);
 
+    /// <inheritdoc />
+    public Task<EncryptionRotationResult> ChangeEncryptionPasswordAsync(string newPassword, CancellationToken cancellationToken = default)
+        => ((SingleFileStorageProvider)_storageProvider).ChangeEncryptionPasswordAsync(newPassword, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<EncryptionRotationResult> RotateEncryptionKeyAsync(byte[]? newKey = null, string? newPassword = null, CancellationToken cancellationToken = default)
+        => ((SingleFileStorageProvider)_storageProvider).RotateEncryptionKeyAsync(newKey, newPassword, cancellationToken);
+
     public StorageMode StorageMode => _storageProvider.Mode;
     public StorageStatistics GetStorageStatistics() => _storageProvider.GetStatistics();
 

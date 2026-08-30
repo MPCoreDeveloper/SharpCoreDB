@@ -252,6 +252,49 @@ public sealed class VacuumResult
 }
 
 /// <summary>
+/// The kind of encryption rotation operation.
+/// </summary>
+public enum EncryptionRotationOperation
+{
+    /// <summary>Only the wrapped-DEK password bundle was re-wrapped (O(1), no data rewrite).</summary>
+    PasswordChanged,
+
+    /// <summary>The data-encryption-key was rotated (full re-encryption of the file).</summary>
+    KeyRotated
+}
+
+/// <summary>
+/// Result of an encryption password/key rotation operation.
+/// </summary>
+public sealed class EncryptionRotationResult
+{
+    /// <summary>The operation that was performed.</summary>
+    public required EncryptionRotationOperation Operation { get; init; }
+
+    /// <summary>The encryption key id / rotation counter after the operation.</summary>
+    public ushort KeyId { get; init; }
+
+    /// <summary>Number of data blocks re-encrypted (0 for a password-only rewrap).</summary>
+    public int BlocksReEncrypted { get; init; }
+
+    /// <summary>Whether the rotation succeeded.</summary>
+    public bool Success { get; init; }
+
+    /// <summary>Error message when <see cref="Success"/> is false.</summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Creates a failed result.
+    /// </summary>
+    public static EncryptionRotationResult Failed(EncryptionRotationOperation operation, string message) => new()
+    {
+        Operation = operation,
+        Success = false,
+        ErrorMessage = message
+    };
+}
+
+/// <summary>
 /// Storage statistics for monitoring.
 /// </summary>
 public sealed class StorageStatistics

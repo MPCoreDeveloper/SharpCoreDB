@@ -78,9 +78,28 @@ public sealed class DatabaseOptions
 
     /// <summary>
     /// Gets or sets the encryption key (32 bytes for AES-256).
-    /// Required when EnableEncryption = true.
+    /// Required when EnableEncryption = true and <see cref="EncryptionPassword"/> is not set.
+    /// When a password is supplied, this key is ignored and a random per-file data-encryption-key
+    /// is derived and wrapped with a key derived from the password (envelope encryption).
     /// </summary>
     public byte[]? EncryptionKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets the encryption password/passphrase (envelope-encryption mode).
+    /// When set (with <see cref="EnableEncryption"/> = true), a random per-file
+    /// data-encryption-key is generated and wrapped with a key derived from this password
+    /// (PBKDF2-HMAC-SHA256 with a per-file salt). Changing the password later only rewraps
+    /// the stored key — it does not require re-encrypting the database.
+    /// Mutually exclusive with <see cref="EncryptionKey"/>.
+    /// </summary>
+    public string? EncryptionPassword { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PBKDF2-HMAC-SHA256 iteration count used to derive the key-encryption-key
+    /// from <see cref="EncryptionPassword"/>. Defaults to the OWASP-2024 recommendation
+    /// (600,000). Only used when a new password-mode file is created.
+    /// </summary>
+    public int EncryptionKeyDerivationIterations { get; set; } = Constants.CryptoConstants.PBKDF2_ITERATIONS;
 
     /// <summary>
     /// Compression mode for block data in SingleFile storage.
@@ -191,10 +210,34 @@ public sealed class DatabaseOptions
         }
 
         // Validate encryption key if encryption enabled
-        if (EnableEncryption && (EncryptionKey == null || EncryptionKey.Length != 32))
+        if (EnableEncryption)
         {
-            throw new ArgumentException(
-                "EncryptionKey must be exactly 32 bytes (256 bits) when EnableEncryption is true");
+            var hasRawKey = EncryptionKey is not null;
+            var hasPassword = !string.IsNullOrWhiteSpace(EncryptionPassword);
+
+            if (!hasRawKey && !hasPassword)
+            {
+                throw new ArgumentException(
+                    "Either EncryptionKey (32 bytes) or EncryptionPassword must be provided when EnableEncryption is true.");
+            }
+
+            if (hasRawKey && hasPassword)
+            {
+                throw new ArgumentException(
+                    "EncryptionKey and EncryptionPassword are mutually exclusive; provide exactly one.");
+            }
+
+            if (hasRawKey && EncryptionKey!.Length != 32)
+            {
+                throw new ArgumentException(
+                    "EncryptionKey must be exactly 32 bytes (256 bits) when EnableEncryption is true.");
+            }
+
+            if (hasPassword && (EncryptionKeyDerivationIterations < 1000 || EncryptionKeyDerivationIterations > 10_000_000))
+            {
+                throw new ArgumentException(
+                    $"EncryptionKeyDerivationIterations must be between 1000 and 10000000. Got: {EncryptionKeyDerivationIterations}");
+            }
         }
 
         // Validate WAL buffer size

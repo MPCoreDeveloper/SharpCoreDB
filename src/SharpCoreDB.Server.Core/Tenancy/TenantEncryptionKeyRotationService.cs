@@ -75,6 +75,41 @@ public sealed class TenantEncryptionKeyRotationService(
 
             var wasRegistered = databaseRegistry.DatabaseExists(databaseName);
 
+            // Engine-level rotation first: re-encrypt the underlying database file with the new
+            // key so it actually unlocks the data. Directory-mode / legacy databases don't
+            // support engine-level rotation — for those we fall back to catalog-reference rotation
+            // (the previous behavior) and log a warning.
+            if (wasRegistered && newMaterial.EncryptionEnabled)
+            {
+                var liveInstance = databaseRegistry.GetDatabase(databaseName);
+                if (liveInstance is not null)
+                {
+                    try
+                    {
+                        var rotation = await liveInstance.Database.RotateEncryptionKeyAsync(
+                            newPassword: newMaterial.KeyMaterial,
+                            cancellationToken: cancellationToken);
+                        if (!rotation.Success)
+                        {
+                            throw new InvalidOperationException(
+                                $"Engine-level key rotation failed for database '{databaseName}': {rotation.ErrorMessage}");
+                        }
+
+                        logger.LogInformation(
+                            "Engine-level encryption key rotation completed for database '{Name}' (key id {KeyId}, {Blocks} blocks re-encrypted)",
+                            databaseName, rotation.KeyId, rotation.BlocksReEncrypted);
+                    }
+                    catch (NotSupportedException nse)
+                    {
+                        // Directory-mode database: swap the catalog reference only (documented
+                        // limitation until the server host migrates tenant DBs to single-file mode).
+                        logger.LogWarning(
+                            "Engine-level key rotation not supported for database '{Name}'; performing catalog-reference rotation only. {Message}",
+                            databaseName, nse.Message);
+                    }
+                }
+            }
+
             if (wasRegistered)
             {
                 await databaseRegistry.UnregisterDatabaseRuntimeAsync(databaseName, cancellationToken: cancellationToken);

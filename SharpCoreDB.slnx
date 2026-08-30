@@ -106,6 +106,7 @@
     <Project Path="src/SharpCoreDB.Functional/SharpCoreDB.Functional.csproj" />
     <Project Path="src/SharpCoreDB.Graph.Advanced/SharpCoreDB.Graph.Advanced.csproj" />
     <Project Path="src/SharpCoreDB.Graph/SharpCoreDB.Graph.csproj" />
+    <Project Path="src/SharpCoreDB.Identity/SharpCoreDB.Identity.csproj" />
     <Project Path="src/SharpCoreDB.Projections/SharpCoreDB.Projections.csproj" />
     <Project Path="src/SharpCoreDB.Provider.Sync/SharpCoreDB.Provider.Sync.csproj" />
     <Project Path="src/SharpCoreDB.Provider.YesSql/SharpCoreDB.Provider.YesSql.csproj" />

@@ -17,6 +17,22 @@ public partial class Database
     public StorageMode StorageMode => StorageMode.Directory; // Legacy: always directory mode for now
 
     /// <inheritdoc/>
+    public Task<EncryptionRotationResult> ChangeEncryptionPasswordAsync(string newPassword, CancellationToken cancellationToken = default)
+    {
+        // Directory-mode encryption is password-derived per-record and does not yet expose
+        // engine-level rotation; users should migrate to single-file (.scdb) mode for this.
+        throw new NotSupportedException(
+            "ChangeEncryptionPasswordAsync is only supported for encrypted single-file (.scdb) databases.");
+    }
+
+    /// <inheritdoc/>
+    public Task<EncryptionRotationResult> RotateEncryptionKeyAsync(byte[]? newKey = null, string? newPassword = null, CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException(
+            "RotateEncryptionKeyAsync is only supported for encrypted single-file (.scdb) databases.");
+    }
+
+    /// <inheritdoc/>
     public async Task<VacuumResult> VacuumAsync(VacuumMode mode = VacuumMode.Quick, CancellationToken cancellationToken = default)
     {
         // For directory-based storage, VACUUM is a no-op

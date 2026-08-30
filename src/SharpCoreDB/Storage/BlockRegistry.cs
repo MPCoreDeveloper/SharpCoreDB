@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Storage;
 
+using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Scdb;
 using System;
 using System.Buffers;
@@ -27,8 +28,8 @@ using System.Threading.Tasks;
 internal sealed class BlockRegistry : IDisposable
 {
     private readonly SingleFileStorageProvider _provider;
-    private readonly ulong _registryOffset;
-    private readonly ulong _registryLength;
+    private ulong _registryOffset;
+    private ulong _registryLength;
     private readonly ConcurrentDictionary<string, BlockEntry> _blocks;
     private readonly Lock _registryLock = new();
     
@@ -190,8 +191,10 @@ internal sealed class BlockRegistry : IDisposable
             return; // Not dirty
 
         byte[] buffer;
+        int writeSize;
         int totalSize;
         KeyValuePair<string, BlockEntry>[] entriesSnapshot;
+        var metadataEncrypted = _provider.IsMetadataEncrypted;
 
         // Prepare data inside lock (fast, synchronous)
         lock (_registryLock)
@@ -207,15 +210,24 @@ internal sealed class BlockRegistry : IDisposable
             var entrySize = Unsafe.SizeOf<BlockEntry>();
             totalSize = headerSize + (entriesSnapshot.Length * entrySize);
 
-            if ((ulong)totalSize > _registryLength)
+            // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
+            var usableSize = metadataEncrypted
+                ? (int)_registryLength - AesGcmEncryption.OverheadSize
+                : (int)_registryLength;
+
+            if (totalSize > usableSize)
             {
                 throw new InvalidOperationException(
-                    $"Block registry too large: {totalSize} bytes exceeds limit {_registryLength}");
+                    $"Block registry too large: {totalSize} bytes exceeds limit {usableSize}");
             }
 
+            // Encrypted regions are written as a full fixed-size ciphertext blob so the reader
+            // knows the exact cipher length; plaintext regions write only the used bytes.
+            writeSize = metadataEncrypted ? (int)_registryLength : totalSize;
+
             // Rent buffer from ArrayPool for zero-allocation
-            buffer = ArrayPool<byte>.Shared.Rent(totalSize);
-            var span = buffer.AsSpan(0, totalSize);
+            buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+            var span = buffer.AsSpan(0, writeSize);
             span.Clear();
 
             // Write header
@@ -253,9 +265,15 @@ internal sealed class BlockRegistry : IDisposable
         // Write to file OUTSIDE lock (I/O is slow)
         try
         {
+            if (metadataEncrypted)
+            {
+                // Encrypt the whole region in place before writing.
+                _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+            }
+
             var fileStream = GetFileStream();
             fileStream.Position = (long)_registryOffset;
-            await fileStream.WriteAsync(buffer.AsMemory(0, totalSize), cancellationToken);
+            await fileStream.WriteAsync(buffer.AsMemory(0, writeSize), cancellationToken);
             
             // ✅ OPTIMIZED: Only flush if not in batch mode or if forced
             if (!_flushCts.Token.IsCancellationRequested)
@@ -269,7 +287,7 @@ internal sealed class BlockRegistry : IDisposable
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
         }
     }
 
@@ -333,6 +351,9 @@ internal sealed class BlockRegistry : IDisposable
 
     /// <summary>
     /// Loads the block registry from disk.
+    /// For full-at-rest encrypted files the whole region is read and decrypted in place;
+    /// a decryption failure (wrong key / tampered region) is rethrown so the database fails
+    /// loudly instead of silently starting with an empty registry.
     /// </summary>
     private void LoadRegistry()
     {
@@ -344,6 +365,15 @@ internal sealed class BlockRegistry : IDisposable
             if (fileStream.Length < (long)(_registryOffset + BlockRegistryHeader.SIZE))
             {
                 return; // Empty registry
+            }
+
+            var metadataEncrypted = _provider.IsMetadataEncrypted;
+
+            // Encrypted region: read the full region, decrypt in place, then parse.
+            if (metadataEncrypted)
+            {
+                LoadRegistryFromEncryptedRegion(fileStream);
+                return;
             }
 
             // Read header
@@ -395,12 +425,93 @@ internal sealed class BlockRegistry : IDisposable
                 $"[BlockRegistry] Loaded {_blocks.Count} blocks from disk");
 #endif
         }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            // Wrong key or tampered region — fail loudly rather than silently opening empty.
+            _blocks.Clear();
+            throw;
+        }
         catch (Exception ex)
         {
             // If loading fails, start with empty registry
             _blocks.Clear();
             System.Diagnostics.Debug.WriteLine(
                 $"[BlockRegistry] Failed to load registry: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Reloads the registry from disk (used after a full VACUUM or key-rotation file swap).
+    /// </summary>
+    internal void Reload(ulong registryOffset, ulong registryLength)
+    {
+        _blocks.Clear();
+        _registryOffset = registryOffset;
+        _registryLength = registryLength > 0 ? registryLength : _registryLength;
+        LoadRegistry();
+    }
+
+    /// <summary>
+    /// Reads and decrypts the whole registry region, then parses the header and entries.
+    /// GCM authentication failures (wrong key / tampered region) propagate to the caller.
+    /// </summary>
+    private void LoadRegistryFromEncryptedRegion(System.IO.FileStream fileStream)
+    {
+        var regionSize = checked((int)_registryLength);
+        if (fileStream.Length < (long)(_registryOffset + (ulong)regionSize))
+        {
+            return; // Truncated region — treat as empty
+        }
+
+        var regionBuffer = ArrayPool<byte>.Shared.Rent(regionSize);
+        try
+        {
+            var regionSpan = regionBuffer.AsSpan(0, regionSize);
+            fileStream.Position = (long)_registryOffset;
+            fileStream.ReadExactly(regionSpan);
+
+            // An all-zero region means the registry was never initialized.
+            if (regionSpan.IndexOfAnyExcept((byte)0) < 0)
+            {
+                return;
+            }
+
+            // Decrypt in place. Throws AuthenticationTagMismatchException (a
+            // CryptographicException) when the key is wrong or the region was tampered with.
+            _provider.DecryptRegion(regionSpan);
+
+            var header = BlockRegistryHeader.Parse(regionSpan[..BlockRegistryHeader.SIZE]);
+            if (!header.IsValid || header.BlockCount == 0)
+            {
+                return;
+            }
+
+            var totalEntrySize = checked((int)(header.BlockCount * (ulong)BlockEntry.SIZE));
+            if (BlockRegistryHeader.SIZE + totalEntrySize > regionSpan.Length)
+            {
+                return; // Header claims more entries than the region can hold
+            }
+
+            for (var i = 0; i < (int)header.BlockCount; i++)
+            {
+                var offset = BlockRegistryHeader.SIZE + (i * BlockEntry.SIZE);
+                var entry = BlockEntry.Parse(regionSpan.Slice(offset, BlockEntry.SIZE));
+
+                var blockName = entry.GetName();
+                if (!string.IsNullOrEmpty(blockName))
+                {
+                    _blocks[blockName] = entry;
+                }
+            }
+
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine(
+                $"[BlockRegistry] Loaded {_blocks.Count} blocks from encrypted region");
+#endif
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(regionBuffer);
         }
     }
 

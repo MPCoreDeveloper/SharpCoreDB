@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Storage;
 
+using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Scdb;
 using System;
 using System.Buffers;
@@ -28,15 +29,15 @@ using Extent = SharpCoreDB.Storage.Scdb.FreeExtent;
 internal sealed class FreeSpaceManager : IDisposable
 {
     private readonly SingleFileStorageProvider _provider;
-    private readonly ulong _fsmOffset;
-    private readonly ulong _fsmLength;
+    private ulong _fsmOffset;
+    private ulong _fsmLength;
     private readonly int _pageSize;
     private readonly BitArray _l1Bitmap; // 1 bit per page
     private readonly List<FreeExtent> _l2Extents; // Large free extents
     private readonly Lock _allocationLock = new();
     
     // ✅ SCDB Phase 2: ExtentAllocator for optimized extent allocation
-    private readonly ExtentAllocator _extentAllocator;
+    private ExtentAllocator _extentAllocator;
     
     private bool _isDirty;
     private bool _disposed;
@@ -273,7 +274,9 @@ internal sealed class FreeSpaceManager : IDisposable
         if (!_isDirty) return;
 
         byte[] buffer;
+        int writeSize;
         int totalSize;
+        var metadataEncrypted = _provider.IsMetadataEncrypted;
 
         // Prepare data inside lock (fast, synchronous)
         lock (_allocationLock)
@@ -290,14 +293,23 @@ internal sealed class FreeSpaceManager : IDisposable
             // Total size
             totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
 
-            if ((ulong)totalSize > _fsmLength)
+            // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
+            var usableSize = metadataEncrypted
+                ? (int)_fsmLength - AesGcmEncryption.OverheadSize
+                : (int)_fsmLength;
+
+            if (totalSize > usableSize)
             {
                 throw new InvalidOperationException(
-                    $"FSM too large: {totalSize} bytes exceeds limit {_fsmLength}");
+                    $"FSM too large: {totalSize} bytes exceeds limit {usableSize}");
             }
 
-            buffer = ArrayPool<byte>.Shared.Rent(totalSize);
-            var span = buffer.AsSpan(0, totalSize);
+            // Encrypted regions are written as a full fixed-size ciphertext blob so the reader
+            // knows the exact cipher length; plaintext regions write only the used bytes.
+            writeSize = metadataEncrypted ? (int)_fsmLength : totalSize;
+
+            buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+            var span = buffer.AsSpan(0, writeSize);
             span.Clear();
 
             // Write header
@@ -337,14 +349,20 @@ internal sealed class FreeSpaceManager : IDisposable
         // Write to file OUTSIDE lock
         try
         {
+            if (metadataEncrypted)
+            {
+                // Encrypt the whole region in place before writing.
+                _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+            }
+
             var fileStream = GetFileStream();
             fileStream.Position = (long)_fsmOffset;
-            await fileStream.WriteAsync(buffer.AsMemory(0, totalSize), cancellationToken);
+            await fileStream.WriteAsync(buffer.AsMemory(0, writeSize), cancellationToken);
             await fileStream.FlushAsync(cancellationToken);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
         }
     }
 
@@ -446,12 +464,21 @@ internal sealed class FreeSpaceManager : IDisposable
 
     /// <summary>
     /// Loads FSM from disk.
+    /// For full-at-rest encrypted files the whole region is read and decrypted in place;
+    /// a decryption failure (wrong key / tampered region) is rethrown.
     /// </summary>
     private void LoadFsm()
     {
         try
         {
             var fileStream = GetFileStream();
+
+            // Encrypted region: read the full region, decrypt in place, then parse.
+            if (_provider.IsMetadataEncrypted)
+            {
+                LoadFsmFromEncryptedRegion(fileStream);
+                return;
+            }
             
             if (fileStream.Length < (long)(_fsmOffset + FreeSpaceMapHeader.SIZE))
             {
@@ -528,6 +555,15 @@ internal sealed class FreeSpaceManager : IDisposable
                 }
             }
         }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            // Wrong key or tampered region — fail loudly rather than silently starting empty.
+            _totalPages = 0;
+            _freePages = 0;
+            _l1Bitmap.Length = 1024 * 1024;
+            _l2Extents.Clear();
+            throw;
+        }
         catch (Exception)
         {
             // If loading fails, start with empty FSM
@@ -536,6 +572,101 @@ internal sealed class FreeSpaceManager : IDisposable
             _l1Bitmap.Length = 1024 * 1024;
             _l2Extents.Clear();
         }
+    }
+
+    /// <summary>
+    /// Reads and decrypts the whole FSM region, then parses the header, L1 bitmap and extents.
+    /// GCM authentication failures (wrong key / tampered region) propagate to the caller.
+    /// </summary>
+    private void LoadFsmFromEncryptedRegion(System.IO.FileStream fileStream)
+    {
+        var regionSize = checked((int)_fsmLength);
+        if (fileStream.Length < (long)(_fsmOffset + (ulong)regionSize))
+        {
+            return; // Truncated region — treat as empty
+        }
+
+        var regionBuffer = ArrayPool<byte>.Shared.Rent(regionSize);
+        try
+        {
+            var regionSpan = regionBuffer.AsSpan(0, regionSize);
+            fileStream.Position = (long)_fsmOffset;
+            fileStream.ReadExactly(regionSpan);
+
+            // An all-zero region means the FSM was never initialized.
+            if (regionSpan.IndexOfAnyExcept((byte)0) < 0)
+            {
+                return;
+            }
+
+            // Decrypt in place. Throws AuthenticationTagMismatchException (a
+            // CryptographicException) when the key is wrong or the region was tampered with.
+            _provider.DecryptRegion(regionSpan);
+
+            var header = MemoryMarshal.Read<FreeSpaceMapHeader>(regionSpan[..FreeSpaceMapHeader.SIZE]);
+            if (!header.IsValid)
+            {
+                return;
+            }
+
+            _totalPages = header.TotalPages;
+            _freePages = header.FreePages;
+
+            // Defensive re-mark (mirrors the plaintext path): guarantee the metadata
+            // reservation (including the registry area) is respected.
+            if (_freePages == 0 && _totalPages > 0)
+            {
+                for (var i = 0; i < (int)_totalPages; i++)
+                {
+                    _l1Bitmap.Set(i, true);
+                }
+            }
+
+            // Read L1 bitmap
+            var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
+            if (FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) <= regionSpan.Length)
+            {
+                DeserializeBitmap(regionSpan.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes));
+            }
+
+            // Read L2 extent count + extents
+            var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
+            var extentCount = MemoryMarshal.Read<int>(regionSpan[countOffset..]);
+            for (var i = 0; i < extentCount; i++)
+            {
+                var offset = countOffset + sizeof(int) + (i * Scdb.FreeExtent.SIZE);
+                if (offset + Scdb.FreeExtent.SIZE > regionSpan.Length)
+                {
+                    break;
+                }
+
+                _l2Extents.Add(MemoryMarshal.Read<Scdb.FreeExtent>(regionSpan[offset..]));
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(regionBuffer);
+        }
+    }
+
+    /// <summary>
+    /// Reloads the FSM from disk (used after a full VACUUM or key-rotation file swap).
+    /// </summary>
+    internal void Reload(ulong fsmOffset, ulong fsmLength)
+    {
+        lock (_allocationLock)
+        {
+            _totalPages = 0;
+            _freePages = 0;
+            _l1Bitmap.Length = 1024 * 1024;
+            _l2Extents.Clear();
+            _extentAllocator = new ExtentAllocator { Strategy = AllocationStrategy.BestFit };
+            _isDirty = false;
+            _fsmOffset = fsmOffset;
+            _fsmLength = fsmLength > 0 ? fsmLength : _fsmLength;
+        }
+
+        LoadFsm();
     }
 
     private void SerializeBitmap(Span<byte> destination)

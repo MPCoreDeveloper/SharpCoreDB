@@ -14,7 +14,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using SharpCoreDB.Storage.Scdb;  // ✅ Add for WalHeader, WalEntry
+using SharpCoreDB.Services;        // ✅ AesGcmEncryption (region/slot overhead)
+using SharpCoreDB.Storage.Scdb;    // ✅ Add for WalHeader, WalEntry
 
 /// <summary>
 /// Write-Ahead Log (WAL) manager for crash recovery.
@@ -26,10 +27,10 @@ internal sealed class WalManager : IDisposable
     // NOTE: These fields will be used for future WAL persistence
     #pragma warning disable S4487 // Remove unread private field
     private readonly SingleFileStorageProvider _provider;
-    private readonly ulong _walOffset;
+    private ulong _walOffset;
     #pragma warning restore S4487
     
-    private readonly ulong _walLength;
+    private ulong _walLength;
     private readonly int _maxEntries;
     private readonly Queue<WalLogEntry> _pendingEntries;
     private readonly Lock _walLock = new();
@@ -163,7 +164,12 @@ internal sealed class WalManager : IDisposable
     {
         lock (_walLock)
         {
-            var payloadLength = Math.Min(data.Length, WalEntry.MAX_DATA_LENGTH);
+            // Encrypted entry slots reserve the last OverheadSize bytes for the GCM nonce + tag,
+            // so the recoverable payload is slightly smaller than the plaintext maximum.
+            var maxPayloadLength = _provider.IsMetadataEncrypted
+                ? WalEntry.MAX_DATA_LENGTH - AesGcmEncryption.OverheadSize
+                : WalEntry.MAX_DATA_LENGTH;
+            var payloadLength = Math.Min(data.Length, maxPayloadLength);
             var payload = payloadLength > 0 ? data.Span[..payloadLength].ToArray() : [];
 
             _pendingEntries.Enqueue(new WalLogEntry
@@ -301,6 +307,9 @@ internal sealed class WalManager : IDisposable
         // Serialize to buffer
         var entryBuffer = new byte[WalEntry.SIZE];
         SerializeWalEntry(entryBuffer, walEntry, logEntry.Data);
+        // Encrypt the entry slot in place (no-op when the WAL is not metadata-encrypted).
+        _provider.EncryptWalEntry(entryBuffer);
+
         
         // Write to file
         fileStream.Position = filePosition;
@@ -529,6 +538,31 @@ internal sealed class WalManager : IDisposable
             // Recovery manager will handle this
         }
     }
+    /// <summary>
+    /// Reloads the WAL state from disk (used after a full VACUUM or key-rotation file swap).
+    /// </summary>
+    internal void Reload(ulong walOffset, ulong walLength)
+    {
+        lock (_walLock)
+        {
+            _pendingEntries.Clear();
+            _blockIndexMap.Clear();
+            _nextBlockIndex = 1;
+            _currentLsn = 0;
+            _currentTransactionId = 0;
+            _lastCheckpointLsn = 0;
+            _inTransaction = false;
+            _headOffset = 0;
+            _tailOffset = 0;
+            _entryCount = 0;
+            _walOffset = walOffset;
+            _walLength = walLength > 0 ? walLength : _walLength;
+        }
+
+        LoadWal();
+    }
+
+
 
     /// <summary>
     /// Reads WAL entries for recovery.
@@ -561,6 +595,11 @@ internal sealed class WalManager : IDisposable
                 // Incomplete entry at the end of the log; nothing more to read.
                 break;
             }
+
+            // Decrypt the entry slot in place (no-op when the WAL is not metadata-encrypted).
+            // A wrong key / tampered entry fails the GCM authentication below.
+            _provider.DecryptWalEntry(entryBuffer);
+
 
             var entry = DeserializeWalEntry(entryBuffer);
             

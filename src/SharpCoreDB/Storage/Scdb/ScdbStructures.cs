@@ -35,14 +35,17 @@ public struct ScdbFileHeader
 
     // === Encryption & Compression (16 bytes) ===
     
-    /// <summary>Encryption mode: 0=None, 1=AES-256-GCM</summary>
+    /// <summary>
+    /// Encryption mode: 0=None, 1=AES-256-GCM block-data only (legacy #341),
+    /// 2=AES-256-GCM full at-rest (block data + block registry + FSM + WAL).
+    /// </summary>
     public byte EncryptionMode;   // 0x0010: Encryption mode
     
     /// <summary>Compression mode: 0=None (always 0 for .scdb)</summary>
     public byte CompressionMode;  // 0x0011: Compression (unused)
     
-    /// <summary>Key derivation ID for encryption</summary>
-    public ushort EncryptionKeyId;// 0x0012: Key derivation ID
+    /// <summary>Key id / rotation counter (incremented on every password/key rotation)</summary>
+    public ushort EncryptionKeyId;// 0x0012: Key id / rotation counter
     
     /// <summary>AES-GCM nonce (12 bytes) if encrypted</summary>
     public unsafe fixed byte Nonce[12];  // 0x0014: Nonce
@@ -115,8 +118,30 @@ public struct ScdbFileHeader
     
     // === Reserved (232 bytes) ===
     
+    // === Encryption Key Bundle (99 bytes, plaintext bootstrap) ===
+    // Envelope-encryption key material for password-based databases. The wrapped DEK is
+    // safe to store in plaintext: it can only be unwrapped with a key derived from the
+    // user password + KdfSalt via KdfAlgorithm (PBKDF2-HMAC-SHA256).
+
+    /// <summary>Per-file random salt (32 bytes) for password→KEK derivation.</summary>
+    public unsafe fixed byte KdfSalt[32];       // 0x00C8: KDF salt
+
+    /// <summary>Wrapped data-encryption-key: [nonce(12)][cipher(32)][tag(16)].</summary>
+    public unsafe fixed byte WrappedDek[60];    // 0x00E8: Wrapped DEK
+
+    /// <summary>PBKDF2 iteration count used for password→KEK derivation.</summary>
+    public uint KdfIterations;                  // 0x0124: KDF iterations
+
+    /// <summary>KDF algorithm: 0=None(raw key), 1=PBKDF2-HMAC-SHA256.</summary>
+    public byte KdfAlgorithm;                   // 0x0128: KDF algorithm
+
+    /// <summary>Key material mode: 0=raw EncryptionKey, 1=password-derived wrapped DEK.</summary>
+    public byte KeyMaterialPresent;             // 0x0129: Key material mode
+
+    // === Reserved (134 bytes) ===
+
     /// <summary>Reserved for future extensions</summary>
-    public unsafe fixed byte Reserved[232];   // 0x00C8: Reserved space
+    public unsafe fixed byte Reserved[134];     // 0x012A: Reserved space
 
     // Total: 512 bytes (0x200)
 
@@ -141,6 +166,42 @@ public struct ScdbFileHeader
     /// legacy-encoded ULIDs that should be migrated with <c>Database.MigrateLegacyUlids()</c>.
     /// </summary>
     public const ulong FEATURE_ULID_SPEC = 0x0000_0000_0000_0002;
+
+    /// <summary>Encryption mode: no encryption.</summary>
+    public const byte ENCRYPTION_MODE_NONE = 0;
+
+    /// <summary>Encryption mode: AES-256-GCM over block data only (legacy issue #341).</summary>
+    public const byte ENCRYPTION_MODE_BLOCK_DATA = 1;
+
+    /// <summary>
+    /// Encryption mode: AES-256-GCM over block data AND metadata regions
+    /// (block registry, free-space map and WAL). Closes the metadata-leakage gap.
+    /// </summary>
+    public const byte ENCRYPTION_MODE_FULL = 2;
+
+    /// <summary>KDF algorithm: raw caller-supplied key (no derivation).</summary>
+    public const byte KDF_ALGORITHM_NONE = 0;
+
+    /// <summary>KDF algorithm: PBKDF2-HMAC-SHA256.</summary>
+    public const byte KDF_ALGORITHM_PBKDF2_SHA256 = 1;
+
+    /// <summary>Key material mode: caller supplies the raw 32-byte encryption key.</summary>
+    public const byte KEY_MATERIAL_RAW = 0;
+
+    /// <summary>Key material mode: a wrapped data-encryption-key stored in the header.</summary>
+    public const byte KEY_MATERIAL_WRAPPED_DEK = 1;
+
+    /// <summary>Default salt size in bytes for password → KEK derivation.</summary>
+    public const int KDF_SALT_SIZE = 32;
+
+    /// <summary>Size in bytes of a wrapped DEK: [nonce(12)][cipher(32)][tag(16)].</summary>
+    public const int WRAPPED_DEK_SIZE = 60;
+
+    /// <summary>Byte offset of <see cref="KdfSalt"/> within the 512-byte header.</summary>
+    public const int KDF_SALT_OFFSET = 0x00C8;
+
+    /// <summary>Byte offset of <see cref="WrappedDek"/> within the 512-byte header.</summary>
+    public const int WRAPPED_DEK_OFFSET = 0x00E8;
 
     /// <summary>
     /// Validates the header magic and version.

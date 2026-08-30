@@ -234,16 +234,22 @@ if (!blockEntry.ValidateChecksum(blockData))
 }
 ```
 
-### 2. **Optional Encryption**
+### 2. **Optional Encryption (full at-rest)**
+
+> ⚠️ **Format note:** `EncryptionMode = 1` (AES-256-GCM over block data only, issue #341) is
+> still readable for backward compatibility. **New encrypted files are created with
+> `EncryptionMode = 2`**, which additionally encrypts the block registry, free-space map and WAL
+> so no metadata (block/table names, offsets, lengths, allocation patterns) leaks in plaintext.
 
 ```csharp
-// AES-256-GCM per-block encryption
-var header = ScdbFileHeader.CreateDefault() with
-{
-    EncryptionMode = 1, // AES-256-GCM
-    EncryptionKeyId = keyId
-};
+// AES-256-GCM full at-rest encryption (new files)
+var options = DatabaseOptions.CreateSingleFileDefault(enableEncryption: true, encryptionKey: key);
+// or envelope-encryption (password mode):
+options.EncryptionPassword = "correct horse battery staple";
 ```
+
+See **[`ENCRYPTION.md`](./ENCRYPTION.md)** for the complete feature documentation — key model,
+password & key rotation, crash-safety, AOT/Sonar compliance notes and a full worked example.
 
 ### 3. **Transaction Integrity**
 

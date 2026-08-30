@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Full at-rest encryption for single-file (`.scdb`) databases** — beyond block data (#341),
+  the **block registry, free-space map and WAL are now encrypted too** (`EncryptionMode = 2`),
+  closing the metadata-leakage gap: block/table names, offsets, lengths and allocation patterns
+  are no longer visible in plaintext on disk (header + wrapped-key bundle remain the only
+  plaintext bootstrap).
+- **Envelope-encryption key model** — `DatabaseOptions.EncryptionPassword` creates a random
+  per-file data-encryption-key (DEK) wrapped by a PBKDF2-HMAC-SHA256-derived key
+  (per-file salt, OWASP-2024 iteration default). Raw `EncryptionKey` mode remains supported.
+- **Password & key rotation** —
+  - `IDatabase.ChangeEncryptionPasswordAsync(newPassword)` re-wraps the same DEK with the new
+    password (O(1), no data rewrite; increments the header `EncryptionKeyId` rotation counter).
+  - `IDatabase.RotateEncryptionKeyAsync(newKey|newPassword)` fully re-keys the database
+    (re-encrypts every block + registry + FSM + WAL) via a crash-safe temp-file swap
+    (same pattern as Issue #343).
+  - Wrong key/password now fails loudly at open (GCM authentication failure) instead of
+    silently returning an empty schema.
+
 ### Fixed
 - **Issue #343 — `VacuumAsync(VacuumMode.Full)` crashed with `ObjectDisposedException` under .NET 10
   trimming / Native AOT** (same fix set as the v1.9.8 line on `master`):
@@ -20,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     with internal `TableDirectoryManager`/`BlockRegistry` accessors;
   - regression test `SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen`; `SharpCoreDB.AotSmoke`
     publishes with `PublishAot=true` and runs exit 0 including the single-file full-vacuum path.
+  - **Follow-up:** full VACUUM now reloads the block registry / FSM / WAL after the file swap so
+    in-memory offsets match the compacted file (fixes stale-offset writes after vacuum).
 
 ## [2.0.0] - 2026-08-28
 

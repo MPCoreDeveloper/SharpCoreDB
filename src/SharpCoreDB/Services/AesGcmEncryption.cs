@@ -27,6 +27,99 @@ public sealed class AesGcmEncryption(byte[] key, bool disableEncrypt = false) : 
     private const int TagSize = 16;   // AesGcm.TagByteSizes.MaxSize = 16
     private const int StackAllocThreshold = 256; // Use stackalloc for buffers <= 256 bytes
 
+    /// <summary>Total overhead (nonce + tag) added to every encrypted blob or page.</summary>
+    public const int OverheadSize = NonceSize + TagSize;
+
+    /// <summary>
+    /// Derives a 32-byte key-encryption-key from a password using PBKDF2-HMAC-SHA256.
+    /// Uses the OWASP-2024 recommended iteration count by default.
+    /// </summary>
+    /// <param name="password">The user password/passphrase.</param>
+    /// <param name="salt">Per-file random salt (at least 16 bytes recommended).</param>
+    /// <param name="iterations">PBKDF2 iteration count.</param>
+    /// <returns>The derived 32-byte key.</returns>
+    public static byte[] DeriveKeyFromPassword(string password, ReadOnlySpan<byte> salt, int iterations)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        if (salt.Length == 0)
+            throw new ArgumentException("Salt must not be empty.", nameof(salt));
+        if (iterations < 1000)
+            throw new ArgumentOutOfRangeException(nameof(iterations), "Iterations must be >= 1000.");
+
+        var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
+        try
+        {
+            return Rfc2898DeriveBytes.Pbkdf2(
+                passwordBytes,
+                salt,
+                iterations,
+                HashAlgorithmName.SHA256,
+                Constants.CryptoConstants.AES_KEY_SIZE);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(passwordBytes);
+        }
+    }
+
+    /// <summary>
+    /// Wraps a data-encryption-key with a key-encryption-key using AES-256-GCM.
+    /// Output format: [nonce(12)][ciphertext][tag(16)].
+    /// </summary>
+    /// <param name="kek">The wrapping key (32 bytes).</param>
+    /// <param name="dek">The key to wrap (32 bytes).</param>
+    /// <returns>The wrapped key blob.</returns>
+    public static byte[] WrapKey(byte[] kek, byte[] dek)
+    {
+        ArgumentNullException.ThrowIfNull(kek);
+        ArgumentNullException.ThrowIfNull(dek);
+
+        using var aes = new AesGcm(kek, TagSize);
+
+        Span<byte> nonce = stackalloc byte[NonceSize];
+        Span<byte> tag = stackalloc byte[TagSize];
+        RandomNumberGenerator.Fill(nonce);
+
+        var cipher = new byte[dek.Length];
+        aes.Encrypt(nonce, dek, cipher, tag);
+
+        var result = new byte[NonceSize + dek.Length + TagSize];
+        nonce.CopyTo(result.AsSpan(0, NonceSize));
+        cipher.CopyTo(result.AsSpan(NonceSize, dek.Length));
+        tag.CopyTo(result.AsSpan(NonceSize + dek.Length, TagSize));
+
+        nonce.Clear();
+        tag.Clear();
+        CryptographicOperations.ZeroMemory(cipher);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Unwraps a data-encryption-key wrapped with <see cref="WrapKey"/>.
+    /// Throws <see cref="CryptographicException"/> when the KEK is wrong or the blob was tampered with.
+    /// </summary>
+    /// <param name="kek">The unwrapping key (32 bytes).</param>
+    /// <param name="wrapped">The wrapped key blob: [nonce(12)][ciphertext][tag(16)].</param>
+    /// <returns>The unwrapped key (32 bytes).</returns>
+    public static byte[] UnwrapKey(byte[] kek, ReadOnlySpan<byte> wrapped)
+    {
+        ArgumentNullException.ThrowIfNull(kek);
+        if (wrapped.Length <= NonceSize + TagSize)
+            throw new ArgumentException("Wrapped key blob is too short.", nameof(wrapped));
+
+        using var aes = new AesGcm(kek, TagSize);
+
+        var cipherLength = wrapped.Length - NonceSize - TagSize;
+        var plain = new byte[cipherLength];
+        aes.Decrypt(
+            wrapped[..NonceSize],
+            wrapped.Slice(NonceSize, cipherLength),
+            wrapped[(NonceSize + cipherLength)..],
+            plain);
+        return plain;
+    }
+
     /// <summary>
     /// Gets a value indicating whether AES hardware acceleration (AES-NI) is available on this platform.
     /// Returns true on Intel/AMD CPUs with AES-NI support, false otherwise.

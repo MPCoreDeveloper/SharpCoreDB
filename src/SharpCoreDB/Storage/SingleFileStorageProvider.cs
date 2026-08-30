@@ -103,12 +103,17 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private bool _disposed;
     private ScdbFileHeader _header;
 
-    // ✅ Issue #341: AES-256-GCM encryption for block data at rest. Created from
-    // DatabaseOptions.EncryptionKey when EnableEncryption is true. The header, block
-    // registry and free-space map remain plaintext (metadata only); every block written
-    // through WriteBlockAsync/UpdateBlockAsync is encrypted, and every block read through
-    // ReadBlockAsync/GetReadStream/GetReadSpan is decrypted (wrong keys throw).
-    private readonly AesGcmEncryption? _encryption;
+    // AES-256-GCM encryption for the whole single-file database at rest. With the v2 key
+    // model, a random per-file data-encryption-key (DEK) encrypts block data AND the metadata
+    // regions (block registry, free-space map, WAL) when EncryptionMode == ENCRYPTION_MODE_FULL;
+    // the header + key bundle stay plaintext bootstrap only. The DEK is either the caller-supplied
+    // raw key (KEY_MATERIAL_RAW) or a random key wrapped by a password-derived KEK
+    // (KEY_MATERIAL_WRAPPED_DEK — envelope encryption).
+    private AesGcmEncryption? _encryption;
+
+    // The current data-encryption-key bytes. Kept so password rotation can re-wrap the same DEK
+    // and DEK rotation can re-encrypt every region under a fresh DEK. Zeroized on dispose.
+    private byte[]? _dek;
 
     // ✅ Compression: block-level compression mode. Compression is applied before encryption
     // on write, and removed after decryption on read. Per-block Compressed flag tracks state.
@@ -132,13 +137,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _header = header;
         _blockCache = new ConcurrentDictionary<string, BlockMetadata>();
 
-        // ✅ Issue #341: create the AES-256-GCM cipher from the caller-supplied key.
-        // Must be created before any subsystem loads block data (table directory,
-        // metadata, registry reads) so encrypted blocks decrypt on first access.
-        _encryption = options.EnableEncryption
-            ? new AesGcmEncryption(options.EncryptionKey ?? throw new InvalidOperationException(
-                "EncryptionKey is required when EnableEncryption is true."))
-            : null;
+        // Resolve the data-encryption-key (raw caller key or password-derived wrapped DEK) and
+        // create the AES-256-GCM cipher before any subsystem loads block data (table directory,
+        // metadata, registry reads) so encrypted regions decrypt on first access.
+        _dek = ResolveDataEncryptionKey(options, header);
+        _encryption = _dek is not null ? new AesGcmEncryption(_dek) : null;
 
         // ✅ Compression: store the compression mode for use in write/read paths.
         _compressionMode = options.BlockCompression;
@@ -152,6 +155,173 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // ✅ C# 14: Start write-behind worker task (Task 1.3)
         _writeWorkerTask = Task.Run(ProcessWriteQueueAsync, _writeCts.Token);
     }
+
+    /// <summary>
+    /// Resolves the data-encryption-key (DEK) for this file.
+    /// Raw-key mode: the caller-supplied <c>options.EncryptionKey</c> is used directly.
+    /// Password mode: a per-file DEK is unwrapped from <c>header.WrappedDek</c> using a KEK
+    /// derived from <c>options.EncryptionPassword</c> + <c>header.KdfSalt</c> (PBKDF2-HMAC-SHA256).
+    /// </summary>
+    private static byte[]? ResolveDataEncryptionKey(DatabaseOptions options, ScdbFileHeader header)
+    {
+        if (!options.EnableEncryption)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.EncryptionPassword))
+        {
+            // Envelope-encryption mode: the wrapped DEK must already exist in the header
+            // (a fresh file was initialized by InitializeKeyBundle before the provider was built).
+            if (header.KeyMaterialPresent != ScdbFileHeader.KEY_MATERIAL_WRAPPED_DEK)
+            {
+                throw new InvalidOperationException(
+                    "This SCDB file was not created with password-based encryption; provide EncryptionKey instead.");
+            }
+
+            var salt = ReadHeaderBytes(header, ScdbFileHeader.KDF_SALT_OFFSET, ScdbFileHeader.KDF_SALT_SIZE);
+            var iterations = header.KdfIterations > 0
+                ? (int)header.KdfIterations
+                : options.EncryptionKeyDerivationIterations;
+            var kek = AesGcmEncryption.DeriveKeyFromPassword(options.EncryptionPassword, salt, iterations);
+            try
+            {
+                var wrapped = ReadHeaderBytes(header, ScdbFileHeader.WRAPPED_DEK_OFFSET, ScdbFileHeader.WRAPPED_DEK_SIZE);
+                return AesGcmEncryption.UnwrapKey(kek, wrapped);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(kek);
+            }
+        }
+
+        if (options.EncryptionKey is not null)
+        {
+            // Return a COPY: the provider zeroizes _dek on dispose, and must not clobber the
+            // caller's key array (which may be reused to reopen the file).
+            return [.. options.EncryptionKey];
+        }
+
+        throw new InvalidOperationException(
+            "EncryptionKey or EncryptionPassword is required when EnableEncryption is true.");
+    }
+
+    private static byte[] ReadHeaderBytes(ScdbFileHeader header, int offset, int length)
+    {
+        var bytes = MemoryMarshal.AsBytes(new ReadOnlySpan<ScdbFileHeader>(in header));
+        return bytes.Slice(offset, length).ToArray();
+    }
+
+    /// <summary>
+    /// Overwrites a byte range inside the header struct (used for the plaintext key bundle).
+    /// </summary>
+    private static void SetHeaderBytes(ref ScdbFileHeader header, int offset, ReadOnlySpan<byte> data)
+    {
+        var bytes = MemoryMarshal.AsBytes(new Span<ScdbFileHeader>(ref header));
+        data.CopyTo(bytes.Slice(offset, data.Length));
+    }
+
+    /// <summary>
+    /// Generates the envelope key bundle for a brand-new password-encrypted file: a random DEK
+    /// and a random salt, a KEK derived from the password, and the wrapped DEK — all baked into
+    /// the header struct. Returns the DEK so the caller can build the cipher before any region is
+    /// written. The caller owns and is responsible for zeroizing the returned DEK.
+    /// </summary>
+    private static byte[] InitializeKeyBundle(DatabaseOptions options, ref ScdbFileHeader header)
+    {
+        var salt = RandomNumberGenerator.GetBytes(ScdbFileHeader.KDF_SALT_SIZE);
+        var dek = RandomNumberGenerator.GetBytes(Constants.CryptoConstants.AES_KEY_SIZE);
+
+        var kek = AesGcmEncryption.DeriveKeyFromPassword(
+            options.EncryptionPassword!, salt, options.EncryptionKeyDerivationIterations);
+        byte[]? wrapped = null;
+        try
+        {
+            wrapped = AesGcmEncryption.WrapKey(kek, dek);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(kek);
+        }
+
+        SetHeaderBytes(ref header, ScdbFileHeader.KDF_SALT_OFFSET, salt);
+        SetHeaderBytes(ref header, ScdbFileHeader.WRAPPED_DEK_OFFSET, wrapped);
+        header.KdfIterations = (uint)options.EncryptionKeyDerivationIterations;
+        header.KdfAlgorithm = ScdbFileHeader.KDF_ALGORITHM_PBKDF2_SHA256;
+        header.KeyMaterialPresent = ScdbFileHeader.KEY_MATERIAL_WRAPPED_DEK;
+
+        return dek;
+    }
+
+    /// <summary>
+    /// Writes the current header (including the key bundle) to the start of the file and fsyncs.
+    /// </summary>
+    private static void PersistHeader(FileStream fs, ref ScdbFileHeader header)
+    {
+        fs.Position = 0;
+        var buffer = new byte[ScdbFileHeader.HEADER_SIZE];
+        header.WriteTo(buffer);
+        fs.Write(buffer);
+        fs.Flush(flushToDisk: true);
+    }
+
+    /// <summary>
+    /// Gets whether the metadata regions (block registry / FSM / WAL) are encrypted.
+    /// False for unencrypted files and for legacy block-data-only encrypted files (#341).
+    /// </summary>
+    internal bool IsMetadataEncrypted
+        => _encryption is not null && _header.EncryptionMode == ScdbFileHeader.ENCRYPTION_MODE_FULL;
+
+    /// <summary>
+    /// Encrypts a fixed-size region buffer in place (block registry / FSM). No-op when not
+    /// metadata-encrypted. The useful plaintext must fit in <c>buffer.Length - OverheadSize</c>.
+    /// </summary>
+    internal void EncryptRegion(Span<byte> buffer)
+    {
+        if (IsMetadataEncrypted)
+        {
+            _encryption!.EncryptPage(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Decrypts a fixed-size region buffer in place. No-op when not metadata-encrypted.
+    /// Throws on GCM authentication failure (wrong key / tampered region).
+    /// </summary>
+    internal void DecryptRegion(Span<byte> buffer)
+    {
+        if (IsMetadataEncrypted)
+        {
+            _encryption!.DecryptPage(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Encrypts a WAL entry slot in place. No-op when not metadata-encrypted.
+    /// </summary>
+    internal void EncryptWalEntry(Span<byte> entrySlot)
+    {
+        if (IsMetadataEncrypted)
+        {
+            _encryption!.EncryptPage(entrySlot);
+        }
+    }
+
+    /// <summary>
+    /// Decrypts a WAL entry slot in place. No-op when not metadata-encrypted.
+    /// </summary>
+    internal void DecryptWalEntry(Span<byte> entrySlot)
+    {
+        if (IsMetadataEncrypted)
+        {
+            _encryption!.DecryptPage(entrySlot);
+        }
+    }
+
+    /// <summary>
+    /// Gets a copy of the current data-encryption-key (for rotation operations).
+    /// </summary>
+    internal byte[]? GetEncryptionKey() => _dek is null ? null : [.. _dek];
 
     /// <summary>
     /// Opens or creates a single-file storage provider.
@@ -193,11 +363,37 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             fileOptions);
 
         ScdbFileHeader header;
+        byte[]? dekForNewFile = null;
+        var isNewFile = fileStream.Length == 0;
 
-        // Initialize or load header
-        if (fileStream.Length == 0)
+        if (isNewFile)
         {
-            header = InitializeNewFile(fileStream, options);
+            // Prepare the header bootstrap (ULID marker, encryption mode, nonce and — for
+            // password mode — the wrapped-DEK key bundle) BEFORE InitializeNewFile writes the
+            // initial metadata regions, so those regions are encrypted from the very first byte
+            // (no plaintext BREG/FSM window).
+            header = ScdbFileHeader.CreateDefault((ushort)options.PageSize);
+            header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
+
+            if (options.EnableEncryption)
+            {
+                header.EncryptionMode = ScdbFileHeader.ENCRYPTION_MODE_FULL;
+                header.EncryptionKeyId = 1;
+
+                var nonce = new byte[12];
+                RandomNumberGenerator.Fill(nonce);
+                unsafe
+                {
+                    var nonceSpan = new Span<byte>(header.Nonce, 12);
+                    nonce.CopyTo(nonceSpan);
+                }
+
+                dekForNewFile = !string.IsNullOrWhiteSpace(options.EncryptionPassword)
+                    ? InitializeKeyBundle(options, ref header)
+                    : options.EncryptionKey;
+            }
+
+            InitializeNewFile(fileStream, options, ref header, dekForNewFile);
         }
         else
         {
@@ -1469,8 +1665,13 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             _memoryMappedFile?.Dispose();
             _fileStream?.Dispose();
 
-            // ✅ Issue #341: dispose the cipher to zeroize the in-memory key.
+            // Dispose the cipher to zeroize the in-memory key, then zeroize the stored DEK.
             _encryption?.Dispose();
+            if (_dek is not null)
+            {
+                CryptographicOperations.ZeroMemory(_dek);
+                _dek = null;
+            }
 
             _writeCts?.Dispose();
             _flushSignal?.Dispose();
@@ -1489,32 +1690,17 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
     // ==================== PRIVATE HELPER METHODS ====================
 
-    private static ScdbFileHeader InitializeNewFile(FileStream fs, DatabaseOptions options)
+    private static void InitializeNewFile(FileStream fs, DatabaseOptions options, ref ScdbFileHeader header, byte[]? dek)
     {
-        var header = ScdbFileHeader.CreateDefault((ushort)options.PageSize);
+        // Note: header bootstrap (ULID marker, encryption mode/nonce, wrapped-DEK key bundle)
+        // is prepared by Open() BEFORE this method so the initial metadata regions can be
+        // encrypted from the very first byte.
 
         // ✅ 1.9.5: New files store ULIDs in the ULID-spec-compliant encoding from birth.
         header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
         
-        // Set encryption flags
-        if (options.EnableEncryption)
-        {
-            header.EncryptionMode = 1; // AES-256-GCM
-            // Generate random nonce
-            var nonce = new byte[12];
-            RandomNumberGenerator.Fill(nonce);
-            
-            // ✅ Fix: Use Span instead of fixed for already-fixed buffer
-            unsafe
-            {
-                var nonceSpan = new Span<byte>(header.Nonce, 12);
-                nonce.CopyTo(nonceSpan);
-            }
-        }
-
         // ✅ Compression: set compression mode in header
         header.CompressionMode = (byte)options.BlockCompression;
-
         static ulong AlignToPage(ulong value, int pageSize)
         {
             var pageSizeUlong = (ulong)pageSize;
@@ -1565,18 +1751,39 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // crash before any user data) always sees a valid header with BlockCount=0 instead of
         // uninitialized bytes. Prevents cases where the first registry flush races with data
         // writes or where allocation collides with the registry area on reopen.
-        fs.Position = (long)header.BlockRegistryOffset;
-        var regHeader = new BlockRegistryHeader
+        // For encrypted files the whole region is encrypted with the DEK so the registry is
+        // ciphertext from the very first byte (no plaintext metadata window).
         {
-            Magic = BlockRegistryHeader.MAGIC,
-            Version = BlockRegistryHeader.CURRENT_VERSION,
-            BlockCount = 0,
-            TotalSize = BlockRegistryHeader.SIZE,
-            LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000
-        };
-        Span<byte> regHeaderBuffer = stackalloc byte[BlockRegistryHeader.SIZE];
-        MemoryMarshal.Write(regHeaderBuffer, in regHeader);
-        fs.Write(regHeaderBuffer);
+            var regionSize = checked((int)header.BlockRegistryLength);
+            var region = ArrayPool<byte>.Shared.Rent(regionSize);
+            try
+            {
+                var regionSpan = region.AsSpan(0, regionSize);
+                regionSpan.Clear();
+                var regHeader = new BlockRegistryHeader
+                {
+                    Magic = BlockRegistryHeader.MAGIC,
+                    Version = BlockRegistryHeader.CURRENT_VERSION,
+                    BlockCount = 0,
+                    TotalSize = BlockRegistryHeader.SIZE,
+                    LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000
+                };
+                MemoryMarshal.Write(regionSpan[..BlockRegistryHeader.SIZE], in regHeader);
+
+                if (dek is not null)
+                {
+                    using var cipher = new AesGcmEncryption(dek);
+                    cipher.EncryptPage(regionSpan);
+                }
+
+                fs.Position = (long)header.BlockRegistryOffset;
+                fs.Write(regionSpan);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(region, clearArray: dek is not null);
+            }
+        }
 
         // ✅ CRITICAL FIX 2: Write FSM header marking metadata pages as allocated
         // Without this, FreeSpaceManager starts with _totalPages=0 and AllocatePages
@@ -1596,50 +1803,45 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + 128)
         };
         
-        // Write FSM header at its designated offset
-        fs.Position = (long)header.FsmOffset;
-        Span<byte> fsmHeaderBuffer = stackalloc byte[FreeSpaceMapHeader.SIZE];
-        MemoryMarshal.Write(fsmHeaderBuffer, in fsmHeader);
-        fs.Write(fsmHeaderBuffer);
-        
-        // Write L1 bitmap — mark all reserved pages as allocated (bit = 1)
-        var bitmapSizeBytes = (int)((reservedPages + 7) / 8);
-        if (bitmapSizeBytes <= 256)
+        // Write the whole FSM region (header + L1 bitmap + extent count). For encrypted files
+        // the region is encrypted with the DEK from the very first byte.
         {
-            Span<byte> bitmapBuffer = stackalloc byte[256];
-            var bitmapSlice = bitmapBuffer[..bitmapSizeBytes];
-            bitmapSlice.Fill(0xFF);
-            var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
-            if (trailingBits > 0 && bitmapSizeBytes > 0)
-            {
-                bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
-            }
-            fs.Write(bitmapSlice);
-        }
-        else
-        {
-            var bitmapBuffer = ArrayPool<byte>.Shared.Rent(bitmapSizeBytes);
+            var fsmRegionSize = checked((int)header.FsmLength);
+            var fsmRegion = ArrayPool<byte>.Shared.Rent(fsmRegionSize);
             try
             {
-                var bitmapSpan = bitmapBuffer.AsSpan(0, bitmapSizeBytes);
-                bitmapSpan.Fill(0xFF);
+                var fsmSpan = fsmRegion.AsSpan(0, fsmRegionSize);
+                fsmSpan.Clear();
+
+                MemoryMarshal.Write(fsmSpan[..FreeSpaceMapHeader.SIZE], in fsmHeader);
+
+                // Write L1 bitmap — mark all reserved pages as allocated (bit = 1)
+                var bitmapSizeBytes = (int)((reservedPages + 7) / 8);
+                var bitmapSlice = fsmSpan.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
+                bitmapSlice.Fill(0xFF);
                 var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
-                if (trailingBits > 0)
+                if (trailingBits > 0 && bitmapSizeBytes > 0)
                 {
-                    bitmapSpan[^1] = (byte)(0xFF >> trailingBits);
+                    bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
                 }
-                fs.Write(bitmapSpan);
+
+                // Write L2 extent count (0 extents)
+                MemoryMarshal.Write(fsmSpan.Slice(FreeSpaceMapHeader.SIZE + bitmapSizeBytes), 0);
+
+                if (dek is not null)
+                {
+                    using var cipher = new AesGcmEncryption(dek);
+                    cipher.EncryptPage(fsmSpan);
+                }
+
+                fs.Position = (long)header.FsmOffset;
+                fs.Write(fsmSpan);
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(bitmapBuffer);
+                ArrayPool<byte>.Shared.Return(fsmRegion, clearArray: dek is not null);
             }
         }
-        
-        // Write L2 extent count (0 extents)
-        Span<byte> extentCountBuffer = stackalloc byte[sizeof(int)];
-        MemoryMarshal.Write(extentCountBuffer, 0);
-        fs.Write(extentCountBuffer);
         
         // Re-write header with updated AllocatedPages
         fs.Position = 0;
@@ -1647,8 +1849,6 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         fs.Write(headerBuffer);
         
         fs.Flush(flushToDisk: true);  // Ensure all metadata is durable
-
-        return header;
     }
 
     private static ScdbFileHeader LoadHeader(FileStream fs)
@@ -1813,16 +2013,19 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // the later File.Move tried to move "<file>.vacuum.tmp" (FileNotFoundException).
         var tempPath = _filePath + ".vacuum.tmp.scdb";
         var blocksMoved = 0;
+        byte[]? newDek = null;
         
         try
         {
-            // Create temporary file with same options
+            // Create temporary file with same options (including password-mode key material)
             var tempOptions = new DatabaseOptions
             {
                 StorageMode = StorageMode.SingleFile,
                 PageSize = _options.PageSize,
                 EnableEncryption = _options.EnableEncryption,
                 EncryptionKey = _options.EncryptionKey,
+                EncryptionPassword = _options.EncryptionPassword,
+                EncryptionKeyDerivationIterations = _options.EncryptionKeyDerivationIterations,
                 EnableMemoryMapping = false, // Don't use mmap for temp file
                 CreateImmediately = true,
                 BlockCompression = _options.BlockCompression,
@@ -1844,6 +2047,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
                 // Flush temp file
                 await tempProvider.FlushAsync(cancellationToken);
+
+                // Capture the temp file's DEK (password-mode files generate a fresh DEK per file).
+                newDek = tempProvider.GetEncryptionKey();
             }
 
             // Close current file
@@ -1886,8 +2092,20 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
             SwapFileStream(newFileStream, newMmf);
 
-            // Reload header
+            // Reload header + metadata subsystems so in-memory offsets match the compacted file.
             _header = LoadHeader(newFileStream);
+
+            // Password-mode files carry a fresh per-file DEK: adopt the temp file's DEK so the
+            // running provider can read/write the new file's ciphertext.
+            if (newDek is not null)
+            {
+                _encryption?.Dispose();
+                _encryption = new AesGcmEncryption(newDek);
+                _dek = newDek;
+            }
+
+            _blockCache.Clear();
+            ReloadSubsystems();
 
             // Delete backup
             File.Delete(backupPath);
@@ -1990,6 +2208,247 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         {
             return -1L;
         }
+    }
+
+    /// <summary>
+    /// Changes the encryption password (envelope-encryption mode only). The data-encryption-key
+    /// is unchanged: only the wrapped-DEK key bundle is re-wrapped with a KEK derived from the
+    /// new password + a fresh salt. O(1) — no data re-encryption. The rotation counter in the
+    /// header (<c>EncryptionKeyId</c>) is incremented.
+    /// </summary>
+    internal async Task<EncryptionRotationResult> ChangeEncryptionPasswordAsync(
+        string newPassword, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (!_options.EnableEncryption || _encryption is null || _dek is null)
+        {
+            return EncryptionRotationResult.Failed(
+                EncryptionRotationOperation.PasswordChanged,
+                "ChangeEncryptionPasswordAsync requires an encrypted database.");
+        }
+
+        if (_header.KeyMaterialPresent != ScdbFileHeader.KEY_MATERIAL_WRAPPED_DEK)
+        {
+            return EncryptionRotationResult.Failed(
+                EncryptionRotationOperation.PasswordChanged,
+                "This database uses a raw encryption key; use RotateEncryptionKeyAsync with a new key instead.");
+        }
+
+        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Make sure buffered writes are durable before touching the key bundle.
+            await FlushAsync(cancellationToken).ConfigureAwait(false);
+
+            var salt = RandomNumberGenerator.GetBytes(ScdbFileHeader.KDF_SALT_SIZE);
+            var kek = AesGcmEncryption.DeriveKeyFromPassword(
+                newPassword, salt, _options.EncryptionKeyDerivationIterations);
+            byte[]? wrapped = null;
+            try
+            {
+                wrapped = AesGcmEncryption.WrapKey(kek, _dek);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(kek);
+            }
+
+            SetHeaderBytes(ref _header, ScdbFileHeader.KDF_SALT_OFFSET, salt);
+            SetHeaderBytes(ref _header, ScdbFileHeader.WRAPPED_DEK_OFFSET, wrapped);
+            _header.KdfIterations = (uint)_options.EncryptionKeyDerivationIterations;
+            _header.KdfAlgorithm = ScdbFileHeader.KDF_ALGORITHM_PBKDF2_SHA256;
+            _header.KeyMaterialPresent = ScdbFileHeader.KEY_MATERIAL_WRAPPED_DEK;
+            _header.EncryptionMode = ScdbFileHeader.ENCRYPTION_MODE_FULL;
+            _header.EncryptionKeyId = checked((ushort)(_header.EncryptionKeyId + 1));
+            PersistHeader(_fileStream, ref _header);
+
+            _options.EncryptionPassword = newPassword;
+
+            return new EncryptionRotationResult
+            {
+                Operation = EncryptionRotationOperation.PasswordChanged,
+                KeyId = _header.EncryptionKeyId,
+                BlocksReEncrypted = 0,
+                Success = true
+            };
+        }
+        catch (Exception ex)
+        {
+            return EncryptionRotationResult.Failed(EncryptionRotationOperation.PasswordChanged, ex.Message);
+        }
+        finally
+        {
+            _ioGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Rotates the data-encryption-key (full re-key). Re-encrypts every block plus the block
+    /// registry, free-space map and WAL under a new DEK by rewriting the whole file to a temp
+    /// file and swapping it in (same crash-safe pattern as <see cref="VacuumFullAsync"/>).
+    /// Raw-key mode: pass <paramref name="newKey"/> (32 bytes) — open with that key afterwards.
+    /// Password mode: pass <paramref name="newPassword"/> — a fresh DEK is generated and wrapped
+    /// with the new password — open with that password afterwards.
+    /// </summary>
+    internal async Task<EncryptionRotationResult> RotateEncryptionKeyAsync(
+        byte[]? newKey, string? newPassword, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (!_options.EnableEncryption || _encryption is null)
+        {
+            return EncryptionRotationResult.Failed(
+                EncryptionRotationOperation.KeyRotated,
+                "RotateEncryptionKeyAsync requires an encrypted database.");
+        }
+
+        var wantsRaw = newKey is not null;
+        var wantsPassword = !string.IsNullOrWhiteSpace(newPassword);
+        if (wantsRaw == wantsPassword)
+        {
+            return EncryptionRotationResult.Failed(
+                EncryptionRotationOperation.KeyRotated,
+                "Provide exactly one of newKey (raw-key mode) or newPassword (password mode).");
+        }
+
+        if (wantsRaw && newKey!.Length != 32)
+        {
+            return EncryptionRotationResult.Failed(
+                EncryptionRotationOperation.KeyRotated,
+                "newKey must be exactly 32 bytes (256 bits).");
+        }
+
+        var tempPath = _filePath + ".rekey.tmp.scdb";
+        var blocksReEncrypted = 0;
+
+        try
+        {
+            // Create the temp file under the NEW key material.
+            var tempOptions = new DatabaseOptions
+            {
+                StorageMode = StorageMode.SingleFile,
+                PageSize = _options.PageSize,
+                EnableEncryption = true,
+                EncryptionKey = wantsRaw ? newKey : null,
+                EncryptionPassword = wantsPassword ? newPassword : null,
+                EncryptionKeyDerivationIterations = _options.EncryptionKeyDerivationIterations,
+                WalBufferSizePages = _options.WalBufferSizePages,
+                EnableMemoryMapping = false,
+                CreateImmediately = true
+            };
+
+            byte[]? newDek = null;
+            using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))
+            {
+                // Re-encrypt every block under the new DEK.
+                foreach (var blockName in _blockRegistry.EnumerateBlockNames().OrderBy(n => n, StringComparer.Ordinal))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var blockData = await ReadBlockAsync(blockName, cancellationToken).ConfigureAwait(false);
+                    if (blockData is not null)
+                    {
+                        await tempProvider.WriteBlockAsync(blockName, blockData, cancellationToken).ConfigureAwait(false);
+                        blocksReEncrypted++;
+                    }
+                }
+
+                await tempProvider.FlushAsync(cancellationToken).ConfigureAwait(false);
+                newDek = tempProvider.GetEncryptionKey();
+            }
+
+            if (newDek is null)
+            {
+                return EncryptionRotationResult.Failed(
+                    EncryptionRotationOperation.KeyRotated,
+                    "Failed to resolve the new data-encryption-key.");
+            }
+
+            // Swap files (Issue #343 pattern: direct field assignment, no reflection).
+            _memoryMappedFile?.Dispose();
+            await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _fileStream.Close();
+
+            var backupPath = _filePath + ".backup";
+            if (File.Exists(backupPath))
+            {
+                File.Delete(backupPath);
+            }
+
+            File.Move(_filePath, backupPath);
+            File.Move(tempPath, _filePath);
+
+            var newFileStream = new FileStream(
+                _filePath,
+                FileMode.Open,
+                FileAccess.ReadWrite,
+                _options.FileShareMode,
+                bufferSize: 0,
+                FileOptions.RandomAccess);
+
+            MemoryMappedFile? newMmf = null;
+            if (_options.EnableMemoryMapping)
+            {
+                newMmf = MemoryMappedFile.CreateFromFile(
+                    newFileStream,
+                    mapName: null,
+                    capacity: 0,
+                    MemoryMappedFileAccess.Read,
+                    HandleInheritability.None,
+                    leaveOpen: true);
+            }
+
+            SwapFileStream(newFileStream, newMmf);
+            _header = LoadHeader(newFileStream);
+
+            // (continuation)
+            _encryption?.Dispose();
+            _encryption = new AesGcmEncryption(newDek);
+            _dek = newDek;
+
+            // Update options so later opens/vacuum use the new key material.
+            _options.EncryptionKey = wantsRaw ? newKey : null;
+            _options.EncryptionPassword = wantsPassword ? newPassword : null;
+
+            // Drop cached ciphertext checksums; reload metadata subsystems from the new file.
+            _blockCache.Clear();
+            ReloadSubsystems();
+
+            File.Delete(backupPath);
+
+            return new EncryptionRotationResult
+            {
+                Operation = EncryptionRotationOperation.KeyRotated,
+                KeyId = _header.EncryptionKeyId,
+                BlocksReEncrypted = blocksReEncrypted,
+                Success = true
+            };
+        }
+        catch (Exception ex)
+        {
+            // Cleanup temp file on error.
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* Ignore */ }
+            }
+
+            return EncryptionRotationResult.Failed(EncryptionRotationOperation.KeyRotated, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Reloads the in-memory block registry, free-space map and WAL from the (new) file header
+    /// after a full VACUUM or key-rotation file swap, so in-memory offsets match the new file.
+    /// Both offset caches are cleared too, otherwise reads would use stale pre-swap offsets.
+    /// </summary>
+    private void ReloadSubsystems()
+    {
+        _blockCache.Clear();
+        _metadataCache.Clear();
+        _blockRegistry.Reload(_header.BlockRegistryOffset, _header.BlockRegistryLength);
+        _freeSpaceManager.Reload(_header.FsmOffset, _header.FsmLength);
+        _walManager.Reload(_header.WalOffset, _header.WalLength);
     }
 }
 

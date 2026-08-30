@@ -12,8 +12,9 @@
 //
 // Exercises the core paths that must work under Native AOT:
 //   CREATE TABLE / CREATE INDEX, InsertBatch, parameterized ExecuteQuery,
-//   the zero-allocation ExecuteQueryStruct fast path, reopen, and single-file
-//   full VACUUM (issue #343).
+//   the zero-allocation ExecuteQueryStruct fast path, reopen, single-file
+//   full VACUUM (issue #343), and full at-rest encryption + password/key
+//   rotation (PBKDF2/AES-GCM envelope key model).
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
@@ -143,7 +144,80 @@ try
         }
     }
 
-    Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum).");
+    // Full at-rest encryption + password/key rotation must also be Native AOT safe:
+    // the envelope key model uses PBKDF2/AES-GCM, no reflection, no dynamic, no Expression.
+    var encryptedScdbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid():N}.scdb");
+    var encryptedOptions = new SharpCoreDB.DatabaseOptions
+    {
+        StorageMode = StorageMode.SingleFile,
+        EnableEncryption = true,
+        EncryptionPassword = "aot-password",
+        CreateImmediately = true,
+    };
+
+    await using (var enc = factory.CreateWithOptions(encryptedScdbPath, "aot123", encryptedOptions))
+    {
+        enc.ExecuteSQL("CREATE TABLE s (id INTEGER PRIMARY KEY, secret TEXT)");
+        enc.ExecuteSQL("INSERT INTO s VALUES (1, 'classified-under-aot')");
+        enc.ForceSave();
+
+        // Password rotation — O(1) re-wrap of the same DEK.
+        var passwordChanged = await enc.ChangeEncryptionPasswordAsync("aot-password-rotated");
+        if (!passwordChanged.Success)
+        {
+            Console.WriteLine($"FAIL: ChangeEncryptionPasswordAsync: {passwordChanged.ErrorMessage}");
+            return 1;
+        }
+
+        // Full DEK rotation — re-encrypts every block + registry + FSM + WAL.
+        var rekeyed = await enc.RotateEncryptionKeyAsync(newPassword: "aot-password-final");
+        if (!rekeyed.Success)
+        {
+            Console.WriteLine($"FAIL: RotateEncryptionKeyAsync: {rekeyed.ErrorMessage}");
+            return 1;
+        }
+
+        if (rekeyed.BlocksReEncrypted <= 0)
+        {
+            Console.WriteLine("FAIL: RotateEncryptionKeyAsync reported 0 re-encrypted blocks.");
+            return 1;
+        }
+
+        var encRows = enc.ExecuteQuery("SELECT * FROM s");
+        if (encRows.Count != 1 || !Equals(encRows[0]["secret"], "classified-under-aot"))
+        {
+            Console.WriteLine("FAIL: Encrypted read after rotation returned the wrong result.");
+            return 1;
+        }
+    }
+
+    // Reopen with the rotated password and run a full VACUUM on the encrypted file.
+    await using (var encReopened = factory.CreateWithOptions(encryptedScdbPath, "aot123",
+        new SharpCoreDB.DatabaseOptions
+        {
+            StorageMode = StorageMode.SingleFile,
+            EnableEncryption = true,
+            EncryptionPassword = "aot-password-final",
+        }))
+    {
+        var reopenedEnc = encReopened.ExecuteQuery("SELECT * FROM s");
+        if (reopenedEnc.Count != 1 || !Equals(reopenedEnc[0]["secret"], "classified-under-aot"))
+        {
+            Console.WriteLine("FAIL: Encrypted reopen returned the wrong result.");
+            return 1;
+        }
+
+        var encryptedVacuum = await encReopened.VacuumAsync(VacuumMode.Full, CancellationToken.None);
+        if (!encryptedVacuum.Success)
+        {
+            Console.WriteLine($"FAIL: Encrypted VacuumAsync(Full): {encryptedVacuum.ErrorMessage}");
+            return 1;
+        }
+    }
+
+    try { File.Delete(encryptedScdbPath); } catch { /* best-effort cleanup */ }
+
+    Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum, full-at-rest encryption + password/key rotation).");
     return 0;
 }
 finally
