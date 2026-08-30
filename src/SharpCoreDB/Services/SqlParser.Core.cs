@@ -388,10 +388,11 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
 
     /// <summary>
     /// Executes a simple point-lookup SELECT and returns zero-allocation <see cref="StructRow"/>
-    /// results. Only the simple "SELECT [*|col] FROM t WHERE col = @param|'literal'" shape is
+    /// results (struct enumerable — foreach on the returned value is allocation-free). Only the
+    /// simple "SELECT [*|col] FROM t [WHERE col = @param|'literal'] [LIMIT n] [OFFSET m]" shape is
     /// supported; any other query shape throws <see cref="NotSupportedException"/>.
     /// </summary>
-    public IEnumerable<DataStructures.StructRow> ExecuteQueryStruct(
+    public DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(
         CachedQueryPlan plan,
         Dictionary<string, object?>? parameters = null)
     {
@@ -404,60 +405,29 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
 
         if (plan.SimpleSelect is not null)
         {
-            return ExecuteSimpleSelectStruct(plan.SimpleSelect, parameters);
+            if (!this.tables.TryGetValue(plan.SimpleSelect.TableName, out var table) || table is not Table concrete)
+            {
+                return new DataStructures.StructRowQueryEnumerable(null, null, false, 0, null);
+            }
+
+            if (plan.SimpleSelect.WhereColumn is null)
+            {
+                // Full scan (no WHERE) is supported by the zero-alloc StructRow path.
+                return new DataStructures.StructRowQueryEnumerable(
+                    concrete, null, true, plan.SimpleSelect.Offset ?? 0, plan.SimpleSelect.Limit);
+            }
+
+            if (!TryBuildSimpleWhereStr(plan.SimpleSelect, parameters, out var built))
+            {
+                return new DataStructures.StructRowQueryEnumerable(null, null, false, 0, null);
+            }
+
+            return new DataStructures.StructRowQueryEnumerable(
+                concrete, built, true, plan.SimpleSelect.Offset ?? 0, plan.SimpleSelect.Limit);
         }
 
         throw new NotSupportedException(
             "ExecuteQueryStruct supports simple point-lookup SELECTs only. Use ExecuteQuery for full SQL support.");
-    }
-
-    /// <summary>
-    /// Zero-allocation execution of a pre-parsed simple point-lookup plan.
-    /// </summary>
-    private IEnumerable<DataStructures.StructRow> ExecuteSimpleSelectStruct(
-        SimpleSelectPlan simple,
-        Dictionary<string, object?>? parameters)
-    {
-        if (!this.tables.TryGetValue(simple.TableName, out var table) || table is not Table concrete)
-        {
-            yield break;
-        }
-
-        // Full scan (no WHERE) is supported by the zero-alloc StructRow path.
-        string? whereStr;
-        if (simple.WhereColumn is null)
-        {
-            whereStr = null;
-        }
-        else if (!TryBuildSimpleWhereStr(simple, parameters, out var built))
-        {
-            yield break;
-        }
-        else
-        {
-            whereStr = built;
-        }
-
-        int index = 0;
-        int skipped = simple.Offset ?? 0;
-        int? limit = simple.Limit;
-
-        foreach (var row in concrete.ScanStructRowsWhere(whereStr))
-        {
-            if (index < skipped)
-            {
-                index++;
-                continue;
-            }
-
-            if (limit.HasValue && index - skipped >= limit.Value)
-            {
-                yield break;
-            }
-
-            index++;
-            yield return row;
-        }
     }
 
     /// <summary>

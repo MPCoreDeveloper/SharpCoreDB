@@ -93,6 +93,65 @@ Notes:
 - **INSERT** is ~0.8–0.9x of SQLite (was 1.2x in the March run — the identical `InsertBatch` path varies with machine load; the StructRow section measured up to 132K/s).
 - **UPDATE/DELETE** remain behind SQLite — its fixed-length C record format with direct field offsets and in-place writes is the strongest point; this is the remaining gap (targeted by WP3/WP6 follow-ups and the .NET 11 runtime improvements).
 
+### 3.2 .NET 11 preview-7 measurements (branch `release/v2.1.0.0`, 2026-08-30)
+
+Single-run numbers on the same machine (AppendOnly engine) after the net11.0 retarget
+(Phase 0) and the Phase 5 SQL-verb allocation refactor (`FirstToken` span dispatch —
+removes the `Trim().Split(' ')[0]` string[] + per-token allocations from every
+`ExecuteSQL` / `ExecuteNonQuery` / `ExecuteSQLAsync` call):
+
+| Operation | net10 baseline (§3.1) | net11 run A (pre-refactor) | net11 run B (post-refactor) |
+|-----------|----------------------:|---------------------------:|----------------------------:|
+| INSERT (SQL) | 91–133K | 73.1K | 75.8K |
+| READ (SQL) | 51–66K | 64.0K | 59.2K |
+| UPDATE (SQL) | 40–45K | 37.7K | 42.4K |
+| **DELETE (SQL)** | 30–67K | 22.4K | **46.7K** |
+| READ (Direct) | ~120–125K | 104.9K | 96.6K |
+| DELETE (Direct) | 78–142K | 117.2K | 104.7K |
+| READ (StructRow) | 70–120K | 87.7K | 91.9K |
+
+Observations:
+- **DELETE (SQL) ≈2× (22.4K → 46.7K ops/sec)** after the Phase 5 allocation refactor —
+  the per-row `ExecuteNonQuery` DELETE path previously allocated a Trim substring +
+  `string[]` + one string per token on every call; the span-based verb dispatch removed
+  those allocations entirely (validated by the full 1,509-test suite, 0 failures).
+- Single runs are noisy (SQLite/LiteDB also varied run-to-run on this machine); a
+  controlled two-run before/after (net10 vs net11) on a quiet machine is still pending.
+- The remaining UPDATE/DELETE gap vs SQLite is structural (row-copy based updates/deletes)
+  and is targeted by the v2.1 in-place-update / fixed-width-record work.
+
+### 3.3 #5 allocation cuts (2026-08-30, `74403f74` on `release/v2.1.0.0` + `release/v2.0.0.0`)
+
+Per-operation allocations on the micro-bench harness (Release; pre-#5 → post-#5):
+
+| Metric | Pre-#5 | Post-#5 |
+|---|---:|---:|
+| Directory READ (varying SQL) | 2,044 B/op | **1,684 B/op** |
+| Directory READ (identical SQL) | 1,237 B/op | **911 B/op** |
+| Directory `ExecuteQueryStruct` | 1,336 B/op | **976 B/op** |
+| Single-file point lookup (varying) | 3,211 B/op | **2,293 B/op** |
+| Single-file point lookup (identical SQL) | 2,447 B/op | **1,540 B/op** |
+
+Changes: leaky `_dictPool` removed from the point-lookup materializer (fresh pre-sized
+`Dictionary(Columns.Count)`); `TryParseSimpleWhereClause` zero-alloc span rewrite;
+`ExecuteSelectQuery` drops `ToUpperInvariant` + `fromParts`/`keywords` + the
+`SubqueryStartRegex` Match (span scan); `ExtractMainTableNameFromSql` span-based;
+four `parameters ?? []` empty-dictionary allocations removed; single-file `ExecuteQuery`
+hoists the per-query `PRAGMA table_info` regex to a compiled static field and replaces
+`sql.Trim().ToUpperInvariant()` with span checks.
+
+**#5 struct-enumerator refactor — DONE (2026-08-30):** full row-dictionary pooling is
+structurally unsafe (callers retain the returned rows; a shared pool would corrupt data), so the
+zero-allocation win was delivered via struct enumerators instead. `ExecuteSimpleSelectStruct` and
+`ScanStructRowsWhere` are no longer yield iterators: `Table.ScanStructRowsWhere` returns a
+`StructRowWhereEnumerable` struct whose enumerator handles the hash-index / primary-key point-lookup
+fast paths allocation-free (the SIMD/full-scan fallback delegates to the yield-based core), and
+`IDatabase.ExecuteQueryStruct` now returns a `StructRowQueryEnumerable` struct (foreach is
+allocation-free; LINQ/boxing goes through a small class-based enumerator). A point lookup dropped
+from **976 → 471 B/op (−52%)** on the StructRow path (911 B/op on the dictionary path), with +13%
+throughput. Remaining bytes are the plan-cache key, WHERE-string build, `TryParseSimpleWhereClause`
+strings, hash-index position list and `engine.Read`'s per-read byte[].
+
 
 ---
 
