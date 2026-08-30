@@ -8,7 +8,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.EntityFrameworkCore</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.0.0-preview.2</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.EntityFrameworkCore</Product>
