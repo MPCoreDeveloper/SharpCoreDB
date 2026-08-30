@@ -147,8 +147,12 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _compressionMode = options.BlockCompression;
 
         // Initialize subsystems
-        _blockRegistry = new BlockRegistry(this, header.BlockRegistryOffset, header.BlockRegistryLength);
-        _freeSpaceManager = new FreeSpaceManager(this, header.FsmOffset, header.FsmLength, header.PageSize);
+        _blockRegistry = new BlockRegistry(this);
+        // ✅ Dynamic metadata (issue #345): the FSM is a named block (sys:fsm) whose location is
+        // resolved from the block registry instead of a fixed header offset.
+        _freeSpaceManager = _blockRegistry.TryGetBlock(ScdbFileHeader.FSM_BLOCK_NAME, out var fsmEntry)
+            ? new FreeSpaceManager(this, fsmEntry.Offset, fsmEntry.Length, header.PageSize)
+            : new FreeSpaceManager(this, 0, 0, header.PageSize);
         _walManager = new WalManager(this, header.WalOffset, header.WalLength, options.WalBufferSizePages);
         _tableDirectoryManager = new TableDirectoryManager(this, header.TableDirOffset, header.TableDirLength);
         
@@ -313,6 +317,95 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         }
     }
 
+    /// <summary>Offset of the root block-registry chunk (dynamic metadata layout, issue #345).</summary>
+    internal ulong RootRegistryOffset => _header.RegistryRootOffset;
+
+    /// <summary>Length of the root block-registry chunk.</summary>
+    internal ulong RootRegistryLength => _header.RegistryRootLength;
+
+    /// <summary>
+    /// Grows (relocates) the block-registry block so it can hold <paramref name="requiredSize"/>
+    /// bytes. Allocates a new, larger block at the end of the file, frees the old block and
+    /// updates the header + FSM. Called by the BlockRegistry when it outgrows its current block.
+    /// </summary>
+    internal async Task GrowRegistryBlockAsync(int requiredSize, CancellationToken cancellationToken)
+    {
+        var pageSize = _header.PageSize;
+        var aligned = (ulong)AlignTo(requiredSize, pageSize);
+        if (aligned <= _header.RegistryRootLength)
+        {
+            return;
+        }
+
+        var newOffset = _freeSpaceManager.AllocatePages((int)(aligned / pageSize));
+        if (_header.RegistryRootLength > 0)
+        {
+            _freeSpaceManager.FreePages(_header.RegistryRootOffset, (int)(_header.RegistryRootLength / pageSize));
+        }
+
+        _header.RegistryRootOffset = newOffset;
+        _header.RegistryRootLength = aligned;
+        _blockRegistry.UpdateLocation(newOffset, aligned);
+
+        await _freeSpaceManager.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await WriteHeaderAsync(cancellationToken).ConfigureAwait(false);
+        _fileStream.Flush(flushToDisk: true);
+    }
+
+    /// <summary>
+    /// Grows (relocates) the Free Space Map block so it can hold <paramref name="requiredSize"/>
+    /// bytes. Allocates a new, larger block at the end of the file, updates the sys:fsm registry
+    /// entry + in-memory FSM location, frees the old FSM block and persists the FSM bitmap.
+    /// Called by the FreeSpaceManager when its serialized bitmap outgrows the current block.
+    /// </summary>
+    internal async Task GrowFsmBlockAsync(int requiredSize, CancellationToken cancellationToken)
+    {
+        var pageSize = _header.PageSize;
+
+        // Current FSM location (from the sys:fsm registry entry).
+        var currentOffset = _freeSpaceManager.FsmBlockOffset;
+        var currentLength = _freeSpaceManager.FsmBlockLength;
+
+        // Grow with headroom (double) so repeated growth is amortized.
+        var aligned = (ulong)AlignTo(requiredSize, pageSize);
+        var doubled = Math.Max(aligned, currentLength * 2);
+        var newLength = (ulong)AlignTo((int)Math.Min(doubled, 1L << 30), pageSize); // cap at 1 GiB
+        var newPages = (int)(newLength / pageSize);
+
+        var newOffset = _freeSpaceManager.AllocatePages(newPages);
+
+        // Update the sys:fsm registry entry + in-memory FSM location FIRST (before any nested
+        // flush), then free the old FSM block pages.
+        var namedEntry = BlockEntry.WithName(ScdbFileHeader.FSM_BLOCK_NAME, new BlockEntry
+        {
+            BlockType = (uint)Scdb.BlockType.FreeSpaceMap,
+            Offset = newOffset,
+            Length = newLength,
+            Flags = 0
+        });
+        _blockRegistry.AddOrUpdateBlock(ScdbFileHeader.FSM_BLOCK_NAME, namedEntry);
+        _freeSpaceManager.UpdateLocation(newOffset, newLength);
+
+        if (currentLength > 0)
+        {
+            _freeSpaceManager.FreePages(currentOffset, (int)(currentLength / pageSize));
+        }
+
+        // Persist: registry (with the new sys:fsm entry) then the FSM bitmap. If we are already
+        // inside a registry flush (registry growth → nested FSM flush), the registry's retry loop
+        // persists sys:fsm; flushing here would deadlock on the held flush gate.
+        if (!_blockRegistry.InFlush)
+        {
+            await _blockRegistry.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _freeSpaceManager.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await WriteHeaderAsync(cancellationToken).ConfigureAwait(false);
+        _fileStream.Flush(flushToDisk: true);
+    }
+
+    private static int AlignTo(int value, int pageSize) => (value + pageSize - 1) / pageSize * pageSize;
+
     /// <summary>
     /// Encrypts a WAL entry slot in place. No-op when not metadata-encrypted.
     /// </summary>
@@ -416,6 +509,18 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         {
             header = LoadHeader(fileStream);
             ValidateHeader(header, options);
+
+            // ✅ Issue #345 Phase 2: migrate legacy format-v1 files (fixed-offset metadata) to the
+            // dynamic-metadata layout (v2) on open. The file is rebuilt via a temp file and
+            // swapped in with the original preserved as <path>.backup.
+            if (header.FormatVersion == 1)
+            {
+                fileStream.Dispose();
+                var dek = ResolveDataEncryptionKey(options, header);
+                MigrateV1ToV2(filePath, options, ref header, dek);
+                fileStream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite,
+                    options.FileShareMode, bufferSize: 0, FileOptions.RandomAccess);
+            }
         }
 
         // Create memory-mapped file if enabled
@@ -720,7 +825,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 // If FSM (for any reason: load timing, bitmap deserialize edge, Release opts, coverage-induced slowdown of init writes)
                 // returns an offset inside the registry, force the data to a safe location after the registry.
                 // The registry area itself is now pre-initialized with a valid empty BREG header (see InitializeNewFile).
-                var registryEnd = _header.BlockRegistryOffset + _header.BlockRegistryLength;
+                // Defensive guard: with the dynamic-metadata layout (issue #345) all metadata
+                // (header, WAL, table directory, registry chunk, FSM block) is tracked by the
+                // FSM as allocated. If the FSM ever returns an offset inside the metadata area,
+                // force the data to a safe location after the FSM block.
+                var registryEnd = _freeSpaceManager.FsmBlockEnd;
                 if (offset < registryEnd)
                 {
                     offset = registryEnd;
@@ -1359,8 +1468,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     /// <inheritdoc/>
     public IEnumerable<string> EnumerateBlocks()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        return _blockRegistry.EnumerateBlockNames();
+        // ✅ Issue #345: hide system metadata blocks (e.g. "sys:fsm") from the public API.
+        return _blockRegistry.EnumerateBlockNames().Where(n => !n.StartsWith("sys:", StringComparison.Ordinal));
     }
 
     /// <inheritdoc/>
@@ -1735,12 +1844,13 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     private static void InitializeNewFile(FileStream fs, DatabaseOptions options, ref ScdbFileHeader header, byte[]? dek)
     {
         // Note: header bootstrap (ULID marker, encryption mode/nonce, wrapped-DEK key bundle)
-        // is prepared by Open() BEFORE this method so the initial metadata regions can be
-        // encrypted from the very first byte.
+        // is prepared by Open() BEFORE this method so the initial metadata can be encrypted
+        // from the very first byte.
 
         // ✅ 1.9.5: New files store ULIDs in the ULID-spec-compliant encoding from birth.
         header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
-        
+        header.FeatureFlags |= ScdbFileHeader.FEATURE_DYNAMIC_METADATA;
+
         // ✅ Compression: set compression mode in header
         header.CompressionMode = (byte)options.BlockCompression;
         static ulong AlignToPage(ulong value, int pageSize)
@@ -1749,67 +1859,68 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             return (value + pageSizeUlong - 1) / pageSizeUlong * pageSizeUlong;
         }
 
-        // Initialize block registry at next page boundary
-        // Configurable region size (issue #345): BlockRegistrySizePages pages.
-        header.BlockRegistryOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, options.PageSize);
-        header.BlockRegistryLength = (ulong)options.PageSize * (ulong)options.BlockRegistrySizePages;
-
-        // Initialize FSM right after the registry (configurable region size)
-        header.FsmOffset = header.BlockRegistryOffset + header.BlockRegistryLength;
-        header.FsmLength = (ulong)options.PageSize * (ulong)options.FsmSizePages; // FSM tracks 1 bit/page
-
-        // Initialize WAL at the next page boundary (configurable)
-        header.WalOffset = header.FsmOffset + header.FsmLength;
+        // ✅ Dynamic metadata layout (issue #345): WAL + TableDir remain fixed regions; the
+        // BlockRegistry is a single growable block and the FSM is a named block (sys:fsm).
+        // Layout: [Header][WAL][TableDir][RegistryRootChunk][FSM block (sys:fsm)][data...]
+        header.WalOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, options.PageSize);
         header.WalLength = (ulong)options.PageSize * (ulong)options.WalBufferSizePages;
 
-        // Initialize table directory after WAL (configurable region size)
         header.TableDirOffset = header.WalOffset + header.WalLength;
         header.TableDirLength = (ulong)options.PageSize * (ulong)options.TableDirectorySizePages;
 
-        // Allocate space for metadata structures
-        var totalMetadataSize = header.TableDirOffset + header.TableDirLength;
-        
-        // ✅ FIX: Align file size to page boundary
-        // The 512-byte HEADER_SIZE causes misalignment, so round up to next page
+        var registryRootLength = (ulong)options.PageSize; // 1 page holds 42 entries + chunk header
+        header.RegistryRootOffset = AlignToPage(header.TableDirOffset + header.TableDirLength, options.PageSize);
+        header.RegistryRootLength = registryRootLength;
+
+        var fsmBlockOffset = header.RegistryRootOffset + registryRootLength;
+        var fsmBlockLength = (ulong)options.PageSize * (ulong)options.FsmSizePages;
+
+        // Allocate space for all metadata structures
+        var totalMetadataSize = fsmBlockOffset + fsmBlockLength;
+
         var remainder = totalMetadataSize % (ulong)options.PageSize;
         if (remainder != 0)
         {
             totalMetadataSize += ((ulong)options.PageSize - remainder);
         }
-        
+
         fs.SetLength((long)totalMetadataSize);
-        
+
         // ✅ CRITICAL FIX 1: Write SCDB file header immediately to disk
-        // Without this, Flush() checks HasPendingChanges and returns early (no writes yet),
-        // leaving header bytes uninitialized. On reopen, LoadHeader() reads garbage data.
         fs.Position = 0;
         var headerBuffer = new byte[ScdbFileHeader.HEADER_SIZE];
         header.WriteTo(headerBuffer);
         fs.Write(headerBuffer);
 
-        // ✅ CRITICAL FIX 3: Write initial empty BlockRegistryHeader ("BREG") immediately.
-        // Mirrors CRITICAL FIX 2 for FSM. Ensures LoadRegistry on a brand-new file (or after
-        // crash before any user data) always sees a valid header with BlockCount=0 instead of
-        // uninitialized bytes. Prevents cases where the first registry flush races with data
-        // writes or where allocation collides with the registry area on reopen.
-        // For encrypted files the whole region is encrypted with the DEK so the registry is
-        // ciphertext from the very first byte (no plaintext metadata window).
+        // ✅ Write the root block-registry chunk with the sys:fsm entry so the FSM block can be
+        // located on reopen. Format: [RegistryChunkHeader(64)][BlockEntry(96)].
         {
-            var regionSize = checked((int)header.BlockRegistryLength);
+            var regionSize = checked((int)registryRootLength);
             var region = ArrayPool<byte>.Shared.Rent(regionSize);
             try
             {
                 var regionSpan = region.AsSpan(0, regionSize);
                 regionSpan.Clear();
-                var regHeader = new BlockRegistryHeader
+
+                var fsmEntry = new BlockEntry
                 {
-                    Magic = BlockRegistryHeader.MAGIC,
-                    Version = BlockRegistryHeader.CURRENT_VERSION,
-                    BlockCount = 0,
-                    TotalSize = BlockRegistryHeader.SIZE,
-                    LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000
+                    BlockType = (uint)Scdb.BlockType.FreeSpaceMap,
+                    Offset = fsmBlockOffset,
+                    Length = fsmBlockLength,
+                    Flags = 0
                 };
-                MemoryMarshal.Write(regionSpan[..BlockRegistryHeader.SIZE], in regHeader);
+                var namedFsmEntry = BlockEntry.WithName(ScdbFileHeader.FSM_BLOCK_NAME, fsmEntry);
+
+                var chunkHeader = new RegistryChunkHeader
+                {
+                    Magic = RegistryChunkHeader.MAGIC,
+                    Version = RegistryChunkHeader.CURRENT_VERSION,
+                    EntryCount = 1,
+                    NextChunkOffset = 0,
+                    NextChunkLength = 0
+                };
+                MemoryMarshal.Write(regionSpan[..RegistryChunkHeader.SIZE], in chunkHeader);
+                MemoryMarshal.Write(regionSpan.Slice(RegistryChunkHeader.SIZE, BlockEntry.SIZE), in namedFsmEntry);
 
                 if (dek is not null)
                 {
@@ -1817,7 +1928,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     cipher.EncryptPage(regionSpan);
                 }
 
-                fs.Position = (long)header.BlockRegistryOffset;
+                fs.Position = (long)header.RegistryRootOffset;
                 fs.Write(regionSpan);
             }
             finally
@@ -1826,10 +1937,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             }
         }
 
-        // ✅ CRITICAL FIX 2: Write FSM header marking metadata pages as allocated
-        // Without this, FreeSpaceManager starts with _totalPages=0 and AllocatePages
-        // returns offset 0 (the SCDB header page!). Data block writes then overwrite the
-        // file header with table data (e.g. "SFT1" magic), corrupting the file.
+        // ✅ Write the FSM block marking all metadata pages as allocated.
         var reservedPages = totalMetadataSize / (ulong)options.PageSize;
         header.AllocatedPages = reservedPages;
 
@@ -1843,11 +1951,9 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             BitmapOffset = (uint)FreeSpaceMapHeader.SIZE,
             ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + 128)
         };
-        
-        // Write the whole FSM region (header + L1 bitmap + extent count). For encrypted files
-        // the region is encrypted with the DEK from the very first byte.
+
         {
-            var fsmRegionSize = checked((int)header.FsmLength);
+            var fsmRegionSize = checked((int)fsmBlockLength);
             var fsmRegion = ArrayPool<byte>.Shared.Rent(fsmRegionSize);
             try
             {
@@ -1875,7 +1981,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     cipher.EncryptPage(fsmSpan);
                 }
 
-                fs.Position = (long)header.FsmOffset;
+                fs.Position = (long)fsmBlockOffset;
                 fs.Write(fsmSpan);
             }
             finally
@@ -1883,15 +1989,319 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 ArrayPool<byte>.Shared.Return(fsmRegion, clearArray: dek is not null);
             }
         }
-        
+
         // Re-write header with updated AllocatedPages
         fs.Position = 0;
         header.WriteTo(headerBuffer);
         fs.Write(headerBuffer);
-        
+
         fs.Flush(flushToDisk: true);  // Ensure all metadata is durable
     }
 
+    /// <summary>
+    /// Migrates a legacy format-v1 file (fixed-offset metadata regions) to the dynamic-metadata
+    /// layout (format v2, issue #345). Uses the temp-file/backup swap pattern: builds
+    /// <c>&lt;path&gt;.migrate.tmp</c>, then atomically promotes it with the original preserved
+    /// as <c>&lt;path&gt;.backup</c>. Data blocks are never moved — only the metadata regions are
+    /// re-laid-out — so block checksums and (self-contained) ciphertexts remain valid.
+    /// </summary>
+    private static void MigrateV1ToV2(string filePath, DatabaseOptions options, ref ScdbFileHeader header, byte[]? dek)
+    {
+        var tempPath = filePath + ".migrate.tmp";
+        var backupPath = filePath + ".backup";
+        var pageSize = header.PageSize;
+
+        // Legacy (v1) metadata locations are still readable through the same byte offsets.
+        var oldRegistryOffset = header.RegistryRootOffset;   // 0x20 = v1 BlockRegistryOffset
+        var oldRegistryLength = header.RegistryRootLength;   // 0x28 = v1 BlockRegistryLength
+        var oldFsmOffset = header.ReservedRegion0;           // 0x30 = v1 FsmOffset
+        var oldFsmLength = header.ReservedRegion1;           // 0x38 = v1 FsmLength
+        var oldWalOffset = header.WalOffset;
+        var oldWalLength = header.WalLength;
+        var oldTableDirOffset = header.TableDirOffset;
+        var oldTableDirLength = header.TableDirLength;
+
+        static ulong AlignToPage(ulong value, int ps)
+        {
+            var psu = (ulong)ps;
+            return (value + psu - 1) / psu * psu;
+        }
+
+        using var src = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.RandomAccess);
+        using var dst = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 0, FileOptions.RandomAccess);
+
+        var fileSize = src.Length;
+        var totalPages = (ulong)((fileSize + pageSize - 1) / pageSize);
+
+        // Read the legacy registry to collect all data-block entries (decrypt when needed).
+        var entries = new List<(string Name, BlockEntry Entry)>();
+        {
+            var regBuffer = new byte[oldRegistryLength];
+            src.Position = (long)oldRegistryOffset;
+            src.ReadExactly(regBuffer);
+            if (dek is not null)
+            {
+                using var cipher = new AesGcmEncryption(dek);
+                cipher.DecryptPage(regBuffer);
+            }
+
+            var regSpan = regBuffer.AsSpan();
+            if (regSpan.Length >= BlockRegistryHeader.SIZE)
+            {
+                var regHeader = BlockRegistryHeader.Parse(regSpan[..BlockRegistryHeader.SIZE]);
+                if (regHeader.IsValid && regHeader.BlockCount > 0)
+                {
+                    var count = Math.Min((int)regHeader.BlockCount, (regSpan.Length - BlockRegistryHeader.SIZE) / BlockEntry.SIZE);
+                    for (var i = 0; i < count; i++)
+                    {
+                        var entry = BlockEntry.Parse(regSpan.Slice(BlockRegistryHeader.SIZE + (i * BlockEntry.SIZE), BlockEntry.SIZE));
+                        var name = entry.GetName();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            entries.Add((name, entry));
+                        }
+                    }
+                }
+            }
+        }
+
+        // New dynamic layout (v2): [Header][WAL][TableDir][RegistryRoot][FSM block][data].
+        var newWalOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, pageSize);
+        var newTableDirOffset = newWalOffset + oldWalLength;
+        var registryNeeded = (ulong)(RegistryChunkHeader.SIZE + ((entries.Count + 1L) * BlockEntry.SIZE));
+        var newRegistryOffset = AlignToPage(newTableDirOffset + oldTableDirLength, pageSize);
+        var newRegistryLength = AlignToPage(registryNeeded, pageSize);
+        var newFsmOffset = newRegistryOffset + newRegistryLength;
+
+        var bitmapBytes = (int)((totalPages + 7) / 8);
+        var requiredFsm = (ulong)(FreeSpaceMapHeader.SIZE + bitmapBytes + sizeof(int));
+        var newFsmLength = AlignToPage(Math.Max(requiredFsm, oldFsmLength), pageSize);
+        if (dek is not null)
+        {
+            newFsmLength = AlignToPage(newFsmLength + AesGcmEncryption.OverheadSize, pageSize);
+        }
+
+        var newMetadataEnd = newFsmOffset + newFsmLength;
+
+        // Build the new header.
+        var newHeader = header;
+        newHeader.FormatVersion = ScdbFileHeader.CURRENT_VERSION;
+        newHeader.FeatureFlags |= ScdbFileHeader.FEATURE_DYNAMIC_METADATA;
+        newHeader.RegistryRootOffset = newRegistryOffset;
+        newHeader.RegistryRootLength = newRegistryLength;
+        newHeader.ReservedRegion0 = 0;
+        newHeader.ReservedRegion1 = 0;
+        newHeader.WalOffset = newWalOffset;
+        newHeader.TableDirOffset = newTableDirOffset;
+        newHeader.FileSize = (ulong)fileSize;
+        newHeader.AllocatedPages = totalPages;
+
+        var headerBuffer = new byte[ScdbFileHeader.HEADER_SIZE];
+        newHeader.WriteTo(headerBuffer);
+        dst.Write(headerBuffer);
+
+        // Copy WAL + TableDir regions verbatim (the GCM nonce/tag live in the region, no offset AAD).
+        CopyRegion(src, dst, oldWalOffset, newWalOffset, oldWalLength);
+        CopyRegion(src, dst, oldTableDirOffset, newTableDirOffset, oldTableDirLength);
+
+        // Write the root registry chunk: [RegistryChunkHeader][sys:fsm][data entries...].
+        WriteNewRegistryChunk(dst, newRegistryOffset, (int)newRegistryLength, entries, newFsmOffset, newFsmLength, dek);
+
+        // Write the rebuilt FSM block (all new metadata pages + data-block pages allocated).
+        WriteRebuiltFsm(dst, newFsmOffset, newFsmLength, newMetadataEnd, totalPages, entries, dek, pageSize);
+
+        // Copy the data region verbatim (blocks keep their old offsets → checksums stay valid).
+        var oldDataStart = oldTableDirOffset + oldTableDirLength;
+        CopyRegion(src, dst, oldDataStart, oldDataStart, (ulong)(fileSize - (long)oldDataStart));
+
+        dst.Flush(flushToDisk: true);
+        src.Dispose();
+        dst.Dispose();
+
+        // Atomic swap with backup preservation.
+        if (File.Exists(backupPath))
+        {
+            File.Delete(backupPath);
+        }
+        File.Move(filePath, backupPath);
+        File.Move(tempPath, filePath);
+
+        // Update the in-memory header for the caller.
+        header = newHeader;
+    }
+
+
+
+    /// <summary>
+    /// Writes the rebuilt v2 FSM block: all new metadata pages plus every data-block page are
+    /// marked allocated; everything else is free.
+    /// </summary>
+    private static void WriteRebuiltFsm(
+        FileStream dst, ulong fsmOffset, ulong fsmLength, ulong newMetadataEnd,
+        ulong totalPages, List<(string Name, BlockEntry Entry)> entries, byte[]? dek, int pageSize)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent((int)fsmLength);
+        try
+        {
+            var span = buffer.AsSpan(0, (int)fsmLength);
+            span.Clear();
+
+            var bitmapSizeBytes = (int)((totalPages + 7) / 8);
+            var bitmap = new byte[bitmapSizeBytes];
+
+            void SetPageAllocated(ulong page)
+            {
+                if (page >= totalPages)
+                {
+                    return;
+                }
+
+                bitmap[(int)(page / 8)] |= (byte)(1 << (int)(page % 8));
+            }
+
+            // All new metadata pages.
+            var metadataPages = newMetadataEnd / (ulong)pageSize;
+            for (ulong p = 0; p < metadataPages; p++)
+            {
+                SetPageAllocated(p);
+            }
+
+            // Every data-block page (blocks keep their old offsets).
+            ulong allocatedCount = metadataPages;
+            foreach (var (_, entry) in entries)
+            {
+                var startPage = entry.Offset / (ulong)pageSize;
+                var pageCount = (entry.Length + (ulong)pageSize - 1) / (ulong)pageSize;
+                for (ulong p = 0; p < pageCount; p++)
+                {
+                    if (startPage + p >= metadataPages)
+                    {
+                        SetPageAllocated(startPage + p);
+                        allocatedCount++;
+                    }
+                }
+            }
+
+            var header = new FreeSpaceMapHeader
+            {
+                Magic = FreeSpaceMapHeader.MAGIC,
+                Version = FreeSpaceMapHeader.CURRENT_VERSION,
+                TotalPages = totalPages,
+                FreePages = totalPages > allocatedCount ? totalPages - allocatedCount : 0,
+                LargestExtent = 0,
+                BitmapOffset = (uint)FreeSpaceMapHeader.SIZE,
+                ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
+            };
+            MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
+            bitmap.CopyTo(span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes));
+            MemoryMarshal.Write(span.Slice(FreeSpaceMapHeader.SIZE + bitmapSizeBytes, sizeof(int)), 0);
+
+            if (dek is not null)
+            {
+                using var cipher = new AesGcmEncryption(dek);
+                cipher.EncryptPage(span);
+            }
+
+            dst.Position = (long)fsmOffset;
+            dst.Write(span);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: dek is not null);
+        }
+    }
+
+    /// <summary>
+    /// Copies a byte range verbatim from source to destination at explicit offsets.
+    /// </summary>
+    private static void CopyRegion(FileStream src, FileStream dst, ulong srcOffset, ulong dstOffset, ulong length)
+    {
+        if (length == 0)
+        {
+            return;
+        }
+
+        const int chunkSize = 1 << 20;
+        var remaining = (long)length;
+        var buffer = ArrayPool<byte>.Shared.Rent(chunkSize);
+        try
+        {
+            src.Position = (long)srcOffset;
+            dst.Position = (long)dstOffset;
+            while (remaining > 0)
+            {
+                var read = (int)Math.Min(remaining, chunkSize);
+                src.ReadExactly(buffer, 0, read);
+                dst.Write(buffer, 0, read);
+                remaining -= read;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Writes the v2 root registry chunk: [RegistryChunkHeader][sys:fsm][legacy entries].
+    /// </summary>
+    private static void WriteNewRegistryChunk(
+        FileStream dst, ulong chunkOffset, int chunkLength,
+        List<(string Name, BlockEntry Entry)> entries,
+        ulong fsmOffset, ulong fsmLength, byte[]? dek)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(chunkLength);
+        try
+        {
+            var span = buffer.AsSpan(0, chunkLength);
+            span.Clear();
+
+            var fsmEntry = BlockEntry.WithName(ScdbFileHeader.FSM_BLOCK_NAME, new BlockEntry
+            {
+                BlockType = (uint)Scdb.BlockType.FreeSpaceMap,
+                Offset = fsmOffset,
+                Length = fsmLength,
+                Flags = 0
+            });
+
+            var chunkHeader = new RegistryChunkHeader
+            {
+                Magic = RegistryChunkHeader.MAGIC,
+                Version = RegistryChunkHeader.CURRENT_VERSION,
+                EntryCount = (ulong)(entries.Count + 1),
+                NextChunkOffset = 0,
+                NextChunkLength = 0
+            };
+            MemoryMarshal.Write(span[..RegistryChunkHeader.SIZE], in chunkHeader);
+            MemoryMarshal.Write(span.Slice(RegistryChunkHeader.SIZE, BlockEntry.SIZE), in fsmEntry);
+
+            var offset = RegistryChunkHeader.SIZE + BlockEntry.SIZE;
+            foreach (var (name, entry) in entries)
+            {
+                if (offset + BlockEntry.SIZE > span.Length)
+                {
+                    break;
+                }
+
+                var named = BlockEntry.WithName(name, entry);
+                MemoryMarshal.Write(span.Slice(offset, BlockEntry.SIZE), in named);
+                offset += BlockEntry.SIZE;
+            }
+
+            if (dek is not null)
+            {
+                using var cipher = new AesGcmEncryption(dek);
+                cipher.EncryptPage(span);
+            }
+
+            dst.Position = (long)chunkOffset;
+            dst.Write(span);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: dek is not null);
+        }
+    }
     private static ScdbFileHeader LoadHeader(FileStream fs)
     {
         Span<byte> buffer = stackalloc byte[(int)ScdbFileHeader.HEADER_SIZE];
@@ -2487,8 +2897,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     {
         _blockCache.Clear();
         _metadataCache.Clear();
-        _blockRegistry.Reload(_header.BlockRegistryOffset, _header.BlockRegistryLength);
-        _freeSpaceManager.Reload(_header.FsmOffset, _header.FsmLength);
+        _blockRegistry.Reload(_header.RegistryRootOffset, _header.RegistryRootLength);
+        var reloadedFsmEntry = _blockRegistry.TryGetBlock(ScdbFileHeader.FSM_BLOCK_NAME, out var rfe)
+            ? rfe
+            : default;
+        _freeSpaceManager.Reload(reloadedFsmEntry.Offset, reloadedFsmEntry.Length);
         _walManager.Reload(_header.WalOffset, _header.WalLength);
     }
 }

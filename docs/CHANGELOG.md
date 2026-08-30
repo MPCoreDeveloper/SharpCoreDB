@@ -5,7 +5,26 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0-preview.2] - 2026-08-30
+## [2.0.0-preview.3] - 2026-08-30
+
+### Added
+- **Dynamic metadata layout (format v2, #345 Phase 2)** — the Free Space Map and Block Registry
+  are no longer fixed header regions but **growable named blocks**:
+  - the Block Registry is a single growable block rooted at `header.RegistryRootOffset`
+    (`[RegistryChunkHeader][BlockEntry...]`), which relocates (grows) automatically when it
+    outgrows its current block;
+  - the FSM is a named block (`sys:fsm`) tracked in the registry; its serialized bitmap relocates
+    (grows) automatically when the database outgrows the initial `FsmSizePages` capacity;
+  - `FormatVersion` is bumped to **2** (`FEATURE_DYNAMIC_METADATA`); `BlockRegistrySizePages`
+    no longer sizes a fixed region (the registry grows on demand);
+  - **automatic v1 → v2 migration on open**: legacy files with fixed-offset metadata are rebuilt
+    via a crash-safe temp-file swap (data blocks are never moved — checksums/ciphertexts stay
+    valid) and the original is preserved as `<file>.backup`;
+  - system metadata blocks (`sys:fsm`) are hidden from `EnumerateBlocks()`.
+- **Regression tests** — format-v1 → v2 migration round-trip (`LegacyMigrationTests`),
+  FSM-block growth + data round-trip, dynamic registry growth (300+ blocks), tampered registry
+  detection at the new dynamic location.
+
 
 ### Added
 - **Block-level Brotli/GZip compression for single-file (`.scdb`) storage** (#344) — transparent

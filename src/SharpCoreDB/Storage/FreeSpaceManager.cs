@@ -31,6 +31,27 @@ internal sealed class FreeSpaceManager : IDisposable
     private readonly SingleFileStorageProvider _provider;
     private ulong _fsmOffset;
     private ulong _fsmLength;
+
+    /// <summary>Byte offset just past the FSM block = start of the data region (issue #345).</summary>
+    internal ulong FsmBlockEnd => _fsmOffset + _fsmLength;
+
+    /// <summary>Current length of the FSM block in bytes (issue #345).</summary>
+    internal ulong FsmBlockLength => _fsmLength;
+
+    /// <summary>Current offset of the FSM block in bytes (issue #345).</summary>
+    internal ulong FsmBlockOffset => _fsmOffset;
+
+    /// <summary>
+    /// Updates the in-memory on-disk location of the FSM block after a grow/relocate.
+    /// </summary>
+    internal void UpdateLocation(ulong offset, ulong length)
+    {
+        lock (_allocationLock)
+        {
+            _fsmOffset = offset;
+            _fsmLength = length;
+        }
+    }
     private readonly int _pageSize;
     private readonly BitArray _l1Bitmap; // 1 bit per page
     private readonly List<FreeExtent> _l2Extents; // Large free extents
@@ -277,102 +298,112 @@ internal sealed class FreeSpaceManager : IDisposable
     {
         if (!_isDirty) return;
 
-        byte[] buffer;
-        int writeSize;
-        int totalSize;
-        var metadataEncrypted = _provider.IsMetadataEncrypted;
-
-        // Prepare data inside lock (fast, synchronous)
-        lock (_allocationLock)
+        // Retry loop: if the FSM outgrows its current block we grow (relocate) and retry.
+        for (var attempt = 0; attempt < 16; attempt++)
         {
-            if (!_isDirty) return;
+            byte[]? buffer;
+            int writeSize = 0;
+            int totalSize;
+            var metadataEncrypted = _provider.IsMetadataEncrypted;
 
-            // Calculate L1 bitmap size (1 bit per page, packed into bytes)
-            var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
-            
-            // Calculate L2 extent size
-            var extentCount = _l2Extents.Count;
-            var extentSizeBytes = extentCount * Scdb.FreeExtent.SIZE;
-            
-            // Total size
-            totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
-
-            // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
-            var usableSize = metadataEncrypted
-                ? (int)_fsmLength - AesGcmEncryption.OverheadSize
-                : (int)_fsmLength;
-
-            if (totalSize > usableSize)
+            lock (_allocationLock)
             {
-                throw new InvalidOperationException(
-                    $"FSM too large: {totalSize} bytes exceeds limit {usableSize}");
+                if (!_isDirty) return;
+
+                // Calculate L1 bitmap size (1 bit per page, packed into bytes)
+                var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
+
+                // Calculate L2 extent size
+                var extentCount = _l2Extents.Count;
+                var extentSizeBytes = extentCount * Scdb.FreeExtent.SIZE;
+
+                // Total size
+                totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
+
+                // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
+                var usableSize = metadataEncrypted
+                    ? (int)_fsmLength - AesGcmEncryption.OverheadSize
+                    : (int)_fsmLength;
+
+                if (totalSize > usableSize)
+                {
+                    // FSM outgrew its block — grow (relocate) and retry (stays dirty).
+                    buffer = null;
+                }
+                else
+                {
+                    // Encrypted regions are written as a full fixed-size ciphertext blob so the
+                    // reader knows the exact cipher length; plaintext regions write used bytes.
+                    writeSize = metadataEncrypted ? (int)_fsmLength : totalSize;
+
+                    buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+                    var span = buffer.AsSpan(0, writeSize);
+                    span.Clear();
+
+                    var header = new FreeSpaceMapHeader
+                    {
+                        Magic = FreeSpaceMapHeader.MAGIC,
+                        Version = FreeSpaceMapHeader.CURRENT_VERSION,
+                        TotalPages = _totalPages,
+                        FreePages = _freePages,
+                        LargestExtent = extentCount > 0 ? _l2Extents.Max(e => e.Length) : 0,
+                        BitmapOffset = FreeSpaceMapHeader.SIZE,
+                        ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
+                    };
+
+                    MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
+
+                    // Write L1 bitmap
+                    var bitmapSpan = span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
+                    SerializeBitmap(bitmapSpan);
+
+                    // Write L2 extent count
+                    var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
+                    MemoryMarshal.Write(span[countOffset..], extentCount);
+
+                    // Write L2 extents
+                    var extentOffset = countOffset + sizeof(int);
+                    for (var i = 0; i < extentCount; i++)
+                    {
+                        var extent = _l2Extents[i];
+                        var extentSpan = span.Slice(extentOffset + (i * Scdb.FreeExtent.SIZE), Scdb.FreeExtent.SIZE);
+                        MemoryMarshal.Write(extentSpan, in extent);
+                    }
+
+                    _isDirty = false;
+                }
             }
 
-            // Encrypted regions are written as a full fixed-size ciphertext blob so the reader
-            // knows the exact cipher length; plaintext regions write only the used bytes.
-            writeSize = metadataEncrypted ? (int)_fsmLength : totalSize;
-
-            buffer = ArrayPool<byte>.Shared.Rent(writeSize);
-            var span = buffer.AsSpan(0, writeSize);
-            span.Clear();
-
-            // Write header
-            var header = new FreeSpaceMapHeader
+            if (buffer is null)
             {
-                Magic = FreeSpaceMapHeader.MAGIC,
-                Version = FreeSpaceMapHeader.CURRENT_VERSION,
-                TotalPages = _totalPages,
-                FreePages = _freePages,
-                LargestExtent = extentCount > 0 ? _l2Extents.Max(e => e.Length) : 0,
-                BitmapOffset = FreeSpaceMapHeader.SIZE,
-                ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
-            };
-
-            MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
-
-            // Write L1 bitmap
-            var bitmapSpan = span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
-            SerializeBitmap(bitmapSpan);
-
-            // Write L2 extent count
-            var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
-            MemoryMarshal.Write(span[countOffset..], extentCount);
-
-            // Write L2 extents
-            var extentOffset = countOffset + sizeof(int);
-            for (var i = 0; i < extentCount; i++)
-            {
-                var extent = _l2Extents[i];
-                var extentSpan = span.Slice(extentOffset + (i * Scdb.FreeExtent.SIZE), Scdb.FreeExtent.SIZE);
-                MemoryMarshal.Write(extentSpan, in extent);
+                // Grow the FSM block first, then retry the flush on the next iteration.
+                await _provider.GrowFsmBlockAsync(
+                    totalSize + (metadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
+                    cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
-            _isDirty = false;
-        }
-
-        // Write to file OUTSIDE lock
-        try
-        {
-            if (metadataEncrypted)
+            try
             {
-                // Encrypt the whole region in place before writing.
-                _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+                if (metadataEncrypted)
+                {
+                    _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+                }
+
+                _provider.WriteAt((long)_fsmOffset, buffer.AsSpan(0, writeSize));
+
+                var fileStream = GetFileStream();
+                await fileStream.FlushAsync(cancellationToken);
+                return;
             }
-
-            // ✅ Issue #345: write at the FSM offset under the provider's write-batch lock so the
-            // shared FileStream.Position can never be raced by the background write worker
-            // (previously FSM/registry data could be written over data pages and vice versa).
-            _provider.WriteAt((long)_fsmOffset, buffer.AsSpan(0, writeSize));
-
-            var fileStream = GetFileStream();
-            await fileStream.FlushAsync(cancellationToken);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
+            }
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
-        }
+
+        throw new InvalidOperationException("FSM could not be flushed after multiple growth attempts.");
     }
-
     public void Dispose()
     {
         if (_disposed) return;

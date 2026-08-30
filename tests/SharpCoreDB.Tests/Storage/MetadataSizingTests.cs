@@ -48,7 +48,7 @@ public sealed class MetadataSizingTests : IDisposable
         options.PageSize = 4096;
         options.WalBufferSizePages = 64;
         options.EnableMemoryMapping = false;
-        options.BlockRegistrySizePages = 8;
+        options.BlockRegistrySizePages = 8; // legacy option: ignored in the dynamic layout
         options.FsmSizePages = 16;
         options.TableDirectorySizePages = 12;
 
@@ -60,17 +60,56 @@ public sealed class MetadataSizingTests : IDisposable
         using var fs = new FileStream(_testDbPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(fs);
 
-        fs.Position = 0x28; // BlockRegistryLength
-        var registryLength = reader.ReadUInt64();
-        fs.Position = 0x38; // FsmLength
-        var fsmLength = reader.ReadUInt64();
+        // Dynamic-metadata layout (issue #345): 0x20 = RegistryRootOffset, 0x28 = RegistryRootLength.
+        fs.Position = 0x20;
+        var registryRootOffset = reader.ReadUInt64();
+        fs.Position = 0x28;
+        var registryRootLength = reader.ReadUInt64();
         fs.Position = 0x58; // TableDirLength
         var tableDirLength = reader.ReadUInt64();
 
-        Assert.Equal((ulong)(4096 * 8), registryLength);
-        Assert.Equal((ulong)(4096 * 16), fsmLength);
-        Assert.Equal((ulong)(4096 * 12), tableDirLength);
+        // The registry is dynamic: the root chunk is always one page; growth relocates it.
+        Assert.Equal((ulong)options.PageSize, registryRootLength);
+
+        // The FSM is a named block (sys:fsm) whose entry lives in the root registry chunk.
+        var fsmLength = ReadFsmEntryLength(fs, registryRootOffset);
+        Assert.Equal((ulong)(options.PageSize * options.FsmSizePages), fsmLength);
+        Assert.Equal((ulong)(options.PageSize * options.TableDirectorySizePages), tableDirLength);
     }
+
+    /// <summary>
+    /// Reads the length of the sys:fsm entry from the root registry chunk.
+    /// Registry format v2: [RegistryChunkHeader(64)][BlockEntry(96)...] (plaintext file).
+    /// BlockEntry layout: Name[32] @ 0x00, BlockType @ 0x20, Offset @ 0x24, Length @ 0x2C.
+    /// </summary>
+    private static ulong ReadFsmEntryLength(FileStream fs, ulong registryRootOffset)
+    {
+        for (var i = 0; i < 42; i++)
+        {
+            var entryStart = (long)registryRootOffset + 64 + (i * 96);
+            fs.Position = entryStart;
+            Span<byte> nameBuf = stackalloc byte[32];
+            fs.ReadExactly(nameBuf);
+
+            var nameEnd = nameBuf.IndexOf((byte)0);
+            var name = System.Text.Encoding.UTF8.GetString(nameBuf[..nameEnd]);
+            if (name == "sys:fsm")
+            {
+                fs.Position = entryStart + 0x2C; // Length field
+                return ReadUInt64(fs);
+            }
+        }
+
+        return 0;
+    }
+
+    private static ulong ReadUInt64(FileStream fs)
+    {
+        Span<byte> buf = stackalloc byte[8];
+        fs.ReadExactly(buf);
+        return System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(buf);
+    }
+
 
     [Fact]
     public async Task ManyBlocks_WithLargerRegistry_ShouldRoundtrip()
@@ -104,6 +143,53 @@ public sealed class MetadataSizingTests : IDisposable
         for (var i = 0; i < blockCount; i++)
         {
             var data = await reopened.ReadBlockAsync($"blk_{i}");
+            Assert.NotNull(data);
+            Assert.Equal(payload, data);
+        }
+    }
+
+    [Fact]
+    public async Task LargeData_GrowsFsmBlock_AndRoundtrips()
+    {
+        // Issue #345 Phase 2: with a 1-page FSM (4 KB bitmap ≈ 32 K pages) the FSM block must
+        // relocate (grow) once the file exceeds ~16 MB. Data must round-trip across the growth.
+        var options = DatabaseOptions.CreateSingleFileDefault();
+        options.PageSize = 512;   // small pages → small bitmap capacity → growth kicks in early
+        options.FsmSizePages = 1;
+        options.WalBufferSizePages = 64;
+        options.EnableMemoryMapping = false;
+
+        const int chunkSize = 2 * 1024 * 1024;   // 2 MB per block
+        var payload = new byte[chunkSize];
+        for (var i = 0; i < payload.Length; i++)
+        {
+            payload[i] = (byte)(i % 251);
+        }
+
+        const int chunkCount = 10;               // 20 MB total → exceeds the 1-page FSM capacity
+        using (var provider = SingleFileStorageProvider.Open(_testDbPath, options))
+        {
+            for (var i = 0; i < chunkCount; i++)
+            {
+                await provider.WriteBlockAsync($"chunk_{i}", payload);
+            }
+
+            await provider.ForceFlushAsync();
+        }
+
+        // The FSM must have grown: its serialized bitmap no longer fits in a single page.
+        using (var fs = new FileStream(_testDbPath, FileMode.Open, FileAccess.Read))
+        {
+            fs.Position = 0x20;
+            var registryRootOffset = ReadUInt64(fs);
+            var fsmLength = ReadFsmEntryLength(fs, registryRootOffset);
+            Assert.True(fsmLength > (ulong)options.PageSize, $"FSM block should have grown past 1 page, got {fsmLength}");
+        }
+
+        using var reopened = SingleFileStorageProvider.Open(_testDbPath, options);
+        for (var i = 0; i < chunkCount; i++)
+        {
+            var data = await reopened.ReadBlockAsync($"chunk_{i}");
             Assert.NotNull(data);
             Assert.Equal(payload, data);
         }

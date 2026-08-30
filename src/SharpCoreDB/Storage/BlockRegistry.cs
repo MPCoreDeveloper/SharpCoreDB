@@ -37,6 +37,7 @@ internal sealed class BlockRegistry : IDisposable
     // from a background flush can never land after a fresher ForceFlush and overwrite it with
     // older registry content (which previously lost the trailing block entries on reopen).
     private readonly SemaphoreSlim _flushGate = new(1, 1);
+    private volatile bool _inFlush;
     
     // ✅ NEW: Batching infrastructure
     private int _dirtyCount;
@@ -56,13 +57,11 @@ internal sealed class BlockRegistry : IDisposable
     
     private bool _disposed;
 
-    public BlockRegistry(SingleFileStorageProvider provider, ulong registryOffset, ulong registryLength)
+    public BlockRegistry(SingleFileStorageProvider provider)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
-        _registryOffset = registryOffset;
-        _registryLength = registryLength > 0 
-            ? registryLength 
-            : throw new ArgumentOutOfRangeException(nameof(registryLength));
+        _registryOffset = provider.RootRegistryOffset;
+        _registryLength = provider.RootRegistryLength;
         _blocks = new ConcurrentDictionary<string, BlockEntry>(StringComparer.Ordinal);
         
         // ✅ C# 14: Start periodic flush task
@@ -70,7 +69,22 @@ internal sealed class BlockRegistry : IDisposable
         _flushTask = Task.Run(PeriodicFlushLoopAsync, _flushCts.Token);
         
         // Load existing registry from disk
-        LoadRegistry();
+        if (_registryLength > 0)
+        {
+            LoadRegistry();
+        }
+    }
+
+    /// <summary>
+    /// Updates the in-memory on-disk location of the registry block after a grow/relocate.
+    /// </summary>
+    internal void UpdateLocation(ulong offset, ulong length)
+    {
+        lock (_registryLock)
+        {
+            _registryOffset = offset;
+            _registryLength = length;
+        }
     }
 
     public int Count => _blocks.Count;
@@ -185,130 +199,132 @@ internal sealed class BlockRegistry : IDisposable
         }
     }
 
-    /// <summary>
-    /// Flushes the block registry to disk if dirty.
-    /// ✅ OPTIMIZED: Now called only when batch threshold reached or timer fires.
-    /// Format: [BlockRegistryHeader(64B)] [BlockEntry1(64B)] [BlockEntry2(64B)] ...
-    /// </summary>
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         if (Interlocked.CompareExchange(ref _dirtyCount, 0, 0) == 0)
             return; // Not dirty
 
-        // ✅ Issue #345: serialize the whole flush (snapshot + write) so a stale background flush
-        // can never overwrite a fresher ForceFlush. The provider also loops until the registry is
-        // clean, so entries added during this flush are picked up by the next iteration.
-        await _flushGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        // Retry loop: if the registry outgrows its current block we grow (relocate) and retry.
+        for (var attempt = 0; attempt < 16; attempt++)
         {
-            byte[] buffer;
-            int writeSize;
-            int totalSize;
-            KeyValuePair<string, BlockEntry>[] entriesSnapshot;
-            var metadataEncrypted = _provider.IsMetadataEncrypted;
-
-            // Prepare data inside lock (fast, synchronous)
-            lock (_registryLock)
-            {
-                if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
-                    return; // Double-check after acquiring gate + lock
-
-                // Take a snapshot to avoid concurrent mutations during flush
-                entriesSnapshot = _blocks.ToArray();
-
-                // Compute struct sizes using runtime sizeof to avoid mismatches
-                var headerSize = Unsafe.SizeOf<BlockRegistryHeader>();
-                var entrySize = Unsafe.SizeOf<BlockEntry>();
-                totalSize = headerSize + (entriesSnapshot.Length * entrySize);
-
-                // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
-                var usableSize = metadataEncrypted
-                    ? (int)_registryLength - AesGcmEncryption.OverheadSize
-                    : (int)_registryLength;
-
-                if (totalSize > usableSize)
-                {
-                    throw new InvalidOperationException(
-                        $"Block registry too large: {totalSize} bytes exceeds limit {usableSize}");
-                }
-
-                // Encrypted regions are written as a full fixed-size ciphertext blob so the reader
-                // knows the exact cipher length; plaintext regions write only the used bytes.
-                writeSize = metadataEncrypted ? (int)_registryLength : totalSize;
-
-                // Rent buffer from ArrayPool for zero-allocation
-                buffer = ArrayPool<byte>.Shared.Rent(writeSize);
-                var span = buffer.AsSpan(0, writeSize);
-                span.Clear();
-
-                // Write header
-                var header = new BlockRegistryHeader
-                {
-                    Magic = BlockRegistryHeader.MAGIC,
-                    Version = BlockRegistryHeader.CURRENT_VERSION,
-                    BlockCount = (ulong)entriesSnapshot.Length,
-                    TotalSize = (ulong)totalSize,
-                    LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                };
-
-                var headerSpan = span[..headerSize];
-                MemoryMarshal.Write(headerSpan, in header);
-
-                // Write block entries from snapshot
-                var offset = headerSize;
-                foreach (var (blockName, blockEntry) in entriesSnapshot)
-                {
-                    var namedEntry = BlockEntry.WithName(blockName, blockEntry);
-
-                    // Bounds guard: ensure we have enough space for the entry
-                    if (offset + entrySize > totalSize)
-                    {
-                        throw new InvalidOperationException(
-                            $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
-                    }
-
-                    var entrySpan = span.Slice(offset, entrySize);
-                    MemoryMarshal.Write(entrySpan, in namedEntry);
-                    offset += entrySize;
-                }
-            }
-
-            // Write to file OUTSIDE lock (I/O is slow)
+            // ✅ Issue #345: serialize the whole flush (snapshot + write) so a stale background flush
+            // can never overwrite a fresher ForceFlush. The provider also loops until the registry is
+            // clean, so entries added during this flush are picked up by the next iteration.
+            await _flushGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            _inFlush = true;
             try
             {
-                if (metadataEncrypted)
+                byte[]? buffer;
+                int writeSize = 0;
+                int totalSize;
+                KeyValuePair<string, BlockEntry>[] entriesSnapshot;
+                var metadataEncrypted = _provider.IsMetadataEncrypted;
+
+                lock (_registryLock)
                 {
-                    // Encrypt the whole region in place before writing.
-                    _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+                    if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
+                        return; // Double-check after acquiring gate + lock
+
+                    entriesSnapshot = _blocks.ToArray();
+
+                    var entrySize = Unsafe.SizeOf<BlockEntry>();
+                    totalSize = RegistryChunkHeader.SIZE + (entriesSnapshot.Length * entrySize);
+
+                    var usableSize = metadataEncrypted
+                        ? (int)_registryLength - AesGcmEncryption.OverheadSize
+                        : (int)_registryLength;
+
+                    if (totalSize > usableSize)
+                    {
+                        Interlocked.Increment(ref _dirtyCount);
+                        buffer = null;
+                    }
+                    else
+                    {
+                        writeSize = metadataEncrypted ? (int)_registryLength : totalSize;
+
+                        buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+                        var span = buffer.AsSpan(0, writeSize);
+                        span.Clear();
+
+                        var header = new RegistryChunkHeader
+                        {
+                            Magic = RegistryChunkHeader.MAGIC,
+                            Version = RegistryChunkHeader.CURRENT_VERSION,
+                            EntryCount = (ulong)entriesSnapshot.Length,
+                            NextChunkOffset = 0,
+                            NextChunkLength = 0
+                        };
+                        MemoryMarshal.Write(span[..RegistryChunkHeader.SIZE], in header);
+
+                        var offset = RegistryChunkHeader.SIZE;
+                        foreach (var (blockName, blockEntry) in entriesSnapshot)
+                        {
+                            var namedEntry = BlockEntry.WithName(blockName, blockEntry);
+
+                            if (offset + entrySize > totalSize)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
+                            }
+
+                            var entrySpan = span.Slice(offset, entrySize);
+                            MemoryMarshal.Write(entrySpan, in namedEntry);
+                            offset += entrySize;
+                        }
+                    }
+                }
+                if (buffer is null)
+                {
+                    await _provider.GrowRegistryBlockAsync(
+                        totalSize + (metadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
+                        cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
 
-                // ✅ Issue #345: write at the registry offset under the provider's write-batch lock so
-                // the shared FileStream.Position can never be raced by the background write worker
-                // (previously registry data could be written over data pages and vice versa).
-                _provider.WriteAt((long)_registryOffset, buffer.AsSpan(0, writeSize));
-
-                var fileStream = GetFileStream();
-
-                // ✅ OPTIMIZED: Only flush if not in batch mode or if forced
-                if (!_flushCts.Token.IsCancellationRequested)
+                try
                 {
-                    await fileStream.FlushAsync(cancellationToken);
+                    if (metadataEncrypted)
+                    {
+                        _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
+                    }
+
+                    _provider.WriteAt((long)_registryOffset, buffer.AsSpan(0, writeSize));
+
+                    var fileStream = GetFileStream();
+
+                    if (!_flushCts.Token.IsCancellationRequested)
+                    {
+                        await fileStream.FlushAsync(cancellationToken);
+                    }
+
+                    _lastFlushTime = DateTime.UtcNow;
+                    Interlocked.Increment(ref _totalFlushes);
+                    Interlocked.Add(ref _totalBlocksWritten, entriesSnapshot.Length);
+                    return;
                 }
-                
-                _lastFlushTime = DateTime.UtcNow;
-                Interlocked.Increment(ref _totalFlushes);
-                Interlocked.Add(ref _totalBlocksWritten, entriesSnapshot.Length);
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
+                }
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
+                _inFlush = false;
+                _flushGate.Release();
             }
         }
-        finally
-        {
-            _flushGate.Release();
-        }
+
+        throw new InvalidOperationException("Block registry could not be flushed after multiple growth attempts.");
     }
+
+    /// <summary>
+    /// True while a registry flush holds the flush gate. Used to break the re-entrant
+    /// deadlock where a registry flush (growing) triggers an FSM flush that would try to
+    /// flush the registry again (issue #345 dynamic metadata).
+    /// </summary>
+    internal bool InFlush => _inFlush;
+
 
     /// <summary>
     /// ✅ NEW: Force immediate flush (for transaction commit, disposal).
@@ -370,80 +386,80 @@ internal sealed class BlockRegistry : IDisposable
     }
 
     /// <summary>
-    /// Loads the block registry from disk.
-    /// For full-at-rest encrypted files the whole region is read and decrypted in place;
-    /// a decryption failure (wrong key / tampered region) is rethrown so the database fails
+    /// Loads the block registry from disk (dynamic-metadata layout, format v2).
+    /// The registry is a single growable block: [RegistryChunkHeader(64)] [BlockEntry...].
+    /// For full-at-rest encrypted files the block is read and decrypted in place; a
+    /// decryption failure (wrong key / tampered region) is rethrown so the database fails
     /// loudly instead of silently starting with an empty registry.
     /// </summary>
     private void LoadRegistry()
     {
         try
         {
+            if (_registryLength == 0)
+            {
+                return; // No registry block yet (fresh file)
+            }
+
             var fileStream = GetFileStream();
-            
-            // Check if registry exists (file large enough)
-            if (fileStream.Length < (long)(_registryOffset + BlockRegistryHeader.SIZE))
+            if (fileStream.Length < (long)(_registryOffset + RegistryChunkHeader.SIZE))
             {
                 return; // Empty registry
             }
 
             var metadataEncrypted = _provider.IsMetadataEncrypted;
-
-            // Encrypted region: read the full region, decrypt in place, then parse.
-            if (metadataEncrypted)
-            {
-                LoadRegistryFromEncryptedRegion(fileStream);
-                return;
-            }
-
-            // Read header
-            fileStream.Position = (long)_registryOffset;
-            Span<byte> headerBuffer = stackalloc byte[BlockRegistryHeader.SIZE];
-            fileStream.ReadExactly(headerBuffer);
-            
-            var header = BlockRegistryHeader.Parse(headerBuffer);
-            
-            if (!header.IsValid)
-            {
-                return; // Invalid or empty registry
-            }
-
-            if (header.BlockCount == 0)
-            {
-                return; // No blocks
-            }
-
-            // Read all block entries
-            var totalEntrySize = (int)(header.BlockCount * (ulong)BlockEntry.SIZE);
-            var buffer = ArrayPool<byte>.Shared.Rent(totalEntrySize);
+            var regionSize = checked((int)_registryLength);
+            var buffer = ArrayPool<byte>.Shared.Rent(regionSize);
             try
             {
-                var entrySpan = buffer.AsSpan(0, totalEntrySize);
-                fileStream.ReadExactly(entrySpan);
+                var regionSpan = buffer.AsSpan(0, regionSize);
+                fileStream.Position = (long)_registryOffset;
+                fileStream.ReadExactly(regionSpan);
 
-                // Parse each entry
-                for (var i = 0; i < (int)header.BlockCount; i++)
+                // An all-zero region means the registry was never initialized.
+                if (regionSpan.IndexOfAnyExcept((byte)0) < 0)
                 {
-                    var offset = i * BlockEntry.SIZE;
-                    var entryData = entrySpan.Slice(offset, BlockEntry.SIZE);
-                    var entry = BlockEntry.Parse(entryData);
-                    
+                    return;
+                }
+
+                if (metadataEncrypted)
+                {
+                    // Decrypt in place. Throws on GCM authentication failure (wrong key / tamper).
+                    _provider.DecryptRegion(regionSpan);
+                }
+
+                var header = RegistryChunkHeader.Parse(regionSpan[..RegistryChunkHeader.SIZE]);
+                if (!header.IsValid || header.EntryCount == 0)
+                {
+                    return;
+                }
+
+                var totalEntrySize = checked((int)(header.EntryCount * (ulong)BlockEntry.SIZE));
+                if (RegistryChunkHeader.SIZE + totalEntrySize > regionSpan.Length)
+                {
+                    return; // Header claims more entries than the block can hold
+                }
+
+                for (var i = 0; i < (int)header.EntryCount; i++)
+                {
+                    var offset = RegistryChunkHeader.SIZE + (i * BlockEntry.SIZE);
+                    var entry = BlockEntry.Parse(regionSpan.Slice(offset, BlockEntry.SIZE));
                     var blockName = entry.GetName();
                     if (!string.IsNullOrEmpty(blockName))
                     {
                         _blocks[blockName] = entry;
                     }
                 }
+
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine(
+                    $"[BlockRegistry] Loaded {_blocks.Count} blocks from disk");
+#endif
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer);
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
             }
-
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine(
-                $"[BlockRegistry] Loaded {_blocks.Count} blocks from disk");
-#endif
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
@@ -469,70 +485,6 @@ internal sealed class BlockRegistry : IDisposable
         _registryOffset = registryOffset;
         _registryLength = registryLength > 0 ? registryLength : _registryLength;
         LoadRegistry();
-    }
-
-    /// <summary>
-    /// Reads and decrypts the whole registry region, then parses the header and entries.
-    /// GCM authentication failures (wrong key / tampered region) propagate to the caller.
-    /// </summary>
-    private void LoadRegistryFromEncryptedRegion(System.IO.FileStream fileStream)
-    {
-        var regionSize = checked((int)_registryLength);
-        if (fileStream.Length < (long)(_registryOffset + (ulong)regionSize))
-        {
-            return; // Truncated region — treat as empty
-        }
-
-        var regionBuffer = ArrayPool<byte>.Shared.Rent(regionSize);
-        try
-        {
-            var regionSpan = regionBuffer.AsSpan(0, regionSize);
-            fileStream.Position = (long)_registryOffset;
-            fileStream.ReadExactly(regionSpan);
-
-            // An all-zero region means the registry was never initialized.
-            if (regionSpan.IndexOfAnyExcept((byte)0) < 0)
-            {
-                return;
-            }
-
-            // Decrypt in place. Throws AuthenticationTagMismatchException (a
-            // CryptographicException) when the key is wrong or the region was tampered with.
-            _provider.DecryptRegion(regionSpan);
-
-            var header = BlockRegistryHeader.Parse(regionSpan[..BlockRegistryHeader.SIZE]);
-            if (!header.IsValid || header.BlockCount == 0)
-            {
-                return;
-            }
-
-            var totalEntrySize = checked((int)(header.BlockCount * (ulong)BlockEntry.SIZE));
-            if (BlockRegistryHeader.SIZE + totalEntrySize > regionSpan.Length)
-            {
-                return; // Header claims more entries than the region can hold
-            }
-
-            for (var i = 0; i < (int)header.BlockCount; i++)
-            {
-                var offset = BlockRegistryHeader.SIZE + (i * BlockEntry.SIZE);
-                var entry = BlockEntry.Parse(regionSpan.Slice(offset, BlockEntry.SIZE));
-
-                var blockName = entry.GetName();
-                if (!string.IsNullOrEmpty(blockName))
-                {
-                    _blocks[blockName] = entry;
-                }
-            }
-
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine(
-                $"[BlockRegistry] Loaded {_blocks.Count} blocks from encrypted region");
-#endif
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(regionBuffer);
-        }
     }
 
     /// <summary>

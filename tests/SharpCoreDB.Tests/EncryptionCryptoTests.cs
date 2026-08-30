@@ -296,12 +296,22 @@ public sealed class EncryptionCryptoTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
 
-        // Flip one byte inside the block-registry region (offset 4096, 16 KB region).
+        // Flip one byte inside the block-registry chunk (dynamic-metadata layout, issue #345).
+        // Read the registry root offset from the header (0x20) instead of the legacy fixed 4096.
+        ulong registryRootOffset;
+        using (var probe = new FileStream(_scdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            probe.Position = 0x20;
+            Span<byte> buf = stackalloc byte[8];
+            probe.ReadExactly(buf);
+            registryRootOffset = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(buf);
+        }
+
         using (var fs = new FileStream(_scdbPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
         {
-            fs.Position = 4096 + 128;
+            fs.Position = (long)registryRootOffset + 128;
             var b = (byte)fs.ReadByte();
-            fs.Position = 4096 + 128;
+            fs.Position = (long)registryRootOffset + 128;
             fs.WriteByte((byte)(b ^ 0xFF));
             fs.Flush(true);
         }

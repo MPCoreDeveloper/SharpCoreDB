@@ -52,17 +52,17 @@ public struct ScdbFileHeader
 
     // === Block Offsets (64 bytes) ===
     
-    /// <summary>Offset to block registry</summary>
-    public ulong BlockRegistryOffset;  // 0x0020: Block registry offset
+    /// <summary>Offset to the root block-registry chunk (dynamic metadata layout, format v2).</summary>
+    public ulong RegistryRootOffset;  // 0x0020: Root registry chunk offset
     
-    /// <summary>Size of block registry in bytes</summary>
-    public ulong BlockRegistryLength;  // 0x0028: Block registry size
+    /// <summary>Size of the root block-registry chunk in bytes.</summary>
+    public ulong RegistryRootLength;  // 0x0028: Root registry chunk size
     
-    /// <summary>Offset to Free Space Map (FSM)</summary>
-    public ulong FsmOffset;            // 0x0030: FSM offset
+    /// <summary>Reserved (previously FsmOffset in format v1).</summary>
+    public ulong ReservedRegion0;     // 0x0030: Reserved
     
-    /// <summary>Size of FSM in bytes</summary>
-    public ulong FsmLength;            // 0x0038: FSM size
+    /// <summary>Reserved (previously FsmLength in format v1).</summary>
+    public ulong ReservedRegion1;     // 0x0038: Reserved
     
     /// <summary>Offset to Write-Ahead Log (WAL)</summary>
     public ulong WalOffset;            // 0x0040: WAL offset
@@ -148,11 +148,14 @@ public struct ScdbFileHeader
     /// <summary>Magic number constant: "SCDB\x10\x00\x00\x00"</summary>
     public const ulong MAGIC = 0x0000_0010_4244_4353;
     
-    /// <summary>Current format version</summary>
-    public const ushort CURRENT_VERSION = 1;
+    /// <summary>Current format version (2 = dynamic metadata layout, issue #345)</summary>
+    public const ushort CURRENT_VERSION = 2;
     
     /// <summary>Header size in bytes</summary>
     public const uint HEADER_SIZE = 512;
+
+    /// <summary>Reserved block name for the Free Space Map in the dynamic-metadata layout (issue #345).</summary>
+    public const string FSM_BLOCK_NAME = "sys:fsm";
     
     /// <summary>Default page size (4KB)</summary>
     public const ushort DEFAULT_PAGE_SIZE = 4096;
@@ -166,6 +169,12 @@ public struct ScdbFileHeader
     /// legacy-encoded ULIDs that should be migrated with <c>Database.MigrateLegacyUlids()</c>.
     /// </summary>
     public const ulong FEATURE_ULID_SPEC = 0x0000_0000_0000_0002;
+
+    /// <summary>
+    /// Dynamic-metadata feature flag (format v2): the Free Space Map and Block Registry are
+    /// managed as growable named blocks instead of fixed-offset header regions (issue #345).
+    /// </summary>
+    public const ulong FEATURE_DYNAMIC_METADATA = 0x0000_0000_0000_0004;
 
     /// <summary>Encryption mode: no encryption.</summary>
     public const byte ENCRYPTION_MODE_NONE = 0;
@@ -204,9 +213,16 @@ public struct ScdbFileHeader
     public const int WRAPPED_DEK_OFFSET = 0x00E8;
 
     /// <summary>
-    /// Validates the header magic and version.
+    /// Validates the header magic and version. Accepts format v1 (legacy fixed-offset layout,
+    /// migrated on open) and the current format v2 (dynamic metadata layout).
     /// </summary>
-    public readonly bool IsValid => Magic == MAGIC && FormatVersion == CURRENT_VERSION;
+    public readonly bool IsValid => Magic == MAGIC && (FormatVersion == 1 || FormatVersion == CURRENT_VERSION);
+
+    /// <summary>
+    /// True when the file uses the dynamic-metadata layout (format v2): FSM + Block Registry
+    /// are growable named blocks instead of fixed-offset header regions (issue #345).
+    /// </summary>
+    public readonly bool IsDynamicMetadataFormat => FormatVersion >= 2;
 
     /// <summary>
     /// Checks if delta-update feature is enabled (Phase 3.3 optimization).
@@ -251,10 +267,10 @@ public struct ScdbFileHeader
             EncryptionMode = 0,
             CompressionMode = 0,
             EncryptionKeyId = 0,
-            BlockRegistryOffset = HEADER_SIZE,
-            BlockRegistryLength = 0,
-            FsmOffset = 0,
-            FsmLength = 0,
+            RegistryRootOffset = 0,
+            RegistryRootLength = 0,
+            ReservedRegion0 = 0,
+            ReservedRegion1 = 0,
             WalOffset = 0,
             WalLength = 0,
             TableDirOffset = 0,
@@ -284,6 +300,63 @@ public struct ScdbFileHeader
         {
             Buffer.MemoryCopy(srcPtr, destPtr, HEADER_SIZE, HEADER_SIZE);
         }
+    }
+}
+
+/// <summary>
+/// Registry chunk header (64 bytes).
+/// The Block Registry in the dynamic-metadata layout (format v2) is a growable chain of
+/// page-aligned chunks: <c>[RegistryChunkHeader][BlockEntry * EntryCount]</c>. The header's
+/// <see cref="ScdbFileHeader.RegistryRootOffset"/> points to the first chunk; each chunk links
+/// to the next via <see cref="NextChunkOffset"/>/<see cref="NextChunkLength"/> (issue #345).
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct RegistryChunkHeader
+{
+    /// <summary>Magic number "BRGC" (0x43475242)</summary>
+    public uint Magic;                 // 0x00: Magic
+
+    /// <summary>Chunk version</summary>
+    public uint Version;               // 0x04: Version
+
+    /// <summary>Number of block entries in this chunk</summary>
+    public ulong EntryCount;           // 0x08: Entry count
+
+    /// <summary>Byte offset of the next chunk (0 = none)</summary>
+    public ulong NextChunkOffset;      // 0x10: Next chunk offset
+
+    /// <summary>Byte length of the next chunk (0 = none)</summary>
+    public ulong NextChunkLength;      // 0x18: Next chunk length
+
+    /// <summary>Reserved for future use</summary>
+    public unsafe fixed byte Reserved[32]; // 0x20: Reserved
+
+    /// <summary>Magic number constant "BRGC"</summary>
+    public const uint MAGIC = 0x4347_5242;
+
+    /// <summary>Current chunk version</summary>
+    public const uint CURRENT_VERSION = 1;
+
+    /// <summary>Structure size in bytes</summary>
+    public const int SIZE = 64;
+
+    /// <summary>
+    /// Validates the chunk header.
+    /// </summary>
+    public readonly bool IsValid => Magic == MAGIC && Version == CURRENT_VERSION;
+
+    /// <summary>
+    /// Parses a chunk header from a byte span.
+    /// </summary>
+    /// <param name="data">Input data span</param>
+    /// <returns>Parsed chunk header</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static RegistryChunkHeader Parse(ReadOnlySpan<byte> data)
+    {
+        if (data.Length < SIZE)
+            throw new InvalidDataException($"Registry chunk header too small: {data.Length} < {SIZE}");
+
+        return MemoryMarshal.Read<RegistryChunkHeader>(data);
     }
 }
 
