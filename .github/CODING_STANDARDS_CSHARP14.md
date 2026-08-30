@@ -751,7 +751,7 @@ await WriteBatchAsync(operations);
 var checksum = SHA256.HashData(data.Span);
 
 // ✅ Mark TODO items
-// TODO: Implement compression for blocks > 1MB
+// TODO: Add streaming compression for blocks > 16MB (avoid full payload in memory)
 
 // ✅ Mark performance-critical sections
 // PERF: Hot path - avoid allocations

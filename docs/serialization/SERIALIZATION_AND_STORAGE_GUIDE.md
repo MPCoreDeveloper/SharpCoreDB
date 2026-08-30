@@ -31,7 +31,7 @@ SharpCoreDB uses a **single-file binary format** (`.scdb`) for persistent storag
 | **String Storage** | Variable-length; prefixed with 4-byte length field |
 | **No Fixed-Length Requirement** | Strings can be arbitrarily long (limited by available disk space) |
 | **Encryption** | Optional AES-256-GCM |
-| **Compression** | Not implemented (reserved in header) |
+| **Compression** | Optional Brotli/GZip block-level compression (see `BlockCompressionMode`) |
 
 ---
 
@@ -89,7 +89,7 @@ public struct ScdbFileHeader
 
     // === Encryption (16 bytes) ===
     public byte EncryptionMode;   // 0x0010: 0=None, 1=AES-256-GCM
-    public byte CompressionMode;  // 0x0011: Reserved (always 0)
+    public byte CompressionMode;  // 0x0011: 0=None, 1=Brotli, 2=GZip (see BlockCompressionMode)
     public ushort EncryptionKeyId;// 0x0012: Key derivation ID
     public fixed byte Nonce[12];  // 0x0014: AES-GCM nonce
 

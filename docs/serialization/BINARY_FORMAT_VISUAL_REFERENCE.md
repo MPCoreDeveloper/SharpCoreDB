@@ -55,7 +55,7 @@ Offset   Size   Field Name                Value
 0x000C   4      HeaderSize                512 (always)
 
 0x0010   1      EncryptionMode            0=None, 1=AES-256-GCM
-0x0011   1      CompressionMode           0=None (reserved)
+0x0011   1      CompressionMode           0=None, 1=Brotli, 2=GZip
 0x0012   2      EncryptionKeyId           Key derivation ID
 0x0014   12     Nonce                     AES-GCM nonce
 
