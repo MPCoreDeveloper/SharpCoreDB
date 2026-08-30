@@ -7,12 +7,14 @@ namespace SharpCoreDB.DataStructures;
 
 using System;
 using System.Buffers.Binary;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SharpCoreDB.Services;
+using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Hybrid;
 
 /// <summary>
@@ -141,8 +143,26 @@ public partial class Table
     /// <param name="where">A simple "column = value" WHERE clause (or null/empty for all rows).</param>
     /// <param name="enableCaching">Enable value caching for repeated column access.</param>
     /// <returns>Zero-allocation filtered enumeration of StructRow instances.</returns>
+    /// <summary>
+    /// Zero-allocation filtered enumeration of StructRow instances (point-lookup fast paths are
+    /// allocation-free via <see cref="StructRowWhereEnumerator"/>; full-scan/SIMD fallback paths
+    /// delegate to the yield-based core).
+    /// </summary>
+    public StructRowWhereEnumerable ScanStructRowsWhere(string? where, bool enableCaching = false)
+    {
+        ArgumentNullException.ThrowIfNull(this.storage);
+        return new StructRowWhereEnumerable(this, where, enableCaching);
+    }
+
+    /// <summary>
+    /// Yield-based implementation backing <see cref="ScanStructRowsWhere"/> for the full-scan /
+    /// SIMD fallback paths (which allocate by nature). The hash-index and primary-key point-lookup
+    /// fast paths are handled allocation-free by <see cref="StructRowWhereEnumerator"/>; this core
+    /// re-checks them (they have already been ruled out when the fallback is reached) and then
+    /// runs the numeric-SIMD batch filter or the full scan.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public IEnumerable<StructRow> ScanStructRowsWhere(string? where, bool enableCaching = false)
+    private IEnumerable<StructRow> ScanStructRowsWhereCore(string? where, bool enableCaching)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
         var schema = BuildVariableLengthSchema();
@@ -284,8 +304,232 @@ public partial class Table
             }
         }
     }
+    /// <summary>
+    /// Zero-allocation enumerable for <see cref="ScanStructRowsWhere"/>. Foreach on this concrete
+    /// type uses <see cref="StructRowWhereEnumerator"/> (no heap allocation); treating it as
+    /// <c>IEnumerable&lt;StructRow&gt;</c> (LINQ, boxing) uses a small class-based enumerator.
+    /// </summary>
+    public readonly struct StructRowWhereEnumerable : IEnumerable<StructRow>
+    {
+        private readonly Table _table;
+        private readonly string? _where;
+        private readonly bool _enableCaching;
+
+        internal StructRowWhereEnumerable(Table table, string? where, bool enableCaching)
+        {
+            _table = table;
+            _where = where;
+            _enableCaching = enableCaching;
+        }
+
+        public StructRowWhereEnumerator GetEnumerator() => new(_table, _where, _enableCaching);
+
+        IEnumerator<StructRow> IEnumerable<StructRow>.GetEnumerator()
+            => new BoxedEnumerator(_table, _where, _enableCaching);
+
+        IEnumerator IEnumerable.GetEnumerator()
+            => ((IEnumerable<StructRow>)this).GetEnumerator();
+
+        private sealed class BoxedEnumerator : IEnumerator<StructRow>
+        {
+            // NOT readonly: MoveNext mutates the struct enumerator's phase state.
+            private StructRowWhereEnumerator _inner;
+
+            internal BoxedEnumerator(Table table, string? where, bool enableCaching)
+            {
+                _inner = new StructRowWhereEnumerator(table, where, enableCaching);
+            }
+
+            public StructRow Current => _inner.Current;
+            object IEnumerator.Current => _inner.Current;
+
+            public bool MoveNext() => _inner.MoveNext();
+            public void Reset() => throw new NotSupportedException();
+            public void Dispose() => _inner.Dispose();
+        }
+    }
+    /// <summary>
+    /// Allocation-free enumerator for <see cref="StructRowWhereEnumerable"/>. Handles the
+    /// hash-index and primary-key point-lookup fast paths natively (zero allocations on the
+    /// hot path); the numeric-SIMD / full-scan fallback delegates to the yield-based core.
+    /// </summary>
+    public struct StructRowWhereEnumerator : IDisposable
+    {
+        private enum Phase
+        {
+            Init,
+            Hash,
+            Pk,
+            Fallback,
+            Done
+        }
+
+        private readonly Table _table;
+        private readonly string? _where;
+        private readonly bool _enableCaching;
+        private Phase _phase;
+        private VariableLengthSchema _schema;
+        private IStorageEngine _engine;
+        private string? _simpleColumn;
+        private object? _simpleValue;
+        private bool _hasSimpleWhere;
+        private List<long> _positions;
+        private int _posIndex;
+        private bool _pkFound;
+        private long _pkPosition;
+        private IEnumerator<StructRow>? _fallback;
+        private StructRow _current;
+
+        internal StructRowWhereEnumerator(Table table, string? where, bool enableCaching)
+        {
+            _table = table;
+            _where = where;
+            _enableCaching = enableCaching;
+            _phase = Phase.Init;
+            _schema = default;
+            _engine = null!;
+            _simpleColumn = null;
+            _simpleValue = null;
+            _hasSimpleWhere = false;
+            _positions = null!;
+            _posIndex = 0;
+            _pkFound = false;
+            _pkPosition = 0;
+            _fallback = null;
+            _current = default;
+        }
+
+        /// <summary>Gets the current row.</summary>
+        public StructRow Current => _current;
+
+        /// <summary>Advances to the next matching row.</summary>
+        public bool MoveNext()
+        {
+            switch (_phase)
+            {
+                case Phase.Init:
+                    return InitAndMoveNext();
+                case Phase.Hash:
+                    return MoveNextHash();
+                case Phase.Pk:
+                    return MoveNextPk();
+                case Phase.Fallback:
+                    return MoveNextFallback();
+                default:
+                    return false;
+            }
+        }
+
+        private bool InitAndMoveNext()
+        {
+            _schema = _table.BuildVariableLengthSchema();
+            _engine = _table.GetOrCreateStorageEngine();
+            _hasSimpleWhere = !string.IsNullOrEmpty(_where) &&
+                TryParseSimpleWhereClause(_where!, out _simpleColumn, out _simpleValue);
+
+            // Fast path 1: hash-index point lookup (mirrors SelectInternal).
+            if (_hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
+                _table.registeredIndexes.ContainsKey(_simpleColumn))
+            {
+                _table.EnsureIndexLoaded(_simpleColumn);
+                if (_table.hashIndexes.TryGetValue(_simpleColumn, out var hashIndex))
+                {
+                    var colIdx = _table.Columns.IndexOf(_simpleColumn);
+                    if (colIdx >= 0)
+                    {
+                        var key = ParseValueForHashLookup(_simpleValue.ToString() ?? string.Empty, _table.ColumnTypes[colIdx]);
+                        if (key is not null)
+                        {
+                            _positions = hashIndex.LookupPositions(key);
+                            _posIndex = 0;
+                            _phase = Phase.Hash;
+                            return MoveNextHash();
+                        }
+                    }
+                }
+            }
+
+            // Fast path 2: primary-key lookup.
+            if (_hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
+                _table.PrimaryKeyIndex >= 0 &&
+                string.Equals(_simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            {
+                var pkStr = _simpleValue.ToString() ?? string.Empty;
+                var search = _table.Index.Search(pkStr);
+                if (search.Found)
+                {
+                    _pkPosition = search.Value;
+                    _pkFound = true;
+                    _phase = Phase.Pk;
+                    return MoveNextPk();
+                }
+
+                _phase = Phase.Done;
+                return false;
+            }
+
+            // Fallback: numeric-SIMD batch filter / full scan (allocating by nature).
+            _fallback = _table.ScanStructRowsWhereCore(_where, _enableCaching).GetEnumerator();
+            _phase = Phase.Fallback;
+            return MoveNextFallback();
+        }
+
+
+
+
 
     /// <summary>
+        private bool MoveNextHash()
+        {
+            while (_posIndex < _positions.Count)
+            {
+                var pos = _positions[_posIndex++];
+                var data = _engine.Read(_table.Name, pos);
+                if (data is { Length: > 0 })
+                {
+                    _current = new StructRow(data.AsMemory(), _schema, _enableCaching);
+                    return true;
+                }
+            }
+
+            _phase = Phase.Done;
+            return false;
+        }
+
+        private bool MoveNextPk()
+        {
+            if (_pkFound)
+            {
+                _pkFound = false;
+                var data = _engine.Read(_table.Name, _pkPosition);
+                if (data is { Length: > 0 })
+                {
+                    _current = new StructRow(data.AsMemory(), _schema, _enableCaching);
+                    return true;
+                }
+            }
+
+            _phase = Phase.Done;
+            return false;
+        }
+
+        private bool MoveNextFallback()
+        {
+            if (_fallback is not null && _fallback.MoveNext())
+            {
+                _current = _fallback.Current;
+                return true;
+            }
+
+            _phase = Phase.Done;
+            return false;
+        }
+
+        /// <summary>Releases the fallback iterator (no-op on the allocation-free fast paths).</summary>
+        public void Dispose() => _fallback?.Dispose();
+    }
+
+
     /// SIMD-accelerated equality filter over a batch of int32 values (portable <c>Vector&lt;int&gt;</c>
     /// with scalar fallback). Writes matching indices into <paramref name="matches"/>.
     /// </summary>

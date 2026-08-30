@@ -126,7 +126,8 @@ public interface IDatabase : IAsyncDisposable
 
     /// <summary>
     /// Executes a simple point-lookup SELECT and returns zero-allocation <see cref="SharpCoreDB.DataStructures.StructRow"/>
-    /// results (the v2 fast-path API). Avoids per-row Dictionary allocations and value boxing.
+    /// results (the v2 fast-path API). The returned <see cref="SharpCoreDB.DataStructures.StructRowQueryEnumerable"/>
+    /// is a struct — foreach on it is allocation-free. Avoids per-row Dictionary allocations and value boxing.
     /// Supports the simple "SELECT [*|col] FROM t [WHERE col = @param|'literal'] [LIMIT n]" shape;
     /// more complex queries throw <see cref="NotSupportedException"/>.
     /// Default implementation throws — <see cref="Database"/> overrides with the real implementation.
@@ -134,7 +135,7 @@ public interface IDatabase : IAsyncDisposable
     /// <param name="sql">The SQL query.</param>
     /// <param name="parameters">The parameters.</param>
     /// <returns>Zero-allocation filtered enumeration of StructRow instances.</returns>
-    IEnumerable<SharpCoreDB.DataStructures.StructRow> ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters = null)
+    SharpCoreDB.DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters = null)
         => throw new NotSupportedException("ExecuteQueryStruct is not supported by this IDatabase implementation.");
 
     /// <summary>

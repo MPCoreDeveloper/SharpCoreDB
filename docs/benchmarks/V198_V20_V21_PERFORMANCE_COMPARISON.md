@@ -160,11 +160,15 @@ Changes landed:
 
 Note on row-dictionary pooling (#5 headline): pooling `Dictionary<string, object>` rows is
 structurally unsafe for the existing API — callers retain the returned rows, so a shared pool
-would corrupt data across queries. The measured "zero-alloc" `ExecuteQueryStruct` path is still
-~1 KB/op on a point lookup: two yield-iterator state machines plus the plan-cache key, the
-WHERE-string build and `engine.Read`'s per-read byte[] dominate. A struct-enumerator refactor
-of `ExecuteSimpleSelectStruct`/`ScanStructRowsWhere` is the remaining path to genuinely
-allocation-free point lookups (deferred — public-API surface change, higher risk).
+would corrupt data across queries. The `ExecuteQueryStruct` StructRow path is now genuinely the
+low-alloc read path: the two yield-iterator state machines (`ExecuteSimpleSelectStruct` /
+`ScanStructRowsWhere`) were replaced with struct enumerators, and `IDatabase.ExecuteQueryStruct`
+now returns a struct enumerable (foreach is allocation-free). Post-refactor, a point lookup
+allocates **471 B/op** (was 976 B/op after the §6.4 allocation cuts, −52%) against 911 B/op for
+the dictionary `ExecuteQuery` path — the remaining bytes are the plan-cache key, the WHERE-string
+build, `TryParseSimpleWhereClause`'s two strings, the hash-index position list and `engine.Read`'s
+per-read byte[]. The full-scan/SIMD fallback paths delegate to the yield-based core (they allocate
+by nature), and LINQ/boxing usage goes through a small class-based enumerator.
 
 ### Recommendations for a follow-up benchmark
 - Run on a quiet machine with ≥5 repetitions per version and report medians.

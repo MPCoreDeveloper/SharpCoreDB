@@ -142,13 +142,17 @@ four `parameters ?? []` empty-dictionary allocations removed; single-file `Execu
 hoists the per-query `PRAGMA table_info` regex to a compiled static field and replaces
 `sql.Trim().ToUpperInvariant()` with span checks.
 
-**Remaining #5 work — struct-enumerator refactor:** full row-dictionary pooling is
-structurally unsafe (callers retain the returned rows; a shared pool would corrupt data),
-and `ExecuteQueryStruct` is still ~1 KB/op on a point lookup because two yield-iterator
-state machines (plus plan-cache key, WHERE-string build, `engine.Read` byte[]) dominate.
-Converting `ExecuteSimpleSelectStruct`/`ScanStructRowsWhere` to struct enumerators
-(source-compatible for `foreach`) is the path to genuinely allocation-free point lookups;
-it changes the public return-type surface and is deferred as a focused, higher-risk item.
+**#5 struct-enumerator refactor — DONE (2026-08-30):** full row-dictionary pooling is
+structurally unsafe (callers retain the returned rows; a shared pool would corrupt data), so the
+zero-allocation win was delivered via struct enumerators instead. `ExecuteSimpleSelectStruct` and
+`ScanStructRowsWhere` are no longer yield iterators: `Table.ScanStructRowsWhere` returns a
+`StructRowWhereEnumerable` struct whose enumerator handles the hash-index / primary-key point-lookup
+fast paths allocation-free (the SIMD/full-scan fallback delegates to the yield-based core), and
+`IDatabase.ExecuteQueryStruct` now returns a `StructRowQueryEnumerable` struct (foreach is
+allocation-free; LINQ/boxing goes through a small class-based enumerator). A point lookup dropped
+from **976 → 471 B/op (−52%)** on the StructRow path (911 B/op on the dictionary path), with +13%
+throughput. Remaining bytes are the plan-cache key, WHERE-string build, `TryParseSimpleWhereClause`
+strings, hash-index position list and `engine.Read`'s per-read byte[].
 
 
 ---
