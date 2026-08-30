@@ -2486,7 +2486,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))
             {
                 // Copy all blocks to new file in optimal order
-                foreach (var blockName in _blockRegistry.EnumerateBlockNames().OrderBy(n => n))
+                foreach (var blockName in _blockRegistry.EnumerateBlockNames()
+                    .Where(n => n != ScdbFileHeader.FSM_BLOCK_NAME).OrderBy(n => n))
                 {
                     var blockData = await ReadBlockAsync(blockName, cancellationToken);
                     if (blockData != null)
@@ -2794,9 +2795,10 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))
             {
                 // Re-encrypt every block under the new DEK.
-                foreach (var blockName in _blockRegistry.EnumerateBlockNames().OrderBy(n => n, StringComparer.Ordinal))
+                foreach (var blockName in _blockRegistry.EnumerateBlockNames()
+                    .Where(n => n != ScdbFileHeader.FSM_BLOCK_NAME)
+                    .OrderBy(n => n, StringComparer.Ordinal))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
                     var blockData = await ReadBlockAsync(blockName, cancellationToken).ConfigureAwait(false);
                     if (blockData is not null)
                     {
