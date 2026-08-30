@@ -95,7 +95,9 @@ public sealed class MetadataSizingTests : IDisposable
                 await provider.WriteBlockAsync($"blk_{i}", payload);
             }
 
-            await provider.FlushAsync();
+            // ForceFlushAsync = registry force flush + WAL checkpoint (full durability),
+            // avoiding a race between the periodic registry flusher and the reopen below.
+            await provider.ForceFlushAsync();
         }
 
         using var reopened = SingleFileStorageProvider.Open(_testDbPath, options);
