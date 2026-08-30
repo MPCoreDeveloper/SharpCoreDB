@@ -52,6 +52,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private readonly string _dataBlockName = $"table:{tableName}:data";
     private List<Dictionary<string, object>> _rowCache = [];
     private bool _cacheLoaded;
+
+    // Comparison operators in precedence order for simple-condition fast-path parsing
+    // (must match EvaluateSingleCondition's ordering: >= before >, etc.).
+    private static readonly string[] SingleFileConditionOperators = [">=", "<=", "!=", "<>", "=", ">", "<"];
+
     private bool _isDirty;
     private long _nextId = 1;
 
@@ -281,19 +286,29 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         List<Dictionary<string, object>> results;
         lock (_tableLock)
         {
-            results = _rowCache.Select(row => new Dictionary<string, object>(row)).ToList();
-        }
+            // PERF: evaluate WHERE/ORDER BY against the cached rows (read-only) and
+            // materialize (defensive-copy) only the surviving rows. Previously every
+            // row was copied up-front, so a point lookup on a large cache copied the
+            // whole table before filtering (O(N) dictionary allocations per query).
+            IEnumerable<Dictionary<string, object>> source = _rowCache;
+            if (!string.IsNullOrWhiteSpace(condition))
+            {
+                // Fast path: a simple "col op value" condition is parsed ONCE and
+                // evaluated per row without per-row regex/IN/AND/OR parsing.
+                var fastPredicate = TryCreateSimpleConditionPredicate(condition);
+                source = fastPredicate is not null
+                    ? _rowCache.Where(fastPredicate)
+                    : _rowCache.Where(row => EvaluateCondition(row, condition));
+            }
 
-        if (!string.IsNullOrWhiteSpace(condition))
-        {
-            results = results.Where(row => EvaluateCondition(row, condition)).ToList();
-        }
+            if (!string.IsNullOrWhiteSpace(orderBy))
+            {
+                source = asc
+                    ? source.OrderBy(row => row.TryGetValue(orderBy, out var value) ? value : null)
+                    : source.OrderByDescending(row => row.TryGetValue(orderBy, out var value) ? value : null);
+            }
 
-        if (!string.IsNullOrWhiteSpace(orderBy))
-        {
-            results = asc
-                ? results.OrderBy(row => row.TryGetValue(orderBy, out var value) ? value : null).ToList()
-                : results.OrderByDescending(row => row.TryGetValue(orderBy, out var value) ? value : null).ToList();
+            results = source.Select(row => new Dictionary<string, object>(row)).ToList();
         }
 
         return results;
@@ -1096,6 +1111,143 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         return columnName.Trim('"', '[', ']', '`');
     }
+
+    /// <summary>
+    /// Fast-path predicate factory for a simple "col op value" WHERE condition.
+    /// Parses the column/operator/value once per query and evaluates per row with the
+    /// exact same type cascade as <see cref="EvaluateSingleCondition"/> (int → long →
+    /// decimal → ordinal string compare), but WITHOUT the per-row regex (IS NULL / LIKE /
+    /// BETWEEN), IN-predicate and AND/OR parsing that dominate single-file SELECT
+    /// allocations. Returns null for anything that is not a simple comparison, in which
+    /// case the caller falls back to the full <see cref="EvaluateCondition"/>.
+    /// </summary>
+    private static Func<Dictionary<string, object>, bool>? TryCreateSimpleConditionPredicate(string condition)
+    {
+        var trimmed = condition.Trim();
+
+        // Conservative eligibility: reject any condition that the full evaluator handles
+        // with dedicated syntax (AND/OR chains, IN lists, LIKE, BETWEEN, IS [NOT] NULL).
+        // Rejecting is always safe — the fallback preserves existing behavior.
+        if (trimmed.Contains(" AND ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" OR ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IN ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("LIKE", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // Same operator order as EvaluateSingleCondition (>= before >, etc.).
+        string? op = null;
+        int opIndex = -1;
+        foreach (var testOp in SingleFileConditionOperators)
+        {
+            opIndex = trimmed.IndexOf(testOp, StringComparison.Ordinal);
+            if (opIndex >= 0)
+            {
+                op = testOp;
+                break;
+            }
+        }
+
+        if (op is null || opIndex <= 0)
+        {
+            return null;
+        }
+
+        var columnName = trimmed[..opIndex].Trim();
+        var dotIndex = columnName.LastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < columnName.Length - 1)
+        {
+            columnName = columnName[(dotIndex + 1)..].Trim('"', '[', ']', '`');
+        }
+
+        if (columnName.Length == 0)
+        {
+            return null;
+        }
+
+        var valueStr = trimmed[(opIndex + op.Length)..].Trim();
+        if ((valueStr.StartsWith('\'') && valueStr.EndsWith('\'')) ||
+            (valueStr.StartsWith('"') && valueStr.EndsWith('"')))
+        {
+            valueStr = valueStr[1..^1];
+        }
+
+        if (valueStr.Length == 0)
+        {
+            return null;
+        }
+
+        var column = columnName;
+        var value = valueStr;
+        var operatorStr = op;
+
+        return row =>
+        {
+            if (!row.TryGetValue(column, out var rowValue) || rowValue is null or DBNull)
+            {
+                return false;
+            }
+
+            // Exact same type cascade as EvaluateSingleCondition.
+            if (rowValue is int intVal && int.TryParse(value, out var intCompare))
+            {
+                return operatorStr switch
+                {
+                    "=" => intVal == intCompare,
+                    "!=" or "<>" => intVal != intCompare,
+                    ">" => intVal > intCompare,
+                    "<" => intVal < intCompare,
+                    ">=" => intVal >= intCompare,
+                    "<=" => intVal <= intCompare,
+                    _ => true
+                };
+            }
+
+            if (rowValue is long longVal && long.TryParse(value, out var longCompare))
+            {
+                return operatorStr switch
+                {
+                    "=" => longVal == longCompare,
+                    "!=" or "<>" => longVal != longCompare,
+                    ">" => longVal > longCompare,
+                    "<" => longVal < longCompare,
+                    ">=" => longVal >= longCompare,
+                    "<=" => longVal <= longCompare,
+                    _ => true
+                };
+            }
+
+            if (rowValue is decimal decVal && decimal.TryParse(value, out var decCompare))
+            {
+                return operatorStr switch
+                {
+                    "=" => decVal == decCompare,
+                    "!=" or "<>" => decVal != decCompare,
+                    ">" => decVal > decCompare,
+                    "<" => decVal < decCompare,
+                    ">=" => decVal >= decCompare,
+                    "<=" => decVal <= decCompare,
+                    _ => true
+                };
+            }
+
+            var comparison = string.Compare(rowValue.ToString(), value, StringComparison.Ordinal);
+            return operatorStr switch
+            {
+                "=" => comparison == 0,
+                "!=" or "<>" => comparison != 0,
+                ">" => comparison > 0,
+                "<" => comparison < 0,
+                ">=" => comparison >= 0,
+                "<=" => comparison <= 0,
+                _ => true
+            };
+        };
+    }
+
 
     private static bool EvaluateCondition(Dictionary<string, object> row, string condition)
     {

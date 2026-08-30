@@ -165,7 +165,11 @@ public sealed class QueryPlanCache
     public static string BuildKey(string normalizedSql, Dictionary<string, object?>? parameters)
     {
         if (parameters is null || parameters.Count == 0)
-            return normalizedSql + "|p:none";
+        {
+            // No-parameter queries use the normalized SQL itself as the cache key,
+            // avoiding a per-call string concatenation on the hot path.
+            return normalizedSql;
+        }
 
         // v2 fast path: a single parameter avoids the OrderBy + list allocation.
         if (parameters.Count == 1)
