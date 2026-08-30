@@ -125,6 +125,15 @@ dotnet add package SharpCoreDB.Client --version 1.9.8
   StructRow, reopen, full vacuum) that publishes and runs with exit 0.
 - **Tests**: regression coverage `SingleFileDatabase_VacuumFull_Works_And_SurvivesReopen` (writes 100
   rows, runs a full vacuum, reopens and verifies the data survived the stream swap).
+- **Block-level Brotli/GZip compression for single-file storage** (Issue #344): transparent per-block
+  compression applied before encryption on write and removed after decryption on read; compressed and
+  uncompressed blocks can coexist in one file; defaults to `None` (backward compatible). New
+  `DatabaseOptions.BlockCompression` / `CompressionThreshold` options.
+- **Configurable SingleFile metadata region sizes** (Issue #345): `FsmSizePages`,
+  `BlockRegistrySizePages` and `TableDirectorySizePages` remove the 4-page hard ceiling (FSM/registry/
+  table directory), and the minimum file extension is now byte-based (~10 MB regardless of `PageSize`).
+- **Unicode & large-blob regression tests** (Issue #346): CJK, emoji (incl. ZWJ), RTL and combining-
+  character roundtrips plus 16 MB blob block-chaining coverage.
 - **100% backward compatible** with the v1.9.7 release line.
 
 ---

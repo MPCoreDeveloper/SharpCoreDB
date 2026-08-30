@@ -5,6 +5,21 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Block-level Brotli/GZip compression for single-file (`.scdb`) storage** (#344) — transparent
+  per-block compression applied before encryption on write and removed after decryption on read.
+  A per-block `Compressed` flag tracks state, so compressed and uncompressed blocks can coexist in
+  one file; defaults to `None` (fully backward compatible). New `DatabaseOptions.BlockCompression`
+  and `CompressionThreshold` options.
+- **Configurable SingleFile metadata region sizes** (#345) — the FSM, Block Registry and Table
+  Directory are no longer hard-coded to 4 pages: `DatabaseOptions.FsmSizePages`,
+  `BlockRegistrySizePages` and `TableDirectorySizePages` size the regions for large databases
+  (>512 MB), and the minimum file extension is now byte-based (~10 MB regardless of `PageSize`).
+- **Unicode & large-blob storage regression tests** (#346) — CJK, emoji (incl. ZWJ sequences), RTL
+  and combining-character roundtrips, plus 16 MB blob block-chaining coverage.
+
 ## [1.9.8] - 2026-08-29
 
 ### Fixed

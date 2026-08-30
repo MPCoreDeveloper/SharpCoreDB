@@ -1,10 +1,31 @@
-# SharpCoreDB v1.9.7 - Production Database Engine
+# SharpCoreDB v1.9.8 - Production Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in v1.9.8
+
+### 🗜️ Block-level Brotli/GZip compression (Issue #344)
+- Transparent per-block **Brotli/GZip** compression for single-file (`.scdb`) storage — applied before
+  encryption on write, removed after decryption on read.
+- Compressed and uncompressed blocks can coexist in one file; defaults to `None` (backward compatible).
+- New options: `DatabaseOptions.BlockCompression` and `CompressionThreshold`.
+
+### ⚙️ Configurable metadata sizing (Issue #345)
+- The FSM, Block Registry and Table Directory are no longer hard-coded to 4 pages:
+  `FsmSizePages`, `BlockRegistrySizePages` and `TableDirectorySizePages` support databases beyond 512 MB.
+- Minimum file extension is now byte-based (~10 MB) regardless of `PageSize`.
+
+### 🧪 Unicode & large-blob regression coverage (Issue #346)
+- CJK, emoji (incl. ZWJ sequences), RTL and combining-character roundtrips, plus 16 MB blob
+  block-chaining integrity tests.
+
+### 🛡️ Native AOT-safe single-file full VACUUM (Issue #343)
+- `VacuumAsync(VacuumMode.Full)` no longer crashes under .NET 10 trimming / Native AOT — reflection-free
+  stream swap and source-generated row-cache JSON make single-file (`.scdb`) mode fully AOT-safe.
 
 ## What's New in v1.9.7
 
@@ -248,7 +269,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.9.7 (August 29, 2026)  
+**Latest Version:** 1.9.8 (August 30, 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 2,520+ across all suites (1,521 core / 114 EF Core), 100% passing  
 **Status:** ✅ Production Ready
