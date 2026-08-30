@@ -1,7 +1,10 @@
 <Project>
   <PropertyGroup>
     <Nullable>enable</Nullable>
-    <LangVersion>14</LangVersion>
+    <!-- .NET 11 / C# 15 toolchain (release/v2.1.0.0 line) — this nested props file
+         shadows the root Directory.Build.props for everything under src/SharpCoreDB/. -->
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     
     <!-- Common optimizations -->

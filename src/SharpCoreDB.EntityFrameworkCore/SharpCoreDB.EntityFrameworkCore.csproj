@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>14.0</LangVersion>
+
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
@@ -62,7 +61,7 @@
 
   <!-- Per-RID builds removed: this is a pure managed (AnyCPU) library.
        The same DLL works on all platforms. Per-RID runtimes/ folders are only
-       needed for native code. The standard lib/net10.0/ layout is correct. -->
+       needed for native code. The standard lib/net11.0/ layout is correct. -->
   <ItemGroup>
     
   </ItemGroup>

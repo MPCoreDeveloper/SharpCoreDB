@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0</TargetFrameworks>
+
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>SharpCoreDB.Provider.YesSql</RootNamespace>
@@ -45,10 +45,8 @@
     <!-- Use Sqlite provider as base (most compatible with SharpCoreDB) -->
     <PackageReference Include="YesSql.Provider.Sqlite" />
 
-    <!-- DI for OrchardCore integration -->
-    <!-- net10 path uses CPM; net8 path keeps explicit older pin for legacy TFM compatibility -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <!-- DI for OrchardCore integration (CPM supplies the version centrally) -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Condition="'$(TargetFramework)' == 'net11.0'" />
 
     <!-- SharpCoreDB dependencies -->
     <PackageReference Include="SharpCoreDB" Condition="'$(UseSharpCoreDBPackage)' == 'true'" />

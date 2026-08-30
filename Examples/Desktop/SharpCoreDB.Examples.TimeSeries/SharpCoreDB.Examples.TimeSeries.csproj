@@ -2,8 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseLocalSharpCoreDbSources Condition="'$(UseLocalSharpCoreDbSources)' == '' and Exists('..\..\..\src\SharpCoreDB\SharpCoreDB.csproj')">true</UseLocalSharpCoreDbSources>

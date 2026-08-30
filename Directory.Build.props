@@ -3,6 +3,15 @@
     This file ensures consistent NuGet package versions across the solution.
     It has higher precedence than Directory.Packages.props for resolving conflicts.
   -->
+  <PropertyGroup>
+    <!-- .NET 11 / C# 15 toolchain (release/v2.1.0.0 line). Centralized here so the
+         whole solution re-targets in one place; per-project overrides removed. -->
+    <TargetFramework>net11.0</TargetFramework>
+    <!-- C# 15 is a preview language version in the .NET 11 preview SDK; numeric "15.0"
+         only becomes valid at GA. "latest" maps to the newest supported version. -->
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Force our version of Microsoft.Data.Sqlite to prevent NU1506 duplicate PackageVersion warnings
          from transitive dependencies (Microsoft.EntityFrameworkCore.Sqlite, linq2db.Provider.SQLite, YesSql.Provider.Sqlite, etc.) -->
