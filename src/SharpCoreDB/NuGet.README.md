@@ -1,4 +1,4 @@
-# SharpCoreDB v1.9.6 - Production Database Engine
+# SharpCoreDB v2.0.0-preview.2 - Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
@@ -6,49 +6,35 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
-## What's New in v1.9.6
+## What's New in v2.0.0-preview.2
 
-### 🐛 Critical fix: WHERE IN (...) no longer returns ALL rows (Issue #339)
+### 🚀 Performance-first engine
+- v2.0 closes the v1.x benchmark gap: point reads **beat SQLite** on the default engine, batch INSERTs
+  are at parity, and the WP10–WP13 storage-engine work narrowed single-row UPDATE/DELETE to ~1–2x SQLite.
+- Zero-allocation struct-row SQL reads via `ExecuteQueryStruct`.
 
-- `IN` / `NOT IN` filters are now evaluated correctly in every path — single-file (`.scdb`) and directory
-  storage modes, string and non-string columns, literal and parameterized lists. Previously these filters
-  were silently ignored and returned the whole table.
-- Single-file parameterized queries (`IN (@p0, @p1)`) no longer throw "Missing required parameter".
-- 🎉 The project is now **continuously analyzed on SonarCloud** — quality gate, bug, vulnerability and
-  code-smell tracking are part of the normal workflow from this release onward.
+### 🔒 Envelope encryption + full at-rest encryption
+- **Password-based key model**: `DatabaseOptions.EncryptionPassword` creates a random per-file
+  data-encryption-key (DEK) wrapped by a PBKDF2-HMAC-SHA256-derived key (per-file salt, OWASP-2024
+  iteration default). Raw `EncryptionKey` mode remains fully supported.
+- **Full at-rest metadata encryption** (beyond issue #341's block data): the block registry,
+  free-space map and WAL are encrypted too (`EncryptionMode = 2`), so block/table names, offsets,
+  lengths and allocation patterns are not visible in plaintext on disk.
+- **Key & password rotation**: `IDatabase.ChangeEncryptionPasswordAsync(...)` re-wraps the DEK (O(1),
+  no data rewrite); `IDatabase.RotateEncryptionKeyAsync(...)` fully re-keys the database via a
+  crash-safe temp-file swap.
+- Wrong key/password now fails loudly at open (GCM authentication failure).
 
-### v1.9.6 to v1.9.6
+### 📦 Block-level compression (Issue #344)
+- Transparent per-block **Brotli/GZip** compression for single-file (`.scdb`) storage — applied before
+  encryption on write, removed after decryption on read.
+- Compressed and uncompressed blocks can coexist in one file; defaults to `None` (backward compatible).
+- New options: `DatabaseOptions.BlockCompression` and `CompressionThreshold`.
 
-- **Auto-ROWID**: Tables without an explicit `PRIMARY KEY` get a hidden `_rowid` column (ULID). SQLite rowid semantics.
-- **GRAPH_RAG SQL clause**: New `GRAPH_RAG` SELECT clause with `LIMIT`, `WITH SCORE > X`, `WITH CONTEXT`, `TOP_K`.
-- **OPTIONALLY projection mode**: `OPTIONALLY` keyword enables `Option<T>` mapping in ADO.NET readers (SharpCoreDB.Functional).
-- **IS SOME / IS NONE predicates**: Null-safety predicates in parser and runtime evaluators.
-- **SIMD optimization**: All 16 columnar aggregate methods use `Vector256.LoadUnsafe` (eliminates Span allocation in AVX2 loops).
-- **Viewer major update**: Multi-tab editor, typed table designer (ULID/GUID), 6-language UI (EN/DE/FR/ES/IT/NL), server connection.
-- **FluentMigrator alignment**: `AddSharpCoreDBFluentMigrator()` defaults both generator and processor to SQLite-compatible mode.
-- `Microsoft.Extensions.Logging.Abstractions` bumped to **10.0.7**.
-- Bug fixes: IS NULL/IS NOT NULL unification, COALESCE() in SELECT, LINQ Convert, German locale matching, PAGE_BASED mixed-predicate scan.
-
-### 🔄 Synchronized 1.9.6 Release
-now ship on the same `1.9.6` release line
-- **Documentation Refresh** - Installation guidance and package docs were updated to match the current feature and fix set
-- **Optional Package Maturity** - Event Sourcing, Projections, and CQRS docs now highlight durable snapshots, checkpointing, persistent outbox support, retry handling, and hosted workers
-
-### 🎉 Phase 11 Complete: Network Database Server
-- **SharpCoreDB.Server** - Full network database server with gRPC, Binary TCP, HTTPS REST, WebSocket
-- **Multi-Language Clients** - .NET, Python (PyPI), JavaScript/TypeScript (npm)
-- **Enterprise Security** - JWT + Mutual TLS + RBAC
-- **Cross-Platform Deploy** - Docker, Windows Service, Linux systemd
-
-### 🐛 Critical Bug Fixes
-- **Database Reopen:** Fixed edge case where closing and immediately reopening a database would fail
-- **Metadata Handling:** Graceful empty JSON handling for new databases
-- **Durability:** Immediate metadata flush ensures persistence on disk
-
-### 📦 New Features
-- **Brotli Compression:** 60-80% smaller metadata files with zero CPU overhead
-- **Backward Compatible:** Auto-detects compressed vs raw JSON format
-- **Enterprise Distributed:** Phase 10 complete with sync, replication, transactions
+### ⚙️ Configurable metadata sizing (Issue #345)
+- The FSM, Block Registry and Table Directory are no longer hard-coded to 4 pages:
+  `FsmSizePages`, `BlockRegistrySizePages` and `TableDirectorySizePages` support databases beyond 512 MB.
+- Minimum file extension is now byte-based (~10 MB) regardless of `PageSize`.
 
 ## 🚀 Key Features
 
@@ -217,10 +203,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 1.9.6 (April 26, 2026)  
+**Latest Version:** 2.0.0-preview.2 (August 30, 2026)  
 **Target:** .NET 10 / C# 14  
-**Tests:** 1,468+ (100% passing)  
-**Status:** ✅ Production Ready
+**Tests:** 1,600+ (100% passing)  
+**Status:** ✅ Preview 2 — performance-first v2.0 line
 
 
 

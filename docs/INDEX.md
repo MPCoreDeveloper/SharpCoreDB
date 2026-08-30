@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`v2.0.0`)
+**Status:** Active documentation set (`v2.0.0-preview.2`)
 
 ## 0. Manual (start here)
 

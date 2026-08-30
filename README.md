@@ -93,6 +93,9 @@ Headline changes:
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
   source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
 - ✅ **2,412 tests / 0 failures** across all 15 test projects; every operation beats LiteDB
+- 🛡️ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL, key & password rotation APIs (#341 follow-on)
+- 🗜️ **Block-level Brotli/GZip compression** for single-file (`.scdb`) storage — transparent, per-block, applied before encryption / removed after decryption (#344)
+- ⚙️ **Configurable metadata region sizing** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` remove the 512 MB single-file ceiling; byte-based file extension (~10 MB regardless of `PageSize`) (#345)
 
 Full details, honest guidance on where SQLite still wins, and the API ladder: **[Performance Guide](docs/manual/performance.md)**.
 Track the v2.x plan: **[`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)**.

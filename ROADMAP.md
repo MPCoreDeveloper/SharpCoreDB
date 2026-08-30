@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Last updated: v2.0.0 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
+**Last updated: v2.0.0-preview.2 · Maintained by [@MPCoreDeveloper](https://github.com/MPCoreDeveloper)**
 
 </div>
 
@@ -102,6 +102,10 @@
 - ✅ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, source-gen DTOs/JSON; `tools/SharpCoreDB.AotSmoke` publishes + runs (exit 0)
 - ✅ **2,412 tests / 0 failures** across all 15 test projects
 - ✅ **Fixed regression** — positional `?` placeholders now fall back to the legacy binder (were treated as literals)
+- ✅ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL; `ChangeEncryptionPasswordAsync` / `RotateEncryptionKeyAsync` rotation APIs (#341 follow-on)
+- ✅ **Block-level Brotli/GZip compression** — single-file (`.scdb`) storage, per-block, before-encryption / after-decryption (#344)
+- ✅ **Configurable metadata region sizes** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` + byte-based file extension (~10 MB regardless of PageSize) (#345)
+- ✅ **Unicode & large-blob regression coverage** — CJK/emoji/RTL/combining characters, 16 MB blob block chaining (#346)
 
 > 📊 Full details + honest guidance: [`docs/manual/performance.md`](docs/manual/performance.md) · plan: [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
 
