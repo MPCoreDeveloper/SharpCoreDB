@@ -297,7 +297,7 @@ These are ideas raised by the community that need more design work or votes befo
 | Version | Focus |
 |---------|-------|
 | **v2.0** ✅ | **Performance-first release** — closed the 16–52x benchmark gap (point reads beat SQLite, all ops beat LiteDB), zero-allocation reads, SIMD filters, Native AOT readiness |
-| **v2.1** | Close UPDATE/DELETE gap vs SQLite (in-place writes, fixed-width records), .NET 11 / C# 15 migration, AOT warning cleanup, Let's Encrypt/ACME |
+| **v2.1** | Close UPDATE/DELETE gap vs SQLite (in-place writes, fixed-width records), **.NET 11 / C# 15 migration (🔶 in progress on `release/v2.1.0.0` — Phase 0 toolchain done)**, AOT warning cleanup, Let's Encrypt/ACME |
 | **v2.2** | Enterprise Backup Orchestrator, backup retention + remote targets, Column-Level Security |
 | **v2.x** | PITR (requires backup foundation), Automated Data Tiering, full OTel distributed tracing, advanced plan profiling |
 

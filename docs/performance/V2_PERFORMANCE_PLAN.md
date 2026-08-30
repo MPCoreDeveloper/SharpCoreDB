@@ -1,10 +1,10 @@
 # SharpCoreDB v2.x — Performance-First Roadmap
 
-**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · remaining items target v2.1
-**Branch:** `release/v2.0.0.0`
+**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · **WP8 Phase 0 (toolchain baseline) complete on `release/v2.1.0.0`** · remaining items target v2.1
+**Branch:** `release/v2.0.0.0` (v2.0.x line, .NET 10 / C# 14) · `release/v2.1.0.0` (v2.1 line, .NET 11 / C# 15)
 **Target version:** 2.0.0.0 (shipped) → 2.1.0.0 (next)
-**Current toolchain:** .NET 10 / C# 14 (locked for v2.0.x)
-**Next toolchain:** .NET 11 / C# 15 — mainstream November 2026 (planned for v2.1+)
+**Current toolchain (v2.1 branch):** .NET 11 preview 7 / C# 15 preview (`LangVersion latest` — numeric `15.0` is only valid at GA)
+**Next milestone:** .NET 11 GA (mainstream November 2026) — switch to `LangVersion 15.0`, adopt Zstandard + IEEE 754 decimal when they land in the runtime
 **Last updated:** August 2026
 
 ---
@@ -63,7 +63,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP5** | Cache DI lookups | Cache `IGraphRagProvider` resolution in `GetSharedSqlParser` | ✅ **DONE in v2.0.0** |
 | **WP6** | Storage/index tuning | AppendOnly/PageBased read path, page cache, hash/B-tree index maintenance batching | ✅ **DONE in v2.0.0** (no-copy hash-index lookup for write-locked batch paths, `ExecuteQueryFast` precompiled regexes, `NormalizeSql` allocation short-circuit; storage read path already uses cached `SafeFileHandle` + `RandomAccess`) |
 | **WP7** | Provider fast paths | ADO.NET `SharpCoreDBCommand`/`DataReader`, YesSql, Sync provider materialization | ✅ **DONE in v2.0.0** (per-`ExecuteReader` full SQL parse eliminated via `OPTIONALLY` keyword fast path; span-based write/sqlite_master detection removes per-call `ToUpperInvariant`; YesSql delegates to the ADO.NET provider so it inherits the wins) |
-| **WP8** | **.NET 11 / C# 15 migration** | Target `net11.0` + `LangVersion 15`; adopt runtime async, intrinsics, SIMD lane APIs | Planned (v2.1, after Nov 2026 GA) |
+| **WP8** | **.NET 11 / C# 15 migration** | Target `net11.0` + C# 15; adopt runtime async, intrinsics, SIMD lane APIs | 🔶 **IN PROGRESS on `release/v2.1.0.0`** — Phase 0 toolchain baseline done: `net11.0` + `LangVersion latest`, SDK `11.0.100-preview.7`, CI on 11.0.x; build (0 errors), **1,790 tests**, Native AOT smoke exit 0, pack → 24 nupkgs |
 | **WP9** | Zero-allocation `StructRow` read path | Promote the dormant zero-copy `StructRow` machinery into a first-class parameterized/WHERE-capable API; cache the variable-length schema; benchmark vs SQLite | ✅ **DONE in v2.0.0** (`ExecuteQueryStruct` READ = 112K/s — **beats SQLite 84K/s**) |
 | **WP9-B/C** | SIMD in the row scan path | Fixed-offset numeric WHERE fast path: direct binary reads (no boxing/string) + portable `Vector<T>` SIMD batch equality filter for Integer/Long in `ScanStructRowsWhere`; numeric early-WHERE in the columnar full scan | ✅ **DONE in v2.0.0** (point-lookup read unaffected; numeric full-scan WHERE now SIMD-filtered, verified by tests) |
 | **WP9-E** | Native AOT readiness | `[RequiresDynamicCode]` on `QueryCompiler.Compile` + LINQ translator; AOT-safe `TypeConverter` (no `Convert.ChangeType`); AOT-safe `Option<T>` reader (no reflection); source-generated metadata JSON via `TableMetadataDto` + `SharpCoreDBJsonContext` with a JIT/AOT conditional resolver | ✅ **DONE in v2.0.0** (`tools/SharpCoreDB.AotSmoke` publishes with `PublishAot=true` and **runs: 1000 inserts, point lookup, StructRow point + full scan, reopen — exit 0**) |
@@ -100,6 +100,23 @@ Notes:
 
 **Decision:** v2.0.x ships on **.NET 10 / C# 14**. We are already *preparing* the codebase for .NET 11 / C# 15 so the migration after November 2026 GA is a low-risk, mechanical step.
 
+### 4.0 Verified preview-7 availability (measured on SDK/runtime `11.0.100-preview.7`, 2026-08-30)
+
+| Feature (§4) | In preview 7? | Evidence / note |
+|---|---|---|
+| Runtime-native async | ✅ Yes (default for `net11.0`, no `EnablePreviewFeatures` needed) | runtime docs; automatic |
+| JIT improvements (bounds-check elim, devirt, switch folding) | ✅ Yes | automatic |
+| NativeAOT faster interface dispatch | ✅ Yes | automatic |
+| AVX-512 / FMA intrinsics | ✅ Yes | already used in `DistanceMetrics` / `SimdWhereFilter` on net10 too |
+| **SIMD lane composition APIs** (`CreateGeometricSequence`, `Zip`→`(Lower,Upper)`, `Unzip`, `Concat*`) on `Vector128/256/512` | ✅ **Yes** | compile + run verified; target for columnar codecs / row scanning (Phase 2) |
+| **`INumberBase<TSelf>.TryParsePartial`** | ⚠️ Present but signature in flux | compiles with changed parameter order; re-verify per preview before adopting (Phase 3) |
+| **Arm SVE2** (`Sve`/`Sve2`) | ⚠️ Evaluation-only (`SYSLIB5003`) | usable behind `#if NET11_0_OR_GREATER` + `[RequiresPreviewFeatures]`; defer until GA (Phase 2) |
+| **Zstandard in `System.IO.Compression`** | ❌ **Not present** | `ZstdCompressor` not in preview 7; **deferred to a later preview / GA** (Phase 3) |
+| **IEEE 754 decimal (`Decimal32/64/128`)** | ❌ **Not present** | not in preview 7; **deferred to GA** (Phase 3) |
+| **C# 15 union types / closed hierarchies** | ⚠️ Not yet stabilized | validate against preview compiler before AST refactor (Phase 4) |
+
+**Toolchain note:** numeric `LangVersion 15.0` is rejected by the preview compiler (`CS1617`); the v2.1 branch uses `LangVersion latest` (maps to C# 15 preview). Switch to `15.0` at GA.
+
 ### 4.1 Runtime & JIT (automatic wins on `net11.0`)
 - **Runtime-native async (Runtime Async):** lower-overhead async, tail-merged suspension points, reduced code size, ExecutionContext-capture opt-out when no ambient state. Directly benefits `Execute*Async`, `InsertBatchAsync`, `ExecuteBatchSQLAsync`, and server paths.
 - **JIT:** bounds-check elimination, redundant checked-context removal, devirtualization, switch-expression folding, constant-folding of `SequenceEqual`, redundant branch elimination → free speedups in parser/materializer loops and index lookups.
@@ -120,10 +137,11 @@ Notes:
 - **Extension indexers / memory safety** → cleaner, allocation-free public API surface.
 
 ### 4.5 Migration plan (for v2.1)
-1. `Directory.Build.props`: `LangVersion` 14 → 15; `TargetFramework` net10.0 → net11.0 (net10 remains supported via `TargetFrameworks` if needed).
-2. Re-run benchmarks on .NET 11; measure runtime-async + JIT + intrinsics wins.
-3. Adopt Runtime Async in async hot paths; enable AVX-VNNI-512/SVE2 intrinsics behind existing `SIMD_ENABLED` guards.
-4. Add optional Zstandard page compression behind a new config flag (default off).
+1. ✅ **DONE (Phase 0, on `release/v2.1.0.0`)** — toolchain centralized: `TargetFramework` net11.0 + `LangVersion latest` in `Directory.Build.props` (root + nested `src/SharpCoreDB`); SDK `11.0.100-preview.7` via `global.json`; CI/workflows on `11.0.x` (preview quality); net10 stays on `release/v2.0.0.0`.
+2. Re-run benchmarks on .NET 11; measure runtime-async + JIT wins (was already planned; the v2.0.0 baseline numbers are in §3.1).
+3. Adopt SIMD lane composition APIs (`Zip`/`Unzip`/`CreateGeometricSequence`/`Concat`) in columnar codecs + row scanning behind the existing `SIMD_ENABLED` / `IsSupported` guards; enable SVE2 when it leaves evaluation-only status.
+4. Add optional Zstandard page compression behind a new config flag (default off) **once `ZstdCompressor` lands in the runtime** (not in preview 7).
+5. C# 15 union types / closed hierarchies for the SQL AST — after the preview compiler stabilizes (Phase 4).
 
 ---
 
