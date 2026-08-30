@@ -140,29 +140,27 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             originalSql = sql;
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
-        // For queries without parameters, we trust the input SQL as-is
-        // SQL injection protection should be handled at the application layer via parameterized queries
 
-        // Use query cache if available
-        string cacheKey = originalSql ?? sql;
         string[] parts;
-        
         if (this.queryCache != null)
         {
-            // Cache the structure - for parameterized queries, still track cache hits
-            this.queryCache.GetOrAdd(cacheKey, key =>
-            {
-                var parsedParts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-                return new QueryCache.CachedQuery
+            // PERF: reuse the cache's tokenized Parts on the hot path. For non-parameterized
+            // queries the cache key IS the SQL text, so the cached Parts are exactly the
+            // tokens of `sql` — this avoids a per-call Trim().Split() (string[] + one string
+            // per token). Parameterized queries embed distinct values into the text per call,
+            // so the cached entry (keyed by the unbound SQL) may hold a different binding's
+            // tokens — in that case the bound text is tokenized here (as before).
+            var entry = this.queryCache.GetOrAdd(originalSql ?? sql, key =>
+                new QueryCache.CachedQuery
                 {
-                    Sql = cacheKey,
-                    Parts = parsedParts,
+                    Sql = key,
+                    Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
                     CachedAt = DateTime.UtcNow
-                };
-            });
-            // Always parse the bound SQL since it contains the actual values
-            parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                });
+
+            parts = originalSql is null
+                ? entry.Parts
+                : sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
         else
         {
@@ -200,16 +198,23 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null)
     {
-        if (parameters != null && parameters.Count > 0)
+        bool hasParams = parameters is { Count: > 0 };
+        if (hasParams)
         {
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
-        // For queries without parameters, we trust the input SQL as-is
-        // SQL injection protection should be handled at the application layer via parameterized queries
-
         // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
-        var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        // PERF: reuse the cache's tokenized Parts for non-parameterized queries (the cache key
+        // is the SQL text itself); parameterized queries re-tokenize the bound text per call.
+        string[] parts = this.queryCache is not null && !hasParams
+            ? this.queryCache.GetOrAdd(sql, key =>
+                new QueryCache.CachedQuery
+                {
+                    Sql = key,
+                    Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                    CachedAt = DateTime.UtcNow
+                }).Parts
+            : sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         return this.ExecuteQueryInternal(sql, parts);
     }
 
@@ -222,17 +227,23 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <returns>The query results.</returns>
     public List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt)
     {
-        if (parameters != null && parameters.Count > 0)
+        bool hasParams = parameters is { Count: > 0 };
+        if (hasParams)
         {
             sql = SqlParser.BindParameters(sql, parameters);
         }
-        // REMOVED: SanitizeSql was breaking string literals by doubling ALL quotes including delimiters
-        // For queries without parameters, we trust the input SQL as-is
-        // SQL injection protection should be handled at the application layer via parameterized queries
         // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
         // EF Core and other callers may pass SQL with newlines, which must be tokenized properly.
-
-        var parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        // PERF: reuse the cache's tokenized Parts for non-parameterized queries (see ExecuteQuery above).
+        string[] parts = this.queryCache is not null && !hasParams
+            ? this.queryCache.GetOrAdd(sql, key =>
+                new QueryCache.CachedQuery
+                {
+                    Sql = key,
+                    Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                    CachedAt = DateTime.UtcNow
+                }).Parts
+            : sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         return this.ExecuteQueryInternal(sql, parts, noEncrypt);
     }
 
