@@ -122,6 +122,34 @@ Observations:
 - The remaining UPDATE/DELETE gap vs SQLite is structural (row-copy based updates/deletes)
   and is targeted by the v2.1 in-place-update / fixed-width-record work.
 
+### 3.3 #5 allocation cuts (2026-08-30, `74403f74` on `release/v2.1.0.0` + `release/v2.0.0.0`)
+
+Per-operation allocations on the micro-bench harness (Release; pre-#5 → post-#5):
+
+| Metric | Pre-#5 | Post-#5 |
+|---|---:|---:|
+| Directory READ (varying SQL) | 2,044 B/op | **1,684 B/op** |
+| Directory READ (identical SQL) | 1,237 B/op | **911 B/op** |
+| Directory `ExecuteQueryStruct` | 1,336 B/op | **976 B/op** |
+| Single-file point lookup (varying) | 3,211 B/op | **2,293 B/op** |
+| Single-file point lookup (identical SQL) | 2,447 B/op | **1,540 B/op** |
+
+Changes: leaky `_dictPool` removed from the point-lookup materializer (fresh pre-sized
+`Dictionary(Columns.Count)`); `TryParseSimpleWhereClause` zero-alloc span rewrite;
+`ExecuteSelectQuery` drops `ToUpperInvariant` + `fromParts`/`keywords` + the
+`SubqueryStartRegex` Match (span scan); `ExtractMainTableNameFromSql` span-based;
+four `parameters ?? []` empty-dictionary allocations removed; single-file `ExecuteQuery`
+hoists the per-query `PRAGMA table_info` regex to a compiled static field and replaces
+`sql.Trim().ToUpperInvariant()` with span checks.
+
+**Remaining #5 work — struct-enumerator refactor:** full row-dictionary pooling is
+structurally unsafe (callers retain the returned rows; a shared pool would corrupt data),
+and `ExecuteQueryStruct` is still ~1 KB/op on a point lookup because two yield-iterator
+state machines (plus plan-cache key, WHERE-string build, `engine.Read` byte[]) dominate.
+Converting `ExecuteSimpleSelectStruct`/`ScanStructRowsWhere` to struct enumerators
+(source-compatible for `foreach`) is the path to genuinely allocation-free point lookups;
+it changes the public return-type surface and is deferred as a focused, higher-risk item.
+
 
 ---
 
