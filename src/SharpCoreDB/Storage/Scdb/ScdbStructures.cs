@@ -1,4 +1,4 @@
-// src\SharpCoreDB\Storage\Scdb\ScdbStructures.cs
+// <copyright file="ScdbStructures.cs" company="MPCoreDeveloper">
 // Copyright (c) 2025-2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
@@ -38,8 +38,9 @@ public struct ScdbFileHeader
     /// <summary>Encryption mode: 0=None, 1=AES-256-GCM</summary>
     public byte EncryptionMode;   // 0x0010: Encryption mode
     
-    /// <summary>Compression mode: 0=None, 1=Brotli, 2=GZip (see BlockCompressionMode)</summary>
-    public byte CompressionMode;  // 0x0011: Block compression mode
+    /// <summary>Compression mode (reserved — the active mode is supplied via
+    /// DatabaseOptions.BlockCompression; per-block state is tracked by the Compressed flag)</summary>
+    public byte CompressionMode;  // 0x0011: Reserved (always 0); mode is per-options, per-block via Compressed flag
     
     /// <summary>Key derivation ID for encryption</summary>
     public ushort EncryptionKeyId;// 0x0012: Key derivation ID
@@ -443,7 +444,7 @@ public enum BlockFlags : uint
     /// <summary>Block has uncommitted changes</summary>
     Dirty = 1 << 0,
     
-    /// <summary>Block is compressed (Brotli or GZip, see BlockCompressionMode)</summary>
+    /// <summary>Block is compressed (mode comes from DatabaseOptions.BlockCompression)</summary>
 
     Compressed = 1 << 1,
     
