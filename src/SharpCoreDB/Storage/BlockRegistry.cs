@@ -31,6 +31,11 @@ internal sealed class BlockRegistry : IDisposable
     private readonly ulong _registryLength;
     private readonly ConcurrentDictionary<string, BlockEntry> _blocks;
     private readonly Lock _registryLock = new();
+
+    // ✅ Issue #345: serializes the whole registry flush (snapshot + write) so a stale snapshot
+    // from a background flush can never land after a fresher ForceFlush and overwrite it with
+    // older registry content (which previously lost the trailing block entries on reopen).
+    private readonly SemaphoreSlim _flushGate = new(1, 1);
     
     // ✅ NEW: Batching infrastructure
     private int _dirtyCount;
@@ -189,90 +194,101 @@ internal sealed class BlockRegistry : IDisposable
         if (Interlocked.CompareExchange(ref _dirtyCount, 0, 0) == 0)
             return; // Not dirty
 
-        byte[] buffer;
-        int totalSize;
-        KeyValuePair<string, BlockEntry>[] entriesSnapshot;
-
-        // Prepare data inside lock (fast, synchronous)
-        lock (_registryLock)
-        {
-            if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
-                return; // Double-check after lock
-
-            // Take a snapshot to avoid concurrent mutations during flush
-            entriesSnapshot = _blocks.ToArray();
-
-            // Compute struct sizes using runtime sizeof to avoid mismatches
-            var headerSize = Unsafe.SizeOf<BlockRegistryHeader>();
-            var entrySize = Unsafe.SizeOf<BlockEntry>();
-            totalSize = headerSize + (entriesSnapshot.Length * entrySize);
-
-            if ((ulong)totalSize > _registryLength)
-            {
-                throw new InvalidOperationException(
-                    $"Block registry too large: {totalSize} bytes exceeds limit {_registryLength}");
-            }
-
-            // Rent buffer from ArrayPool for zero-allocation
-            buffer = ArrayPool<byte>.Shared.Rent(totalSize);
-            var span = buffer.AsSpan(0, totalSize);
-            span.Clear();
-
-            // Write header
-            var header = new BlockRegistryHeader
-            {
-                Magic = BlockRegistryHeader.MAGIC,
-                Version = BlockRegistryHeader.CURRENT_VERSION,
-                BlockCount = (ulong)entriesSnapshot.Length,
-                TotalSize = (ulong)totalSize,
-                LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            };
-
-            var headerSpan = span[..headerSize];
-            MemoryMarshal.Write(headerSpan, in header);
-
-            // Write block entries from snapshot
-            var offset = headerSize;
-            foreach (var (blockName, blockEntry) in entriesSnapshot)
-            {
-                var namedEntry = BlockEntry.WithName(blockName, blockEntry);
-
-                // Bounds guard: ensure we have enough space for the entry
-                if (offset + entrySize > totalSize)
-                {
-                    throw new InvalidOperationException(
-                        $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
-                }
-
-                var entrySpan = span.Slice(offset, entrySize);
-                MemoryMarshal.Write(entrySpan, in namedEntry);
-                offset += entrySize;
-            }
-        }
-
-        // Write to file OUTSIDE lock (I/O is slow)
+        // ✅ Issue #345: serialize the whole flush (snapshot + write) so a stale background flush
+        // can never overwrite a fresher ForceFlush. The provider also loops until the registry is
+        // clean, so entries added during this flush are picked up by the next iteration.
+        await _flushGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // ✅ Issue #345: write at the registry offset under the provider's write-batch lock so
-            // the shared FileStream.Position can never be raced by the background write worker
-            // (previously registry data could be written over data pages and vice versa).
-            _provider.WriteAt((long)_registryOffset, buffer.AsSpan(0, totalSize));
+            byte[] buffer;
+            int totalSize;
+            KeyValuePair<string, BlockEntry>[] entriesSnapshot;
 
-            var fileStream = GetFileStream();
-
-            // ✅ OPTIMIZED: Only flush if not in batch mode or if forced
-            if (!_flushCts.Token.IsCancellationRequested)
+            // Prepare data inside lock (fast, synchronous)
+            lock (_registryLock)
             {
-                await fileStream.FlushAsync(cancellationToken);
+                if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
+                    return; // Double-check after acquiring gate + lock
+
+                // Take a snapshot to avoid concurrent mutations during flush
+                entriesSnapshot = _blocks.ToArray();
+
+                // Compute struct sizes using runtime sizeof to avoid mismatches
+                var headerSize = Unsafe.SizeOf<BlockRegistryHeader>();
+                var entrySize = Unsafe.SizeOf<BlockEntry>();
+                totalSize = headerSize + (entriesSnapshot.Length * entrySize);
+
+                if ((ulong)totalSize > _registryLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Block registry too large: {totalSize} bytes exceeds limit {_registryLength}");
+                }
+
+                // Rent buffer from ArrayPool for zero-allocation
+                buffer = ArrayPool<byte>.Shared.Rent(totalSize);
+                var span = buffer.AsSpan(0, totalSize);
+                span.Clear();
+
+                // Write header
+                var header = new BlockRegistryHeader
+                {
+                    Magic = BlockRegistryHeader.MAGIC,
+                    Version = BlockRegistryHeader.CURRENT_VERSION,
+                    BlockCount = (ulong)entriesSnapshot.Length,
+                    TotalSize = (ulong)totalSize,
+                    LastModified = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                };
+
+                var headerSpan = span[..headerSize];
+                MemoryMarshal.Write(headerSpan, in header);
+
+                // Write block entries from snapshot
+                var offset = headerSize;
+                foreach (var (blockName, blockEntry) in entriesSnapshot)
+                {
+                    var namedEntry = BlockEntry.WithName(blockName, blockEntry);
+
+                    // Bounds guard: ensure we have enough space for the entry
+                    if (offset + entrySize > totalSize)
+                    {
+                        throw new InvalidOperationException(
+                            $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
+                    }
+
+                    var entrySpan = span.Slice(offset, entrySize);
+                    MemoryMarshal.Write(entrySpan, in namedEntry);
+                    offset += entrySize;
+                }
             }
-            
-            _lastFlushTime = DateTime.UtcNow;
-            Interlocked.Increment(ref _totalFlushes);
-            Interlocked.Add(ref _totalBlocksWritten, entriesSnapshot.Length);
+
+            // Write to file OUTSIDE lock (I/O is slow)
+            try
+            {
+                // ✅ Issue #345: write at the registry offset under the provider's write-batch lock so
+                // the shared FileStream.Position can never be raced by the background write worker
+                // (previously registry data could be written over data pages and vice versa).
+                _provider.WriteAt((long)_registryOffset, buffer.AsSpan(0, totalSize));
+
+                var fileStream = GetFileStream();
+
+                // ✅ OPTIMIZED: Only flush if not in batch mode or if forced
+                if (!_flushCts.Token.IsCancellationRequested)
+                {
+                    await fileStream.FlushAsync(cancellationToken);
+                }
+                
+                _lastFlushTime = DateTime.UtcNow;
+                Interlocked.Increment(ref _totalFlushes);
+                Interlocked.Add(ref _totalBlocksWritten, entriesSnapshot.Length);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            _flushGate.Release();
         }
     }
 
@@ -330,6 +346,7 @@ internal sealed class BlockRegistry : IDisposable
         finally
         {
             _flushCts.Dispose();
+            _flushGate.Dispose();
             _disposed = true;
         }
     }
