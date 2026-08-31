@@ -140,7 +140,8 @@
   the record length stable (in-place, no file growth), even after variable-length TEXT columns
 - ✅ **Out-of-line overflow (B1, opt-in)** — `DatabaseConfig.FixedWidthRecordLayout`: constant-size
   records + per-table overflow arena for TEXT/BLOB; every UPDATE is in-place (fixed or variable col)
-- ⬜ Arena GC / free-list (B3), read-path SIMD wins (B4), migration (B5)
+- ✅ **Arena GC (B3)** — overflow arena compacts together with the data file (copy-on-compact)
+- ⬜ Read-path SIMD wins (B4), migration (B5)
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

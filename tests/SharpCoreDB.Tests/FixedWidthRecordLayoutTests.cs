@@ -191,6 +191,46 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
     }
 
     [Fact]
+    public void Arena_Compacts_ReclaimsSpace_DataCorrect()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'seed-1')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'seed-2')");
+
+            // Many variable updates: each appends a new arena block (the previous one is freed),
+            // so the .ovf grows until compaction reclaims it.
+            for (int i = 0; i < 300; i++)
+            {
+                db.ExecuteSQL($"UPDATE t SET name = 'value-{i}-with-enough-length' WHERE id = 1");
+            }
+
+            long arenaBefore = new FileInfo(OvfPath("t")).Length;
+            Assert.True(arenaBefore > 0);
+
+            // Force compaction deterministically via the Table API (B3: arena + .dat together).
+            Assert.True(db.TryGetTable("t", out var table));
+            var concrete = Assert.IsType<SharpCoreDB.DataStructures.Table>(table);
+            concrete.CompactStorage();
+
+            long arenaAfter = new FileInfo(OvfPath("t")).Length;
+            Assert.True(arenaAfter < arenaBefore, $"arena did not shrink: {arenaAfter} >= {arenaBefore}");
+
+            // Data still correct after compaction + arena re-point.
+            var row = db.ExecuteQuery("SELECT * FROM t WHERE id = 1");
+            Assert.Single(row);
+            Assert.Equal("value-299-with-enough-length", row[0]["name"]);
+            Assert.Equal("seed-2", db.ExecuteQuery("SELECT * FROM t WHERE id = 2")[0]["name"]);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
     public void StructRow_Api_FallsBackToDictionary()
     {
         var db = CreateFixedWidthDb();

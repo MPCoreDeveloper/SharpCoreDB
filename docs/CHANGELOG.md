@@ -46,8 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   copy-on-compact), `FixedWidthRecordLayout`, and fixed-width serialize/deserialize/in-place-patch
   wired into the Table dispatcher, PK index rebuild, full-scan guards and StructRow fallback.
   Flag persisted in table metadata, restored from config on reopen.
+- **Overflow arena GC (B3)** — `CompactStorage` now compacts the overflow arena together with the
+  data file: live arena offsets are collected from the current records, the `.ovf` is rewritten
+  (copy-on-compact), and the active records' variable slots are re-pointed in place. Dead arena
+  blocks from variable updates / deletes are reclaimed.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (7). Full suite green: **1,666 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (8, incl. arena-compaction reclaim). Full suite green:
+  **1,667 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

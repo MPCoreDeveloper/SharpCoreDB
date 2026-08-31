@@ -74,8 +74,9 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
   - ✅ **Out-of-line overflow (B1, opt-in)** — `DatabaseConfig.FixedWidthRecordLayout`: constant-size
     records with TEXT/BLOB in a per-table overflow arena; every UPDATE (fixed or variable column) is
     an in-place overwrite (no `.dat` growth). Flag persisted in metadata.
-  - [ ] Arena GC into auto-compaction + persistent free-list (B3); constant-offset SIMD/early-WHERE
-    read wins (B4); on-disk migration (B5)
+  - ✅ **Arena GC (B3)** — `CompactStorage` compacts the overflow arena with the data file
+    (live-offset collection + copy-on-compact + slot re-point).
+  - [ ] Constant-offset SIMD/early-WHERE read wins (B4); on-disk migration (B5)
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

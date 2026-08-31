@@ -278,8 +278,15 @@ patch wired into the Table serializer/deserializer dispatch, PK index rebuild, f
 early-WHERE guards and the StructRow dictionary fallback. The flag is persisted in table metadata and
 restored from config on reopen.
 
-> **Still open (B3–B5):** arena GC wired into auto-compaction + persistent free-list; constant-offset
-> SIMD/early-WHERE read wins; on-disk migration path.
+- **B3 · arena GC wired into auto-compaction (2026-08-31)** — `CompactStorage` now compacts the
+  overflow arena together with the data file: it collects the live arena offsets from the current
+  records, rewrites the `.ovf` (copy-on-compact), and re-points the active records' variable slots
+  in place (fixed-width records, so re-pointing never changes their length). Dead blocks from
+  variable updates / deletes are reclaimed.
+
+> **Still open (B4–B5):** constant-offset SIMD/early-WHERE read wins; on-disk migration path.
+> A persistent arena free-list (in-place block reuse between compactions) remains a possible
+> follow-up optimization.
 
 ---
 
