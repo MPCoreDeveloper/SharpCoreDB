@@ -47,6 +47,15 @@ public interface IStorageEngine : IDisposable
     long Update(string tableName, long storageReference, byte[] newData);
 
     /// <summary>
+    /// Attempts to overwrite a record in place at the given storage reference — no relocation,
+    /// no new version, so the reference and every index entry stay valid. Returns true when the
+    /// write succeeded in place; false when the new record does not fit the existing slot (or the
+    /// engine does not support in-place updates), in which case callers must fall back to
+    /// <see cref="Update"/>.
+    /// </summary>
+    bool TryUpdateInPlace(string tableName, long storageReference, byte[] newData);
+
+    /// <summary>
     /// Deletes a record at the specified storage reference.
     /// </summary>
     /// <param name="tableName">Name of the table.</param>

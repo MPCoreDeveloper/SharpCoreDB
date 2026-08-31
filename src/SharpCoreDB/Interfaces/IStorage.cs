@@ -96,6 +96,15 @@ public interface IStorage
     long AppendBytes(string path, byte[] data);
 
     /// <summary>
+    /// Overwrites a length-prefixed record in place at <paramref name="offset"/> (in-place UPDATE).
+    /// Returns true only when the new (encrypted) record fits the existing slot — i.e. the stored
+    /// length is unchanged, so every following record stays at a valid offset. When the lengths
+    /// differ the caller must fall back to <see cref="AppendBytes"/>. Not available inside a
+    /// transaction (buffered appends + rollback are append-only by design).
+    /// </summary>
+    bool OverwriteRecordAt(string path, long offset, byte[] data);
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>

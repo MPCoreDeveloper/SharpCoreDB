@@ -464,4 +464,63 @@ public class StorageEngineTests : IDisposable
         Assert.NotEqual(reference, newRef);
         Assert.Equal(updated, engine.Read("test_table", newRef));
     }
+
+    [Fact]
+    public void AppendOnlyEngine_TryUpdateInPlace_SameLength_OverwritesInPlace()
+    {
+        var crypto = new CryptoService();
+        var key = new byte[32];
+        var config = new DatabaseConfig { NoEncryptMode = true };
+        var storage = new Services.Storage(crypto, key, config, null);
+
+        using var engine = new AppendOnlyEngine(storage, testDbPath);
+
+        var original = new byte[] { 1, 2, 3 };
+        var reference = engine.Insert("test_table", original);
+        string dataFile = Path.Combine(testDbPath, "test_table.dat");
+        long sizeBefore = new FileInfo(dataFile).Length;
+
+        // Same stored length → in-place overwrite succeeds, the reference stays valid
+        // (no new version appended) and the file does not grow.
+        var updated = new byte[] { 9, 8, 7 };
+        bool inPlace = engine.TryUpdateInPlace("test_table", reference, updated);
+
+        Assert.True(inPlace);
+        Assert.Equal(updated, engine.Read("test_table", reference));
+        Assert.Equal(sizeBefore, new FileInfo(dataFile).Length);
+
+        // A second in-place update over the same reference also succeeds.
+        var updatedAgain = new byte[] { 6, 5, 4 };
+        Assert.True(engine.TryUpdateInPlace("test_table", reference, updatedAgain));
+        Assert.Equal(updatedAgain, engine.Read("test_table", reference));
+        Assert.Equal(sizeBefore, new FileInfo(dataFile).Length);
+    }
+
+    [Fact]
+    public void AppendOnlyEngine_TryUpdateInPlace_DifferentLength_ReturnsFalse()
+    {
+        var crypto = new CryptoService();
+        var key = new byte[32];
+        var config = new DatabaseConfig { NoEncryptMode = true };
+        var storage = new Services.Storage(crypto, key, config, null);
+
+        using var engine = new AppendOnlyEngine(storage, testDbPath);
+
+        var original = new byte[] { 1, 2, 3 };
+        var reference = engine.Insert("test_table", original);
+
+        // Different length → cannot overwrite in place; the caller must fall back to Update.
+        var longer = new byte[] { 1, 2, 3, 4 };
+        Assert.False(engine.TryUpdateInPlace("test_table", reference, longer));
+        Assert.Equal(original, engine.Read("test_table", reference));
+
+        var shorter = new byte[] { 1 };
+        Assert.False(engine.TryUpdateInPlace("test_table", reference, shorter));
+        Assert.Equal(original, engine.Read("test_table", reference));
+
+        // The append fallback still works and returns a new reference.
+        long newRef = engine.Update("test_table", reference, longer);
+        Assert.NotEqual(reference, newRef);
+        Assert.Equal(longer, engine.Read("test_table", newRef));
+    }
 }

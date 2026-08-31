@@ -112,6 +112,27 @@ public class AppendOnlyEngine : IStorageEngine
 
         return newReference;
     }
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public bool TryUpdateInPlace(string tableName, long storageReference, byte[] newData)
+    {
+        ArgumentNullException.ThrowIfNull(newData);
+
+        // Overwrites [length][data] at the existing offset when the new record fits the slot
+        // (same stored length) — no new version, so the reference and all index entries stay valid.
+        var filePath = GetTableFilePath(tableName);
+        bool overwritten = storage.OverwriteRecordAt(filePath, storageReference, newData);
+
+        if (overwritten)
+        {
+            Interlocked.Increment(ref totalUpdates);
+            Interlocked.Add(ref bytesWritten, newData.Length);
+        }
+
+        return overwritten;
+    }
+
+
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
