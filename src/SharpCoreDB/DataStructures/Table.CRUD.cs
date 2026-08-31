@@ -1117,12 +1117,19 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            // Use SelectInternal to preserve _rowid in results when it's the PK,
-            // so PK-based storage position lookups work correctly during update.
-            var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+            // Load every registered hash index before the write loop: the append fallback leaves a
+            // stale record in the data file, and an unloaded index would later be rebuilt from the
+            // file INCLUDING that stale record (regression: stale row returned for the same PK).
+            EnsureAllRegisteredIndexesLoaded();
+
+            // Position-aware resolution: simple `pk = value` / hash-indexed WHEREs return the
+            // storage position too, so the write path can patch fields in place (fixed-width
+            // layout). Compound / range / unindexed WHEREs fall back to SelectInternal and resolve
+            // positions via the PK when present.
+            var rows = ResolveUpdateRows(where);
             int affected = 0;
 
-            foreach (var row in rows)
+            foreach (var (rowPos, row) in rows)
             {
                 affected++;
 
@@ -1188,35 +1195,41 @@ public partial class Table
 
                 if (StorageMode == StorageMode.Columnar)
                 {
-                    var rowData = SerializeFullRow();
-
-                    // Get old position from primary key index.
-                    long oldPosition = -1;
-                    if (this.PrimaryKeyIndex >= 0)
+                    // Fixed-width layout step: when the row's existing bytes can be located, patch
+                    // only the updated fields at their actual offsets (no deserialize → mutate →
+                    // re-serialize round trip, no full string re-encoding). A fixed-size field keeps
+                    // the record length unchanged, so the write is an in-place overwrite (Issue #6)
+                    // and the file does not grow. Falls back to full serialization when a field
+                    // cannot be patched in place (e.g. a variable-length field that changes size).
+                    byte[] rowData;
+                    if (rowPos >= 0)
                     {
-                        var pkVal = oldPkValue ?? string.Empty;
-                        var searchResult = this.Index.Search(pkVal);
-                        if (searchResult.Found)
-                        {
-                            oldPosition = searchResult.Value;
-                        }
+                        var existingData = engine.Read(Name, rowPos);
+                        rowData = existingData is { Length: > 0 }
+                            && TryOverwriteFieldsInPlaceActual(existingData, updates) is { } patched
+                                ? patched
+                                : SerializeFullRow();
+                    }
+                    else
+                    {
+                        rowData = SerializeFullRow();
                     }
 
                     // Issue #6: in-place UPDATE — overwrite the record in its existing slot when
                     // the new record fits (fixed-width rows, or variable-width rows whose stored
                     // length is unchanged). No new version is appended, the storage reference and
                     // the PK index stay valid, and no stale version is left for compaction.
-                    if (oldPosition >= 0 && engine.TryUpdateInPlace(Name, oldPosition, rowData))
+                    if (rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData))
                     {
                         // Position unchanged: move hash entries in place (values may have changed).
                         foreach (var kvp in this.hashIndexes)
                         {
                             if (oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                             {
-                                kvp.Value.Remove(oldKey, oldPosition);
+                                kvp.Value.Remove(oldKey, rowPos);
                             }
 
-                            kvp.Value.Add(row, oldPosition);
+                            kvp.Value.Add(row, rowPos);
                         }
 
                         // Re-point the PK index only when the PK value itself changed.
@@ -1232,7 +1245,7 @@ public partial class Table
 
                                 if (!string.IsNullOrEmpty(newPkVal))
                                 {
-                                    this.Index.Insert(newPkVal, oldPosition);
+                                    this.Index.Insert(newPkVal, rowPos);
                                 }
                             }
                         }
@@ -1250,9 +1263,9 @@ public partial class Table
 
                         foreach (var kvp in this.hashIndexes)
                         {
-                            if (oldPosition >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                            if (rowPos >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                             {
-                                kvp.Value.Remove(oldKey, oldPosition); // Remove old ref
+                                kvp.Value.Remove(oldKey, rowPos); // Remove old ref
                             }
 
                             kvp.Value.Add(row, newPosition); // Add new ref
@@ -1333,6 +1346,100 @@ public partial class Table
     }
 
     /// <summary>
+    /// Resolves the rows to update as (storage position, row) pairs. A simple <c>pk = value</c>
+    /// WHERE is resolved through the primary-key B-tree directly (single search + one read); a
+    /// simple <c>col = value</c> WHERE on an indexed binary-collation column resolves through the
+    /// hash index. Everything else falls back to <see cref="SelectInternal"/> (positions resolved
+    /// via the PK when present). The position lets the columnar write path patch fields in place
+    /// (fixed-width layout) instead of appending a new version.
+    /// </summary>
+    private List<(long Position, Dictionary<string, object> Row)> ResolveUpdateRows(string? where)
+    {
+        var engine = GetOrCreateStorageEngine();
+        var result = new List<(long, Dictionary<string, object>)>();
+
+        // Issue #7 fast path: simple `pk = value` — single search + one read.
+        if (StorageMode != StorageMode.PageBased &&
+            this.PrimaryKeyIndex >= 0 &&
+            !string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var pkCol, out var pkVal) &&
+            string.Equals(pkCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            var sr = this.Index.Search(pkVal?.ToString() ?? string.Empty);
+            if (sr.Found)
+            {
+                var data = engine.Read(Name, sr.Value);
+                if (data != null)
+                {
+                    var row = DeserializeRowFromSpan(data);
+                    if (row != null)
+                    {
+                        result.Add((sr.Value, row));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Hash index fast path for a simple equality on an indexed binary-collation column.
+        if (!string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
+            this.registeredIndexes.ContainsKey(whereCol))
+        {
+            var colIdx = this.Columns.IndexOf(whereCol);
+            var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count
+                ? this.ColumnCollations[colIdx]
+                : CollationType.Binary;
+
+            if (collation == CollationType.Binary)
+            {
+                EnsureIndexLoaded(whereCol);
+                if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex) && colIdx >= 0)
+                {
+                    var key = ParseValueForHashLookup(whereVal?.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+                    if (key != null)
+                    {
+                        foreach (var pos in hashIndex.LookupPositions(key))
+                        {
+                            var data = engine.Read(Name, pos);
+                            if (data != null)
+                            {
+                                var row = DeserializeRowFromSpan(data);
+                                if (row != null) result.Add((pos, row));
+                            }
+                        }
+
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // Fallback: full SELECT (compound/range WHERE or no usable index). Resolve positions via
+        // the PK when present so the write path can still attempt an in-place update.
+        var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+        foreach (var row in rows)
+        {
+            long position = -1;
+            if (this.PrimaryKeyIndex >= 0 &&
+                row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pkValue) &&
+                pkValue != null)
+            {
+                var sr = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                if (sr.Found)
+                {
+                    position = sr.Value;
+                }
+            }
+
+            result.Add((position, row));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Re-points indexes after the storage engine relocated a record to another page
     /// (a growing record on a full page). The PK index is re-pointed precisely; hash
     /// indexes are marked stale so they rebuild lazily on next use.
@@ -1382,6 +1489,10 @@ public partial class Table
         {
             var engine = GetOrCreateStorageEngine();
             var columnIndexCache = GetColumnIndexCache();
+            // Load every registered hash index before the write loop so the append fallback can
+            // remove the stale record from all indexes (unloaded indexes would later be rebuilt
+            // from the file INCLUDING the stale record).
+            EnsureAllRegisteredIndexesLoaded();
             int updatedInBatch = 0;
 
             foreach (var (where, updates) in operations)
@@ -1498,8 +1609,9 @@ public partial class Table
                         }
                     }
 
-                    // Serialize (WP13: exact-size allocation, no pool + copy)
-                    var rowData = SerializeRowExact(row);
+                        // Serialize (WP13: exact-size allocation, no pool + copy). The columnar
+                        // branch patches only the updated fields at their actual offsets instead.
+                        byte[] rowData;
 
                         if (StorageMode == StorageMode.Columnar)
                         {
@@ -1510,6 +1622,25 @@ public partial class Table
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
                                     oldPosition = searchResult.Value;
+                            }
+
+                            // Fixed-width layout step: patch only the updated fields at their actual
+                            // offsets in the existing record (no deserialize → mutate → re-serialize
+                            // round trip). A fixed-size field keeps the record length unchanged, so
+                            // the write is an in-place overwrite (Issue #6) and the file does not
+                            // grow. Falls back to full serialization when a field cannot be patched.
+                            if (oldPosition >= 0)
+                            {
+                                var existingData = engine.Read(Name, oldPosition);
+                                rowData = existingData is { Length: > 0 }
+                                    && TryOverwriteFieldsInPlaceActual(existingData, updates) is { } patched
+                                        ? patched
+                                        : SerializeRowExact(row);
+                            }
+                            else
+                            {
+                                // Serialize (WP13: exact-size allocation, no pool + copy)
+                                rowData = SerializeRowExact(row);
                             }
 
                             // Issue #6: in-place UPDATE — overwrite the record in its existing slot
@@ -1574,6 +1705,8 @@ public partial class Table
                         }
                         else // PageBased
                         {
+                            rowData = SerializeRowExact(row);
+
                             if (this.PrimaryKeyIndex >= 0)
                             {
                                 var pkVal = oldPkValue?.ToString() ?? string.Empty;
@@ -1779,6 +1912,10 @@ public partial class Table
     private List<(long storagePosition, Dictionary<string, object> row)> CollectDeleteRecords(string? where)
     {
         var engine = GetOrCreateStorageEngine();
+        // Load every registered hash index before the delete so DeleteRecordsCore can remove the
+        // deleted positions from all of them (an unloaded index would later be rebuilt from the
+        // file INCLUDING the logically-deleted record, resurrecting it in hash lookups).
+        EnsureAllRegisteredIndexesLoaded();
 
         // ✅ OPTIMIZATION: Snapshot-based deletion (Option 1)
         // Capture ALL storage references BEFORE any deletions
@@ -1925,6 +2062,9 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
+            // Load every registered hash index before the delete loop (same reason as
+            // CollectDeleteRecords: stale file records must be removed from every index).
+            EnsureAllRegisteredIndexesLoaded();
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var where in whereConditions)

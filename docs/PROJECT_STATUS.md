@@ -65,7 +65,13 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
   - ✅ **PK fast path in `Delete` / `DeleteMultiple` / `UpdateMultiple`** — a simple `pk = value`
     WHERE resolves via the primary-key B-tree directly (single search + one read) instead of
     full-row materialization + per-row re-search.
-  - [ ] Fixed-width record layout for hot tables (SQLite-style C record format)
+  - ✅ **Field-level in-place patch on the columnar UPDATE path (fixed-width layout step)** — when
+    the row's storage position is known, only the updated fields are patched at their **actual**
+    record offsets (`ComputeActualColumnOffsets` + `TryOverwriteFieldsInPlaceActual`); a fixed-size
+    field keeps the record length unchanged, so the write is in-place (no full re-serialize, no
+    file growth) — even for columns after variable-length TEXT columns. Registered hash indexes are
+    loaded up front so append/logical-delete DML never leaves stale entries (stale-rebuild fix).
+  - [ ] Full fixed-width record layout (fixed part + variable-length heap) for hot tables
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 - [ ] **.NET 11 / C# 15 migration** (after Nov 2026 GA) — Runtime Async, AVX-VNNI-512/SVE2 behind
   `SIMD_ENABLED`, optional Zstandard compression.

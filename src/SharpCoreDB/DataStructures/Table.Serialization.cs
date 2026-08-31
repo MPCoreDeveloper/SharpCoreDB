@@ -259,6 +259,112 @@ public partial class Table
     }
 
     /// <summary>
+    /// Fixed-width layout step 1: computes the actual per-column byte offsets in an existing
+    /// serialized row by walking the length-prefixed record (fixed-size columns contribute their
+    /// fixed encoded size; variable-length columns contribute 1 null flag + 4-byte length +
+    /// payload). Unlike <see cref="GetColumnOffsetsCached"/>, this resolves offsets AFTER a
+    /// variable-length column, so e.g. <c>score</c> in <c>(name TEXT, email TEXT, age INT, score REAL)</c>
+    /// can be patched in place even though its schema-level offset is "unstable". Returns null
+    /// when the record is corrupt / out of bounds — callers must fall back to full serialization.
+    /// </summary>
+    private int[]? ComputeActualColumnOffsets(byte[] row)
+    {
+        if (row is not { Length: > 0 })
+            return null;
+
+        var offsets = new int[Columns.Count];
+        int offset = 0;
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            if (offset >= row.Length)
+                return null;
+
+            offsets[i] = offset;
+
+            int fixedSize = GetFixedEncodedSize(ColumnTypes[i]);
+            if (fixedSize >= 0)
+            {
+                offset += fixedSize;
+                continue;
+            }
+
+            // Variable-length: 1 null flag (+ 4-byte length + payload when not null).
+            if (row[offset] == 0)
+            {
+                offset += 1;
+                continue;
+            }
+
+            if (offset + 5 > row.Length)
+                return null;
+
+            int len = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(row.AsSpan(offset + 1, 4));
+            if (len < 0 || offset + 5 + len > row.Length)
+                return null;
+
+            offset += 5 + len;
+        }
+
+        return offsets;
+    }
+
+    /// <summary>
+    /// Fixed-width layout step 2: like <see cref="TryOverwriteFieldsInPlace"/> but resolves the
+    /// updated column offsets from the actual record bytes (see <see cref="ComputeActualColumnOffsets"/>),
+    /// so fields after a variable-length column can also be patched in place. Returns null when any
+    /// updated field would change the record length (or the record is corrupt) — callers then fall
+    /// back to full serialization.
+    /// </summary>
+    private byte[]? TryOverwriteFieldsInPlaceActual(byte[] existingRow, Dictionary<string, object> updates)
+    {
+        if (existingRow is not { Length: > 0 } || updates.Count == 0)
+            return null;
+
+        var columnIndexCache = GetColumnIndexCache();
+        var offsets = ComputeActualColumnOffsets(existingRow);
+        if (offsets is null)
+            return null;
+
+        // Pass 1: every updated column must have a valid offset and fit in its existing slot.
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx) || colIdx < 0 || colIdx >= offsets.Length)
+                return null;
+
+            int offset = offsets[colIdx];
+            if (offset < 0 || offset >= existingRow.Length)
+                return null;
+
+            int newSize = GetEncodedSize(value, ColumnTypes[colIdx]);
+            int oldSize = ReadColumnEncodedSize(existingRow.AsSpan(), offset, ColumnTypes[colIdx]);
+            if (newSize > oldSize)
+                return null;
+
+            // A variable-length field before the last column changes the byte position of every
+            // following column; overwriting it in place is only safe when its encoding keeps the
+            // exact same size. Fixed-size fields never change size, and the last column has no
+            // followers to shift.
+            if (GetFixedEncodedSize(ColumnTypes[colIdx]) < 0 && colIdx < Columns.Count - 1 && newSize != oldSize)
+                return null;
+        }
+
+        // Pass 2: copy the row and overwrite only the updated fields.
+        var result = new byte[existingRow.Length];
+        existingRow.CopyTo(result, 0);
+        var span = result.AsSpan();
+
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx))
+                return null;
+
+            _ = WriteTypedValueToSpan(span.Slice(offsets[colIdx]), value, ColumnTypes[colIdx]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// WP13: computes the exact encoded size of a row so serialization can allocate the
     /// final array once (no ArrayPool.Rent + ToArray double allocation, no copy).
     /// Uses the same size model as <see cref="GetEncodedSize"/> so it matches what

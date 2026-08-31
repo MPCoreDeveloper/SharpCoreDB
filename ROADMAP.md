@@ -135,7 +135,10 @@
   records overwrite their slot; no file growth
 - ✅ **Single-pass SQL DELETE/UPDATE (#7/#8)** — no more double materialization for RETURNING /
   `CHANGES()`; PK fast path in `Delete`/`DeleteMultiple`/`UpdateMultiple`
-- ⬜ Fixed-width record layout for hot tables (SQLite-style C record format)
+- ✅ **Field-level in-place patch on columnar UPDATE (fixed-width layout step)** — only the changed
+  fields are patched at their actual record offsets; no full re-serialize; fixed-size fields keep
+  the record length stable (in-place, no file growth), even after variable-length TEXT columns
+- ⬜ Full fixed-width record layout (fixed part + variable-length heap) for hot tables
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 - Track in [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
 

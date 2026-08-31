@@ -18,9 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PK fast path extended to batch DML** — simple `pk = value` WHERE clauses resolve via the
   primary-key B-tree directly (single search + one read) in `Delete`/`DeleteMultiple`/
   `UpdateMultiple` instead of full-row materialization + per-row PK re-search.
-- **Regression tests:** `DmlSinglePassTests` (9 cases) — affected counts, RETURNING pre-delete
-  rows, range/non-indexed WHERE fallbacks, batch PK deletes/updates. Full suite green:
-  **1,644 tests, 0 failures**.
+- **Field-level in-place patch on the columnar UPDATE path (fixed-width layout step)** — when the
+  row's storage position is known (PK B-tree / hash index), only the updated fields are patched at
+  their **actual** record offsets (`ComputeActualColumnOffsets` + `TryOverwriteFieldsInPlaceActual`)
+  instead of deserialize → mutate → re-serialize of the whole row. A fixed-size field keeps the
+  record length unchanged → the write is an in-place overwrite (no file growth), even for columns
+  that sit after variable-length TEXT columns. `UpdateAffectedCount`/`UpdateMultiple` now resolve
+  rows as (position, row) pairs; variable-width fields that change size still fall back to append.
+- **Stale-index regression fix** — WHERE-based UPDATE/DELETE entry points load all registered hash
+  indexes up front (`EnsureAllRegisteredIndexesLoaded`), so append updates / logical deletes remove
+  the stale record from every index (an unloaded index would otherwise be rebuilt from the data
+  file including the stale record, resurrecting the pre-update row).
+- **Regression tests:** `DmlSinglePassTests` (9 cases) + `FixedWidthPatchTests` (5 cases) —
+  affected counts, RETURNING pre-delete rows, range/non-indexed WHERE fallbacks, batch PK
+  deletes/updates, in-place patch no-growth (after variable columns / by PK), variable-growth
+  append fallback, compound WHERE. Full suite green: **1,649 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

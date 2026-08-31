@@ -216,6 +216,45 @@ Full suite green: **1,644 tests, 0 failures** (16 skipped).
 > with a PK single-statement DELETE/UPDATE workload is the correct validation (still pending, same
 > caveat as §3.2).
 
+### 3.6 Fixed-width layout step — field-level in-place patch on the columnar UPDATE path (2026-08-31, `release/v2.1.0.0`)
+
+The columnar UPDATE write path previously **deserialized → mutated → re-serialized the whole row**
+per statement (re-encoding every string), then either overwrote in place (Issue #6, same length) or
+appended. This step removes the full re-serialize when the row's storage position is known:
+
+- **`ComputeActualColumnOffsets(byte[])`** walks the length-prefixed record and resolves the **real**
+  byte offset of every column — including columns **after a variable-length column**, which the
+  schema-level cache (`GetColumnOffsetsCached`) marks as "unstable".
+- **`TryOverwriteFieldsInPlaceActual(byte[], updates)`** patches only the updated fields at those
+  actual offsets (same fit/safety rules as the existing WP11 `TryOverwriteFieldsInPlace`). Returns
+  null when a field would change the record length → caller falls back to full serialization.
+- **`UpdateAffectedCount`** now resolves rows as **(position, row)** pairs (`ResolveUpdateRows`:
+  PK B-tree for `pk = value`, hash index for an indexed equality, `SelectInternal` otherwise),
+  reads the existing record, patches the changed fields, and writes in place via `TryUpdateInPlace`.
+  Same for `UpdateMultiple` (batch).
+- **Stale-index regression fixed:** a write that creates a stale file record (append update /
+  logical delete) must remove it from **every** registered hash index. The PK/hash fast paths
+  bypassed the `EnsureIndexLoaded` that `SelectInternal` used to perform, so an unloaded index was
+  later **rebuilt from the data file including the stale record** → SELECT returned the pre-update
+  row for the same PK. All four WHERE-based DML entry points (`UpdateAffectedCount`, `UpdateMultiple`,
+  `CollectDeleteRecords`, `DeleteMultiple`) now call `EnsureAllRegisteredIndexesLoaded()` first
+  (cached — cheap after the first load).
+
+Effect: `UPDATE t SET score = X WHERE name = 'User5'` on `(name TEXT, email TEXT, age INT,
+score REAL, data TEXT)` — `score` sits **after two variable-length columns** — now patches the 8
+`score` bytes in the existing record (no full string re-encoding) and overwrites in place (**no file
+growth**). Variable-width fields that change size still fall back to append (correct, unchanged).
+
+Regression coverage: `FixedWidthPatchTests` (5 cases: fixed field after variable columns → in-place
+no-growth; PK fixed field → in-place; variable growth → append + correct read-back; compound WHERE →
+correct; batch patch). Full suite green: **1,649 tests, 0 failures** (16 skipped).
+
+> **Still open** for the full SQLite-style fixed-width record layout: a dedicated on-disk format
+> with a fixed part + variable-length heap would make even variable-column updates in-place without
+> the per-update record walk, and enable true per-field random access on reads. This step removes
+> the full re-serialize and keeps the record length stable for fixed-size fields — the core of the
+> SQLite update model.
+
 ---
 
 ## 4. C# 15 / .NET 11 readiness (mainstream November 2026)
