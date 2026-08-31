@@ -310,8 +310,18 @@ restored from config on reopen.
     tables that already store fixed-width records but predate flag persistence (B1–B4), and skips
     migration for byte-identical fixed-size-only legacy tables.
 
-> **Still open (follow-up):** single-file (.scdb) fixed-width support; automatic PageBased →
-> Columnar + fixed-width migration; cross-session persistence of the arena free-list.
+- **B6 · single-file (.scdb) fixed-width record layout (2026-09-01)** — the fixed-width
+  out-of-line-overflow model now works for single-file tables too. With
+  `DatabaseConfig.FixedWidthRecordLayout` the `.scdb` table stores binary fixed-width records in its
+  data block (variable values in a dedicated `table:{name}:overflow` block) instead of the legacy
+  JSON row array, so value-only updates keep the data block constant-size and the provider
+  overwrites it in place. The format is detected on reopen (binary blocks are parsed untrimmed — a
+  binary record may legitimately end with `0x00` bytes), legacy JSON tables auto-migrate when the
+  config opts in and via `MigrateTableToFixedWidth`. The arena uses content-dedup + an exact-length
+  free-list (unreferenced blocks are swept on flush) so it stays bounded between copy-on-compact
+  passes.
+
+> **Still open (follow-up):** automatic PageBased → Columnar + fixed-width migration.
 
 - **B6 · arena free-list — in-place block reuse (2026-09-01)** — freed overflow blocks are tracked
   in an in-memory free-list (grouped by payload length) and reused via the storage layer's in-place

@@ -83,6 +83,9 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
     auto-migrate on reopen with `FixedWidthRecordLayout` (or via `MigrateTableToFixedWidth`).
   - ✅ **Arena free-list (B6)** — freed overflow blocks reused in place for same-length values
     (no `.ovf` growth); fixed a latent offset-0 block leak on update.
+  - ✅ **Single-file fixed-width (B6)** — `.scdb` tables store binary fixed-width records +
+    overflow block instead of JSON (constant-size updates, format detected on reopen, JSON tables
+    migrate via `MigrateTableToFixedWidth` or the config flag).
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

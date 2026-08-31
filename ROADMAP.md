@@ -147,7 +147,9 @@
   on reopen with `FixedWidthRecordLayout` or via `MigrateTableToFixedWidth`
 - ✅ **Arena free-list (B6)** — freed overflow blocks reused in place (same-length values); fixed a
   latent offset-0 block leak on update
-- ⬜ Follow-up: single-file fixed-width, PageBased auto-conversion, free-list persistence
+- ✅ **Single-file fixed-width (B6)** — `.scdb` tables use binary fixed-width records + overflow
+  block (constant-size updates, format detection, JSON migration)
+- ⬜ Follow-up: PageBased auto-conversion, free-list persistence across sessions
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

@@ -385,7 +385,7 @@ public partial class Table
         return _overflowArena;
     }
 
-    private static byte[] EncodeVariablePayload(DataType type, object value)
+    internal static byte[] EncodeVariablePayload(DataType type, object value)
     {
         return type switch
         {
@@ -394,7 +394,7 @@ public partial class Table
         };
     }
 
-    private static object DecodeVariablePayload(DataType type, byte[] payload)
+    internal static object DecodeVariablePayload(DataType type, byte[] payload)
     {
         return type switch
         {
@@ -405,77 +405,11 @@ public partial class Table
 
     /// <summary>Serializes a row using the fixed-width record layout (variable values → overflow arena).</summary>
     private byte[] SerializeRowFixedWidth(Dictionary<string, object> row)
-    {
-        var layout = GetFixedWidthLayout();
-        var arena = GetOverflowArena();
-        var buffer = new byte[layout.FixedSize];
-        var span = buffer.AsSpan();
-
-        for (int i = 0; i < Columns.Count; i++)
-        {
-            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
-            var value = row.TryGetValue(Columns[i], out var v) ? v : DBNull.Value;
-
-            if (layout.IsVariable[i])
-            {
-                if (value == null || value == DBNull.Value)
-                {
-                    slot[0] = 0;
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
-                }
-                else
-                {
-                    var payload = EncodeVariablePayload(ColumnTypes[i], value);
-                    var offset = arena.Write(payload);
-                    slot[0] = 1;
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
-                }
-            }
-            else
-            {
-                _ = WriteTypedValueToSpan(slot, value, ColumnTypes[i]);
-            }
-        }
-
-        return buffer;
-    }
+        => FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values read from the overflow arena).</summary>
     private Dictionary<string, object> DeserializeRowFixedWidth(ReadOnlySpan<byte> data)
-    {
-        var layout = GetFixedWidthLayout();
-        var arena = GetOverflowArena();
-        var row = new Dictionary<string, object>(Columns.Count, StringComparer.Ordinal);
-
-        for (int i = 0; i < Columns.Count; i++)
-        {
-            if (layout.Offsets[i] + layout.SlotSizes[i] > data.Length)
-            {
-                break; // truncated / corrupt record
-            }
-
-            var slot = data.Slice(layout.Offsets[i], layout.SlotSizes[i]);
-            if (layout.IsVariable[i])
-            {
-                if (slot[0] == 0)
-                {
-                    row[Columns[i]] = DBNull.Value;
-                }
-                else
-                {
-                    var offset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                    var payload = arena.Read(offset);
-                    row[Columns[i]] = payload is null ? DBNull.Value : DecodeVariablePayload(ColumnTypes[i], payload);
-                }
-            }
-            else
-            {
-                row[Columns[i]] = ReadTypedValueFromSpan(slot, ColumnTypes[i], out _);
-            }
-        }
-
-        return row;
-    }
+        => FixedWidthCodec.DeserializeRow(data, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
 
     /// <summary>
     /// Fixed-width in-place patch: overwrites only the updated slots in an existing fixed record
@@ -935,7 +869,7 @@ public partial class Table
     /// <param name="type">The data type of the value.</param>
     /// <returns>Number of bytes written.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private int WriteTypedValueToSpan(Span<byte> buffer, object value, DataType type)
+    internal static int WriteTypedValueToSpan(Span<byte> buffer, object value, DataType type)
     {
         if (value == DBNull.Value || value == null)
         {
@@ -1107,7 +1041,7 @@ public partial class Table
     /// <param name="bytesRead">Output: number of bytes consumed.</param>
     /// <returns>The deserialized value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private object ReadTypedValueFromSpan(ReadOnlySpan<byte> buffer, DataType type, out int bytesRead)
+    internal static object ReadTypedValueFromSpan(ReadOnlySpan<byte> buffer, DataType type, out int bytesRead)
     {
         bytesRead = 1;
         

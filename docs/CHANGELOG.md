@@ -67,9 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variable-column updates no longer grow the `.ovf` within a session (copy-on-compact still
   reclaims the rest). Also fixed a latent B1 leak where the first arena block (offset 0) was never
   freed on update.
+- **Single-file (.scdb) fixed-width (B6)** — the fixed-width out-of-line-overflow model now also
+  serves single-file tables: with `DatabaseConfig.FixedWidthRecordLayout` the table stores binary
+  fixed-width records (variable values in a dedicated overflow block) instead of the legacy JSON row
+  array, so value-only updates keep the data block constant-size. The on-disk format is detected on
+  reopen (binary blocks are parsed untrimmed), legacy JSON tables migrate via
+  `MigrateTableToFixedWidth` (or automatically when the config opts in), and the shared
+  `FixedWidthCodec` keeps directory-mode and single-file record formats in sync.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (13, incl. arena free-list reuse), `FixedWidthMigrationTests` (7).
-  Full suite green: **1,679 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (13), `FixedWidthMigrationTests` (7), `SingleFileFixedWidthTests` (5).
+  Full suite green: **1,684 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

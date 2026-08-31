@@ -50,8 +50,16 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private readonly DatabaseConfig? _config;
     private readonly Lock _tableLock = new();
     private readonly string _dataBlockName = $"table:{tableName}:data";
+    private readonly string _overflowBlockName = $"table:{tableName}:overflow";
     private List<Dictionary<string, object>> _rowCache = [];
     private bool _cacheLoaded;
+
+    // Fixed-width record layout (out-of-line overflow): binary records in the data block with
+    // variable-length values in the overflow block. The on-disk format is detected on load; the
+    // config flag only selects the format for NEW tables and triggers JSON → binary migration.
+    private bool _fixedWidthRecords;
+    private FixedWidthRecordLayout? _fixedWidthLayout;
+    private SingleFileOverflowArena? _overflowArena;
 
     // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /
     // SELECT … WHERE pk = value / UpdateByPrimaryKey / DeleteByPrimaryKey). Keyed by the ordinal
@@ -96,6 +104,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         : this(tableName, storageProvider)
     {
         _config = config;
+        _fixedWidthRecords = config?.FixedWidthRecordLayout ?? false;
     }
 
     /// <summary>
@@ -679,17 +688,76 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
 
         List<Dictionary<string, object?>> serializableRows;
+        List<Dictionary<string, object>> rowsToWrite;
         lock (_tableLock)
         {
+            rowsToWrite = _rowCache.ToList();
             serializableRows = _rowCache.Select(ToSerializableRow).ToList();
             _isDirty = false;
         }
 
-        // Serialize to byte array to get exact length
-        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+        if (!_fixedWidthRecords)
+        {
+            // Legacy JSON row format (write using WriteBlockAsync to properly track data length).
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+            _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
+            return;
+        }
 
-        // Write using WriteBlockAsync to properly track data length
-        _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
+        // B6: binary fixed-width records + out-of-line overflow arena.
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var arena = _overflowArena ??= new SingleFileOverflowArena();
+
+        var records = new List<byte[]>(rowsToWrite.Count);
+        foreach (var row in rowsToWrite)
+        {
+            records.Add(FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, layout, arena));
+        }
+
+        // Sweep: values that changed (or rows that were deleted) leave their old blocks
+        // unreferenced — free them so the free-list can reuse them in place on the next flush.
+        var liveOffsets = new HashSet<long>();
+        foreach (var record in records)
+        {
+            FixedWidthCodec.CollectVariableOffsets(record, layout, liveOffsets);
+        }
+
+        arena.FreeUnreferenced(liveOffsets);
+
+        // Copy-on-compact the arena when its dead space grows (freed blocks that were not reused
+        // in place). The records' variable slots are re-pointed through the compaction mapping.
+        if (arena.TotalCount >= 32 && arena.LiveCount * 4 < arena.TotalCount)
+        {
+            var mapping = arena.Compact(liveOffsets);
+            if (mapping.Count > 0)
+            {
+                var repointed = new List<byte[]>(records.Count);
+                foreach (var record in records)
+                {
+                    repointed.Add(FixedWidthCodec.RepointVariableSlots(record, layout, mapping) ?? record);
+                }
+
+                records = repointed;
+            }
+        }
+
+        int total = 0;
+        foreach (var record in records)
+        {
+            total += 4 + record.Length;
+        }
+
+        var buffer = new byte[total];
+        int position = 0;
+        foreach (var record in records)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(position, 4), record.Length);
+            record.CopyTo(buffer, position + 4);
+            position += 4 + record.Length;
+        }
+
+        _storageProvider.WriteBlockAsync(_dataBlockName, buffer).GetAwaiter().GetResult();
+        _storageProvider.WriteBlockAsync(_overflowBlockName, arena.Serialize()).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -768,6 +836,43 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     /// <inheritdoc />
     public void SetDatabase(Database database) { }
 
+    /// <summary>
+    /// B6: gets whether this table uses the fixed-width record layout. The on-disk format is
+    /// detected when the cache is first loaded, so this is accurate even without the config flag.
+    /// </summary>
+    public bool IsFixedWidthRecords
+    {
+        get
+        {
+            EnsureCacheLoaded();
+            return _fixedWidthRecords;
+        }
+    }
+
+    /// <summary>Sets the fixed-width record layout flag (used by DDL to forward the database config).</summary>
+    internal void SetFixedWidthRecords(bool value) => _fixedWidthRecords = value;
+
+    /// <summary>
+    /// B6: converts this table from the legacy JSON row format to the binary fixed-width record
+    /// layout (out-of-line overflow arena). Returns the number of rows written.
+    /// </summary>
+    public int MigrateToFixedWidth()
+    {
+        lock (_tableLock)
+        {
+            EnsureCacheLoaded();
+            if (_fixedWidthRecords)
+            {
+                return 0;
+            }
+
+            _fixedWidthRecords = true;
+            _isDirty = true;
+            FlushCache();
+            return _rowCache.Count;
+        }
+    }
+
     private readonly Dictionary<string, long> _columnUsage = new(StringComparer.OrdinalIgnoreCase);
 
     private void EnsureCacheLoaded()
@@ -788,8 +893,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             // are both transparently handled. GetReadStream returns the raw on-disk bytes
             // when encryption is off, which would hand compressed data (Brotli/GZip marker
             // bytes) to the JSON parser on reopen — breaking SELECT after reopen.
-            var jsonBytes = _storageProvider.ReadBlockAsync(_dataBlockName, CancellationToken.None).GetAwaiter().GetResult();
-            if (jsonBytes is null || jsonBytes.Length == 0)
+            var dataBytes = _storageProvider.ReadBlockAsync(_dataBlockName, CancellationToken.None).GetAwaiter().GetResult();
+            if (dataBytes is null || dataBytes.Length == 0)
             {
                 _rowCache = [];
                 _cacheLoaded = true;
@@ -797,27 +902,98 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 return;
             }
 
-            // Trim trailing null bytes
-            var endIndex = jsonBytes.Length;
-            while (endIndex > 0 && jsonBytes[endIndex - 1] == 0)
+            // Detect the on-disk format on the RAW bytes: the legacy JSON row array vs binary
+            // fixed-width records. Trailing-null trimming is ONLY valid for the JSON format — a
+            // binary record can legitimately end with 0x00 bytes (a variable slot whose arena
+            // offset's most significant bytes are zero), so binary blocks are parsed untrimmed.
+            if (IsFixedWidthDataBlock(dataBytes))
             {
-                endIndex--;
+                // Binary fixed-width records: the on-disk format is authoritative (even when the
+                // config flag is off, reading must use the binary codec).
+                _fixedWidthRecords = true;
+                var overflowBytes = _storageProvider.ReadBlockAsync(_overflowBlockName, CancellationToken.None).GetAwaiter().GetResult();
+                _overflowArena = SingleFileOverflowArena.Deserialize(overflowBytes);
+                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+                var binaryRows = new List<Dictionary<string, object>>();
+
+                long position = 0;
+                while (position + 4 <= dataBytes.Length)
+                {
+                    int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(dataBytes.AsSpan((int)position, 4));
+                    if (length <= 0 || position + 4 + length > dataBytes.Length)
+                    {
+                        break; // truncated / corrupt
+                    }
+
+                    binaryRows.Add(FixedWidthCodec.DeserializeRow(
+                        dataBytes.AsSpan((int)position + 4, length), Columns, ColumnTypes, layout, _overflowArena));
+                    position += 4 + length;
+                }
+
+                _rowCache = binaryRows;
             }
-            
-            if (endIndex == 0)
+            else
             {
-                _rowCache = [];
-                _cacheLoaded = true;
-                RebuildPkIndex();
-                return;
+                // Legacy JSON row format (trim historical trailing null padding first).
+                var endIndex = dataBytes.Length;
+                while (endIndex > 0 && dataBytes[endIndex - 1] == 0)
+                {
+                    endIndex--;
+                }
+
+                if (endIndex == 0)
+                {
+                    _rowCache = [];
+                    _cacheLoaded = true;
+                    RebuildPkIndex();
+                    return;
+                }
+
+                var trimmedJsonBytes = dataBytes.AsSpan(0, endIndex);
+                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
+                _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
+
+                // Config opts into fixed-width: convert the in-memory rows to binary on next flush.
+                if (_fixedWidthRecords)
+                {
+                    _isDirty = true;
+                }
             }
-            
-            var trimmedJsonBytes = jsonBytes.AsSpan(0, endIndex);
-            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
-            _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
+
             _cacheLoaded = true;
             RebuildPkIndex();
         }
+    }
+
+    /// <summary>
+    /// Detects whether the data block holds binary fixed-width records (every record has exactly
+    /// the fixed-width slot size) rather than the legacy JSON row array. The on-disk format is
+    /// authoritative on reopen regardless of the config flag.
+    /// </summary>
+    private bool IsFixedWidthDataBlock(ReadOnlySpan<byte> data)
+    {
+        if (ColumnTypes is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        long position = 0;
+        bool any = false;
+
+        while (position + 4 <= data.Length)
+        {
+            int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data.Slice((int)position, 4));
+            if (length != layout.FixedSize || position + 4 + length > data.Length)
+            {
+                return false;
+            }
+
+            any = true;
+            position += 4 + length;
+        }
+
+        return any;
     }
 
     private void LoadSchemaFromProvider(string tableName)

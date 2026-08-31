@@ -196,59 +196,14 @@ public partial class Table
 
     /// <summary>Collects the overflow-block offsets referenced by a fixed-width record's variable slots.</summary>
     private static void CollectVariableOffsets(byte[] record, FixedWidthRecordLayout layout, HashSet<long> live)
-    {
-        for (int i = 0; i < layout.ColumnCount; i++)
-        {
-            if (!layout.IsVariable[i])
-            {
-                continue;
-            }
-
-            var slot = layout.Offsets[i];
-            if (slot + 5 > record.Length || record[slot] == 0)
-            {
-                continue; // truncated or null slot
-            }
-
-            var blockOffset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(slot + 1, 4));
-            // NOTE: offset 0 is a valid block offset (first arena block) — the flag byte above
-            // already excluded NULL slots, so collect every referenced offset unconditionally.
-            live.Add(blockOffset);
-        }
-    }
+        => FixedWidthCodec.CollectVariableOffsets(record, layout, live);
 
     /// <summary>
     /// Returns a copy of a fixed-width record with its variable slots re-pointed through the
     /// compaction mapping, or null when no slot moved.
     /// </summary>
     private static byte[]? RepointVariableSlots(byte[] record, FixedWidthRecordLayout layout, Dictionary<long, long> mapping)
-    {
-        byte[]? result = null;
-
-        for (int i = 0; i < layout.ColumnCount; i++)
-        {
-            if (!layout.IsVariable[i])
-            {
-                continue;
-            }
-
-            var slot = layout.Offsets[i];
-            if (slot + 5 > record.Length || record[slot] == 0)
-            {
-                continue;
-            }
-
-            var blockOffset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(slot + 1, 4));
-            // NOTE: offset 0 is a valid block offset (first arena block) — re-point it like any other.
-            if (mapping.TryGetValue(blockOffset, out var newOffset) && newOffset != blockOffset)
-            {
-                result ??= (byte[])record.Clone();
-                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(slot + 1, 4), (int)newOffset);
-            }
-        }
-
-        return result;
-    }
+        => FixedWidthCodec.RepointVariableSlots(record, layout, mapping);
 
     /// <summary>
     /// Rebuilds the primary key index after compaction.

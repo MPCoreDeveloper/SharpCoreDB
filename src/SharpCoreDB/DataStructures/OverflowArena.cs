@@ -18,7 +18,7 @@ using System.IO;
 /// reused in place when a new payload has the exact same length (in-memory); the remaining dead
 /// space is reclaimed by the copy-on-compact pass.
 /// </summary>
-public sealed class OverflowArena : IDisposable
+public sealed class OverflowArena : IDisposable, IOverflowArena
 {
     private readonly IStorage _storage;
     private readonly string _filePath;
