@@ -131,9 +131,12 @@
 >> **Why:** v2.0 closed the read/insert gap; single-row UPDATE/DELETE is still ~5–7x behind SQLite
 >> because row-store writes are append-on-update instead of in-place.
 
-- In-place record updates (avoid append-on-update) for row stores
-- Fixed-width record layout for hot tables (SQLite-style C record format)
-- Eliminate read-modify-write in `UpdateMultiple`
+- ✅ **In-place record updates for columnar/append-only (#6)** — fixed-width/unchanged-length
+  records overwrite their slot; no file growth
+- ✅ **Single-pass SQL DELETE/UPDATE (#7/#8)** — no more double materialization for RETURNING /
+  `CHANGES()`; PK fast path in `Delete`/`DeleteMultiple`/`UpdateMultiple`
+- ⬜ Fixed-width record layout for hot tables (SQLite-style C record format)
+- ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 - Track in [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
 
 ---

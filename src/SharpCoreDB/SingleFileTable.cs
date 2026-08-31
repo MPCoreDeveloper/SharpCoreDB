@@ -315,7 +315,10 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     }
 
     /// <inheritdoc />
-    public void Update(string? where, Dictionary<string, object> updates)
+    public void Update(string? where, Dictionary<string, object> updates) => UpdateAffectedCount(where, updates);
+
+    /// <inheritdoc />
+    public int UpdateAffectedCount(string? where, Dictionary<string, object> updates)
     {
         ArgumentNullException.ThrowIfNull(updates);
         EnsureCacheLoaded();
@@ -327,6 +330,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             condition = condition[6..].Trim();
         }
 
+        int affected = 0;
         lock (_tableLock)
         {
             foreach (var row in _rowCache)
@@ -339,6 +343,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                     }
 
                     _isDirty = true;
+                    affected++;
                 }
             }
         }
@@ -348,6 +353,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         {
             FlushCache();
         }
+
+        return affected;
     }
 
     /// <summary>
@@ -423,6 +430,50 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (AutoFlush && !_isInTransaction)
         {
             FlushCache();
+        }
+    }
+
+    /// <inheritdoc />
+    public List<Dictionary<string, object>> DeleteAffectedRows(string? where)
+    {
+        EnsureCacheLoaded();
+
+        // Strip leading WHERE keyword if present
+        var condition = where?.Trim();
+        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition[6..].Trim();
+        }
+
+        lock (_tableLock)
+        {
+            List<Dictionary<string, object>> toDelete;
+            if (string.IsNullOrWhiteSpace(condition))
+            {
+                toDelete = [.. _rowCache];
+            }
+            else
+            {
+                toDelete = _rowCache.Where(row => EvaluateCondition(row, condition)).ToList();
+            }
+
+            if (toDelete.Count > 0)
+            {
+                foreach (var row in toDelete)
+                {
+                    _rowCache.Remove(row);
+                }
+
+                _isDirty = true;
+            }
+
+            // ✅ CRITICAL FIX: Only flush if not in transaction
+            if (AutoFlush && _isDirty && !_isInTransaction)
+            {
+                FlushCache();
+            }
+
+            return toDelete;
         }
     }
 

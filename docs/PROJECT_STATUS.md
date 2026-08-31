@@ -55,8 +55,18 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
 
 ## Roadmap / TODO (v2.1)
 
-- [ ] **Close UPDATE/DELETE gap vs SQLite** — in-place record updates, fixed-width record layout
-  for hot tables, eliminate read-modify-write in `UpdateMultiple`.
+- [ ] **Close UPDATE/DELETE gap vs SQLite** (in progress — details in
+  `docs/performance/V2_PERFORMANCE_PLAN.md` §3.4 / §3.5):
+  - ✅ **In-place UPDATE for columnar/append-only (Issue #6)** — fixed-width / unchanged-length
+    records overwrite their existing slot (`TryUpdateInPlace`); no new version, no file growth.
+  - ✅ **Single-pass SQL DELETE/UPDATE (Issue #7/#8)** — `DeleteAffectedRows` / `UpdateAffectedCount`
+    return the affected rows/count from the table operation itself, so the SQL paths no longer
+    materialize matching rows twice for RETURNING / change-tracking.
+  - ✅ **PK fast path in `Delete` / `DeleteMultiple` / `UpdateMultiple`** — a simple `pk = value`
+    WHERE resolves via the primary-key B-tree directly (single search + one read) instead of
+    full-row materialization + per-row re-search.
+  - [ ] Fixed-width record layout for hot tables (SQLite-style C record format)
+  - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 - [ ] **.NET 11 / C# 15 migration** (after Nov 2026 GA) — Runtime Async, AVX-VNNI-512/SVE2 behind
   `SIMD_ENABLED`, optional Zstandard compression.
 - [ ] **Native AOT warning cleanup** — interface-based B-tree factory (replace `GetMethod`/

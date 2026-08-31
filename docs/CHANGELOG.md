@@ -5,6 +5,23 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0-preview] - 2026-08-31
+
+### Performance
+- **Single-pass SQL DELETE/UPDATE (Issue #7/#8)** — the SQL paths no longer materialize matching
+  rows twice:
+  - `ITable.DeleteAffectedRows(where)` deletes AND returns the affected rows; `ExecuteDelete` uses
+    it for RETURNING + `CHANGES()` from a single pass (`Table`/`SingleFileTable` override the
+    default; third-party `ITable` implementers keep the two-pass fallback).
+  - `ITable.UpdateAffectedCount(where, updates)` applies the update and returns the affected count;
+    `ExecuteUpdate` no longer runs a full `Select().Count` for change-tracking.
+- **PK fast path extended to batch DML** — simple `pk = value` WHERE clauses resolve via the
+  primary-key B-tree directly (single search + one read) in `Delete`/`DeleteMultiple`/
+  `UpdateMultiple` instead of full-row materialization + per-row PK re-search.
+- **Regression tests:** `DmlSinglePassTests` (9 cases) — affected counts, RETURNING pre-delete
+  rows, range/non-indexed WHERE fallbacks, batch PK deletes/updates. Full suite green:
+  **1,644 tests, 0 failures**.
+
 ## [2.0.0-preview.3] - 2026-08-30
 
 ### Added
