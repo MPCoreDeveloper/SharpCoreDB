@@ -20,6 +20,17 @@ public class DatabaseConfig
     public bool NoEncryptMode { get; init; } = false;
 
     /// <summary>
+    /// Gets a value indicating whether new directory-mode tables use the fixed-width record layout
+    /// with out-of-line overflow (the SQLite-model). Fixed-size columns live at constant record
+    /// offsets; variable-length (TEXT/BLOB) values are stored in a per-table overflow arena, so the
+    /// record length is constant per schema and every UPDATE is an in-place overwrite.
+    /// ⚠️ OPT-IN FORMAT: only enable on databases whose columnar tables are created with the same
+    /// flag, and never share such databases with tooling built before this option. Existing tables
+    /// are unaffected.
+    /// </summary>
+    public bool FixedWidthRecordLayout { get; init; } = false;
+
+    /// <summary>
     /// Gets a value indicating whether SQLite integer type affinity is used for DDL type mapping.
     /// When <see langword="true"/> (opt-in), <c>INTEGER</c> maps to <see cref="DataType.Long"/> (Int64),
     /// matching SQLite semantics so values like <c>DateTime.UtcNow.Ticks</c> (~6.4e17) fit.

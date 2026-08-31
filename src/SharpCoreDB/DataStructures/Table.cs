@@ -51,7 +51,12 @@ public partial class Table : ITable, IDisposable
     {
         (this.storage, this.isReadOnly) = (storage, isReadOnly);
         _config = config;
-        
+
+        // Fixed-width record layout (out-of-line overflow): opt-in, columnar mode only.
+        // When enabled, records have a constant size per schema and variable-length values live in
+        // the table's overflow arena — every UPDATE is an in-place overwrite.
+        _fixedWidthRecords = config?.FixedWidthRecordLayout ?? false;
+
         // Apply compaction threshold from config if provided
         if (config is not null && config.ColumnarAutoCompactionThreshold > 0)
         {
@@ -250,6 +255,22 @@ public partial class Table : ITable, IDisposable
 
     // ✅ NEW: DatabaseConfig for passing optimizations through to storage engines
     private readonly DatabaseConfig? _config;
+
+    // Fixed-width record layout (out-of-line overflow, SQLite-model) — opt-in via
+    // DatabaseConfig.FixedWidthRecordLayout. Only takes effect for columnar/append-only tables.
+    private bool _fixedWidthRecords;
+    private FixedWidthRecordLayout? _fixedWidthLayout;
+    private OverflowArena? _overflowArena;
+
+    /// <summary>
+    /// Gets or sets whether this table uses the fixed-width record layout (out-of-line overflow).
+    /// Persisted in table metadata so a database created with the flag reopens correctly.
+    /// </summary>
+    public bool IsFixedWidthRecords
+    {
+        get => _fixedWidthRecords;
+        set => _fixedWidthRecords = value;
+    }
 
     // ✅ NEW: Compaction tracking for columnar storage
     private long _deletedRowCount = 0;
@@ -561,32 +582,51 @@ public partial class Table : ITable, IDisposable
             // Parse just enough to get the primary key value
             try
             {
-                var row = new Dictionary<string, object>();
-                int offset = 0;
+                string? pkStr = null;
 
-                for (int i = 0; i < Columns.Count; i++)
+                if (_fixedWidthRecords)
                 {
-                    if (offset >= recordData.Length)
+                    // Fixed-width layout: variable columns reference the overflow arena, so the
+                    // record must be deserialized through the fixed-width codec (a raw walk would
+                    // misread the 5-byte variable slots as length-prefixed values).
+                    var fwRow = DeserializeRowFixedWidth(recordData.AsSpan());
+                    if (fwRow.TryGetValue(Columns[PrimaryKeyIndex], out var fwPk) && fwPk is not null)
                     {
-                        break;
+                        pkStr = fwPk.ToString();
+                    }
+                }
+                else
+                {
+                    var row = new Dictionary<string, object>();
+                    int offset = 0;
+
+                    for (int i = 0; i < Columns.Count; i++)
+                    {
+                        if (offset >= recordData.Length)
+                        {
+                            break;
+                        }
+
+                        var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
+
+                        // Only store PK column, we don't need the rest for index rebuild
+                        if (i == PrimaryKeyIndex)
+                        {
+                            row[Columns[i]] = value;
+                        }
+
+                        offset += bytesRead;
                     }
 
-                    var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
-
-                    // Only store PK column, we don't need the rest for index rebuild
-                    if (i == PrimaryKeyIndex)
+                    // Extract PK value
+                    if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
                     {
-                        row[Columns[i]] = value;
+                        pkStr = pkValue.ToString() ?? string.Empty;
                     }
-
-                    offset += bytesRead;
                 }
 
-                // Extract PK value and add to index
-                if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
+                if (pkStr is not null)
                 {
-                    var pkStr = pkValue.ToString() ?? string.Empty;
-
                     // Only add if this key doesn't exist yet (handles UPDATE versions - keep latest)
                     var existing = Index.Search(pkStr);
                     if (!existing.Found)

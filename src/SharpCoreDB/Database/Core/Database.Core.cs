@@ -389,6 +389,14 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
 
+                // Fixed-width record layout (out-of-line overflow): the flag is persisted in table
+                // metadata, but also restored from the current config (which must match) so tables
+                // created/opened with DatabaseConfig.FixedWidthRecordLayout reopen correctly.
+                if (config is not null)
+                {
+                    table.IsFixedWidthRecords = config.FixedWidthRecordLayout;
+                }
+
                 // ✅ Phase 2: Set storage provider for delta-update optimization
                 table.SetStorageProvider(_storageProvider);
 

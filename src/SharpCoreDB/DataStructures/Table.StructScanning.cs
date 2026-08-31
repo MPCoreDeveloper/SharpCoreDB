@@ -54,6 +54,21 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public IEnumerable<StructRow> ScanStructRows(bool enableCaching = false)
     {
+        // Fixed-width record layout (out-of-line overflow): the zero-alloc struct scan walks the
+        // variable-length record format, so fixed-width tables fall back to the dictionary path
+        // (correct, allocated). StructRow.FromDictionary is self-consistent (own bytes + schema).
+        if (_fixedWidthRecords)
+        {
+            var columns = Columns.ToArray();
+            var types = ColumnTypes.ToArray();
+            foreach (var row in Select())
+            {
+                yield return StructRow.FromDictionary(row, columns, types);
+            }
+
+            yield break;
+        }
+
         // ✅ FIX: Validate upfront, then delegate to iterator methods
         ArgumentNullException.ThrowIfNull(this.storage);
 
@@ -63,12 +78,18 @@ public partial class Table
         if (this.StorageMode == StorageMode.Columnar)
         {
             // Columnar mode: Read entire file and iterate with position filtering
-            return ScanColumnarStructRowsInternal(schema, enableCaching);
+            foreach (var row in ScanColumnarStructRowsInternal(schema, enableCaching))
+            {
+                yield return row;
+            }
         }
         else // PageBased
         {
             // PageBased mode: Use storage engine's GetAllRecords
-            return ScanPageBasedStructRowsInternal(schema, enableCaching);
+            foreach (var row in ScanPageBasedStructRowsInternal(schema, enableCaching))
+            {
+                yield return row;
+            }
         }
     }
 
@@ -165,6 +186,20 @@ public partial class Table
     private IEnumerable<StructRow> ScanStructRowsWhereCore(string? where, bool enableCaching)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
+
+        // Fixed-width records: fall back to the dictionary path (see ScanStructRows).
+        if (_fixedWidthRecords)
+        {
+            var columns = Columns.ToArray();
+            var types = ColumnTypes.ToArray();
+            foreach (var row in Select(where))
+            {
+                yield return StructRow.FromDictionary(row, columns, types);
+            }
+
+            yield break;
+        }
+
         var schema = BuildVariableLengthSchema();
         var engine = GetOrCreateStorageEngine();
 
@@ -427,8 +462,9 @@ public partial class Table
             _hasSimpleWhere = !string.IsNullOrEmpty(_where) &&
                 TryParseSimpleWhereClause(_where!, out _simpleColumn, out _simpleValue);
 
-            // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-            if (_hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
+            // Fast path 1: hash-index point lookup (mirrors SelectInternal). Disabled for
+            // fixed-width tables (their records use the overflow format, not the walkable layout).
+            if (!_table._fixedWidthRecords && _hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
                 _table.registeredIndexes.ContainsKey(_simpleColumn))
             {
                 _table.EnsureIndexLoaded(_simpleColumn);
@@ -449,8 +485,8 @@ public partial class Table
                 }
             }
 
-            // Fast path 2: primary-key lookup.
-            if (_hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
+            // Fast path 2: primary-key lookup. Disabled for fixed-width tables (same reason).
+            if (!_table._fixedWidthRecords && _hasSimpleWhere && _simpleColumn is not null && _simpleValue is not null &&
                 _table.PrimaryKeyIndex >= 0 &&
                 string.Equals(_simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
             {

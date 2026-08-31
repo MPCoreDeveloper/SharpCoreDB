@@ -364,6 +364,183 @@ public partial class Table
         return result;
     }
 
+    #region Fixed-width record layout (out-of-line overflow, opt-in)
+
+    private FixedWidthRecordLayout GetFixedWidthLayout()
+    {
+        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        return _fixedWidthLayout;
+    }
+
+    private OverflowArena GetOverflowArena()
+    {
+        if (_overflowArena is null)
+        {
+            var arenaPath = string.IsNullOrEmpty(DataFile)
+                ? System.IO.Path.ChangeExtension(Name + ".dat", ".ovf")
+                : System.IO.Path.ChangeExtension(DataFile, ".ovf");
+            _overflowArena = new OverflowArena(storage, arenaPath);
+        }
+
+        return _overflowArena;
+    }
+
+    private static byte[] EncodeVariablePayload(DataType type, object value)
+    {
+        return type switch
+        {
+            DataType.Blob => (byte[])value,
+            _ => System.Text.Encoding.UTF8.GetBytes(value?.ToString() ?? string.Empty),
+        };
+    }
+
+    private static object DecodeVariablePayload(DataType type, byte[] payload)
+    {
+        return type switch
+        {
+            DataType.Blob => payload,
+            _ => System.Text.Encoding.UTF8.GetString(payload),
+        };
+    }
+
+    /// <summary>Serializes a row using the fixed-width record layout (variable values → overflow arena).</summary>
+    private byte[] SerializeRowFixedWidth(Dictionary<string, object> row)
+    {
+        var layout = GetFixedWidthLayout();
+        var arena = GetOverflowArena();
+        var buffer = new byte[layout.FixedSize];
+        var span = buffer.AsSpan();
+
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+            var value = row.TryGetValue(Columns[i], out var v) ? v : DBNull.Value;
+
+            if (layout.IsVariable[i])
+            {
+                if (value == null || value == DBNull.Value)
+                {
+                    slot[0] = 0;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+                }
+                else
+                {
+                    var payload = EncodeVariablePayload(ColumnTypes[i], value);
+                    var offset = arena.Write(payload);
+                    slot[0] = 1;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+                }
+            }
+            else
+            {
+                _ = WriteTypedValueToSpan(slot, value, ColumnTypes[i]);
+            }
+        }
+
+        return buffer;
+    }
+
+    /// <summary>Deserializes a fixed-width record into a row dictionary (variable values read from the overflow arena).</summary>
+    private Dictionary<string, object> DeserializeRowFixedWidth(ReadOnlySpan<byte> data)
+    {
+        var layout = GetFixedWidthLayout();
+        var arena = GetOverflowArena();
+        var row = new Dictionary<string, object>(Columns.Count, StringComparer.Ordinal);
+
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            if (layout.Offsets[i] + layout.SlotSizes[i] > data.Length)
+            {
+                break; // truncated / corrupt record
+            }
+
+            var slot = data.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+            if (layout.IsVariable[i])
+            {
+                if (slot[0] == 0)
+                {
+                    row[Columns[i]] = DBNull.Value;
+                }
+                else
+                {
+                    var offset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                    var payload = arena.Read(offset);
+                    row[Columns[i]] = payload is null ? DBNull.Value : DecodeVariablePayload(ColumnTypes[i], payload);
+                }
+            }
+            else
+            {
+                row[Columns[i]] = ReadTypedValueFromSpan(slot, ColumnTypes[i], out _);
+            }
+        }
+
+        return row;
+    }
+
+    /// <summary>
+    /// Fixed-width in-place patch: overwrites only the updated slots in an existing fixed record
+    /// (variable values get a new overflow block and the slot offset is updated). The record length
+    /// is constant, so the patched record always fits — the write is an in-place overwrite (#6).
+    /// </summary>
+    private byte[]? TryOverwriteFixedWidthInPlace(byte[] existingRow, Dictionary<string, object> updates)
+    {
+        if (existingRow.Length != GetFixedWidthLayout().FixedSize)
+        {
+            return null;
+        }
+
+        var layout = GetFixedWidthLayout();
+        var arena = GetOverflowArena();
+        var columnIndexCache = GetColumnIndexCache();
+        var result = new byte[existingRow.Length];
+        existingRow.CopyTo(result, 0);
+        var span = result.AsSpan();
+
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx) || colIdx < 0 || colIdx >= layout.ColumnCount)
+            {
+                return null;
+            }
+
+            var slot = span.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+            if (layout.IsVariable[colIdx])
+            {
+                int oldOffset = slot[0] == 0 ? 0 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                if (value == null || value == DBNull.Value)
+                {
+                    if (oldOffset != 0)
+                    {
+                        arena.Free(oldOffset);
+                    }
+
+                    slot[0] = 0;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+                }
+                else
+                {
+                    var payload = EncodeVariablePayload(ColumnTypes[colIdx], value);
+                    var offset = arena.Write(payload);
+                    if (oldOffset != 0)
+                    {
+                        arena.Free(oldOffset);
+                    }
+
+                    slot[0] = 1;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+                }
+            }
+            else
+            {
+                _ = WriteTypedValueToSpan(slot, value, ColumnTypes[colIdx]);
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
+
     /// <summary>
     /// WP13: computes the exact encoded size of a row so serialization can allocate the
     /// final array once (no ArrayPool.Rent + ToArray double allocation, no copy).
@@ -393,6 +570,13 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte[] SerializeRowExact(Dictionary<string, object> row)
     {
+        // Fixed-width record layout (out-of-line overflow): constant-size record, variable values
+        // stored in the table's overflow arena.
+        if (_fixedWidthRecords)
+        {
+            return SerializeRowFixedWidth(row);
+        }
+
         byte[] buffer = new byte[ComputeExactRowSize(row)];
         int bytesWritten = WriteRowOptimized(buffer.AsSpan(), row);
         return bytesWritten == buffer.Length
@@ -1486,6 +1670,12 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private Dictionary<string, object> DeserializeRowWithSimd(ReadOnlySpan<byte> data)
     {
+        // Fixed-width record layout (out-of-line overflow): variable slots reference the arena.
+        if (_fixedWidthRecords)
+        {
+            return DeserializeRowFixedWidth(data);
+        }
+
         if (data.IsEmpty)
             return new Dictionary<string, object>(Columns.Count);
 

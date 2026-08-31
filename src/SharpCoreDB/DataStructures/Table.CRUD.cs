@@ -924,7 +924,10 @@ public partial class Table
         // RTrim, Locale) require collation-aware comparison that only EvaluateWhere provides.
         int earlyWhereColIdx = -1;
         string? earlyWhereValue = null;
-        if (!string.IsNullOrEmpty(where) &&
+        // Fixed-width records have constant slot offsets (no per-record walk) — the early-WHERE
+        // walk below assumes the variable-length layout, so it is disabled for fixed-width tables.
+        if (!_fixedWidthRecords &&
+            !string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol, out var ewValObj) &&
             ewValObj is string ewStr)
         {
@@ -948,7 +951,8 @@ public partial class Table
         int earlyNumericOffset = -1;
         DataType earlyNumericType = DataType.String;
         object? earlyNumericExpected = null;
-        if (earlyWhereColIdx < 0 && !string.IsNullOrEmpty(where) &&
+        if (!_fixedWidthRecords &&
+            earlyWhereColIdx < 0 && !string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol2, out var ewVal2) &&
             TryGetFixedNumericWhereInfo(ewCol2, out var ewOffset, out var ewType) &&
             TryParseNumericExpected(ewVal2, ewType, out var ewExpected))
@@ -1206,9 +1210,11 @@ public partial class Table
                     {
                         var existingData = engine.Read(Name, rowPos);
                         rowData = existingData is { Length: > 0 }
-                            && TryOverwriteFieldsInPlaceActual(existingData, updates) is { } patched
-                                ? patched
-                                : SerializeFullRow();
+                            && (_fixedWidthRecords
+                                ? TryOverwriteFixedWidthInPlace(existingData, updates)
+                                : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
+                                    ? patched
+                                    : SerializeFullRow();
                     }
                     else
                     {
@@ -1633,9 +1639,11 @@ public partial class Table
                             {
                                 var existingData = engine.Read(Name, oldPosition);
                                 rowData = existingData is { Length: > 0 }
-                                    && TryOverwriteFieldsInPlaceActual(existingData, updates) is { } patched
-                                        ? patched
-                                        : SerializeRowExact(row);
+                                    && (_fixedWidthRecords
+                                        ? TryOverwriteFixedWidthInPlace(existingData, updates)
+                                        : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
+                                            ? patched
+                                            : SerializeRowExact(row);
                             }
                             else
                             {
