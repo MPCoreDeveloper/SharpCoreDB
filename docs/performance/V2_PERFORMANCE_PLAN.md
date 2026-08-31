@@ -321,7 +321,16 @@ restored from config on reopen.
   free-list (unreferenced blocks are swept on flush) so it stays bounded between copy-on-compact
   passes.
 
-> **Still open (follow-up):** automatic PageBased → Columnar + fixed-width migration.
+- **B6 · automatic PageBased → Columnar + fixed-width conversion (2026-09-01)** — the migration
+  path is now complete for every directory-mode storage mode. `MigrateToFixedWidth` converts a
+  page-based table to Columnar storage in-process (rows re-read via the page engine, `.pages` files
+  removed, `DataFile`/`StorageMode`/metadata updated) and then rewrites the records as fixed-width,
+  and the database-load auto-migration now covers PageBased tables too. Also fixed a pre-existing
+  PageBased data-loss bug: single INSERT/UPDATE never flushed the page cache, so reopened tables
+  returned zero rows — dirty pages are now flushed when the table/storage engine is disposed.
+
+> **Still open (follow-up):** cross-session persistence of the directory-mode arena free-list
+> (compaction already bounds the growth).
 
 - **B6 · arena free-list — in-place block reuse (2026-09-01)** — freed overflow blocks are tracked
   in an in-memory free-list (grouped by payload length) and reused via the storage layer's in-place

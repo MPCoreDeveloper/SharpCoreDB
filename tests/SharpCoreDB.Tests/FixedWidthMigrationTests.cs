@@ -179,20 +179,63 @@ public sealed class FixedWidthMigrationTests : IDisposable
     }
 
     [Fact]
-    public void PageBasedTable_ExplicitMigration_Throws()
+    public void PageBasedTable_ExplicitMigration_ConvertsToColumnarAndFixedWidth()
     {
         IDatabase? db = null;
         try
         {
             db = CreateLegacyDb();
-            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT) STORAGE = PAGE_BASED");
             db.ExecuteSQL("INSERT INTO t VALUES (1, 'alpha')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'beta')");
+            Assert.True(File.Exists(Path.Combine(_dirPath, "t.pages")));
+            Assert.False(IsFixedWidth(db, "t"));
 
-            Assert.True(db.TryGetTable("t", out var table));
-            var concrete = Assert.IsType<Table>(table);
-            concrete.StorageMode = SharpCoreDB.Storage.Hybrid.StorageMode.PageBased;
+            int migrated = db.MigrateTableToFixedWidth("t");
+            Assert.Equal(2, migrated);
+            Assert.True(IsFixedWidth(db, "t"));
+            Assert.True(File.Exists(DatPath("t")));
+            Assert.False(File.Exists(Path.Combine(_dirPath, "t.pages")));
 
-            Assert.Throws<NotSupportedException>(() => concrete.MigrateToFixedWidth());
+            Assert.Equal("alpha", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+            Assert.Equal("beta", db.ExecuteQuery("SELECT * FROM t WHERE id = 2")[0]["name"]);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Reopen without the config flag → persisted fixed-width columnar table, data intact.
+        db = null;
+        try
+        {
+            db = CreateLegacyDb();
+            Assert.True(IsFixedWidth(db, "t"));
+            Assert.True(File.Exists(DatPath("t")));
+            Assert.False(File.Exists(Path.Combine(_dirPath, "t.pages")));
+            Assert.Equal("alpha", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
+    public void PageBasedTable_AutoMigrationOnReopen()
+    {
+        IDatabase? db = null;
+        try
+        {
+            db = CreateLegacyDb();
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT) STORAGE = PAGE_BASED");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'alpha')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'beta')");
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        db = null;
+        try
+        {
+            db = CreateFixedWidthDb(); // config opts into fixed-width → auto-migrate (incl. PageBased)
+            Assert.True(IsFixedWidth(db, "t"));
+            Assert.True(File.Exists(DatPath("t")));
+            Assert.False(File.Exists(Path.Combine(_dirPath, "t.pages")));
+            Assert.Equal("beta", db.ExecuteQuery("SELECT * FROM t WHERE id = 2")[0]["name"]);
         }
         finally { (db as IDisposable)?.Dispose(); }
     }

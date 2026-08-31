@@ -477,11 +477,15 @@ public partial class PageBasedEngine : IStorageEngine
     {
         if (disposing)
         {
+            // ✅ CRITICAL FIX: Flush dirty pages before closing the page managers. A single
+            // INSERT / UPDATE never calls FlushDirtyPages (only CommitAsync/Flush do), so without
+            // this the page cache is lost on dispose and reopened tables return zero rows.
             foreach (var manager in tableManagers.Values)
             {
+                manager.FlushDirtyPages();
                 manager.Dispose();
             }
-            
+
             tableManagers.Clear();
         }
     }

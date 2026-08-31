@@ -408,11 +408,14 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 // authoritative — a legacy (1.x) table simply lacks it (variable-length records).
                 // Opening a legacy table as fixed-width would misread its records, so when the
                 // config opts into FixedWidthRecordLayout we AUTO-MIGRATE the legacy table instead.
-                // PageBased tables stay legacy until converted to Columnar first, and read-only
-                // opens never rewrite data.
+                // Both Columnar and PageBased tables are migrated (PageBased tables are converted
+                // to Columnar storage in-process first); read-only opens never rewrite data.
                 if (!table.IsFixedWidthRecords && config is { FixedWidthRecordLayout: true })
                 {
-                    if (!isReadOnly && table.StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar)
+                    var storageMode = table.StorageMode;
+                    if (!isReadOnly &&
+                        (storageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar ||
+                         storageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased))
                     {
                         table.MigrateToFixedWidth();
                         migratedAnyTable = true;
@@ -833,6 +836,12 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         queryCache?.Clear();
         ClearPlanCache();
 
+        // ✅ B6: flush + release each table's storage engine (see the sync Dispose path).
+        foreach (var table in tables.Values.OfType<Table>())
+        {
+            try { table.Dispose(); } catch { /* best-effort */ }
+        }
+
         _disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -875,6 +884,14 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             pageCache?.Clear(false, null);
             queryCache?.Clear();
             ClearPlanCache();  // ✅ Clear query plan cache on disposal
+
+            // ✅ B6: flush + release each table's storage engine so pending page-based writes are
+            // persisted. A single INSERT/UPDATE never flushes the page cache, so without this a
+            // reopened PageBased table returned zero rows (data loss on dispose).
+            foreach (var table in tables.Values.OfType<Table>())
+            {
+                try { table.Dispose(); } catch { /* best-effort */ }
+            }
         }
 
         _disposed = true;

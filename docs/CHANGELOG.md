@@ -74,9 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reopen (binary blocks are parsed untrimmed), legacy JSON tables migrate via
   `MigrateTableToFixedWidth` (or automatically when the config opts in), and the shared
   `FixedWidthCodec` keeps directory-mode and single-file record formats in sync.
+- **Automatic PageBased → Columnar + fixed-width conversion (B6)** — `MigrateToFixedWidth` now
+  converts page-based tables to Columnar storage in-process (rows re-read via the page engine,
+  `.pages` files removed, `DataFile`/`StorageMode`/metadata updated) before rewriting the records
+  as fixed-width, and the database-load auto-migration covers PageBased tables as well. Also fixed
+  a pre-existing PageBased data-loss bug: single INSERT/UPDATE never flushed the page cache (only
+  `CommitAsync`/`Flush` did), so reopened tables returned zero rows — dirty pages are now flushed
+  when the table/storage engine is disposed.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (13), `FixedWidthMigrationTests` (7), `SingleFileFixedWidthTests` (5).
-  Full suite green: **1,684 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (13), `FixedWidthMigrationTests` (8, incl. PageBased conversion),
+  `SingleFileFixedWidthTests` (5). Full suite green: **1,685 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

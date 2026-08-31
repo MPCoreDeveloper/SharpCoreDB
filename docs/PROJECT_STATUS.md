@@ -86,6 +86,9 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
   - ✅ **Single-file fixed-width (B6)** — `.scdb` tables store binary fixed-width records +
     overflow block instead of JSON (constant-size updates, format detected on reopen, JSON tables
     migrate via `MigrateTableToFixedWidth` or the config flag).
+  - ✅ **PageBased auto-conversion (B6)** — `MigrateToFixedWidth` converts PageBased → Columnar
+    in-process before the fixed-width rewrite; auto-migration on reopen covers PageBased too.
+    Fixed a pre-existing PageBased data-loss bug (page cache never flushed on dispose).
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

@@ -11,27 +11,21 @@ using SharpCoreDB.Storage.Hybrid;
 /// B5: 1.x → 2.0 record-format migration. Converts a legacy table (variable-length records) to the
 /// fixed-width record layout (out-of-line overflow arena): current rows are re-read through the
 /// legacy codec, re-serialized as fixed-width records (variable values move into a fresh overflow
-/// arena), and the primary-key / hash indexes are rebuilt on the new record positions.
+/// arena), and the primary-key / hash indexes are rebuilt on the new record positions. Page-based
+/// tables are converted to Columnar storage in-process first.
 /// </summary>
 public partial class Table
 {
     /// <summary>
     /// Migrates this table from the legacy variable-length record format to the fixed-width record
     /// layout. Returns the number of rows migrated (0 when the table is already fixed-width).
-    /// Requires a writable, columnar (append-only) table.
+    /// Requires a writable table; page-based tables are converted to Columnar storage first.
     /// </summary>
     public int MigrateToFixedWidth()
     {
         if (isReadOnly)
         {
             throw new InvalidOperationException("Cannot migrate a read-only table to the fixed-width record layout.");
-        }
-
-        if (StorageMode != StorageMode.Columnar)
-        {
-            throw new NotSupportedException(
-                "The fixed-width record layout supports columnar/append-only tables only. " +
-                "Convert the table to Columnar storage first (StorageMigrator.MigrateToColumnar).");
         }
 
         rwLock.EnterWriteLock();
@@ -42,30 +36,46 @@ public partial class Table
                 return 0; // already in the target format
             }
 
-            // B5 safety net: a table created with the fixed-width flag BEFORE the record format was
-            // persisted in metadata (B1–B4) is unmarked but already stores fixed-width records.
-            // Re-reading it as legacy would corrupt it, so adopt the format when the on-disk records
-            // provably match the fixed-width layout (constant length + variable slots resolve in the
-            // arena). Legacy records with fixed-size-only columns are byte-identical to fixed-width,
-            // so adopting is also correct for them.
-            if (RecordsMatchFixedWidthLayout())
+            List<Dictionary<string, object>> rows;
+
+            if (StorageMode == StorageMode.PageBased)
             {
-                _fixedWidthRecords = true;
-                return 0;
+                // PageBased → Columnar conversion happens first (in-process). ScanPageBasedTable
+                // resolves the current rows without relying on the PK index.
+                rows = Select();
+                ConvertToColumnarInPlace();
+            }
+            else
+            {
+                if (StorageMode != StorageMode.Columnar)
+                {
+                    throw new NotSupportedException(
+                        $"Storage mode '{StorageMode}' cannot be migrated to the fixed-width record layout.");
+                }
+
+                // B5 safety net: a table created with the fixed-width flag BEFORE the record format
+                // was persisted in metadata (B1–B4) is unmarked but already stores fixed-width
+                // records. Re-reading it as legacy would corrupt it, so adopt the format when the
+                // on-disk records provably match the fixed-width layout (constant length + variable
+                // slots resolve in the arena). Legacy records with fixed-size-only columns are
+                // byte-identical to fixed-width, so adopting is also correct for them.
+                if (RecordsMatchFixedWidthLayout())
+                {
+                    _fixedWidthRecords = true;
+                    return 0;
+                }
+
+                // Rebuild the PK index with the LEGACY codec so Select() filters stale versions
+                // correctly (the index may be empty right after metadata load).
+                if (PrimaryKeyIndex >= 0)
+                {
+                    RebuildPrimaryKeyIndexFromDisk();
+                }
+
+                rows = Select();
             }
 
-            // 1. Rebuild the PK index with the LEGACY codec so Select() filters stale versions
-            //    correctly (the index may be empty right after metadata load).
-            if (PrimaryKeyIndex >= 0)
-            {
-                RebuildPrimaryKeyIndexFromDisk();
-            }
-
-            // 2. Read the current rows through the legacy (variable-length) codec. This runs under
-            //    the write lock — the recursive rwLock allows the nested read-side Select.
-            var rows = Select();
-
-            // 3. Switch the serializer to the fixed-width codec and start with a fresh arena.
+            // Switch the serializer to the fixed-width codec and start with a fresh arena.
             var arenaPath = System.IO.Path.ChangeExtension(DataFile, ".ovf");
             if (File.Exists(arenaPath))
             {
@@ -131,6 +141,57 @@ public partial class Table
         {
             rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Converts this table from page-based to columnar (append-only) storage in place: the
+    /// page-based engine and its <c>.pages</c> files are dropped, <see cref="StorageMode"/> is set
+    /// to Columnar and <see cref="DataFile"/> switches to the <c>.dat</c> convention. The rows
+    /// themselves are written by the caller (the fixed-width rewrite).
+    /// </summary>
+    private void ConvertToColumnarInPlace()
+    {
+        // Dispose + drop the page-based engine (it owns the .pages files and their handles).
+        DisposeStorageEngine();
+
+        var pagesPath = DataFile;
+        var directory = System.IO.Path.GetDirectoryName(pagesPath) ?? ".";
+        var baseName = System.IO.Path.GetFileNameWithoutExtension(pagesPath);
+
+        // The engine stores pages in table_{stableId}.pages (deterministic FNV-1a of the upper-cased
+        // table name) — the {name}.pages DDL file is just an empty placeholder.
+        uint stableTableId = ComputeStableTableId(Name);
+        foreach (var file in Directory.EnumerateFiles(directory, "*.pages"))
+        {
+            var fileName = System.IO.Path.GetFileName(file);
+            if (string.Equals(fileName, baseName + ".pages", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(fileName, $"table_{stableTableId}.pages", System.StringComparison.OrdinalIgnoreCase))
+            {
+                try { File.Delete(file); } catch { /* best-effort cleanup */ }
+            }
+        }
+
+        StorageMode = StorageMode.Columnar;
+        DataFile = System.IO.Path.ChangeExtension(pagesPath, ".dat");
+    }
+
+    /// <summary>
+    /// Deterministic FNV-1a table id used by the page-based engine's file naming
+    /// (<c>table_{id}.pages</c>). Mirrors <c>PageBasedEngine.ComputeStableTableId</c>.
+    /// </summary>
+    private static uint ComputeStableTableId(string tableName)
+    {
+        const uint fnvOffset = 2166136261;
+        const uint fnvPrime = 16777619;
+
+        uint hash = fnvOffset;
+        foreach (var b in System.Text.Encoding.UTF8.GetBytes(tableName.ToUpperInvariant()))
+        {
+            hash ^= b;
+            hash *= fnvPrime;
+        }
+
+        return hash;
     }
 
     /// <summary>

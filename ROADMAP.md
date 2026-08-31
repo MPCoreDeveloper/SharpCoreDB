@@ -149,7 +149,9 @@
   latent offset-0 block leak on update
 - ✅ **Single-file fixed-width (B6)** — `.scdb` tables use binary fixed-width records + overflow
   block (constant-size updates, format detection, JSON migration)
-- ⬜ Follow-up: PageBased auto-conversion, free-list persistence across sessions
+- ✅ **PageBased auto-conversion (B6)** — `MigrateToFixedWidth` converts PageBased → Columnar
+  in-process; auto-migration on reopen covers all directory-mode storage modes
+- ⬜ Follow-up: free-list persistence across sessions
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)
