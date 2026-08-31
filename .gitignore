@@ -57,6 +57,8 @@ dlldata.c
 
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
+# Comparative benchmark harness output (tests/benchmarks/SharpCoreDB.Benchmarks.Comparative)
+results/
 
 # .NET Core
 project.lock.json
