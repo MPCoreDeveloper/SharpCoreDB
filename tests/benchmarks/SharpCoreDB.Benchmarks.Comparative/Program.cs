@@ -30,6 +30,13 @@ class Program
 
     static async Task Main(string[] args)
     {
+        // Optional: --fixedwidth → run the fixed-width vs legacy before/after benchmark only.
+        if (args.Any(a => a.Equals("--fixedwidth", StringComparison.OrdinalIgnoreCase)))
+        {
+            FixedWidthBenchmark.Run();
+            return;
+        }
+
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
         var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
