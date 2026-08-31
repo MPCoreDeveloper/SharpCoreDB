@@ -1529,10 +1529,24 @@ public partial class Table
 
             foreach (var (where, updates) in operations)
             {
-                // Resolve matching rows as (storage position, row) pairs so the columnar write
-                // path can patch fields in place even when the table has no primary key. The
-                // position comes from the hash index / PK lookup already performed here.
-                List<(long Position, Dictionary<string, object> Row)>? rows = null;
+                // B7: when the operation only touches non-indexed, non-PK columns on a table
+                // without CHECK constraints, matching rows are patched directly on their raw bytes
+                // (only the changed fields at their actual slot offsets) — no full-row
+                // deserialization. This is the hot path for
+                // `UPDATE t SET score = ... WHERE indexed_col = ...`.
+                bool fastPatch = StorageMode == StorageMode.Columnar &&
+                    !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var fastWhereCol, out _) &&
+                    !updates.ContainsKey(fastWhereCol) &&
+                    (this.PrimaryKeyIndex < 0 || !updates.ContainsKey(this.Columns[this.PrimaryKeyIndex])) &&
+                    this.TableCheckConstraints.Count == 0 &&
+                    !HasColumnCheckConstraints();
+
+                // Resolve matching rows as (storage position, row, raw bytes) so the columnar
+                // write path can patch fields in place even when the table has no primary key.
+                // The position comes from the hash index / PK lookup already performed here; in
+                // fast-patch mode the raw record bytes are kept instead of a deserialized row.
+                List<(long Position, Dictionary<string, object>? Row, byte[]? Raw)>? rows = null;
 
                 // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
                 // on a columnar table with a PK resolves through the PK B-tree directly (single
@@ -1541,20 +1555,18 @@ public partial class Table
                 if (StorageMode != StorageMode.PageBased &&
                     this.PrimaryKeyIndex >= 0 &&
                     !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var fastWhereCol, out var fastWhereVal) &&
-                    string.Equals(fastWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                    TryParseSimpleWhereClause(where, out var pkWhereCol, out var pkWhereVal) &&
+                    string.Equals(pkWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
                 {
-                    var fastSearch = this.Index.Search(fastWhereVal?.ToString() ?? string.Empty);
+                    var fastSearch = this.Index.Search(pkWhereVal?.ToString() ?? string.Empty);
                     if (fastSearch.Found)
                     {
                         var fastData = engine.Read(Name, fastSearch.Value);
                         if (fastData != null)
                         {
-                            var fastRow = DeserializeRow(fastData);
-                            if (fastRow != null)
-                            {
-                                rows = [(fastSearch.Value, fastRow)];
-                            }
+                            rows = fastPatch
+                                ? [(fastSearch.Value, null, fastData)]
+                                : [(fastSearch.Value, DeserializeRow(fastData), null)];
                         }
                     }
                 }
@@ -1581,8 +1593,15 @@ public partial class Table
                                     var data = engine.Read(Name, pos);
                                     if (data != null)
                                     {
-                                        var row = DeserializeRow(data);
-                                        if (row != null) rows.Add((pos, row));
+                                        if (fastPatch)
+                                        {
+                                            rows.Add((pos, null, data));
+                                        }
+                                        else
+                                        {
+                                            var row = DeserializeRow(data);
+                                            if (row != null) rows.Add((pos, row, null));
+                                        }
                                     }
                                 }
                             }
@@ -1607,12 +1626,46 @@ public partial class Table
                             }
                         }
 
-                        rows.Add((position, row));
+                        rows.Add((position, row, null));
                     }
                 }
 
-                foreach (var (rowPosition, row) in rows)
+                foreach (var (rowPosition, resolvedRow, rawData) in rows)
                 {
+                    // B7: fast patch — overwrite only the changed fields at their slot offsets in
+                    // the existing record bytes (no full-row deserialization). The in-place write
+                    // keeps the storage position, and since no indexed / PK column is touched the
+                    // index entries stay valid.
+                    Dictionary<string, object>? row = resolvedRow;
+                    if (fastPatch && rowPosition >= 0 && rawData is { Length: > 0 })
+                    {
+                        // NOT NULL validation on the changed values only.
+                        for (int i = 0; i < this.Columns.Count; i++)
+                        {
+                            if (i < this.IsNotNull.Count && this.IsNotNull[i] &&
+                                updates.TryGetValue(this.Columns[i], out var newVal) &&
+                                (newVal == null || newVal == DBNull.Value))
+                            {
+                                throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                            }
+                        }
+
+                        byte[]? patched = _fixedWidthRecords
+                            ? TryOverwriteFixedWidthInPlace(rawData, updates)
+                            : TryOverwriteFieldsInPlaceActual(rawData, updates);
+
+                        if (patched is not null && engine.TryUpdateInPlace(Name, rowPosition, patched))
+                        {
+                            continue;
+                        }
+
+                        // The patch did not fit (variable-length growth) → full-row fallback below.
+                        row = DeserializeRow(rawData);
+                        if (row is null) continue;
+                    }
+
+                    row ??= resolvedRow;
+                    if (row is null) continue;
                     // v2: capture the old PK and indexed-column values BEFORE applying updates,
                     // avoiding a full row dictionary copy per row (WP3 allocation reduction).
                     object? oldPkValue = this.PrimaryKeyIndex >= 0
@@ -1816,6 +1869,29 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// True when any column carries a CHECK expression (the batch fast-patch path is disabled in
+    /// that case because a CHECK may read non-updated columns).
+    /// </summary>
+    private bool HasColumnCheckConstraints()
+    {
+        var expressions = this.ColumnCheckExpressions;
+        if (expressions is null || expressions.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var expr in expressions)
+        {
+            if (expr is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

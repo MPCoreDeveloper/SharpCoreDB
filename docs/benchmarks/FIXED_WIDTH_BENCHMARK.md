@@ -39,24 +39,25 @@ AppendOnly engine (`--engine=appendonly`), 100K inserts / 10K reads / 10K update
 
 | Database | INSERT ops/s | READ ops/s | UPDATE ops/s | DELETE ops/s |
 |---|---|---|---|---|
-| SharpCoreDB (SQL) | 92,953 | 70,163 | 24,774 | 54,897 |
-| SharpCoreDB (Direct) | 104,558 | 115,664 | 28,749 | 63,973 |
-| SharpCoreDB (StructRow) | 140,915 | 120,451 | – | – |
-| SQLite | 146,824 | 95,353 | 306,303 | 371,871 |
-| LiteDB | 80,748 | 14,518 | 10,751 | 14,718 |
+| SharpCoreDB (SQL) | 91,873 | 65,858 | 37,203 | 60,211 |
+| SharpCoreDB (Direct) | 116,146 | 141,293 | 46,189 | 61,554 |
+| SharpCoreDB (StructRow) | 135,322 | 120,224 | – | – |
+| SQLite | 148,654 | 95,143 | 281,072 | 351,863 |
+| LiteDB | 78,569 | 13,721 | 9,641 | 14,710 |
 
 PageBased engine (`--engine=pagebased`):
 
 | Database | INSERT ops/s | READ ops/s | UPDATE ops/s | DELETE ops/s |
 |---|---|---|---|---|
-| SharpCoreDB (SQL) | 125,697 | 24,962 | 54,835 | 115,602 |
-| SharpCoreDB (Direct) | 164,184 | 45,429 | 95,631 | 156,637 |
-| SharpCoreDB (StructRow) | 229,421 | 61,268 | – | – |
-| SQLite | 146,910 | 96,440 | 283,518 | 358,708 |
-| LiteDB | 63,792 | 15,135 | 10,813 | 14,875 |
+| SharpCoreDB (SQL) | 123,995 | 30,807 | 69,574 | 124,176 |
+| SharpCoreDB (Direct) | 124,917 | 39,669 | 102,160 | 175,887 |
+| SharpCoreDB (StructRow) | 209,068 | 51,438 | – | – |
+| SQLite | 146,301 | 94,523 | 266,673 | 372,029 |
+| LiteDB | 71,677 | 13,616 | 10,337 | 14,061 |
 
 - **vs LiteDB: SharpCoreDB wins every workload** (1.5–8×).
 - **vs SQLite:** SharpCoreDB wins on INSERT (StructRow) and on READ (AppendOnly Direct); SQLite
-  remains ~3–10× faster on UPDATE/DELETE. The batch UPDATE path is now in-place (no stale records,
-  no compaction storm, rollback-safe) — the remaining gap is per-row overhead vs SQLite's
+  remains ~6–8× faster on UPDATE/DELETE. The batch UPDATE path is now in-place and
+  **deserialize-free on the hot path** (only the changed fields are patched at their slot
+  offsets) — the remaining gap is the per-statement parser + write-behind bookkeeping vs SQLite's
   specialized b-tree writes.

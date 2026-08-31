@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   primary key can still patch records in place. Previously the position was discarded: every
   non-PK update fell back to append (stale versions → file growth + compaction storm), and on the
   PageBased engine the update was silently **not applied at all**.
+- **Zero-deserialize fast patch (B8)** — for `UPDATE … SET non_indexed_col = … WHERE indexed_col = …`
+  on a columnar table without CHECK constraints, matching rows are patched directly on their raw
+  record bytes (only the changed fields at their actual slot offsets via
+  `TryOverwriteFieldsInPlaceActual` / `TryOverwriteFixedWidthInPlace`). The full-row deserialize,
+  row dictionary, validation loop and `SerializeRowExact` round trip are skipped entirely; NOT NULL
+  is still enforced on the changed values. Measured on the comparative UPDATE workload:
+  AppendOnly SQL 24,774 → **37,203 ops/s**, Direct 28,749 → **46,189 ops/s** (back to pre-fix
+  levels while keeping in-place writes); fixed-width growing updates **7.5–8.5× faster than legacy**.
 - **In-place overwrites inside transactions (write-behind)** — `OverwriteRecordAt` no longer
   refuses to run inside a transaction. Overwrites are buffered per file and flushed once on
   commit (`FlushBufferedAppendsAndOverwrites`); rollback simply drops the buffer because nothing
@@ -30,8 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reads coexist.
 - **Regression tests:** `SqlInPlaceUpdateTests` now covers PK-less batch updates (columnar file
   size stays constant, correct values, row count stable), PK-less PageBased updates (previously
-  dropped), and transaction rollback of in-place overwrites. Full suite green: **1,690 tests,
-  0 failures**.
+  dropped), transaction rollback of in-place overwrites, fast-patch NOT NULL enforcement, CHECK
+  fallback and WHERE-column updates. Full suite green: **1,693 tests, 0 failures**.
 
 ## [2.1.0-preview] - 2026-08-31
 

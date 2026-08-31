@@ -352,4 +352,81 @@ public sealed class SqlInPlaceUpdateTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    [Fact]
+    public void BatchSqlUpdate_FastPatch_NotNullViolationThrows()
+    {
+        // B7 fast patch: NOT NULL must still be validated on the changed values even though the
+        // full row is never deserialized.
+        var db = (SharpCoreDB.Database)_factory.Create(_dirPath, "pw");
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (name TEXT NOT NULL, score REAL NOT NULL)");
+            db.ExecuteSQL("CREATE INDEX idx_t_name ON t(name)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('a', 1.0)");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                db.ExecuteBatchSQL(new[] { "UPDATE t SET score = NULL WHERE name = 'a'" }));
+            Assert.Contains("cannot be NULL", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            // The row is unchanged.
+            var rows = db.ExecuteQuery("SELECT * FROM t");
+            Assert.Single(rows);
+            Assert.Equal(1.0, (double)rows[0]["score"], precision: 6);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void BatchSqlUpdate_WithCheckConstraint_FallsBackAndApplies()
+    {
+        // B7 fast patch is disabled when a CHECK constraint exists (the constraint may read
+        // non-updated columns) — the full-row fallback must still apply the update correctly.
+        var db = (SharpCoreDB.Database)_factory.Create(_dirPath, "pw");
+        try
+        {
+            db.ExecuteSQL(@"CREATE TABLE t (name TEXT NOT NULL, score REAL CHECK (score >= 0))");
+            db.ExecuteSQL("CREATE INDEX idx_t_name ON t(name)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('a', 1.0)");
+
+            db.ExecuteBatchSQL(new[] { "UPDATE t SET score = 42.5 WHERE name = 'a'" });
+            var rows = db.ExecuteQuery("SELECT * FROM t");
+            Assert.Single(rows);
+            Assert.Equal(42.5, (double)rows[0]["score"], precision: 6);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void BatchSqlUpdate_WhereColumnTouched_FallsBackAndApplies()
+    {
+        // B7 fast patch only applies when no indexed column changes. Updating the WHERE column
+        // itself must still work through the full-row path (including hash-index maintenance).
+        var db = (SharpCoreDB.Database)_factory.Create(_dirPath, "pw");
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (name TEXT NOT NULL, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_t_name ON t(name)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('a', 1.0)");
+
+            db.ExecuteBatchSQL(new[] { "UPDATE t SET name = 'b' WHERE name = 'a'" });
+
+            Assert.Equal(0, db.ExecuteQuery("SELECT * FROM t WHERE name = @n",
+                new Dictionary<string, object?> { ["@n"] = "a" }).Count);
+            var rows = db.ExecuteQuery("SELECT * FROM t WHERE name = @n",
+                new Dictionary<string, object?> { ["@n"] = "b" });
+            Assert.Single(rows);
+            Assert.Equal(1.0, (double)rows[0]["score"], precision: 6);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
 }
