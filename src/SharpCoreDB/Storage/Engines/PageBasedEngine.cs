@@ -176,6 +176,15 @@ public partial class PageBasedEngine : IStorageEngine
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryUpdateInPlace(string tableName, long storageReference, byte[] newData)
+    {
+        // PageBasedEngine.Update already keeps the storage reference for in-place and
+        // within-page updates; only a cross-page relocation changes the reference.
+        return Update(tableName, storageReference, newData) == storageReference;
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Delete(string tableName, long storageReference)
     {
         var (pageId, recordId) = DecodeStorageReference(storageReference);

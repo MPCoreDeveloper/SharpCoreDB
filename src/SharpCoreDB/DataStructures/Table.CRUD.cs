@@ -1177,8 +1177,7 @@ public partial class Table
                 {
                     var rowData = SerializeFullRow();
 
-                    // Columnar: Append new version (old ref becomes stale)
-                    // Get old position from primary key index
+                    // Get old position from primary key index.
                     long oldPosition = -1;
                     if (this.PrimaryKeyIndex >= 0)
                     {
@@ -1190,28 +1189,65 @@ public partial class Table
                         }
                     }
 
-                    // Insert new version
-                    long newPosition = engine.Insert(Name, rowData);
-
-                    // Update indexes to point to new position
-                    if (this.PrimaryKeyIndex >= 0)
+                    // Issue #6: in-place UPDATE — overwrite the record in its existing slot when
+                    // the new record fits (fixed-width rows, or variable-width rows whose stored
+                    // length is unchanged). No new version is appended, the storage reference and
+                    // the PK index stay valid, and no stale version is left for compaction.
+                    if (oldPosition >= 0 && engine.TryUpdateInPlace(Name, oldPosition, rowData))
                     {
-                        var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                        this.Index.Insert(pkVal, newPosition);
-                    }
-
-                    // Update hash indexes (key-only removal of the old value)
-                    foreach (var kvp in this.hashIndexes)
-                    {
-                        if (oldPosition >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                        // Position unchanged: move hash entries in place (values may have changed).
+                        foreach (var kvp in this.hashIndexes)
                         {
-                            kvp.Value.Remove(oldKey, oldPosition); // Remove old ref
-                        }
-                        kvp.Value.Add(row, newPosition); // Add new ref
-                    }
+                            if (oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                            {
+                                kvp.Value.Remove(oldKey, oldPosition);
+                            }
 
-                    // ✅ NEW: Track updates for compaction
-                    Interlocked.Increment(ref _updatedRowCount);
+                            kvp.Value.Add(row, oldPosition);
+                        }
+
+                        // Re-point the PK index only when the PK value itself changed.
+                        if (this.PrimaryKeyIndex >= 0)
+                        {
+                            var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                            if (!string.Equals(newPkVal, oldPkValue, StringComparison.Ordinal))
+                            {
+                                if (!string.IsNullOrEmpty(oldPkValue))
+                                {
+                                    this.Index.Delete(oldPkValue);
+                                }
+
+                                if (!string.IsNullOrEmpty(newPkVal))
+                                {
+                                    this.Index.Insert(newPkVal, oldPosition);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Columnar fallback: append new version (old ref becomes stale) + re-point indexes.
+                        long newPosition = engine.Insert(Name, rowData);
+
+                        if (this.PrimaryKeyIndex >= 0)
+                        {
+                            var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                            this.Index.Insert(pkVal, newPosition);
+                        }
+
+                        foreach (var kvp in this.hashIndexes)
+                        {
+                            if (oldPosition >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                            {
+                                kvp.Value.Remove(oldKey, oldPosition); // Remove old ref
+                            }
+
+                            kvp.Value.Add(row, newPosition); // Add new ref
+                        }
+
+                        // ✅ Track updates for compaction (only the append path creates stale versions).
+                        Interlocked.Increment(ref _updatedRowCount);
+                    }
                 }
                 else // PageBased
                 {
@@ -1436,27 +1472,62 @@ public partial class Table
                                     oldPosition = searchResult.Value;
                             }
 
-                            long newPosition = engine.Insert(Name, rowData);
-
-                            if (this.PrimaryKeyIndex >= 0)
+                            // Issue #6: in-place UPDATE — overwrite the record in its existing slot
+                            // when the new record fits; the storage reference and PK index stay valid.
+                            if (oldPosition >= 0 && engine.TryUpdateInPlace(Name, oldPosition, rowData))
                             {
-                                var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                                this.Index.Delete(pkVal);
-                                this.Index.Insert(pkVal, newPosition);
-                            }
-
-                            foreach (var hashIndex in this.hashIndexes)
-                            {
-                                if (oldPosition >= 0 &&
-                                    oldHashValues is not null &&
-                                    oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
-                                    oldKey is not null)
+                                // Position unchanged: move hash entries in place (values may have changed).
+                                foreach (var hashIndex in this.hashIndexes)
                                 {
-                                    hashIndex.Value.Remove(oldKey, oldPosition);
+                                    if (oldPosition >= 0 &&
+                                        oldHashValues is not null &&
+                                        oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                        oldKey is not null)
+                                    {
+                                        hashIndex.Value.Remove(oldKey, oldPosition);
+                                    }
+
+                                    if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                        hashIndex.Value.Add(newKey, oldPosition);
                                 }
 
-                                if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
-                                    hashIndex.Value.Add(newKey, newPosition);
+                                // Re-point the PK index only when the PK value itself changed.
+                                if (this.PrimaryKeyIndex >= 0)
+                                {
+                                    var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                    if (!string.Equals(newPkVal, oldPkValue?.ToString(), StringComparison.Ordinal))
+                                    {
+                                        if (!string.IsNullOrEmpty(oldPkValue?.ToString()))
+                                            this.Index.Delete(oldPkValue!.ToString()!);
+                                        if (!string.IsNullOrEmpty(newPkVal))
+                                            this.Index.Insert(newPkVal, oldPosition);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                long newPosition = engine.Insert(Name, rowData);
+
+                                if (this.PrimaryKeyIndex >= 0)
+                                {
+                                    var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+                                    this.Index.Delete(pkVal);
+                                    this.Index.Insert(pkVal, newPosition);
+                                }
+
+                                foreach (var hashIndex in this.hashIndexes)
+                                {
+                                    if (oldPosition >= 0 &&
+                                        oldHashValues is not null &&
+                                        oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                        oldKey is not null)
+                                    {
+                                        hashIndex.Value.Remove(oldKey, oldPosition);
+                                    }
+
+                                    if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                        hashIndex.Value.Add(newKey, newPosition);
+                                }
                             }
 
                             updatedInBatch++;

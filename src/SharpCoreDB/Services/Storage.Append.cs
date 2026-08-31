@@ -329,6 +329,79 @@ public partial class Storage
 
         return position;
     }
+    /// <summary>
+    /// Overwrites a length-prefixed record in place at <paramref name="offset"/> (in-place UPDATE).
+    /// Returns true only when the new (encrypted) record fits the existing slot — i.e. the stored
+    /// length is unchanged, so every following record stays at a valid offset. When the lengths
+    /// differ the caller must fall back to <see cref="AppendBytes"/>. Not available inside a
+    /// transaction (buffered appends + rollback are append-only by design).
+    /// </summary>
+    /// <param name="path">The table data file path.</param>
+    /// <param name="offset">The physical file offset of the record's 4-byte length prefix.</param>
+    /// <param name="data">The plaintext record data to write.</param>
+    /// <returns>True when the record was overwritten in place; false when it did not fit.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public bool OverwriteRecordAt(string path, long offset, byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+
+        // In-place overwrites of already-flushed records cannot be buffered/rolled back with the
+        // append-only transaction machinery — fall back to append semantics in a transaction.
+        if (IsInTransaction)
+        {
+            return false;
+        }
+
+        bool encryptWrites = ShouldEncryptWrites(path);
+        byte[] record = EncryptRecord(data, encryptWrites);
+        int recordLength = record.Length;
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read, 4096, FileOptions.WriteThrough);
+            if (fs.Length < offset + 4)
+            {
+                return false;
+            }
+
+            // Read the existing record's length prefix at the offset (ciphertext length for
+            // encrypted files, plaintext length otherwise — identical to AppendBytes).
+            fs.Position = offset;
+            Span<byte> lengthBuffer = stackalloc byte[4];
+            if (fs.Read(lengthBuffer) != 4)
+            {
+                return false;
+            }
+
+            int existingLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+            if (existingLength != recordLength)
+            {
+                return false;
+            }
+
+            // Overwrite length prefix + payload in place; the file length is unchanged so all
+            // following records keep their offsets.
+            fs.Position = offset;
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
+            fs.Write(lengthBuffer);
+            fs.Write(record.AsSpan());
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        // Invalidate app-level page cache (mirrors AppendBytes).
+        if (this.pageCache != null)
+        {
+            int pageId = ComputePageId(path, offset);
+            this.pageCache.EvictPage(pageId);
+        }
+
+        return true;
+    }
+
+
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

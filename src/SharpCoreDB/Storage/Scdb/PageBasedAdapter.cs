@@ -190,6 +190,15 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public bool TryUpdateInPlace(string tableName, long storageReference, byte[] newData)
+    {
+        // The adapter updates records within a page; the slot pointer moves but the
+        // storage reference stays valid (relocation only occurs across pages for a record
+        // that grows past the page size).
+        return Update(tableName, storageReference, newData) == storageReference;
+    }
+
+    /// <inheritdoc/>
     public void Delete(string tableName, long storageReference)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
