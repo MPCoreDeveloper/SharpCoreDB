@@ -200,10 +200,44 @@ public interface ITable
     void Update(string? where, Dictionary<string, object> updates);
 
     /// <summary>
+    /// Updates rows matching <paramref name="where"/> and returns the number of affected rows.
+    /// The default implementation preserves the historic two-pass behavior (Select for the count,
+    /// then Update) so third-party <see cref="ITable"/> implementations keep working without
+    /// changes. Core implementations (<see cref="Table"/>, <see cref="SingleFileTable"/>) override
+    /// this with a single-pass path so the SQL UPDATE path does not materialize every matching row
+    /// just to count it.
+    /// </summary>
+    /// <param name="where">The where clause string.</param>
+    /// <param name="updates">The updates to apply.</param>
+    /// <returns>The number of affected rows.</returns>
+    int UpdateAffectedCount(string? where, Dictionary<string, object> updates)
+    {
+        var count = Select(where, null, true, false).Count;
+        Update(where, updates);
+        return count;
+    }
+
+    /// <summary>
     /// Deletes rows from the table.
     /// </summary>
     /// <param name="where">The where clause string.</param>
     void Delete(string? where);
+
+    /// <summary>
+    /// Deletes rows matching <paramref name="where"/> and returns the affected (pre-delete) rows.
+    /// The default implementation preserves the historic two-pass behavior (Select to capture the
+    /// rows, then Delete) so third-party <see cref="ITable"/> implementations keep working without
+    /// changes. Core implementations (<see cref="Table"/>, <see cref="SingleFileTable"/>) override
+    /// this with a single-pass path so the SQL DELETE path does not materialize the same rows twice.
+    /// </summary>
+    /// <param name="where">The where clause string.</param>
+    /// <returns>The rows that were deleted (pre-delete values).</returns>
+    List<Dictionary<string, object>> DeleteAffectedRows(string? where)
+    {
+        var rows = Select(where, null, true, false);
+        Delete(where);
+        return rows;
+    }
 
     /// <summary>
     /// Finds a single row by primary key value, bypassing SQL parsing.

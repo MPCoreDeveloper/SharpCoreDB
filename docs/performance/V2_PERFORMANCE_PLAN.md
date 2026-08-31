@@ -192,7 +192,31 @@ What changed:
 > (2–26× over scalar). See
 > [`docs/benchmarks/AVX512_2026-09-01.md`](../benchmarks/AVX512_2026-09-01.md).
 
+### 3.5 #7/#8 single-pass DML — SQL DELETE/UPDATE no longer materialize twice (2026-08-31, `release/v2.1.0.0`)
 
+The SQL DELETE path previously materialized every matching row **twice** per statement:
+`ExecuteDelete` ran a full `Select` (for RETURNING + affected-count) and then `Table.Delete`
+re-scanned/re-deserialized the same rows. The SQL UPDATE path was worse: a full `Select().Count`
+for change-tracking, the update pass itself, and — for RETURNING — a second full `Select`.
+
+Changes:
+
+- **`ITable.DeleteAffectedRows(where)`** — default implementation keeps the historic two-pass
+  behavior for third-party `ITable` implementers; `Table` and `SingleFileTable` override with a
+  single pass (delete AND return the affected pre-delete rows). `ExecuteDelete` now uses it:
+  one scan, RETURNING + count from the same rows.
+- **`ITable.UpdateAffectedCount(where, updates)`** — same default/override pattern; applies the
+  update and returns the affected count. `ExecuteUpdate` now uses it; the separate `Select().Count`
+  pass is gone (RETURNING still re-selects, only when requested).
+- **PK fast path (Issue #7) extended to `DeleteMultiple` and `UpdateMultiple`** — a simple
+  `pk = value` WHERE on a columnar table resolves via the PK B-tree directly (single search + one
+  read) instead of `SelectInternal` full-row materialization + a per-row PK re-search. Range /
+  compound / non-indexed WHERE clauses bypass the fast path and keep their (correct) generic
+  behavior — `TryParseSimpleWhereClause` only accepts a plain `col = value`.
+
+Regression coverage: `DmlSinglePassTests` (affected counts, RETURNING pre-delete rows, range +
+non-indexed fallbacks, batch PK deletes/updates) + the existing RETURNING / `CHANGES()` tests.
+Full suite green: **1,644 tests, 0 failures** (16 skipped).
 
 ---
 

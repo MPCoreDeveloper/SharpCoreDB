@@ -1548,10 +1548,10 @@ public partial class SqlParser
             }
         }
 
-        // Count affected rows before update for change tracking
-        var affectedCount = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false).Count;
-
-        table.Update(whereClause, updates);
+        // Issue #8: single-pass — UpdateAffectedCount applies the update AND returns the affected
+        // count, so change-tracking no longer needs a separate full Select pass (the old code
+        // materialized every matching row just to count them).
+        var affectedCount = table.UpdateAffectedCount(whereClause, updates);
         _lastChanges = affectedCount;
         _totalChanges += affectedCount;
 
@@ -1588,8 +1588,10 @@ public partial class SqlParser
 
         var whereClause = deleteMatch.Groups[2].Value.Trim();
 
-        // Capture rows before deletion for RETURNING and change tracking
-        var affectedRows = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false);
+        // Issue #8: single-pass delete — DeleteAffectedRows deletes AND returns the affected rows,
+        // so RETURNING + affected-count no longer need a separate full Select pass (the old code
+        // materialized matching rows twice: once here and once inside Table.Delete).
+        var affectedRows = table.DeleteAffectedRows(whereClause);
         var affectedCount = affectedRows.Count;
 
         if (returningColumns is not null)
@@ -1597,7 +1599,6 @@ public partial class SqlParser
             _pendingQueryResults = ProjectReturningRows(affectedRows, returningColumns);
         }
 
-        table.Delete(whereClause);
         _lastChanges = affectedCount;
         _totalChanges += affectedCount;
 

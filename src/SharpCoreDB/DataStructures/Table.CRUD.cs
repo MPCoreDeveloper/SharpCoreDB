@@ -1460,13 +1460,23 @@ public partial class Table
     /// <summary>
     /// Updates rows in the table that match the WHERE condition.
     /// Routes to storage engine with different semantics per mode:
-    /// - Columnar: Append new version (old becomes stale)
-    /// - PageBased: In-place update via engine.Update()
+    /// - Columnar: in-place overwrite when the new record fits (Issue #6), append otherwise
+    /// - PageBased: in-place update via engine.Update()
+    /// This entry point returns no count; see <see cref="UpdateAffectedCount"/> for the
+    /// single-pass variant that also reports the number of affected rows.
     /// </summary>
     /// <param name="where">Optional WHERE clause to filter rows.</param>
     /// <param name="updates">Dictionary of column names and new values.</param>
     /// <exception cref="InvalidOperationException">Thrown when table is readonly.</exception>
-    public void Update(string? where, Dictionary<string, object> updates)
+    public void Update(string? where, Dictionary<string, object> updates) => UpdateAffectedCount(where, updates);
+
+    /// <summary>
+    /// Updates rows matching <paramref name="where"/> and returns the number of affected rows.
+    /// Single-pass variant used by the SQL UPDATE path so change-tracking no longer needs a
+    /// separate full <c>Select</c> pass (Issue #8: ExecuteUpdate previously materialized
+    /// every matching row just to count them).
+    /// </summary>
+    public int UpdateAffectedCount(string? where, Dictionary<string, object> updates)
     {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
 
@@ -1477,9 +1487,11 @@ public partial class Table
             // Use SelectInternal to preserve _rowid in results when it's the PK,
             // so PK-based storage position lookups work correctly during update.
             var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+            int affected = 0;
 
             foreach (var row in rows)
             {
+                affected++;
                 UpdateSingleRow(row, engine, updates);
             }
 
@@ -1488,6 +1500,8 @@ public partial class Table
             {
                 TryAutoCompact();
             }
+
+            return affected;
         }
         finally
         {
@@ -1765,7 +1779,32 @@ public partial class Table
                 // overwrite updated fields in place instead of re-serializing the row.
                 List<(long pos, byte[]? data, Dictionary<string, object> row)>? rows = null;
 
-                if (!string.IsNullOrEmpty(where) &&
+                // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
+                // on a columnar table with a PK resolves through the PK B-tree directly (single
+                // search + one read) instead of SelectInternal full-row materialization. When the
+                // key is not found the generic machinery below still runs.
+                if (StorageMode != StorageMode.PageBased &&
+                    this.PrimaryKeyIndex >= 0 &&
+                    !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var fastWhereCol, out var fastWhereVal) &&
+                    string.Equals(fastWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                {
+                    var fastSearch = this.Index.Search(fastWhereVal?.ToString() ?? string.Empty);
+                    if (fastSearch.Found)
+                    {
+                        var fastData = engine.Read(Name, fastSearch.Value);
+                        if (fastData != null)
+                        {
+                            var fastRow = DeserializeRow(fastData);
+                            if (fastRow != null)
+                            {
+                                rows = [(fastSearch.Value, fastData, fastRow)];
+                            }
+                        }
+                    }
+                }
+
+                if (rows is null && !string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
                     this.registeredIndexes.ContainsKey(whereCol))
                 {
@@ -2093,23 +2132,114 @@ public partial class Table
     /// <exception cref="InvalidOperationException">Thrown when table is readonly.</exception>
     public void Delete(string? where)
     {
+        DeleteAffected(where);
+    }
+
+    /// <summary>
+    /// Deletes rows matching <paramref name="where"/> and returns the number of affected rows.
+    /// Issue #7: a simple `pk = value` WHERE is resolved through the primary-key index directly
+    /// (single search + one read) instead of going through <see cref="SelectInternal"/>, which
+    /// deserialized the full row set only to re-search the index for every row. The SQL DELETE
+    /// path also previously materialized matching rows twice (once in ExecuteDelete and once
+    /// here); callers use this method to delete once and get the affected count for free.
+    /// </summary>
+    public int DeleteAffected(string? where)
+    {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
 
         this.rwLock.EnterWriteLock();
         try
         {
-            var engine = GetOrCreateStorageEngine();
+            var records = CollectDeleteRecords(where);
+            DeleteRecordsCore(records);
+            return records.Count;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
 
-            // ✅ OPTIMIZATION: Snapshot-based deletion (Option 1)
-            // Capture ALL storage references BEFORE any deletions
-            // This prevents mid-scan invalidation and eliminates exception overhead
-            // Performance: 50-70% faster for batch deletes, single table scan
+    /// <summary>
+    /// Deletes rows matching <paramref name="where"/> and returns the affected (pre-delete) rows.
+    /// Single-pass version of <see cref="DeleteAffected"/> used by the SQL DELETE path so RETURNING
+    /// + affected-count no longer need a separate full <c>Select</c> pass (Issue #8: the SQL
+    /// DELETE path previously materialized matching rows twice — once in ExecuteDelete and once in
+    /// <see cref="Delete"/>). The returned rows are the exact rows that were deleted.
+    /// </summary>
+    public List<Dictionary<string, object>> DeleteAffectedRows(string? where)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
 
-            var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var records = CollectDeleteRecords(where);
+            DeleteRecordsCore(records);
 
-            if (StorageMode == StorageMode.PageBased)
+            var rows = new List<Dictionary<string, object>>(records.Count);
+            foreach (var (_, row) in records)
             {
-                // PageBased: Collect storage references upfront
+                rows.Add(row);
+            }
+
+            return rows;
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Collects the storage positions + rows to delete for <paramref name="where"/> without
+    /// deleting anything. Issue #7 fast path: a simple `pk = value` WHERE on a columnar table
+    /// with a PK is resolved via the primary-key B-tree directly (no SelectInternal, no full-row
+    /// materialization, no redundant re-search). When the key is not found the generic machinery
+    /// below runs (collation-aware evaluation may still match), so correctness is unchanged.
+    /// </summary>
+    private List<(long storagePosition, Dictionary<string, object> row)> CollectDeleteRecords(string? where)
+    {
+        var engine = GetOrCreateStorageEngine();
+
+        // ✅ OPTIMIZATION: Snapshot-based deletion (Option 1)
+        // Capture ALL storage references BEFORE any deletions
+        // This prevents mid-scan invalidation and eliminates exception overhead
+        // Performance: 50-70% faster for batch deletes, single table scan
+
+        var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
+
+        // ✅ Issue #7 fast path: simple "pk = value" WHERE — the PK B-tree search is the complete
+        // resolution (a primary key has at most one row), so when it hits we skip everything below.
+        bool fastPathHit = false;
+        if (StorageMode != StorageMode.PageBased && this.PrimaryKeyIndex >= 0 &&
+            TryParseSimpleWhereClause(where, out var fastCol, out var fastVal) &&
+            string.Equals(fastCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            var searchResult = this.Index.Search(fastVal?.ToString() ?? string.Empty);
+            if (searchResult.Found)
+            {
+                var data = engine.Read(Name, searchResult.Value);
+                if (data != null)
+                {
+                    var row = DeserializeRowFromSpan(data);
+                    if (row != null)
+                    {
+                        recordsToDelete.Add((searchResult.Value, row));
+                        fastPathHit = true;
+                    }
+                }
+            }
+        }
+
+        if (fastPathHit)
+        {
+            return recordsToDelete;
+        }
+
+        if (StorageMode == StorageMode.PageBased)
+        {
+            // PageBased: Collect storage references upfront
                 foreach (var (storageRef, data) in engine.GetAllRecords(Name))
                 {
                     var row = DeserializeRowFromSpan(data);
@@ -2184,28 +2314,22 @@ public partial class Table
                     }
                 }
 
-                if (!scannedViaIndex)
-                {
-                    // Full scan fallback (no index or compound WHERE clause)
-                    foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+                    if (!scannedViaIndex)
                     {
-                        var row = DeserializeRowFromSpan(data);
-                        if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                        // Full scan fallback (no index or compound WHERE clause)
+                        foreach (var (storageRef, data) in engine.GetAllRecords(Name))
                         {
-                            recordsToDelete.Add((storageRef, row));
+                            var row = DeserializeRowFromSpan(data);
+                            if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                            {
+                                recordsToDelete.Add((storageRef, row));
+                            }
                         }
                     }
                 }
-            }
 
-            // ✅ WP12: unified delete core - engine deletes, PK and key-only hash index cleanup.
-            DeleteRecordsCore(recordsToDelete);
+            return recordsToDelete;
         }
-        finally
-        {
-            this.rwLock.ExitWriteLock();
-        }
-    }
 
     /// <summary>
     /// Deletes rows matching multiple WHERE conditions under a single write lock.
@@ -2227,6 +2351,33 @@ public partial class Table
 
             foreach (var where in whereConditions)
             {
+                // Issue #7 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE on
+                // a columnar table with a PK is resolved via the PK B-tree directly (single search +
+                // one read) instead of SelectInternal (full-row materialization) + a per-row PK
+                // re-search. When the key is not found the generic machinery below still runs.
+                if (StorageMode != StorageMode.PageBased &&
+                    this.PrimaryKeyIndex >= 0 &&
+                    !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var fastPkCol, out var fastPkVal) &&
+                    string.Equals(fastPkCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                {
+                    var fastSearch = this.Index.Search(fastPkVal?.ToString() ?? string.Empty);
+                    if (fastSearch.Found)
+                    {
+                        var fastData = engine.Read(Name, fastSearch.Value);
+                        if (fastData != null)
+                        {
+                            var fastRow = DeserializeRowFromSpan(fastData);
+                            if (fastRow != null)
+                            {
+                                recordsToDelete.Add((fastSearch.Value, fastRow));
+                            }
+                        }
+
+                        continue;
+                    }
+                }
+
                 // Try hash index fast path
                 if (!string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var col, out var val) &&
