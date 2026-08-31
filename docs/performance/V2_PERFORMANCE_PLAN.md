@@ -208,6 +208,14 @@ Regression coverage: `DmlSinglePassTests` (affected counts, RETURNING pre-delete
 non-indexed fallbacks, batch PK deletes/updates) + the existing RETURNING / `CHANGES()` tests.
 Full suite green: **1,644 tests, 0 failures** (16 skipped).
 
+> **Benchmark note (2026-08-31):** the comparative harness (§3.1/§3.2) is not the right probe for
+> this work — its UPDATE/DELETE run in **batch** (`ExecuteBatchSQL`) against a **hash-indexed
+> non-PK column**, so neither the single-statement `ExecuteDelete`/`ExecuteUpdate` passes nor the
+> PK fast paths are exercised (run-to-run variance on the dev machine was >60%: two HEAD runs of
+> the same binary measured SQL DELETE at 28.5K and 51.1K ops/s). A controlled quiet-machine A/B
+> with a PK single-statement DELETE/UPDATE workload is the correct validation (still pending, same
+> caveat as §3.2).
+
 ---
 
 ## 4. C# 15 / .NET 11 readiness (mainstream November 2026)
