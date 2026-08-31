@@ -48,6 +48,55 @@ var options = DatabaseOptions.CreateSingleFileDefault();
 options.CompressMetadata = true; // Default: enabled
 ```
 
+### Step 4: (Optional) Tune Compression Presets 🆕
+
+Fine-tune the trade-off between compression speed and storage efficiency:
+
+```csharp
+var options = DatabaseOptions.CreateSingleFileDefault();
+
+// Metadata compression (default: Fastest — minimal CPU, metadata is small)
+options.MetadataCompressionLevel = OptionalCompressionLevel.Fastest;
+
+// Block data compression (default: Optimal — balanced for telemetry)
+options.BlockCompressionLevel = OptionalCompressionLevel.Optimal;
+```
+
+**Available presets:**
+
+| Preset | CPU Cost | Compression Ratio | Best For |
+|--------|----------|-------------------|----------|
+| `Fastest` | Minimal | Good | Metadata, high-frequency writes |
+| `Optimal` | Moderate | Better | Telemetry blocks, general use |
+| `SmallestSize` | High | Best | Cold storage, archival workloads |
+
+**Available algorithms:**
+
+| Algorithm | Speed | Ratio | Best For |
+|-----------|-------|-------|----------|
+| `Brotli` | Moderate (Fastest) to Very Slow (SmallestSize) | Best | Archival, read-heavy workloads |
+| `GZip` | Fast | Good | High-frequency writes, individual inserts |
+| `Zstd` | Fast to Moderate | Excellent | General-purpose, telemetry, mixed workloads |
+
+**Performance findings (1,000 single-row inserts):**
+
+| Configuration | ms/row | vs None |
+|---------------|--------|---------|
+| None | 0.517 | Baseline |
+| GZip/Fastest | 0.197 | **2.6x faster** |
+| GZip/Optimal | 0.220 | **2.3x faster** |
+| GZip/SmallestSize | 0.360 | **1.4x faster** |
+| Brotli/Fastest | 0.639 | 1.2x slower |
+| Brotli/Optimal | 0.793 | 1.5x slower |
+| Brotli/SmallestSize | 38.322 | **74x slower** ⚠️ |
+
+**Key insights:**
+- GZip is **faster than no compression** for individual inserts due to I/O savings.
+- Brotli/SmallestSize is a **trap** for write-heavy workloads — use it only for archival.
+- Zstd provides the best balance of speed and ratio for most database workloads.
+
+**Note:** Presets only apply when `BlockCompression` is not `None`. Decoders auto-detect the preset on read — no migration needed.
+
 ---
 
 ## 🧪 Verify Compression

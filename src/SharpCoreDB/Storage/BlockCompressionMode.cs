@@ -5,14 +5,33 @@
 namespace SharpCoreDB.Storage;
 
 /// <summary>
-/// Compression algorithm for SingleFile block data.
+/// Compression mode for block data in SingleFile storage.
 /// </summary>
 public enum BlockCompressionMode
 {
-    /// <summary>No compression. Default for backward compatibility.</summary>
+    /// <summary>
+    /// No compression (default, backward compatible).
+    /// </summary>
     None = 0,
-    /// <summary>Brotli compression. Best ratio for text/JSON payloads.</summary>
+
+    /// <summary>
+    /// Brotli compression (best ratio at high levels, expensive CPU at SmallestSize).
+    /// Best for: archival, cold storage, read-heavy workloads.
+    /// </summary>
     Brotli = 1,
-    /// <summary>GZip compression. Faster decompression, slightly larger.</summary>
-    GZip = 2
+
+    /// <summary>
+    /// GZip compression (fast, decent ratio).
+    /// Best for: high-frequency writes, individual inserts.
+    /// Note: GZip is often faster than no compression due to I/O savings.
+    /// </summary>
+    GZip = 2,
+
+    /// <summary>
+    /// Zstandard compression (excellent speed/ratio balance).
+    /// Best for: general-purpose database blocks, telemetry, mixed workloads.
+    /// Requires .NET 11+ (System.IO.Compression.ZstandardStream).
+    /// On .NET 10, using this mode will throw NotSupportedException.
+    /// </summary>
+    Zstd = 3
 }
