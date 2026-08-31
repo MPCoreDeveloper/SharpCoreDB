@@ -329,8 +329,13 @@ restored from config on reopen.
   PageBased data-loss bug: single INSERT/UPDATE never flushed the page cache, so reopened tables
   returned zero rows — dirty pages are now flushed when the table/storage engine is disposed.
 
-> **Still open (follow-up):** cross-session persistence of the directory-mode arena free-list
-> (compaction already bounds the growth).
+- **B6 · cross-session arena free-list (2026-09-01)** — the directory-mode overflow arena no longer
+  needs to persist its free-list: on arena load the fixed-width records in the data file are scanned
+  and every block no record references is freed, so same-length value updates reuse dead blocks
+  across sessions (the copy-on-compact pass still reclaims the remainder). Single-file tables
+  already restore the free-list on every flush via their unreferenced-sweep.
+
+> **All planned storage-performance follow-ups are complete** (A1/A2/B1–B6).
 
 - **B6 · arena free-list — in-place block reuse (2026-09-01)** — freed overflow blocks are tracked
   in an in-memory free-list (grouped by payload length) and reused via the storage layer's in-place

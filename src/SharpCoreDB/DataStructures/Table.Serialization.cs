@@ -380,9 +380,52 @@ public partial class Table
                 ? System.IO.Path.ChangeExtension(Name + ".dat", ".ovf")
                 : System.IO.Path.ChangeExtension(DataFile, ".ovf");
             _overflowArena = new OverflowArena(storage, arenaPath);
+
+            // B6: the free-list is in-memory, so a reopened arena treats every .ovf block as live.
+            // Derive the cross-session free-list from the records: free every block no fixed-width
+            // record references, so same-length value updates reuse the space in the new session.
+            RebuildOverflowArenaFreeListFromDisk();
         }
 
         return _overflowArena;
+    }
+
+    /// <summary>
+    /// B6: rebuilds the overflow-arena free-list from disk after a reopen. Dead blocks (freed
+    /// within a session) stay physically in the <c>.ovf</c> until the next copy-on-compact, and the
+    /// in-memory free-list is per-session, so scanning the fixed-width records and freeing every
+    /// block no record references restores cross-session reuse without persisting the free-list.
+    /// </summary>
+    private void RebuildOverflowArenaFreeListFromDisk()
+    {
+        if (!_fixedWidthRecords || storage is null || _overflowArena is null ||
+            string.IsNullOrEmpty(DataFile) || !File.Exists(DataFile))
+        {
+            return;
+        }
+
+        var layout = GetFixedWidthLayout();
+        var live = new HashSet<long>();
+        foreach (var (_, data) in storage.ReadAllRecords(DataFile))
+        {
+            if (data is { Length: > 0 })
+            {
+                FixedWidthCodec.CollectVariableOffsets(data, layout, live);
+            }
+        }
+
+        if (live.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var offset in _overflowArena.GetAllOffsets().ToList())
+        {
+            if (!live.Contains(offset))
+            {
+                _overflowArena.Free(offset);
+            }
+        }
     }
 
     internal static byte[] EncodeVariablePayload(DataType type, object value)

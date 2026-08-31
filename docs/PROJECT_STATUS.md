@@ -89,6 +89,8 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
   - ✅ **PageBased auto-conversion (B6)** — `MigrateToFixedWidth` converts PageBased → Columnar
     in-process before the fixed-width rewrite; auto-migration on reopen covers PageBased too.
     Fixed a pre-existing PageBased data-loss bug (page cache never flushed on dispose).
+  - ✅ **Cross-session free-list (B6)** — the directory-mode arena derives its free-list from the
+    records on load, so dead blocks are reused across sessions without persisting the free-list.
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

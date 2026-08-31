@@ -45,6 +45,13 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     /// <summary>Gets the number of payload blocks currently cached.</summary>
     public int Count => _cache.Count;
 
+    /// <summary>Enumerates all block offsets currently cached (live + freed), loading the arena first.</summary>
+    public IEnumerable<long> GetAllOffsets()
+    {
+        EnsureLoaded();
+        return _cache.Keys;
+    }
+
     /// <summary>B6: gets the number of times a freed block was reused in place (diagnostics).</summary>
     public int BlockReuses => _blockReuses;
 

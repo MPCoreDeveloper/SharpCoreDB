@@ -81,9 +81,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a pre-existing PageBased data-loss bug: single INSERT/UPDATE never flushed the page cache (only
   `CommitAsync`/`Flush` did), so reopened tables returned zero rows — dirty pages are now flushed
   when the table/storage engine is disposed.
+- **Cross-session arena free-list (B6)** — the directory-mode `OverflowArena` derives its free-list
+  on load: the fixed-width records in the data file are scanned and every arena block no record
+  references is freed, so same-length value updates reuse dead blocks across sessions without
+  persisting the free-list itself (single-file tables already restore it per flush via the
+  unreferenced-sweep). This closes the last open storage-performance follow-up.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (13), `FixedWidthMigrationTests` (8, incl. PageBased conversion),
-  `SingleFileFixedWidthTests` (5). Full suite green: **1,685 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (14, incl. cross-session free-list), `FixedWidthMigrationTests` (8),
+  `SingleFileFixedWidthTests` (5). Full suite green: **1,686 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

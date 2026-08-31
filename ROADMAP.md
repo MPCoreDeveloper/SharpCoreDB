@@ -151,7 +151,8 @@
   block (constant-size updates, format detection, JSON migration)
 - ✅ **PageBased auto-conversion (B6)** — `MigrateToFixedWidth` converts PageBased → Columnar
   in-process; auto-migration on reopen covers all directory-mode storage modes
-- ⬜ Follow-up: free-list persistence across sessions
+- ✅ **Cross-session free-list (B6)** — directory-mode arena derives its free-list from the records
+  on load (no persistence needed); single-file tables sweep unreferenced blocks per flush
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

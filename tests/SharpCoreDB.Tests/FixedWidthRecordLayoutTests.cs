@@ -402,4 +402,38 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    [Fact]
+    public void ArenaFreeList_SurvivesReopen()
+    {
+        // Session 1: one same-length update frees the first block (offset 0) and appends a new one.
+        long ovfAfterSession1;
+        IDatabase? db = null;
+        try
+        {
+            db = CreateFixedWidthDb();
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'AAAAAAAA')");
+            db.ExecuteSQL("UPDATE t SET name = 'BBBBBBBB' WHERE id = 1");
+            ovfAfterSession1 = new FileInfo(OvfPath("t")).Length;
+            Assert.Equal("BBBBBBBB", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Session 2: the free-list is derived from the records on arena load, so a same-length
+        // update reuses the freed block instead of appending → the arena does NOT grow.
+        db = null;
+        try
+        {
+            db = CreateFixedWidthDb();
+            db.ExecuteSQL("UPDATE t SET name = 'CCCCCCCC' WHERE id = 1");
+            Assert.Equal(ovfAfterSession1, new FileInfo(OvfPath("t")).Length);
+            Assert.Equal("CCCCCCCC", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+
+            Assert.True(db.TryGetTable("t", out var table));
+            var concrete = Assert.IsType<SharpCoreDB.DataStructures.Table>(table);
+            Assert.True(concrete.OverflowArenaBlockReuses > 0, "expected a cross-session in-place arena block reuse");
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
 }
