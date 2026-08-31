@@ -53,6 +53,12 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private List<Dictionary<string, object>> _rowCache = [];
     private bool _cacheLoaded;
 
+    // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /
+    // SELECT … WHERE pk = value / UpdateByPrimaryKey / DeleteByPrimaryKey). Keyed by the ordinal
+    // string form of the PK column value (the same comparison FindByPrimaryKey already used).
+    // Maintained incrementally on every row mutation and rebuilt on cache load / rollback.
+    private readonly Dictionary<string, List<Dictionary<string, object>>> _pkIndex = new(StringComparer.Ordinal);
+
     // Comparison operators in precedence order for simple-condition fast-path parsing
     // (must match EvaluateSingleCondition's ordering: >= before >, etc.).
     private static readonly string[] SingleFileConditionOperators = [">=", "<=", "!=", "<>", "=", ">", "<"];
@@ -214,6 +220,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         {
             ApplyDefaults(row);
             _rowCache.Add(row);
+            IndexRow(row);
             _isDirty = true;
         }
 
@@ -240,6 +247,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 var row = rows[i];
                 ApplyDefaults(row);
                 _rowCache.Add(row);
+                IndexRow(row);
                 positions[i] = _rowCache.Count - 1;
             }
 
@@ -286,6 +294,26 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         List<Dictionary<string, object>> results;
         lock (_tableLock)
         {
+            // Issue A1 fast path: an exact `pk = value` equality resolves through the primary-key
+            // hash index (O(1)) instead of a full cache scan. Candidates are still verified with
+            // the full predicate so semantics are identical to the scan path.
+            if (IsPkIndexLookupSafe() && TryParsePkEquality(condition, out var pkValue) && pkValue is not null)
+            {
+                results = _pkIndex.TryGetValue(pkValue, out var candidates)
+                    ? candidates.Where(row => EvaluateCondition(row, condition))
+                                .Select(row => new Dictionary<string, object>(row)).ToList()
+                    : [];
+
+                if (!string.IsNullOrWhiteSpace(orderBy))
+                {
+                    results = asc
+                        ? [.. results.OrderBy(row => row.TryGetValue(orderBy, out var value) ? value : null)]
+                        : [.. results.OrderByDescending(row => row.TryGetValue(orderBy, out var value) ? value : null)];
+                }
+
+                return results;
+            }
+
             // PERF: evaluate WHERE/ORDER BY against the cached rows (read-only) and
             // materialize (defensive-copy) only the surviving rows. Previously every
             // row was copied up-front, so a point lookup on a large cache copied the
@@ -330,6 +358,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             condition = condition[6..].Trim();
         }
 
+        bool updatesTouchPk = PrimaryKeyIndex >= 0 &&
+            updates.Keys.Any(k => string.Equals(k, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase));
+
         int affected = 0;
         lock (_tableLock)
         {
@@ -337,9 +368,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 if (string.IsNullOrWhiteSpace(condition) || EvaluateCondition(row, condition))
                 {
+                    string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
+
                     foreach (var update in updates)
                     {
                         row[update.Key] = update.Value;
+                    }
+
+                    if (oldPkKey is not null)
+                    {
+                        var newPkKey = GetPkKey(row);
+                        if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                        {
+                            UnindexRow(row, oldPkKey);
+                            IndexRow(row);
+                        }
                     }
 
                     _isDirty = true;
@@ -369,6 +412,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (PrimaryKeyIndex < 0) return;
 
         var pkColumn = Columns[PrimaryKeyIndex];
+        bool updatesTouchPk = updates.Keys.Any(k => string.Equals(k?.ToString(), pkColumn, StringComparison.OrdinalIgnoreCase));
 
         lock (_tableLock)
         {
@@ -384,9 +428,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                     continue;
                 }
 
+                string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
+
                 foreach (var update in rowUpdates)
                 {
                     row[update.Key] = update.Value;
+                }
+
+                if (oldPkKey is not null)
+                {
+                    var newPkKey = GetPkKey(row);
+                    if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                    {
+                        UnindexRow(row, oldPkKey);
+                        IndexRow(row);
+                    }
                 }
 
                 _isDirty = true;
@@ -417,10 +473,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             if (string.IsNullOrWhiteSpace(condition))
             {
                 _rowCache.Clear();
+                _pkIndex.Clear();
             }
             else
             {
-                _rowCache.RemoveAll(row => EvaluateCondition(row, condition));
+                // Remove matching rows while keeping the primary-key index in sync
+                // (reverse iteration avoids index-shift issues).
+                for (int i = _rowCache.Count - 1; i >= 0; i--)
+                {
+                    var row = _rowCache[i];
+                    if (EvaluateCondition(row, condition))
+                    {
+                        UnindexRow(row);
+                        _rowCache.RemoveAt(i);
+                    }
+                }
             }
 
             _isDirty = true;
@@ -461,6 +528,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 foreach (var row in toDelete)
                 {
+                    UnindexRow(row);
                     _rowCache.Remove(row);
                 }
 
@@ -491,19 +559,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return null;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
 
         lock (_tableLock)
         {
-            foreach (var row in _rowCache)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                if (row.TryGetValue(pkColumn, out var pkValue) &&
-                    pkValue is not null &&
-                    string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    return new Dictionary<string, object>(row);
-                }
+                return new Dictionary<string, object>(rows[0]);
             }
         }
 
@@ -528,28 +591,34 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
         bool found = false;
 
         lock (_tableLock)
         {
-            foreach (var row in _rowCache)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
-                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                var row = rows[0];
+                string? oldPkKey = GetPkKey(row);
 
                 foreach (var update in updates)
                 {
                     row[update.Key] = update.Value;
                 }
 
+                if (oldPkKey is not null)
+                {
+                    var newPkKey = GetPkKey(row);
+                    if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                    {
+                        UnindexRow(row, oldPkKey);
+                        IndexRow(row);
+                    }
+                }
+
                 _isDirty = true;
                 found = true;
-                break;
             }
         }
 
@@ -574,25 +643,19 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
         bool found = false;
 
         lock (_tableLock)
         {
-            for (int i = 0; i < _rowCache.Count; i++)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                var row = _rowCache[i];
-                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
-                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                _rowCache.RemoveAt(i);
+                var row = rows[0];
+                UnindexRow(row, keyStr);
+                _rowCache.Remove(row);
                 _isDirty = true;
                 found = true;
-                break;
             }
         }
 
@@ -730,6 +793,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 _rowCache = [];
                 _cacheLoaded = true;
+                RebuildPkIndex();
                 return;
             }
 
@@ -744,6 +808,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 _rowCache = [];
                 _cacheLoaded = true;
+                RebuildPkIndex();
                 return;
             }
             
@@ -751,6 +816,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
             _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
             _cacheLoaded = true;
+            RebuildPkIndex();
         }
     }
 
@@ -863,12 +929,144 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             if (_transactionSnapshot is not null)
             {
                 _rowCache = _transactionSnapshot.Select(row => new Dictionary<string, object>(row)).ToList();
+                RebuildPkIndex();
             }
 
             _transactionSnapshot = null;
             _isInTransaction = false;
             _isDirty = false; // Clear dirty flag since we discarded changes
         }
+    }
+
+    /// <summary>Returns the ordinal string key for a row's primary key value, or null when the
+    /// table has no PK / the value is null.</summary>
+    private string? GetPkKey(Dictionary<string, object> row)
+    {
+        if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= Columns.Count)
+            return null;
+
+        if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue is not null)
+        {
+            return pkValue.ToString();
+        }
+
+        return null;
+    }
+
+    /// <summary>Adds a row to the primary-key index (no-op without a PK or null PK).</summary>
+    private void IndexRow(Dictionary<string, object> row)
+    {
+        var key = GetPkKey(row);
+        if (key is null)
+            return;
+
+        if (!_pkIndex.TryGetValue(key, out var list))
+        {
+            list = new List<Dictionary<string, object>>(1);
+            _pkIndex[key] = list;
+        }
+
+        list.Add(row);
+    }
+
+    /// <summary>Removes a row from the primary-key index. <paramref name="key"/> is the key to
+    /// remove under (defaults to the row's current PK key) — pass the OLD key when the row's PK
+    /// value has already been changed.</summary>
+    private void UnindexRow(Dictionary<string, object> row, string? key = null)
+    {
+        key ??= GetPkKey(row);
+        if (key is null)
+            return;
+
+        if (_pkIndex.TryGetValue(key, out var list))
+        {
+            list.Remove(row);
+            if (list.Count == 0)
+            {
+                _pkIndex.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>Rebuilds the primary-key index from the current row cache (cache load / rollback).</summary>
+    private void RebuildPkIndex()
+    {
+        _pkIndex.Clear();
+        foreach (var row in _rowCache)
+        {
+            IndexRow(row);
+        }
+    }
+
+    /// <summary>
+    /// Tries to parse an exact <c>pk = value</c> equality. Returns false for compound / range /
+    /// special-syntax conditions (the caller falls back to the full scan).
+    /// </summary>
+    private bool TryParsePkEquality(string condition, out string? value)
+    {
+        value = null;
+        if (PrimaryKeyIndex < 0 || string.IsNullOrWhiteSpace(condition))
+            return false;
+
+        var trimmed = condition.Trim();
+        if (trimmed.Contains(" AND ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" OR ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IN ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("LIKE", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        int eq = trimmed.IndexOf('=');
+        if (eq <= 0 || trimmed.IndexOf('=', eq + 1) >= 0)
+            return false;
+
+        var col = trimmed[..eq].Trim().Trim('"', '[', ']', '`');
+        if (!string.Equals(col, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var val = trimmed[(eq + 1)..].Trim();
+        if (val.Length == 0)
+            return false;
+
+        if ((val.StartsWith('\'') && val.EndsWith('\'')) ||
+            (val.StartsWith('"') && val.EndsWith('"')))
+        {
+            val = val[1..^1];
+        }
+
+        // Normalize numeric literals to the row's canonical ToString() form so `pk = 05`
+        // resolves the same index key ("5") as `pk = 5` — matching the numeric comparison the
+        // typed WHERE predicate performs.
+        switch (ColumnTypes[PrimaryKeyIndex])
+        {
+            case DataType.Integer when int.TryParse(val, out var intVal):
+                val = intVal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+            case DataType.Long when long.TryParse(val, out var longVal):
+                val = longVal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+        }
+
+        value = val;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the PK column's string form is a stable, canonical representation that can be
+    /// compared against SQL literals for index lookups. String, Integer, Long, Boolean, Guid and
+    /// Ulid are canonical; DateTime / Real / Decimal / Blob are not (culture / format), so those
+    /// fall back to the full scan.
+    /// </summary>
+    private bool IsPkIndexLookupSafe()
+    {
+        if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= ColumnTypes.Count)
+            return false;
+
+        return ColumnTypes[PrimaryKeyIndex] is DataType.String or DataType.Integer or DataType.Long
+            or DataType.Boolean or DataType.Guid or DataType.Ulid;
     }
 
     private void ApplyDefaults(Dictionary<string, object> row)
