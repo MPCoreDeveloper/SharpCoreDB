@@ -154,6 +154,35 @@ from **976 → 471 B/op (−52%)** on the StructRow path (911 B/op on the dictio
 throughput. Remaining bytes are the plan-cache key, WHERE-string build, `TryParseSimpleWhereClause`
 strings, hash-index position list and `engine.Read`'s per-read byte[].
 
+### 3.4 #6 in-place UPDATE for columnar/append-only storage (2026-08-31, `3d4cee77` + `68cb5dab` on `release/v2.1.0.0`; `116fc30e` + `8a13ba2b` on `release/v2.0.0.0`)
+
+UPDATE no longer appends a new version for fixed-width records. `Table.Update` first attempts an
+in-place overwrite (`IStorageEngine.TryUpdateInPlace` → `Storage.OverwriteRecordAt`) that is only
+taken when the new record fits the existing slot (same stored length); otherwise it falls back to
+the append path unchanged. The PK index entry stays valid (no re-point), no stale version is left
+for compaction, and hash-index entries move in place.
+
+Measured (Windows, Release, directory storage, `StorageEngineType.AppendOnly`, 2,000 fixed-width
+rows, per-statement autocommit):
+
+| Workload | Pre-#6 (row-copy append) | #6 initial (broken) | #6 final |
+|---|---:|---:|---:|
+| fixed-width UPDATE | ~1,500 ops/s, **+90 KB growth** | 75 ops/s, 0 growth | **~3.5–5.3K ops/s, 0 growth** |
+| variable-width UPDATE | ~1,600 ops/s, +128 KB growth | 133 ops/s | ~1.3–1.7K ops/s (append fallback) |
+
+The initial #6 implementation opened a fresh read-write `FileStream` per statement for the
+in-place overwrite; on Windows the read-write open measures ~5–8 ms (on-access filters), a ~20x
+throughput regression. The fix reads the record's length prefix through the already-cached read
+`SafeFileHandle` and writes through a per-call **write-only** `FileStream` (`FileMode.Open`,
+`FileAccess.Write`) — as fast as the append path's open. Final result: fixed-width UPDATEs are
+**2.3–3.5x faster than the pre-#6 append path AND the file does not grow**; variable-width
+updates keep the append fallback (correct, unchanged semantics).
+
+Regression coverage: `SqlInPlaceUpdateTests` (fixed-width overwrites in place, no file growth,
+PK/hash indexes stay consistent; variable-width falls back to append) + `AppendOnlyEngine_TryUpdateInPlace`
+unit tests; full suites green on both branches (1,635 tests).
+
+
 
 ---
 
