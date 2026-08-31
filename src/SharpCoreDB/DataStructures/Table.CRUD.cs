@@ -924,10 +924,12 @@ public partial class Table
         // RTrim, Locale) require collation-aware comparison that only EvaluateWhere provides.
         int earlyWhereColIdx = -1;
         string? earlyWhereValue = null;
-        // Fixed-width records have constant slot offsets (no per-record walk) — the early-WHERE
-        // walk below assumes the variable-length layout, so it is disabled for fixed-width tables.
-        if (!_fixedWidthRecords &&
-            !string.IsNullOrEmpty(where) &&
+        // B4: fixed-width tables use a constant slot offset + arena payload compare (pre-encoded
+        // UTF-8, Binary collation) — no per-record variable-length walk needed.
+        int earlyWhereSlotOffset = -1;
+        byte[]? earlyWhereUtf8 = null;
+        OverflowArena? earlyWhereArena = null;
+        if (!string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol, out var ewValObj) &&
             ewValObj is string ewStr)
         {
@@ -940,19 +942,34 @@ public partial class Table
 
                 if (collation == CollationType.Binary)
                 {
-                    earlyWhereColIdx = idx;
-                    earlyWhereValue = ewStr;
+                    if (_fixedWidthRecords)
+                    {
+                        var fwLayout = GetFixedWidthLayout();
+                        if (idx < fwLayout.ColumnCount)
+                        {
+                            earlyWhereSlotOffset = fwLayout.Offsets[idx];
+                            earlyWhereValue = ewStr;
+                            earlyWhereUtf8 = System.Text.Encoding.UTF8.GetBytes(ewStr);
+                            earlyWhereArena = GetOverflowArena();
+                        }
+                    }
+                    else
+                    {
+                        earlyWhereColIdx = idx;
+                        earlyWhereValue = ewStr;
+                    }
                 }
             }
         }
 
         // v2 (WP9-C): numeric early-WHERE — direct fixed-offset binary reads (no boxing/string
         // allocation), enabled for fixed-width numeric columns at a constant per-record offset.
+        // B4: also enabled for fixed-width tables — the layout provides the constant slot offset
+        // (null flag + raw payload), identical to the variable-length encoding for the offset path.
         int earlyNumericOffset = -1;
         DataType earlyNumericType = DataType.String;
         object? earlyNumericExpected = null;
-        if (!_fixedWidthRecords &&
-            earlyWhereColIdx < 0 && !string.IsNullOrEmpty(where) &&
+        if (earlyWhereColIdx < 0 && earlyWhereSlotOffset < 0 && !string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol2, out var ewVal2) &&
             TryGetFixedNumericWhereInfo(ewCol2, out var ewOffset, out var ewType) &&
             TryParseNumericExpected(ewVal2, ewType, out var ewExpected))
@@ -1005,6 +1022,15 @@ public partial class Table
             {
                 // v2 (WP9-C): fixed-width numeric predicate via direct offset reads.
                 if (!MatchesNumericDirect(recordData, earlyNumericOffset, earlyNumericType, earlyNumericExpected))
+                {
+                    filePosition += 4 + recordLength;
+                    continue;
+                }
+            }
+            else if (earlyWhereSlotOffset >= 0 && earlyWhereUtf8 is not null && earlyWhereArena is not null)
+            {
+                // B4: fixed-width string predicate — constant slot offset + arena payload compare.
+                if (!MatchesFixedWidthStringDirect(recordData, earlyWhereSlotOffset, earlyWhereArena, earlyWhereUtf8))
                 {
                     filePosition += 4 + recordLength;
                     continue;

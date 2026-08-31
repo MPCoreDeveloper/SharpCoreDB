@@ -50,9 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data file: live arena offsets are collected from the current records, the `.ovf` is rewritten
   (copy-on-compact), and the active records' variable slots are re-pointed in place. Dead arena
   blocks from variable updates / deletes are reclaimed.
+- **Constant-offset read-path wins (B4)** — early-WHERE re-enabled for fixed-width tables using the
+  constant slot offsets of `FixedWidthRecordLayout`: numeric predicates read the column directly at
+  its slot offset (also when a variable-length column precedes it), string predicates compare the
+  arena payload byte-wise against the pre-encoded expected UTF-8, and the StructRow numeric-SIMD
+  batch filter (`Vector<T>`) now serves fixed-width tables. Also fixed a latent bug where arena
+  block offset 0 (the first block) was treated as "no block" and dropped by compaction / early-WHERE.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (8, incl. arena-compaction reclaim). Full suite green:
-  **1,667 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (12, incl. arena-compaction reclaim + constant-offset WHERE).
+  Full suite green: **1,671 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

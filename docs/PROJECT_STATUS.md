@@ -76,7 +76,10 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
     an in-place overwrite (no `.dat` growth). Flag persisted in metadata.
   - ✅ **Arena GC (B3)** — `CompactStorage` compacts the overflow arena with the data file
     (live-offset collection + copy-on-compact + slot re-point).
-  - [ ] Constant-offset SIMD/early-WHERE read wins (B4); on-disk migration (B5)
+  - ✅ **Constant-offset read wins (B4)** — early-WHERE re-enabled for fixed-width tables (numeric
+    direct-offset reads incl. columns after variable columns; string arena-payload compare;
+    StructRow numeric-SIMD batch filter). Fixed a latent offset-0 arena-block bug.
+  - [ ] On-disk migration (B5)
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

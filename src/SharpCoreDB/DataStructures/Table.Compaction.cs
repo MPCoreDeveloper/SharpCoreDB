@@ -211,10 +211,9 @@ public partial class Table
             }
 
             var blockOffset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(slot + 1, 4));
-            if (blockOffset != 0)
-            {
-                live.Add(blockOffset);
-            }
+            // NOTE: offset 0 is a valid block offset (first arena block) — the flag byte above
+            // already excluded NULL slots, so collect every referenced offset unconditionally.
+            live.Add(blockOffset);
         }
     }
 
@@ -240,7 +239,8 @@ public partial class Table
             }
 
             var blockOffset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(slot + 1, 4));
-            if (blockOffset != 0 && mapping.TryGetValue(blockOffset, out var newOffset) && newOffset != blockOffset)
+            // NOTE: offset 0 is a valid block offset (first arena block) — re-point it like any other.
+            if (mapping.TryGetValue(blockOffset, out var newOffset) && newOffset != blockOffset)
             {
                 result ??= (byte[])record.Clone();
                 System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(slot + 1, 4), (int)newOffset);

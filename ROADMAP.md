@@ -141,7 +141,9 @@
 - ✅ **Out-of-line overflow (B1, opt-in)** — `DatabaseConfig.FixedWidthRecordLayout`: constant-size
   records + per-table overflow arena for TEXT/BLOB; every UPDATE is in-place (fixed or variable col)
 - ✅ **Arena GC (B3)** — overflow arena compacts together with the data file (copy-on-compact)
-- ⬜ Read-path SIMD wins (B4), migration (B5)
+- ✅ **Constant-offset read wins (B4)** — early-WHERE on constant slot offsets for fixed-width
+  (numeric direct reads, string arena-payload compare, StructRow numeric-SIMD batch filter)
+- ⬜ Migration (B5)
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

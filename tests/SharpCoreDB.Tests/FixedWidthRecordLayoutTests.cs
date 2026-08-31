@@ -197,8 +197,11 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
         try
         {
             db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
-            db.ExecuteSQL("INSERT INTO t VALUES (1, 'seed-1')");
+            // Insert row 2 FIRST so its variable block sits at arena offset 0 — the first arena
+            // block. Its offset stays live through the updates below and must survive compaction
+            // (regression: offset 0 is a valid block offset, only the slot flag distinguishes NULL).
             db.ExecuteSQL("INSERT INTO t VALUES (2, 'seed-2')");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'seed-1')");
 
             // Many variable updates: each appends a new arena block (the previous one is freed),
             // so the .ovf grows until compaction reclaims it.
@@ -223,6 +226,12 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
             Assert.Single(row);
             Assert.Equal("value-299-with-enough-length", row[0]["name"]);
             Assert.Equal("seed-2", db.ExecuteQuery("SELECT * FROM t WHERE id = 2")[0]["name"]);
+
+            // Reopen: the remapped arena offsets + compacted .dat must survive a fresh load.
+            (db as IDisposable)?.Dispose();
+            db = CreateFixedWidthDb();
+            Assert.Equal("value-299-with-enough-length", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+            Assert.Equal("seed-2", db.ExecuteQuery("SELECT * FROM t WHERE id = 2")[0]["name"]);
         }
         finally
         {
@@ -243,6 +252,114 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
             var rows = db.ExecuteQueryStruct("SELECT * FROM t WHERE id = 2").ToList();
             Assert.Single(rows);
             Assert.Equal("beta", rows[0].GetValueBoxed(1).ToString());
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void NumericEarlyWhere_ConstantOffset_ColumnAfterVariable_PerfPath()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            // Numeric column after a variable-length column: only the fixed-width layout can read
+            // it at a constant slot offset — the variable-length walk would reject the preceding
+            // TEXT column. B4 re-enables the numeric early-WHERE for fixed-width tables.
+            db.ExecuteSQL("CREATE TABLE t (name TEXT, score INTEGER, id INTEGER PRIMARY KEY)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('alpha', 10, 1)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('beta', 30, 2)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('gamma', 30, 3)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('delta', 40, 4)");
+
+            var rows = db.ExecuteQuery("SELECT * FROM t WHERE score = 30 ORDER BY id");
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("beta", rows[0]["name"]);
+            Assert.Equal("gamma", rows[1]["name"]);
+
+            Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE score = 40"));
+            Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE score = 99"));
+            Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE score = NULL"));
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void StringEarlyWhere_ConstantOffset_ArenaCompare()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'Alice')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'Bob')");
+            db.ExecuteSQL("INSERT INTO t VALUES (3, NULL)");
+
+            // Simple equality on a string column → B4 early-WHERE: constant slot offset + arena
+            // payload compare (Binary collation). NULL never equals a value.
+            var rows = db.ExecuteQuery("SELECT * FROM t WHERE name = 'Alice'");
+            Assert.Single(rows);
+            Assert.Equal(1, Convert.ToInt32(rows[0]["id"]));
+
+            Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE name = 'alice'"));
+
+            // IS NULL is not a simple equality → full-scan EvaluateWhere fallback stays correct.
+            var nulls = db.ExecuteQuery("SELECT * FROM t WHERE name IS NULL");
+            Assert.Single(nulls);
+            Assert.Equal(3, Convert.ToInt32(nulls[0]["id"]));
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void NoCaseCollation_StringWhere_FallsBackCorrectly()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT COLLATE NOCASE)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'Alice')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'Bob')");
+
+            // NOCASE collation → the binary early-WHERE must NOT engage → full scan +
+            // collation-aware EvaluateWhere stays correct.
+            var rows = db.ExecuteQuery("SELECT * FROM t WHERE name = 'alice'");
+            Assert.Single(rows);
+            Assert.Equal(1, Convert.ToInt32(rows[0]["id"]));
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void StructRow_NumericWhere_FixedWidth_UsesSimdFastPath()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (name TEXT, score INTEGER, id INTEGER PRIMARY KEY)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('alpha', 10, 1)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('beta', 30, 2)");
+            db.ExecuteSQL("INSERT INTO t VALUES ('gamma', 30, 3)");
+
+            // StructRow API: numeric equality on a non-indexed column → the numeric-SIMD batch
+            // fast path now works for fixed-width tables (constant-offset raw reads).
+            Assert.True(db.TryGetTable("t", out var table));
+            var concrete = Assert.IsType<SharpCoreDB.DataStructures.Table>(table);
+            var rows = concrete.ScanStructRowsWhere("score = 30").ToList();
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("beta", rows[0].GetValueBoxed(0).ToString());
+            Assert.Equal("gamma", rows[1].GetValueBoxed(0).ToString());
         }
         finally
         {

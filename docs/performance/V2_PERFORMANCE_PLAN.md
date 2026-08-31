@@ -284,9 +284,20 @@ restored from config on reopen.
   in place (fixed-width records, so re-pointing never changes their length). Dead blocks from
   variable updates / deletes are reclaimed.
 
-> **Still open (B4–B5):** constant-offset SIMD/early-WHERE read wins; on-disk migration path.
-> A persistent arena free-list (in-place block reuse between compactions) remains a possible
-> follow-up optimization.
+- **B4 · constant-offset read-path wins (2026-08-31)** — early-WHERE is re-enabled for fixed-width
+  tables using the constant slot offsets of `FixedWidthRecordLayout`:
+  - numeric predicates (`col = value` on Integer/Long/Real) read the column directly at its constant
+    slot offset (no layout walk, no boxing, no full-row deserialization) — also for columns that
+    follow a variable-length column, which the variable-length walk previously rejected;
+  - string predicates (`col = 'value'`, Binary collation) compare the arena payload byte-wise
+    against the pre-encoded expected UTF-8 (one arena lookup per row, no row dictionary);
+  - the StructRow numeric-SIMD batch filter (Integer/Long `Vector<T>`) now also serves fixed-width
+    tables (matched records are materialized through the arena-aware dictionary deserialize).
+  Arena block offset `0` is a valid offset (first arena block) — only the slot's null flag
+  distinguishes NULL.
+
+> **Still open (B5):** on-disk migration path. A persistent arena free-list (in-place block reuse
+> between compactions) remains a possible follow-up optimization.
 
 ---
 

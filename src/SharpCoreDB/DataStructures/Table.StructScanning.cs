@@ -187,20 +187,14 @@ public partial class Table
     {
         ArgumentNullException.ThrowIfNull(this.storage);
 
-        // Fixed-width records: fall back to the dictionary path (see ScanStructRows).
-        if (_fixedWidthRecords)
-        {
-            var columns = Columns.ToArray();
-            var types = ColumnTypes.ToArray();
-            foreach (var row in Select(where))
-            {
-                yield return StructRow.FromDictionary(row, columns, types);
-            }
-
-            yield break;
-        }
-
-        var schema = BuildVariableLengthSchema();
+        // Fixed-width records: StructRow's variable-length schema can't walk the fixed-width
+        // format, so matched records are materialized through the dictionary path. The numeric-SIMD
+        // fast path below is still usable (raw constant-offset reads, no schema walk); anything else
+        // falls back to the arena-aware dictionary full scan (see ScanStructRows).
+        bool fixedWidth = _fixedWidthRecords;
+        string[]? fixedColumns = fixedWidth ? Columns.ToArray() : null;
+        DataType[]? fixedTypes = fixedWidth ? ColumnTypes.ToArray() : null;
+        var schema = fixedWidth ? default : BuildVariableLengthSchema();
         var engine = GetOrCreateStorageEngine();
 
         string? simpleColumn = null;
@@ -208,8 +202,9 @@ public partial class Table
         bool hasSimpleWhere = !string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where!, out simpleColumn, out simpleValue);
 
-        // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+        // Fast path 1: hash-index point lookup (mirrors SelectInternal). StructRow can only
+        // represent variable-length records, so fixed-width tables skip this path.
+        if (!fixedWidth && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
             this.registeredIndexes.ContainsKey(simpleColumn))
         {
             EnsureIndexLoaded(simpleColumn);
@@ -236,8 +231,8 @@ public partial class Table
             }
         }
 
-        // Fast path 2: primary-key lookup.
-        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+        // Fast path 2: primary-key lookup (variable-length layout only — StructRow schema walk).
+        if (!fixedWidth && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
             this.PrimaryKeyIndex >= 0 &&
             string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
         {
@@ -302,12 +297,19 @@ public partial class Table
                 for (int mi = 0; mi < matches.Count; mi++)
                 {
                     var rec = recordDatas[matches[mi]];
-                    if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]]))
+                    if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]], fixedWidth))
                     {
                         continue;
                     }
 
-                    yield return new StructRow(rec.AsMemory(), schema, enableCaching);
+                    if (fixedWidth)
+                    {
+                        yield return StructRow.FromDictionary(DeserializeRowFixedWidth(rec.AsSpan()), fixedColumns!, fixedTypes!);
+                    }
+                    else
+                    {
+                        yield return new StructRow(rec.AsMemory(), schema, enableCaching);
+                    }
                 }
             }
             else
@@ -317,13 +319,31 @@ public partial class Table
                 {
                     if (data is not { Length: > 0 } ||
                         !MatchesNumericDirect(data, numericOffset, numericType, numericExpected) ||
-                        !TryValidateCurrentVersion(data, schema, recordPosition))
+                        !TryValidateCurrentVersion(data, schema, recordPosition, fixedWidth))
                     {
                         continue;
                     }
 
-                    yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                    if (fixedWidth)
+                    {
+                        yield return StructRow.FromDictionary(DeserializeRowFixedWidth(data.AsSpan()), fixedColumns!, fixedTypes!);
+                    }
+                    else
+                    {
+                        yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                    }
                 }
+            }
+
+            yield break;
+        }
+
+        // Fixed-width fallback: arena-aware dictionary full scan (StructRow can't walk the format).
+        if (fixedWidth)
+        {
+            foreach (var row in Select(where))
+            {
+                yield return StructRow.FromDictionary(row, fixedColumns!, fixedTypes!);
             }
 
             yield break;
@@ -672,19 +692,33 @@ public partial class Table
     /// <summary>
     /// Stale-version guard: when the table has a PK, the PK index must point to
     /// <paramref name="recordPosition"/> for the record to be the current version.
-    /// Returns true for tables without a PK (no version tracking).
+    /// Returns true for tables without a PK (no version tracking). For fixed-width records the
+    /// PK is read via the arena-aware dictionary deserialization (constant slot offsets).
     /// </summary>
-    private bool TryValidateCurrentVersion(ReadOnlySpan<byte> recordData, VariableLengthSchema schema, long recordPosition)
+    private bool TryValidateCurrentVersion(ReadOnlySpan<byte> recordData, VariableLengthSchema schema, long recordPosition, bool fixedWidth)
     {
         if (this.PrimaryKeyIndex < 0)
         {
             return true;
         }
 
-        var pkValue = ExtractPrimaryKeyValueFromSpan(recordData, schema);
-        if (pkValue is null)
+        string pkValue;
+        if (fixedWidth)
         {
-            return false;
+            var row = DeserializeRowFixedWidth(recordData);
+            pkValue = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var v) && v is not null && v != DBNull.Value
+                ? v.ToString() ?? string.Empty
+                : string.Empty;
+        }
+        else
+        {
+            var pk = ExtractPrimaryKeyValueFromSpan(recordData, schema);
+            if (pk is null)
+            {
+                return false;
+            }
+
+            pkValue = pk;
         }
 
         var search = this.Index.Search(pkValue);
@@ -708,6 +742,19 @@ public partial class Table
         type = this.ColumnTypes[colIdx];
         if (type != DataType.Integer && type != DataType.Long && type != DataType.Real)
             return false;
+
+        if (_fixedWidthRecords)
+        {
+            // Fixed-width layout: every column sits at a constant slot offset (null flag + payload),
+            // so the numeric column can be read directly regardless of preceding variable columns —
+            // no layout walk needed (B4).
+            var layout = GetFixedWidthLayout();
+            if (colIdx >= layout.ColumnCount)
+                return false;
+
+            valueOffset = layout.Offsets[colIdx];
+            return true;
+        }
 
         for (int i = 0; i < colIdx; i++)
         {
@@ -801,6 +848,31 @@ public partial class Table
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// B4: fixed-width string early-WHERE — reads the variable column's constant slot
+    /// <c>[null-flag(1)][arena-offset(4)]</c>, resolves the payload from the overflow arena and
+    /// compares it byte-wise against the pre-encoded expected UTF-8 (Binary collation). The
+    /// comparison is exact for Binary collation (no full-row deserialization for non-matches).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool MatchesFixedWidthStringDirect(
+        ReadOnlySpan<byte> recordData,
+        int slotOffset,
+        OverflowArena arena,
+        ReadOnlySpan<byte> expectedUtf8)
+    {
+        if (slotOffset + 5 > recordData.Length || recordData[slotOffset] == 0)
+        {
+            return false; // truncated record or NULL slot (NULL never equals a value)
+        }
+
+        // NOTE: offset 0 is a VALID block offset (the first arena block's length prefix sits at 0),
+        // so only the flag byte above distinguishes NULL — never filter on the offset value itself.
+        var arenaOffset = BinaryPrimitives.ReadInt32LittleEndian(recordData.Slice(slotOffset + 1, 4));
+        var payload = arena.Read(arenaOffset);
+        return payload is not null && payload.AsSpan().SequenceEqual(expectedUtf8);
     }
 
     #endregion
