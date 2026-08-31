@@ -358,17 +358,30 @@ public partial class Storage
 
         try
         {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read, 4096, FileOptions.WriteThrough);
-            if (fs.Length < offset + 4)
+            // Read the existing length prefix via the cached read handle (opened once per table
+            // file — cheap), then overwrite via a per-call WRITE-only stream. The original
+            // read-write FileStream open measured ~5-8 ms per call on Windows (on-access filters
+            // on read-write intent); a write-only open is as fast as the append path's open.
+            SafeFileHandle readHandle;
+            try
+            {
+                readHandle = GetOrOpenReadHandle(path);
+            }
+            catch
+            {
+                _readHandleCache.TryRemove(path, out _);
+                readHandle = GetOrOpenReadHandle(path);
+            }
+
+            if (RandomAccess.GetLength(readHandle) < offset + 4)
             {
                 return false;
             }
 
             // Read the existing record's length prefix at the offset (ciphertext length for
             // encrypted files, plaintext length otherwise — identical to AppendBytes).
-            fs.Position = offset;
             Span<byte> lengthBuffer = stackalloc byte[4];
-            if (fs.Read(lengthBuffer) != 4)
+            if (RandomAccess.Read(readHandle, lengthBuffer, offset) != 4)
             {
                 return false;
             }
@@ -381,8 +394,9 @@ public partial class Storage
 
             // Overwrite length prefix + payload in place; the file length is unchanged so all
             // following records keep their offsets.
-            fs.Position = offset;
             BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read, 4096, FileOptions.None);
+            fs.Position = offset;
             fs.Write(lengthBuffer);
             fs.Write(record.AsSpan());
         }
