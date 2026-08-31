@@ -506,10 +506,13 @@ public partial class Table
             var slot = span.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
             if (layout.IsVariable[colIdx])
             {
-                int oldOffset = slot[0] == 0 ? 0 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                // B6: offset 0 is a VALID arena block (the first block's length prefix sits at 0), so
+                // -1 is the sentinel for "no block" (NULL slot) — a real offset 0 must be freed too,
+                // otherwise the first variable block leaks and the free-list cannot reuse it.
+                int oldOffset = slot[0] == 0 ? -1 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
                 if (value == null || value == DBNull.Value)
                 {
-                    if (oldOffset != 0)
+                    if (oldOffset >= 0)
                     {
                         arena.Free(oldOffset);
                     }
@@ -521,7 +524,7 @@ public partial class Table
                 {
                     var payload = EncodeVariablePayload(ColumnTypes[colIdx], value);
                     var offset = arena.Write(payload);
-                    if (oldOffset != 0)
+                    if (oldOffset >= 0)
                     {
                         arena.Free(oldOffset);
                     }

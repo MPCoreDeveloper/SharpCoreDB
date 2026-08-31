@@ -272,6 +272,18 @@ public partial class Table : ITable, IDisposable
         set => _fixedWidthRecords = value;
     }
 
+    /// <summary>
+    /// B6: gets the number of overflow-arena blocks reused in place via the free-list (diagnostics).
+    /// Freed blocks of the same payload length are overwritten in place instead of appended, so the
+    /// <c>.ovf</c> stops growing during same-length variable-column updates.
+    /// </summary>
+    public int OverflowArenaBlockReuses => _overflowArena?.BlockReuses ?? 0;
+
+    /// <summary>
+    /// B6: gets the number of freed arena blocks currently tracked for in-place reuse (diagnostics).
+    /// </summary>
+    public int OverflowArenaFreeBlockCount => _overflowArena?.FreeBlockCount ?? 0;
+
     // ✅ NEW: Compaction tracking for columnar storage
     private long _deletedRowCount = 0;
     private long _updatedRowCount = 0;

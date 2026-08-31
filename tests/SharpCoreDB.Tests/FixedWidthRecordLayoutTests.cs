@@ -366,4 +366,40 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    [Fact]
+    public void ArenaFreeList_ReusesEqualLengthBlocks_NoGrowth()
+    {
+        var db = CreateFixedWidthDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'AAAAAAAA')"); // 8-byte arena payload
+
+            // The first same-length update appends (the insert's block is freed into the free-list).
+            db.ExecuteSQL("UPDATE t SET name = 'BBBBBBBB' WHERE id = 1");
+            long sizeAfterFirstUpdate = new FileInfo(OvfPath("t")).Length;
+
+            // All subsequent same-length updates reuse the freed block in place → the arena no
+            // longer grows (B6 free-list; the storage layer requires identical plaintext length).
+            string[] names = { "CCCCCCCC", "DDDDDDDD", "EEEEEEEE", "FFFFFFFF", "GGGGGGGG" };
+            for (int i = 0; i < 200; i++)
+            {
+                db.ExecuteSQL($"UPDATE t SET name = '{names[i % names.Length]}' WHERE id = 1");
+            }
+
+            Assert.Equal(sizeAfterFirstUpdate, new FileInfo(OvfPath("t")).Length);
+            Assert.Equal("GGGGGGGG", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0]["name"]);
+
+            // Diagnostics: the free-list actually performed in-place block reuse.
+            Assert.True(db.TryGetTable("t", out var table));
+            var concrete = Assert.IsType<SharpCoreDB.DataStructures.Table>(table);
+            Assert.True(concrete.OverflowArenaBlockReuses > 0, "expected at least one in-place arena block reuse");
+            Assert.Equal(1, concrete.OverflowArenaFreeBlockCount);
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
 }

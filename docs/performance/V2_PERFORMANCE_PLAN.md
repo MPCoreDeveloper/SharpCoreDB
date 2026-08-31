@@ -310,8 +310,15 @@ restored from config on reopen.
     tables that already store fixed-width records but predate flag persistence (B1–B4), and skips
     migration for byte-identical fixed-size-only legacy tables.
 
-> **Still open (follow-up):** persistent arena free-list (in-place block reuse between compactions);
-> single-file (.scdb) fixed-width support; automatic PageBased → Columnar + fixed-width migration.
+> **Still open (follow-up):** single-file (.scdb) fixed-width support; automatic PageBased →
+> Columnar + fixed-width migration; cross-session persistence of the arena free-list.
+
+- **B6 · arena free-list — in-place block reuse (2026-09-01)** — freed overflow blocks are tracked
+  in an in-memory free-list (grouped by payload length) and reused via the storage layer's in-place
+  overwrite (`IStorage.OverwriteRecordAt`) when a new payload has the exact same length. Same-length
+  variable-column updates stop growing the `.ovf` within a session; the copy-on-compact pass still
+  reclaims the remaining dead space. Also fixed a latent B1 leak where the first arena block
+  (offset 0) was never freed on update (`oldOffset != 0` treated offset 0 as "no block").
 
 ---
 

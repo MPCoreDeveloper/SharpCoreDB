@@ -145,7 +145,9 @@
   (numeric direct reads, string arena-payload compare, StructRow numeric-SIMD batch filter)
 - ✅ **1.x → 2.0 migration path (B5)** — fixed-width flag persisted; legacy databases auto-migrate
   on reopen with `FixedWidthRecordLayout` or via `MigrateTableToFixedWidth`
-- ⬜ Follow-up: persistent arena free-list, single-file fixed-width, PageBased auto-conversion
+- ✅ **Arena free-list (B6)** — freed overflow blocks reused in place (same-length values); fixed a
+  latent offset-0 block leak on update
+- ⬜ Follow-up: single-file fixed-width, PageBased auto-conversion, free-list persistence
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

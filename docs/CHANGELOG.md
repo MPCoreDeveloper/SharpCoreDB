@@ -62,9 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its columnar tables, and `IDatabase.MigrateTableToFixedWidth(tableName)` provides on-demand
   conversion. A format probe adopts already-fixed-width tables that predate flag persistence and
   skips byte-identical fixed-size-only legacy tables.
+- **Arena free-list (B6)** — freed overflow blocks are tracked per payload length and reused in
+  place (`OverwriteRecordAt`) when a new value has the exact same length, so same-length
+  variable-column updates no longer grow the `.ovf` within a session (copy-on-compact still
+  reclaims the rest). Also fixed a latent B1 leak where the first arena block (offset 0) was never
+  freed on update.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (12), `FixedWidthMigrationTests` (7). Full suite green:
-  **1,678 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (13, incl. arena free-list reuse), `FixedWidthMigrationTests` (7).
+  Full suite green: **1,679 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 
