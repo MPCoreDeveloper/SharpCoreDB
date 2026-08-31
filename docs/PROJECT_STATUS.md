@@ -79,7 +79,8 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
   - ✅ **Constant-offset read wins (B4)** — early-WHERE re-enabled for fixed-width tables (numeric
     direct-offset reads incl. columns after variable columns; string arena-payload compare;
     StructRow numeric-SIMD batch filter). Fixed a latent offset-0 arena-block bug.
-  - [ ] On-disk migration (B5)
+  - ✅ **1.x → 2.0 migration path (B5)** — fixed-width flag persisted per table; legacy databases
+    auto-migrate on reopen with `FixedWidthRecordLayout` (or via `MigrateTableToFixedWidth`).
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
 
 **Single-file `.scdb` (A-track):**

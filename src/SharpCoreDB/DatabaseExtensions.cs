@@ -712,6 +712,15 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         return converted;
     }
 
+    /// <inheritdoc />
+    public int MigrateTableToFixedWidth(string tableName)
+    {
+        // Single-file (.scdb) tables use their own storage format and do not support the
+        // fixed-width record layout (directory-mode columnar tables only).
+        throw new NotSupportedException(
+            $"Table '{tableName}' does not support the fixed-width record layout (single-file tables use their own storage format).");
+    }
+
     /// <summary>
     /// Rewrites every ULID value of a single-file table from the legacy encoding to the spec encoding.
     /// </summary>

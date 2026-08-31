@@ -56,9 +56,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arena payload byte-wise against the pre-encoded expected UTF-8, and the StructRow numeric-SIMD
   batch filter (`Vector<T>`) now serves fixed-width tables. Also fixed a latent bug where arena
   block offset 0 (the first block) was treated as "no block" and dropped by compaction / early-WHERE.
+- **1.x → 2.0 record-format migration path (B5)** — the fixed-width flag is now persisted per table
+  in metadata (authoritative on reopen; config no longer overrides the on-disk format). A legacy
+  (variable-length) database opened with `DatabaseConfig.FixedWidthRecordLayout = true` auto-migrates
+  its columnar tables, and `IDatabase.MigrateTableToFixedWidth(tableName)` provides on-demand
+  conversion. A format probe adopts already-fixed-width tables that predate flag persistence and
+  skips byte-identical fixed-size-only legacy tables.
 - **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
-  `FixedWidthRecordLayoutTests` (12, incl. arena-compaction reclaim + constant-offset WHERE).
-  Full suite green: **1,671 tests, 0 failures**.
+  `FixedWidthRecordLayoutTests` (12), `FixedWidthMigrationTests` (7). Full suite green:
+  **1,678 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

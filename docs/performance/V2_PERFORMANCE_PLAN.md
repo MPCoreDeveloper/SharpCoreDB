@@ -296,8 +296,22 @@ restored from config on reopen.
   Arena block offset `0` is a valid offset (first arena block) — only the slot's null flag
   distinguishes NULL.
 
-> **Still open (B5):** on-disk migration path. A persistent arena free-list (in-place block reuse
-> between compactions) remains a possible follow-up optimization.
+- **B5 · 1.x → 2.0 record-format migration path (2026-08-31)** — legacy databases (variable-length
+  records) migrate to the fixed-width layout in place:
+  - the fixed-width flag is now persisted per table in metadata (authoritative on reopen — config no
+    longer overrides the on-disk format);
+  - opening a legacy database with `DatabaseConfig.FixedWidthRecordLayout = true` **auto-migrates**
+    every columnar table (current rows are re-read with the legacy codec, re-serialized as
+    fixed-width records into a fresh overflow arena, the data file is swapped atomically and the
+    PK / hash indexes are rebuilt);
+  - explicit API `IDatabase.MigrateTableToFixedWidth(tableName)` for on-demand conversion (returns
+    the migrated row count); read-only opens and page-based tables are never rewritten;
+  - a format probe (constant record length + variable slots resolving in the arena) safely adopts
+    tables that already store fixed-width records but predate flag persistence (B1–B4), and skips
+    migration for byte-identical fixed-size-only legacy tables.
+
+> **Still open (follow-up):** persistent arena free-list (in-place block reuse between compactions);
+> single-file (.scdb) fixed-width support; automatic PageBased → Columnar + fixed-width migration.
 
 ---
 

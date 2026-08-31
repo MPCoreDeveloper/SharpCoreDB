@@ -339,4 +339,18 @@ public interface IDatabase : IAsyncDisposable
     /// <exception cref="InvalidOperationException">Thrown when the database is read-only or a row
     /// cannot be located while migrating.</exception>
     int MigrateLegacyUlids();
+
+    /// <summary>
+    /// B5: migrates a legacy (1.x, variable-length records) table to the fixed-width record layout
+    /// (out-of-line overflow arena, 2.0). Current rows are re-read with the legacy codec,
+    /// re-serialized as fixed-width records and the primary-key / hash indexes are rebuilt. The
+    /// migrated record format is persisted in metadata so it survives reopen without the config flag.
+    /// </summary>
+    /// <param name="tableName">The table to migrate.</param>
+    /// <returns>The number of rows migrated (0 when the table is already fixed-width or empty).</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the database or table is read-only,
+    /// or the table does not exist.</exception>
+    /// <exception cref="NotSupportedException">Thrown for non-columnar tables (page-based) and
+    /// single-file tables, which do not support the fixed-width record layout.</exception>
+    int MigrateTableToFixedWidth(string tableName);
 }

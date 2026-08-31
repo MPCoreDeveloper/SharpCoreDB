@@ -143,7 +143,9 @@
 - ✅ **Arena GC (B3)** — overflow arena compacts together with the data file (copy-on-compact)
 - ✅ **Constant-offset read wins (B4)** — early-WHERE on constant slot offsets for fixed-width
   (numeric direct reads, string arena-payload compare, StructRow numeric-SIMD batch filter)
-- ⬜ Migration (B5)
+- ✅ **1.x → 2.0 migration path (B5)** — fixed-width flag persisted; legacy databases auto-migrate
+  on reopen with `FixedWidthRecordLayout` or via `MigrateTableToFixedWidth`
+- ⬜ Follow-up: persistent arena free-list, single-file fixed-width, PageBased auto-conversion
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
 
 ### Single-file `.scdb` (A-track)

@@ -214,6 +214,8 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     {
         string? metaJson;
         bool metaExists;
+        // B5: set when auto-migration converts a legacy (1.x) table to the fixed-width layout.
+        bool migratedAnyTable = false;
         
         if (_storageProvider is not null)
         {
@@ -389,14 +391,6 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 table.SetStorage(storage);
                 table.SetReadOnly(isReadOnly);
 
-                // Fixed-width record layout (out-of-line overflow): the flag is persisted in table
-                // metadata, but also restored from the current config (which must match) so tables
-                // created/opened with DatabaseConfig.FixedWidthRecordLayout reopen correctly.
-                if (config is not null)
-                {
-                    table.IsFixedWidthRecords = config.FixedWidthRecordLayout;
-                }
-
                 // ✅ Phase 2: Set storage provider for delta-update optimization
                 table.SetStorageProvider(_storageProvider);
 
@@ -408,6 +402,21 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 if (!isReadOnly)
                 {
                     table.InitializeStorageEngine();
+                }
+
+                // B5 (1.x → 2.0 record-format migration): the persisted fixed-width flag is now
+                // authoritative — a legacy (1.x) table simply lacks it (variable-length records).
+                // Opening a legacy table as fixed-width would misread its records, so when the
+                // config opts into FixedWidthRecordLayout we AUTO-MIGRATE the legacy table instead.
+                // PageBased tables stay legacy until converted to Columnar first, and read-only
+                // opens never rewrite data.
+                if (!table.IsFixedWidthRecords && config is { FixedWidthRecordLayout: true })
+                {
+                    if (!isReadOnly && table.StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar)
+                    {
+                        table.MigrateToFixedWidth();
+                        migratedAnyTable = true;
+                    }
                 }
 
                 
@@ -495,6 +504,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 #if DEBUG
         System.Diagnostics.Debug.WriteLine($"[Load] Total tables loaded: {tables.Count}");
 #endif
+
+        // B5: persist the new record-format flags (and rebuilt indexes) when auto-migration
+        // converted any legacy table during this load.
+        if (migratedAnyTable)
+        {
+            SaveMetadata();
+        }
     }
 
     /// <summary>
@@ -522,6 +538,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             ForeignKeys = t.ForeignKeys,  // Added for Phase 1.2
             ColumnCollations = t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
             AutoIncrementCounters = t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
+            IsFixedWidthRecords = t.IsFixedWidthRecords,  // B5: persist the record format (1.x → 2.0)
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
