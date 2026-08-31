@@ -5,6 +5,34 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Performance / correctness — batch UPDATE path (B7)
+
+- **Position-aware batch UPDATE (`UpdateMultiple`)** — WHERE resolution now returns
+  `(storage position, row)` pairs from the PK B-tree *and* the hash index, so a table without a
+  primary key can still patch records in place. Previously the position was discarded: every
+  non-PK update fell back to append (stale versions → file growth + compaction storm), and on the
+  PageBased engine the update was silently **not applied at all**.
+- **In-place overwrites inside transactions (write-behind)** — `OverwriteRecordAt` no longer
+  refuses to run inside a transaction. Overwrites are buffered per file and flushed once on
+  commit (`FlushBufferedAppendsAndOverwrites`); rollback simply drops the buffer because nothing
+  reached disk early. Intermediate flushes (`FlushTransactionBuffer`) deliberately keep the
+  overwrites buffered so rollback stays possible.
+- **No more compaction storm for in-place updates** — `UpdateMultiple` counts only real appends
+  (`appendedInBatch`) toward `_updatedRowCount`; a batch of in-place overwrites no longer triggers
+  an unnecessary full compaction.
+- **Cached write handles for `.dat`** — the per-row in-place write uses a cached `SafeFileHandle`
+  (one open per table file) instead of a `FileStream` per update; overflow-arena (`.ovf`) files
+  keep short-lived streams because the arena owns its own append/reuse streams.
+- **File-sharing alignment** — all append/file-read opens inside `Storage.Append`/`ReadWrite`
+  now use `FileShare.ReadWrite|Delete` so the cached write handle, the append path and full-file
+  reads coexist.
+- **Regression tests:** `SqlInPlaceUpdateTests` now covers PK-less batch updates (columnar file
+  size stays constant, correct values, row count stable), PK-less PageBased updates (previously
+  dropped), and transaction rollback of in-place overwrites. Full suite green: **1,690 tests,
+  0 failures**.
+
 ## [2.1.0-preview] - 2026-08-31
 
 ### Performance

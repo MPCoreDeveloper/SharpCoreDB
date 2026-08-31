@@ -86,7 +86,15 @@ public partial class Storage
             return null;
         }
 
-        byte[] fileData = File.ReadAllBytes(path);
+        byte[] fileData;
+        // B7: open with FileShare.ReadWrite so the cached write handle (in-place overwrites) can
+        // coexist with full-file reads. File.ReadAllBytes defaults to FileShare.Read, which fails
+        // while a write handle is open.
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            fileData = new byte[fs.Length];
+            fs.ReadExactly(fileData);
+        }
 
         var effectiveNoEncrypt = noEncrypt || this.noEncryption;
         if (effectiveNoEncrypt)

@@ -1525,12 +1525,14 @@ public partial class Table
             // remove the stale record from all indexes (unloaded indexes would later be rebuilt
             // from the file INCLUDING the stale record).
             EnsureAllRegisteredIndexesLoaded();
-            int updatedInBatch = 0;
+            int appendedInBatch = 0; // only appends create stale versions that need compaction
 
             foreach (var (where, updates) in operations)
             {
-                // Resolve matching rows — prefer PK/hash index point-lookup
-                List<Dictionary<string, object>>? rows = null;
+                // Resolve matching rows as (storage position, row) pairs so the columnar write
+                // path can patch fields in place even when the table has no primary key. The
+                // position comes from the hash index / PK lookup already performed here.
+                List<(long Position, Dictionary<string, object> Row)>? rows = null;
 
                 // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
                 // on a columnar table with a PK resolves through the PK B-tree directly (single
@@ -1551,7 +1553,7 @@ public partial class Table
                             var fastRow = DeserializeRow(fastData);
                             if (fastRow != null)
                             {
-                                rows = [fastRow];
+                                rows = [(fastSearch.Value, fastRow)];
                             }
                         }
                     }
@@ -1580,7 +1582,7 @@ public partial class Table
                                     if (data != null)
                                     {
                                         var row = DeserializeRow(data);
-                                        if (row != null) rows.Add(row);
+                                        if (row != null) rows.Add((pos, row));
                                     }
                                 }
                             }
@@ -1588,9 +1590,28 @@ public partial class Table
                     }
                 }
 
-                rows ??= SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+                if (rows is null)
+                {
+                    rows = [];
+                    foreach (var row in SelectInternal(where, orderBy: null, asc: true, noEncrypt: false))
+                    {
+                        long position = -1;
+                        if (this.PrimaryKeyIndex >= 0 &&
+                            row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pkValue) &&
+                            pkValue != null)
+                        {
+                            var sr = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                            if (sr.Found)
+                            {
+                                position = sr.Value;
+                            }
+                        }
 
-                foreach (var row in rows)
+                        rows.Add((position, row));
+                    }
+                }
+
+                foreach (var (rowPosition, row) in rows)
                 {
                     // v2: capture the old PK and indexed-column values BEFORE applying updates,
                     // avoiding a full row dictionary copy per row (WP3 allocation reduction).
@@ -1647,8 +1668,8 @@ public partial class Table
 
                         if (StorageMode == StorageMode.Columnar)
                         {
-                            long oldPosition = -1;
-                            if (this.PrimaryKeyIndex >= 0)
+                            long oldPosition = rowPosition;
+                            if (oldPosition < 0 && this.PrimaryKeyIndex >= 0)
                             {
                                 var pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
@@ -1733,47 +1754,51 @@ public partial class Table
                                     if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
                                         hashIndex.Value.Add(newKey, newPosition);
                                 }
-                            }
 
-                            updatedInBatch++;
+                                appendedInBatch++; // append fallback: stale version left for compaction
+                            }
                         }
                         else // PageBased
                         {
                             rowData = SerializeRowExact(row);
 
-                            if (this.PrimaryKeyIndex >= 0)
+                            long position = rowPosition;
+                            string? pkVal = this.PrimaryKeyIndex >= 0 ? oldPkValue?.ToString() : null;
+                            if (position < 0 && this.PrimaryKeyIndex >= 0)
                             {
-                                var pkVal = oldPkValue?.ToString() ?? string.Empty;
+                                pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
+                                    position = searchResult.Value;
+                            }
+
+                            if (position >= 0)
+                            {
+                                long newPosition = engine.Update(Name, position, rowData);
+
+                                if (newPosition != position)
                                 {
-                                    long position = searchResult.Value;
-                                    long newPosition = engine.Update(Name, position, rowData);
-
-                                    if (newPosition != position)
+                                    // Record was relocated to another page: re-point the PK
+                                    // index and rebuild hash indexes lazily.
+                                    var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
+                                        ? newPk?.ToString() ?? string.Empty
+                                        : string.Empty;
+                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                                }
+                                else
+                                {
+                                    // In-place update keeps the position; move hash entries in place.
+                                    foreach (var hashIndex in this.hashIndexes)
                                     {
-                                        // Record was relocated to another page: re-point the PK
-                                        // index and rebuild hash indexes lazily.
-                                        var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
-                                            ? newPk?.ToString() ?? string.Empty
-                                            : string.Empty;
-                                        RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
-                                    }
-                                    else
-                                    {
-                                        // In-place update keeps the position; move hash entries in place.
-                                        foreach (var hashIndex in this.hashIndexes)
+                                        if (oldHashValues is not null &&
+                                            oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                            oldKey is not null)
                                         {
-                                            if (oldHashValues is not null &&
-                                                oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
-                                                oldKey is not null)
-                                            {
-                                                hashIndex.Value.Remove(oldKey, position);
-                                            }
-
-                                            if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
-                                                hashIndex.Value.Add(newKey, position);
+                                            hashIndex.Value.Remove(oldKey, position);
                                         }
+
+                                        if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                            hashIndex.Value.Add(newKey, position);
                                     }
                                 }
                             }
@@ -1781,9 +1806,9 @@ public partial class Table
                 }
             }
 
-            if (StorageMode == StorageMode.Columnar && updatedInBatch > 0)
+            if (StorageMode == StorageMode.Columnar && appendedInBatch > 0)
             {
-                Interlocked.Add(ref _updatedRowCount, updatedInBatch);
+                Interlocked.Add(ref _updatedRowCount, appendedInBatch);
                 TryAutoCompact();
             }
         }
