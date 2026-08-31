@@ -33,6 +33,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   affected counts, RETURNING pre-delete rows, range/non-indexed WHERE fallbacks, batch PK
   deletes/updates, in-place patch no-growth (after variable columns / by PK), variable-growth
   append fallback, compound WHERE. Full suite green: **1,649 tests, 0 failures**.
+- **Single-file `.scdb` (A-track):**
+  - **PK hash index (A1)** — `FindByPrimaryKey` / `UpdateByPrimaryKey` / `DeleteByPrimaryKey` and
+    `SELECT … WHERE pk = value` resolve in O(1) instead of an O(N) cache scan (index maintained on
+    all mutations, rebuilt on reopen/rollback; numeric literals normalized).
+  - **In-place block overwrite (A2)** — pinned: a same-length update does not grow the `.scdb`
+    (`WriteBlockAsync` reuses the table block offset when the JSON fits).
+- **Out-of-line overflow (B1, opt-in):** `DatabaseConfig.FixedWidthRecordLayout` — fixed-width
+  records with constant size per schema; TEXT/BLOB values in a per-table overflow arena (`.ovf`),
+  referenced by a 4-byte offset in the record. Every UPDATE (fixed **or** variable column) is an
+  in-place overwrite (`.dat` does not grow). Includes `OverflowArena` (append + cache +
+  copy-on-compact), `FixedWidthRecordLayout`, and fixed-width serialize/deserialize/in-place-patch
+  wired into the Table dispatcher, PK index rebuild, full-scan guards and StructRow fallback.
+  Flag persisted in table metadata, restored from config on reopen.
+- **Regression tests:** `SingleFilePkIndexTests` (7), `SingleFileWriteTests` (2),
+  `FixedWidthRecordLayoutTests` (7). Full suite green: **1,666 tests, 0 failures**.
 
 ## [2.0.0-preview.3] - 2026-08-30
 

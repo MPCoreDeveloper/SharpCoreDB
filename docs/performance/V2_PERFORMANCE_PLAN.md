@@ -255,6 +255,32 @@ correct; batch patch). Full suite green: **1,649 tests, 0 failures** (16 skipped
 > the full re-serialize and keeps the record length stable for fixed-size fields — the core of the
 > SQLite update model.
 
+### 3.7 Single-file (.scdb) — PK hash index + in-place block overwrite (2026-08-31)
+
+- **PK hash index (A1):** `SingleFileTable` maintains a primary-key hash index (ordinal string key)
+  on every mutation; `FindByPrimaryKey` / `UpdateByPrimaryKey` / `DeleteByPrimaryKey` and
+  `SELECT … WHERE pk = value` resolve in **O(1)** instead of an O(N) cache scan. Rebuilt on cache
+  load / rollback; numeric literals are normalized (`pk = 05` ≡ `pk = 5`).
+- **In-place block overwrite (A2):** `WriteBlockAsync` already reuses a table's block offset when the
+  row-cache JSON fits the allocated pages — a same-length update overwrites the block in place and
+  the `.scdb` file does not grow (pinned by a regression test).
+- **Still open:** delta/incremental flush (A3) and unifying single-file onto the columnar format (A4).
+
+### 3.8 Out-of-line overflow — opt-in fixed-width record layout (B1, 2026-08-31)
+
+`DatabaseConfig.FixedWidthRecordLayout` (opt-in, default off): records have a **constant size per
+schema** — fixed-size columns inline at constant offsets, TEXT/BLOB values in a per-table overflow
+arena (`.ovf`, `[len][payload]` blocks) referenced by a 4-byte offset in the record. Every UPDATE
+(fixed **or** variable column) is therefore an **in-place overwrite**: the `.dat` does not grow, and
+variable values are patched through the arena. Components: `OverflowArena` (append + in-memory cache
++ copy-on-compact), `FixedWidthRecordLayout`, and fixed-width serialize / deserialize / in-place
+patch wired into the Table serializer/deserializer dispatch, PK index rebuild, full-scan
+early-WHERE guards and the StructRow dictionary fallback. The flag is persisted in table metadata and
+restored from config on reopen.
+
+> **Still open (B3–B5):** arena GC wired into auto-compaction + persistent free-list; constant-offset
+> SIMD/early-WHERE read wins; on-disk migration path.
+
 ---
 
 ## 4. C# 15 / .NET 11 readiness (mainstream November 2026)

@@ -138,8 +138,15 @@
 - ✅ **Field-level in-place patch on columnar UPDATE (fixed-width layout step)** — only the changed
   fields are patched at their actual record offsets; no full re-serialize; fixed-size fields keep
   the record length stable (in-place, no file growth), even after variable-length TEXT columns
-- ⬜ Full fixed-width record layout (fixed part + variable-length heap) for hot tables
+- ✅ **Out-of-line overflow (B1, opt-in)** — `DatabaseConfig.FixedWidthRecordLayout`: constant-size
+  records + per-table overflow arena for TEXT/BLOB; every UPDATE is in-place (fixed or variable col)
+- ⬜ Arena GC / free-list (B3), read-path SIMD wins (B4), migration (B5)
 - ⬜ Storage-level DELETE reuse (free-slot reuse / compaction on PageBased)
+
+### Single-file `.scdb` (A-track)
+- ✅ **PK hash index (A1)** — O(1) point reads (`FindByPrimaryKey`, `SELECT … WHERE pk = value`)
+- ✅ **In-place block overwrite (A2)** — same-length updates do not grow the `.scdb` (pinned)
+- ⬜ Delta/incremental flush (A3); unify onto the columnar format (A4)
 - Track in [`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)
 
 ---

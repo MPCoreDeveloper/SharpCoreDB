@@ -71,8 +71,19 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
     field keeps the record length unchanged, so the write is in-place (no full re-serialize, no
     file growth) — even for columns after variable-length TEXT columns. Registered hash indexes are
     loaded up front so append/logical-delete DML never leaves stale entries (stale-rebuild fix).
-  - [ ] Full fixed-width record layout (fixed part + variable-length heap) for hot tables
+  - ✅ **Out-of-line overflow (B1, opt-in)** — `DatabaseConfig.FixedWidthRecordLayout`: constant-size
+    records with TEXT/BLOB in a per-table overflow arena; every UPDATE (fixed or variable column) is
+    an in-place overwrite (no `.dat` growth). Flag persisted in metadata.
+  - [ ] Arena GC into auto-compaction + persistent free-list (B3); constant-offset SIMD/early-WHERE
+    read wins (B4); on-disk migration (B5)
   - [ ] Storage-level DELETE reuse (free-slot reuse / compaction on PageBased deletes)
+
+**Single-file `.scdb` (A-track):**
+  - ✅ **PK hash index (A1)** — `FindByPrimaryKey` / point `SELECT … WHERE pk = value` are O(1)
+    (was O(N) cache scan); maintained on all mutations and rebuilt on reopen/rollback.
+  - ✅ **In-place block overwrite (A2)** — `WriteBlockAsync` reuses the table block offset when the
+    JSON fits; a same-length update does not grow the `.scdb` (pinned by a test).
+  - [ ] Delta/incremental flush (A3); unify single-file onto the columnar format (A4)
 - [ ] **.NET 11 / C# 15 migration** (after Nov 2026 GA) — Runtime Async, AVX-VNNI-512/SVE2 behind
   `SIMD_ENABLED`, optional Zstandard compression.
 - [ ] **Native AOT warning cleanup** — interface-based B-tree factory (replace `GetMethod`/
