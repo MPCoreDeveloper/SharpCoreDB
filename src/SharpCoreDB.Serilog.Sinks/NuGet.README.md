@@ -54,7 +54,7 @@ Log.Error(ex, "An error occurred");
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Serilog.Sinks --version 2.0.0
+dotnet add package SharpCoreDB.Serilog.Sinks --version 2.0.0.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+, Serilog v2.13+

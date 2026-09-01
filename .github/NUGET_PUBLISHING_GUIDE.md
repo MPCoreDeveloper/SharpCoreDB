@@ -60,21 +60,21 @@ order (with `--skip-duplicate`):
 | Input | Description |
 |---|---|
 | `reason` | Free-text note shown in the run summary |
-| `versionSuffix` | Optional NuGet pre-release suffix. **Empty** → stable version from the `.csproj` files (e.g. `2.0.0`). **`preview.1`**, **`rc.1`**, **`beta.1`** → `2.0.0-preview.1` etc. |
+| `versionSuffix` | Optional NuGet pre-release suffix. **Empty** → stable version from the `.csproj` files (e.g. `2.0.0.0`). **`preview.1`**, **`rc.1`**, **`beta.1`** → `2.0.0.0-preview.1` etc. |
 
-### Scenario B2: Publishing a v2.0 Pre-release (click-by-click)
+### Scenario B2: Publishing the 2.0.0.0 release (click-by-click)
 
 1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
 2. In the left sidebar, select **"Manual NuGet Publish"**
 3. Click the blue **"Run workflow"** button (top right)
 4. In the dialog:
-   - **Branch**: `release/v2.0.0.0` (the v2.0 line — or `master` for the 1.9.x line)
-   - **versionSuffix**: `preview.1` (must include a number; a bare `preview` is rejected by NuGet.org)
-   - **reason**: e.g. `v2.0 preview.1 – storage engine WP10–WP13`
+   - **Branch**: `master` (the v2.0.0.0 trunk — SharpCoreDB v2 is now the leading line)
+   - **versionSuffix**: leave **empty** for the stable `2.0.0.0` release
+   - **reason**: e.g. `2.0.0.0 – performance-first V2 release`
 5. Click **"Run workflow"**
 6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
    dependency layers (core → dependents → mid-level → top-level).
-7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — tick **"Include prerelease"** to see `2.0.0-preview.1`.
+7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — the `2.0.0.0` version should appear.
 
 > **Requires** the `NUGET_API_KEY` repository secret (`Settings → Secrets and variables → Actions`). If it was
 > used for the 1.9.7 publish it is already configured.
@@ -92,13 +92,17 @@ on:
 
 ## Version Management
 
-Your projects use `<Version>` tags in `.csproj` files. Ensure each project file has:
+SharpCoreDB uses **4-part versions** (`n.n.n.n`, e.g. `2.0.0.0`). The versions come from the `<Version>` tags
+in `.csproj` files, but the **single source of truth for the SharpCoreDB package family is
+`<SharpCoreDBVersion>` in `Directory.Packages.props`** (used by all central package references).
+
+Each packable project file carries the same version:
 
 ```xml
 <PropertyGroup>
-  <Version>1.7.0</Version>
-  <AssemblyVersion>1.7.0</AssemblyVersion>
-  <FileVersion>1.7.0</FileVersion>
+  <Version>2.0.0.0</Version>
+  <AssemblyVersion>2.0.0.0</AssemblyVersion>
+  <FileVersion>2.0.0.0</FileVersion>
 </PropertyGroup>
 ```
 
@@ -108,8 +112,8 @@ To automatically version based on git commits, use:
 
 ```xml
 <PropertyGroup>
-  <Version>1.7.0</Version>
-  <InformationalVersion>1.7.0+$(GitCommitHash)</InformationalVersion>
+  <Version>2.0.0.0</Version>
+  <InformationalVersion>2.0.0.0+$(GitCommitHash)</InformationalVersion>
 </PropertyGroup>
 ```
 
@@ -173,15 +177,15 @@ Create GitHub Releases for each version:
 
 ### 3. Pre-release Packages
 
-For v2.0 pre-releases (e.g. `2.0.0-preview.1`), **do not edit the `.csproj` files** — trigger the
+For pre-releases of the v2.0.0.0 line (e.g. `2.0.0.0-preview.1`), **do not edit the `.csproj` files** — trigger the
 "Manual NuGet Publish" workflow with a `versionSuffix` (see Scenario B2). The workflow passes
-`/p:Version=2.0.0-<suffix>` to the whole solution, so every package and every internal
+`/p:Version=2.0.0.0-<suffix>` to the whole solution, so every package and every internal
 `ProjectReference` dependency stays consistent on the same pre-release version.
 
 Consumers opt in explicitly — pre-release packages are **not** selected by default:
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0-preview.1
+dotnet add package SharpCoreDB --version 2.0.0.0-preview.1
 ```
 
 Or in Visual Studio: **Manage NuGet Packages → tick "Include prerelease"**.

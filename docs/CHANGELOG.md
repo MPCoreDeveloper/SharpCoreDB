@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0.0] - 2026-09-01
+
+### Release highlights
+
+- **Performance-first engine** — point reads **beat SQLite** on the default engine, batch INSERTs
+  beat SQLite on PageBased (**194–206K vs 109K ops/s**), and the UPDATE/DELETE gap vs SQLite narrowed
+  from ~5–7× to ~1–4× (in-place field patches + unified delete core).
+- **Single-file storage format v2** — dynamic/growable metadata layout (Block Registry, FSM, Table
+  Directory) with **automatic crash-safe v1 → v2 migration on open** (original preserved as
+  `<file>.backup`).
+- **Block-level compression** — Brotli/GZip/Zstd with configurable presets
+  (`BlockCompressionLevel`, `MetadataCompressionLevel`, `CompressionThreshold`).
+- **Envelope encryption + full at-rest metadata encryption** (`EncryptionPassword`, per-file DEK,
+  key/password rotation) and **configurable metadata sizing** (`FsmSizePages`,
+  `BlockRegistrySizePages`, `TableDirectorySizePages`).
+- **4-part versioning** — all packages now use `n.n.n.n` (this release: `2.0.0.0`).
+
 ### SingleFile storage — critical compression read-path fixes + configurable presets (PR #352)
 
 - **Fix: zero-copy read paths returning compressed bytes** — `GetReadStream()` and `GetReadSpan()`

@@ -27,7 +27,7 @@ Functional facade for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.0.0
+dotnet add package SharpCoreDB.Functional --version 2.0.0.0
 ```
 
 ## Related packages
@@ -50,7 +50,7 @@ dotnet add package SharpCoreDB.Functional --version 2.0.0
 - `DeleteAsync(...) -> Task<Fin<Unit>>`
 - `CountAsync(...) -> Task<long>`
 
-## Functional SQL Syntax (v2.0.0)
+## Functional SQL Syntax (v2.0.0.0)
 
 The functional facade supports SQL extensions that map directly to `Option<T>` behavior.
 
