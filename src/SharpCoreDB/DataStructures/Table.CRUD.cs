@@ -140,10 +140,10 @@ public partial class Table
                 {
                     unloadedIndexes = [];
                     // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
-                    // NOSONAR:S3267 - intentional: LINQ Where would allocate on this hot path.
                     foreach (var col in this.registeredIndexes.Keys)
                     {
-                        if (!this.loadedIndexes.Contains(col))
+                        bool needsLoad = !this.loadedIndexes.Contains(col);
+                        if (needsLoad)
                         {
                             unloadedIndexes.Add(col);
                         }
