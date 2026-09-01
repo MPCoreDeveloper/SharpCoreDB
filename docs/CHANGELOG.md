@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0.1] - 2026-09-01
+
+### Fixed
+
+- **Single-file data corruption under concurrent writes (critical)** — the WAL manager wrote to
+  the shared file stream with a bare `Position` + `WriteAsync`, while the background write-behind
+  worker wrote data pages under a lock. A concurrent `Position` mutation could land WAL bytes on a
+  data page, so a table's data block could read back as WAL/registry bytes instead of JSON after a
+  reopen (sporadic `JsonException '0x02'` / "Expected 100 rows, got 0"). All `FileStream.Position`
+  use is now serialized through `SingleFileStorageProvider.WriteAt` (header, WAL, delta writes,
+  reads, defrag). Regression covered by `VacuumStressTests` (failed ~50% before, stable after).
+- **4-part patch versioning** — this patch ships as `2.0.0.1` (NuGet shows `2.0.0.1`).
+
 ## [2.0.0.0] - 2026-09-01
 
 ### Release highlights

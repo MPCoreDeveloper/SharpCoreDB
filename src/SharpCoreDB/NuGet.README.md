@@ -1,4 +1,4 @@
-# SharpCoreDB v2.0.0.0 — Performance-First Database Engine
+# SharpCoreDB v2.0.0.1 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
@@ -10,7 +10,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
-## What's New in 2.0.0.0
+## What's New in 2.0.0.1
 
 ### 🚀 Performance-first engine
 - v2.0 closes the v1.x benchmark gap: point reads **beat SQLite** on the default engine, batch INSERTs
@@ -175,16 +175,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0.0
+dotnet add package SharpCoreDB --version 2.0.0.1
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.0.0.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.0
+dotnet add package SharpCoreDB.Functional --version 2.0.0.1
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.1
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.1
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -194,7 +194,7 @@ dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.0
 - **Directory-storage databases** open unchanged (the table file format is byte-for-byte identical).
 - **Single-file (`.scdb`) databases** are migrated automatically to the v2 dynamic-metadata format on
   first open; the original file is preserved as `<file>.backup`. The migration is **one-way** — after
-  opening with v2.0.0.0 the file can no longer be read by v1.9 (use the `.backup` for a v1.9 copy).
+  opening with v2.0.0.1 the file can no longer be read by v1.9 (use the `.backup` for a v1.9 copy).
 - The public API is **additive** (`EncryptionPassword`, `BlockCompressionLevel`, `MetadataCompressionLevel`,
   `BlockCompressionMode.Zstd`, …) — existing application code compiles and runs unchanged.
 
@@ -212,7 +212,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.0.0.0 (September 2026)  
+**Latest Version:** 2.0.0.1 (September 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,700+ (100% passing)  
 **Status:** ✅ Stable — performance-first v2.0.0 release  
