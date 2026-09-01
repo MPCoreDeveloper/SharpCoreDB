@@ -37,6 +37,13 @@ class Program
             return;
         }
 
+        // Optional: --inserttest → focused SQL-vs-Direct insert micro-benchmark (median of N runs).
+        if (args.Any(a => a.Equals("--inserttest", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunInsertMicroBenchmark();
+            return;
+        }
+
         // Optional: --fixedwidth → run the fixed-width vs legacy before/after benchmark only.
         if (args.Any(a => a.Equals("--fixedwidth", StringComparison.OrdinalIgnoreCase)))
         {
@@ -218,6 +225,112 @@ class Program
             try { Directory.Delete(dbPath, true); }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Focused insert micro-benchmark: SQL (<c>ExecuteBatchSQL</c> with INSERT statements) vs
+    /// Direct API (<c>InsertBatch</c>). Each repetition runs on a fresh database so append-only
+    /// growth and unique keys do not skew the result; median of several runs is reported.
+    /// </summary>
+    static void RunInsertMicroBenchmark()
+    {
+        const int inserts = 50_000;
+        const int batch = 10_000;
+        const int reps = 5;
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var sp = services.BuildServiceProvider();
+        var factory = sp.GetRequiredService<DatabaseFactory>();
+        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
+
+        double[] sqlTimes = new double[reps];
+        double[] directTimes = new double[reps];
+
+        for (int r = 0; r < reps; r++)
+        {
+            var sqlPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-sql-{Guid.NewGuid()}");
+            using (var db = (SharpCoreDB.Database)factory.Create(sqlPath, "pw", isReadOnly: false, config: config))
+            {
+                db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+                // Build the statements once (outside the timed region — this is caller work,
+                // identical for SQLite in the comparative benchmark).
+                var stmtBatches = new List<List<string>>();
+                for (int b = 0; b < inserts; b += batch)
+                {
+                    var stmts = new List<string>(batch);
+                    for (int i = b; i < b + batch; i++)
+                    {
+                        stmts.Add(string.Format(CultureInfo.InvariantCulture,
+                            "INSERT INTO docs VALUES ('User{0}', 'user{0}@test.com', {1}, {2}, 'payload-{0}')",
+                            i, 20 + i % 60, i * 0.1));
+                    }
+
+                    stmtBatches.Add(stmts);
+                }
+
+                var sw = Stopwatch.StartNew();
+                foreach (var stmts in stmtBatches)
+                {
+                    db.ExecuteBatchSQL(stmts);
+                }
+
+                sw.Stop();
+                sqlTimes[r] = sw.Elapsed.TotalSeconds;
+            }
+
+            try { Directory.Delete(sqlPath, true); } catch { }
+
+            var directPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-direct-{Guid.NewGuid()}");
+            using (var db = (SharpCoreDB.Database)factory.Create(directPath, "pw", isReadOnly: false, config: config))
+            {
+                db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+                var rowBatches = new List<List<Dictionary<string, object>>>();
+                for (int b = 0; b < inserts; b += batch)
+                {
+                    var rows = new List<Dictionary<string, object>>(batch);
+                    for (int i = b; i < b + batch; i++)
+                    {
+                        rows.Add(new Dictionary<string, object>
+                        {
+                            ["name"] = $"User{i}",
+                            ["email"] = $"user{i}@test.com",
+                            ["age"] = 20 + i % 60,
+                            ["score"] = i * 0.1,
+                            ["data"] = $"payload-{i}",
+                        });
+                    }
+
+                    rowBatches.Add(rows);
+                }
+
+                var sw = Stopwatch.StartNew();
+                foreach (var rows in rowBatches)
+                {
+                    db.InsertBatch("docs", rows);
+                }
+
+                sw.Stop();
+                directTimes[r] = sw.Elapsed.TotalSeconds;
+            }
+
+            try { Directory.Delete(directPath, true); } catch { }
+        }
+
+        Array.Sort(sqlTimes);
+        Array.Sort(directTimes);
+        double sqlMedian = sqlTimes[reps / 2];
+        double directMedian = directTimes[reps / 2];
+
+        Console.WriteLine();
+        Console.WriteLine($"═══ INSERT micro-benchmark ({inserts:N0} batched inserts, median of {reps}) ═══");
+        Console.WriteLine($"  SQL    : {sqlMedian:F3}s  ({inserts / sqlMedian:N0} ops/s)");
+        Console.WriteLine($"  Direct : {directMedian:F3}s  ({inserts / directMedian:N0} ops/s)");
+        Console.WriteLine($"  SQL/Direct overhead: {(sqlMedian / directMedian):F2}x");
     }
 
     static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType)

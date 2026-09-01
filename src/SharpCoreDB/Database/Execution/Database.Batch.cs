@@ -713,26 +713,34 @@ public partial class Database
     {
         try
         {
+            // B9: the only caller already ran IsInsertStatement, so the statement starts with
+            // "INSERT INTO" (after optional leading whitespace) — skip the redundant full-span
+            // IndexOf scan.
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase);
-            if (insertIdx < 0) return null;
-            
-            insertSql = insertSql.Slice(insertIdx);
-            var tableStart = "INSERT INTO ".Length;
-            
-            // Find table name end
-            int tableEnd = -1;
-            for (int i = tableStart; i < insertSql.Length; i++)
+            int idx = 0;
+            while (idx < insertSql.Length && char.IsWhiteSpace(insertSql[idx]))
             {
-                if (insertSql[i] == ' ' || insertSql[i] == '(')
-                {
-                    tableEnd = i;
-                    break;
-                }
+                idx++;
             }
-            if (tableEnd == -1) return null;
 
-            var tableName = insertSql.Slice(tableStart, tableEnd - tableStart).Trim().ToString();
+            insertSql = insertSql.Slice(idx);
+            const int KeywordLen = 11; // "INSERT INTO".Length
+            const int PrefixLen = 12;  // "INSERT INTO ".Length
+            if (insertSql.Length < PrefixLen ||
+                !insertSql[..KeywordLen].Equals("INSERT INTO", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Find table name end (whitespace or opening parenthesis).
+            var nameSpan = insertSql.Slice(KeywordLen).TrimStart();
+            int tableEnd = nameSpan.IndexOfAny(' ', '(');
+            if (tableEnd < 0)
+            {
+                return null;
+            }
+
+            var tableName = nameSpan[..tableEnd].ToString();
             
             if (!tables.ContainsKey(tableName))
                 return null;

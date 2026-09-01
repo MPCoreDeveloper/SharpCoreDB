@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ~65,000 → **~120,000–166,000 ops/s**; Direct API ~160–188,000 ops/s; SQL/Direct overhead
   dropped from ~2× to ~1.1–1.5×. Both SQL and Direct reads now beat SQLite (~95,000 ops/s) on
   this workload.
+- **INSERT batch-parse micro-optimizations** — `ParseInsertStatementFast` no longer scans the
+  full statement for `INSERT INTO` (the caller already classified it) and resolves the table
+  name with a single `IndexOfAny`. SQL insert throughput measured at ~70,000 ops/s vs ~214,000
+  ops/s for `InsertBatch` (Direct API); the remaining gap is the per-statement text parsing and
+  string extraction that SQL requires by nature.
 
 ## [2.1.0-preview] - 2026-08-31
 
