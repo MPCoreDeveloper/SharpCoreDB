@@ -105,9 +105,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
     // AES-256-GCM encryption for the whole single-file database at rest. With the v2 key
     // model, a random per-file data-encryption-key (DEK) encrypts block data AND the metadata
-    // regions (block registry, free-space map, WAL) when the full encryption mode is active;
-    // the header and key bundle stay plaintext bootstrap only. The DEK is either the caller-supplied
-    // raw key or a random key wrapped by a password-derived KEK (envelope encryption).
+    // regions including the block registry, the free space map, and the WAL when full encryption
+    // is active; the header and key bundle stay plaintext bootstrap only. The DEK is either the
+    // caller-supplied raw key or a random key wrapped by a password-derived KEK (envelope encryption).
     private AesGcmEncryption? _encryption;
 
     // The current data-encryption-key bytes. Kept so password rotation can re-wrap the same DEK
@@ -2153,8 +2153,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             return (value + psu - 1) / psu * psu;
         }
 
-        using var src = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.RandomAccess);
-        using var dst = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 0, FileOptions.RandomAccess);
+        var src = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.RandomAccess);
+        var dst = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 0, FileOptions.RandomAccess);
 
         var fileSize = src.Length;
         var totalPages = (ulong)((fileSize + pageSize - 1) / pageSize);

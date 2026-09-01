@@ -19,6 +19,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 
+// NOSONAR:S2068 - intentional: smoke-test tool uses a throwaway local password (never a real credential).
 const string AotPassword = "aot123";
 
 var services = new ServiceCollection();
@@ -39,7 +40,66 @@ static async Task<int> RunAotSmokeAsync(DatabaseFactory factory)
 
     try
     {
-        var config = new DatabaseConfig
+        if (await RunDataScenarioAsync(factory, dbPath) != 0)
+        {
+            return 1;
+        }
+
+        // Issue #343: full VACUUM on a single-file (.scdb) database must survive .NET trimming /
+        // Native AOT. Previously the stream swap used reflection (GetField on a private readonly
+        // field), which returns null under AOT and crashed with ObjectDisposedException. The row
+        // cache JSON serialization is AOT-safe through the source-generated SingleFileTableJsonContext.
+        if (await RunVacuumScenarioAsync(factory, scdbPath) != 0)
+        {
+            return 1;
+        }
+
+        // Full at-rest encryption + password/key rotation must also be Native AOT safe:
+        // the envelope key model uses PBKDF2/AES-GCM, no reflection, no dynamic, no Expression.
+        if (await RunEncryptionScenarioAsync(factory) != 0)
+        {
+            return 1;
+        }
+
+        Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum, full-at-rest encryption + password/key rotation).");
+        return 0;
+    }
+    finally
+    {
+        try
+        {
+            if (Directory.Exists(dbPath))
+            {
+                Directory.Delete(dbPath, true);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+
+        try
+        {
+            if (File.Exists(scdbPath))
+            {
+                File.Delete(scdbPath);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+    }
+}
+
+/// <summary>
+/// Exercises CREATE TABLE / CREATE INDEX, batch INSERT, parameterized ExecuteQuery,
+/// the zero-allocation ExecuteQueryStruct fast path (point + full scan) and reopen under
+/// Native AOT. Returns 0 on success.
+/// </summary>
+static async Task<int> RunDataScenarioAsync(DatabaseFactory factory, string dbPath)
+{
+    var config = new DatabaseConfig
     {
         NoEncryptMode = true,
         EnableHashIndexes = true,
@@ -122,51 +182,7 @@ static async Task<int> RunAotSmokeAsync(DatabaseFactory factory)
         }
     }
 
-    // Issue #343: full VACUUM on a single-file (.scdb) database must survive .NET trimming /
-    // Native AOT. Previously the stream swap used reflection (GetField on a private readonly
-    // field), which returns null under AOT and crashed with ObjectDisposedException. The row
-    // cache JSON serialization is AOT-safe through the source-generated SingleFileTableJsonContext.
-    if (await RunVacuumScenarioAsync(factory, scdbPath) != 0)
-    {
-        return 1;
-    }
-
-    // Full at-rest encryption + password/key rotation must also be Native AOT safe:
-    // the envelope key model uses PBKDF2/AES-GCM, no reflection, no dynamic, no Expression.
-    if (await RunEncryptionScenarioAsync(factory) != 0)
-    {
-        return 1;
-    }
-
-    Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum, full-at-rest encryption + password/key rotation).");
     return 0;
-}
-finally
-{
-    try
-    {
-        if (Directory.Exists(dbPath))
-        {
-            Directory.Delete(dbPath, true);
-        }
-    }
-    catch
-    {
-        // Best-effort cleanup.
-    }
-
-    try
-    {
-        if (File.Exists(scdbPath))
-        {
-            File.Delete(scdbPath);
-        }
-    }
-    catch
-    {
-        // Best-effort cleanup.
-    }
-}
 }
 
 /// <summary>

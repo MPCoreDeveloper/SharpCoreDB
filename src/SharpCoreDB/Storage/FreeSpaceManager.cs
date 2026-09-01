@@ -66,7 +66,7 @@ internal sealed class FreeSpaceManager : IDisposable
     private ulong _freePages;
 
     // ✅ C# 14: Pre-allocation settings for optimal file growth - Phase 3 optimized.
-    // The minimum file extension is byte-based (about 10 MB regardless of page size);
+    // The minimum file extension is defined in bytes and stays around 10 MB regardless of page size;
     // a fixed page count would grow linearly with page size (see issue #345).
     private const long MIN_EXTENSION_BYTES = 10L * 1024 * 1024;
     private const int EXTENSION_GROWTH_FACTOR = 2;     // Double size each time (exponential growth)

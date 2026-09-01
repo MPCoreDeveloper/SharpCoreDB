@@ -276,7 +276,7 @@ public partial class Table
     /// Semantics are identical (validation, defaults, NOT NULL, PK, indexes, engine batch).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns);
+    internal long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns);
 
     /// <summary>
     /// Dedicated SQL batch-INSERT fast path with an explicit user-facing column order (as used
@@ -1547,8 +1547,7 @@ public partial class Table
     {
         // Page-based: In-place update (or relocation when the record grows).
         // WP11: overwrite only the updated fields at their cached fixed column
-        // offsets when they fit (avoiding a full serialize-and-deserialize round trip);
-        // fall back to full serialization otherwise.
+        // offsets when they fit; otherwise fall back to full serialization.
         if (this.PrimaryKeyIndex < 0)
         {
             return;

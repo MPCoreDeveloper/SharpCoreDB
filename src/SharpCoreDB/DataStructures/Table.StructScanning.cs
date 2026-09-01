@@ -181,20 +181,19 @@ public partial class Table
             TryParseSimpleWhereClause(where, out simpleColumn, out simpleValue);
 
         // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-            this.registeredIndexes.ContainsKey(simpleColumn))
+        var hashRows = TryScanHashIndex(simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
+        if (hashRows is not null)
         {
-            foreach (var row in ScanByHashIndexPoint(simpleColumn, simpleValue, schema, engine, enableCaching))
+            foreach (var row in hashRows)
                 yield return row;
             yield break;
         }
 
         // Fast path 2: primary-key lookup.
-        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-            this.PrimaryKeyIndex >= 0 &&
-            string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        var pkRows = TryScanPrimaryKey(simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
+        if (pkRows is not null)
         {
-            foreach (var row in ScanByPrimaryKeyPoint(simpleValue, schema, engine, enableCaching))
+            foreach (var row in pkRows)
                 yield return row;
             yield break;
         }
@@ -202,11 +201,11 @@ public partial class Table
         // Fast path 3: fixed-width numeric equality — SIMD batch filter over extracted values
         // (no deserialization, no boxing). Integer/Long use portable Vector<T>; Real uses
         // direct per-record reads.
-        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-            TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) &&
-            TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
+        var numericRows = TryScanNumeric(
+            simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
+        if (numericRows is not null)
         {
-            foreach (var row in ScanByNumericSimd(numericOffset, numericType, numericExpected, schema, engine, enableCaching))
+            foreach (var row in numericRows)
                 yield return row;
             yield break;
         }
@@ -221,6 +220,47 @@ public partial class Table
                 yield return row;
             }
         }
+    }
+
+    private IEnumerable<StructRow>? TryScanHashIndex(
+        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
+        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
+    {
+        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+            !this.registeredIndexes.ContainsKey(simpleColumn))
+        {
+            return null;
+        }
+
+        return ScanByHashIndexPoint(simpleColumn, simpleValue, schema, engine, enableCaching);
+    }
+
+    private IEnumerable<StructRow>? TryScanPrimaryKey(
+        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
+        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
+    {
+        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+            this.PrimaryKeyIndex < 0 ||
+            !string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return ScanByPrimaryKeyPoint(simpleValue, schema, engine, enableCaching);
+    }
+
+    private IEnumerable<StructRow>? TryScanNumeric(
+        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
+        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
+    {
+        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+            !TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) ||
+            !TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
+        {
+            return null;
+        }
+
+        return ScanByNumericSimd(numericOffset, numericType, numericExpected, schema, engine, enableCaching);
     }
     /// <summary>Fast path 1: hash-index point lookup (mirrors SelectInternal).</summary>
     private IEnumerable<StructRow> ScanByHashIndexPoint(
@@ -281,52 +321,8 @@ public partial class Table
     {
         if (numericType == DataType.Integer || numericType == DataType.Long)
         {
-            List<int>? intValues = numericType == DataType.Integer ? new List<int>(1024) : null;
-            List<long>? longValues = numericType == DataType.Long ? new List<long>(1024) : null;
-            var recordDatas = new List<byte[]>(1024);
-            var recordPositions = new List<long>(1024);
-
-            foreach (var (pos, rec) in engine.GetAllRecords(Name))
-            {
-                if (rec is not { Length: > 0 } || !TryExtractNumericDirect(rec, numericOffset, numericType, out var val))
-                {
-                    continue;
-                }
-
-                if (intValues is not null)
-                {
-                    intValues.Add((int)val);
-                }
-                else if (longValues is not null)
-                {
-                    longValues.Add((long)val);
-                }
-
-                recordDatas.Add(rec);
-                recordPositions.Add(pos);
-            }
-
-            var matches = new List<int>(16);
-            if (intValues is not null)
-            {
-                SimdFilterInt32Batch(CollectionsMarshal.AsSpan(intValues), (int)numericExpected, matches);
-            }
-            else if (longValues is not null)
-            {
-                SimdFilterInt64Batch(CollectionsMarshal.AsSpan(longValues), (long)numericExpected, matches);
-            }
-
-            for (int mi = 0; mi < matches.Count; mi++)
-            {
-                var rec = recordDatas[matches[mi]];
-                if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]]))
-                {
-                    continue;
-                }
-
-                yield return new StructRow(rec.AsMemory(), schema, enableCaching);
-            }
-
+            foreach (var row in ScanNumericIntLong(numericOffset, numericType, numericExpected, schema, engine, enableCaching))
+                yield return row;
             yield break;
         }
 
@@ -341,6 +337,61 @@ public partial class Table
             }
 
             yield return new StructRow(data.AsMemory(), schema, enableCaching);
+        }
+    }
+
+    /// <summary>
+    /// SIMD batch filter for Integer/Long expected values: collects raw constant-offset numeric
+    /// values, runs the portable <c>Vector&lt;T&gt;</c> equality filter and yields the matches.
+    /// </summary>
+    private IEnumerable<StructRow> ScanNumericIntLong(
+        int numericOffset, DataType numericType, object numericExpected,
+        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
+    {
+        List<int>? intValues = numericType == DataType.Integer ? new List<int>(1024) : null;
+        List<long>? longValues = numericType == DataType.Long ? new List<long>(1024) : null;
+        var recordDatas = new List<byte[]>(1024);
+        var recordPositions = new List<long>(1024);
+
+        foreach (var (pos, rec) in engine.GetAllRecords(Name))
+        {
+            if (rec is not { Length: > 0 } || !TryExtractNumericDirect(rec, numericOffset, numericType, out var val))
+            {
+                continue;
+            }
+
+            if (intValues is not null)
+            {
+                intValues.Add((int)val);
+            }
+            else if (longValues is not null)
+            {
+                longValues.Add((long)val);
+            }
+
+            recordDatas.Add(rec);
+            recordPositions.Add(pos);
+        }
+
+        var matches = new List<int>(16);
+        if (intValues is not null)
+        {
+            SimdFilterInt32Batch(CollectionsMarshal.AsSpan(intValues), (int)numericExpected, matches);
+        }
+        else if (longValues is not null)
+        {
+            SimdFilterInt64Batch(CollectionsMarshal.AsSpan(longValues), (long)numericExpected, matches);
+        }
+
+        for (int mi = 0; mi < matches.Count; mi++)
+        {
+            var rec = recordDatas[matches[mi]];
+            if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]]))
+            {
+                continue;
+            }
+
+            yield return new StructRow(rec.AsMemory(), schema, enableCaching);
         }
     }
 
@@ -465,50 +516,82 @@ public partial class Table
                 TryParseSimpleWhereClause(_where, out simpleColumn, out simpleValue);
 
             // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-            if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-                _table.registeredIndexes.ContainsKey(simpleColumn))
+            if (TryActivateHashPhase(simpleColumn, simpleValue, hasSimpleWhere, out var hashMoved))
             {
-                _table.EnsureIndexLoaded(simpleColumn);
-                if (_table.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))
-                {
-                    var colIdx = _table.Columns.IndexOf(simpleColumn);
-                    if (colIdx >= 0)
-                    {
-                        var key = ParseValueForHashLookup(simpleValue.ToString() ?? string.Empty, _table.ColumnTypes[colIdx]);
-                        if (key is not null)
-                        {
-                            _positions = hashIndex.LookupPositions(key);
-                            _posIndex = 0;
-                            _phase = Phase.Hash;
-                            return MoveNextHash();
-                        }
-                    }
-                }
+                return hashMoved;
             }
 
             // Fast path 2: primary-key lookup.
-            if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-                _table.PrimaryKeyIndex >= 0 &&
-                string.Equals(simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            if (TryActivatePkPhase(simpleColumn, simpleValue, hasSimpleWhere, out var pkMoved))
             {
-                var pkStr = simpleValue.ToString() ?? string.Empty;
-                var search = _table.Index.Search(pkStr);
-                if (search.Found)
-                {
-                    _pkPosition = search.Value;
-                    _pkFound = true;
-                    _phase = Phase.Pk;
-                    return MoveNextPk();
-                }
-
-                _phase = Phase.Done;
-                return false;
+                return pkMoved;
             }
 
             // Fallback: numeric-SIMD batch filter / full scan (allocating by nature).
             _fallback = _table.ScanStructRowsWhereCore(_where, _enableCaching).GetEnumerator();
             _phase = Phase.Fallback;
             return MoveNextFallback();
+        }
+
+        private bool TryActivateHashPhase(string? simpleColumn, object? simpleValue, bool hasSimpleWhere, out bool movedNext)
+        {
+            movedNext = false;
+            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+                !_table.registeredIndexes.ContainsKey(simpleColumn))
+            {
+                return false;
+            }
+
+            _table.EnsureIndexLoaded(simpleColumn);
+            if (!_table.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))
+            {
+                return false;
+            }
+
+            var colIdx = _table.Columns.IndexOf(simpleColumn);
+            if (colIdx < 0)
+            {
+                return false;
+            }
+
+            var key = ParseValueForHashLookup(simpleValue.ToString() ?? string.Empty, _table.ColumnTypes[colIdx]);
+            if (key is null)
+            {
+                return false;
+            }
+
+            _positions = hashIndex.LookupPositions(key);
+            _posIndex = 0;
+            _phase = Phase.Hash;
+            movedNext = MoveNextHash();
+            return true;
+        }
+
+        private bool TryActivatePkPhase(string? simpleColumn, object? simpleValue, bool hasSimpleWhere, out bool movedNext)
+        {
+            movedNext = false;
+            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+                _table.PrimaryKeyIndex < 0 ||
+                !string.Equals(simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var pkStr = simpleValue.ToString() ?? string.Empty;
+            var search = _table.Index.Search(pkStr);
+            if (search.Found)
+            {
+                _pkPosition = search.Value;
+                _pkFound = true;
+                _phase = Phase.Pk;
+                movedNext = MoveNextPk();
+            }
+            else
+            {
+                _phase = Phase.Done;
+            }
+
+            return true;
         }
 
         /// <summary>Advances the hash-index fast path.</summary>
