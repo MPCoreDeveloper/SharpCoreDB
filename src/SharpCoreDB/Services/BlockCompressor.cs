@@ -8,6 +8,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using SharpCoreDB.Storage;
+using SharpCoreDB.Compression;
 
 /// <summary>
 /// Compression/decompression for SingleFile block payloads.
@@ -16,15 +17,19 @@ using SharpCoreDB.Storage;
 internal static class BlockCompressor
 {
     /// <summary>
-    /// Compresses data using the specified compression mode.
+    /// Compresses data using the specified compression mode and level.
     /// Returns the original data if mode is None.
     /// </summary>
-    public static byte[] Compress(ReadOnlySpan<byte> data, BlockCompressionMode mode)
+    public static byte[] Compress(
+        ReadOnlySpan<byte> data,
+        BlockCompressionMode mode,
+        OptionalCompressionLevel level = OptionalCompressionLevel.Optimal)
     {
         if (mode == BlockCompressionMode.None) return data.ToArray();
 
         using var output = new MemoryStream(data.Length / 2);
-        using (var compressor = CreateCompressor(output, mode))
+        var compressionLevel = ToBcl(level);
+        using (var compressor = CreateCompressor(output, mode, compressionLevel))
         {
             compressor.Write(data);
         }
@@ -46,10 +51,16 @@ internal static class BlockCompressor
         return output.ToArray();
     }
 
-    private static Stream CreateCompressor(Stream output, BlockCompressionMode mode) => mode switch
+    private static Stream CreateCompressor(Stream output, BlockCompressionMode mode, CompressionLevel level) => mode switch
     {
-        BlockCompressionMode.Brotli => new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: false),
-        BlockCompressionMode.GZip => new GZipStream(output, CompressionLevel.Fastest, leaveOpen: false),
+        BlockCompressionMode.Brotli => new BrotliStream(output, level, leaveOpen: false),
+        BlockCompressionMode.GZip => new GZipStream(output, level, leaveOpen: false),
+#if NET11_0_OR_GREATER
+        BlockCompressionMode.Zstd => new ZstandardStream(output, level, leaveOpen: false),
+#else
+        BlockCompressionMode.Zstd => throw new PlatformNotSupportedException(
+            "Zstd compression requires .NET 11 or later. Current runtime: " + Environment.Version),
+#endif
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 
@@ -57,6 +68,23 @@ internal static class BlockCompressor
     {
         BlockCompressionMode.Brotli => new BrotliStream(input, CompressionMode.Decompress, leaveOpen: false),
         BlockCompressionMode.GZip => new GZipStream(input, CompressionMode.Decompress, leaveOpen: false),
+#if NET11_0_OR_GREATER
+        BlockCompressionMode.Zstd => new ZstandardStream(input, CompressionMode.Decompress, leaveOpen: false),
+#else
+        BlockCompressionMode.Zstd => throw new PlatformNotSupportedException(
+            "Zstd decompression requires .NET 11 or later. Current runtime: " + Environment.Version),
+#endif
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
+
+    /// <summary>
+    /// Maps OptionalCompressionLevel to BCL CompressionLevel.
+    /// </summary>
+    private static CompressionLevel ToBcl(OptionalCompressionLevel level) =>
+        level switch
+        {
+            OptionalCompressionLevel.Fastest => CompressionLevel.Fastest,
+            OptionalCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
+            _ => CompressionLevel.Optimal
+        };
 }

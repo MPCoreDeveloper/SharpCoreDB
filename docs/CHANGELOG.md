@@ -5,6 +5,30 @@ All notable changes to SharpCoreDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### SingleFile storage — critical compression read-path fixes + configurable presets (PR #352)
+
+- **Fix: zero-copy read paths returning compressed bytes** — `GetReadStream()` and `GetReadSpan()`
+  served the raw Brotli/GZip bytes when encryption was disabled, causing `JsonException` on
+  database reopen. Both methods now check the block's `BlockFlags.Compressed` bit and fall back
+  to `ReadBlockAsync` so compressed blocks are always decompressed. Affected databases created
+  with `BlockCompression != None` and `EnableEncryption = false` in v1.9.8.
+- **Fix: stale `Compressed` flag on block overwrite** — `WriteBlockAsync` preserved old flags and
+  never updated the `Compressed` bit based on the current write, so a block that grew past the
+  compression threshold (256 B default) could be stored compressed but marked uncompressed.
+  The flag is now cleared and re-set on every write while preserving all other flags.
+- **Configurable compression presets** — new `DatabaseOptions.MetadataCompressionLevel`
+  (default `Fastest`) and `BlockCompressionLevel` (default `Optimal`) map to the BCL
+  `CompressionLevel` via the new `SharpCoreDB.Compression.OptionalCompressionLevel` enum;
+  `BlockBrotliCompressionLevel` remains as an obsolete alias. `VacuumMode.Full` preserves the
+  block compression level when it creates the temporary file.
+- **Zstd support** — `BlockCompressionMode.Zstd` (`.NET 11+`, `ZstandardStream`) with a
+  `PlatformNotSupportedException` fallback on older runtimes.
+- **Regression tests:** `CompressionLevelTests` (31 tests) cover preset defaults, roundtrips,
+  size ordering across levels, metadata roundtrips, `GetReadStream`/`GetReadSpan` decompression
+  without encryption, and the multi-write stale-flag scenario.
+
 ## [2.0.0-preview.3] - 2026-08-30
 
 ### Added
