@@ -213,9 +213,9 @@ public partial class Table
         // Fallback: full scan with a simple equality predicate (scalar, allocation-free per row).
         foreach (var row in ScanStructRows(enableCaching))
         {
-            // NOSONAR:S3267 - intentional: LINQ Where would allocate per row on the scan hot path.
-            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-                MatchesSimpleWhere(row, schema, simpleColumn, simpleValue))
+            bool matches = !hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+                MatchesSimpleWhere(row, schema, simpleColumn, simpleValue);
+            if (matches)
             {
                 yield return row;
             }

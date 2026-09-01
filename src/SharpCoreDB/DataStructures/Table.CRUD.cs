@@ -140,6 +140,7 @@ public partial class Table
                 {
                     unloadedIndexes = [];
                     // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
+                    // NOSONAR:S3267 - intentional: LINQ Where would allocate on this hot path.
                     foreach (var col in this.registeredIndexes.Keys)
                     {
                         if (!this.loadedIndexes.Contains(col))
@@ -362,35 +363,50 @@ public partial class Table
 
         for (int i = 0; i < this.Columns.Count; i++)
         {
-            var val = normalized[i];
-            if (val is null or DBNull)
-            {
-                if (this.IsAuto[i])
-                {
-                    // AUTO: auto-generate for absent columns and explicit NULLs alike.
-                    normalized[i] = GenerateAutoValue(this.ColumnTypes[i], i);
-                }
-                else if (!present[i])
-                {
-                    // Column absent from the statement → default value.
-                    normalized[i] = this.DefaultExpressions[i] is not null
-                        ? TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]) ?? DBNull.Value
-                        : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                }
-                // Explicit NULL for a non-auto column stays NULL (dict-path parity).
-            }
-            else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
-            {
-                if (!TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
-                {
-                    throw new InvalidOperationException($"Type mismatch for column {this.Columns[i]} in row {rowIdx}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
-                }
-
-                normalized[i] = coercedValue;
-            }
+            normalized[i] = NormalizeColumnValue(i, normalized[i], present[i], rowIdx);
         }
 
-        // NOT NULL validation for batch insert
+        ValidateNotNullBatch(normalized, rowIdx);
+        return normalized;
+    }
+
+    private object? NormalizeColumnValue(int columnIdx, object? val, bool isPresent, int rowIdx)
+    {
+        if (val is null or DBNull)
+        {
+            if (this.IsAuto[columnIdx])
+            {
+                // AUTO: auto-generate for absent columns and explicit NULLs alike.
+                return GenerateAutoValue(this.ColumnTypes[columnIdx], columnIdx);
+            }
+
+            if (!isPresent)
+            {
+                // Column absent from the statement → default value.
+                return this.DefaultExpressions[columnIdx] is not null
+                    ? TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[columnIdx], this.ColumnTypes[columnIdx]) ?? DBNull.Value
+                    : GetDefaultValue(this.ColumnTypes[columnIdx]) ?? DBNull.Value;
+            }
+
+            // Explicit NULL for a non-auto column stays NULL (dict-path parity).
+            return null;
+        }
+
+        if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[columnIdx]))
+        {
+            if (!TryCoerceValue(val, this.ColumnTypes[columnIdx], out var coercedValue))
+            {
+                throw new InvalidOperationException($"Type mismatch for column {this.Columns[columnIdx]} in row {rowIdx}: expected {this.ColumnTypes[columnIdx]}, got {val.GetType().Name}");
+            }
+
+            return coercedValue;
+        }
+
+        return val;
+    }
+
+    private void ValidateNotNullBatch(object[] normalized, int rowIdx)
+    {
         for (int colIdx = 0; colIdx < this.Columns.Count; colIdx++)
         {
             if (this.IsNotNull[colIdx] && (normalized[colIdx] == null || normalized[colIdx] == DBNull.Value))
@@ -398,8 +414,6 @@ public partial class Table
                 throw new InvalidOperationException($"Column '{this.Columns[colIdx]}' cannot be NULL in row {rowIdx}");
             }
         }
-
-        return normalized;
     }
 
     /// <summary>

@@ -29,6 +29,9 @@ using SharpCoreDB.Services;
 /// </summary>
 public partial class Database
 {
+    /// <summary>SQL prefix that marks an INSERT statement (also its length for prefix slicing).</summary>
+    private const string SqlInsertPrefix = "INSERT INTO";
+
     /// <summary>
     /// v2: Pre-compiled regex for batch UPDATE statement parsing.
     /// Previously a per-statement Regex cache lookup/creation was incurred for every statement.
@@ -508,7 +511,7 @@ public partial class Database
     private static bool IsInsertStatement(string sql)
     {
         var trimmed = sql.AsSpan().Trim();
-        return trimmed.Length >= 11 && trimmed[..11].Equals("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+        return trimmed.Length >= 11 && trimmed[..11].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -823,11 +826,11 @@ public partial class Database
         try
         {
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+            var insertIdx = insertSql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
             if (insertIdx < 0) return null;
             
             insertSql = insertSql.Slice(insertIdx);
-            var tableStart = "INSERT INTO ".Length;
+            var tableStart = (SqlInsertPrefix.Length + 1);
             
             // Find table name end
             int tableEnd = -1;
@@ -907,11 +910,11 @@ public partial class Database
         try
         {
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+            var insertIdx = insertSql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
             if (insertIdx < 0) return null;
 
             insertSql = insertSql.Slice(insertIdx);
-            var tableStart = "INSERT INTO ".Length;
+            var tableStart = (SqlInsertPrefix.Length + 1);
 
             // Find table name end
             int tableEnd = -1;
@@ -975,8 +978,8 @@ public partial class Database
     {
         try
         {
-            var insertSql = sql[sql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase)..];
-            var tableStart = "INSERT INTO ".Length;
+            var insertSql = sql[sql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase)..];
+            var tableStart = (SqlInsertPrefix.Length + 1);
             var tableEnd = insertSql.IndexOf(' ', tableStart);
             if (tableEnd == -1)
             {
