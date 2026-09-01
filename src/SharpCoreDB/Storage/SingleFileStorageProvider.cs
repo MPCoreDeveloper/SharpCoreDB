@@ -2926,12 +2926,20 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         catch (Exception ex)
         {
             // Cleanup temp file on error.
-            if (File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); } catch { /* Ignore */ }
-            }
-
+            TryDeleteFile(tempPath);
             return EncryptionRotationResult.Failed(EncryptionRotationOperation.KeyRotated, ex.Message);
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Ignore - best-effort cleanup.
         }
     }
 

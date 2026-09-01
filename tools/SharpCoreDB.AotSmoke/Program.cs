@@ -273,6 +273,18 @@ static async Task<int> RunEncryptionScenarioAsync(DatabaseFactory factory)
     }
 
     // Reopen with the rotated password and run a full VACUUM on the encrypted file.
+    if (await VerifyEncryptedReopenAsync(factory, encryptedScdbPath) != 0)
+    {
+        return 1;
+    }
+
+    try { File.Delete(encryptedScdbPath); } catch { /* best-effort cleanup */ }
+
+    return 0;
+}
+
+static async Task<int> VerifyEncryptedReopenAsync(DatabaseFactory factory, string encryptedScdbPath)
+{
     await using (var encReopened = factory.CreateWithOptions(encryptedScdbPath, AotPassword,
         new SharpCoreDB.DatabaseOptions
         {
@@ -295,8 +307,6 @@ static async Task<int> RunEncryptionScenarioAsync(DatabaseFactory factory)
             return 1;
         }
     }
-
-    try { File.Delete(encryptedScdbPath); } catch { /* best-effort cleanup */ }
 
     return 0;
 }
