@@ -117,6 +117,32 @@ public sealed class DatabaseOptions
     public int CompressionThreshold { get; set; } = 256;
 
     /// <summary>
+    /// Metadata Brotli compression preset (default: Fastest to preserve current behavior).
+    /// Metadata is typically small and written frequently, so Fastest minimizes CPU overhead.
+    /// Set to Optimal or SmallestSize for better compression at the cost of slower writes.
+    /// </summary>
+    public Compression.OptionalCompressionLevel MetadataCompressionLevel { get; set; } = Compression.OptionalCompressionLevel.Fastest;
+
+    /// <summary>
+    /// Compression preset used for data blocks when BlockCompression is Brotli or GZip.
+    /// Default: Optimal (better ratio for typical telemetry workloads).
+    /// Data blocks are larger and written less frequently than metadata, so Optimal provides
+    /// better storage efficiency without significant performance impact.
+    /// </summary>
+    public Compression.OptionalCompressionLevel BlockCompressionLevel { get; set; } = Compression.OptionalCompressionLevel.Optimal;
+
+    /// <summary>
+    /// Obsolete alias for BlockCompressionLevel.
+    /// This preset applies to both Brotli and GZip block compression, not just Brotli.
+    /// </summary>
+    [Obsolete("Use BlockCompressionLevel instead. This property applies to both Brotli and GZip compression.")]
+    public Compression.OptionalCompressionLevel BlockBrotliCompressionLevel
+    {
+        get => BlockCompressionLevel;
+        set => BlockCompressionLevel = value;
+    }
+
+    /// <summary>
     /// Number of pages allocated for the SingleFile Block Registry.
     /// Each block entry is 96 bytes; the default 4 pages @ 4KB supports ~170 blocks.
     /// Increase for databases that store many named blocks (default: 4, backward compatible).

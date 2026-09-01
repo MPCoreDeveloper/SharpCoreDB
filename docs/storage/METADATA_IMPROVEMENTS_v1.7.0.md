@@ -298,7 +298,26 @@ options.CompressMetadata = false;
 var db = factory.Create("mydb.scdb", "password", options);
 ```
 
-### 3. **Compression Threshold**
+### 3. Tuning Metadata Compression Presets 🎛️
+
+The metadata compression level is configurable via `DatabaseOptions.MetadataCompressionLevel`. The default is `Fastest`, which matches the v1.7.0 behavior and is optimal for the typically-small metadata payload.
+
+```csharp
+var options = DatabaseOptions.CreateSingleFileDefault();
+options.MetadataCompressionLevel = OptionalCompressionLevel.SmallestSize; // Max compression
+```
+
+**Presets:**
+
+| Preset | Maps to | Typical Use Case |
+|--------|---------|------------------|
+| `Fastest` | `CompressionLevel.Fastest` | Default. Metadata is small (<24KB); CPU savings outweigh ratio gains. |
+| `Optimal` | `CompressionLevel.Optimal` | Databases with hundreds of tables where every byte matters. |
+| `SmallestSize` | `CompressionLevel.SmallestSize` | Cold/archival databases with no write-frequency concerns. |
+
+**Implementation detail:** The preset is applied via the BCL `BrotliStream` constructor and is not persisted in the file header. Decoders do not need to know the preset — Brotli's format is self-describing.
+
+### 4. **Compression Threshold**
 
 Only compresses if metadata > 256 bytes:
 
@@ -313,6 +332,61 @@ if (shouldCompress && metaBytes.Length > 256)
 - Small JSON (<256B) doesn't benefit from compression
 - Avoids overhead for tiny databases
 - Magic header (4 bytes) would increase size for small payloads
+
+---
+
+## 🔧 Block Data Compression Levels 🎛️
+
+While metadata compression is optimized for speed (default: `Fastest`), block data compression can be tuned for different workload characteristics via `DatabaseOptions.BlockCompressionLevel`.
+
+### Configuration
+
+```csharp
+var options = new DatabaseOptions
+{
+    StorageMode = StorageMode.SingleFile,
+    BlockCompression = BlockCompressionMode.Brotli,
+    BlockCompressionLevel = OptionalCompressionLevel.Optimal  // Default
+};
+```
+
+### Workload Recommendations
+
+| Workload | Recommended Algorithm | Recommended Preset | Rationale |
+|----------|----------------------|-------------------|-----------|
+| Telemetry ingest (high-frequency) | `Zstd` | `Optimal` | Best speed/ratio balance for streaming data |
+| High-frequency logging | `GZip` | `Fastest` | GZip is often faster than no compression due to I/O savings |
+| General-purpose database | `Zstd` | `Optimal` | Excellent ratio without Brotli's encoding cost |
+| Archival / cold storage | `Brotli` | `SmallestSize` | Maximum compression when writes are infrequent |
+| Binary data (already compressed) | `None` | N/A | Skip compression for JPEGs, MP4s, etc. |
+
+**⚠️ Warning:** Avoid `Brotli` with `SmallestSize` for write-heavy workloads. Benchmarks show 74x slower individual inserts compared to no compression. Use `Zstd` or `GZip` instead.
+
+### Interaction with Encryption
+
+Compression is applied **before** encryption (ciphertext is incompressible):
+
+```
+Write: Plaintext → Compress → Encrypt → Disk
+Read:  Disk → Decrypt → Decompress → Plaintext
+```
+
+The compression level does not affect the encryption step. Both features can be combined safely.
+
+### Vacuum Preserves Compression Settings
+
+`VacuumMode.Full` creates a temporary file with the same compression settings:
+
+```csharp
+var tempOptions = new DatabaseOptions
+{
+    BlockCompression = _options.BlockCompression,
+    CompressionThreshold = _options.CompressionThreshold,
+    BlockCompressionLevel = _options.BlockCompressionLevel  // Preserved
+};
+```
+
+This ensures compacted files maintain the same compression characteristics as the original.
 
 ---
 

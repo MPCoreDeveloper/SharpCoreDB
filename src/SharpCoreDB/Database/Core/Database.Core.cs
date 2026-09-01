@@ -557,14 +557,17 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             
             // ✅ FIX: Add compression support
             // Only compress for SingleFileStorageProvider (not for mock providers in tests)
-            var shouldCompress = (_storageProvider as SingleFileStorageProvider)?.Options?.CompressMetadata ?? false;
+            var provider = _storageProvider as SingleFileStorageProvider;
+            var shouldCompress = provider?.Options?.CompressMetadata ?? false;
+            var metadataLevel = provider?.Options?.MetadataCompressionLevel ?? SharpCoreDB.Compression.OptionalCompressionLevel.Fastest;
+
             if (shouldCompress && metaBytes.Length > 256)  // Only compress if worth it
             {
-                metaBytes = CompressMetadata(metaBytes);
+                metaBytes = CompressMetadata(metaBytes, metadataLevel);
 #if DEBUG
                 var originalSize = System.Text.Encoding.UTF8.GetByteCount(metaJson);
                 var compressionRatio = (1.0 - ((double)metaBytes.Length / originalSize)) * 100;
-                System.Diagnostics.Debug.WriteLine($"[SaveMetadata] Compressed {originalSize} → {metaBytes.Length} bytes ({compressionRatio:F1}% reduction)");
+                System.Diagnostics.Debug.WriteLine($"[SaveMetadata] Compressed {originalSize} → {metaBytes.Length} bytes ({compressionRatio:F1}% reduction) using {metadataLevel}");
 #endif
             }
             
@@ -588,18 +591,26 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Compresses metadata using Brotli (fastest mode).
+    /// Compresses metadata using Brotli with the specified compression level.
     /// Format: [Magic: "BROT" (4 bytes)] [Compressed Data]
     /// </summary>
-    private static byte[] CompressMetadata(byte[] data)
+    internal static byte[] CompressMetadata(byte[] data, SharpCoreDB.Compression.OptionalCompressionLevel level)
     {
         using var output = new MemoryStream();
         
         // Write magic header for auto-detection
         output.Write("BROT"u8);
         
-        // Compress with Brotli (fastest mode = 0, best speed/ratio balance)
-        using (var brotli = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
+        // Map to BCL CompressionLevel
+        var compressionLevel = level switch
+        {
+            SharpCoreDB.Compression.OptionalCompressionLevel.Fastest => CompressionLevel.Fastest,
+            SharpCoreDB.Compression.OptionalCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
+            _ => CompressionLevel.Optimal
+        };
+
+        // Compress with Brotli
+        using (var brotli = new BrotliStream(output, compressionLevel, leaveOpen: true))
         {
             brotli.Write(data);
         }
@@ -611,7 +622,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// Decompresses metadata if it has the Brotli magic header.
     /// Auto-detects compressed vs raw JSON.
     /// </summary>
-    private static byte[] DecompressMetadataIfNeeded(byte[] data)
+    internal static byte[] DecompressMetadataIfNeeded(byte[] data)
     {
         // Check for Brotli magic header
         if (data.Length > 4 && 

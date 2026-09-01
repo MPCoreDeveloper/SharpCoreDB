@@ -624,17 +624,19 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // ✅ Issue #341: encrypted blocks cannot be served as a zero-copy sub-stream of
-        // the file; materialize and decrypt the block instead.
-        if (_encryption is not null)
-        {
-            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
-            return data is null ? null : new MemoryStream(data);
-        }
-
         if (!_blockRegistry.TryGetBlock(blockName, out var entry))
         {
             return null;
+        }
+
+        bool isCompressed = (entry.Flags & (uint)BlockFlags.Compressed) != 0;
+
+        // ✅ Issue #341 & Compression: encrypted or compressed blocks cannot be served as a zero-copy sub-stream of
+        // the file; materialize, decrypt, and decompress the block instead.
+        if (_encryption is not null || isCompressed)
+        {
+            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
+            return data is null ? null : new MemoryStream(data);
         }
 
         // Create a sub-stream view of the block
@@ -646,16 +648,18 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // ✅ Issue #341: encrypted blocks are materialized + decrypted (no zero-copy span).
-        if (_encryption is not null)
-        {
-            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
-            return data is null ? ReadOnlySpan<byte>.Empty : data.AsSpan();
-        }
-
         if (!_blockRegistry.TryGetBlock(blockName, out var entry))
         {
             return ReadOnlySpan<byte>.Empty;
+        }
+
+        bool isCompressed = (entry.Flags & (uint)BlockFlags.Compressed) != 0;
+
+        // ✅ Issue #341 & Compression: encrypted or compressed blocks are materialized + decrypted/decompressed (no zero-copy span).
+        if (_encryption is not null || isCompressed)
+        {
+            var data = ReadBlockAsync(blockName, CancellationToken.None).GetAwaiter().GetResult();
+            return data is null ? ReadOnlySpan<byte>.Empty : data.AsSpan();
         }
 
         // Guard against invalid lengths
@@ -773,7 +777,10 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         bool isCompressed = false;
         if (_compressionMode != BlockCompressionMode.None && data.Length >= _options.CompressionThreshold)
         {
-            var compressedData = BlockCompressor.Compress(data.Span, _compressionMode);
+            var compressedData = BlockCompressor.Compress(
+                data.Span,
+                _compressionMode,
+                _options.BlockCompressionLevel);
             if (compressedData.Length < data.Length)
             {
                 data = compressedData;
@@ -795,18 +802,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             // Calculate required pages
             var requiredPages = (data.Length + _header.PageSize - 1) / _header.PageSize;
 
-            // ✅ Compression (#344): the Compressed flag must reflect the state of THIS write.
-            // A previous write may have stored the block compressed or uncompressed; the flag is
-            // recomputed here so an updated (rewritten/grown) block always carries the correct
-            // marker. The earlier code only set the flag for brand-new blocks, so an existing
-            // block that got compressed lost its Compressed bit and reopen read raw Brotli/GZip
-            // bytes as JSON (JsonException "invalid start of a value").
-            uint flags = (uint)BlockFlags.Dirty;
-            if (isCompressed)
-            {
-                flags |= (uint)BlockFlags.Compressed;
-            }
-
+            // ✅ Compression fix (#344/#352): the Compressed flag must reflect the state of THIS write.
+            // The old flag may be stale (e.g., first write was below threshold, subsequent writes
+            // are above threshold). We preserve all other flags but clear and re-set Compressed,
+            // so an existing block that got compressed cannot lose its Compressed bit and reopen
+            // read raw Brotli/GZip bytes as JSON (JsonException "invalid start of a value").
             ulong offset;
             BlockEntry entry;
 
@@ -814,18 +814,24 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             {
                 var existingPages = (existingEntry.Length + (ulong)_header.PageSize - 1) / (ulong)_header.PageSize;
 
+                var updatedFlags = (existingEntry.Flags & ~(uint)BlockFlags.Compressed) | (uint)BlockFlags.Dirty;
+                if (isCompressed)
+                {
+                    updatedFlags |= (uint)BlockFlags.Compressed;
+                }
+
                 if (requiredPages <= (int)existingPages)
                 {
                     // Fits in existing space
                     offset = existingEntry.Offset;
-                    entry = existingEntry with { Length = (ulong)data.Length, Flags = flags };
+                    entry = existingEntry with { Length = (ulong)data.Length, Flags = updatedFlags };
                 }
                 else
                 {
                     // Need more space: free old, allocate new
                     _freeSpaceManager.FreePages(existingEntry.Offset, (int)existingPages);
                     offset = _freeSpaceManager.AllocatePages(requiredPages);
-                    entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = flags };
+                    entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = updatedFlags };
                 }
             }
             else
@@ -845,6 +851,13 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 if (offset < registryEnd)
                 {
                     offset = registryEnd;
+                }
+
+                // ✅ Compression: set the Compressed flag if this block was compressed.
+                var flags = (uint)BlockFlags.Dirty;
+                if (isCompressed)
+                {
+                    flags |= (uint)BlockFlags.Compressed;
                 }
 
                 entry = new BlockEntry
@@ -2488,7 +2501,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 EnableMemoryMapping = false, // Don't use mmap for temp file
                 CreateImmediately = true,
                 BlockCompression = _options.BlockCompression,
-                CompressionThreshold = _options.CompressionThreshold
+                CompressionThreshold = _options.CompressionThreshold,
+                BlockCompressionLevel = _options.BlockCompressionLevel
             };
 
             using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))
