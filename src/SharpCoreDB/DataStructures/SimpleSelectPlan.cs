@@ -76,19 +76,11 @@ internal sealed class SimpleSelectPlan
 
         // Scan the trailing clauses: WHERE col = value, ORDER BY col [ASC|DESC], LIMIT n [OFFSET m].
         int pos = fromIdx + 2;
-        string? whereColumn = null;
-        string? whereValue = null;
-        bool whereIsParameter = false;
-        string? orderByColumn = null;
-        bool orderAscending = true;
-        int? limit = null;
-        int? offset = null;
+        var state = new ClauseState();
 
         while (pos < parts.Length)
         {
-            if (!TryParseNextClause(parts, ref pos,
-                ref whereColumn, ref whereValue, ref whereIsParameter,
-                ref orderByColumn, ref orderAscending, ref limit, ref offset))
+            if (!TryParseNextClause(parts, ref pos, state))
             {
                 // Unknown trailing token — fall back to the full parser.
                 return null;
@@ -97,32 +89,44 @@ internal sealed class SimpleSelectPlan
 
         // A point lookup requires a WHERE predicate; without one this is a full scan
         // (supported by the StructRow path, which scans all rows).
-        if (whereColumn is null)
+        if (state.WhereColumn is null)
         {
             return new SimpleSelectPlan
             {
                 TableName = tableName,
                 WhereColumn = null,
                 IsSelectAll = isSelectAll,
-                OrderByColumn = orderByColumn,
-                OrderByAscending = orderAscending,
-                Limit = limit,
-                Offset = offset
+                OrderByColumn = state.OrderByColumn,
+                OrderByAscending = state.OrderAscending,
+                Limit = state.Limit,
+                Offset = state.Offset
             };
         }
 
         return new SimpleSelectPlan
         {
             TableName = tableName,
-            WhereColumn = whereColumn,
-            WhereParameter = whereIsParameter ? whereValue : null,
-            WhereLiteral = whereIsParameter ? null : whereValue,
+            WhereColumn = state.WhereColumn,
+            WhereParameter = state.WhereIsParameter ? state.WhereValue : null,
+            WhereLiteral = state.WhereIsParameter ? null : state.WhereValue,
             IsSelectAll = isSelectAll,
-            OrderByColumn = orderByColumn,
-            OrderByAscending = orderAscending,
-            Limit = limit,
-            Offset = offset
+            OrderByColumn = state.OrderByColumn,
+            OrderByAscending = state.OrderAscending,
+            Limit = state.Limit,
+            Offset = state.Offset
         };
+    }
+
+    /// <summary>Mutable state collected while scanning the trailing SELECT clauses.</summary>
+    private sealed class ClauseState
+    {
+        public string? WhereColumn;
+        public string? WhereValue;
+        public bool WhereIsParameter;
+        public string? OrderByColumn;
+        public bool OrderAscending = true;
+        public int? Limit;
+        public int? Offset;
     }
 
     private static bool TryRejectComplexParts(string[] parts)
@@ -170,39 +174,34 @@ internal sealed class SimpleSelectPlan
         return false;
     }
 
-    private static bool TryParseNextClause(
-        string[] parts, ref int pos,
-        ref string? whereColumn, ref string? whereValue, ref bool whereIsParameter,
-        ref string? orderByColumn, ref bool orderAscending, ref int? limit, ref int? offset)
+    private static bool TryParseNextClause(string[] parts, ref int pos, ClauseState state)
     {
         if (parts[pos].Equals("WHERE", StringComparison.OrdinalIgnoreCase))
         {
-            return TryParseWhereClause(parts, ref pos, ref whereColumn, ref whereValue, ref whereIsParameter);
+            return TryParseWhereClause(parts, ref pos, state);
         }
 
         if (parts[pos].Equals("ORDER", StringComparison.OrdinalIgnoreCase))
         {
-            return TryParseOrderByClause(parts, ref pos, whereColumn, ref orderByColumn, ref orderAscending);
+            return TryParseOrderByClause(parts, ref pos, state);
         }
 
         if (parts[pos].Equals("LIMIT", StringComparison.OrdinalIgnoreCase))
         {
-            return TryParseLimitClause(parts, ref pos, ref limit);
+            return TryParseLimitClause(parts, ref pos, state);
         }
 
         if (parts[pos].Equals("OFFSET", StringComparison.OrdinalIgnoreCase))
         {
-            return TryParseOffsetClause(parts, ref pos, ref offset);
+            return TryParseOffsetClause(parts, ref pos, state);
         }
 
         return false;
     }
 
-    private static bool TryParseWhereClause(
-        string[] parts, ref int pos,
-        ref string? whereColumn, ref string? whereValue, ref bool whereIsParameter)
+    private static bool TryParseWhereClause(string[] parts, ref int pos, ClauseState state)
     {
-        if (whereColumn is not null)
+        if (state.WhereColumn is not null)
             return false; // Duplicate WHERE — unsupported.
 
         if (pos + 3 >= parts.Length)
@@ -220,18 +219,16 @@ internal sealed class SimpleSelectPlan
         if (value == "?")
             return false;
 
-        whereColumn = col;
-        whereIsParameter = value[0] == '@' || value[0] == ':';
-        whereValue = value;
+        state.WhereColumn = col;
+        state.WhereIsParameter = value[0] == '@' || value[0] == ':';
+        state.WhereValue = value;
         pos += 4;
         return true;
     }
 
-    private static bool TryParseOrderByClause(
-        string[] parts, ref int pos, string? whereColumn,
-        ref string? orderByColumn, ref bool orderAscending)
+    private static bool TryParseOrderByClause(string[] parts, ref int pos, ClauseState state)
     {
-        if (whereColumn is null || orderByColumn is not null)
+        if (state.WhereColumn is null || state.OrderByColumn is not null)
             return false; // ORDER BY before WHERE or duplicated.
 
         if (pos + 2 >= parts.Length || !parts[pos + 1].Equals("BY", StringComparison.OrdinalIgnoreCase))
@@ -240,12 +237,12 @@ internal sealed class SimpleSelectPlan
         if (!IsSimpleIdentifier(parts[pos + 2]))
             return false;
 
-        orderByColumn = parts[pos + 2];
+        state.OrderByColumn = parts[pos + 2];
         pos += 3;
 
         if (pos < parts.Length && parts[pos].Equals("DESC", StringComparison.OrdinalIgnoreCase))
         {
-            orderAscending = false;
+            state.OrderAscending = false;
             pos += 1;
         }
         else if (pos < parts.Length && parts[pos].Equals("ASC", StringComparison.OrdinalIgnoreCase))
@@ -256,28 +253,28 @@ internal sealed class SimpleSelectPlan
         return true;
     }
 
-    private static bool TryParseLimitClause(string[] parts, ref int pos, ref int? limit)
+    private static bool TryParseLimitClause(string[] parts, ref int pos, ClauseState state)
     {
-        if (limit is not null || pos + 1 >= parts.Length ||
+        if (state.Limit is not null || pos + 1 >= parts.Length ||
             !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int limitValue) || limitValue < 0)
         {
             return false;
         }
 
-        limit = limitValue;
+        state.Limit = limitValue;
         pos += 2;
         return true;
     }
 
-    private static bool TryParseOffsetClause(string[] parts, ref int pos, ref int? offset)
+    private static bool TryParseOffsetClause(string[] parts, ref int pos, ClauseState state)
     {
-        if (offset is not null || pos + 1 >= parts.Length ||
+        if (state.Offset is not null || pos + 1 >= parts.Length ||
             !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int offsetValue) || offsetValue < 0)
         {
             return false;
         }
 
-        offset = offsetValue;
+        state.Offset = offsetValue;
         pos += 2;
         return true;
     }

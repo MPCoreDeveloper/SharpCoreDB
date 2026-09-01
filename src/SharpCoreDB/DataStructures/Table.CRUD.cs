@@ -17,6 +17,9 @@ using SharpCoreDB.Optimizations;
 /// </summary>
 public partial class Table
 {
+    /// <summary>Error message used by every write path when the table is opened read-only.</summary>
+    private const string ReadOnlyInsertError = "Cannot insert in readonly mode";
+
     /// <summary>
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
@@ -30,7 +33,7 @@ public partial class Table
     public void Insert(Dictionary<string, object> row)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         for (int i = 0; i < this.Columns.Count; i++)
@@ -247,7 +250,7 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(rows);
 
         if (rows.Count == 0) return [];
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
         var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
@@ -290,7 +293,7 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(rows);
 
         if (rows.Length == 0) return [];
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
         ValidateBatchPrimaryKeysUpfront(validatedRows);
@@ -565,19 +568,11 @@ public partial class Table
                 _database?.SetLastInsertRowId(positions[^1]);
             }
 
-            var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
-                foreach (var col in this.registeredIndexes.Keys)
+                foreach (var col in this.registeredIndexes.Keys.Where(c => !this.loadedIndexes.Contains(c)))
                 {
-                    if (!this.loadedIndexes.Contains(col))
-                    {
-                        unloadedIndexes.Add(col);
-                    }
-                }
-                foreach (var registeredCol in unloadedIndexes)
-                {
-                    EnsureIndexLoaded(registeredCol);
+                    EnsureIndexLoaded(col);
                 }
             }
 
@@ -750,9 +745,6 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private long[] InsertBatchStandardPath(List<Dictionary<string, object>> rows)
     {
-        // ✅ PERFORMANCE: Get column index cache once for entire batch
-        var columnIndexCache = GetColumnIndexCache();
-
         // ✅ CRITICAL FIX: Start engine transaction for batching!
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
@@ -1680,7 +1672,6 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            var columnIndexCache = GetColumnIndexCache();
             int updatedInBatch = 0;
 
             foreach (var (where, updates) in operations)
@@ -1733,18 +1724,20 @@ public partial class Table
                 {
                     // v2: capture the old PK and indexed-column values BEFORE applying updates,
                     // avoiding a full row dictionary copy per row (WP3 allocation reduction).
-                    object? oldPkValue = this.PrimaryKeyIndex >= 0
-                        ? row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pk) ? pk : null
-                        : null;
+                    object? oldPkValue = null;
+                    if (this.PrimaryKeyIndex >= 0 && row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pk))
+                    {
+                        oldPkValue = pk;
+                    }
 
                     Dictionary<string, object?>? oldHashValues = null;
                     if (this.hashIndexes.Count > 0)
                     {
                         oldHashValues = new Dictionary<string, object?>(this.hashIndexes.Count, StringComparer.OrdinalIgnoreCase);
-                        foreach (var hashIndex in this.hashIndexes)
+                        foreach (var key in this.hashIndexes.Keys)
                         {
-                            if (row.TryGetValue(hashIndex.Key, out var oldVal) && oldVal is not null)
-                                oldHashValues[hashIndex.Key] = oldVal;
+                            if (row.TryGetValue(key, out var oldVal) && oldVal is not null)
+                                oldHashValues[key] = oldVal;
                         }
                     }
 
@@ -2655,7 +2648,7 @@ public partial class Table
      ArgumentNullException.ThrowIfNull(this.storage);
 
      if (rowCount == 0) return [];
-     if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+     if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
      // ✅ FIX: Decode OUTSIDE the lock, then call optimized path which handles its own locking
      // Decode binary data to Dictionary rows using BinaryRowDecoder
