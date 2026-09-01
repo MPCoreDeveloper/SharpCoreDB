@@ -1,17 +1,23 @@
-# SharpCoreDB v2.0.0-preview.3 - Performance-First Database Engine
+# SharpCoreDB v2.0.0.1 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
+[![NuGet](https://img.shields.io/nuget/v/SharpCoreDB.svg)](https://www.nuget.org/packages/SharpCoreDB)
+[![NuGet downloads](https://img.shields.io/nuget/dt/SharpCoreDB.svg)](https://www.nuget.org/packages/SharpCoreDB)
+[![.NET 10](https://img.shields.io/badge/.NET-10-blue.svg)](https://dotnet.microsoft.com/download)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
-## What's New in v2.0.0-preview.3
+## What's New in 2.0.0.1
 
 ### 🚀 Performance-first engine
 - v2.0 closes the v1.x benchmark gap: point reads **beat SQLite** on the default engine, batch INSERTs
   are at parity, and the WP10–WP13 storage-engine work narrowed single-row UPDATE/DELETE to ~1–2x SQLite.
 - Zero-allocation struct-row SQL reads via `ExecuteQueryStruct`.
+- Batch UPDATE / READ / INSERT fast paths: position-aware batch `UPDATE`, zero-deserialize in-place
+  field patches, direct hash-index point lookups and memoized SQL normalization (B7–B9).
 
 ### 🔒 Envelope encryption + full at-rest encryption
 - **Password-based key model**: `DatabaseOptions.EncryptionPassword` creates a random per-file
@@ -26,10 +32,12 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - Wrong key/password now fails loudly at open (GCM authentication failure).
 
 ### 📦 Block-level compression (Issue #344)
-- Transparent per-block **Brotli/GZip** compression for single-file (`.scdb`) storage — applied before
+- Transparent per-block **Brotli / GZip / Zstd** compression for single-file (`.scdb`) storage — applied before
   encryption on write, removed after decryption on read.
+- Configurable presets: `DatabaseOptions.BlockCompressionLevel` / `MetadataCompressionLevel`
+  (`Fastest`, `Optimal`, `SmallestSize`); `CompressionThreshold` controls the minimum block size.
 - Compressed and uncompressed blocks can coexist in one file; defaults to `None` (backward compatible).
-- New options: `DatabaseOptions.BlockCompression` and `CompressionThreshold`.
+- New options: `DatabaseOptions.BlockCompression`, `CompressionThreshold`, `BlockCompressionLevel`.
 
 ### ⚙️ Configurable metadata sizing (Issue #345)
 - The FSM, Block Registry and Table Directory are no longer hard-coded to 4 pages:
@@ -167,27 +175,28 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.0.0.1
 ```
 
-**Optional companion packages introduced or highlighted in v1.9.6:**
+**Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.0.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
+dotnet add package SharpCoreDB.Functional --version 2.0.0.1
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.1
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.1
 ```
 
-## 🔄 Upgrade from v1.3.5
+## 🔄 Upgrading from v1.9
 
-**100% backward compatible** - No breaking changes!
+**Backward compatible for existing databases — with one important note:**
 
-```bash
-dotnet add package SharpCoreDB --version 2.0.0
-```
-
-Your existing databases work as-is. New metadata is automatically compressed.
+- **Directory-storage databases** open unchanged (the table file format is byte-for-byte identical).
+- **Single-file (`.scdb`) databases** are migrated automatically to the v2 dynamic-metadata format on
+  first open; the original file is preserved as `<file>.backup`. The migration is **one-way** — after
+  opening with v2.0.0.1 the file can no longer be read by v1.9 (use the `.backup` for a v1.9 copy).
+- The public API is **additive** (`EncryptionPassword`, `BlockCompressionLevel`, `MetadataCompressionLevel`,
+  `BlockCompressionMode.Zstd`, …) — existing application code compiles and runs unchanged.
 
 ## 🐛 Bug Reporting
 
@@ -203,10 +212,11 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.0.0-preview.3 (August 30, 2026)  
+**Latest Version:** 2.0.0.1 (September 2026)  
 **Target:** .NET 10 / C# 14  
-**Tests:** 1,600+ (100% passing)  
-**Status:** ✅ Preview 2 — performance-first v2.0 line
+**Tests:** 1,700+ (100% passing)  
+**Status:** ✅ Stable — performance-first v2.0.0 release  
+**Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 
 

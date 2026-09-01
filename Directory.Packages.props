@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <SharpCoreDBVersion>1.9.5</SharpCoreDBVersion>
+    <SharpCoreDBVersion>2.0.0.1</SharpCoreDBVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />

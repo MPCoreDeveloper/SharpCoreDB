@@ -68,7 +68,7 @@ var users = await context.Users.Where(u => u.IsActive).ToListAsync();
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+, EntityFrameworkCore v8.0+

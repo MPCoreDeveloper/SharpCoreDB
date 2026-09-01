@@ -54,7 +54,7 @@ Unlock enterprise-grade analytics with 100+ aggregate functions, window function
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 2.0.0
+dotnet add package SharpCoreDB.Analytics --version 2.0.0.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

@@ -50,9 +50,9 @@ jobs:
       env:
         VERSION_SUFFIX: ${{ github.event.inputs.versionSuffix }}
       run: |
-        PACK_VERSION="2.0.0"
+        PACK_VERSION="2.0.0.0"
         if [ -n "$VERSION_SUFFIX" ]; then
-          PACK_VERSION="2.0.0-${VERSION_SUFFIX}"
+          PACK_VERSION="2.0.0.0-${VERSION_SUFFIX}"
           echo "::warning::Publishing PRE-RELEASE NuGet version ${PACK_VERSION}"
         fi
         echo "::group::Pack NuGet packages (${PACK_VERSION})"

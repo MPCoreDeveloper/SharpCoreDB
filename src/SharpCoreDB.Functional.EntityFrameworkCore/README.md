@@ -28,7 +28,7 @@ Entity Framework Core adapter for `SharpCoreDB.Functional`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.0
 ```
 
 ## Documentation

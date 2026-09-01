@@ -9,174 +9,153 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
-- **Dedicated SQL batch-INSERT fast path (WP14)** — `ExecuteBatchSQL` INSERTs no longer build a
+- **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new
   `Table.InsertBatch(object[][], columnOrder)` path with full dict-path parity (defaults, AUTO,
   explicit NULL, NOT NULL, PK, hash/B-tree indexes). SQL INSERT throughput measured **+80%**
-  (54.5K/s → 98.2K/s in the comparative benchmark), closing the INSERT gap vs SQLite from ~1.9× to
-  ~1.5×.
-- **AVX-512 validation on real hardware (2026-09-01)** — 6-run benchmark on an AVX-512 machine
-  confirmed the adaptive SIMD tier (AVX-512 **2–26× over scalar**, up to **2.7× over AVX2** for
-  `EuclidSq`/`Normalize`, dims 64–1024) and the CRUD profile (beats LiteDB on every operation; INSERT
-  at 0.69–0.85× of SQLite). Full report:
+  (54.5K/s ÔåÆ 98.2K/s in the comparative benchmark), closing the INSERT gap vs SQLite from ~1.9├ù to
+  ~1.5├ù. Batch UPDATE also reuses the WP11 in-place field-overwrite fast path (runtime offsets now
+  resolve fixed-size fields after variable-length columns; monitored via `Table.TotalInPlacePatches`).
+- **AVX-512 validation on real hardware (2026-09-01)** ÔÇö 6-run benchmark on an AVX-512 machine
+  confirmed the adaptive SIMD tier (AVX-512 **2ÔÇô26├ù over scalar**, up to **2.7├ù over AVX2** for
+  `EuclidSq`/`Normalize`, dims 64ÔÇô1024) and the CRUD profile (beats LiteDB on every operation; INSERT
+  at 0.69ÔÇô0.85├ù of SQLite). Full report:
   `docs/benchmarks/AVX512_2026-09-01.md` (+ raw per-run `.md`/`.json` in `docs/benchmarks/avx512-2026-09-01/`).
 
-### Performance / correctness — batch UPDATE path (B7)
+## [2.0.0.1] - 2026-09-01
 
-- **Position-aware batch UPDATE (`UpdateMultiple`)** — WHERE resolution now returns
-  `(storage position, row)` pairs from the PK B-tree *and* the hash index, so a table without a
-  primary key can still patch records in place. Previously the position was discarded: every
-  non-PK update fell back to append (stale versions → file growth + compaction storm), and on the
-  PageBased engine the update was silently **not applied at all**.
-- **Zero-deserialize fast patch (B8)** — for `UPDATE … SET non_indexed_col = … WHERE indexed_col = …`
-  on a columnar table without CHECK constraints, matching rows are patched directly on their raw
-  record bytes (only the changed fields at their actual slot offsets via
-  `TryOverwriteFieldsInPlaceActual` / `TryOverwriteFixedWidthInPlace`). The full-row deserialize,
-  row dictionary, validation loop and `SerializeRowExact` round trip are skipped entirely; NOT NULL
-  is still enforced on the changed values. Measured on the comparative UPDATE workload:
-  AppendOnly SQL 24,774 → **37,203 ops/s**, Direct 28,749 → **46,189 ops/s** (back to pre-fix
-  levels while keeping in-place writes); fixed-width growing updates **7.5–8.5× faster than legacy**.
-- **In-place overwrites inside transactions (write-behind)** — `OverwriteRecordAt` no longer
-  refuses to run inside a transaction. Overwrites are buffered per file and flushed once on
-  commit (`FlushBufferedAppendsAndOverwrites`); rollback simply drops the buffer because nothing
-  reached disk early. Intermediate flushes (`FlushTransactionBuffer`) deliberately keep the
-  overwrites buffered so rollback stays possible.
-- **No more compaction storm for in-place updates** — `UpdateMultiple` counts only real appends
-  (`appendedInBatch`) toward `_updatedRowCount`; a batch of in-place overwrites no longer triggers
-  an unnecessary full compaction.
-- **Cached write handles for `.dat`** — the per-row in-place write uses a cached `SafeFileHandle`
-  (one open per table file) instead of a `FileStream` per update; overflow-arena (`.ovf`) files
-  keep short-lived streams because the arena owns its own append/reuse streams.
-- **File-sharing alignment** — all append/file-read opens inside `Storage.Append`/`ReadWrite`
-  now use `FileShare.ReadWrite|Delete` so the cached write handle, the append path and full-file
-  reads coexist.
-- **Regression tests:** `SqlInPlaceUpdateTests` now covers PK-less batch updates (columnar file
-  size stays constant, correct values, row count stable), PK-less PageBased updates (previously
-  dropped), transaction rollback of in-place overwrites, fast-patch NOT NULL enforcement, CHECK
-  fallback and WHERE-column updates. Full suite green: **1,693 tests, 0 failures**.
+### Fixed
 
-### Performance — read / point-lookup fast path (B9)
+- **Single-file data corruption under concurrent writes (critical)** ÔÇö the WAL manager wrote to
+  the shared file stream with a bare `Position` + `WriteAsync`, while the background write-behind
+  worker wrote data pages under a lock. A concurrent `Position` mutation could land WAL bytes on a
+  data page, so a table's data block could read back as WAL/registry bytes instead of JSON after a
+  reopen (sporadic `JsonException '0x02'` / "Expected 100 rows, got 0"). All `FileStream.Position`
+  use is now serialized through `SingleFileStorageProvider.WriteAt` (header, WAL, delta writes,
+  reads, defrag). Regression covered by `VacuumStressTests` (failed ~50% before, stable after).
+- **4-part patch versioning** ÔÇö this patch ships as `2.0.0.1` (NuGet shows `2.0.0.1`).
 
-- **Direct hash-index point lookup for simple SELECTs** — `SELECT … FROM t WHERE indexed_col = @p`
-  (or a literal) no longer builds a WHERE string and re-parses it inside `SelectInternal`.
-  `TryExecuteSimpleSelect` now resolves the parameter/literal value once and calls a new
-  `Table.TrySelectIndexedPointLookup` that runs the hash-index lookup directly (read lock +
-  `EnsureIndexLoaded` + binary collation). The lookup is gated on **explicit `CREATE INDEX`
-  indexes** and PK columns route through the B-tree, so auto-registered (fixed-width / PK)
-  indexes keep their legacy behavior.
-- **Memoized SQL normalization** — `GetOrAddPlan`/`TryGetCachedPlan` cache the normalized SQL per
-  exact statement text, removing the per-call trim + whitespace-collapse + string allocation on
-  repeated executions of the same query.
-- **Measured** (`--readtest`, median of 7 × 10K point reads on 100K rows): SQL point-read
-  ~65,000 → **~120,000–166,000 ops/s**; Direct API ~160–188,000 ops/s; SQL/Direct overhead
-  dropped from ~2× to ~1.1–1.5×. Both SQL and Direct reads now beat SQLite (~95,000 ops/s) on
-  this workload.
-- **INSERT batch-parse micro-optimizations** — `ParseInsertStatementFast` no longer scans the
-  full statement for `INSERT INTO` (the caller already classified it) and resolves the table
-  name with a single `IndexOfAny`. SQL insert throughput measured at ~70,000 ops/s vs ~214,000
-  ops/s for `InsertBatch` (Direct API); the remaining gap is the per-statement text parsing and
-  string extraction that SQL requires by nature.
+## [2.0.0.0] - 2026-09-01
 
-### SingleFile storage — critical compression read-path fixes + configurable presets (PR #352)
+### Release highlights
 
-- **Fix: zero-copy read paths returning compressed bytes** — `GetReadStream()` and `GetReadSpan()`
+- **Performance-first engine** ÔÇö point reads **beat SQLite** on the default engine, batch INSERTs
+  beat SQLite on PageBased (**194ÔÇô206K vs 109K ops/s**), and the UPDATE/DELETE gap vs SQLite narrowed
+  from ~5ÔÇô7├ù to ~1ÔÇô4├ù (in-place field patches + unified delete core).
+- **Single-file storage format v2** ÔÇö dynamic/growable metadata layout (Block Registry, FSM, Table
+  Directory) with **automatic crash-safe v1 ÔåÆ v2 migration on open** (original preserved as
+  `<file>.backup`).
+- **Block-level compression** ÔÇö Brotli/GZip/Zstd with configurable presets
+  (`BlockCompressionLevel`, `MetadataCompressionLevel`, `CompressionThreshold`).
+- **Envelope encryption + full at-rest metadata encryption** (`EncryptionPassword`, per-file DEK,
+  key/password rotation) and **configurable metadata sizing** (`FsmSizePages`,
+  `BlockRegistrySizePages`, `TableDirectorySizePages`).
+- **4-part versioning** ÔÇö all packages now use `n.n.n.n` (this release: `2.0.0.0`).
+- **Full change/benchmark report** ÔÇö see
+  [`docs/2.0.0.0_WHAT_CHANGED.md`](2.0.0.0_WHAT_CHANGED.md): everything that changed
+  vs the 1.9 line, plus the SharpCoreDB vs SQLite vs LiteDB benchmark tables and graphs.
+
+### SingleFile storage ÔÇö critical compression read-path fixes + configurable presets (PR #352)
+
+- **Fix: zero-copy read paths returning compressed bytes** ÔÇö `GetReadStream()` and `GetReadSpan()`
   served the raw Brotli/GZip bytes when encryption was disabled, causing `JsonException` on
   database reopen. Both methods now check the block's `BlockFlags.Compressed` bit and fall back
   to `ReadBlockAsync` so compressed blocks are always decompressed. Affected databases created
   with `BlockCompression != None` and `EnableEncryption = false` in v1.9.8.
-- **Fix: stale `Compressed` flag on block overwrite** — `WriteBlockAsync` preserved old flags and
+- **Fix: stale `Compressed` flag on block overwrite** ÔÇö `WriteBlockAsync` preserved old flags and
   never updated the `Compressed` bit based on the current write, so a block that grew past the
   compression threshold (256 B default) could be stored compressed but marked uncompressed.
   The flag is now cleared and re-set on every write while preserving all other flags.
-- **Configurable compression presets** — new `DatabaseOptions.MetadataCompressionLevel`
+- **Configurable compression presets** ÔÇö new `DatabaseOptions.MetadataCompressionLevel`
   (default `Fastest`) and `BlockCompressionLevel` (default `Optimal`) map to the BCL
   `CompressionLevel` via the new `SharpCoreDB.Compression.OptionalCompressionLevel` enum;
   `BlockBrotliCompressionLevel` remains as an obsolete alias. `VacuumMode.Full` preserves the
   block compression level when it creates the temporary file.
-- **Zstd support** — `BlockCompressionMode.Zstd` (`.NET 11+`, `ZstandardStream`) with a
+- **Zstd support** ÔÇö `BlockCompressionMode.Zstd` (`.NET 11+`, `ZstandardStream`) with a
   `PlatformNotSupportedException` fallback on older runtimes.
 - **Regression tests:** `CompressionLevelTests` (31 tests) cover preset defaults, roundtrips,
   size ordering across levels, metadata roundtrips, `GetReadStream`/`GetReadSpan` decompression
   without encryption, and the multi-write stale-flag scenario.
 
+
 ## [2.1.0-preview] - 2026-08-31
 
 ### Performance
-- **Single-pass SQL DELETE/UPDATE (Issue #7/#8)** — the SQL paths no longer materialize matching
+- **Single-pass SQL DELETE/UPDATE (Issue #7/#8)** ÔÇö the SQL paths no longer materialize matching
   rows twice:
   - `ITable.DeleteAffectedRows(where)` deletes AND returns the affected rows; `ExecuteDelete` uses
     it for RETURNING + `CHANGES()` from a single pass (`Table`/`SingleFileTable` override the
     default; third-party `ITable` implementers keep the two-pass fallback).
   - `ITable.UpdateAffectedCount(where, updates)` applies the update and returns the affected count;
     `ExecuteUpdate` no longer runs a full `Select().Count` for change-tracking.
-- **PK fast path extended to batch DML** — simple `pk = value` WHERE clauses resolve via the
+- **PK fast path extended to batch DML** ÔÇö simple `pk = value` WHERE clauses resolve via the
   primary-key B-tree directly (single search + one read) in `Delete`/`DeleteMultiple`/
   `UpdateMultiple` instead of full-row materialization + per-row PK re-search.
-- **Field-level in-place patch on the columnar UPDATE path (fixed-width layout step)** — when the
+- **Field-level in-place patch on the columnar UPDATE path (fixed-width layout step)** ÔÇö when the
   row's storage position is known (PK B-tree / hash index), only the updated fields are patched at
   their **actual** record offsets (`ComputeActualColumnOffsets` + `TryOverwriteFieldsInPlaceActual`)
-  instead of deserialize → mutate → re-serialize of the whole row. A fixed-size field keeps the
-  record length unchanged → the write is an in-place overwrite (no file growth), even for columns
+  instead of deserialize ÔåÆ mutate ÔåÆ re-serialize of the whole row. A fixed-size field keeps the
+  record length unchanged ÔåÆ the write is an in-place overwrite (no file growth), even for columns
   that sit after variable-length TEXT columns. `UpdateAffectedCount`/`UpdateMultiple` now resolve
   rows as (position, row) pairs; variable-width fields that change size still fall back to append.
-- **Stale-index regression fix** — WHERE-based UPDATE/DELETE entry points load all registered hash
+- **Stale-index regression fix** ÔÇö WHERE-based UPDATE/DELETE entry points load all registered hash
   indexes up front (`EnsureAllRegisteredIndexesLoaded`), so append updates / logical deletes remove
   the stale record from every index (an unloaded index would otherwise be rebuilt from the data
   file including the stale record, resurrecting the pre-update row).
-- **Regression tests:** `DmlSinglePassTests` (9 cases) + `FixedWidthPatchTests` (5 cases) —
+- **Regression tests:** `DmlSinglePassTests` (9 cases) + `FixedWidthPatchTests` (5 cases) ÔÇö
   affected counts, RETURNING pre-delete rows, range/non-indexed WHERE fallbacks, batch PK
   deletes/updates, in-place patch no-growth (after variable columns / by PK), variable-growth
   append fallback, compound WHERE. Full suite green: **1,649 tests, 0 failures**.
 - **Single-file `.scdb` (A-track):**
-  - **PK hash index (A1)** — `FindByPrimaryKey` / `UpdateByPrimaryKey` / `DeleteByPrimaryKey` and
-    `SELECT … WHERE pk = value` resolve in O(1) instead of an O(N) cache scan (index maintained on
+  - **PK hash index (A1)** ÔÇö `FindByPrimaryKey` / `UpdateByPrimaryKey` / `DeleteByPrimaryKey` and
+    `SELECT ÔÇª WHERE pk = value` resolve in O(1) instead of an O(N) cache scan (index maintained on
     all mutations, rebuilt on reopen/rollback; numeric literals normalized).
-  - **In-place block overwrite (A2)** — pinned: a same-length update does not grow the `.scdb`
+  - **In-place block overwrite (A2)** ÔÇö pinned: a same-length update does not grow the `.scdb`
     (`WriteBlockAsync` reuses the table block offset when the JSON fits).
-- **Out-of-line overflow (B1, opt-in):** `DatabaseConfig.FixedWidthRecordLayout` — fixed-width
+- **Out-of-line overflow (B1, opt-in):** `DatabaseConfig.FixedWidthRecordLayout` ÔÇö fixed-width
   records with constant size per schema; TEXT/BLOB values in a per-table overflow arena (`.ovf`),
   referenced by a 4-byte offset in the record. Every UPDATE (fixed **or** variable column) is an
   in-place overwrite (`.dat` does not grow). Includes `OverflowArena` (append + cache +
   copy-on-compact), `FixedWidthRecordLayout`, and fixed-width serialize/deserialize/in-place-patch
   wired into the Table dispatcher, PK index rebuild, full-scan guards and StructRow fallback.
   Flag persisted in table metadata, restored from config on reopen.
-- **Overflow arena GC (B3)** — `CompactStorage` now compacts the overflow arena together with the
+- **Overflow arena GC (B3)** ÔÇö `CompactStorage` now compacts the overflow arena together with the
   data file: live arena offsets are collected from the current records, the `.ovf` is rewritten
   (copy-on-compact), and the active records' variable slots are re-pointed in place. Dead arena
   blocks from variable updates / deletes are reclaimed.
-- **Constant-offset read-path wins (B4)** — early-WHERE re-enabled for fixed-width tables using the
+- **Constant-offset read-path wins (B4)** ÔÇö early-WHERE re-enabled for fixed-width tables using the
   constant slot offsets of `FixedWidthRecordLayout`: numeric predicates read the column directly at
   its slot offset (also when a variable-length column precedes it), string predicates compare the
   arena payload byte-wise against the pre-encoded expected UTF-8, and the StructRow numeric-SIMD
   batch filter (`Vector<T>`) now serves fixed-width tables. Also fixed a latent bug where arena
   block offset 0 (the first block) was treated as "no block" and dropped by compaction / early-WHERE.
-- **1.x → 2.0 record-format migration path (B5)** — the fixed-width flag is now persisted per table
+- **1.x ÔåÆ 2.0 record-format migration path (B5)** ÔÇö the fixed-width flag is now persisted per table
   in metadata (authoritative on reopen; config no longer overrides the on-disk format). A legacy
   (variable-length) database opened with `DatabaseConfig.FixedWidthRecordLayout = true` auto-migrates
   its columnar tables, and `IDatabase.MigrateTableToFixedWidth(tableName)` provides on-demand
   conversion. A format probe adopts already-fixed-width tables that predate flag persistence and
   skips byte-identical fixed-size-only legacy tables.
-- **Arena free-list (B6)** — freed overflow blocks are tracked per payload length and reused in
+- **Arena free-list (B6)** ÔÇö freed overflow blocks are tracked per payload length and reused in
   place (`OverwriteRecordAt`) when a new value has the exact same length, so same-length
   variable-column updates no longer grow the `.ovf` within a session (copy-on-compact still
   reclaims the rest). Also fixed a latent B1 leak where the first arena block (offset 0) was never
   freed on update.
-- **Single-file (.scdb) fixed-width (B6)** — the fixed-width out-of-line-overflow model now also
+- **Single-file (.scdb) fixed-width (B6)** ÔÇö the fixed-width out-of-line-overflow model now also
   serves single-file tables: with `DatabaseConfig.FixedWidthRecordLayout` the table stores binary
   fixed-width records (variable values in a dedicated overflow block) instead of the legacy JSON row
   array, so value-only updates keep the data block constant-size. The on-disk format is detected on
   reopen (binary blocks are parsed untrimmed), legacy JSON tables migrate via
   `MigrateTableToFixedWidth` (or automatically when the config opts in), and the shared
   `FixedWidthCodec` keeps directory-mode and single-file record formats in sync.
-- **Automatic PageBased → Columnar + fixed-width conversion (B6)** — `MigrateToFixedWidth` now
+- **Automatic PageBased ÔåÆ Columnar + fixed-width conversion (B6)** ÔÇö `MigrateToFixedWidth` now
   converts page-based tables to Columnar storage in-process (rows re-read via the page engine,
   `.pages` files removed, `DataFile`/`StorageMode`/metadata updated) before rewriting the records
   as fixed-width, and the database-load auto-migration covers PageBased tables as well. Also fixed
   a pre-existing PageBased data-loss bug: single INSERT/UPDATE never flushed the page cache (only
-  `CommitAsync`/`Flush` did), so reopened tables returned zero rows — dirty pages are now flushed
+  `CommitAsync`/`Flush` did), so reopened tables returned zero rows ÔÇö dirty pages are now flushed
   when the table/storage engine is disposed.
-- **Cross-session arena free-list (B6)** — the directory-mode `OverflowArena` derives its free-list
+- **Cross-session arena free-list (B6)** ÔÇö the directory-mode `OverflowArena` derives its free-list
   on load: the fixed-width records in the data file are scanned and every arena block no record
   references is freed, so same-length value updates reuse dead blocks across sessions without
   persisting the free-list itself (single-file tables already restore it per flush via the
@@ -185,10 +164,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FixedWidthRecordLayoutTests` (14, incl. cross-session free-list), `FixedWidthMigrationTests` (8),
   `SingleFileFixedWidthTests` (5). Full suite green: **1,686 tests, 0 failures**.
 
+
 ## [2.0.0-preview.3] - 2026-08-30
 
 ### Added
-- **Dynamic metadata layout (format v2, #345 Phase 2)** — the Free Space Map and Block Registry
+- **Dynamic metadata layout (format v2, #345 Phase 2)** ÔÇö the Free Space Map and Block Registry
   are no longer fixed header regions but **growable named blocks**:
   - the Block Registry is a single growable block rooted at `header.RegistryRootOffset`
     (`[RegistryChunkHeader][BlockEntry...]`), which relocates (grows) automatically when it
@@ -196,38 +176,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - the FSM is a named block (`sys:fsm`) tracked in the registry; its serialized bitmap relocates
     (grows) automatically when the database outgrows the initial `FsmSizePages` capacity;
   - `FormatVersion` is bumped to **2** (`FEATURE_DYNAMIC_METADATA`); `BlockRegistrySizePages`
-    sizes the **initial** registry block (default 4 pages ≈ 170 entries; the registry still
+    sizes the **initial** registry block (default 4 pages Ôëê 170 entries; the registry still
     grows on demand beyond that);
-  - **automatic v1 → v2 migration on open**: legacy files with fixed-offset metadata are rebuilt
-    via a crash-safe temp-file swap (data blocks are never moved — checksums/ciphertexts stay
+  - **automatic v1 ÔåÆ v2 migration on open**: legacy files with fixed-offset metadata are rebuilt
+    via a crash-safe temp-file swap (data blocks are never moved ÔÇö checksums/ciphertexts stay
     valid) and the original is preserved as `<file>.backup`;
   - system metadata blocks (`sys:fsm`) are hidden from `EnumerateBlocks()`.
-- **Regression tests** — format-v1 → v2 migration round-trip (`LegacyMigrationTests`),
+- **Regression tests** ÔÇö format-v1 ÔåÆ v2 migration round-trip (`LegacyMigrationTests`),
   FSM-block growth + data round-trip, dynamic registry growth (300+ blocks), tampered registry
   detection at the new dynamic location.
 
 
 ### Added
-- **Block-level Brotli/GZip compression for single-file (`.scdb`) storage** (#344) — transparent
+- **Block-level Brotli/GZip compression for single-file (`.scdb`) storage** (#344) ÔÇö transparent
   per-block compression applied before encryption on write and removed after decryption on read.
   A per-block `Compressed` flag tracks state, so compressed and uncompressed blocks can coexist in
   one file; defaults to `None` (fully backward compatible). New `DatabaseOptions.BlockCompression`
   and `CompressionThreshold` options.
-- **Configurable SingleFile metadata region sizes** (#345) — the FSM, Block Registry and Table
+- **Configurable SingleFile metadata region sizes** (#345) ÔÇö the FSM, Block Registry and Table
   Directory are no longer hard-coded to 4 pages: `DatabaseOptions.FsmSizePages`,
   `BlockRegistrySizePages` and `TableDirectorySizePages` size the regions for large databases
   (>512 MB), and the minimum file extension is now byte-based (~10 MB regardless of `PageSize`).
-- **Unicode & large-blob storage regression tests** (#346) — CJK, emoji (incl. ZWJ sequences), RTL
+- **Unicode & large-blob storage regression tests** (#346) ÔÇö CJK, emoji (incl. ZWJ sequences), RTL
   and combining-character roundtrips, plus 16 MB blob block-chaining coverage.
-- **Full at-rest encryption for single-file (`.scdb`) databases** — beyond block data (#341),
+- **Full at-rest encryption for single-file (`.scdb`) databases** ÔÇö beyond block data (#341),
   the **block registry, free-space map and WAL are now encrypted too** (`EncryptionMode = 2`),
   closing the metadata-leakage gap: block/table names, offsets, lengths and allocation patterns
   are no longer visible in plaintext on disk (header + wrapped-key bundle remain the only
   plaintext bootstrap).
-- **Envelope-encryption key model** — `DatabaseOptions.EncryptionPassword` creates a random
+- **Envelope-encryption key model** ÔÇö `DatabaseOptions.EncryptionPassword` creates a random
   per-file data-encryption-key (DEK) wrapped by a PBKDF2-HMAC-SHA256-derived key
   (per-file salt, OWASP-2024 iteration default). Raw `EncryptionKey` mode remains supported.
-- **Password & key rotation** —
+- **Password & key rotation** ÔÇö
   - `IDatabase.ChangeEncryptionPasswordAsync(newPassword)` re-wraps the same DEK with the new
     password (O(1), no data rewrite; increments the header `EncryptionKeyId` rotation counter).
   - `IDatabase.RotateEncryptionKeyAsync(newKey|newPassword)` fully re-keys the database
@@ -237,7 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     silently returning an empty schema.
 
 ### Fixed
-- **Issue #343 — `VacuumAsync(VacuumMode.Full)` crashed with `ObjectDisposedException` under .NET 10
+- **Issue #343 ÔÇö `VacuumAsync(VacuumMode.Full)` crashed with `ObjectDisposedException` under .NET 10
   trimming / Native AOT** (same fix set as the v1.9.8 line on `master`):
   - the full-vacuum stream swap uses direct field assignment (`SwapFileStream`) instead of reflection,
     and error paths read the file size safely (`GetFileSizeSafely`, `-1` fallback);
@@ -251,7 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     publishes with `PublishAot=true` and runs exit 0 including the single-file full-vacuum path.
   - **Follow-up:** full VACUUM now reloads the block registry / FSM / WAL after the file swap so
     in-memory offsets match the compacted file (fixes stale-offset writes after vacuum).
-- **Issue #344 — compressed single-file (`.scdb`) databases crashed on reopen + SELECT with
+- **Issue #344 ÔÇö compressed single-file (`.scdb`) databases crashed on reopen + SELECT with
   `JsonException: '0x0B' is an invalid start of a value`**:
   - `WriteBlockAsync` only stamped the per-block `Compressed` flag for brand-new blocks; a table
     row-cache block that was rewritten while it already existed (auto-flush as the JSON grows past
@@ -266,55 +246,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-08-28
 
-### Performance-first release 🚀
+### Performance-first release ­ƒÜÇ
 
-The v2.0 release closes the v1.x benchmark gap (was **16–52x slower than SQLite** on point reads,
+The v2.0 release closes the v1.x benchmark gap (was **16ÔÇô52x slower than SQLite** on point reads,
 updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 
 | Operation | v2.0 | SQLite | LiteDB |
 |-----------|-----:|-------:|-------:|
-| READ — Direct / StructRow | 70–126K ops/s | 87–97K | 14–16K |
-| READ — SQL | 51–59K ops/s | 87–97K | 14–16K |
-| INSERT (batch) | 91–133K ops/s | 145–150K | 66–77K |
-| UPDATE (batch) | 41–59K ops/s | 241–296K | 10–11K |
-| DELETE (batch) | 30–142K ops/s | 320–367K | 13–14K |
+| READ ÔÇö Direct / StructRow | 70ÔÇô126K ops/s | 87ÔÇô97K | 14ÔÇô16K |
+| READ ÔÇö SQL | 51ÔÇô59K ops/s | 87ÔÇô97K | 14ÔÇô16K |
+| INSERT (batch) | 91ÔÇô133K ops/s | 145ÔÇô150K | 66ÔÇô77K |
+| UPDATE (batch) | 41ÔÇô59K ops/s | 241ÔÇô296K | 10ÔÇô11K |
+| DELETE (batch) | 30ÔÇô142K ops/s | 320ÔÇô367K | 13ÔÇô14K |
 
 ### Added
-- **`ExecuteQueryStruct(sql, params)`** — first-class zero-allocation struct-row SQL reads with a
+- **`ExecuteQueryStruct(sql, params)`** ÔÇö first-class zero-allocation struct-row SQL reads with a
   cached `VariableLengthSchema` (column layout parsed once, not per row).
-- **`FindByPrimaryKey(table, key)` / `FindByIndex(table, col, value)` direct reads** — no-SQL
+- **`FindByPrimaryKey(table, key)` / `FindByIndex(table, col, value)` direct reads** ÔÇö no-SQL
   point lookups (Direct API tier, the benchmark's "Direct" path).
-- **`SimpleSelectPlan` zero-reparse SELECT fast path** — simple `SELECT … WHERE key = @p` plans
+- **`SimpleSelectPlan` zero-reparse SELECT fast path** ÔÇö simple `SELECT ÔÇª WHERE key = @p` plans
   resolve from the query plan cache without re-lexing or re-parsing.
-- **SIMD numeric WHERE batch filters** — `Vector<T>` batch predicate evaluation for Integer/Long
+- **SIMD numeric WHERE batch filters** ÔÇö `Vector<T>` batch predicate evaluation for Integer/Long
   columns plus a fixed-offset numeric predicate fast path in columnar scans.
-- **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader,
+- **Native AOT readiness** ÔÇö AOT-safe `TypeConverter`, `Option<T>` reader,
   `[RequiresDynamicCode]` annotations, source-generated `TableMetadataDto` and
   `SharpCoreDBJsonContext`. `tools/SharpCoreDB.AotSmoke` publishes and runs successfully
   (CREATE/INSERT/query/StructRow/reopen, exit 0).
-- **New benchmark APIs & tests** — `ExecuteQueryStruct` benchmark path + 5 tests;
+- **New benchmark APIs & tests** ÔÇö `ExecuteQueryStruct` benchmark path + 5 tests;
   regression test for positional `?` placeholders falling back to the legacy binder.
 
 ### Changed
-- **Removed hot-path debug file I/O** — unconditional `File.AppendAllText` writes to `D:\*.log`
+- **Removed hot-path debug file I/O** ÔÇö unconditional `File.AppendAllText` writes to `D:\*.log`
   (per SELECT, per ExecuteSQL, per transaction, per INSERT) are gone. This single artifact was the
   dominant v1.x read bottleneck.
 - **`NormalizeSql` is regex-free** with an allocation short-circuit for query-plan-cache keys.
 - **All hot-path regexes are compiled** (batch UPDATE/DELETE parsing, provider detection,
   `ExecuteQueryFast`).
-- **`HashIndex.Add/Remove` operate on the key only** — no full row copies during index maintenance.
+- **`HashIndex.Add/Remove` operate on the key only** ÔÇö no full row copies during index maintenance.
 - **`UpdateMultiple` no longer copies rows** (`new Dictionary(row)` removed);
   `DeduplicateByPrimaryKey` early-exits on redundant keys.
-- **`LookupPositionsUnsafe`** — no-copy position lookup under an explicit write-lock contract.
-- **DI cached** — `IGraphRagProvider` is resolved once instead of per call in
+- **`LookupPositionsUnsafe`** ÔÇö no-copy position lookup under an explicit write-lock contract.
+- **DI cached** ÔÇö `IGraphRagProvider` is resolved once instead of per call in
   `GetSharedSqlParser`.
-- **Provider fast paths** — `OPTIONALLY` keyword check avoids a full parse per `ExecuteReader`;
+- **Provider fast paths** ÔÇö `OPTIONALLY` keyword check avoids a full parse per `ExecuteReader`;
   span-based single-file and `sqlite_master` detection.
-- **Fixed regression** — positional `?` placeholders now fall back to the legacy parameter binder
+- **Fixed regression** ÔÇö positional `?` placeholders now fall back to the legacy parameter binder
   (previously treated as SQL literals by the fast path).
 
 ### Compatibility
-- **100% backward compatible** with v1.9.x — no public API breaking changes; the fast-path APIs are additive.
+- **100% backward compatible** with v1.9.x ÔÇö no public API breaking changes; the fast-path APIs are additive.
 - Toolchain locked to **.NET 10 / C# 14** for v2.0.x; .NET 11 / C# 15 planned for v2.1.
 
 ### Validation
@@ -326,13 +306,13 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 ## [1.9.6] - 2026-08-28
 
 ### Fixed
-- **Issue 339 — `WHERE col IN (...)` silently returned ALL rows (regression)**: every `IN` variant
+- **Issue 339 ÔÇö `WHERE col IN (...)` silently returned ALL rows (regression)**: every `IN` variant
   (literal lists, parameterized lists, single-value lists, `NOT IN`) was ignored by the predicate
   evaluators and fell through to an "accept all" path:
   - `SingleFileTable.EvaluateSingleCondition` did not recognize `IN`/`NOT IN` at all (single-file
     `.scdb` mode) and returned `true` for every row.
-  - `Table.EvaluateWhere` (directory mode) split the value list on spaces — `IN ('a', 'b')` lost
-    everything after the first value — and non-string columns fell into the switch's `default:
+  - `Table.EvaluateWhere` (directory mode) split the value list on spaces ÔÇö `IN ('a', 'b')` lost
+    everything after the first value ÔÇö and non-string columns fell into the switch's `default:
     return true`.
   - `SqlParser.EvaluateOperator` (enhanced/AST path) did not strip the surrounding parentheses from
     the value list.
@@ -353,38 +333,38 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 
 ### Added
 - **Regression tests for parameter binding**: `ParametricInsertTests` (9 tests) round-trip
-  parameterized INSERT/SELECT/UPDATE with 4–11 named parameters and assert the values land in the
+  parameterized INSERT/SELECT/UPDATE with 4ÔÇô11 named parameters and assert the values land in the
   columns the SQL specifies.
 - **Regression tests for server parameter pass-through**: `ParameterRoundTripTests` (2 tests)
   validate parameterized INSERT + SELECT over gRPC.
 - **ULID specification compatibility tests**: 6 new tests in `UlidTests` validate generation,
   parsing and timestamp extraction against the official ULID test vector
-  (`0000XSNJG0MQJHBF4QX1EFD6Y3` / timestamp `1000000000` ms), the 128-bit range (`7ZZZ…Z` accepted,
-  `8ZZZ…Z` rejected) and the 48-bit timestamp limit.
+  (`0000XSNJG0MQJHBF4QX1EFD6Y3` / timestamp `1000000000` ms), the 128-bit range (`7ZZZÔÇªZ` accepted,
+  `8ZZZÔÇªZ` rejected) and the 48-bit timestamp limit.
 
 ### Fixed
-- **Issue 336 — parameterized INSERT bound values to the wrong columns**: `SqlParser.BindParameters`
+- **Issue 336 ÔÇö parameterized INSERT bound values to the wrong columns**: `SqlParser.BindParameters`
   used substring-based replacement, so a parameter name that is a prefix of another (`@t` vs `@tid`)
-  corrupted the longer placeholder (e.g. `@tid` → `200id`). Binding is now token-aware via
-  `ParameterBinder.Bind` — the single source of truth for named and positional parameters — and
+  corrupted the longer placeholder (e.g. `@tid` ÔåÆ `200id`). Binding is now token-aware via
+  `ParameterBinder.Bind` ÔÇö the single source of truth for named and positional parameters ÔÇö and
   replaces every occurrence of each placeholder.
-- **Issue 337 — SharpCoreDB.Server dropped `request.Parameters`**: `DatabaseService.ExecuteQuery` and
+- **Issue 337 ÔÇö SharpCoreDB.Server dropped `request.Parameters`**: `DatabaseService.ExecuteQuery` and
   `ExecuteNonQuery` now translate `request.Parameters` into the parameter dictionary expected by the
   engine. The binary protocol handler now parses bind-message parameter values (and `$n` placeholders)
   and forwards them, and the WebSocket handler forwards parameters as well.
 - **ULID encoding was not standards-compliant**: the Crockford Base32 encoder/decoder treated a ULID
   as a plain 128-bit bit stream (RFC-4648 style), so generated ULIDs were not interchangeable with
   other standards-compliant implementations (Python/Java/Go). Encoding now follows the ULID
-  specification — the first character carries only 3 significant bits — and decoding rejects values
+  specification ÔÇö the first character carries only 3 significant bits ÔÇö and decoding rejects values
   above the 128-bit range. `Ulid.NewUlid(long)` also enforces the 48-bit timestamp limit.
   *Breaking change vs 1.9.4 for previously stored ULID strings, mirroring posseth.global.ulid v2.0.0.*
 - **Upgrade path for legacy ULIDs**: new `Ulid.FromLegacy(string)` / `Ulid.TryFromLegacy(...)` convert
   ULIDs generated before 1.9.5 into the current spec-compliant encoding. The 128-bit value
-  (timestamp + randomness) is preserved exactly — only the Base32 text changes — so existing
+  (timestamp + randomness) is preserved exactly ÔÇö only the Base32 text changes ÔÇö so existing
   `_rowid` values and ULID columns can be migrated one-to-one. The legacy encoder/decoder is kept as
   `Base32.LegacyEncode`/`Base32.LegacyDecode` for migration tooling.
 - **Automatic legacy-database detection and one-shot ULID migration**: `Database.NeedsLegacyUlidMigration()`
-  tells you whether a database was created before 1.9.5 — the ULID encoding generation is recorded in
+  tells you whether a database was created before 1.9.5 ÔÇö the ULID encoding generation is recorded in
   the database metadata (directory mode) and in the file-header feature flags (single-file `.scdb` mode),
   so no schema or version guessing is needed. `Database.MigrateLegacyUlids()` rewrites every ULID value
   in every `ULID`-typed column of every table (including hidden `_rowid` primary keys) to the
@@ -417,17 +397,17 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 ## [1.9.4] - 2026-08-22
 
 ### Added
-- **Known Issue 1 — opt-in at-rest per-record encryption**: `DatabaseConfig.EnableAtRestRecordEncryption`
+- **Known Issue 1 ÔÇö opt-in at-rest per-record encryption**: `DatabaseConfig.EnableAtRestRecordEncryption`
   (default `false` for full backward compatibility). When enabled, table data files carry an 8-byte
   magic header and each appended record is AES-256-GCM encrypted; point reads, full scans, PK index
   rebuilds and compaction decrypt transparently. Legacy plaintext files and `NoEncryptMode` remain
   byte-for-byte unchanged; legacy/encrypted file mixing is prevented per file.
-- **Known Issue 6 — opt-in SQLite integer affinity**: `DatabaseConfig.UseSqliteIntegerAffinity`
+- **Known Issue 6 ÔÇö opt-in SQLite integer affinity**: `DatabaseConfig.UseSqliteIntegerAffinity`
   (default `false`). When enabled, `INTEGER` DDL maps to `DataType.Long` (Int64) so values like
   `DateTime.UtcNow.Ticks` fit; the default Int32 path now throws an actionable overflow message
   pointing to `BIGINT`/the flag.
-- **Single-file ↔ directory SQL parity**: single-file mode now handles the full WHERE operator set
-  identically to directory mode — `LIKE` / `NOT LIKE` (case-insensitive, `%`/`_`, NULL never matches),
+- **Single-file Ôåö directory SQL parity**: single-file mode now handles the full WHERE operator set
+  identically to directory mode ÔÇö `LIKE` / `NOT LIKE` (case-insensitive, `%`/`_`, NULL never matches),
   `IS NULL` / `IS NOT NULL`, and `BETWEEN` (inclusive, culture-independent numeric comparison).
   Aggregates (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`), `GROUP BY`, `IN`, `ORDER BY`, `LIMIT`, `DISTINCT`
   and JOINs already matched via the shared `SqlParser` and are now covered by regression tests.
@@ -436,20 +416,20 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
   15 intentionally-skipped CPU-timing performance benchmarks.
 
 ### Changed
-- **Version bump 1.9.3 → 1.9.4** across all packable `.csproj` files, `Directory.Packages.props`
+- **Version bump 1.9.3 ÔåÆ 1.9.4** across all packable `.csproj` files, `Directory.Packages.props`
   (`SharpCoreDBVersion`), test projects, and documentation (hub docs, per-package READMEs,
   NuGet-readme info, script clients). `DocumentationConsistencyTests` now enforces `1.9.4` as the
   current release label.
-- **Known Issue 2 — reopen AOORE fix**: `Database.Load()` now pads `DefaultExpressions`,
+- **Known Issue 2 ÔÇö reopen AOORE fix**: `Database.Load()` now pads `DefaultExpressions`,
   `ColumnCheckExpressions` and `ColumnLocaleNames` to the column count, so `ITable.Insert` after a
   reopen no longer throws `ArgumentOutOfRangeException`.
-- **Known Issue 3 — single-file point operations**: `SingleFileTable.FindByPrimaryKey` /
+- **Known Issue 3 ÔÇö single-file point operations**: `SingleFileTable.FindByPrimaryKey` /
   `UpdateByPrimaryKey` / `DeleteByPrimaryKey` are now functional (transaction-aware, respect
   `AutoFlush`) instead of returning `null`/`false`.
-- **Known Issue 4 — read-after-write**: `ExecuteQuery` flushes pending batch-update writes
+- **Known Issue 4 ÔÇö read-after-write**: `ExecuteQuery` flushes pending batch-update writes
   (`_batchUpdateActive`) before executing, matching `ExecuteSQL(SELECT)`; plain metadata dirtiness is
   no longer force-flushed per query (avoids page-based engine read regressions).
-- **Known Issue 5 — SQL validator**: parameter keys are normalized by stripping `@`/`:` prefixes
+- **Known Issue 5 ÔÇö SQL validator**: parameter keys are normalized by stripping `@`/`:` prefixes
   (consistent with `SqlParser.ResolveParameter`), removing false "Missing/Unused parameters" warnings
   while genuine mismatches are still reported.
 - **Benchmark test fix**: `InsertOptimizationsTests.Baseline_10K_Inserts_Without_Optimizations` used
@@ -464,10 +444,10 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 ## [1.9.3] - 2026-07-28
 
 ### Added
-- **SharpCoreDB.Functional.Linq2DB v1.9.3** — Full production release of the linq2db adapter.
+- **SharpCoreDB.Functional.Linq2DB v1.9.3** ÔÇö Full production release of the linq2db adapter.
   - `FunctionalLinq2DbContext` providing `Option<T>`, `Fin<T>`, `Seq<T>` APIs over linq2db (`FindOneAsync`, `QueryAsync` with builder/predicate, `GetAllAsync`, `InsertAsync`/`InsertBatchAsync` (BulkCopy), `UpdateAsync`, `Delete*Async`, `CountAsync`, `ExistsAsync`, `TransactionAsync`).
   - High-performance `BulkCopyAsync` support for batch operations (critical for GraphRAG, AI ingestion, analytics).
-  - Complete type mapping schema (`Ulid`, `Guid` (compact N format), `DateTime`/`DateTimeOffset` (ISO), `bool` ↔ integer for SQLite compatibility).
+  - Complete type mapping schema (`Ulid`, `Guid` (compact N format), `DateTime`/`DateTimeOffset` (ISO), `bool` Ôåö integer for SQLite compatibility).
   - Modern `DataOptions`-based constructors (fixes linq2db deprecation warnings).
   - Comprehensive documentation, examples, and cross-references in root README, `FEATURE_MATRIX`, GraphRAG guide, functional SQL docs, and dedicated package README.
 
@@ -476,7 +456,7 @@ updates and deletes). Measured final two-run ranges vs SQLite/LiteDB:
 - All documentation refreshed to highlight the new library as a first-class, production-ready functional LINQ option (especially valuable for agentic/AI and GraphRAG workloads).
 
 ### Fixed
-- Test projects updated to use compatible SQLite connection strings (`"Data Source=..."`) — resolves linq2db `Microsoft.Data.Sqlite` provider parsing errors with SharpCoreDB's `"Path=..."` format.
+- Test projects updated to use compatible SQLite connection strings (`"Data Source=..."`) ÔÇö resolves linq2db `Microsoft.Data.Sqlite` provider parsing errors with SharpCoreDB's `"Path=..."` format.
 - `GetByIdAsync` improved with safe fallback and explicit limits.
 - All tests in `SharpCoreDB.Functional.Linq2DB.Tests` now pass reliably.
 - Build and CI compatibility verified (including Release configuration).
@@ -513,8 +493,8 @@ This release is a pure preparation/synchronization release with zero functional 
 ## [1.7.2] - 2026-04-28
 
 ### Added
-- **SIMD LoadUnsafe Optimization**: All 16 columnar SIMD aggregate methods (`SumInt32`, `SumInt64`, `SumDouble`, `MinInt32`, `MinInt64`, `MinDouble`, `MaxInt32`, `MaxInt64` — both single-threaded and parallel variants) now use `Vector256.LoadUnsafe(ref data[i])` instead of `Vector256.Create(data.AsSpan(i))`. This eliminates per-iteration `Span<T>` construction and bounds checking overhead in SIMD hot loops, yielding tighter codegen on AVX2 hardware.
-- **Auto-ROWID**: Tables created without an explicit `PRIMARY KEY` now receive a hidden `_rowid` column (ULID type, auto-generated). Follows the SQLite rowid pattern — invisible in `SELECT *`, visible when explicitly queried via `SELECT _rowid, ...`. See [`docs/features/AUTO_ROWID.md`](features/AUTO_ROWID.md) for full documentation.
+- **SIMD LoadUnsafe Optimization**: All 16 columnar SIMD aggregate methods (`SumInt32`, `SumInt64`, `SumDouble`, `MinInt32`, `MinInt64`, `MinDouble`, `MaxInt32`, `MaxInt64` ÔÇö both single-threaded and parallel variants) now use `Vector256.LoadUnsafe(ref data[i])` instead of `Vector256.Create(data.AsSpan(i))`. This eliminates per-iteration `Span<T>` construction and bounds checking overhead in SIMD hot loops, yielding tighter codegen on AVX2 hardware.
+- **Auto-ROWID**: Tables created without an explicit `PRIMARY KEY` now receive a hidden `_rowid` column (ULID type, auto-generated). Follows the SQLite rowid pattern ÔÇö invisible in `SELECT *`, visible when explicitly queried via `SELECT _rowid, ...`. See [`docs/features/AUTO_ROWID.md`](features/AUTO_ROWID.md) for full documentation.
 - `Table.HasInternalRowId` property (persisted in metadata) to track tables with auto-generated `_rowid`.
 - `Table.SelectIncludingRowId()` method for queries that explicitly request `_rowid`.
 - `Database.GetColumnsIncludingHidden()` for schema discovery including hidden columns (with `IsHidden` flag).
@@ -533,7 +513,7 @@ This release is a pure preparation/synchronization release with zero functional 
 - Added parser support for scalar function expressions in SELECT columns (including `COALESCE(...)`) and parenthesized subquery expressions.
 - Improved `EnhancedSqlParser` malformed SQL detection by flagging unparsed trailing content via `HasErrors`.
 - Added LINQ translator handling for `ExpressionType.Convert` / `ConvertChecked` in enum-related comparison scenarios.
-- Improved German locale comparison behavior for `ß/ss` equivalence in locale-aware matching.
+- Improved German locale comparison behavior for `├ƒ/ss` equivalence in locale-aware matching.
 - Fixed PAGE_BASED mixed-predicate filtering (`column = value AND other_column <= value`) by routing scan-time predicate evaluation through the shared SQL condition evaluator; added regression coverage for `ORDER BY ... LIMIT` retrieval.
 - **ColumnStore SIMD consistency**: Cleaned up inconsistent `MaxInt64SIMDDirect` implementation (previously used manual `ref` + `Unsafe.Add` pattern) to use the same `Vector256.LoadUnsafe(ref data[i])` pattern as all other SIMD methods.
 
@@ -570,11 +550,11 @@ This release is a pure preparation/synchronization release with zero functional 
 
 ## [1.6.0] - 2026-03-30
 
-### 🎉 Major Achievement - Phase 12: GraphRAG Enhancement & Vector Search Integration COMPLETE
+### ­ƒÄë Major Achievement - Phase 12: GraphRAG Enhancement & Vector Search Integration COMPLETE
 
 SharpCoreDB v1.6.0 introduces **GraphRAG (Graph Retrieval-Augmented Generation)** - a comprehensive graph analytics platform with semantic vector search integration for contextually rich search results.
 
-### ✨ Added - Phase 12: GraphRAG Enhancement
+### Ô£¿ Added - Phase 12: GraphRAG Enhancement
 
 #### GraphRAG Engine
 - **Real Semantic Search**: Vector search integration with HNSW indexing and SIMD acceleration (50-100x faster than SQLite)
@@ -591,9 +571,9 @@ SharpCoreDB v1.6.0 introduces **GraphRAG (Graph Retrieval-Augmented Generation)*
 
 #### Comprehensive Centrality Metrics
 - **Degree Centrality**: O(n) - Direct connection count measuring popularity
-- **Betweenness Centrality**: O(n × m) - Bridge detection for information flow analysis
-- **Closeness Centrality**: O(n²) - Distance efficiency measuring accessibility
-- **Eigenvector Centrality**: O(k × m) - Influence measurement for prestige analysis
+- **Betweenness Centrality**: O(n ├ù m) - Bridge detection for information flow analysis
+- **Closeness Centrality**: O(n┬▓) - Distance efficiency measuring accessibility
+- **Eigenvector Centrality**: O(k ├ù m) - Influence measurement for prestige analysis
 - **SQL Functions**: Direct database functions for all centrality calculations
 
 #### Advanced Subgraph Queries
@@ -608,7 +588,7 @@ SharpCoreDB v1.6.0 introduces **GraphRAG (Graph Retrieval-Augmented Generation)*
 - **Scaling Strategies**: Horizontal/vertical partitioning for massive graph processing
 - **Health Monitoring**: Cache statistics, performance alerts, and diagnostic tools
 
-### 📚 Documentation & Examples
+### ­ƒôÜ Documentation & Examples
 
 #### Comprehensive Documentation Suite
 - **API Reference**: Complete XML-documented API with complexity analysis
@@ -622,7 +602,7 @@ SharpCoreDB v1.6.0 introduces **GraphRAG (Graph Retrieval-Augmented Generation)*
 - **Custom Providers**: Extensible interface for any embedding service
 - **Production Patterns**: Error handling, caching, monitoring, and scaling
 
-### 🧪 Testing & Quality Assurance
+### ­ƒº¬ Testing & Quality Assurance
 
 #### Comprehensive Test Suite
 - **20 integration tests** covering all major functionality
@@ -630,7 +610,7 @@ SharpCoreDB v1.6.0 introduces **GraphRAG (Graph Retrieval-Augmented Generation)*
 - **Performance validation** with automated benchmarking
 - **Memory safety** verified through comprehensive testing
 
-### 📊 Performance Metrics
+### ­ƒôè Performance Metrics
 
 #### Benchmark Results
 ```
@@ -646,7 +626,7 @@ Enhanced Ranking:            5ms (2000 ops/sec)
 - **SIMD acceleration**: Hardware-optimized vector operations
 - **Batch processing**: Handles large datasets without memory pressure
 
-### 🧹 Documentation Migration & Cleanup
+### ­ƒº╣ Documentation Migration & Cleanup
 - Removed obsolete phase-status, kickoff, completion, and superseded planning documents across `docs/archived`, `docs/server`, and `docs/graphrag`.
 - Consolidated documentation navigation to canonical entry points:
   - `docs/INDEX.md`

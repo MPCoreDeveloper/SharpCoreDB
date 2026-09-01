@@ -39,7 +39,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.0.0.0
 ```
 
 ---

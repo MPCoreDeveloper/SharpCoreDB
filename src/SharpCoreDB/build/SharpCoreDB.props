@@ -2,6 +2,6 @@
 <!-- Copyright (c) 2025 MPCoreDeveloper. Licensed under the MIT License. -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <SharpCoreDBVersion>2.0.0</SharpCoreDBVersion>
+    <SharpCoreDBVersion>2.0.0.1</SharpCoreDBVersion>
   </PropertyGroup>
 </Project>
