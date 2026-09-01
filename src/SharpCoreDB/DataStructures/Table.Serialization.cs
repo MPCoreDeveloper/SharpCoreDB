@@ -214,9 +214,43 @@ public partial class Table
     {
         if (existingRow == null || existingRow.Length == 0 || updates.Count == 0)
             return null;
-
         var offsets = GetColumnOffsetsCached();
         var columnIndexCache = GetColumnIndexCache();
+
+        // When an updated column's static offset is -1 (a variable-length column precedes it),
+        // resolve the runtime offsets by walking the encoded fields of the existing row. This
+        // makes in-place patching work for schemas with leading variable-length columns (e.g.
+        // updating a fixed-size column in a row whose first column is TEXT).
+        bool needsRuntimeOffsets = false;
+        foreach (var (column, _) in updates)
+        {
+            if (columnIndexCache.TryGetValue(column, out int ci) && ci >= 0 && ci < offsets.Length && offsets[ci] < 0)
+            {
+                needsRuntimeOffsets = true;
+                break;
+            }
+        }
+
+        if (needsRuntimeOffsets)
+        {
+            var runtime = new int[Columns.Count];
+            int off = 0;
+            bool walkOk = true;
+            for (int i = 0; i < Columns.Count && off < existingRow.Length; i++)
+            {
+                runtime[i] = off;
+                int size = ReadColumnEncodedSize(existingRow.AsSpan(), off, ColumnTypes[i]);
+                if (size <= 0)
+                {
+                    walkOk = false;
+                    break;
+                }
+                off += size;
+            }
+
+            if (walkOk && off == existingRow.Length)
+                offsets = runtime;
+        }
 
         // Pass 1: every updated column must have a stable offset and fit in its old slot.
         foreach (var (column, value) in updates)
@@ -255,8 +289,14 @@ public partial class Table
             _ = WriteTypedValueToSpan(span.Slice(offset), value, ColumnTypes[colIdx]);
         }
 
+        Interlocked.Increment(ref _inPlacePatchCount);
         return result;
     }
+
+    private long _inPlacePatchCount;
+
+    /// <summary>Number of rows patched in place via <see cref="TryOverwriteFieldsInPlace"/> (monitoring).</summary>
+    public long TotalInPlacePatches => Interlocked.Read(ref _inPlacePatchCount);
 
     /// <summary>
     /// Fixed-width layout step 1: computes the actual per-column byte offsets in an existing
@@ -542,6 +582,22 @@ public partial class Table
     }
 
     /// <summary>
+    /// Column-ordered array variant of <see cref="ComputeExactRowSize(Dictionary{string,object})"/>
+    /// used by the dedicated batch-INSERT path (no dictionary, no column-name lookups).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private int ComputeExactRowSize(object[] values)
+    {
+        int size = 0;
+        for (int i = 0; i < this.Columns.Count; i++)
+        {
+            size += GetEncodedSize(values[i], this.ColumnTypes[i]);
+        }
+
+        return size;
+    }
+
+    /// <summary>
     /// WP13: serializes a row directly into a freshly allocated array of the exact encoded
     /// size. Replaces the ArrayPool.Rent + Span.ToArray() double allocation (one less
     /// allocation and no intermediate copy). Falls back to an exact-length copy on the
@@ -559,6 +615,20 @@ public partial class Table
 
         byte[] buffer = new byte[ComputeExactRowSize(row)];
         int bytesWritten = WriteRowOptimized(buffer.AsSpan(), row);
+        return bytesWritten == buffer.Length
+            ? buffer
+            : buffer.AsSpan(0, bytesWritten).ToArray();
+    }
+
+    /// <summary>
+    /// Column-ordered array variant of <see cref="SerializeRowExact(Dictionary{string,object})"/>
+    /// for the dedicated batch-INSERT path (no dictionary allocation / lookups).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private byte[] SerializeRowExact(object[] values)
+    {
+        byte[] buffer = new byte[ComputeExactRowSize(values)];
+        int bytesWritten = WriteRowGeneric(buffer.AsSpan(), values);
         return bytesWritten == buffer.Length
             ? buffer
             : buffer.AsSpan(0, bytesWritten).ToArray();
@@ -735,6 +805,23 @@ public partial class Table
             offset += WriteTypedValueToSpan(buffer.Slice(offset), value, type);
         }
         
+        return offset;
+    }
+
+    /// <summary>
+    /// Column-ordered array variant of <see cref="WriteRowGeneric(Span{byte},Dictionary{string,object})"/>
+    /// for the dedicated batch-INSERT path (no dictionary lookups).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private int WriteRowGeneric(Span<byte> buffer, object[] values)
+    {
+        int offset = 0;
+
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            offset += WriteTypedValueToSpan(buffer.Slice(offset), values[i], ColumnTypes[i]);
+        }
+
         return offset;
     }
     

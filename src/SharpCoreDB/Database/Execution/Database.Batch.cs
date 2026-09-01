@@ -160,6 +160,67 @@ public partial class Database
         }
 
         /// <summary>
+        /// Parses VALUES clause into a column-ordered <c>object[]</c> using cached metadata.
+        /// Same semantics as <see cref="ParseValues"/> but avoids the per-row dictionary
+        /// allocation — used by the dedicated SQL batch-INSERT path (columns are consumed in
+        /// table column order, identical to <see cref="ParseValues"/>).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public object[] ParseValuesToArray(ReadOnlySpan<char> valuesClause)
+        {
+            var values = new object[Columns.Count];
+
+            int valueStart = 0;
+            int valueIndex = 0;
+            bool inQuotes = false;
+            int parenDepth = 0;
+
+            for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
+            {
+                char c = valuesClause[i];
+
+                if (c == '\'' && (i == 0 || valuesClause[i - 1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                }
+                else if (!inQuotes)
+                {
+                    if (c == '(') parenDepth++;
+                    else if (c == ')') parenDepth--;
+                    else if (c == ',' && parenDepth == 0)
+                    {
+                        if (valueStart < i && valueIndex < ColumnTypes.Count)
+                        {
+                            var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
+                            values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+                        }
+
+                        valueStart = i + 1;
+                        valueIndex++;
+                    }
+                }
+            }
+
+            // Parse last value
+            if (valueIndex < Columns.Count && valueStart < valuesClause.Length)
+            {
+                var valueSpan = valuesClause.Slice(valueStart).Trim();
+                values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+                valueIndex++;
+            }
+
+            // Verify we parsed all expected columns to catch malformed SQL early
+            if (valueIndex != Columns.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Column count mismatch in INSERT VALUES: expected {Columns.Count} values, but parsed {valueIndex}. " +
+                    $"Table '{TableName}' requires columns: {string.Join(", ", Columns)}");
+            }
+
+            return values;
+        }
+
+        /// <summary>
         /// Fast value parsing without string allocations where possible.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -551,7 +612,9 @@ public partial class Database
             return;
         }
 
-        Dictionary<string, List<Dictionary<string, object>>> insertsByTable = [];
+        // ✅ PERF: Dedicated batch-INSERT path uses column-ordered object[] rows
+        // (no per-row Dictionary<string, object> allocation, no column-name lookups)
+        Dictionary<string, List<object[]>> insertsByTableArray = [];
         List<string> nonInserts = [];
 
         // ✅ PHASE 3: Track prepared statement per table for fast repeated parsing
@@ -565,19 +628,19 @@ public partial class Database
         {
             if (IsInsertStatement(sql))
             {
-                // ✅ PHASE 3: Try fast path with prepared statement first
-                var parsed = ParseInsertStatementFast(sql, preparedStatements);
+                // ✅ PHASE 3: Fast path — parse directly into column-ordered object[] rows
+                var parsed = ParseInsertStatementFastToArray(sql, preparedStatements);
                 if (parsed.HasValue)
                 {
-                    var (tableName, row) = parsed.Value;
+                    var (tableName, values) = parsed.Value;
 
-                    if (!insertsByTable.TryGetValue(tableName, out var rows))
+                    if (!insertsByTableArray.TryGetValue(tableName, out var valueList))
                     {
-                        rows = [];
-                        insertsByTable[tableName] = rows;
+                        valueList = [];
+                        insertsByTableArray[tableName] = valueList;
                     }
 
-                    rows.Add(row);
+                    valueList.Add(values);
                 }
                 else
                 {
@@ -623,12 +686,29 @@ public partial class Database
             
             try
             {
-                foreach (var (tableName, rows) in insertsByTable)
+                foreach (var (tableName, rows) in insertsByTableArray)
                 {
                     if (tables.TryGetValue(tableName, out var table))
                     {
-                        // InsertBatch will detect existing transaction and not create nested one
-                        table.InsertBatch(rows);
+                        if (table is DataStructures.Table concreteInsert)
+                        {
+                            // Dedicated fast path: column-ordered object[] rows (no dictionaries).
+                            // The prepared statement carries the user-facing column order
+                            // (excludes the internal _rowid column).
+                            if (preparedStatements.TryGetValue(tableName, out var prepared) && prepared is not null)
+                            {
+                                concreteInsert.InsertBatch(rows.ToArray(), prepared.Columns);
+                            }
+                            else
+                            {
+                                concreteInsert.InsertBatch(rows.ToArray());
+                            }
+                        }
+                        else
+                        {
+                            // Fallback for other ITable implementations
+                            table.InsertBatch(RowsToDictionaryList(table, rows));
+                        }
                     }
                 }
 
@@ -673,9 +753,9 @@ public partial class Database
                 }
                 
                 // ✅ FIX: Force tables to refresh row count from disk to ensure visibility
-                if (insertsByTable.Count > 0)
+                if (insertsByTableArray.Count > 0)
                 {
-                    foreach (var tableName in insertsByTable.Keys)
+                    foreach (var tableName in insertsByTableArray.Keys)
                     {
                         if (tables.TryGetValue(tableName, out var table))
                         {
@@ -685,7 +765,7 @@ public partial class Database
                 }
                 
                 // ✅ FIX: Set metadata dirty flag to ensure ExecuteCompiledQuery flushes before reading
-                if (insertsByTable.Count > 0 || nonInserts.Count > 0)
+                if (insertsByTableArray.Count > 0 || nonInserts.Count > 0)
                 {
                     _metadataDirty = true;
                 }
@@ -699,6 +779,27 @@ public partial class Database
                 throw;
             }
         }
+    }
+
+    /// <summary>
+    /// Converts column-ordered object[] rows to dictionaries. Fallback for ITable
+    /// implementations that do not expose the dedicated array-based InsertBatch fast path.
+    /// </summary>
+    private static List<Dictionary<string, object>> RowsToDictionaryList(SharpCoreDB.Interfaces.ITable table, List<object[]> rows)
+    {
+        var result = new List<Dictionary<string, object>>(rows.Count);
+        var columns = table.Columns;
+        foreach (var values in rows)
+        {
+            var row = new Dictionary<string, object>(values.Length);
+            for (int i = 0; i < values.Length; i++)
+            {
+                row[columns[i]] = values[i];
+            }
+            result.Add(row);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -791,6 +892,79 @@ public partial class Database
 #endif
             // Fall back to original parsing on any error
             return ParseInsertStatement(sql);
+        }
+    }
+
+    /// <summary>
+    /// Fast INSERT parsing that produces a column-ordered <c>object[]</c> instead of a dictionary.
+    /// Used by the dedicated SQL batch-INSERT fast path (<see cref="ExecuteBatchSQL"/>).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private (string tableName, object[] values)? ParseInsertStatementFastToArray(
+        string sql,
+        Dictionary<string, PreparedInsertStatement?> preparedCache)
+    {
+        try
+        {
+            var insertSql = sql.AsSpan();
+            var insertIdx = insertSql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+            if (insertIdx < 0) return null;
+
+            insertSql = insertSql.Slice(insertIdx);
+            var tableStart = "INSERT INTO ".Length;
+
+            // Find table name end
+            int tableEnd = -1;
+            for (int i = tableStart; i < insertSql.Length; i++)
+            {
+                if (insertSql[i] == ' ' || insertSql[i] == '(')
+                {
+                    tableEnd = i;
+                    break;
+                }
+            }
+            if (tableEnd == -1) return null;
+
+            var tableName = insertSql.Slice(tableStart, tableEnd - tableStart).Trim().ToString();
+            if (!tables.ContainsKey(tableName))
+                return null;
+
+            if (!preparedCache.TryGetValue(tableName, out var prepared))
+            {
+                prepared = GetOrCreatePreparedInsert(tableName);
+                preparedCache[tableName] = prepared;
+            }
+
+            if (prepared == null)
+            {
+                return null;
+            }
+
+            // Find VALUES clause
+            var rest = insertSql.Slice(tableEnd);
+            var valuesIdx = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase);
+            if (valuesIdx < 0) return null;
+
+            var valuesClause = rest.Slice(valuesIdx + "VALUES".Length).Trim();
+
+            // Remove outer parentheses
+            if (valuesClause.Length > 2 && valuesClause[0] == '(' && valuesClause[^1] == ')')
+            {
+                valuesClause = valuesClause[1..^1];
+            }
+
+            if (valuesClause.IsEmpty || valuesClause.IsWhiteSpace())
+            {
+                return null;
+            }
+
+            var values = prepared.ParseValuesToArray(valuesClause);
+            return (tableName, values);
+        }
+        catch
+        {
+            // Fall back to the generic path on any parse error
+            return null;
         }
     }
 

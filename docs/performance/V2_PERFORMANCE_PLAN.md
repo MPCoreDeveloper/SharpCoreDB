@@ -1,11 +1,11 @@
 # SharpCoreDB v2.x — Performance-First Roadmap
 
-**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · **WP8 Phase 0 (toolchain baseline) complete on `release/v2.1.0.0`** · remaining items target v2.1
+**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · **WP8 Phase 0 (toolchain baseline) complete on `release/v2.1.0.0`** · **WP14 backported to `release/v2.1.0.0`** · remaining items target v2.1
 **Branch:** `release/v2.0.0.0` (v2.0.x line, .NET 10 / C# 14) · `release/v2.1.0.0` (v2.1 line, .NET 11 / C# 15)
 **Target version:** 2.0.0.0 (shipped) → 2.1.0.0 (next)
 **Current toolchain (v2.1 branch):** .NET 11 preview 7 / C# 15 preview (`LangVersion latest` — numeric `15.0` is only valid at GA)
 **Next milestone:** .NET 11 GA (mainstream November 2026) — switch to `LangVersion 15.0`, adopt Zstandard + IEEE 754 decimal when they land in the runtime
-**Last updated:** August 2026
+**Last updated:** September 2026
 
 ---
 
@@ -69,6 +69,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP9-E** | Native AOT readiness | `[RequiresDynamicCode]` on `QueryCompiler.Compile` + LINQ translator; AOT-safe `TypeConverter` (no `Convert.ChangeType`); AOT-safe `Option<T>` reader (no reflection); source-generated metadata JSON via `TableMetadataDto` + `SharpCoreDBJsonContext` with a JIT/AOT conditional resolver | ✅ **DONE in v2.0.0** (`tools/SharpCoreDB.AotSmoke` publishes with `PublishAot=true` and **runs: 1000 inserts, point lookup, StructRow point + full scan, reopen — exit 0**) |
 | **WP10** | .NET 11 SQL-verb allocation refactor | Replace the hot-path `sql.Trim().Split(' ')[0]` verb dispatch (Trim substring + `string[]` + one string/token per `ExecuteSQL`/`ExecuteNonQuery`/`ExecuteSQLAsync`) with an allocation-free `FirstToken(ReadOnlySpan<char>)` span dispatch | ✅ **DONE on `release/v2.1.0.0`** — 1,509 tests green; **DELETE (SQL) ≈2×** (22.4K → 46.7K ops/sec) in a single-run comparison |
 | **WP11** | Columnar aggregates → Vector512 | Add a guarded `Vector512.IsHardwareAccelerated` fast path ahead of every `Vector256` branch in the 18 column-store SUM/MIN/MAX aggregate methods (2× SIMD width on AVX-512 hardware) | ✅ **DONE on `release/v2.1.0.0`** — 1,509 tests green; fallback path verified on this AVX2-only machine; the Vector512 path activates automatically on AVX-512 hardware |
+| **WP14** | Dedicated SQL batch-INSERT fast path (`object[]` rows) | `ExecuteBatchSQL` INSERTs now parse VALUES directly into column-ordered `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and insert via `Table.InsertBatch(object[][], columnOrder)` — no per-row `Dictionary<string, object>` allocation, no column-name `TryGetValue` lookups; user-facing column order (excludes internal `_rowid`) is re-mapped to table positions with full dict-path parity (defaults, AUTO, explicit NULL, NOT NULL, PK, indexes) | ✅ **DONE on `master` (v2.0.0.1), backported to `release/v2.1.0.0`** (SQL INSERT 54.5K/s → 98.2K/s, **+80%**; verified by full test suite on both lines) |
 
 ---
 
@@ -154,6 +155,7 @@ from **976 → 471 B/op (−52%)** on the StructRow path (911 B/op on the dictio
 throughput. Remaining bytes are the plan-cache key, WHERE-string build, `TryParseSimpleWhereClause`
 strings, hash-index position list and `engine.Read`'s per-read byte[].
 
+<<<<<<< HEAD
 ### 3.4 #6 in-place UPDATE for columnar/append-only storage (2026-08-31, `3d4cee77` + `68cb5dab` on `release/v2.1.0.0`; `116fc30e` + `8a13ba2b` on `release/v2.0.0.0`)
 
 UPDATE no longer appends a new version for fixed-width records. `Table.Update` first attempts an
@@ -343,6 +345,36 @@ restored from config on reopen.
   variable-column updates stop growing the `.ovf` within a session; the copy-on-compact pass still
   reclaims the remaining dead space. Also fixed a latent B1 leak where the first arena block
   (offset 0) was never freed on update (`oldOffset != 0` treated offset 0 as "no block").
+### 3.9 WP14 — dedicated batch-INSERT fast path (2026-09-01, backported to `release/v2.1.0.0`)
+
+Same machine, `SharpCoreDB.Benchmarks.Comparative` (AppendOnly, 100K inserts / 10K reads-updates-deletes),
+**before → after** WP14 on the net10 line (identical harness invocation; SQLite numbers shift with
+machine load, so the relative gap matters more than absolute ops/sec):
+
+| Operation | before (SQL) | after (SQL) | SQLite (same run) | INSERT gap vs SQLite |
+|-----------|-------------:|------------:|------------------:|---------------------:|
+| **INSERT** | 54,515/s | **98,219/s (+80%)** | 144,603/s | 1.94× → **1.47×** |
+| READ | 38,068/s | 75,569/s | 96,691/s | ~1.3× |
+| UPDATE | 26,633/s | 41,648/s | 290,382/s | ~7× (structural) |
+| DELETE | 35,294/s | 86,861/s | 367,711/s | ~4× (structural) |
+
+What changed:
+- **`PreparedInsertStatement.ParseValuesToArray`** — parses a VALUES clause directly into a
+  column-ordered `object[]` (same `ParseValueFast` conversion rules; no dictionary, no column-name
+  lookups). The batch INSERT path in `ExecuteBatchSQL` (`Database.Batch.cs`) now uses it via
+  `ParseInsertStatementFastToArray` (fast path: only runs after `IsInsertStatement`).
+- **`Table.InsertBatch(object[][], List<string> columnOrder)`** (`Table.CRUD.cs`) — validates,
+  defaults, auto-generates, NOT-NULL-checks and serializes column-ordered rows without per-row
+  `Dictionary<string, object>` allocations. The user-facing column order (which excludes the
+  internal `_rowid` column) is re-mapped onto table column positions; absent columns get defaults,
+  explicit NULLs stay NULL, AUTO columns auto-generate — byte-for-byte parity with the dictionary
+  path (verified by the full test suite on both branches).
+
+> **Independent AVX-512 machine run (2026-09-01):** a 6-run benchmark on real AVX-512 hardware
+> confirmed the same CRUD profile (INSERT 0.69–0.85× of SQLite, READ 0.58–0.72×, UPDATE 0.13–0.21×,
+> DELETE 0.07–0.11×; beats LiteDB on every operation) and validated the AVX-512 SIMD tier
+> (2–26× over scalar). See
+> [`docs/benchmarks/AVX512_2026-09-01.md`](../benchmarks/AVX512_2026-09-01.md).
 
 ---
 

@@ -149,6 +149,7 @@ guide explaining when SharpCoreDB is fastest.
 - `benchmarks/BENCHMARK_SCENARIOS_FINAL.md`
 - `benchmarks/SHARPCOREDB_VS_ZVEC_COMPARISON.md`
 - `benchmarks/ZVEC_BENCHMARKS_COMPLETE.md`
+- `benchmarks/AVX512_2026-09-01.md` — **AVX-512 hardware results** (2026-09-01, real AVX-512 machine): SIMD kernels 2–26× vs scalar + CRUD vs SQLite/LiteDB (raw per-run `.md`/`.json` in `benchmarks/avx512-2026-09-01/`)
 - `performance/graphrag-performance-tuning.md`
 - `QUERY_PLAN_CACHE.md`
 - `../tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/` — runnable harness + `results/*.json`
