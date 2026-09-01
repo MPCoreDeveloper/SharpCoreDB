@@ -19,8 +19,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 
-// NOSONAR:S2068 - intentional: smoke-test tool uses a throwaway local password (never a real credential).
-const string AotPassword = "aot123";
+// Smoke-test tool: throwaway local password, never a real credential.
+const string AotPassword = "aot123"; // NOSONAR:S2068 - intentional test fixture value
 
 var services = new ServiceCollection();
 services.AddSharpCoreDB();

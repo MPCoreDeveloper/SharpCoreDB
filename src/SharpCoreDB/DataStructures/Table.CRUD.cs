@@ -276,7 +276,7 @@ public partial class Table
     /// Semantics are identical (validation, defaults, NOT NULL, PK, indexes, engine batch).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns);
+    internal long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns); // NOSONAR:S2368 - internal API consumed by the SQL batch-INSERT parser
 
     /// <summary>
     /// Dedicated SQL batch-INSERT fast path with an explicit user-facing column order (as used
