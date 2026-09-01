@@ -311,10 +311,11 @@ internal sealed class WalManager : IDisposable
         _provider.EncryptWalEntry(entryBuffer);
 
         
-        // Write to file
-        fileStream.Position = filePosition;
-        await fileStream.WriteAsync(entryBuffer.AsMemory(), cancellationToken);
-        
+        // Write to file (through the provider's WriteAt so the shared FileStream.Position
+        // is serialized with data/metadata writes — a bare Position+WriteAsync here raced
+        // with the background write-behind worker and could land WAL bytes on a data page).
+        _provider.WriteAt(filePosition, entryBuffer);
+
         // Update circular buffer pointers
         lock (_walLock)
         {
@@ -479,9 +480,9 @@ internal sealed class WalManager : IDisposable
         var headerBuffer = new byte[WalHeader.SIZE];
         MemoryMarshal.Write(headerBuffer, in header);
         
-        // Write to beginning of WAL region
-        fileStream.Position = (long)_walOffset;
-        await fileStream.WriteAsync(headerBuffer.AsMemory(), cancellationToken);
+        // Write to beginning of WAL region (through the provider's WriteAt so the shared
+        // FileStream.Position is serialized with data/metadata writes — see WriteEntryToBufferAsync).
+        _provider.WriteAt((long)_walOffset, headerBuffer);
     }
 
     private System.IO.FileStream GetFileStream()
