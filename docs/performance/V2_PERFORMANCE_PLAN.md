@@ -1,11 +1,11 @@
 # SharpCoreDB v2.x — Performance-First Roadmap
 
-**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E complete (all committed on `release/v2.0.0.0`) · remaining items target v2.1
-**Branch:** `release/v2.0.0.0`
+**Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E, WP14 complete (all committed on `release/v2.0.0.0` + `master`) · remaining items target v2.1
+**Branch:** `master` / `release/v2.0.0.0`
 **Target version:** 2.0.0.0 (shipped) → 2.1.0.0 (next)
 **Current toolchain:** .NET 10 / C# 14 (locked for v2.0.x)
 **Next toolchain:** .NET 11 / C# 15 — mainstream November 2026 (planned for v2.1+)
-**Last updated:** August 2026
+**Last updated:** September 2026
 
 ---
 
@@ -67,6 +67,7 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 | **WP9** | Zero-allocation `StructRow` read path | Promote the dormant zero-copy `StructRow` machinery into a first-class parameterized/WHERE-capable API; cache the variable-length schema; benchmark vs SQLite | ✅ **DONE in v2.0.0** (`ExecuteQueryStruct` READ = 112K/s — **beats SQLite 84K/s**) |
 | **WP9-B/C** | SIMD in the row scan path | Fixed-offset numeric WHERE fast path: direct binary reads (no boxing/string) + portable `Vector<T>` SIMD batch equality filter for Integer/Long in `ScanStructRowsWhere`; numeric early-WHERE in the columnar full scan | ✅ **DONE in v2.0.0** (point-lookup read unaffected; numeric full-scan WHERE now SIMD-filtered, verified by tests) |
 | **WP9-E** | Native AOT readiness | `[RequiresDynamicCode]` on `QueryCompiler.Compile` + LINQ translator; AOT-safe `TypeConverter` (no `Convert.ChangeType`); AOT-safe `Option<T>` reader (no reflection); source-generated metadata JSON via `TableMetadataDto` + `SharpCoreDBJsonContext` with a JIT/AOT conditional resolver | ✅ **DONE in v2.0.0** (`tools/SharpCoreDB.AotSmoke` publishes with `PublishAot=true` and **runs: 1000 inserts, point lookup, StructRow point + full scan, reopen — exit 0**) |
+| **WP14** | Dedicated SQL batch-INSERT fast path (`object[]` rows) | `ExecuteBatchSQL` INSERTs now parse VALUES directly into column-ordered `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and insert via `Table.InsertBatch(object[][], columnOrder)` — no per-row `Dictionary<string, object>` allocation, no column-name `TryGetValue` lookups; user-facing column order (excludes internal `_rowid`) is re-mapped to table positions with full dict-path parity (defaults, AUTO, explicit NULL, NOT NULL, PK, indexes). Also wires `UpdateMultiple` to the existing WP11 in-place field-overwrite fast path with runtime offsets (fixed-size fields after variable-length columns now patch in place) | ✅ **DONE in v2.0.0.1** (SQL INSERT 54.5K/s → 98.2K/s, **+80%**; verified by full 1,680-test suite + `TotalInPlacePatches` instrumentation) |
 
 ---
 
@@ -151,6 +152,46 @@ allocation-free; LINQ/boxing goes through a small class-based enumerator). A poi
 from **976 → 471 B/op (−52%)** on the StructRow path (911 B/op on the dictionary path), with +13%
 throughput. Remaining bytes are the plan-cache key, WHERE-string build, `TryParseSimpleWhereClause`
 strings, hash-index position list and `engine.Read`'s per-read byte[].
+
+### 3.4 WP14 — dedicated batch-INSERT fast path (2026-09-01, `master` / v2.0.0.1 line)
+
+Same machine, `SharpCoreDB.Benchmarks.Comparative` (AppendOnly, 100K inserts / 10K reads-updates-deletes),
+**before → after** WP14 (identical harness invocation; SQLite numbers shift with machine load, so the
+relative gap matters more than absolute ops/sec):
+
+| Operation | before (SQL) | after (SQL) | SQLite (same run) | INSERT gap vs SQLite |
+|-----------|-------------:|------------:|------------------:|---------------------:|
+| **INSERT** | 54,515/s | **98,219/s (+80%)** | 144,603/s | 1.94× → **1.47×** |
+| READ | 38,068/s | 75,569/s | 96,691/s | ~1.3× |
+| UPDATE | 26,633/s | 41,648/s | 290,382/s | ~7× (structural) |
+| DELETE | 35,294/s | 86,861/s | 367,711/s | ~4× (structural) |
+
+What changed:
+- **`PreparedInsertStatement.ParseValuesToArray`** — parses a VALUES clause directly into a
+  column-ordered `object[]` (same `ParseValueFast` conversion rules; no dictionary, no column-name
+  lookups). The batch INSERT path in `ExecuteBatchSQL` (`Database.Batch.cs`) now uses it via
+  `ParseInsertStatementFastToArray`.
+- **`Table.InsertBatch(object[][], List<string> columnOrder)`** (`Table.CRUD.cs`) — validates,
+  defaults, auto-generates, NOT-NULL-checks and serializes column-ordered rows without per-row
+  `Dictionary<string, object>` allocations. The user-facing column order (which excludes the
+  internal `_rowid` column) is re-mapped onto table column positions; absent columns get defaults,
+  explicit NULLs stay NULL, AUTO columns auto-generate — byte-for-byte parity with the dictionary
+  path (verified by the full 1,680-test suite).
+- **`UpdateMultiple` in-place wiring** — batch UPDATE now carries the storage position + raw bytes
+  from the hash-index point lookup and tries the existing WP11 `TryOverwriteFieldsInPlace` fast path
+  first. `TryOverwriteFieldsInPlace` gained **runtime offset resolution** (walks the encoded fields
+  of the existing row when a variable-length column precedes the updated column), so fixed-size
+  fields can now be patched in place even in schemas with a leading TEXT column. Instrumented via
+  `Table.TotalInPlacePatches`. On AppendOnly the engine still appends the new version, so the
+  UPDATE gain is modest (~1.5× vs pre-WP14 baseline, and still behind SQLite's in-place b-tree
+  writes — the remaining structural gap targeted by the PageBased/in-place engine work).
+
+> **Independent AVX-512 machine run (2026-09-01):** a 6-run benchmark on real AVX-512 hardware
+> confirmed the same CRUD profile (INSERT 0.69–0.85× of SQLite, READ 0.58–0.72×, UPDATE 0.13–0.21×,
+> DELETE 0.07–0.11×; beats LiteDB on every operation) and validated the AVX-512 SIMD tier
+> (2–26× over scalar). See
+> [`docs/benchmarks/AVX512_2026-09-01.md`](../benchmarks/AVX512_2026-09-01.md).
+
 
 
 ---

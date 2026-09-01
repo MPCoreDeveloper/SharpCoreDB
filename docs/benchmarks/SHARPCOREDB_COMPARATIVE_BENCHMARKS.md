@@ -206,6 +206,11 @@ SharpCoreDB automatically uses the best SIMD instruction set available on the ho
 
 > **Zvec crashed with `Illegal instruction (core dumped)` on our test CPU** (i7-10850H, AVX2) because it hard-requires AVX-512. SharpCoreDB's single binary runs on any CPU and adapts automatically.
 
+> **AVX-512 hardware results (2026-09-01):** measured on a real AVX-512 machine — the AVX-512 tier
+> (`EuclidSq`, `Normalize`, `Cosine`, `Dot`, `Hamming`, dims 64–1024) reaches **2–26× over scalar** and
+> **up to 2.7× over AVX2** for memory-bound kernels, with adaptive fallback confirmed. Full 6-run report:
+> [`AVX512_2026-09-01.md`](AVX512_2026-09-01.md).
+
 ---
 
 ## Part 3: Overall Comparison Matrix

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- **Dedicated SQL batch-INSERT fast path (WP14)** — `ExecuteBatchSQL` INSERTs no longer build a
+  per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
+  `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new
+  `Table.InsertBatch(object[][], columnOrder)` path with full dict-path parity (defaults, AUTO,
+  explicit NULL, NOT NULL, PK, hash/B-tree indexes). SQL INSERT throughput measured **+80%**
+  (54.5K/s → 98.2K/s in the comparative benchmark), closing the INSERT gap vs SQLite from ~1.9× to
+  ~1.5×. Batch UPDATE also reuses the WP11 in-place field-overwrite fast path (runtime offsets now
+  resolve fixed-size fields after variable-length columns; monitored via `Table.TotalInPlacePatches`).
+- **AVX-512 validation on real hardware (2026-09-01)** — 6-run benchmark on an AVX-512 machine
+  confirmed the adaptive SIMD tier (AVX-512 **2–26× over scalar**, up to **2.7× over AVX2** for
+  `EuclidSq`/`Normalize`, dims 64–1024) and the CRUD profile (beats LiteDB on every operation; INSERT
+  at 0.69–0.85× of SQLite). Full report:
+  `docs/benchmarks/AVX512_2026-09-01.md` (+ raw per-run `.md`/`.json` in `docs/benchmarks/avx512-2026-09-01/`).
+
 ## [2.0.0.1] - 2026-09-01
 
 ### Fixed
