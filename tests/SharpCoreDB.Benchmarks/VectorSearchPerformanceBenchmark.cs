@@ -299,7 +299,6 @@ public class VectorSearchPerformanceBenchmark
 public class VectorSearchLatencyBenchmark
 {
     private HnswIndex _index = null;
-    private float[][] _vectors = null;
     private const int VectorCount = 10000;
     private const int Dimensions = 1536;
     private Random _random = null;
@@ -319,12 +318,12 @@ public class VectorSearchLatencyBenchmark
         };
 
         _index = new HnswIndex(config, seed: 42);
-        _vectors = new float[VectorCount][];
+        var vectors = new float[VectorCount][];
 
         for (int i = 0; i < VectorCount; i++)
         {
             var vector = GenerateRandomVector(Dimensions);
-            _vectors[i] = vector;
+            vectors[i] = vector;
             _index.Add(i, vector);
         }
     }

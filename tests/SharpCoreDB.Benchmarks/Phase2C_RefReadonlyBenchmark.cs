@@ -158,14 +158,12 @@ public class Phase2CRefReadonlyBenchmark
 public class Phase2CRefReadonlyDetailedTest
 {
     private RowMaterializer materializer = null;
-    private string[] columnNames = null;
-    private Type[] columnTypes = null;
 
     [GlobalSetup]
     public void Setup()
     {
-        columnNames = new[] { "id", "name", "email", "age", "is_active" };
-        columnTypes = new[] { typeof(int), typeof(string), typeof(string), typeof(int), typeof(bool) };
+        var columnNames = new[] { "id", "name", "email", "age", "is_active" };
+        var columnTypes = new[] { typeof(int), typeof(string), typeof(string), typeof(int), typeof(bool) };
         
         materializer = new RowMaterializer(columnNames, columnTypes);
     }

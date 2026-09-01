@@ -293,6 +293,58 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         EnsureCacheLoaded();
 
+        lock (_tableLock)
+        {
+            // Issue A1 fast path: an exact `pk = value` equality resolves through the primary-key
+            // hash index (O(1)) instead of a full cache scan. Candidates are still verified with
+            // the full predicate so semantics are identical to the scan path.
+            if (TryGetPkLookupResults(where, orderBy, asc, out var pkResults))
+            {
+                return pkResults;
+            }
+
+            // PERF: evaluate WHERE/ORDER BY against the cached rows (read-only) and
+            // materialize (defensive-copy) only the surviving rows. Previously every
+            // row was copied up-front, so a point lookup on a large cache copied the
+            // whole table before filtering (O(N) dictionary allocations per query).
+            IEnumerable<Dictionary<string, object>> source = ApplyCondition(_rowCache, where);
+
+            if (!string.IsNullOrWhiteSpace(orderBy))
+            {
+                source = ApplyOrderBy(source, orderBy, asc);
+            }
+
+            return source.Select(row => new Dictionary<string, object>(row)).ToList();
+        }
+    }
+
+    private bool TryGetPkLookupResults(string? where, string? orderBy, bool asc, out List<Dictionary<string, object>> results)
+    {
+        results = [];
+        var condition = NormalizeWhereCondition(where);
+
+        if (!IsPkIndexLookupSafe() || !TryParsePkEquality(condition, out var pkValue) || pkValue is null)
+        {
+            return false;
+        }
+
+        results = _pkIndex.TryGetValue(pkValue, out var candidates)
+            ? candidates.Where(row => EvaluateCondition(row, condition))
+                        .Select(row => new Dictionary<string, object>(row)).ToList()
+            : [];
+
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            results = asc
+                ? [.. results.OrderBy(row => GetOrderKey(row, orderBy))]
+                : [.. results.OrderByDescending(row => GetOrderKey(row, orderBy))];
+        }
+
+        return true;
+    }
+
+    private static string? NormalizeWhereCondition(string? where)
+    {
         // Strip leading WHERE keyword if present
         var condition = where?.Trim();
         if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
@@ -300,56 +352,39 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             condition = condition[6..].Trim();
         }
 
-        List<Dictionary<string, object>> results;
-        lock (_tableLock)
+        return condition;
+    }
+
+    private static IEnumerable<Dictionary<string, object>> ApplyCondition(
+        IEnumerable<Dictionary<string, object>> rows, string? where)
+    {
+        var condition = NormalizeWhereCondition(where);
+        if (string.IsNullOrWhiteSpace(condition))
         {
-            // Issue A1 fast path: an exact `pk = value` equality resolves through the primary-key
-            // hash index (O(1)) instead of a full cache scan. Candidates are still verified with
-            // the full predicate so semantics are identical to the scan path.
-            if (IsPkIndexLookupSafe() && TryParsePkEquality(condition, out var pkValue) && pkValue is not null)
-            {
-                results = _pkIndex.TryGetValue(pkValue, out var candidates)
-                    ? candidates.Where(row => EvaluateCondition(row, condition))
-                                .Select(row => new Dictionary<string, object>(row)).ToList()
-                    : [];
-
-                if (!string.IsNullOrWhiteSpace(orderBy))
-                {
-                    results = asc
-                        ? [.. results.OrderBy(row => row.TryGetValue(orderBy, out var value) ? value : null)]
-                        : [.. results.OrderByDescending(row => row.TryGetValue(orderBy, out var value) ? value : null)];
-                }
-
-                return results;
-            }
-
-            // PERF: evaluate WHERE/ORDER BY against the cached rows (read-only) and
-            // materialize (defensive-copy) only the surviving rows. Previously every
-            // row was copied up-front, so a point lookup on a large cache copied the
-            // whole table before filtering (O(N) dictionary allocations per query).
-            IEnumerable<Dictionary<string, object>> source = _rowCache;
-            if (!string.IsNullOrWhiteSpace(condition))
-            {
-                // Fast path: a simple "col op value" condition is parsed ONCE and
-                // evaluated per row without per-row regex/IN/AND/OR parsing.
-                var fastPredicate = TryCreateSimpleConditionPredicate(condition);
-                source = fastPredicate is not null
-                    ? _rowCache.Where(fastPredicate)
-                    : _rowCache.Where(row => EvaluateCondition(row, condition));
-            }
-
-            if (!string.IsNullOrWhiteSpace(orderBy))
-            {
-                source = asc
-                    ? source.OrderBy(row => row.TryGetValue(orderBy, out var value) ? value : null)
-                    : source.OrderByDescending(row => row.TryGetValue(orderBy, out var value) ? value : null);
-            }
-
-            results = source.Select(row => new Dictionary<string, object>(row)).ToList();
+            return rows;
         }
 
-        return results;
+        // Fast path: a simple "col op value" condition is parsed ONCE and
+        // evaluated per row without per-row regex/IN/AND/OR parsing.
+        var fastPredicate = TryCreateSimpleConditionPredicate(condition);
+        return fastPredicate is not null
+            ? rows.Where(fastPredicate)
+            : rows.Where(row => EvaluateCondition(row, condition));
     }
+
+    private static IEnumerable<Dictionary<string, object>> ApplyOrderBy(
+        IEnumerable<Dictionary<string, object>> rows, string orderBy, bool asc)
+    {
+        if (asc)
+        {
+            return rows.OrderBy(row => GetOrderKey(row, orderBy));
+        }
+
+        return rows.OrderByDescending(row => GetOrderKey(row, orderBy));
+    }
+
+    private static object? GetOrderKey(Dictionary<string, object> row, string orderBy)
+        => row.TryGetValue(orderBy, out var value) ? value : null;
 
     /// <inheritdoc />
     public void Update(string? where, Dictionary<string, object> updates) => UpdateAffectedCount(where, updates);
@@ -1613,67 +1648,69 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         var value = valueStr;
         var operatorStr = op;
 
-        return row =>
+        return row => EvaluateSimplePredicate(column, operatorStr, value, row);
+    }
+
+    private static bool EvaluateSimplePredicate(string column, string op, string value, Dictionary<string, object> row)
+    {
+        if (!row.TryGetValue(column, out var rowValue) || rowValue is null or DBNull)
         {
-            if (!row.TryGetValue(column, out var rowValue) || rowValue is null or DBNull)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            // Exact same type cascade as EvaluateSingleCondition.
-            if (rowValue is int intVal && int.TryParse(value, out var intCompare))
+        // Exact same type cascade as EvaluateSingleCondition.
+        if (rowValue is int intVal && int.TryParse(value, out var intCompare))
+        {
+            return op switch
             {
-                return operatorStr switch
-                {
-                    "=" => intVal == intCompare,
-                    "!=" or "<>" => intVal != intCompare,
-                    ">" => intVal > intCompare,
-                    "<" => intVal < intCompare,
-                    ">=" => intVal >= intCompare,
-                    "<=" => intVal <= intCompare,
-                    _ => true
-                };
-            }
-
-            if (rowValue is long longVal && long.TryParse(value, out var longCompare))
-            {
-                return operatorStr switch
-                {
-                    "=" => longVal == longCompare,
-                    "!=" or "<>" => longVal != longCompare,
-                    ">" => longVal > longCompare,
-                    "<" => longVal < longCompare,
-                    ">=" => longVal >= longCompare,
-                    "<=" => longVal <= longCompare,
-                    _ => true
-                };
-            }
-
-            if (rowValue is decimal decVal && decimal.TryParse(value, out var decCompare))
-            {
-                return operatorStr switch
-                {
-                    "=" => decVal == decCompare,
-                    "!=" or "<>" => decVal != decCompare,
-                    ">" => decVal > decCompare,
-                    "<" => decVal < decCompare,
-                    ">=" => decVal >= decCompare,
-                    "<=" => decVal <= decCompare,
-                    _ => true
-                };
-            }
-
-            var comparison = string.Compare(rowValue.ToString(), value, StringComparison.Ordinal);
-            return operatorStr switch
-            {
-                "=" => comparison == 0,
-                "!=" or "<>" => comparison != 0,
-                ">" => comparison > 0,
-                "<" => comparison < 0,
-                ">=" => comparison >= 0,
-                "<=" => comparison <= 0,
+                "=" => intVal == intCompare,
+                "!=" or "<>" => intVal != intCompare,
+                ">" => intVal > intCompare,
+                "<" => intVal < intCompare,
+                ">=" => intVal >= intCompare,
+                "<=" => intVal <= intCompare,
                 _ => true
             };
+        }
+
+        if (rowValue is long longVal && long.TryParse(value, out var longCompare))
+        {
+            return op switch
+            {
+                "=" => longVal == longCompare,
+                "!=" or "<>" => longVal != longCompare,
+                ">" => longVal > longCompare,
+                "<" => longVal < longCompare,
+                ">=" => longVal >= longCompare,
+                "<=" => longVal <= longCompare,
+                _ => true
+            };
+        }
+
+        if (rowValue is decimal decVal && decimal.TryParse(value, out var decCompare))
+        {
+            return op switch
+            {
+                "=" => decVal == decCompare,
+                "!=" or "<>" => decVal != decCompare,
+                ">" => decVal > decCompare,
+                "<" => decVal < decCompare,
+                ">=" => decVal >= decCompare,
+                "<=" => decVal <= decCompare,
+                _ => true
+            };
+        }
+
+        var comparison = string.Compare(rowValue.ToString(), value, StringComparison.Ordinal);
+        return op switch
+        {
+            "=" => comparison == 0,
+            "!=" or "<>" => comparison != 0,
+            ">" => comparison > 0,
+            "<" => comparison < 0,
+            ">=" => comparison >= 0,
+            "<=" => comparison <= 0,
+            _ => true
         };
     }
 

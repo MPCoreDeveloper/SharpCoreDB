@@ -18,6 +18,12 @@ public static class SqlConstants
     /// <summary>INSERT keyword.</summary>
     public const string INSERT = "INSERT";
 
+    /// <summary>UPDATE keyword.</summary>
+    public const string UPDATE = "UPDATE";
+
+    /// <summary>DELETE keyword.</summary>
+    public const string DELETE = "DELETE";
+
     /// <summary>INTO keyword.</summary>
     public const string INTO = "INTO";
 
@@ -32,6 +38,9 @@ public static class SqlConstants
 
     /// <summary>WHERE keyword.</summary>
     public const string WHERE = "WHERE";
+
+    /// <summary>LIMIT keyword.</summary>
+    public const string LIMIT = "LIMIT";
 
     /// <summary>ORDER keyword.</summary>
     public const string ORDER = "ORDER";

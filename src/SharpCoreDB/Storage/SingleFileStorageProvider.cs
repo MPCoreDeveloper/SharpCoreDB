@@ -91,7 +91,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     // ✅ C# 14: Write-behind cache for batched disk writes (Task 1.3)
     private Channel<WriteOperation> _writeQueue = Channel.CreateBounded<WriteOperation>(
         new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.Wait });
-    private Task _writeWorkerTask = Task.CompletedTask;
+    private Task _writeWorkerTask;
     private readonly CancellationTokenSource _writeCts = new();
     private readonly Lock _writeBatchLock = new();
     
@@ -105,10 +105,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
     // AES-256-GCM encryption for the whole single-file database at rest. With the v2 key
     // model, a random per-file data-encryption-key (DEK) encrypts block data AND the metadata
-    // regions (block registry, free-space map, WAL) when EncryptionMode == ENCRYPTION_MODE_FULL;
-    // the header + key bundle stay plaintext bootstrap only. The DEK is either the caller-supplied
-    // raw key (KEY_MATERIAL_RAW) or a random key wrapped by a password-derived KEK
-    // (KEY_MATERIAL_WRAPPED_DEK — envelope encryption).
+    // regions (block registry, free-space map, WAL) when the full encryption mode is active;
+    // the header and key bundle stay plaintext bootstrap only. The DEK is either the caller-supplied
+    // raw key or a random key wrapped by a password-derived KEK (envelope encryption).
     private AesGcmEncryption? _encryption;
 
     // The current data-encryption-key bytes. Kept so password rotation can re-wrap the same DEK
@@ -236,8 +235,11 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         var salt = RandomNumberGenerator.GetBytes(ScdbFileHeader.KDF_SALT_SIZE);
         var dek = RandomNumberGenerator.GetBytes(Constants.CryptoConstants.AES_KEY_SIZE);
 
+        var password = options.EncryptionPassword
+            ?? throw new InvalidOperationException(
+                "EncryptionPassword must be set when password-based encryption is enabled.");
         var kek = AesGcmEncryption.DeriveKeyFromPassword(
-            options.EncryptionPassword!, salt, options.EncryptionKeyDerivationIterations);
+            password, salt, options.EncryptionKeyDerivationIterations);
         byte[]? wrapped = null;
         try
         {
@@ -282,9 +284,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal void EncryptRegion(Span<byte> buffer)
     {
-        if (IsMetadataEncrypted)
+        if (IsMetadataEncrypted && _encryption is { } encryption)
         {
-            _encryption!.EncryptPage(buffer);
+            encryption.EncryptPage(buffer);
         }
     }
 
@@ -294,9 +296,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal void DecryptRegion(Span<byte> buffer)
     {
-        if (IsMetadataEncrypted)
+        if (IsMetadataEncrypted && _encryption is { } encryption)
         {
-            _encryption!.DecryptPage(buffer);
+            encryption.DecryptPage(buffer);
         }
     }
 
@@ -348,7 +350,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _blockRegistry.UpdateLocation(newOffset, aligned);
 
         await _freeSpaceManager.FlushAsync(cancellationToken).ConfigureAwait(false);
-        await WriteHeaderAsync(cancellationToken).ConfigureAwait(false);
+        await WriteHeaderAsync().ConfigureAwait(false);
         _fileStream.Flush(flushToDisk: true);
     }
 
@@ -400,7 +402,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         }
 
         await _freeSpaceManager.FlushAsync(cancellationToken).ConfigureAwait(false);
-        await WriteHeaderAsync(cancellationToken).ConfigureAwait(false);
+        await WriteHeaderAsync().ConfigureAwait(false);
         _fileStream.Flush(flushToDisk: true);
     }
 
@@ -411,9 +413,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal void EncryptWalEntry(Span<byte> entrySlot)
     {
-        if (IsMetadataEncrypted)
+        if (IsMetadataEncrypted && _encryption is { } encryption)
         {
-            _encryption!.EncryptPage(entrySlot);
+            encryption.EncryptPage(entrySlot);
         }
     }
 
@@ -422,9 +424,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     /// </summary>
     internal void DecryptWalEntry(Span<byte> entrySlot)
     {
-        if (IsMetadataEncrypted)
+        if (IsMetadataEncrypted && _encryption is { } encryption)
         {
-            _encryption!.DecryptPage(entrySlot);
+            encryption.DecryptPage(entrySlot);
         }
     }
 
@@ -473,10 +475,45 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             fileOptions);
 
         ScdbFileHeader header;
-        byte[]? dekForNewFile = null;
-        var isNewFile = fileStream.Length == 0;
+        byte[]? dekForNewFile;
+        (header, dekForNewFile, fileStream) = InitializeFileState(filePath, options, fileStream);
 
-        if (isNewFile)
+        // Create memory-mapped file if enabled
+        MemoryMappedFile? mmf = null;
+        if (options.EnableMemoryMapping && fileStream.Length > 0)
+        {
+            try
+            {
+                mmf = MemoryMappedFile.CreateFromFile(
+                    fileStream,
+                    mapName: null,
+                    capacity: 0,
+                    MemoryMappedFileAccess.Read,
+                    HandleInheritability.None,
+                    leaveOpen: true);
+            }
+            catch
+            {
+                // Fall back to non-memory-mapped if OS doesn't support it
+            }
+        }
+
+        return new SingleFileStorageProvider(filePath, options, fileStream, mmf, header);
+    }
+
+    /// <summary>
+    /// Bootstraps a new single-file database (header bootstrap + initial metadata regions) or loads
+    /// an existing file's header, migrating legacy format-v1 files to the dynamic-metadata layout (v2).
+    /// Returns the resolved header, the DEK for a freshly created encrypted file, and the (possibly
+    /// re-opened) file stream.
+    /// </summary>
+    private static (ScdbFileHeader Header, byte[]? DekForNewFile, FileStream FileStream) InitializeFileState(
+        string filePath, DatabaseOptions options, FileStream fileStream)
+    {
+        ScdbFileHeader header;
+        byte[]? dekForNewFile = null;
+
+        if (fileStream.Length == 0)
         {
             // Prepare the header bootstrap (ULID marker, encryption mode, nonce and — for
             // password mode — the wrapped-DEK key bundle) BEFORE InitializeNewFile writes the
@@ -504,46 +541,25 @@ public sealed class SingleFileStorageProvider : IStorageProvider
             }
 
             InitializeNewFile(fileStream, options, ref header, dekForNewFile);
+            return (header, dekForNewFile, fileStream);
         }
-        else
+
+        header = LoadHeader(fileStream);
+        ValidateHeader(header, options);
+
+        // ✅ Issue #345 Phase 2: migrate legacy format-v1 files (fixed-offset metadata) to the
+        // dynamic-metadata layout (v2) on open. The file is rebuilt via a temp file and
+        // swapped in with the original preserved as <path>.backup.
+        if (header.FormatVersion == 1)
         {
-            header = LoadHeader(fileStream);
-            ValidateHeader(header, options);
-
-            // ✅ Issue #345 Phase 2: migrate legacy format-v1 files (fixed-offset metadata) to the
-            // dynamic-metadata layout (v2) on open. The file is rebuilt via a temp file and
-            // swapped in with the original preserved as <path>.backup.
-            if (header.FormatVersion == 1)
-            {
-                fileStream.Dispose();
-                var dek = ResolveDataEncryptionKey(options, header);
-                MigrateV1ToV2(filePath, options, ref header, dek);
-                fileStream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite,
-                    options.FileShareMode, bufferSize: 0, FileOptions.RandomAccess);
-            }
+            fileStream.Dispose();
+            var dek = ResolveDataEncryptionKey(options, header);
+            MigrateV1ToV2(filePath, options, ref header, dek);
+            fileStream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite,
+                options.FileShareMode, bufferSize: 0, FileOptions.RandomAccess);
         }
 
-        // Create memory-mapped file if enabled
-        MemoryMappedFile? mmf = null;
-        if (options.EnableMemoryMapping && fileStream.Length > 0)
-        {
-            try
-            {
-                mmf = MemoryMappedFile.CreateFromFile(
-                    fileStream,
-                    mapName: null,
-                    capacity: 0,
-                    MemoryMappedFileAccess.Read,
-                    HandleInheritability.None,
-                    leaveOpen: true);
-            }
-            catch
-            {
-                // Fall back to non-memory-mapped if OS doesn't support it
-            }
-        }
-
-        return new SingleFileStorageProvider(filePath, options, fileStream, mmf, header);
+        return (header, null, fileStream);
     }
 
     /// <summary>
@@ -569,7 +585,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         }
 
         _header.FeatureFlags |= ScdbFileHeader.FEATURE_ULID_SPEC;
-        WriteHeaderAsync(CancellationToken.None).GetAwaiter().GetResult();
+        WriteHeaderAsync().GetAwaiter().GetResult();
     }
 
     /// <inheritdoc/>
@@ -768,18 +784,12 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         return new BlockStream(_fileStream, offset, length, FileAccess.Write);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// ✅ Phase 1 Task 1.2: Pre-computes checksum from input data (no read-back).
-    /// ✅ Phase 1 Task 1.3: Queues write operations for batching (40-50% improvement).
-    /// Combined: Improves performance by ~60% by eliminating read-back + batching writes.
-    /// </remarks>
-    public async Task WriteBlockAsync(string blockName, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Compresses (when beneficial) and encrypts block data before it is checksummed and queued.
+    /// Returns the prepared bytes and whether compression was applied.
+    /// </summary>
+    private (ReadOnlyMemory<byte> Data, bool IsCompressed) PrepareBlockData(ReadOnlyMemory<byte> data)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        // ✅ Compression: compress before encrypt (ciphertext is incompressible).
-        // Only compress if above threshold and compression actually reduces size.
         bool isCompressed = false;
         if (_compressionMode != BlockCompressionMode.None && data.Length >= _options.CompressionThreshold)
         {
@@ -794,13 +804,30 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             }
         }
 
-        // ✅ Issue #341: encrypt block data at rest before computing the checksum and
-        // queuing the write. The on-disk block is ciphertext (nonce, ciphertext, tag)
-        // and the checksum plus registry length describe that ciphertext, not the plaintext.
         if (_encryption is not null)
         {
             data = _encryption.Encrypt(data.ToArray());
         }
+
+        return (data, isCompressed);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// ✅ Phase 1 Task 1.2: Pre-computes checksum from input data (no read-back).
+    /// ✅ Phase 1 Task 1.3: Queues write operations for batching (40-50% improvement).
+    /// Combined: Improves performance by ~60% by eliminating read-back + batching writes.
+    /// </remarks>
+    public async Task WriteBlockAsync(string blockName, ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // ✅ Compression: compress before encrypt (ciphertext is incompressible); only compress
+        // above the threshold when compression actually reduces size. Encrypt block data at rest
+        // before computing the checksum and queuing the write (Issue #341): the on-disk block is
+        // ciphertext (nonce, ciphertext, tag) and the checksum + registry length describe that
+        // ciphertext, not the plaintext.
+        (data, var isCompressed) = PrepareBlockData(data);
 
         await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -1476,7 +1503,10 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // concurrently with our drain and be mid-batch. Since the worker holds
         // _writeBatchLock across (data write + registry update), acquiring it here
         // guarantees any in-flight batch has fully completed before we flush / return.
-        lock (_writeBatchLock) { }
+        lock (_writeBatchLock)
+        {
+            Thread.MemoryBarrier(); // intentional: drain waits for the in-flight batch
+        }
 
         if (flushToDisk)
         {
@@ -1617,7 +1647,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
             _header.LastTransactionId++;
             _header.LastCheckpointLsn = _walManager.CurrentLsn;
-            await WriteHeaderAsync(cancellationToken).ConfigureAwait(false);
+            await WriteHeaderAsync().ConfigureAwait(false);
 
             _fileStream.Flush(flushToDisk: true);
         }
@@ -1807,8 +1837,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
             try
             {
-                // Safety timeout prevents indefinite hang if the worker is stuck
-                await _writeWorkerTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                // Safety timeout prevents indefinite hang if the worker is stuck.
+                // Deliberately uses CancellationToken.None: the CTS is already canceled above,
+                // so passing _writeCts.Token would return immediately; the timeout is the
+                // intended cancellation here.
+                await _writeWorkerTask.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1846,7 +1879,12 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             }
             finally
             {
-                try { _fileStream?.Dispose(); } catch { /* best effort */ }
+                try
+                {
+                    if (_fileStream is not null)
+                        await _fileStream.DisposeAsync().ConfigureAwait(false);
+                }
+                catch { /* best effort */ }
             }
 
             // Dispose the cipher to zeroize the in-memory key, then zeroize the stored DEK.
@@ -1873,6 +1911,137 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     }
 
     // ==================== PRIVATE HELPER METHODS ====================
+
+    /// <summary>
+    /// Writes the root block-registry chunk containing the sys:fsm entry so the FSM block can be
+    /// located on reopen. Format: [RegistryChunkHeader(64)][BlockEntry(96)].
+    /// </summary>
+    private static void WriteRootRegistryChunk(
+        FileStream fs, ulong registryRootOffset, ulong registryRootLength,
+        ulong fsmBlockOffset, ulong fsmBlockLength, byte[]? dek)
+    {
+        var regionSize = checked((int)registryRootLength);
+        var region = ArrayPool<byte>.Shared.Rent(regionSize);
+        try
+        {
+            var regionSpan = region.AsSpan(0, regionSize);
+            regionSpan.Clear();
+
+            var fsmEntry = new BlockEntry
+            {
+                BlockType = (uint)Scdb.BlockType.FreeSpaceMap,
+                Offset = fsmBlockOffset,
+                Length = fsmBlockLength,
+                Flags = 0
+            };
+            var namedFsmEntry = BlockEntry.WithName(ScdbFileHeader.FSM_BLOCK_NAME, fsmEntry);
+
+            var chunkHeader = new RegistryChunkHeader
+            {
+                Magic = RegistryChunkHeader.MAGIC,
+                Version = RegistryChunkHeader.CURRENT_VERSION,
+                EntryCount = 1,
+                NextChunkOffset = 0,
+                NextChunkLength = 0
+            };
+            MemoryMarshal.Write(regionSpan[..RegistryChunkHeader.SIZE], in chunkHeader);
+            MemoryMarshal.Write(regionSpan.Slice(RegistryChunkHeader.SIZE, BlockEntry.SIZE), in namedFsmEntry);
+
+            if (dek is not null)
+            {
+                using var cipher = new AesGcmEncryption(dek);
+                cipher.EncryptPage(regionSpan);
+            }
+
+            fs.Position = (long)registryRootOffset;
+            fs.Write(regionSpan);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(region, clearArray: dek is not null);
+        }
+    }
+
+    /// <summary>
+    /// Writes the free-space-map block marking all metadata pages as allocated.
+    /// </summary>
+    private static void WriteFsmBlock(
+        FileStream fs, ulong fsmBlockOffset, ulong fsmBlockLength,
+        FreeSpaceMapHeader fsmHeader, ulong reservedPages, byte[]? dek)
+    {
+        var fsmRegionSize = checked((int)fsmBlockLength);
+        var fsmRegion = ArrayPool<byte>.Shared.Rent(fsmRegionSize);
+        try
+        {
+            var fsmSpan = fsmRegion.AsSpan(0, fsmRegionSize);
+            fsmSpan.Clear();
+
+            MemoryMarshal.Write(fsmSpan[..FreeSpaceMapHeader.SIZE], in fsmHeader);
+
+            // Write L1 bitmap — mark all reserved pages as allocated (bit = 1)
+            var bitmapSizeBytes = (int)((reservedPages + 7) / 8);
+            var bitmapSlice = fsmSpan.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
+            bitmapSlice.Fill(0xFF);
+            var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
+            if (trailingBits > 0 && bitmapSizeBytes > 0)
+            {
+                bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
+            }
+
+            // Write L2 extent count (0 extents)
+            MemoryMarshal.Write(fsmSpan.Slice(FreeSpaceMapHeader.SIZE + bitmapSizeBytes), 0);
+
+            if (dek is not null)
+            {
+                using var cipher = new AesGcmEncryption(dek);
+                cipher.EncryptPage(fsmSpan);
+            }
+
+            fs.Position = (long)fsmBlockOffset;
+            fs.Write(fsmSpan);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(fsmRegion, clearArray: dek is not null);
+        }
+    }
+
+    /// <summary>
+    /// Reads the legacy format-v1 registry from the source stream and appends every named data-block
+    /// entry to <paramref name="entries"/> (decrypting the region when a DEK is present).
+    /// </summary>
+    private static void ReadLegacyRegistry(
+        FileStream src, ulong oldRegistryOffset, ulong oldRegistryLength,
+        byte[]? dek, List<(string Name, BlockEntry Entry)> entries)
+    {
+        var regBuffer = new byte[oldRegistryLength];
+        src.Position = (long)oldRegistryOffset;
+        src.ReadExactly(regBuffer);
+        if (dek is not null)
+        {
+            using var cipher = new AesGcmEncryption(dek);
+            cipher.DecryptPage(regBuffer);
+        }
+
+        var regSpan = regBuffer.AsSpan();
+        if (regSpan.Length >= BlockRegistryHeader.SIZE)
+        {
+            var regHeader = BlockRegistryHeader.Parse(regSpan[..BlockRegistryHeader.SIZE]);
+            if (regHeader.IsValid && regHeader.BlockCount > 0)
+            {
+                var count = Math.Min((int)regHeader.BlockCount, (regSpan.Length - BlockRegistryHeader.SIZE) / BlockEntry.SIZE);
+                for (var i = 0; i < count; i++)
+                {
+                    var entry = BlockEntry.Parse(regSpan.Slice(BlockRegistryHeader.SIZE + (i * BlockEntry.SIZE), BlockEntry.SIZE));
+                    var name = entry.GetName();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        entries.Add((name, entry));
+                    }
+                }
+            }
+        }
+    }
 
     private static void InitializeNewFile(FileStream fs, DatabaseOptions options, ref ScdbFileHeader header, byte[]? dek)
     {
@@ -1929,48 +2098,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
         // ✅ Write the root block-registry chunk with the sys:fsm entry so the FSM block can be
         // located on reopen. Format: [RegistryChunkHeader(64)][BlockEntry(96)].
-        {
-            var regionSize = checked((int)registryRootLength);
-            var region = ArrayPool<byte>.Shared.Rent(regionSize);
-            try
-            {
-                var regionSpan = region.AsSpan(0, regionSize);
-                regionSpan.Clear();
-
-                var fsmEntry = new BlockEntry
-                {
-                    BlockType = (uint)Scdb.BlockType.FreeSpaceMap,
-                    Offset = fsmBlockOffset,
-                    Length = fsmBlockLength,
-                    Flags = 0
-                };
-                var namedFsmEntry = BlockEntry.WithName(ScdbFileHeader.FSM_BLOCK_NAME, fsmEntry);
-
-                var chunkHeader = new RegistryChunkHeader
-                {
-                    Magic = RegistryChunkHeader.MAGIC,
-                    Version = RegistryChunkHeader.CURRENT_VERSION,
-                    EntryCount = 1,
-                    NextChunkOffset = 0,
-                    NextChunkLength = 0
-                };
-                MemoryMarshal.Write(regionSpan[..RegistryChunkHeader.SIZE], in chunkHeader);
-                MemoryMarshal.Write(regionSpan.Slice(RegistryChunkHeader.SIZE, BlockEntry.SIZE), in namedFsmEntry);
-
-                if (dek is not null)
-                {
-                    using var cipher = new AesGcmEncryption(dek);
-                    cipher.EncryptPage(regionSpan);
-                }
-
-                fs.Position = (long)header.RegistryRootOffset;
-                fs.Write(regionSpan);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(region, clearArray: dek is not null);
-            }
-        }
+        WriteRootRegistryChunk(fs, header.RegistryRootOffset, registryRootLength, fsmBlockOffset, fsmBlockLength, dek);
 
         // ✅ Write the FSM block marking all metadata pages as allocated.
         var reservedPages = totalMetadataSize / (ulong)options.PageSize;
@@ -1987,43 +2115,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + 128)
         };
 
-        {
-            var fsmRegionSize = checked((int)fsmBlockLength);
-            var fsmRegion = ArrayPool<byte>.Shared.Rent(fsmRegionSize);
-            try
-            {
-                var fsmSpan = fsmRegion.AsSpan(0, fsmRegionSize);
-                fsmSpan.Clear();
-
-                MemoryMarshal.Write(fsmSpan[..FreeSpaceMapHeader.SIZE], in fsmHeader);
-
-                // Write L1 bitmap — mark all reserved pages as allocated (bit = 1)
-                var bitmapSizeBytes = (int)((reservedPages + 7) / 8);
-                var bitmapSlice = fsmSpan.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
-                bitmapSlice.Fill(0xFF);
-                var trailingBits = bitmapSizeBytes * 8 - (int)reservedPages;
-                if (trailingBits > 0 && bitmapSizeBytes > 0)
-                {
-                    bitmapSlice[^1] = (byte)(0xFF >> trailingBits);
-                }
-
-                // Write L2 extent count (0 extents)
-                MemoryMarshal.Write(fsmSpan.Slice(FreeSpaceMapHeader.SIZE + bitmapSizeBytes), 0);
-
-                if (dek is not null)
-                {
-                    using var cipher = new AesGcmEncryption(dek);
-                    cipher.EncryptPage(fsmSpan);
-                }
-
-                fs.Position = (long)fsmBlockOffset;
-                fs.Write(fsmSpan);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(fsmRegion, clearArray: dek is not null);
-            }
-        }
+        WriteFsmBlock(fs, fsmBlockOffset, fsmBlockLength, fsmHeader, reservedPages, dek);
 
         // Re-write header with updated AllocatedPages
         fs.Position = 0;
@@ -2049,7 +2141,6 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // Legacy (v1) metadata locations are still readable through the same byte offsets.
         var oldRegistryOffset = header.RegistryRootOffset;   // 0x20 = v1 BlockRegistryOffset
         var oldRegistryLength = header.RegistryRootLength;   // 0x28 = v1 BlockRegistryLength
-        var oldFsmOffset = header.ReservedRegion0;           // 0x30 = v1 FsmOffset
         var oldFsmLength = header.ReservedRegion1;           // 0x38 = v1 FsmLength
         var oldWalOffset = header.WalOffset;
         var oldWalLength = header.WalLength;
@@ -2070,35 +2161,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
         // Read the legacy registry to collect all data-block entries (decrypt when needed).
         var entries = new List<(string Name, BlockEntry Entry)>();
-        {
-            var regBuffer = new byte[oldRegistryLength];
-            src.Position = (long)oldRegistryOffset;
-            src.ReadExactly(regBuffer);
-            if (dek is not null)
-            {
-                using var cipher = new AesGcmEncryption(dek);
-                cipher.DecryptPage(regBuffer);
-            }
-
-            var regSpan = regBuffer.AsSpan();
-            if (regSpan.Length >= BlockRegistryHeader.SIZE)
-            {
-                var regHeader = BlockRegistryHeader.Parse(regSpan[..BlockRegistryHeader.SIZE]);
-                if (regHeader.IsValid && regHeader.BlockCount > 0)
-                {
-                    var count = Math.Min((int)regHeader.BlockCount, (regSpan.Length - BlockRegistryHeader.SIZE) / BlockEntry.SIZE);
-                    for (var i = 0; i < count; i++)
-                    {
-                        var entry = BlockEntry.Parse(regSpan.Slice(BlockRegistryHeader.SIZE + (i * BlockEntry.SIZE), BlockEntry.SIZE));
-                        var name = entry.GetName();
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            entries.Add((name, entry));
-                        }
-                    }
-                }
-            }
-        }
+        ReadLegacyRegistry(src, oldRegistryOffset, oldRegistryLength, dek, entries);
 
         // New dynamic layout (v2): [Header][WAL][TableDir][RegistryRoot][FSM block][data].
         var newWalOffset = AlignToPage(ScdbFileHeader.HEADER_SIZE, pageSize);
@@ -2144,7 +2207,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         WriteNewRegistryChunk(dst, newRegistryOffset, (int)newRegistryLength, entries, newFsmOffset, newFsmLength, dek);
 
         // Write the rebuilt FSM block (all new metadata pages + data-block pages allocated).
-        WriteRebuiltFsm(dst, newFsmOffset, newFsmLength, newMetadataEnd, totalPages, entries, dek, pageSize);
+        WriteRebuiltFsm(dst, new RebuildFsmArgs(newFsmOffset, newFsmLength, newMetadataEnd, totalPages, dek, pageSize), entries);
 
         // Copy the data region verbatim (blocks keep their old offsets → checksums stay valid).
         var oldDataStart = oldTableDirOffset + oldTableDirLength;
@@ -2169,25 +2232,30 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
 
     /// <summary>
+    /// Scalar parameters for <see cref="WriteRebuiltFsm"/> (kept under the 7-parameter Sonar limit).
+    /// </summary>
+    private readonly record struct RebuildFsmArgs(
+        ulong FsmOffset, ulong FsmLength, ulong NewMetadataEnd,
+        ulong TotalPages, byte[]? Dek, int PageSize);
+
+    /// <summary>
     /// Writes the rebuilt v2 FSM block: all new metadata pages plus every data-block page are
     /// marked allocated; everything else is free.
     /// </summary>
-    private static void WriteRebuiltFsm(
-        FileStream dst, ulong fsmOffset, ulong fsmLength, ulong newMetadataEnd,
-        ulong totalPages, List<(string Name, BlockEntry Entry)> entries, byte[]? dek, int pageSize)
+    private static void WriteRebuiltFsm(FileStream dst, RebuildFsmArgs args, List<(string Name, BlockEntry Entry)> entries)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent((int)fsmLength);
+        var buffer = ArrayPool<byte>.Shared.Rent((int)args.FsmLength);
         try
         {
-            var span = buffer.AsSpan(0, (int)fsmLength);
+            var span = buffer.AsSpan(0, (int)args.FsmLength);
             span.Clear();
 
-            var bitmapSizeBytes = (int)((totalPages + 7) / 8);
+            var bitmapSizeBytes = (int)((args.TotalPages + 7) / 8);
             var bitmap = new byte[bitmapSizeBytes];
 
             void SetPageAllocated(ulong page)
             {
-                if (page >= totalPages)
+                if (page >= args.TotalPages)
                 {
                     return;
                 }
@@ -2196,7 +2264,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             }
 
             // All new metadata pages.
-            var metadataPages = newMetadataEnd / (ulong)pageSize;
+            var metadataPages = args.NewMetadataEnd / (ulong)args.PageSize;
             for (ulong p = 0; p < metadataPages; p++)
             {
                 SetPageAllocated(p);
@@ -2206,8 +2274,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             ulong allocatedCount = metadataPages;
             foreach (var (_, entry) in entries)
             {
-                var startPage = entry.Offset / (ulong)pageSize;
-                var pageCount = (entry.Length + (ulong)pageSize - 1) / (ulong)pageSize;
+                var startPage = entry.Offset / (ulong)args.PageSize;
+                var pageCount = (entry.Length + (ulong)args.PageSize - 1) / (ulong)args.PageSize;
                 for (ulong p = 0; p < pageCount; p++)
                 {
                     if (startPage + p >= metadataPages)
@@ -2222,8 +2290,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             {
                 Magic = FreeSpaceMapHeader.MAGIC,
                 Version = FreeSpaceMapHeader.CURRENT_VERSION,
-                TotalPages = totalPages,
-                FreePages = totalPages > allocatedCount ? totalPages - allocatedCount : 0,
+                TotalPages = args.TotalPages,
+                FreePages = args.TotalPages > allocatedCount ? args.TotalPages - allocatedCount : 0,
                 LargestExtent = 0,
                 BitmapOffset = (uint)FreeSpaceMapHeader.SIZE,
                 ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
@@ -2232,18 +2300,18 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             bitmap.CopyTo(span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes));
             MemoryMarshal.Write(span.Slice(FreeSpaceMapHeader.SIZE + bitmapSizeBytes, sizeof(int)), 0);
 
-            if (dek is not null)
+            if (args.Dek is not null)
             {
-                using var cipher = new AesGcmEncryption(dek);
+                using var cipher = new AesGcmEncryption(args.Dek);
                 cipher.EncryptPage(span);
             }
 
-            dst.Position = (long)fsmOffset;
+            dst.Position = (long)args.FsmOffset;
             dst.Write(span);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: dek is not null);
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: args.Dek is not null);
         }
     }
 
@@ -2383,7 +2451,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         }
     }
 
-    private async Task WriteHeaderAsync(CancellationToken cancellationToken)
+    private async Task WriteHeaderAsync()
     {
         lock (_writeBatchLock)
         {
@@ -2399,7 +2467,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // Quick: Just checkpoint WAL and update stats
         await _walManager.CheckpointAsync(cancellationToken);
         _header.LastVacuumTime = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        await WriteHeaderAsync(cancellationToken);
+        await WriteHeaderAsync();
 
         return new VacuumResult
         {
@@ -2479,7 +2547,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         await _freeSpaceManager.FlushAsync(cancellationToken);
 
         _header.LastVacuumTime = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        await WriteHeaderAsync(cancellationToken);
+        await WriteHeaderAsync();
 
         var statsAfter = GetStatistics();
 
@@ -2808,7 +2876,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 "Provide exactly one of newKey (raw-key mode) or newPassword (password mode).");
         }
 
-        if (wantsRaw && newKey!.Length != 32)
+        if (wantsRaw && newKey is { Length: not 32 })
         {
             return EncryptionRotationResult.Failed(
                 EncryptionRotationOperation.KeyRotated,

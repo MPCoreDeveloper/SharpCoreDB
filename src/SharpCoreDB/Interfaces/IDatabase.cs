@@ -125,6 +125,15 @@ public interface IDatabase : IAsyncDisposable
     List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?>? parameters = null);
 
     /// <summary>
+    /// Executes a query and returns the results with optional encryption bypass.
+    /// </summary>
+    /// <param name="sql">The SQL query.</param>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
+    /// <returns>The query results.</returns>
+    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt);
+
+    /// <summary>
     /// Executes a simple point-lookup SELECT and returns zero-allocation <see cref="SharpCoreDB.DataStructures.StructRow"/>
     /// results (the v2 fast-path API). The returned <see cref="SharpCoreDB.DataStructures.StructRowQueryEnumerable"/>
     /// is a struct — foreach on it is allocation-free. Avoids per-row Dictionary allocations and value boxing.
@@ -137,15 +146,6 @@ public interface IDatabase : IAsyncDisposable
     /// <returns>Zero-allocation filtered enumeration of StructRow instances.</returns>
     SharpCoreDB.DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters = null)
         => throw new NotSupportedException("ExecuteQueryStruct is not supported by this IDatabase implementation.");
-
-    /// <summary>
-    /// Executes a query and returns the results with optional encryption bypass.
-    /// </summary>
-    /// <param name="sql">The SQL query.</param>
-    /// <param name="parameters">The parameters.</param>
-    /// <param name="noEncrypt">If true, bypasses encryption for this query.</param>
-    /// <returns>The query results.</returns>
-    List<Dictionary<string, object>> ExecuteQuery(string sql, Dictionary<string, object?> parameters, bool noEncrypt);
 
     /// <summary>
     /// Gets whether a batch UPDATE transaction is currently active.

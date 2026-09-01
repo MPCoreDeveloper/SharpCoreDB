@@ -159,50 +159,11 @@ internal static class SqlInPredicate
 
         while (trimmed.Length >= 2 && trimmed[0] == '(' && trimmed[^1] == ')')
         {
-            int depth = 0;
-            bool inString = false;
-            char quote = '\0';
-            bool fullyWrapped = true;
-
-            // Scan up to (but excluding) the final ')' — if the depth returns to 0 before
-            // the end, the outer parens do not wrap the whole expression and must be kept.
-            for (int i = 0; i < trimmed.Length - 1; i++)
-            {
-                char c = trimmed[i];
-
-                if (inString)
-                {
-                    inString = c != quote; // closing quote exits the string literal
-                    continue;
-                }
-
-                if (c is '\'' or '"')
-                {
-                    inString = true;
-                    quote = c;
-                    continue;
-                }
-
-                if (c == '(')
-                {
-                    depth++;
-                }
-                else if (c == ')')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        fullyWrapped = false;
-                        break;
-                    }
-                }
-            }
-
             // The scan excludes the final ')' (which balances the outer '('), so a fully
             // wrapped expression leaves exactly ONE unmatched '(' (depth == 1). If the depth
             // returns to 0 before the end, the outer parens do not wrap the whole expression
             // and must be kept.
-            if (!fullyWrapped || depth != 1)
+            if (!TryGetOuterWrapDepth(trimmed, out int depth) || depth != 1)
             {
                 break;
             }
@@ -211,6 +172,48 @@ internal static class SqlInPredicate
         }
 
         return trimmed;
+    }
+
+    private static bool TryGetOuterWrapDepth(string trimmed, out int depth)
+    {
+        depth = 0;
+        bool inString = false;
+        char quote = '\0';
+
+        // Scan up to (but excluding) the final ')' — if the depth returns to 0 before
+        // the end, the outer parens do not wrap the whole expression and must be kept.
+        for (int i = 0; i < trimmed.Length - 1; i++)
+        {
+            char c = trimmed[i];
+
+            if (inString)
+            {
+                inString = c != quote; // closing quote exits the string literal
+                continue;
+            }
+
+            if (c is '\'' or '"')
+            {
+                inString = true;
+                quote = c;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

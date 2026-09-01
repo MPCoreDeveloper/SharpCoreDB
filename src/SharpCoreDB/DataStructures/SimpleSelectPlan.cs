@@ -52,51 +52,14 @@ internal sealed class SimpleSelectPlan
     /// <returns>A descriptor, or null when the query is not a supported simple shape.</returns>
     public static SimpleSelectPlan? TryCreate(string[] parts)
     {
-        if (parts.Length < 4)
-            return null;
-
-        if (!parts[0].Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+        if (parts.Length < 4 || !parts[0].Equals("SELECT", StringComparison.OrdinalIgnoreCase))
             return null;
 
         // Reject complex shapes outright: subqueries, joins, set operations, grouping, DISTINCT.
-        // Any token containing '(', ')', or ',' is rejected (catches COUNT(*), col lists, etc.).
-        foreach (var part in parts)
-        {
-            if (part.Length == 0)
-                return null;
+        if (!TryRejectComplexParts(parts))
+            return null;
 
-            if (part.IndexOfAny(['(', ')', ',']) >= 0)
-                return null;
-
-            if (part.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("INNER", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("CROSS", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("UNION", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("DISTINCT", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("GROUP", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals("HAVING", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-        }
-
-        // Locate the FROM clause (must come after SELECT).
-        int fromIdx = -1;
-        for (int i = 1; i < parts.Length; i++)
-        {
-            if (parts[i].Equals("FROM", StringComparison.OrdinalIgnoreCase))
-            {
-                fromIdx = i;
-                break;
-            }
-        }
-
-        if (fromIdx < 0)
+        if (!TryFindFromIndex(parts, out int fromIdx))
             return null;
 
         // SELECT clause: only "*" or exactly one bare column name.
@@ -123,86 +86,9 @@ internal sealed class SimpleSelectPlan
 
         while (pos < parts.Length)
         {
-            if (parts[pos].Equals("WHERE", StringComparison.OrdinalIgnoreCase))
-            {
-                if (whereColumn is not null)
-                    return null; // Duplicate WHERE — unsupported.
-
-                if (pos + 3 >= parts.Length)
-                    return null;
-
-                string col = parts[pos + 1];
-                if (!IsSimpleIdentifier(col) || !parts[pos + 2].Equals("=", StringComparison.Ordinal))
-                    return null;
-
-                string value = parts[pos + 3];
-                if (value.Length == 0 || value.IndexOfAny(['(', ')', ',']) >= 0)
-                    return null;
-
-                // Positional '?' placeholders require the parameter binder (legacy path).
-                if (value == "?")
-                    return null;
-
-                whereColumn = col;
-                if (value[0] == '@' || value[0] == ':')
-                {
-                    whereIsParameter = true;
-                    whereValue = value;
-                }
-                else
-                {
-                    whereValue = value;
-                }
-
-                pos += 4;
-            }
-            else if (parts[pos].Equals("ORDER", StringComparison.OrdinalIgnoreCase))
-            {
-                if (whereColumn is null || orderByColumn is not null)
-                    return null; // ORDER BY before WHERE or duplicated.
-
-                if (pos + 2 >= parts.Length || !parts[pos + 1].Equals("BY", StringComparison.OrdinalIgnoreCase))
-                    return null;
-
-                if (!IsSimpleIdentifier(parts[pos + 2]))
-                    return null;
-
-                orderByColumn = parts[pos + 2];
-                pos += 3;
-
-                if (pos < parts.Length && parts[pos].Equals("DESC", StringComparison.OrdinalIgnoreCase))
-                {
-                    orderAscending = false;
-                    pos += 1;
-                }
-                else if (pos < parts.Length && parts[pos].Equals("ASC", StringComparison.OrdinalIgnoreCase))
-                {
-                    pos += 1;
-                }
-            }
-            else if (parts[pos].Equals("LIMIT", StringComparison.OrdinalIgnoreCase))
-            {
-                if (limit is not null || pos + 1 >= parts.Length ||
-                    !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int limitValue) || limitValue < 0)
-                {
-                    return null;
-                }
-
-                limit = limitValue;
-                pos += 2;
-            }
-            else if (parts[pos].Equals("OFFSET", StringComparison.OrdinalIgnoreCase))
-            {
-                if (offset is not null || pos + 1 >= parts.Length ||
-                    !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int offsetValue) || offsetValue < 0)
-                {
-                    return null;
-                }
-
-                offset = offsetValue;
-                pos += 2;
-            }
-            else
+            if (!TryParseNextClause(parts, ref pos,
+                ref whereColumn, ref whereValue, ref whereIsParameter,
+                ref orderByColumn, ref orderAscending, ref limit, ref offset))
             {
                 // Unknown trailing token — fall back to the full parser.
                 return null;
@@ -239,6 +125,163 @@ internal sealed class SimpleSelectPlan
         };
     }
 
+    private static bool TryRejectComplexParts(string[] parts)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Length == 0)
+                return false;
+
+            if (part.IndexOfAny(['(', ')', ',']) >= 0)
+                return false;
+
+            if (part.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("LEFT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("RIGHT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("INNER", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("FULL", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("CROSS", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("UNION", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("DISTINCT", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("GROUP", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals("HAVING", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryFindFromIndex(string[] parts, out int fromIdx)
+    {
+        fromIdx = -1;
+        for (int i = 1; i < parts.Length; i++)
+        {
+            if (parts[i].Equals("FROM", StringComparison.OrdinalIgnoreCase))
+            {
+                fromIdx = i;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryParseNextClause(
+        string[] parts, ref int pos,
+        ref string? whereColumn, ref string? whereValue, ref bool whereIsParameter,
+        ref string? orderByColumn, ref bool orderAscending, ref int? limit, ref int? offset)
+    {
+        if (parts[pos].Equals("WHERE", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseWhereClause(parts, ref pos, ref whereColumn, ref whereValue, ref whereIsParameter);
+        }
+
+        if (parts[pos].Equals("ORDER", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseOrderByClause(parts, ref pos, whereColumn, ref orderByColumn, ref orderAscending);
+        }
+
+        if (parts[pos].Equals("LIMIT", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseLimitClause(parts, ref pos, ref limit);
+        }
+
+        if (parts[pos].Equals("OFFSET", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseOffsetClause(parts, ref pos, ref offset);
+        }
+
+        return false;
+    }
+
+    private static bool TryParseWhereClause(
+        string[] parts, ref int pos,
+        ref string? whereColumn, ref string? whereValue, ref bool whereIsParameter)
+    {
+        if (whereColumn is not null)
+            return false; // Duplicate WHERE — unsupported.
+
+        if (pos + 3 >= parts.Length)
+            return false;
+
+        string col = parts[pos + 1];
+        if (!IsSimpleIdentifier(col) || !parts[pos + 2].Equals("=", StringComparison.Ordinal))
+            return false;
+
+        string value = parts[pos + 3];
+        if (value.Length == 0 || value.IndexOfAny(['(', ')', ',']) >= 0)
+            return false;
+
+        // Positional '?' placeholders require the parameter binder (legacy path).
+        if (value == "?")
+            return false;
+
+        whereColumn = col;
+        whereIsParameter = value[0] == '@' || value[0] == ':';
+        whereValue = value;
+        pos += 4;
+        return true;
+    }
+
+    private static bool TryParseOrderByClause(
+        string[] parts, ref int pos, string? whereColumn,
+        ref string? orderByColumn, ref bool orderAscending)
+    {
+        if (whereColumn is null || orderByColumn is not null)
+            return false; // ORDER BY before WHERE or duplicated.
+
+        if (pos + 2 >= parts.Length || !parts[pos + 1].Equals("BY", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!IsSimpleIdentifier(parts[pos + 2]))
+            return false;
+
+        orderByColumn = parts[pos + 2];
+        pos += 3;
+
+        if (pos < parts.Length && parts[pos].Equals("DESC", StringComparison.OrdinalIgnoreCase))
+        {
+            orderAscending = false;
+            pos += 1;
+        }
+        else if (pos < parts.Length && parts[pos].Equals("ASC", StringComparison.OrdinalIgnoreCase))
+        {
+            pos += 1;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseLimitClause(string[] parts, ref int pos, ref int? limit)
+    {
+        if (limit is not null || pos + 1 >= parts.Length ||
+            !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int limitValue) || limitValue < 0)
+        {
+            return false;
+        }
+
+        limit = limitValue;
+        pos += 2;
+        return true;
+    }
+
+    private static bool TryParseOffsetClause(string[] parts, ref int pos, ref int? offset)
+    {
+        if (offset is not null || pos + 1 >= parts.Length ||
+            !int.TryParse(parts[pos + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int offsetValue) || offsetValue < 0)
+        {
+            return false;
+        }
+
+        offset = offsetValue;
+        pos += 2;
+        return true;
+    }
+
     /// <summary>
     /// Validates that a token is a bare SQL identifier (letters, digits, underscore).
     /// </summary>
@@ -260,4 +303,3 @@ internal sealed class SimpleSelectPlan
         return true;
     }
 }
-

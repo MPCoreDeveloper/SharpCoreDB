@@ -103,7 +103,7 @@ public sealed class TenantEncryptionKeyRotationService(
                     {
                         // Directory-mode database: swap the catalog reference only (documented
                         // limitation until the server host migrates tenant DBs to single-file mode).
-                        logger.LogWarning(
+                        logger.LogWarning(nse,
                             "Engine-level key rotation not supported for database '{Name}'; performing catalog-reference rotation only. {Message}",
                             databaseName, nse.Message);
                     }

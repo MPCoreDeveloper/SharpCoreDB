@@ -19,17 +19,27 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 
-var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}");
-var scdbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}.scdb");
+const string AotPassword = "aot123";
 
-try
+var services = new ServiceCollection();
+services.AddSharpCoreDB();
+var sp = services.BuildServiceProvider();
+var factory = sp.GetRequiredService<DatabaseFactory>();
+return await RunAotSmokeAsync(factory);
+
+/// <summary>
+/// Executes the AOT smoke scenario: CREATE TABLE / CREATE INDEX, InsertBatch, parameterized
+/// ExecuteQuery, the zero-allocation ExecuteQueryStruct fast path, reopen, single-file full
+/// VACUUM (issue #343), and full at-rest encryption + password/key rotation.
+/// </summary>
+static async Task<int> RunAotSmokeAsync(DatabaseFactory factory)
 {
-    var services = new ServiceCollection();
-    services.AddSharpCoreDB();
-    var sp = services.BuildServiceProvider();
-    var factory = sp.GetRequiredService<DatabaseFactory>();
+    var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}");
+    var scdbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid()}.scdb");
 
-    var config = new DatabaseConfig
+    try
+    {
+        var config = new DatabaseConfig
     {
         NoEncryptMode = true,
         EnableHashIndexes = true,
@@ -39,10 +49,10 @@ try
         SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled
     };
 
-    using var db = (SharpCoreDB.Database)factory.Create(dbPath, "aot123", isReadOnly: false, config: config);
+    await using var db = (SharpCoreDB.Database)factory.Create(dbPath, AotPassword, isReadOnly: false, config: config);
 
-    db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-    db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+    await db.ExecuteSQLAsync("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+    await db.ExecuteSQLAsync("CREATE INDEX idx_docs_name ON docs(name)");
 
     var batch = new List<Dictionary<string, object>>(1000);
     for (int i = 0; i < 1000; i++)
@@ -57,7 +67,7 @@ try
         });
     }
 
-    db.InsertBatch("docs", batch);
+    await db.InsertBatchAsync("docs", batch);
     db.Flush();
 
     // Dictionary-returning query path (plan-cache fast path).
@@ -102,8 +112,7 @@ try
     db.Flush();
 
     // Reopen the database to exercise LoadMetadata (metadata JSON round-trip) under AOT.
-    db.Dispose();
-    using (var reopened = (SharpCoreDB.Database)factory.Create(dbPath, "aot123", isReadOnly: false, config: config))
+    await using (var reopened = (SharpCoreDB.Database)factory.Create(dbPath, AotPassword, isReadOnly: false, config: config))
     {
         var reopenedCount = reopened.ExecuteQueryStruct("SELECT * FROM docs").Count();
         if (reopenedCount != 1000)
@@ -117,16 +126,65 @@ try
     // Native AOT. Previously the stream swap used reflection (GetField on a private readonly
     // field), which returns null under AOT and crashed with ObjectDisposedException. The row
     // cache JSON serialization is AOT-safe through the source-generated SingleFileTableJsonContext.
-    var scdbOptions = SharpCoreDB.DatabaseOptions.CreateSingleFileDefault();
-    await using (var scdb = factory.CreateWithOptions(scdbPath, "aot123", scdbOptions))
+    if (await RunVacuumScenarioAsync(factory, scdbPath) != 0)
     {
-        scdb.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+        return 1;
+    }
+
+    // Full at-rest encryption + password/key rotation must also be Native AOT safe:
+    // the envelope key model uses PBKDF2/AES-GCM, no reflection, no dynamic, no Expression.
+    if (await RunEncryptionScenarioAsync(factory) != 0)
+    {
+        return 1;
+    }
+
+    Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum, full-at-rest encryption + password/key rotation).");
+    return 0;
+}
+finally
+{
+    try
+    {
+        if (Directory.Exists(dbPath))
+        {
+            Directory.Delete(dbPath, true);
+        }
+    }
+    catch
+    {
+        // Best-effort cleanup.
+    }
+
+    try
+    {
+        if (File.Exists(scdbPath))
+        {
+            File.Delete(scdbPath);
+        }
+    }
+    catch
+    {
+        // Best-effort cleanup.
+    }
+}
+}
+
+/// <summary>
+/// Exercises a full VACUUM on a single-file (.scdb) database, which must survive .NET trimming /
+/// Native AOT (issue #343). Returns 0 on success.
+/// </summary>
+static async Task<int> RunVacuumScenarioAsync(DatabaseFactory factory, string scdbPath)
+{
+    var scdbOptions = SharpCoreDB.DatabaseOptions.CreateSingleFileDefault();
+    await using (var scdb = factory.CreateWithOptions(scdbPath, AotPassword, scdbOptions))
+    {
+        await scdb.ExecuteSQLAsync("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
         var inserts = new List<string>(50);
         for (int i = 0; i < 50; i++)
         {
             inserts.Add($"INSERT INTO t (id, name) VALUES ({i}, 'User{i}')");
         }
-        scdb.ExecuteBatchSQL(inserts);
+        await scdb.ExecuteBatchSQLAsync(inserts);
         scdb.Flush();
 
         var vacuum = await scdb.VacuumAsync(VacuumMode.Full, CancellationToken.None);
@@ -144,8 +202,15 @@ try
         }
     }
 
-    // Full at-rest encryption + password/key rotation must also be Native AOT safe:
-    // the envelope key model uses PBKDF2/AES-GCM, no reflection, no dynamic, no Expression.
+    return 0;
+}
+
+/// <summary>
+/// Exercises full at-rest encryption (password + key rotation, encrypted reopen + full vacuum)
+/// under Native AOT. Returns 0 on success.
+/// </summary>
+static async Task<int> RunEncryptionScenarioAsync(DatabaseFactory factory)
+{
     var encryptedScdbPath = Path.Combine(Path.GetTempPath(), $"scdb-aot-smoke-{Guid.NewGuid():N}.scdb");
     var encryptedOptions = new SharpCoreDB.DatabaseOptions
     {
@@ -155,10 +220,10 @@ try
         CreateImmediately = true,
     };
 
-    await using (var enc = factory.CreateWithOptions(encryptedScdbPath, "aot123", encryptedOptions))
+    await using (var enc = factory.CreateWithOptions(encryptedScdbPath, AotPassword, encryptedOptions))
     {
-        enc.ExecuteSQL("CREATE TABLE s (id INTEGER PRIMARY KEY, secret TEXT)");
-        enc.ExecuteSQL("INSERT INTO s VALUES (1, 'classified-under-aot')");
+        await enc.ExecuteSQLAsync("CREATE TABLE s (id INTEGER PRIMARY KEY, secret TEXT)");
+        await enc.ExecuteSQLAsync("INSERT INTO s VALUES (1, 'classified-under-aot')");
         enc.ForceSave();
 
         // Password rotation — O(1) re-wrap of the same DEK.
@@ -192,7 +257,7 @@ try
     }
 
     // Reopen with the rotated password and run a full VACUUM on the encrypted file.
-    await using (var encReopened = factory.CreateWithOptions(encryptedScdbPath, "aot123",
+    await using (var encReopened = factory.CreateWithOptions(encryptedScdbPath, AotPassword,
         new SharpCoreDB.DatabaseOptions
         {
             StorageMode = StorageMode.SingleFile,
@@ -217,32 +282,5 @@ try
 
     try { File.Delete(encryptedScdbPath); } catch { /* best-effort cleanup */ }
 
-    Console.WriteLine("PASS: SharpCoreDB Native AOT smoke test OK (1000 inserts, point lookup, StructRow point + full scan, reopen, full vacuum, full-at-rest encryption + password/key rotation).");
     return 0;
-}
-finally
-{
-    try
-    {
-        if (Directory.Exists(dbPath))
-        {
-            Directory.Delete(dbPath, true);
-        }
-    }
-    catch
-    {
-        // Best-effort cleanup.
-    }
-
-    try
-    {
-        if (File.Exists(scdbPath))
-        {
-            File.Delete(scdbPath);
-        }
-    }
-    catch
-    {
-        // Best-effort cleanup.
-    }
 }

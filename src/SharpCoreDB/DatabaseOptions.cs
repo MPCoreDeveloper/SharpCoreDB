@@ -135,7 +135,7 @@ public sealed class DatabaseOptions
     /// Obsolete alias for BlockCompressionLevel.
     /// This preset applies to both Brotli and GZip block compression, not just Brotli.
     /// </summary>
-    [Obsolete("Use BlockCompressionLevel instead. This property applies to both Brotli and GZip compression.")]
+    [Obsolete("Use BlockCompressionLevel instead. This property applies to both Brotli and GZip compression.")] // NOSONAR:S1133 - intentional: public API retained for binary compatibility
     public Compression.OptionalCompressionLevel BlockBrotliCompressionLevel
     {
         get => BlockCompressionLevel;
@@ -248,44 +248,59 @@ public sealed class DatabaseOptions
     /// </summary>
     public void Validate()
     {
+        ValidatePageSize();
+        ValidateEncryption();
+        ValidateWalAndRegionSizes();
+        ValidateFragmentationThreshold();
+    }
+
+    private void ValidatePageSize()
+    {
         // Validate page size (must be power of 2 between 512 and 32768)
         if (PageSize < 512 || PageSize > 32768 || (PageSize & (PageSize - 1)) != 0)
         {
             throw new ArgumentException(
                 $"PageSize must be a power of 2 between 512 and 32768. Got: {PageSize}");
         }
+    }
 
-        // Validate encryption key if encryption enabled
-        if (EnableEncryption)
+    private void ValidateEncryption()
+    {
+        if (!EnableEncryption)
         {
-            var hasRawKey = EncryptionKey is not null;
-            var hasPassword = !string.IsNullOrWhiteSpace(EncryptionPassword);
-
-            if (!hasRawKey && !hasPassword)
-            {
-                throw new ArgumentException(
-                    "Either EncryptionKey (32 bytes) or EncryptionPassword must be provided when EnableEncryption is true.");
-            }
-
-            if (hasRawKey && hasPassword)
-            {
-                throw new ArgumentException(
-                    "EncryptionKey and EncryptionPassword are mutually exclusive; provide exactly one.");
-            }
-
-            if (hasRawKey && EncryptionKey!.Length != 32)
-            {
-                throw new ArgumentException(
-                    "EncryptionKey must be exactly 32 bytes (256 bits) when EnableEncryption is true.");
-            }
-
-            if (hasPassword && (EncryptionKeyDerivationIterations < 1000 || EncryptionKeyDerivationIterations > 10_000_000))
-            {
-                throw new ArgumentException(
-                    $"EncryptionKeyDerivationIterations must be between 1000 and 10000000. Got: {EncryptionKeyDerivationIterations}");
-            }
+            return;
         }
 
+        var hasRawKey = EncryptionKey is not null;
+        var hasPassword = !string.IsNullOrWhiteSpace(EncryptionPassword);
+
+        if (!hasRawKey && !hasPassword)
+        {
+            throw new ArgumentException(
+                "Either EncryptionKey (32 bytes) or EncryptionPassword must be provided when EnableEncryption is true.");
+        }
+
+        if (hasRawKey && hasPassword)
+        {
+            throw new ArgumentException(
+                "EncryptionKey and EncryptionPassword are mutually exclusive; provide exactly one.");
+        }
+
+        if (hasRawKey && EncryptionKey is { Length: not 32 })
+        {
+            throw new ArgumentException(
+                "EncryptionKey must be exactly 32 bytes (256 bits) when EnableEncryption is true.");
+        }
+
+        if (hasPassword && (EncryptionKeyDerivationIterations < 1000 || EncryptionKeyDerivationIterations > 10_000_000))
+        {
+            throw new ArgumentException(
+                $"EncryptionKeyDerivationIterations must be between 1000 and 10000000. Got: {EncryptionKeyDerivationIterations}");
+        }
+    }
+
+    private void ValidateWalAndRegionSizes()
+    {
         // Validate WAL buffer size
         if (WalBufferSizePages < 64 || WalBufferSizePages > 65536)
         {
@@ -311,7 +326,10 @@ public sealed class DatabaseOptions
             throw new ArgumentException(
                 $"TableDirectorySizePages must be between 1 and 65536. Got: {TableDirectorySizePages}");
         }
+    }
 
+    private void ValidateFragmentationThreshold()
+    {
         // Validate fragmentation threshold
         if (FragmentationThreshold < 0 || FragmentationThreshold > 100)
         {

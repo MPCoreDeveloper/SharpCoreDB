@@ -37,6 +37,25 @@ public static class TypeConverter
         }
     }
 
+    private static readonly Dictionary<Type, Func<object, object>> AotConverters = new()
+    {
+        [typeof(int)] = v => System.Convert.ToInt32(v),
+        [typeof(long)] = v => System.Convert.ToInt64(v),
+        [typeof(short)] = v => System.Convert.ToInt16(v),
+        [typeof(byte)] = v => System.Convert.ToByte(v),
+        [typeof(uint)] = v => System.Convert.ToUInt32(v),
+        [typeof(ulong)] = v => System.Convert.ToUInt64(v),
+        [typeof(double)] = v => System.Convert.ToDouble(v),
+        [typeof(float)] = v => System.Convert.ToSingle(v),
+        [typeof(decimal)] = v => System.Convert.ToDecimal(v),
+        [typeof(bool)] = v => System.Convert.ToBoolean(v),
+        [typeof(string)] = v => System.Convert.ToString(v) ?? string.Empty,
+        [typeof(DateTime)] = v => System.Convert.ToDateTime(v),
+        [typeof(char)] = v => System.Convert.ToChar(v),
+        [typeof(Guid)] = v => v is Guid guid ? guid : Guid.Parse(System.Convert.ToString(v) ?? string.Empty),
+        [typeof(byte[])] = v => v is byte[] bytes ? bytes : throw new InvalidCastException($"Cannot convert {v.GetType().Name} to byte[]"),
+    };
+
     /// <summary>
     /// AOT-safe conversion to a target type. Avoids <c>Convert.ChangeType(object, Type)</c>
     /// which requires dynamic code (IL3050 in Native AOT). Uses the IConvertible-based
@@ -44,21 +63,11 @@ public static class TypeConverter
     /// </summary>
     internal static object ConvertToType(object value, Type targetType)
     {
-        if (targetType == typeof(int)) return System.Convert.ToInt32(value);
-        if (targetType == typeof(long)) return System.Convert.ToInt64(value);
-        if (targetType == typeof(short)) return System.Convert.ToInt16(value);
-        if (targetType == typeof(byte)) return System.Convert.ToByte(value);
-        if (targetType == typeof(uint)) return System.Convert.ToUInt32(value);
-        if (targetType == typeof(ulong)) return System.Convert.ToUInt64(value);
-        if (targetType == typeof(double)) return System.Convert.ToDouble(value);
-        if (targetType == typeof(float)) return System.Convert.ToSingle(value);
-        if (targetType == typeof(decimal)) return System.Convert.ToDecimal(value);
-        if (targetType == typeof(bool)) return System.Convert.ToBoolean(value);
-        if (targetType == typeof(string)) return System.Convert.ToString(value) ?? string.Empty;
-        if (targetType == typeof(DateTime)) return System.Convert.ToDateTime(value);
-        if (targetType == typeof(char)) return System.Convert.ToChar(value);
-        if (targetType == typeof(Guid)) return value is Guid guid ? guid : Guid.Parse(System.Convert.ToString(value) ?? string.Empty);
-        if (targetType == typeof(byte[])) return value is byte[] bytes ? bytes : throw new InvalidCastException($"Cannot convert {value.GetType().Name} to byte[]");
+        if (AotConverters.TryGetValue(targetType, out var converter))
+        {
+            return converter(value);
+        }
+
         throw new InvalidCastException($"Cannot convert {value.GetType().Name} to {targetType.Name}");
     }
 

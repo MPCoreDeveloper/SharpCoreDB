@@ -584,12 +584,9 @@ public partial class PageManager : IDisposable
     private static int GetUsedDataEnd(Page page)
     {
         int dataEnd = 0;
-        foreach (var s in page.Slots)
+        foreach (var s in page.Slots.Where(s => !s.flags.HasFlag(RecordFlags.Deleted)))
         {
-            if (!s.flags.HasFlag(RecordFlags.Deleted))
-            {
-                dataEnd = Math.Max(dataEnd, s.offset + s.length);
-            }
+            dataEnd = Math.Max(dataEnd, s.offset + s.length);
         }
 
         return dataEnd;

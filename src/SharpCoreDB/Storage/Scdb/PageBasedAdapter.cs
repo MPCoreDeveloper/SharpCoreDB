@@ -175,8 +175,8 @@ public sealed class PageBasedAdapter : IStorageEngine, IDisposable
                 throw new InvalidOperationException($"Page {pageId} not found for table {tableName}");
             }
             
-            // Update record in page (relocates within the page when the record grows;
-            // the slot pointer moves but the storage reference stays valid).
+            // Update the record inside the page; a growing record is relocated within the page.
+            // The slot pointer moves, but the storage reference remains valid.
             var updatedPage = UpdateRecordInPage(pageData, slotIndex, newData);
             
             // Write back
