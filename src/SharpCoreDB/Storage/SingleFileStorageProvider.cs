@@ -673,8 +673,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         {
             // Fallback: regular read (allocates)
             var buffer = new byte[checked((int)Math.Min(entry.Length, (ulong)int.MaxValue))];
-            _fileStream.Position = (long)entry.Offset;
-            _fileStream.ReadExactly(buffer);
+            lock (_writeBatchLock)
+            {
+                _fileStream.Position = (long)entry.Offset;
+                _fileStream.ReadExactly(buffer);
+            }
             return buffer;
         }
 
@@ -707,8 +710,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
         // Fallback: regular read (allocates)
         var buffer2 = new byte[(int)entry.Length];
-        _fileStream.Position = (long)entry.Offset;
-        _fileStream.ReadExactly(buffer2);
+        lock (_writeBatchLock)
+        {
+            _fileStream.Position = (long)entry.Offset;
+            _fileStream.ReadExactly(buffer2);
+        }
         return buffer2;
     }
 
@@ -982,8 +988,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             _dirtyTracker.MarkDirty(blockName, offset, data.Length);
             
             // ✅ Write only the modified region (delta write - NOT the entire block!)
-            _fileStream.Position = (long)absoluteOffset;
-            await _fileStream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
+            lock (_writeBatchLock)
+            {
+                _fileStream.Position = (long)absoluteOffset;
+                _fileStream.Write(data.Span);
+            }
             
             // ✅ Mark block as dirty (checksum needs recalculation on next full flush)
             var updatedEntry = entry with 
@@ -1080,8 +1089,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 var absoluteOffset = entry.Offset + (ulong)offset;
                 
                 // ✅ Write only the dirty region (NOT the entire block!)
-                _fileStream.Position = (long)absoluteOffset;
-                await _fileStream.WriteAsync(dirtyData, cancellationToken).ConfigureAwait(false);
+                lock (_writeBatchLock)
+                {
+                    _fileStream.Position = (long)absoluteOffset;
+                    _fileStream.Write(dirtyData.Span);
+                }
                 
                 totalBytesWritten += length;
                 
@@ -1148,8 +1160,11 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             try
             {
                 var buffer = pooledBuffer.AsMemory(0, (int)entry.Length);
-                _fileStream.Position = (long)entry.Offset;
-                await _fileStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+                lock (_writeBatchLock)
+                {
+                    _fileStream.Position = (long)entry.Offset;
+                    _fileStream.ReadExactly(buffer.Span);
+                }
 
                 // Validate checksum; if mismatch, attempt self-heal
                 if (!ValidateChecksum(entry, buffer.Span))
@@ -2370,10 +2385,13 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
     private async Task WriteHeaderAsync(CancellationToken cancellationToken)
     {
-        _fileStream.Position = 0;
-        var buffer = new byte[ScdbFileHeader.HEADER_SIZE];
-        _header.WriteTo(buffer);
-        await _fileStream.WriteAsync(buffer, cancellationToken);
+        lock (_writeBatchLock)
+        {
+            _fileStream.Position = 0;
+            var buffer = new byte[ScdbFileHeader.HEADER_SIZE];
+            _header.WriteTo(buffer);
+            _fileStream.Write(buffer);
+        }
     }
 
     private async Task<VacuumResult> VacuumQuickAsync(StorageStatistics stats, Stopwatch sw, CancellationToken cancellationToken)
@@ -2418,12 +2436,15 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     {
                         // Move block to better position
                         var blockData = new byte[entry.Length];
-                        _fileStream.Position = (long)entry.Offset;
-                        await _fileStream.ReadExactlyAsync(blockData, cancellationToken);
-                        
-                        // Write to new location
-                        _fileStream.Position = (long)optimalPage;
-                        await _fileStream.WriteAsync(blockData, cancellationToken);
+                        lock (_writeBatchLock)
+                        {
+                            _fileStream.Position = (long)entry.Offset;
+                            _fileStream.ReadExactly(blockData);
+
+                            // Write to new location
+                            _fileStream.Position = (long)optimalPage;
+                            _fileStream.Write(blockData);
+                        }
                         
                         // Free old location
                         var oldPages = (int)((entry.Length + (ulong)_header.PageSize - 1) / (ulong)_header.PageSize);
