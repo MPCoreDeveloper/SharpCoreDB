@@ -21,6 +21,10 @@ guide explaining when SharpCoreDB is fastest.
 - `manual/ecosystem.md` — EventSourcing, CQRS, Projections, Distributed, Functional
 - `manual/migration.md` — migrate from SQLite / LiteDB / RavenDB
 
+## 0b. Release notes
+
+- `2.0.0.0_WHAT_CHANGED.md` — **what's new in v2.0 vs v1.9** (features + benchmarks vs SQLite/LiteDB)
+
 ## 1. Project Entry Points
 
 - `../README.md`

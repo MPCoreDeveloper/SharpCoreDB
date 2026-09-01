@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   key/password rotation) and **configurable metadata sizing** (`FsmSizePages`,
   `BlockRegistrySizePages`, `TableDirectorySizePages`).
 - **4-part versioning** — all packages now use `n.n.n.n` (this release: `2.0.0.0`).
+- **Full change/benchmark report** — see
+  [`docs/2.0.0.0_WHAT_CHANGED.md`](2.0.0.0_WHAT_CHANGED.md): everything that changed
+  vs the 1.9 line, plus the SharpCoreDB vs SQLite vs LiteDB benchmark tables and graphs.
 
 ### SingleFile storage — critical compression read-path fixes + configurable presets (PR #352)
 
