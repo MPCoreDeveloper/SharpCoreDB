@@ -86,7 +86,7 @@ public sealed class InPlaceUpdateTests : IDisposable
         var row = table.Select("id = 1").Single();
         Assert.Equal(99, row["age"]);
         Assert.Equal(9.9, (double)row["score"]);
-        Assert.Equal(true, row["active"]); // untouched
+        Assert.True((bool)row["active"]!); // untouched
         Assert.Equal(created, row["created"]); // untouched
     }
 

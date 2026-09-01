@@ -674,7 +674,7 @@ public partial class SqlParser
 
         var whereIdx = Array.IndexOf(parts, SqlConstants.WHERE);
         var orderIdx = Array.IndexOf(parts, SqlConstants.ORDER);
-        var limitIdx = Array.IndexOf(parts, "LIMIT");
+        var limitIdx = Array.IndexOf(parts, SqlConstants.LIMIT);
 
         string? whereStr = whereIdx > 0
             ? string.Join(" ", parts.Skip(whereIdx + 1).Take(CalculateWhereClauseEndIndex(orderIdx, limitIdx, parts.Length) - whereIdx - 1))
@@ -1037,7 +1037,7 @@ public partial class SqlParser
         if (wherePos >= 0)
         {
             var orderPos = FindKeywordPosition(sqlUpper, "ORDER", wherePos + 5);
-            var limitPos = FindKeywordPosition(sqlUpper, "LIMIT", wherePos + 5);
+            var limitPos = FindKeywordPosition(sqlUpper, SqlConstants.LIMIT, wherePos + 5);
             int end = MinPositive(orderPos, limitPos, sql.Length);
             var whereClause = sql.Substring(wherePos + 5, end - wherePos - 5).Trim();
             currentRows = [.. currentRows.Where(r => EvaluateJoinRowWhere(r, whereClause))];
@@ -1047,14 +1047,14 @@ public partial class SqlParser
         var orderPos2 = FindKeywordPosition(sqlUpper, "ORDER BY");
         if (orderPos2 >= 0)
         {
-            var limitPos = FindKeywordPosition(sqlUpper, "LIMIT", orderPos2 + 8);
+            var limitPos = FindKeywordPosition(sqlUpper, SqlConstants.LIMIT, orderPos2 + 8);
             int end = limitPos >= 0 ? limitPos : sql.Length;
             var orderClause = sql.Substring(orderPos2 + 8, end - orderPos2 - 8).Trim();
             currentRows = ApplyJoinOrderBy(currentRows, orderClause);
         }
 
         // 5. Apply LIMIT
-        var limitPos2 = FindKeywordPosition(sqlUpper, "LIMIT");
+        var limitPos2 = FindKeywordPosition(sqlUpper, SqlConstants.LIMIT);
         if (limitPos2 >= 0)
         {
             var limitStr = sql[(limitPos2 + 5)..].Trim().Split(' ', ',')[0];

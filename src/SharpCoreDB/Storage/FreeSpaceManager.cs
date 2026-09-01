@@ -65,9 +65,9 @@ internal sealed class FreeSpaceManager : IDisposable
     private ulong _totalPages;
     private ulong _freePages;
 
-    // ✅ C# 14: Pre-allocation settings for optimal file growth - Phase 3 optimized
-    // Minimum file extension is byte-based so it stays ~10 MB regardless of PageSize;
-    // a fixed page count would scale linearly (40 MB @ 16 KB, 80 MB @ 32 KB) - issue #345.
+    // ✅ C# 14: Pre-allocation settings for optimal file growth - Phase 3 optimized.
+    // The minimum file extension is byte-based (about 10 MB regardless of page size);
+    // a fixed page count would grow linearly with page size (see issue #345).
     private const long MIN_EXTENSION_BYTES = 10L * 1024 * 1024;
     private const int EXTENSION_GROWTH_FACTOR = 2;     // Double size each time (exponential growth)
     private ulong _preallocatedPages = 0;
@@ -301,91 +301,23 @@ internal sealed class FreeSpaceManager : IDisposable
         // Retry loop: if the FSM outgrows its current block we grow (relocate) and retry.
         for (var attempt = 0; attempt < 16; attempt++)
         {
-            byte[]? buffer;
-            int writeSize = 0;
-            int totalSize;
-            var metadataEncrypted = _provider.IsMetadataEncrypted;
-
-            lock (_allocationLock)
+            if (!TrySerializeFsmSnapshot(out var buffer, out var writeSize, out var totalSize))
             {
-                if (!_isDirty) return;
-
-                // Calculate L1 bitmap size (1 bit per page, packed into bytes)
-                var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
-
-                // Calculate L2 extent size
-                var extentCount = _l2Extents.Count;
-                var extentSizeBytes = extentCount * Scdb.FreeExtent.SIZE;
-
-                // Total size
-                totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
-
-                // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
-                var usableSize = metadataEncrypted
-                    ? (int)_fsmLength - AesGcmEncryption.OverheadSize
-                    : (int)_fsmLength;
-
-                if (totalSize > usableSize)
-                {
-                    // FSM outgrew its block — grow (relocate) and retry (stays dirty).
-                    buffer = null;
-                }
-                else
-                {
-                    // Encrypted regions are written as a full fixed-size ciphertext blob so the
-                    // reader knows the exact cipher length; plaintext regions write used bytes.
-                    writeSize = metadataEncrypted ? (int)_fsmLength : totalSize;
-
-                    buffer = ArrayPool<byte>.Shared.Rent(writeSize);
-                    var span = buffer.AsSpan(0, writeSize);
-                    span.Clear();
-
-                    var header = new FreeSpaceMapHeader
-                    {
-                        Magic = FreeSpaceMapHeader.MAGIC,
-                        Version = FreeSpaceMapHeader.CURRENT_VERSION,
-                        TotalPages = _totalPages,
-                        FreePages = _freePages,
-                        LargestExtent = extentCount > 0 ? _l2Extents.Max(e => e.Length) : 0,
-                        BitmapOffset = FreeSpaceMapHeader.SIZE,
-                        ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
-                    };
-
-                    MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
-
-                    // Write L1 bitmap
-                    var bitmapSpan = span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
-                    SerializeBitmap(bitmapSpan);
-
-                    // Write L2 extent count
-                    var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
-                    MemoryMarshal.Write(span[countOffset..], extentCount);
-
-                    // Write L2 extents
-                    var extentOffset = countOffset + sizeof(int);
-                    for (var i = 0; i < extentCount; i++)
-                    {
-                        var extent = _l2Extents[i];
-                        var extentSpan = span.Slice(extentOffset + (i * Scdb.FreeExtent.SIZE), Scdb.FreeExtent.SIZE);
-                        MemoryMarshal.Write(extentSpan, in extent);
-                    }
-
-                    _isDirty = false;
-                }
+                return; // Not dirty anymore
             }
 
             if (buffer is null)
             {
                 // Grow the FSM block first, then retry the flush on the next iteration.
                 await _provider.GrowFsmBlockAsync(
-                    totalSize + (metadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
+                    totalSize + (_provider.IsMetadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
                     cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
             try
             {
-                if (metadataEncrypted)
+                if (_provider.IsMetadataEncrypted)
                 {
                     _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
                 }
@@ -398,11 +330,91 @@ internal sealed class FreeSpaceManager : IDisposable
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: _provider.IsMetadataEncrypted);
             }
         }
 
         throw new InvalidOperationException("FSM could not be flushed after multiple growth attempts.");
+    }
+
+    private bool TrySerializeFsmSnapshot(out byte[]? buffer, out int writeSize, out int totalSize)
+    {
+        var metadataEncrypted = _provider.IsMetadataEncrypted;
+
+        lock (_allocationLock)
+        {
+            if (!_isDirty)
+            {
+                buffer = null;
+                writeSize = 0;
+                totalSize = 0;
+                return false;
+            }
+
+            // Calculate L1 bitmap size (1 bit per page, packed into bytes)
+            var bitmapSizeBytes = (int)((_totalPages + 7) / 8);
+
+            // Calculate L2 extent size
+            var extentCount = _l2Extents.Count;
+            var extentSizeBytes = extentCount * Scdb.FreeExtent.SIZE;
+
+            // Total size
+            totalSize = FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int) + extentSizeBytes;
+
+            // Encrypted regions reserve the last OverheadSize bytes for the GCM nonce + tag.
+            var usableSize = metadataEncrypted
+                ? (int)_fsmLength - AesGcmEncryption.OverheadSize
+                : (int)_fsmLength;
+
+            if (totalSize > usableSize)
+            {
+                // FSM outgrew its block — grow (relocate) and retry (stays dirty).
+                buffer = null;
+                writeSize = 0;
+                return true;
+            }
+
+            // Encrypted regions are written as a full fixed-size ciphertext blob so the
+            // reader knows the exact cipher length; plaintext regions write used bytes.
+            writeSize = metadataEncrypted ? (int)_fsmLength : totalSize;
+
+            buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+            var span = buffer.AsSpan(0, writeSize);
+            span.Clear();
+
+            var header = new FreeSpaceMapHeader
+            {
+                Magic = FreeSpaceMapHeader.MAGIC,
+                Version = FreeSpaceMapHeader.CURRENT_VERSION,
+                TotalPages = _totalPages,
+                FreePages = _freePages,
+                LargestExtent = extentCount > 0 ? _l2Extents.Max(e => e.Length) : 0,
+                BitmapOffset = FreeSpaceMapHeader.SIZE,
+                ExtentMapOffset = (uint)(FreeSpaceMapHeader.SIZE + bitmapSizeBytes + sizeof(int))
+            };
+
+            MemoryMarshal.Write(span[..FreeSpaceMapHeader.SIZE], in header);
+
+            // Write L1 bitmap
+            var bitmapSpan = span.Slice(FreeSpaceMapHeader.SIZE, bitmapSizeBytes);
+            SerializeBitmap(bitmapSpan);
+
+            // Write L2 extent count
+            var countOffset = FreeSpaceMapHeader.SIZE + bitmapSizeBytes;
+            MemoryMarshal.Write(span[countOffset..], extentCount);
+
+            // Write L2 extents
+            var extentOffset = countOffset + sizeof(int);
+            for (var i = 0; i < extentCount; i++)
+            {
+                var extent = _l2Extents[i];
+                var extentSpan = span.Slice(extentOffset + (i * Scdb.FreeExtent.SIZE), Scdb.FreeExtent.SIZE);
+                MemoryMarshal.Write(extentSpan, in extent);
+            }
+
+            _isDirty = false;
+            return true;
+        }
     }
     public void Dispose()
     {

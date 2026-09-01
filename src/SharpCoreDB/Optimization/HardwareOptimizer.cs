@@ -447,13 +447,24 @@ public static class PlatformOptimizer
         // The runtime (HardwareIntrinsics / JIT) selects SIMD-optimized code paths
         // automatically when the feature is available; no manual dispatch is needed.
         // Log the active feature set for diagnostics.
-        var feature = info switch
+        string feature;
+        if (info.HasAVX512)
         {
-            { HasAVX512: true } => "PlatformOptimizer: AVX-512 code path available.",
-            { HasAVX2: true } => "PlatformOptimizer: AVX2 code path available.",
-            { HasNEON: true } => "PlatformOptimizer: ARM NEON code path available.",
-            _ => "PlatformOptimizer: scalar fallback.",
-        };
+            feature = "PlatformOptimizer: AVX-512 code path available.";
+        }
+        else if (info.HasAVX2)
+        {
+            feature = "PlatformOptimizer: AVX2 code path available.";
+        }
+        else if (info.HasNEON)
+        {
+            feature = "PlatformOptimizer: ARM NEON code path available.";
+        }
+        else
+        {
+            feature = "PlatformOptimizer: scalar fallback.";
+        }
+
         Debug.WriteLine(feature);
     }
 

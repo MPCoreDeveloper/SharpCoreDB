@@ -214,77 +214,23 @@ internal sealed class BlockRegistry : IDisposable
             _inFlush = true;
             try
             {
-                byte[]? buffer;
-                int writeSize = 0;
-                int totalSize;
-                KeyValuePair<string, BlockEntry>[] entriesSnapshot;
-                var metadataEncrypted = _provider.IsMetadataEncrypted;
-
-                lock (_registryLock)
+                if (!TrySerializeRegistrySnapshot(
+                    out var buffer, out var writeSize, out var totalSize, out var entriesSnapshot))
                 {
-                    if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
-                        return; // Double-check after acquiring gate + lock
-
-                    entriesSnapshot = _blocks.ToArray();
-
-                    var entrySize = Unsafe.SizeOf<BlockEntry>();
-                    totalSize = RegistryChunkHeader.SIZE + (entriesSnapshot.Length * entrySize);
-
-                    var usableSize = metadataEncrypted
-                        ? (int)_registryLength - AesGcmEncryption.OverheadSize
-                        : (int)_registryLength;
-
-                    if (totalSize > usableSize)
-                    {
-                        Interlocked.Increment(ref _dirtyCount);
-                        buffer = null;
-                    }
-                    else
-                    {
-                        writeSize = metadataEncrypted ? (int)_registryLength : totalSize;
-
-                        buffer = ArrayPool<byte>.Shared.Rent(writeSize);
-                        var span = buffer.AsSpan(0, writeSize);
-                        span.Clear();
-
-                        var header = new RegistryChunkHeader
-                        {
-                            Magic = RegistryChunkHeader.MAGIC,
-                            Version = RegistryChunkHeader.CURRENT_VERSION,
-                            EntryCount = (ulong)entriesSnapshot.Length,
-                            NextChunkOffset = 0,
-                            NextChunkLength = 0
-                        };
-                        MemoryMarshal.Write(span[..RegistryChunkHeader.SIZE], in header);
-
-                        var offset = RegistryChunkHeader.SIZE;
-                        foreach (var (blockName, blockEntry) in entriesSnapshot)
-                        {
-                            var namedEntry = BlockEntry.WithName(blockName, blockEntry);
-
-                            if (offset + entrySize > totalSize)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
-                            }
-
-                            var entrySpan = span.Slice(offset, entrySize);
-                            MemoryMarshal.Write(entrySpan, in namedEntry);
-                            offset += entrySize;
-                        }
-                    }
+                    return; // Double-check after acquiring gate + lock — nothing to flush
                 }
+
                 if (buffer is null)
                 {
                     await _provider.GrowRegistryBlockAsync(
-                        totalSize + (metadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
+                        totalSize + (_provider.IsMetadataEncrypted ? AesGcmEncryption.OverheadSize : 0),
                         cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
                 try
                 {
-                    if (metadataEncrypted)
+                    if (_provider.IsMetadataEncrypted)
                     {
                         _provider.EncryptRegion(buffer.AsSpan(0, writeSize));
                     }
@@ -305,7 +251,7 @@ internal sealed class BlockRegistry : IDisposable
                 }
                 finally
                 {
-                    ArrayPool<byte>.Shared.Return(buffer, clearArray: metadataEncrypted);
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: _provider.IsMetadataEncrypted);
                 }
             }
             finally
@@ -318,7 +264,75 @@ internal sealed class BlockRegistry : IDisposable
         throw new InvalidOperationException("Block registry could not be flushed after multiple growth attempts.");
     }
 
-    /// <summary>
+    private bool TrySerializeRegistrySnapshot(
+        out byte[]? buffer, out int writeSize, out int totalSize,
+        out KeyValuePair<string, BlockEntry>[] entriesSnapshot)
+    {
+        var metadataEncrypted = _provider.IsMetadataEncrypted;
+
+        lock (_registryLock)
+        {
+            if (Interlocked.Exchange(ref _dirtyCount, 0) == 0)
+            {
+                buffer = null;
+                writeSize = 0;
+                totalSize = 0;
+                entriesSnapshot = [];
+                return false;
+            }
+
+            entriesSnapshot = _blocks.ToArray();
+
+            var entrySize = Unsafe.SizeOf<BlockEntry>();
+            totalSize = RegistryChunkHeader.SIZE + (entriesSnapshot.Length * entrySize);
+
+            var usableSize = metadataEncrypted
+                ? (int)_registryLength - AesGcmEncryption.OverheadSize
+                : (int)_registryLength;
+
+            if (totalSize > usableSize)
+            {
+                Interlocked.Increment(ref _dirtyCount);
+                buffer = null;
+                writeSize = 0;
+                return true;
+            }
+
+            writeSize = metadataEncrypted ? (int)_registryLength : totalSize;
+
+            buffer = ArrayPool<byte>.Shared.Rent(writeSize);
+            var span = buffer.AsSpan(0, writeSize);
+            span.Clear();
+
+            var header = new RegistryChunkHeader
+            {
+                Magic = RegistryChunkHeader.MAGIC,
+                Version = RegistryChunkHeader.CURRENT_VERSION,
+                EntryCount = (ulong)entriesSnapshot.Length,
+                NextChunkOffset = 0,
+                NextChunkLength = 0
+            };
+            MemoryMarshal.Write(span[..RegistryChunkHeader.SIZE], in header);
+
+            var offset = RegistryChunkHeader.SIZE;
+            foreach (var (blockName, blockEntry) in entriesSnapshot)
+            {
+                var namedEntry = BlockEntry.WithName(blockName, blockEntry);
+
+                if (offset + entrySize > totalSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Block registry write overflow: offset={offset} entrySize={entrySize} totalSize={totalSize} entries={entriesSnapshot.Length}");
+                }
+
+                var entrySpan = span.Slice(offset, entrySize);
+                MemoryMarshal.Write(entrySpan, in namedEntry);
+                offset += entrySize;
+            }
+
+            return true;
+        }
+    }    /// <summary>
     /// True while a registry flush holds the flush gate. Used to break the re-entrant
     /// deadlock where a registry flush (growing) triggers an FSM flush that would try to
     /// flush the registry again (issue #345 dynamic metadata).

@@ -352,7 +352,7 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// Builds the "column = value" WHERE string for a simple point-lookup plan, using the
     /// exact same parameter formatting as the legacy binder so the parser sees identical text.
     /// </summary>
-    private bool TryBuildSimpleWhereStr(
+    private static bool TryBuildSimpleWhereStr(
         SimpleSelectPlan simple,
         Dictionary<string, object?>? parameters,
         out string whereStr)

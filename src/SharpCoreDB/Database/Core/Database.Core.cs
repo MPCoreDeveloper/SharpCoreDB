@@ -871,19 +871,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// results (struct enumerable — foreach on the returned value is allocation-free). Avoids
     /// per-row Dictionary allocations and value boxing (~200 B → ~20 B per row). Supports the
     /// simple "SELECT [*|col] FROM t [WHERE col = @param|'literal'] [LIMIT n]" shape; more complex
-    /// queries throw <see cref="NotSupportedException"/>.
+    /// queries throw <see cref="NotSupportedException"/>. Parameterized queries reuse the plan
+    /// cache and the zero-reparse point-lookup fast path.
     /// </summary>
-    public DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql)
-    {
-        return ExecuteQueryStruct(sql, null);
-    }
-
-    /// <summary>
-    /// Executes a simple point-lookup SELECT with parameters and returns zero-allocation
-    /// <see cref="StructRow"/> results. Parameterized queries reuse the plan cache and the
-    /// zero-reparse point-lookup fast path.
-    /// </summary>
-    public DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters)
+    public DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 

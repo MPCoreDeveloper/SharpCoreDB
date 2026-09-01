@@ -100,15 +100,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.INSERT);
         }
-        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
         }
-        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
@@ -164,15 +164,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
         }
-        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
         }
-        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }
@@ -231,15 +231,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.INSERT);
         }
-        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
         }
-        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
@@ -283,15 +283,15 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals("INSERT".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
         }
-        else if (FirstToken(sql).Equals("UPDATE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
         }
-        else if (FirstToken(sql).Equals("DELETE".AsSpan(), StringComparison.OrdinalIgnoreCase))
+        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
         }

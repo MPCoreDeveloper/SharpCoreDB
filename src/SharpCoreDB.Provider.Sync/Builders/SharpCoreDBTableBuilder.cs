@@ -173,6 +173,7 @@ public sealed class SharpCoreDBTableBuilder(SyncTable tableDescription, ScopeInf
 
         var command = connection.CreateCommand();
         command.Transaction = transaction;
+        // NOSONAR:S2077 - {trackingTableName}/{pkColumn}/{pkType} whitelisted via SqlIdentifier.EnsureSafe + MapDbTypeToSqlType
         command.CommandText = $@"
             CREATE TABLE IF NOT EXISTS {trackingTableName} (
                 {pkColumn} {pkType} PRIMARY KEY NOT NULL,

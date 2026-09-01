@@ -164,11 +164,9 @@ public sealed class QueryPlanCache
         // v2 fast path: a single parameter avoids the OrderBy + list allocation.
         if (parameters.Count == 1)
         {
-            foreach (var single in parameters)
-            {
-                var typeName = single.Value?.GetType().Name ?? "null";
-                return normalizedSql + "|p:" + single.Key + ":" + typeName;
-            }
+            var single = parameters.First();
+            var typeName = single.Value?.GetType().Name ?? "null";
+            return normalizedSql + "|p:" + single.Key + ":" + typeName;
         }
 
         var parts = new List<string>(parameters.Count);

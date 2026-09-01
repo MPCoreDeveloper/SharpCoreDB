@@ -187,7 +187,7 @@ public partial class Table
                     string? newPkValue = PrimaryKeyIndex >= 0
                         ? row[Columns[PrimaryKeyIndex]]?.ToString()
                         : null;
-                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
                 }
 
                 updatedCount++;

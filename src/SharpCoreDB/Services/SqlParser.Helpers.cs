@@ -69,18 +69,13 @@ public partial class SqlParser
             {
                 parenthesisDepth--;
             }
-            else if (parenthesisDepth == 0 && i + 4 <= sql.Length)
+            else if (parenthesisDepth == 0 && i + 4 <= sql.Length &&
+                sql.AsSpan(i, 4).Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase) &&
+                (i == 0 || char.IsWhiteSpace(sql[i - 1])) &&
+                (i + 4 >= sql.Length || char.IsWhiteSpace(sql[i + 4])))
             {
-                // Check for FROM keyword at depth 0.
-                // PERF: span equality — the previous sql.Substring(i, 4).ToUpperInvariant()
-                // allocated twice per scanned character position.
-                if (sql.AsSpan(i, 4).Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase) &&
-                    (i == 0 || char.IsWhiteSpace(sql[i - 1])) && 
-                    (i + 4 >= sql.Length || char.IsWhiteSpace(sql[i + 4])))
-                {
-                    fromPosition = i + 4;
-                    break;
-                }
+                fromPosition = i + 4;
+                break;
             }
         }
         
@@ -112,14 +107,12 @@ public partial class SqlParser
         
         // Strip SQL identifier quotes: "name", [name], `name` (same behavior as the legacy builder).
         ReadOnlySpan<char> name = sql.AsSpan(fromPosition, end - fromPosition).Trim();
-        if (name.Length >= 2)
+        if (name.Length >= 2 &&
+            ((name[0] == '"' && name[^1] == '"') ||
+             (name[0] == '[' && name[^1] == ']') ||
+             (name[0] == '`' && name[^1] == '`')))
         {
-            if ((name[0] == '"' && name[^1] == '"') ||
-                (name[0] == '[' && name[^1] == ']') ||
-                (name[0] == '`' && name[^1] == '`'))
-            {
-                name = name[1..^1];
-            }
+            name = name[1..^1];
         }
 
         return name.IsEmpty ? null : name.ToString();

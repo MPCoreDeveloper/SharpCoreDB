@@ -335,76 +335,56 @@ public sealed class SharpCoreDBDataReader : DbDataReader
     /// </summary>
     private static object CreateOptionValue(Type innerType, object? raw)
     {
+        if (raw is null or DBNull)
+        {
+            return CreateOptionNone(innerType);
+        }
+
+        return CreateOptionSome(innerType, raw);
+    }
+
+    private static object CreateOptionNone(Type innerType)
+    {
+        if (innerType == typeof(int)) return Option<int>.None;
+        if (innerType == typeof(long)) return Option<long>.None;
+        if (innerType == typeof(double)) return Option<double>.None;
+        if (innerType == typeof(decimal)) return Option<decimal>.None;
+        if (innerType == typeof(bool)) return Option<bool>.None;
+        if (innerType == typeof(DateTime)) return Option<DateTime>.None;
+        if (innerType == typeof(string)) return Option<string>.None;
+        if (innerType == typeof(Guid)) return Option<Guid>.None;
+        if (innerType == typeof(byte[])) return Option<byte[]>.None;
+        if (innerType == typeof(object)) return Option<object>.None;
+        throw new NotSupportedException($"Option<{innerType.Name}> is not supported by the AOT-safe reader path.");
+    }
+
+    private static object CreateOptionSome(Type innerType, object raw)
+    {
         if (innerType == typeof(int))
-        {
-            return raw is null or DBNull
-                ? Option<int>.None
-                : Option<int>.Some(System.Convert.ToInt32(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<int>.Some(System.Convert.ToInt32(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(long))
-        {
-            return raw is null or DBNull
-                ? Option<long>.None
-                : Option<long>.Some(System.Convert.ToInt64(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<long>.Some(System.Convert.ToInt64(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(double))
-        {
-            return raw is null or DBNull
-                ? Option<double>.None
-                : Option<double>.Some(System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<double>.Some(System.Convert.ToDouble(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(decimal))
-        {
-            return raw is null or DBNull
-                ? Option<decimal>.None
-                : Option<decimal>.Some(System.Convert.ToDecimal(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<decimal>.Some(System.Convert.ToDecimal(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(bool))
-        {
-            return raw is null or DBNull
-                ? Option<bool>.None
-                : Option<bool>.Some(System.Convert.ToBoolean(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<bool>.Some(System.Convert.ToBoolean(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(DateTime))
-        {
-            return raw is null or DBNull
-                ? Option<DateTime>.None
-                : Option<DateTime>.Some(System.Convert.ToDateTime(raw, System.Globalization.CultureInfo.InvariantCulture));
-        }
-
+            return Option<DateTime>.Some(System.Convert.ToDateTime(raw, System.Globalization.CultureInfo.InvariantCulture));
         if (innerType == typeof(string))
-        {
-            return raw is null or DBNull
-                ? Option<string>.None
-                : Option<string>.Some(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
-        }
-
+            return Option<string>.Some(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
         if (innerType == typeof(Guid))
         {
-            return raw is null or DBNull
-                ? Option<Guid>.None
-                : Option<Guid>.Some(raw is Guid guid ? guid : Guid.Parse(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+            var guidValue = raw is Guid guid
+                ? guid
+                : Guid.Parse(System.Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+            return Option<Guid>.Some(guidValue);
         }
-
         if (innerType == typeof(byte[]))
-        {
-            return raw is null or DBNull
-                ? Option<byte[]>.None
-                : Option<byte[]>.Some((byte[])raw!);
-        }
-
+            return Option<byte[]>.Some((byte[])raw);
         if (innerType == typeof(object))
-        {
-            return raw is null or DBNull
-                ? Option<object>.None
-                : Option<object>.Some(raw!);
-        }
-
+            return Option<object>.Some(raw);
         throw new NotSupportedException($"Option<{innerType.Name}> is not supported by the AOT-safe reader path.");
     }
 

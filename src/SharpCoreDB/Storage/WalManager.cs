@@ -279,11 +279,11 @@ internal sealed class WalManager : IDisposable
         // ✅ Write each entry to circular buffer
         foreach (var entry in entriesToWrite)
         {
-            await WriteEntryToBufferAsync(fileStream, entry, cancellationToken);
+            await WriteEntryToBufferAsync(entry);
         }
 
         // ✅ Update and persist WAL header
-        await UpdateWalHeaderAsync(fileStream, cancellationToken);
+        await UpdateWalHeaderAsync();
         
         await fileStream.FlushAsync(cancellationToken);
     }
@@ -292,10 +292,7 @@ internal sealed class WalManager : IDisposable
     /// Writes a single WAL entry to the circular buffer.
     /// Handles wraparound automatically.
     /// </summary>
-    private async Task WriteEntryToBufferAsync(
-        System.IO.FileStream fileStream, 
-        WalLogEntry logEntry, 
-        CancellationToken cancellationToken)
+    private async Task WriteEntryToBufferAsync(WalLogEntry logEntry)
     {
         // Calculate position in circular buffer
         var entryIndex = _tailOffset % (ulong)_maxEntries;
@@ -458,7 +455,7 @@ internal sealed class WalManager : IDisposable
     /// <summary>
     /// Updates WAL header with current state.
     /// </summary>
-    private async Task UpdateWalHeaderAsync(System.IO.FileStream fileStream, CancellationToken cancellationToken)
+    private async Task UpdateWalHeaderAsync()
     {
         WalHeader header;
         lock (_walLock)

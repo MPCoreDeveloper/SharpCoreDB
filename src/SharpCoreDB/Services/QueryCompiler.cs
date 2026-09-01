@@ -427,7 +427,8 @@ public static class QueryCompiler
     /// </summary>
     private static Expression CompareUsingIComparable(Expression left, Expression right, string op)
     {
-        var compareMethod = new Func<object?, object?, string, bool>(CompareValuesRuntime).Method;
+        // MethodInfo resolved from a compiled delegate (no non-public reflection, no dynamic lookup).
+        var compareMethod = new Func<object?, object?, string, bool>(CompareValuesRuntime).Method; // NOSONAR:S3011
 
         if (left.Type != typeof(object))
             left = Expression.Convert(left, typeof(object));
@@ -658,8 +659,8 @@ public static class QueryCompiler
 
         AddColumn(orderByColumn);
 
-        // Note: the local AddColumn helper mutates the captured columns list; SonarC#
-        // cannot track that side effect and wrongly reports the loop as unreachable.
+        // Note: the local AddColumn helper mutates the captured columns list, which the
+        // static analyzer cannot track across the closure boundary; the loop is reachable.
         for (int i = 0; i < columns.Count; i++) // NOSONAR:S2583
         {
             indices[columns[i]] = i;
