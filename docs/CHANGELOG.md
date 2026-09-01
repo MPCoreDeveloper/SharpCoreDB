@@ -41,6 +41,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dropped), transaction rollback of in-place overwrites, fast-patch NOT NULL enforcement, CHECK
   fallback and WHERE-column updates. Full suite green: **1,693 tests, 0 failures**.
 
+### Performance — read / point-lookup fast path (B9)
+
+- **Direct hash-index point lookup for simple SELECTs** — `SELECT … FROM t WHERE indexed_col = @p`
+  (or a literal) no longer builds a WHERE string and re-parses it inside `SelectInternal`.
+  `TryExecuteSimpleSelect` now resolves the parameter/literal value once and calls a new
+  `Table.TrySelectIndexedPointLookup` that runs the hash-index lookup directly (read lock +
+  `EnsureIndexLoaded` + binary collation). The lookup is gated on **explicit `CREATE INDEX`
+  indexes** and PK columns route through the B-tree, so auto-registered (fixed-width / PK)
+  indexes keep their legacy behavior.
+- **Memoized SQL normalization** — `GetOrAddPlan`/`TryGetCachedPlan` cache the normalized SQL per
+  exact statement text, removing the per-call trim + whitespace-collapse + string allocation on
+  repeated executions of the same query.
+- **Measured** (`--readtest`, median of 7 × 10K point reads on 100K rows): SQL point-read
+  ~65,000 → **~120,000–166,000 ops/s**; Direct API ~160–188,000 ops/s; SQL/Direct overhead
+  dropped from ~2× to ~1.1–1.5×. Both SQL and Direct reads now beat SQLite (~95,000 ops/s) on
+  this workload.
+
 ## [2.1.0-preview] - 2026-08-31
 
 ### Performance

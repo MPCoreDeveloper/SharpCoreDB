@@ -56,8 +56,17 @@ PageBased engine (`--engine=pagebased`):
 | LiteDB | 71,677 | 13,616 | 10,337 | 14,061 |
 
 - **vs LiteDB: SharpCoreDB wins every workload** (1.5–8×).
-- **vs SQLite:** SharpCoreDB wins on INSERT (StructRow) and on READ (AppendOnly Direct); SQLite
-  remains ~6–8× faster on UPDATE/DELETE. The batch UPDATE path is now in-place and
+- **vs SQLite:** SharpCoreDB wins on INSERT (StructRow) and on READ (AppendOnly Direct + SQL after
+  B9); SQLite remains ~6–8× faster on UPDATE/DELETE. The batch UPDATE path is now in-place and
   **deserialize-free on the hot path** (only the changed fields are patched at their slot
   offsets) — the remaining gap is the per-statement parser + write-behind bookkeeping vs SQLite's
   specialized b-tree writes.
+
+### Point-read micro-benchmark (`--readtest`, median of 7 × 10K reads on 100K rows)
+
+| Path | ops/s | notes |
+|---|---|---|
+| SQL `SELECT * FROM docs WHERE name = @name` | ~120,000–166,000 | B9 direct hash-index lookup (was ~65,000) |
+| Direct `FindByIndex("docs", "name", …)` | ~160,000–188,000 | reference |
+| SQL/Direct overhead | 1.1–1.5× | was ~2× |
+| SQLite (same workload) | ~95,000 | — |

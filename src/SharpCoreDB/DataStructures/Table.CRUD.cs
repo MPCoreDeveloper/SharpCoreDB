@@ -1895,6 +1895,24 @@ public partial class Table
     }
 
     /// <summary>
+    /// True when the column has an index created explicitly via <c>CREATE INDEX</c> (the
+    /// index-name → column map is only populated for named indexes). Used to gate the direct
+    /// hash-index point lookup on trusted, fully-maintained indexes.
+    /// </summary>
+    private bool HasExplicitNamedIndex(string column)
+    {
+        foreach (var (_, indexedColumn) in this.indexNameToColumn)
+        {
+            if (string.Equals(indexedColumn, column, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// WP12: shared delete core used by every delete path (<see cref="Delete"/>, DeleteMultiple,
     /// <see cref="DeleteByPrimaryKey"/>). Performs physical engine deletes, primary-key B-tree
     /// cleanup, key-only hash-index cleanup (single lock per index) and row-count bookkeeping.
@@ -2374,6 +2392,92 @@ public partial class Table
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// B8: direct hash-index point lookup for the simple-SELECT fast path
+    /// (<c>SELECT … FROM t WHERE indexed_col = @param|literal</c>). Bypasses the WHERE-string
+    /// round trip (build a string → parse it again → re-detect the index route). Mirrors
+    /// <c>SelectInternal</c>'s indexed path: read lock + <c>EnsureIndexLoaded</c> + binary
+    /// collation only. Returns false when the caller must fall back to the full scan / WHERE
+    /// machinery (no usable index on the column, or a non-binary collation).
+    /// </summary>
+    internal bool TrySelectIndexedPointLookup(string column, object value, out List<Dictionary<string, object>> results)
+    {
+        results = [];
+
+        // The PK B-tree is authoritative for primary-key lookups (the PK hash index may be
+        // stale or not built yet); route PK columns through the legacy path.
+        if (this.PrimaryKeyIndex >= 0 &&
+            string.Equals(column, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Only hash indexes created explicitly via CREATE INDEX are trusted for a direct
+        // point lookup. Auto-registered indexes (primary key / fixed-width layout) can be
+        // stale or incomplete; those columns fall back to SelectInternal, which probes the
+        // B-tree and full scan.
+        if (!HasExplicitNamedIndex(column))
+        {
+            return false;
+        }
+
+        // Upgradeable read lock, matching SelectWithLock: the first index load inside
+        // EnsureIndexLoaded upgrades to a write lock (a plain read lock would deadlock).
+        this.rwLock.EnterUpgradeableReadLock();
+        try
+        {
+            if (!this.registeredIndexes.ContainsKey(column))
+            {
+                return false;
+            }
+
+            EnsureIndexLoaded(column);
+            if (!this.hashIndexes.TryGetValue(column, out var hashIndex))
+            {
+                return false;
+            }
+
+            var colIdx = this.Columns.IndexOf(column);
+            if (colIdx < 0)
+            {
+                return false;
+            }
+
+            // The hash index is only used for binary collation (mirrors SelectInternal).
+            var collation = colIdx < this.ColumnCollations.Count ? this.ColumnCollations[colIdx] : CollationType.Binary;
+            if (collation != CollationType.Binary)
+            {
+                return false;
+            }
+
+            var key = ParseValueForHashLookup(value?.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+            if (key is null)
+            {
+                return true; // no matches — the lookup was handled
+            }
+
+            var engine = GetOrCreateStorageEngine();
+            foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
+            {
+                var data = engine.Read(Name, pos);
+                if (data != null)
+                {
+                    var row = DeserializeRow(data);
+                    if (row != null)
+                    {
+                        results.Add(row);
+                    }
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            this.rwLock.ExitUpgradeableReadLock();
+        }
     }
 
     internal bool TryGetConflictingUniquePrimaryKey(

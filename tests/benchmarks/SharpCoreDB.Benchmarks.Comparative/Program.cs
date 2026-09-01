@@ -30,6 +30,13 @@ class Program
 
     static async Task Main(string[] args)
     {
+        // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
+        if (args.Any(a => a.Equals("--readtest", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunReadMicroBenchmark();
+            return;
+        }
+
         // Optional: --fixedwidth → run the fixed-width vs legacy before/after benchmark only.
         if (args.Any(a => a.Equals("--fixedwidth", StringComparison.OrdinalIgnoreCase)))
         {
@@ -112,6 +119,107 @@ class Program
     // ══════════════════════════════════════
     // SharpCoreDB
     // ══════════════════════════════════════
+
+    /// <summary>
+    /// Focused read micro-benchmark: SQL (parameterized point-lookup) vs Direct API
+    /// (<c>FindByIndex</c>) on the same database. Reports the median of several runs so
+    /// machine load does not dominate the result.
+    /// </summary>
+    static void RunReadMicroBenchmark()
+    {
+        const int rows = 100_000;
+        const int queries = 10_000;
+        const int reps = 7;
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var sp = services.BuildServiceProvider();
+        var factory = sp.GetRequiredService<DatabaseFactory>();
+        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
+        var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-readtest-{Guid.NewGuid()}");
+
+        using var db = (SharpCoreDB.Database)factory.Create(
+            dbPath: dbPath,
+            masterPassword: "pw",
+            isReadOnly: false,
+            config: config);
+
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+            for (int batch = 0; batch < rows; batch += 10_000)
+            {
+                var list = new List<Dictionary<string, object>>(10_000);
+                for (int i = batch; i < batch + 10_000; i++)
+                {
+                    list.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = $"User{i}",
+                        ["email"] = $"user{i}@test.com",
+                        ["age"] = 20 + i % 60,
+                        ["score"] = i * 0.1,
+                        ["data"] = $"payload-{i}",
+                    });
+                }
+
+                db.InsertBatch("docs", list);
+            }
+
+            db.Flush();
+
+            // Warmup (JIT + index load).
+            for (int i = 0; i < 1000; i++)
+            {
+                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
+                    new Dictionary<string, object?> { ["@name"] = $"User{i}" });
+                db.FindByIndex("docs", "name", $"User{i}");
+            }
+
+            double[] sqlTimes = new double[reps];
+            double[] directTimes = new double[reps];
+
+            for (int r = 0; r < reps; r++)
+            {
+                var sw = Stopwatch.StartNew();
+                for (int i = 0; i < queries; i++)
+                {
+                    db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
+                        new Dictionary<string, object?> { ["@name"] = $"User{i}" });
+                }
+
+                sw.Stop();
+                sqlTimes[r] = sw.Elapsed.TotalSeconds;
+
+                sw.Restart();
+                for (int i = 0; i < queries; i++)
+                {
+                    db.FindByIndex("docs", "name", $"User{i}");
+                }
+
+                sw.Stop();
+                directTimes[r] = sw.Elapsed.TotalSeconds;
+            }
+
+            Array.Sort(sqlTimes);
+            Array.Sort(directTimes);
+            double sqlMedian = sqlTimes[reps / 2];
+            double directMedian = directTimes[reps / 2];
+
+            Console.WriteLine();
+            Console.WriteLine("═══ READ micro-benchmark (10,000 point reads via name hash index, median of 7) ═══");
+            Console.WriteLine($"  SQL    : {sqlMedian:F3}s  ({queries / sqlMedian:N0} ops/s)");
+            Console.WriteLine($"  Direct : {directMedian:F3}s  ({queries / directMedian:N0} ops/s)");
+            Console.WriteLine($"  SQL/Direct overhead: {(sqlMedian / directMedian):F2}x");
+        }
+        finally
+        {
+            try { Directory.Delete(dbPath, true); }
+            catch { }
+        }
+    }
+
     static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         return new DatabaseConfig

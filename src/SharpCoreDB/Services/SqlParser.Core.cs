@@ -306,21 +306,86 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         if (!this.tables.TryGetValue(simple.TableName, out var table))
             return false;
 
-        string whereStr;
-        if (!TryBuildSimpleWhereStr(simple, parameters, out whereStr))
-            return false;
+        if (simple.WhereColumn is not null)
+        {
+            // B8: direct hash-index point lookup for `WHERE indexed_col = @param|literal`. This
+            // skips building a WHERE string and re-parsing it inside SelectInternal — the single
+            // biggest overhead difference vs the Direct API (FindByIndex) on point reads.
+            if (TryResolveWhereValue(simple, parameters, out var whereValue) && whereValue is not null)
+            {
+                if (table is DataStructures.Table concrete &&
+                    concrete.TrySelectIndexedPointLookup(simple.WhereColumn, whereValue, out var indexRows))
+                {
+                    if (simple.Offset.HasValue && simple.Offset.Value > 0)
+                        indexRows = [.. indexRows.Skip(simple.Offset.Value)];
 
-        var rows = table.Select(whereStr, simple.OrderByColumn, simple.OrderByAscending, noEncrypt: false);
+                    if (simple.Limit.HasValue && simple.Limit.Value > 0)
+                        indexRows = [.. indexRows.Take(simple.Limit.Value)];
 
-        // Apply LIMIT/OFFSET exactly like the legacy ExecuteSelectQuery path.
-        if (simple.Offset.HasValue && simple.Offset.Value > 0)
-            rows = [.. rows.Skip(simple.Offset.Value)];
+                    results = concrete.DeduplicateByPrimaryKey(indexRows);
+                    return true;
+                }
+            }
 
-        if (simple.Limit.HasValue && simple.Limit.Value > 0)
-            rows = [.. rows.Take(simple.Limit.Value)];
+            // Fallback: build the WHERE string exactly like the legacy binder and let the table
+            // scan/index machinery resolve it (non-indexed columns, non-binary collations, …).
+            if (!TryBuildSimpleWhereStr(simple, parameters, out var whereStr))
+                return false;
 
-        results = table is Table concreteTable ? concreteTable.DeduplicateByPrimaryKey(rows) : rows;
-        return true;
+            var rows = table.Select(whereStr, simple.OrderByColumn, simple.OrderByAscending, noEncrypt: false);
+
+            // Apply LIMIT/OFFSET exactly like the legacy ExecuteSelectQuery path.
+            if (simple.Offset.HasValue && simple.Offset.Value > 0)
+                rows = [.. rows.Skip(simple.Offset.Value)];
+
+            if (simple.Limit.HasValue && simple.Limit.Value > 0)
+                rows = [.. rows.Take(simple.Limit.Value)];
+
+            results = table is DataStructures.Table concreteTable ? concreteTable.DeduplicateByPrimaryKey(rows) : rows;
+            return true;
+        }
+
+        // No WHERE (full scan) — the legacy parser handles this shape.
+        return false;
+    }
+
+    /// <summary>
+    /// B8: resolves the simple-SELECT WHERE value as an object (parameter value or literal)
+    /// for the direct hash-index point lookup.
+    /// </summary>
+    private static bool TryResolveWhereValue(
+        SimpleSelectPlan simple,
+        Dictionary<string, object?>? parameters,
+        out object? value)
+    {
+        value = null;
+
+        if (simple.WhereParameter is not null)
+        {
+            if (parameters is null || parameters.Count == 0)
+                return false;
+
+            if (!TryResolveParameterValue(parameters, simple.WhereParameter, out value))
+                return false;
+
+            return value is not null && value != DBNull.Value;
+        }
+
+        if (simple.WhereLiteral is not null)
+        {
+            var literal = simple.WhereLiteral;
+            if (literal.Length >= 2 &&
+                ((literal[0] == '\'' && literal[^1] == '\'') ||
+                 (literal[0] == '"' && literal[^1] == '"')))
+            {
+                literal = literal[1..^1];
+            }
+
+            value = literal;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
