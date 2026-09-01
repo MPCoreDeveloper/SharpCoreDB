@@ -332,78 +332,74 @@ public partial class Table
         }
 
         var normalizedRows = new object[rows.Length][];
-
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
-            var values = rows[rowIdx];
-            var normalized = new object[this.Columns.Count];
-
-            // Place parsed values at their table column positions and track which columns
-            // are explicitly present in the statement (explicit NULLs must stay NULL,
-            // matching the dictionary path — only absent columns get defaults).
-            var present = new bool[this.Columns.Count];
-            for (int c = 0; c < columnIndexMap.Length; c++)
-            {
-                present[columnIndexMap[c]] = true;
-                normalized[columnIndexMap[c]] = values[c];
-            }
-
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                var val = normalized[i];
-                if (val is null or DBNull)
-                {
-                    if (this.IsAuto[i])
-                    {
-                        // AUTO: auto-generate for absent columns and explicit NULLs alike.
-                        normalized[i] = GenerateAutoValue(this.ColumnTypes[i], i);
-                    }
-                    else if (!present[i])
-                    {
-                        // Column absent from the statement → default value.
-                        if (this.DefaultExpressions[i] is not null)
-                        {
-                            normalized[i] = TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]) ?? DBNull.Value;
-                        }
-                        else
-                        {
-                            normalized[i] = GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                        }
-                    }
-                    // Explicit NULL for a non-auto column stays NULL (dict-path parity).
-                }
-                else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
-                {
-                    if (TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
-                    {
-                        normalized[i] = coercedValue;
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Type mismatch for column {this.Columns[i]} in row {rowIdx}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
-                    }
-                }
-            }
-
-            // NOT NULL validation for batch insert
-            for (int colIdx = 0; colIdx < this.Columns.Count; colIdx++)
-            {
-                if (this.IsNotNull[colIdx] && (normalized[colIdx] == null || normalized[colIdx] == DBNull.Value))
-                {
-                    throw new InvalidOperationException($"Column '{this.Columns[colIdx]}' cannot be NULL in row {rowIdx}");
-                }
-            }
-
-            normalizedRows[rowIdx] = normalized;
+            normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, rowIdx);
         }
 
         var serializedRows = new List<byte[]>(rows.Length);
-        for (int i = 0; i < normalizedRows.Length; i++)
+        foreach (var row in normalizedRows)
         {
-            serializedRows.Add(SerializeRowExact(normalizedRows[i]));
+            serializedRows.Add(SerializeRowExact(row));
         }
 
         return (serializedRows, normalizedRows);
+    }
+
+    private object[] NormalizeInsertRow(object[] values, int[] columnIndexMap, int rowIdx)
+    {
+        var normalized = new object[this.Columns.Count];
+
+        // Place parsed values at their table column positions and track which columns
+        // are explicitly present in the statement (explicit NULLs must stay NULL,
+        // matching the dictionary path — only absent columns get defaults).
+        var present = new bool[this.Columns.Count];
+        for (int c = 0; c < columnIndexMap.Length; c++)
+        {
+            present[columnIndexMap[c]] = true;
+            normalized[columnIndexMap[c]] = values[c];
+        }
+
+        for (int i = 0; i < this.Columns.Count; i++)
+        {
+            var val = normalized[i];
+            if (val is null or DBNull)
+            {
+                if (this.IsAuto[i])
+                {
+                    // AUTO: auto-generate for absent columns and explicit NULLs alike.
+                    normalized[i] = GenerateAutoValue(this.ColumnTypes[i], i);
+                }
+                else if (!present[i])
+                {
+                    // Column absent from the statement → default value.
+                    normalized[i] = this.DefaultExpressions[i] is not null
+                        ? TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]) ?? DBNull.Value
+                        : GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
+                }
+                // Explicit NULL for a non-auto column stays NULL (dict-path parity).
+            }
+            else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
+            {
+                if (!TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
+                {
+                    throw new InvalidOperationException($"Type mismatch for column {this.Columns[i]} in row {rowIdx}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
+                }
+
+                normalized[i] = coercedValue;
+            }
+        }
+
+        // NOT NULL validation for batch insert
+        for (int colIdx = 0; colIdx < this.Columns.Count; colIdx++)
+        {
+            if (this.IsNotNull[colIdx] && (normalized[colIdx] == null || normalized[colIdx] == DBNull.Value))
+            {
+                throw new InvalidOperationException($"Column '{this.Columns[colIdx]}' cannot be NULL in row {rowIdx}");
+            }
+        }
+
+        return normalized;
     }
 
     /// <summary>
@@ -541,15 +537,7 @@ public partial class Table
     private long[] InsertBatchCriticalSection(object[][] validatedRows, List<byte[]> serializedRows)
     {
         // Validate primary keys (requires lock for index access)
-        if (this.PrimaryKeyIndex >= 0)
-        {
-            for (int rowIdx = 0; rowIdx < validatedRows.Length; rowIdx++)
-            {
-                var pkVal = validatedRows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
-                    throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
-            }
-        }
+        ValidateExistingPrimaryKeys(validatedRows);
 
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
@@ -577,24 +565,10 @@ public partial class Table
             }
 
             // Update primary key index (direct array indexing — no dictionary)
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                for (int i = 0; i < validatedRows.Length; i++)
-                {
-                    var pkVal = validatedRows[i][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, positions[i]);
-                }
-            }
+            UpdatePrimaryKeyIndex(validatedRows, positions);
 
             // Batch hash index updates — build dictionaries only when hash indexes exist.
-            if (this.hashIndexes.Count > 0)
-            {
-                var dictRows = RowsToDictionaries(validatedRows);
-                foreach (var hashIndex in this.hashIndexes.Values)
-                {
-                    hashIndex.AddBatch(dictRows, positions);
-                }
-            }
+            UpdateHashIndexes(validatedRows, positions);
 
             Interlocked.Add(ref _cachedRowCount, validatedRows.Length);
 
@@ -618,6 +592,49 @@ public partial class Table
                 engine.Rollback();
             }
             throw;
+        }
+    }
+
+    private void ValidateExistingPrimaryKeys(object[][] rows)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return;
+        }
+
+        for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
+        {
+            var pkVal = rows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
+            if (this.Index.Search(pkVal).Found)
+                throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
+        }
+    }
+
+    private void UpdatePrimaryKeyIndex(object[][] rows, long[] positions)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var pkVal = rows[i][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
+            this.Index.Insert(pkVal, positions[i]);
+        }
+    }
+
+    private void UpdateHashIndexes(object[][] rows, long[] positions)
+    {
+        if (this.hashIndexes.Count == 0)
+        {
+            return;
+        }
+
+        var dictRows = RowsToDictionaries(rows);
+        foreach (var hashIndex in this.hashIndexes.Values)
+        {
+            hashIndex.AddBatch(dictRows, positions);
         }
     }
 
