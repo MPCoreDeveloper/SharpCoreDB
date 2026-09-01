@@ -1222,46 +1222,13 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // Exact same type cascade as EvaluateSingleCondition.
         if (rowValue is int intVal && int.TryParse(value, out var intCompare))
-        {
-            return op switch
-            {
-                "=" => intVal == intCompare,
-                "!=" or "<>" => intVal != intCompare,
-                ">" => intVal > intCompare,
-                "<" => intVal < intCompare,
-                ">=" => intVal >= intCompare,
-                "<=" => intVal <= intCompare,
-                _ => true
-            };
-        }
+            return CompareNumeric(op, intVal, intCompare);
 
         if (rowValue is long longVal && long.TryParse(value, out var longCompare))
-        {
-            return op switch
-            {
-                "=" => longVal == longCompare,
-                "!=" or "<>" => longVal != longCompare,
-                ">" => longVal > longCompare,
-                "<" => longVal < longCompare,
-                ">=" => longVal >= longCompare,
-                "<=" => longVal <= longCompare,
-                _ => true
-            };
-        }
+            return CompareNumeric(op, longVal, longCompare);
 
         if (rowValue is decimal decVal && decimal.TryParse(value, out var decCompare))
-        {
-            return op switch
-            {
-                "=" => decVal == decCompare,
-                "!=" or "<>" => decVal != decCompare,
-                ">" => decVal > decCompare,
-                "<" => decVal < decCompare,
-                ">=" => decVal >= decCompare,
-                "<=" => decVal <= decCompare,
-                _ => true
-            };
-        }
+            return CompareNumeric(op, decVal, decCompare);
 
         var comparison = string.Compare(rowValue.ToString(), value, StringComparison.Ordinal);
         return op switch
@@ -1272,6 +1239,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             "<" => comparison < 0,
             ">=" => comparison >= 0,
             "<=" => comparison <= 0,
+            _ => true
+        };
+    }
+
+    private static bool CompareNumeric<T>(string op, T left, T right)
+        where T : IComparable<T>, IEquatable<T>
+    {
+        return op switch
+        {
+            "=" => left.Equals(right),
+            "!=" or "<>" => !left.Equals(right),
+            ">" => left.CompareTo(right) > 0,
+            "<" => left.CompareTo(right) < 0,
+            ">=" => left.CompareTo(right) >= 0,
+            "<=" => left.CompareTo(right) <= 0,
             _ => true
         };
     }

@@ -179,7 +179,7 @@ public partial class Database
             {
                 char c = valuesClause[i];
 
-                if (c == '\'' && (i == 0 || valuesClause[i - 1] != '\\'))
+                if (IsQuoteChar(c, i, valuesClause))
                 {
                     inQuotes = !inQuotes;
                 }
@@ -189,13 +189,7 @@ public partial class Database
                     else if (c == ')') parenDepth--;
                     else if (c == ',' && parenDepth == 0)
                     {
-                        if (valueStart < i && valueIndex < ColumnTypes.Count)
-                        {
-                            var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
-                            values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
-                        }
-
-                        valueStart = i + 1;
+                        CommitParsedValue(valuesClause, i, ref valueStart, valueIndex, values);
                         valueIndex++;
                     }
                 }
@@ -218,6 +212,20 @@ public partial class Database
             }
 
             return values;
+        }
+
+        private static bool IsQuoteChar(char c, int i, ReadOnlySpan<char> clause)
+            => c == '\'' && (i == 0 || clause[i - 1] != '\\');
+
+        private void CommitParsedValue(ReadOnlySpan<char> valuesClause, int commaIndex, ref int valueStart, int valueIndex, object[] values)
+        {
+            if (valueStart < commaIndex && valueIndex < ColumnTypes.Count)
+            {
+                var valueSpan = valuesClause.Slice(valueStart, commaIndex - valueStart).Trim();
+                values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+            }
+
+            valueStart = commaIndex + 1;
         }
 
         /// <summary>
