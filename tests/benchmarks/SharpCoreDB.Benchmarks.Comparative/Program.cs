@@ -347,12 +347,17 @@ class Program
         Console.WriteLine($"  SQL/Direct overhead: {(sqlMedian / directMedian):F2}x");
     }
 
-    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false)
     {
         return new DatabaseConfig
         {
             NoEncryptMode = true,
             StorageEngineType = engineType,
+            // The fair PK comparison intentionally isolates the record-layout variable: the legacy
+            // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
+            // records; the fixed-width arm forces FixedWidthRecordLayout.
+            AutoFixedWidthRecords = !fixedWidth,
+            FixedWidthRecordLayout = fixedWidth,
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,
             HighSpeedInsertMode = true,
@@ -840,7 +845,7 @@ class Program
     /// <c>ExecuteBatchSQL</c> (single transaction). This exercises the PK B-tree fast paths and the
     /// recommended usage; the no-PK harness scenario above under-measures the engine on DML.
     /// </summary>
-    static BenchmarkResult RunSharpCoreDBPk(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    static BenchmarkResult RunSharpCoreDBPk(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -852,7 +857,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = BuildConfig(engineType);
+            var config = BuildConfig(engineType, fixedWidth);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -962,8 +967,12 @@ class Program
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK) ━━━");
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length) ━━━");
         var scdb = RunSharpCoreDBPk(engineType);
+        Console.WriteLine();
+
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width) ━━━");
+        var scdbFw = RunSharpCoreDBPk(engineType, fixedWidth: true);
         Console.WriteLine();
 
         Console.WriteLine("━━━ SQLite (reference) ━━━");
@@ -972,12 +981,15 @@ class Program
 
         Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
         Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SharpCoreDB FW│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
         Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap: {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   DELETE gap: {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x");
+        Console.WriteLine($"\n  UPDATE gap: SQLite vs legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   vs fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x");
+        Console.WriteLine($"  DELETE gap: SQLite vs legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   vs fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x");
 
         var results = new Dictionary<string, BenchmarkResult>
         {
-            ["SharpCoreDB (SQL, PK)"] = scdb,
+            ["SharpCoreDB (SQL, PK, legacy)"] = scdb,
+            ["SharpCoreDB (SQL, PK, fixed-width)"] = scdbFw,
             ["SQLite"] = sqlite,
         };
 
