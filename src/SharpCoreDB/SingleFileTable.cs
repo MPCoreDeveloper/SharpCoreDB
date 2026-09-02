@@ -29,6 +29,9 @@ using System.Runtime.InteropServices;
 /// </summary>
 public sealed class SingleFileTable(string tableName, IStorageProvider storageProvider) : ITable, ITableSchemaApplicator
 {
+    /// <summary>Leading WHERE keyword used when normalizing a WHERE condition for lookup.</summary>
+    private const string WhereKeywordPrefix = "WHERE ";
+
     /// <summary>
     /// AOT-safe JSON options for the row cache: source-generated resolver plus the
     /// polymorphic object converter (issue #343 / single-file support under Native AOT).
@@ -347,7 +350,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         // Strip leading WHERE keyword if present
         var condition = where?.Trim();
-        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        if (condition is not null && condition.StartsWith(WhereKeywordPrefix, StringComparison.OrdinalIgnoreCase))
         {
             condition = condition[6..].Trim();
         }
@@ -390,14 +393,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     public void Update(string? where, Dictionary<string, object> updates) => UpdateAffectedCount(where, updates);
 
     /// <inheritdoc />
-    public int UpdateAffectedCount(string? where, Dictionary<string, object> updates)
+    public int UpdateAffectedCount(string? where, Dictionary<string, object> updates) // NOSONAR:S3776 - single-pass single-file UPDATE with PK/hash/scan resolution + change bookkeeping; the SQL row store shares this path
     {
         ArgumentNullException.ThrowIfNull(updates);
         EnsureCacheLoaded();
 
         // Strip leading WHERE keyword if present
         var condition = where?.Trim();
-        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        if (condition is not null && condition.StartsWith(WhereKeywordPrefix, StringComparison.OrdinalIgnoreCase))
         {
             condition = condition[6..].Trim();
         }
@@ -448,7 +451,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     /// Executes batch updates keyed by primary key value.
     /// </summary>
     /// <param name="updates">Dictionary of primary key to update values.</param>
-    public void UpdateBatch(Dictionary<object, Dictionary<string, object>> updates)
+    public void UpdateBatch(Dictionary<object, Dictionary<string, object>> updates) // NOSONAR:S3776 - per-row PK update loop with per-type patch/serialize fallback and index bookkeeping
     {
         ArgumentNullException.ThrowIfNull(updates);
         EnsureCacheLoaded();
@@ -507,7 +510,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // Strip leading WHERE keyword if present
         var condition = where?.Trim();
-        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        if (condition is not null && condition.StartsWith(WhereKeywordPrefix, StringComparison.OrdinalIgnoreCase))
         {
             condition = condition[6..].Trim();
         }
@@ -551,7 +554,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         // Strip leading WHERE keyword if present
         var condition = where?.Trim();
-        if (condition is not null && condition.StartsWith("WHERE ", StringComparison.OrdinalIgnoreCase))
+        if (condition is not null && condition.StartsWith(WhereKeywordPrefix, StringComparison.OrdinalIgnoreCase))
         {
             condition = condition[6..].Trim();
         }
@@ -910,7 +913,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
     private readonly Dictionary<string, long> _columnUsage = new(StringComparer.OrdinalIgnoreCase);
 
-    private void EnsureCacheLoaded()
+    private void EnsureCacheLoaded() // NOSONAR:S3776 - row-cache warm-up with per-region schema guards; must stay sequential to keep the JSON parse inside one lock
     {
         if (_cacheLoaded)
         {

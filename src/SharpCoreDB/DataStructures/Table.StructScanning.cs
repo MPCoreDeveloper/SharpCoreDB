@@ -54,6 +54,14 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public IEnumerable<StructRow> ScanStructRows(bool enableCaching = false)
     {
+        // ✅ FIX: Validate upfront, then delegate to the iterator so argument errors surface at
+        // the call site instead of on first enumeration (iterator bodies defer all validation).
+        ArgumentNullException.ThrowIfNull(this.storage);
+        return ScanStructRowsCore(enableCaching);
+    }
+
+    private IEnumerable<StructRow> ScanStructRowsCore(bool enableCaching)
+    {
         // Fixed-width record layout (out-of-line overflow): the zero-alloc struct scan walks the
         // variable-length record format, so fixed-width tables fall back to the dictionary path
         // (correct, allocated). StructRow.FromDictionary is self-consistent (own bytes + schema).
@@ -68,9 +76,6 @@ public partial class Table
 
             yield break;
         }
-
-        // ✅ FIX: Validate upfront, then delegate to iterator methods
-        ArgumentNullException.ThrowIfNull(this.storage);
 
         // Build schema once for entire scan
         var schema = BuildVariableLengthSchema();
@@ -191,7 +196,7 @@ public partial class Table
         return ScanStructRowsWhereCoreIterator(where, enableCaching);
     }
 
-    private IEnumerable<StructRow> ScanStructRowsWhereCoreIterator(string? where, bool enableCaching)
+    private IEnumerable<StructRow> ScanStructRowsWhereCoreIterator(string? where, bool enableCaching) // NOSONAR:S3776 - ordered fast-path cascade (hash -> PK -> SIMD -> scan); each guard is a separate resolution strategy with early yield-break
     {
         // Fixed-width records: StructRow's variable-length schema can't walk the fixed-width
         // format, so matched records are materialized through the dictionary path. The numeric-SIMD
@@ -247,15 +252,15 @@ public partial class Table
         {
             foreach (var row in Select(where))
             {
-                yield return StructRow.FromDictionary(row, fixedColumns ?? [], fixedTypes ?? []);
+                // fixedColumns/fixedTypes are non-null here (assigned when fixedWidth was resolved).
+                yield return StructRow.FromDictionary(row, fixedColumns!, fixedTypes!);
             }
 
             yield break;
         }
 
         // Fallback: full scan with a simple equality predicate (scalar, allocation-free per row).
-        // NOSONAR:S3267 - intentional: LINQ Where would allocate per row on the scan hot path.
-        foreach (var row in ScanStructRows(enableCaching))
+        foreach (var row in ScanStructRows(enableCaching)) // NOSONAR:S3267 - intentional: LINQ Where would allocate per row on the scan hot path
         {
             if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
                 MatchesSimpleWhere(row, schema, simpleColumn, simpleValue))
@@ -318,7 +323,7 @@ public partial class Table
     /// (no deserialization, no boxing). Integer/Long use portable Vector&lt;T&gt;; Real uses
     /// direct per-record reads. Fixed-width tables materialize rows through the dictionary path.
     /// </summary>
-    private IEnumerable<StructRow> ScanByNumericSimd(
+    private IEnumerable<StructRow> ScanByNumericSimd( // NOSONAR - S3776 (SIMD kernel with per-type extraction passes) + S107 (layout parameters intentionally threaded; grouped further would add an allocation in the hot path)
         int numericOffset, DataType numericType, object numericExpected,
         VariableLengthSchema schema, IStorageEngine engine, bool enableCaching,
         bool fixedWidth, string[]? fixedColumns, DataType[]? fixedTypes)
@@ -510,7 +515,7 @@ public partial class Table
             }
         }
 
-        private bool InitAndMoveNext()
+        private bool InitAndMoveNext() // NOSONAR:S3776 - init resolves the WHERE via an ordered fast-path cascade and seeds the phase machine; each branch has distinct cleanup
         {
             _schema = _table.BuildVariableLengthSchema();
             _engine = _table.GetOrCreateStorageEngine();

@@ -266,7 +266,7 @@ public partial class Table : ITable, IDisposable
     /// Gets or sets whether this table uses the fixed-width record layout (out-of-line overflow).
     /// Persisted in table metadata so a database created with the flag reopens correctly.
     /// </summary>
-    public bool IsFixedWidthRecords
+    public bool IsFixedWidthRecords // NOSONAR:S2292 - backing field is read/written directly across the Table.* partial files and metadata round-trip; auto-property would not remove the field
     {
         get => _fixedWidthRecords;
         set => _fixedWidthRecords = value;

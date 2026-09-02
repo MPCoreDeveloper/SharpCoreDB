@@ -20,6 +20,9 @@ public partial class Table
     /// <summary>Error message used by every write path when the table is opened read-only.</summary>
     private const string ReadOnlyInsertError = "Cannot insert in readonly mode";
 
+    /// <summary>Error message used by every DELETE path when the table is opened read-only.</summary>
+    private const string ReadOnlyDeleteError = "Cannot delete in readonly mode";
+
     /// <summary>
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
@@ -1615,6 +1618,29 @@ public partial class Table
         }
     }
 
+    /// <summary>
+    /// Patches a single row in place when the existing record bytes can be located and every
+    /// updated field fits its slot (fixed-size fields resolved at their actual offsets, or an
+    /// unchanged-size trailing variable field); otherwise falls back to a full serialization.
+    /// A same-length patch enables an in-place overwrite (Issue #6) so the file does not grow.
+    /// </summary>
+    private byte[] TryPatchOrSerializeRow(byte[]? existingData, Dictionary<string, object> updates, Dictionary<string, object> row)
+    {
+        if (existingData is { Length: > 0 })
+        {
+            var patched = _fixedWidthRecords
+                ? TryOverwriteFixedWidthInPlace(existingData, updates)
+                : TryOverwriteFieldsInPlaceActual(existingData, updates);
+
+            if (patched is not null)
+            {
+                return patched;
+            }
+        }
+
+        return SerializeRowExact(row);
+    }
+
     private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos)
     {
         // Fixed-width layout step: when the row's existing bytes can be located, patch
@@ -1627,12 +1653,7 @@ public partial class Table
         if (rowPos >= 0)
         {
             var existingData = engine.Read(Name, rowPos);
-            rowData = existingData is { Length: > 0 }
-                && (_fixedWidthRecords
-                    ? TryOverwriteFixedWidthInPlace(existingData, updates)
-                    : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
-                        ? patched
-                        : SerializeRowExact(row);
+            rowData = TryPatchOrSerializeRow(existingData, updates, row);
         }
         else
         {
@@ -1717,7 +1738,7 @@ public partial class Table
             // Record was relocated to another page (growing record on a
             // full page): re-point the PK index and rebuild hash indexes.
             var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-            RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+            RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
         }
         else
         {
@@ -1771,7 +1792,7 @@ public partial class Table
     /// via the PK when present). The position lets the columnar write path patch fields in place
     /// (fixed-width layout) instead of appending a new version.
     /// </summary>
-    private List<(long Position, Dictionary<string, object> Row)> ResolveUpdateRows(string? where)
+    private List<(long Position, Dictionary<string, object> Row)> ResolveUpdateRows(string? where) // NOSONAR:S3776 - sequential guarded index-resolution steps (PK -> hash -> scan); extracting branches would re-read/duplicate shared fallbacks
     {
         var engine = GetOrCreateStorageEngine();
         var result = new List<(long, Dictionary<string, object>)>();
@@ -1862,11 +1883,10 @@ public partial class Table
     /// (a growing record on a full page). The PK index is re-pointed precisely; hash
     /// indexes are marked stale so they rebuild lazily on next use.
     /// </summary>
-    /// <param name="oldPosition">The storage position before relocation.</param>
     /// <param name="newPosition">The storage position after relocation.</param>
     /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
     /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
-    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue)
+    private void RepointIndexesAfterRelocation(long newPosition, string? oldPkValue, string? newPkValue)
     {
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -1933,7 +1953,7 @@ public partial class Table
                 bool touchesHashIndexedColumn = false;
                 if (this.hashIndexes.Count > 0)
                 {
-                    foreach (var updateKey in updates.Keys)
+                    foreach (var updateKey in updates.Keys) // NOSONAR:S3267 - updates.Keys is tiny; LINQ would add a closure + enumerator alloc per op in the batch-DML hot path
                     {
                         if (this.hashIndexes.ContainsKey(updateKey))
                         {
@@ -2167,12 +2187,7 @@ public partial class Table
                             if (oldPosition >= 0)
                             {
                                 var existingData = engine.Read(Name, oldPosition);
-                                rowData = existingData is { Length: > 0 }
-                                    && (_fixedWidthRecords
-                                        ? TryOverwriteFixedWidthInPlace(existingData, updates)
-                                        : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
-                                            ? patched
-                                            : SerializeRowExact(row);
+                                rowData = TryPatchOrSerializeRow(existingData, updates, row);
                             }
                             else
                             {
@@ -2265,7 +2280,7 @@ public partial class Table
                                     var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
                                         ? newPk?.ToString() ?? string.Empty
                                         : string.Empty;
-                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                                    RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
                                 }
                                 else
                                 {
@@ -2312,7 +2327,7 @@ public partial class Table
             return false;
         }
 
-        foreach (var expr in expressions)
+        foreach (var expr in expressions) // NOSONAR:S3267 - LINQ would allocate per call; this runs per UPDATE op in the batch-DML hot path
         {
             if (expr is not null)
             {
@@ -2347,7 +2362,7 @@ public partial class Table
     /// cleanup, key-only hash-index cleanup (single lock per index) and row-count bookkeeping.
     /// </summary>
     /// <param name="recordsToDelete">The storage positions and their deserialized rows.</param>
-    private void DeleteRecordsCore(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete)
+    private void DeleteRecordsCore(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete) // NOSONAR:S3776 - per-engine physical delete, PK cleanup, key-only hash removal and compaction bookkeeping are distinct but share the batch; extraction would force intermediate lists
     {
         if (recordsToDelete.Count == 0)
             return;
@@ -2438,7 +2453,7 @@ public partial class Table
     /// </summary>
     public int DeleteAffected(string? where)
     {
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyDeleteError);
 
         this.rwLock.EnterWriteLock();
         try
@@ -2462,7 +2477,7 @@ public partial class Table
     /// </summary>
     public List<Dictionary<string, object>> DeleteAffectedRows(string? where)
     {
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyDeleteError);
 
         this.rwLock.EnterWriteLock();
         try
@@ -2637,7 +2652,7 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal void DeleteMultiple(List<string> whereConditions)
     {
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyDeleteError);
         if (whereConditions.Count == 0) return;
 
         this.rwLock.EnterWriteLock();
@@ -3102,7 +3117,7 @@ public partial class Table
 
             // WP13: capture only what index maintenance needs instead of copying the whole row.
             Dictionary<string, object>? oldHashKeys = null;
-            foreach (var kvp in this.hashIndexes)
+            foreach (var kvp in this.hashIndexes) // NOSONAR:S3267 - deliberate: LINQ Select/Where would allocate per point-update on the hot path
             {
                 if (row.TryGetValue(kvp.Key, out var oldVal))
                 {
@@ -3163,7 +3178,7 @@ public partial class Table
                     // Record was relocated to another page: re-point the PK index and
                     // rebuild hash indexes lazily.
                     var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
+                    RepointIndexesAfterRelocation(newPosition, pkStr, newPkVal);
                 }
                 else
                 {
@@ -3202,7 +3217,7 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(key);
 
         if (this.isReadOnly)
-            throw new InvalidOperationException("Cannot delete in readonly mode");
+            throw new InvalidOperationException(ReadOnlyDeleteError);
 
         if (this.PrimaryKeyIndex < 0)
             return false;

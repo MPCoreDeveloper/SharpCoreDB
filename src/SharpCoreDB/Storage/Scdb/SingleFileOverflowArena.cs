@@ -71,12 +71,9 @@ public sealed class SingleFileOverflowArena : IOverflowArena
     public void FreeUnreferenced(IReadOnlyCollection<long> liveOffsets)
     {
         var live = liveOffsets as HashSet<long> ?? new HashSet<long>(liveOffsets);
-        foreach (var offset in _blocks.Keys.ToList())
+        foreach (var offset in _blocks.Keys.Where(k => !live.Contains(k)).ToList())
         {
-            if (!live.Contains(offset))
-            {
-                Free(offset);
-            }
+            Free(offset);
         }
     }
 
@@ -95,22 +92,19 @@ public sealed class SingleFileOverflowArena : IOverflowArena
             return dedupedOffset;
         }
 
-        if (_freeByLength.TryGetValue(payload.Length, out var offsets))
+        if (_freeByLength.TryGetValue(payload.Length, out var offsets) && offsets.Count > 0)
         {
-            while (offsets.Count > 0)
+            var offset = offsets[^1];
+            offsets.RemoveAt(offsets.Count - 1);
+            if (offsets.Count == 0)
             {
-                var offset = offsets[^1];
-                offsets.RemoveAt(offsets.Count - 1);
-                if (offsets.Count == 0)
-                {
-                    _freeByLength.Remove(payload.Length);
-                }
-
-                _blocks[offset] = payload;
-                _contentIndex[contentKey] = offset;
-                _blockReuses++;
-                return offset;
+                _freeByLength.Remove(payload.Length);
             }
+
+            _blocks[offset] = payload;
+            _contentIndex[contentKey] = offset;
+            _blockReuses++;
+            return offset;
         }
 
         var newOffset = _nextOffset;

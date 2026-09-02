@@ -28,6 +28,13 @@ class Program
     const int UpdateCount = 10_000;
     const int DeleteCount = 10_000;
 
+    // Shared literals (used across the SharpCoreDB harness scenarios).
+    const string ColEmail = "email";
+    const string ColScore = "score";
+    const string CreateIndexSql = "CREATE INDEX idx_docs_name ON docs(name)";
+    const string MasterPasswordValue = "bench123";
+    const string PointReadByNameSql = "SELECT * FROM docs WHERE name = @name";
+
     static async Task Main(string[] args)
     {
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
@@ -168,7 +175,7 @@ class Program
         try
         {
             db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateIndexSql);
 
             for (int batch = 0; batch < rows; batch += 10_000)
             {
@@ -178,9 +185,9 @@ class Program
                     list.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [ColEmail] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ColScore] = i * 0.1,
                         ["data"] = $"payload-{i}",
                     });
                 }
@@ -193,7 +200,7 @@ class Program
             // Warmup (JIT + index load).
             for (int i = 0; i < 1000; i++)
             {
-                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
+                db.ExecuteQuery(PointReadByNameSql,
                     new Dictionary<string, object?> { ["@name"] = $"User{i}" });
                 db.FindByIndex("docs", "name", $"User{i}");
             }
@@ -206,7 +213,7 @@ class Program
                 var sw = Stopwatch.StartNew();
                 for (int i = 0; i < queries; i++)
                 {
-                    db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
+                    db.ExecuteQuery(PointReadByNameSql,
                         new Dictionary<string, object?> { ["@name"] = $"User{i}" });
                 }
 
@@ -237,7 +244,7 @@ class Program
         finally
         {
             try { Directory.Delete(dbPath, true); }
-            catch { }
+            catch { /* temp cleanup */ }
         }
     }
 
@@ -267,7 +274,7 @@ class Program
             using (var db = (SharpCoreDB.Database)factory.Create(sqlPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+                db.ExecuteSQL(CreateIndexSql);
 
                 // Build the statements once (outside the timed region — this is caller work,
                 // identical for SQLite in the comparative benchmark).
@@ -295,13 +302,13 @@ class Program
                 sqlTimes[r] = sw.Elapsed.TotalSeconds;
             }
 
-            try { Directory.Delete(sqlPath, true); } catch { }
+            try { Directory.Delete(sqlPath, true); } catch { /* temp cleanup */ }
 
             var directPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-direct-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(directPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+                db.ExecuteSQL(CreateIndexSql);
 
                 var rowBatches = new List<List<Dictionary<string, object>>>();
                 for (int b = 0; b < inserts; b += batch)
@@ -312,9 +319,9 @@ class Program
                         rows.Add(new Dictionary<string, object>
                         {
                             ["name"] = $"User{i}",
-                            ["email"] = $"user{i}@test.com",
+                            [ColEmail] = $"user{i}@test.com",
                             ["age"] = 20 + i % 60,
-                            ["score"] = i * 0.1,
+                            [ColScore] = i * 0.1,
                             ["data"] = $"payload-{i}",
                         });
                     }
@@ -332,7 +339,7 @@ class Program
                 directTimes[r] = sw.Elapsed.TotalSeconds;
             }
 
-            try { Directory.Delete(directPath, true); } catch { }
+            try { Directory.Delete(directPath, true); } catch { /* temp cleanup */ }
         }
 
         Array.Sort(sqlTimes);
@@ -392,7 +399,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: MasterPasswordValue,
                 isReadOnly: false,
                 config: config);
 
@@ -405,7 +412,7 @@ class Program
             )");
 
             // Index lookup path used by READ/UPDATE/DELETE in this benchmark
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateIndexSql);
 
             // INSERT (batched via InsertBatch API for optimal performance)
             var sw = Stopwatch.StartNew();
@@ -418,9 +425,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [ColEmail] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ColScore] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -436,7 +443,7 @@ class Program
             sw.Restart();
             for (int i = 0; i < ReadCount; i++)
             {
-                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name", new Dictionary<string, object?>
+                db.ExecuteQuery(PointReadByNameSql, new Dictionary<string, object?>
                 {
                     ["@name"] = $"User{i}"
                 });
@@ -512,7 +519,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: MasterPasswordValue,
                 isReadOnly: false,
                 config: config);
 
@@ -524,7 +531,7 @@ class Program
                 data TEXT
             )");
 
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateIndexSql);
 
             // INSERT (same batched API — no SQL parsing either way)
             var sw = Stopwatch.StartNew();
@@ -537,9 +544,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [ColEmail] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ColScore] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -631,7 +638,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: MasterPasswordValue,
                 isReadOnly: false,
                 config: config);
 
@@ -643,7 +650,7 @@ class Program
                 data TEXT
             )");
 
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateIndexSql);
 
             // INSERT (same batched API as the other SharpCoreDB rows)
             var sw = Stopwatch.StartNew();
@@ -656,9 +663,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [ColEmail] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ColScore] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -676,7 +683,7 @@ class Program
             {
                 var parameters = new Dictionary<string, object?> { ["@name"] = $"User{i}" };
                 int matched = 0;
-                foreach (var row in db.ExecuteQueryStruct("SELECT * FROM docs WHERE name = @name", parameters))
+                foreach (var row in db.ExecuteQueryStruct(PointReadByNameSql, parameters))
                 {
                     matched++;
                 }
@@ -856,7 +863,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: MasterPasswordValue,
                 isReadOnly: false,
                 config: config);
 
@@ -868,7 +875,7 @@ class Program
                 score REAL,
                 data TEXT
             )");
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateIndexSql);
 
             // INSERT (batched via InsertBatch with explicit ids, mirroring SQLite's rowid 1..N)
             var sw = Stopwatch.StartNew();
@@ -882,9 +889,9 @@ class Program
                     {
                         ["id"] = i + 1,
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [ColEmail] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ColScore] = i * 0.1,
                         ["data"] = $"payload-{i}",
                     });
                 }

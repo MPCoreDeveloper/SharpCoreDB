@@ -422,8 +422,6 @@ public partial class Storage
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        bool inTransaction = IsInTransaction;
-
         bool encryptWrites = ShouldEncryptWrites(path);
         byte[] record = EncryptRecord(data, encryptWrites);
         int recordLength = record.Length;
@@ -821,20 +819,17 @@ public partial class Storage
         if (!bufferedOverwrites.IsEmpty &&
             bufferedOverwrites.TryGetValue(path, out var buffered) &&
             buffered.TryGetValue(offset, out var newRecord) &&
-            newRecord.Length > 0)
+            newRecord.Length is > 0 and <= MaxRecordSize)
         {
-            if (newRecord.Length <= MaxRecordSize)
+            byte[] bufferedPayload = new byte[newRecord.Length];
+            Buffer.BlockCopy(newRecord, 0, bufferedPayload, 0, newRecord.Length);
+
+            if (UseRecordEncryption && FileHasEncryptedHeader(path))
             {
-                byte[] bufferedPayload = new byte[newRecord.Length];
-                Buffer.BlockCopy(newRecord, 0, bufferedPayload, 0, newRecord.Length);
-
-                if (UseRecordEncryption && FileHasEncryptedHeader(path))
-                {
-                    return DecryptRecord(bufferedPayload);
-                }
-
-                return bufferedPayload;
+                return DecryptRecord(bufferedPayload);
             }
+
+            return bufferedPayload;
         }
 
         // PERF: Use cached SafeFileHandle + RandomAccess instead of opening a new
