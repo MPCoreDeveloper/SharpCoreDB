@@ -56,6 +56,49 @@ public static class FixedWidthCodec
         return buffer;
     }
 
+    /// <summary>
+    /// Serializes a column-ordered <c>object[]</c> row (values already aligned to the table's full
+    /// column order) into a fixed-width record. Dedicated overload for the SQL batch-INSERT fast
+    /// path so it never falls back to the variable-length encoding on a fixed-width table.
+    /// </summary>
+    public static byte[] SerializeRow(
+        object[] row,
+        IReadOnlyList<DataType> types,
+        FixedWidthRecordLayout layout,
+        IOverflowArena arena)
+    {
+        var buffer = new byte[layout.FixedSize];
+        var span = buffer.AsSpan();
+
+        for (int i = 0; i < row.Length && i < types.Count; i++)
+        {
+            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+            var value = row[i];
+
+            if (layout.IsVariable[i])
+            {
+                if (value == null || value == DBNull.Value)
+                {
+                    slot[0] = 0;
+                    BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+                }
+                else
+                {
+                    var payload = Table.EncodeVariablePayload(types[i], value);
+                    var offset = arena.Write(payload);
+                    slot[0] = 1;
+                    BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+                }
+            }
+            else
+            {
+                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
+            }
+        }
+
+        return buffer;
+    }
+
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values ← arena).</summary>
     public static Dictionary<string, object> DeserializeRow(
         ReadOnlySpan<byte> data,

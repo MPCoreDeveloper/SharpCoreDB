@@ -31,6 +31,17 @@ public class DatabaseConfig
     public bool FixedWidthRecordLayout { get; init; } = false;
 
     /// <summary>
+    /// Gets a value indicating whether NEW columnar tables that declare a PRIMARY KEY default to
+    /// the fixed-width record layout with out-of-line overflow (see
+    /// <see cref="FixedWidthRecordLayout"/>), so UPDATE/DELETE by key are in-place overwrites.
+    /// This only affects tables created after the setting is in effect — existing tables keep
+    /// their persisted record format until an explicit opt-in (<see cref="FixedWidthRecordLayout"/>)
+    /// or <c>MigrateTableToFixedWidth</c> converts them. Set to <see langword="false"/> to keep
+    /// creating every new table with the legacy variable-length records.
+    /// </summary>
+    public bool AutoFixedWidthRecords { get; init; } = true;
+
+    /// <summary>
     /// Gets a value indicating whether SQLite integer type affinity is used for DDL type mapping.
     /// When <see langword="true"/> (opt-in), <c>INTEGER</c> maps to <see cref="DataType.Long"/> (Int64),
     /// matching SQLite semantics so values like <c>DateTime.UtcNow.Ticks</c> (~6.4e17) fit.
