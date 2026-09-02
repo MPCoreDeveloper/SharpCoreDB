@@ -465,26 +465,43 @@ public partial class Storage
             }
 
             // B7: inside a transaction, buffer the overwrite (write-behind) instead of writing to
-            // disk per row. Only records already flushed to disk (offset below the buffered-appends
-            // boundary) can be overwritten in place; still-buffered records fall back to append.
-            // Because nothing is written to disk until commit, the original bytes remain intact and
-            // rollback needs no undo data.
+            // disk per row; outside one, write it immediately. Nothing is written to disk before
+            // commit in the transactional case, so rollback needs no undo data.
+            return BufferOrWriteOverwriteInPlace(path, offset, record);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// B7: buffers (inside a transaction) or writes (outside one) an in-place overwrite of a
+    /// length-prefixed record whose payload is <paramref name="record"/> (already encrypted when
+    /// applicable). The caller guarantees the new payload length equals the stored payload length,
+    /// so no length-prefix read/verification is needed.
+    /// </summary>
+    private bool BufferOrWriteOverwriteInPlace(string path, long offset, byte[] record)
+    {
+        bool inTransaction = IsInTransaction;
+        int recordLength = record.Length;
+
+        try
+        {
             if (inTransaction)
             {
+                // Only records already flushed to disk (offset below the buffered-appends boundary)
+                // can be overwritten in place; still-buffered records fall back to append.
                 if (!bufferedFileBaseLengths.TryGetValue(path, out long baseLength))
                 {
                     baseLength = File.Exists(path) ? new FileInfo(path).Length : 0;
                     bufferedFileBaseLengths[path] = baseLength;
                 }
 
-                if (offset + 4 + existingLength > baseLength)
+                if (offset + 4 + recordLength > baseLength)
                 {
                     return false;
                 }
-
-                byte[] newRecord = new byte[4 + record.Length];
-                BinaryPrimitives.WriteInt32LittleEndian(newRecord, record.Length);
-                record.CopyTo(newRecord.AsSpan(4));
 
                 lock (appendLock)
                 {
@@ -494,22 +511,15 @@ public partial class Storage
                         bufferedOverwrites[path] = overwrites;
                     }
 
-                    overwrites[offset] = newRecord;
+                    overwrites[offset] = record;
                 }
-
-                // Invalidate app-level page cache (mirrors AppendBytes).
-                if (this.pageCache != null)
-                {
-                    int pageId = ComputePageId(path, offset);
-                    this.pageCache.EvictPage(pageId);
-                }
-
-                return true;
             }
-
-            // Outside a transaction: overwrite the record on disk immediately.
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
-            WriteRecordInPlace(path, offset, lengthBuffer, record);
+            else
+            {
+                Span<byte> lengthBuffer = stackalloc byte[4];
+                BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
+                WriteRecordInPlace(path, offset, lengthBuffer, record);
+            }
         }
         catch (IOException)
         {
@@ -526,7 +536,27 @@ public partial class Storage
         return true;
     }
 
+    /// <summary>
+    /// Overwrites a length-prefixed record in place at <paramref name="offset"/> when the caller
+    /// guarantees the new plaintext payload has the same length as the stored one (e.g. an in-place
+    /// field patch built from the existing record bytes). Skips the length-prefix read/verification
+    /// that <see cref="OverwriteRecordAt"/> performs — one less per-row syscall in the batch-DML
+    /// hot path.
+    /// </summary>
+    /// <param name="path">The table data file path.</param>
+    /// <param name="offset">The physical file offset of the record's 4-byte length prefix.</param>
+    /// <param name="data">The plaintext record data to write (same length as the stored payload).</param>
+    /// <returns>True when the record was overwritten/buffered in place.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public bool OverwriteRecordAtSameLength(string path, long offset, byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
 
+        bool encryptWrites = ShouldEncryptWrites(path);
+        byte[] record = EncryptRecord(data, encryptWrites);
+
+        return BufferOrWriteOverwriteInPlace(path, offset, record);
+    }
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -765,9 +795,11 @@ public partial class Storage
 
             try
             {
-                foreach (var (offset, newRecord) in overwrites)
+                Span<byte> lengthPrefix = stackalloc byte[4];
+                foreach (var (offset, record) in overwrites)
                 {
-                    WriteRecordInPlace(path, offset, newRecord.AsSpan(0, 4), newRecord.AsSpan(4));
+                    BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, record.Length);
+                    WriteRecordInPlace(path, offset, lengthPrefix, record);
                 }
             }
             catch (IOException)
@@ -784,18 +816,17 @@ public partial class Storage
     public byte[]? ReadBytesFrom(string path, long offset)
     {
         // B7: inside a transaction, a buffered in-place overwrite takes precedence over the disk
-        // version (the overwrite is written to disk only at commit).
+        // version (the overwrite is written to disk only at commit). The buffer holds the payload
+        // only (its length is the record's stored length).
         if (!bufferedOverwrites.IsEmpty &&
             bufferedOverwrites.TryGetValue(path, out var buffered) &&
             buffered.TryGetValue(offset, out var newRecord) &&
             newRecord.Length > 0)
         {
-            int bufferedLength = BinaryPrimitives.ReadInt32LittleEndian(newRecord);
-            if (bufferedLength > 0 && bufferedLength <= MaxRecordSize &&
-                newRecord.Length >= 4 + bufferedLength)
+            if (newRecord.Length <= MaxRecordSize)
             {
-                byte[] bufferedPayload = new byte[bufferedLength];
-                Buffer.BlockCopy(newRecord, 4, bufferedPayload, 0, bufferedLength);
+                byte[] bufferedPayload = new byte[newRecord.Length];
+                Buffer.BlockCopy(newRecord, 0, bufferedPayload, 0, newRecord.Length);
 
                 if (UseRecordEncryption && FileHasEncryptedHeader(path))
                 {
