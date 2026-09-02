@@ -105,6 +105,15 @@ public interface IStorage
     bool OverwriteRecordAt(string path, long offset, byte[] data);
 
     /// <summary>
+    /// Like <see cref="OverwriteRecordAt"/> for the case where the caller guarantees
+    /// <paramref name="data"/> has the same byte length as the stored record payload (an in-place
+    /// field patch built from the existing row). Implementations may skip the length-prefix
+    /// read/verification; the default routes to <see cref="OverwriteRecordAt"/>.
+    /// </summary>
+    bool OverwriteRecordAtSameLength(string path, long offset, byte[] data) =>
+        OverwriteRecordAt(path, offset, data);
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>

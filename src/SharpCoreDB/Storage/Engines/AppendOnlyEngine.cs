@@ -132,6 +132,26 @@ public class AppendOnlyEngine : IStorageEngine
         return overwritten;
     }
 
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public bool TryUpdateInPlaceSameLength(string tableName, long storageReference, byte[] newData)
+    {
+        ArgumentNullException.ThrowIfNull(newData);
+
+        // Caller guarantees newData has the same payload length as the stored record (in-place field
+        // patch), so the storage layer skips the length-prefix read/verification.
+        var filePath = GetTableFilePath(tableName);
+        bool overwritten = storage.OverwriteRecordAtSameLength(filePath, storageReference, newData);
+
+        if (overwritten)
+        {
+            Interlocked.Increment(ref totalUpdates);
+            Interlocked.Add(ref bytesWritten, newData.Length);
+        }
+
+        return overwritten;
+    }
+
 
 
     /// <inheritdoc />
