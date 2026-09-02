@@ -51,6 +51,20 @@ class Program
             return;
         }
 
+        // Optional: --pk → fair PK-based comparison: SharpCoreDB on a table with an
+        // `id INTEGER PRIMARY KEY` (mirroring the SQLite harness schema) with UPDATE/DELETE by PK,
+        // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
+        if (args.Any(a => a.Equals("--pk", StringComparison.OrdinalIgnoreCase)))
+        {
+            var engineArgPk = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineTypePk = engineArgPk is not null
+                && engineArgPk.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
+                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
+            RunPkComparison(engineTypePk);
+            return;
+        }
+
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
         var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
@@ -814,6 +828,164 @@ class Program
         }
 
         return result;
+    }
+
+    // ══════════════════════════════════════
+    // PK-based "fair usage" SharpCoreDB scenario
+    // ══════════════════════════════════════
+
+    /// <summary>
+    /// SharpCoreDB on the same schema/API shape SQLite gets in the harness: an
+    /// <c>id INTEGER PRIMARY KEY</c> table, batched inserts, and UPDATE/DELETE by primary key via
+    /// <c>ExecuteBatchSQL</c> (single transaction). This exercises the PK B-tree fast paths and the
+    /// recommended usage; the no-PK harness scenario above under-measures the engine on DML.
+    /// </summary>
+    static BenchmarkResult RunSharpCoreDBPk(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var sp = services.BuildServiceProvider();
+
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = BuildConfig(engineType);
+
+            using var db = (SharpCoreDB.Database)factory.Create(
+                dbPath: dbPath,
+                masterPassword: "bench123",
+                isReadOnly: false,
+                config: config);
+
+            db.ExecuteSQL(@"CREATE TABLE docs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT,
+                age INTEGER,
+                score REAL,
+                data TEXT
+            )");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+            // INSERT (batched via InsertBatch with explicit ids, mirroring SQLite's rowid 1..N)
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                var rows = new List<Dictionary<string, object>>(end - batch);
+                for (int i = batch; i < end; i++)
+                {
+                    rows.Add(new Dictionary<string, object>
+                    {
+                        ["id"] = i + 1,
+                        ["name"] = $"User{i}",
+                        ["email"] = $"user{i}@test.com",
+                        ["age"] = 20 + i % 60,
+                        ["score"] = i * 0.1,
+                        ["data"] = $"payload-{i}",
+                    });
+                }
+
+                db.InsertBatch("docs", rows);
+            }
+
+            db.Flush();
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ by PK
+            sw.Restart();
+            for (int i = 1; i <= ReadCount; i++)
+            {
+                db.ExecuteQuery("SELECT * FROM docs WHERE id = @id", new Dictionary<string, object?> { ["@id"] = i });
+            }
+
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE by PK (single ExecuteBatchSQL transaction, like SQLite's single tx)
+            sw.Restart();
+            var updateStmts = new List<string>(UpdateCount);
+            for (int i = 1; i <= UpdateCount; i++)
+            {
+                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
+            }
+
+            db.ExecuteBatchSQL(updateStmts);
+            db.Flush();
+            sw.Stop();
+            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            // DELETE by PK
+            sw.Restart();
+            var deleteStmts = new List<string>(DeleteCount);
+            for (int i = 1; i <= DeleteCount; i++)
+            {
+                deleteStmts.Add($"DELETE FROM docs WHERE id = {i}");
+            }
+
+            db.ExecuteBatchSQL(deleteStmts);
+            db.Flush();
+            sw.Stop();
+            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the fair PK scenario (SharpCoreDB vs SQLite) and prints the comparison.
+    /// </summary>
+    static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  Fair PK comparison: SharpCoreDB vs SQLite              ║");
+        Console.WriteLine("║  (id INTEGER PRIMARY KEY, UPDATE/DELETE by PK)           ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK) ━━━");
+        var scdb = RunSharpCoreDBPk(engineType);
+        Console.WriteLine();
+
+        Console.WriteLine("━━━ SQLite (reference) ━━━");
+        var sqlite = RunSQLite();
+        Console.WriteLine();
+
+        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"\n  UPDATE gap: {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   DELETE gap: {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL, PK)"] = scdb,
+            ["SQLite"] = sqlite,
+        };
+
+        var dir = "results";
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"pk_comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
     }
 
     // ══════════════════════════════════════
