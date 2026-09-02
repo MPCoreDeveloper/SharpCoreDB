@@ -159,7 +159,7 @@ public sealed class TenantEncryptionKeyRotationService(
                 tenantId,
                 "EncryptionKeyRotationCompleted",
                 TenantEventStatus.Completed,
-                $"Encryption key rotation completed for database '{databaseName}'.",
+                $"Encryption key rotation completed for database '{SanitizeForLog(databaseName)}'.",
                 cancellationToken);
 
             return operation;
@@ -169,8 +169,8 @@ public sealed class TenantEncryptionKeyRotationService(
             logger.LogError(
                 ex,
                 "Failed to rotate encryption key for tenant '{TenantId}' database '{DatabaseName}'",
-                tenantId,
-                databaseName);
+                SanitizeForLog(tenantId),
+                SanitizeForLog(databaseName));
 
             operation.Status = TenantEncryptionKeyRotationStatus.Failed;
             operation.ErrorMessage = ex.Message;
