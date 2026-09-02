@@ -214,6 +214,7 @@ public partial class Table
     {
         if (existingRow == null || existingRow.Length == 0 || updates.Count == 0)
             return null;
+
         var offsets = GetColumnOffsetsCached();
         var columnIndexCache = GetColumnIndexCache();
 
@@ -221,58 +222,16 @@ public partial class Table
         // resolve the runtime offsets by walking the encoded fields of the existing row. This
         // makes in-place patching work for schemas with leading variable-length columns (e.g.
         // updating a fixed-size column in a row whose first column is TEXT).
-        bool needsRuntimeOffsets = false;
-        foreach (var (column, _) in updates)
+        offsets = TryResolveRuntimeOffsets(existingRow, updates, offsets, columnIndexCache);
+        if (offsets is null)
         {
-            if (columnIndexCache.TryGetValue(column, out int ci) && ci >= 0 && ci < offsets.Length && offsets[ci] < 0)
-            {
-                needsRuntimeOffsets = true;
-                break;
-            }
-        }
-
-        if (needsRuntimeOffsets)
-        {
-            var runtime = new int[Columns.Count];
-            int off = 0;
-            bool walkOk = true;
-            for (int i = 0; i < Columns.Count && off < existingRow.Length; i++)
-            {
-                runtime[i] = off;
-                int size = ReadColumnEncodedSize(existingRow.AsSpan(), off, ColumnTypes[i]);
-                if (size <= 0)
-                {
-                    walkOk = false;
-                    break;
-                }
-                off += size;
-            }
-
-            if (walkOk && off == existingRow.Length)
-                offsets = runtime;
+            return null;
         }
 
         // Pass 1: every updated column must have a stable offset and fit in its old slot.
-        foreach (var (column, value) in updates)
+        if (!AllUpdatedColumnsFit(updates, columnIndexCache, offsets, existingRow))
         {
-            if (!columnIndexCache.TryGetValue(column, out int colIdx) || colIdx < 0 || colIdx >= offsets.Length)
-                return null;
-
-            int offset = offsets[colIdx];
-            if (offset < 0 || offset >= existingRow.Length)
-                return null;
-
-            int newSize = GetEncodedSize(value, ColumnTypes[colIdx]);
-            int oldSize = ReadColumnEncodedSize(existingRow.AsSpan(), offset, ColumnTypes[colIdx]);
-            if (newSize > oldSize)
-                return null; // would overflow the field
-
-            // A variable-length field before the last column changes the byte position of
-            // every following column; overwriting it in place is only safe when its encoding
-            // keeps the exact same size. Fixed-size fields never change size, and the last
-            // column has no followers to shift.
-            if (GetFixedEncodedSize(ColumnTypes[colIdx]) < 0 && colIdx < Columns.Count - 1 && newSize != oldSize)
-                return null;
+            return null;
         }
 
         // Pass 2: copy the row and overwrite only the updated fields.
@@ -291,6 +250,69 @@ public partial class Table
 
         Interlocked.Increment(ref _inPlacePatchCount);
         return result;
+    }
+
+    private int[]? TryResolveRuntimeOffsets(
+        byte[] existingRow, Dictionary<string, object> updates, int[] offsets, Dictionary<string, int> columnIndexCache)
+    {
+        bool needsRuntimeOffsets = false;
+        foreach (var (column, _) in updates)
+        {
+            if (columnIndexCache.TryGetValue(column, out int ci) && ci >= 0 && ci < offsets.Length && offsets[ci] < 0)
+            {
+                needsRuntimeOffsets = true;
+                break;
+            }
+        }
+
+        if (!needsRuntimeOffsets)
+        {
+            return offsets;
+        }
+
+        var runtime = new int[Columns.Count];
+        int off = 0;
+        for (int i = 0; i < Columns.Count && off < existingRow.Length; i++)
+        {
+            runtime[i] = off;
+            int size = ReadColumnEncodedSize(existingRow.AsSpan(), off, ColumnTypes[i]);
+            if (size <= 0)
+            {
+                return null;
+            }
+
+            off += size;
+        }
+
+        return off == existingRow.Length ? runtime : null;
+    }
+
+    private bool AllUpdatedColumnsFit(
+        Dictionary<string, object> updates, Dictionary<string, int> columnIndexCache, int[] offsets, byte[] existingRow)
+    {
+        foreach (var (column, value) in updates)
+        {
+            if (!columnIndexCache.TryGetValue(column, out int colIdx) || colIdx < 0 || colIdx >= offsets.Length)
+                return false;
+
+            int offset = offsets[colIdx];
+            if (offset < 0 || offset >= existingRow.Length)
+                return false;
+
+            int newSize = GetEncodedSize(value, ColumnTypes[colIdx]);
+            int oldSize = ReadColumnEncodedSize(existingRow.AsSpan(), offset, ColumnTypes[colIdx]);
+            if (newSize > oldSize)
+                return false; // would overflow the field
+
+            // A variable-length field before the last column changes the byte position of
+            // every following column; overwriting it in place is only safe when its encoding
+            // keeps the exact same size. Fixed-size fields never change size, and the last
+            // column has no followers to shift.
+            if (GetFixedEncodedSize(ColumnTypes[colIdx]) < 0 && colIdx < Columns.Count - 1 && newSize != oldSize)
+                return false;
+        }
+
+        return true;
     }
 
     private long _inPlacePatchCount;

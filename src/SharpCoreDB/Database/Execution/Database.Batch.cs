@@ -29,6 +29,9 @@ using SharpCoreDB.Services;
 /// </summary>
 public partial class Database
 {
+    /// <summary>SQL prefix that marks an INSERT statement (also its length for prefix slicing).</summary>
+    private const string SqlInsertPrefix = "INSERT INTO";
+
     /// <summary>
     /// v2: Pre-compiled regex for batch UPDATE statement parsing.
     /// Previously a per-statement Regex cache lookup/creation was incurred for every statement.
@@ -179,7 +182,7 @@ public partial class Database
             {
                 char c = valuesClause[i];
 
-                if (c == '\'' && (i == 0 || valuesClause[i - 1] != '\\'))
+                if (IsQuoteChar(c, i, valuesClause))
                 {
                     inQuotes = !inQuotes;
                 }
@@ -189,13 +192,7 @@ public partial class Database
                     else if (c == ')') parenDepth--;
                     else if (c == ',' && parenDepth == 0)
                     {
-                        if (valueStart < i && valueIndex < ColumnTypes.Count)
-                        {
-                            var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
-                            values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
-                        }
-
-                        valueStart = i + 1;
+                        CommitParsedValue(valuesClause, i, ref valueStart, valueIndex, values);
                         valueIndex++;
                     }
                 }
@@ -218,6 +215,20 @@ public partial class Database
             }
 
             return values;
+        }
+
+        private static bool IsQuoteChar(char c, int i, ReadOnlySpan<char> clause)
+            => c == '\'' && (i == 0 || clause[i - 1] != '\\');
+
+        private void CommitParsedValue(ReadOnlySpan<char> valuesClause, int commaIndex, ref int valueStart, int valueIndex, object[] values)
+        {
+            if (valueStart < commaIndex && valueIndex < ColumnTypes.Count)
+            {
+                var valueSpan = valuesClause.Slice(valueStart, commaIndex - valueStart).Trim();
+                values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+            }
+
+            valueStart = commaIndex + 1;
         }
 
         /// <summary>
@@ -500,7 +511,7 @@ public partial class Database
     private static bool IsInsertStatement(string sql)
     {
         var trimmed = sql.AsSpan().Trim();
-        return trimmed.Length >= 11 && trimmed[..11].Equals("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+        return trimmed.Length >= 11 && trimmed[..11].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -828,7 +839,7 @@ public partial class Database
             const int KeywordLen = 11; // "INSERT INTO".Length
             const int PrefixLen = 12;  // "INSERT INTO ".Length
             if (insertSql.Length < PrefixLen ||
-                !insertSql[..KeywordLen].Equals("INSERT INTO", StringComparison.OrdinalIgnoreCase))
+                !insertSql[..KeywordLen].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
@@ -907,11 +918,11 @@ public partial class Database
         try
         {
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase);
+            var insertIdx = insertSql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
             if (insertIdx < 0) return null;
 
             insertSql = insertSql.Slice(insertIdx);
-            var tableStart = "INSERT INTO ".Length;
+            var tableStart = (SqlInsertPrefix.Length + 1);
 
             // Find table name end
             int tableEnd = -1;
@@ -975,8 +986,8 @@ public partial class Database
     {
         try
         {
-            var insertSql = sql[sql.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase)..];
-            var tableStart = "INSERT INTO ".Length;
+            var insertSql = sql[sql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase)..];
+            var tableStart = (SqlInsertPrefix.Length + 1);
             var tableEnd = insertSql.IndexOf(' ', tableStart);
             if (tableEnd == -1)
             {

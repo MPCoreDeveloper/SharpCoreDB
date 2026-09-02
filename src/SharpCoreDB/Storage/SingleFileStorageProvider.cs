@@ -105,9 +105,9 @@ public sealed class SingleFileStorageProvider : IStorageProvider
 
     // AES-256-GCM encryption for the whole single-file database at rest. With the v2 key
     // model, a random per-file data-encryption-key (DEK) encrypts block data AND the metadata
-    // regions (block registry, free-space map, WAL) when the full encryption mode is active;
-    // the header and key bundle stay plaintext bootstrap only. The DEK is either the caller-supplied
-    // raw key or a random key wrapped by a password-derived KEK (envelope encryption).
+    // regions including the block registry, the free space map, and the WAL when full encryption
+    // is active; the header and key bundle stay plaintext bootstrap only. The DEK is either the
+    // caller-supplied raw key or a random key wrapped by a password-derived KEK (envelope encryption).
     private AesGcmEncryption? _encryption;
 
     // The current data-encryption-key bytes. Kept so password rotation can re-wrap the same DEK
@@ -2153,8 +2153,8 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
             return (value + psu - 1) / psu * psu;
         }
 
-        using var src = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.RandomAccess);
-        using var dst = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 0, FileOptions.RandomAccess);
+        var src = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.RandomAccess);
+        var dst = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 0, FileOptions.RandomAccess);
 
         var fileSize = src.Length;
         var totalPages = (ulong)((fileSize + pageSize - 1) / pageSize);
@@ -2884,7 +2884,6 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         }
 
         var tempPath = _filePath + ".rekey.tmp.scdb";
-        var blocksReEncrypted = 0;
 
         try
         {
@@ -2902,25 +2901,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 CreateImmediately = true
             };
 
-            byte[]? newDek = null;
-            using (var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions))
-            {
-                // Re-encrypt every block under the new DEK.
-                foreach (var blockName in _blockRegistry.EnumerateBlockNames()
-                    .Where(n => n != ScdbFileHeader.FSM_BLOCK_NAME)
-                    .OrderBy(n => n, StringComparer.Ordinal))
-                {
-                    var blockData = await ReadBlockAsync(blockName, cancellationToken).ConfigureAwait(false);
-                    if (blockData is not null)
-                    {
-                        await tempProvider.WriteBlockAsync(blockName, blockData, cancellationToken).ConfigureAwait(false);
-                        blocksReEncrypted++;
-                    }
-                }
-
-                await tempProvider.FlushAsync(cancellationToken).ConfigureAwait(false);
-                newDek = tempProvider.GetEncryptionKey();
-            }
+            var (newDek, blocksReEncrypted) = await ReEncryptToTempFileAsync(tempPath, tempOptions, cancellationToken).ConfigureAwait(false);
 
             if (newDek is null)
             {
@@ -2929,57 +2910,10 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                     "Failed to resolve the new data-encryption-key.");
             }
 
-            // Swap files (Issue #343 pattern: direct field assignment, no reflection).
-            _memoryMappedFile?.Dispose();
-            await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            _fileStream.Close();
-
             var backupPath = _filePath + ".backup";
-            if (File.Exists(backupPath))
-            {
-                File.Delete(backupPath);
-            }
-
-            File.Move(_filePath, backupPath);
-            File.Move(tempPath, _filePath);
-
-            var newFileStream = new FileStream(
-                _filePath,
-                FileMode.Open,
-                FileAccess.ReadWrite,
-                _options.FileShareMode,
-                bufferSize: 0,
-                FileOptions.RandomAccess);
-
-            MemoryMappedFile? newMmf = null;
-            if (_options.EnableMemoryMapping)
-            {
-                newMmf = MemoryMappedFile.CreateFromFile(
-                    newFileStream,
-                    mapName: null,
-                    capacity: 0,
-                    MemoryMappedFileAccess.Read,
-                    HandleInheritability.None,
-                    leaveOpen: true);
-            }
-
-            SwapFileStream(newFileStream, newMmf);
-            _header = LoadHeader(newFileStream);
-
-            // (continuation)
-            _encryption?.Dispose();
-            _encryption = new AesGcmEncryption(newDek);
-            _dek = newDek;
-
-            // Update options so later opens/vacuum use the new key material.
-            _options.EncryptionKey = wantsRaw ? newKey : null;
-            _options.EncryptionPassword = wantsPassword ? newPassword : null;
-
-            // Drop cached ciphertext checksums; reload metadata subsystems from the new file.
-            _blockCache.Clear();
-            ReloadSubsystems();
-
-            File.Delete(backupPath);
+            await SwapInRotatedFileAsync(
+                tempPath, backupPath, newDek, wantsRaw ? newKey : null, wantsPassword ? newPassword : null)
+                .ConfigureAwait(false);
 
             return new EncryptionRotationResult
             {
@@ -2992,13 +2926,96 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         catch (Exception ex)
         {
             // Cleanup temp file on error.
-            if (File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); } catch { /* Ignore */ }
-            }
-
+            TryDeleteFile(tempPath);
             return EncryptionRotationResult.Failed(EncryptionRotationOperation.KeyRotated, ex.Message);
         }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Ignore - best-effort cleanup.
+        }
+    }
+
+    private async Task<(byte[]? Key, int BlocksReEncrypted)> ReEncryptToTempFileAsync(
+        string tempPath, DatabaseOptions tempOptions, CancellationToken cancellationToken)
+    {
+        int blocksReEncrypted = 0;
+        using var tempProvider = SingleFileStorageProvider.Open(tempPath, tempOptions);
+
+        // Re-encrypt every block under the new DEK.
+        foreach (var blockName in _blockRegistry.EnumerateBlockNames()
+            .Where(n => n != ScdbFileHeader.FSM_BLOCK_NAME)
+            .OrderBy(n => n, StringComparer.Ordinal))
+        {
+            var blockData = await ReadBlockAsync(blockName, cancellationToken).ConfigureAwait(false);
+            if (blockData is not null)
+            {
+                await tempProvider.WriteBlockAsync(blockName, blockData, cancellationToken).ConfigureAwait(false);
+                blocksReEncrypted++;
+            }
+        }
+
+        await tempProvider.FlushAsync(cancellationToken).ConfigureAwait(false);
+        return (tempProvider.GetEncryptionKey(), blocksReEncrypted);
+    }
+
+    private async Task SwapInRotatedFileAsync(
+        string tempPath, string backupPath, byte[] newDek, byte[]? newKey, string? newPassword)
+    {
+        // Swap files (Issue #343 pattern: direct field assignment, no reflection).
+        _memoryMappedFile?.Dispose();
+        await _fileStream.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+        _fileStream.Close();
+
+        if (File.Exists(backupPath))
+        {
+            File.Delete(backupPath);
+        }
+
+        File.Move(_filePath, backupPath);
+        File.Move(tempPath, _filePath);
+
+        var newFileStream = new FileStream(
+            _filePath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            _options.FileShareMode,
+            bufferSize: 0,
+            FileOptions.RandomAccess);
+
+        MemoryMappedFile? newMmf = null;
+        if (_options.EnableMemoryMapping)
+        {
+            newMmf = MemoryMappedFile.CreateFromFile(
+                newFileStream,
+                mapName: null,
+                capacity: 0,
+                MemoryMappedFileAccess.Read,
+                HandleInheritability.None,
+                leaveOpen: true);
+        }
+
+        SwapFileStream(newFileStream, newMmf);
+        _header = LoadHeader(newFileStream);
+
+        _encryption?.Dispose();
+        _encryption = new AesGcmEncryption(newDek);
+        _dek = newDek;
+
+        // Update options so later opens/vacuum use the new key material.
+        _options.EncryptionKey = newKey;
+        _options.EncryptionPassword = newPassword;
+
+        // Drop cached ciphertext checksums; reload metadata subsystems from the new file.
+        _blockCache.Clear();
+        ReloadSubsystems();
     }
 
     /// <summary>

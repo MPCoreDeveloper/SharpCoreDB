@@ -17,6 +17,9 @@ using SharpCoreDB.Optimizations;
 /// </summary>
 public partial class Table
 {
+    /// <summary>Error message used by every write path when the table is opened read-only.</summary>
+    private const string ReadOnlyInsertError = "Cannot insert in readonly mode";
+
     /// <summary>
     /// Inserts a row into the table.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
@@ -30,7 +33,7 @@ public partial class Table
     public void Insert(Dictionary<string, object> row)
     {
         ArgumentNullException.ThrowIfNull(this.storage);
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         for (int i = 0; i < this.Columns.Count; i++)
@@ -137,9 +140,10 @@ public partial class Table
                 {
                     unloadedIndexes = [];
                     // Manual loop for performance - avoids LINQ Where.ToList() allocation on hot path
-                    foreach (var col in this.registeredIndexes.Keys)
+                    foreach (var col in this.registeredIndexes.Keys) // NOSONAR:S3267 - hot-path allocation avoidance
                     {
-                        if (!this.loadedIndexes.Contains(col))
+                        bool needsLoad = !this.loadedIndexes.Contains(col);
+                        if (needsLoad)
                         {
                             unloadedIndexes.Add(col);
                         }
@@ -247,7 +251,7 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(rows);
 
         if (rows.Count == 0) return [];
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
         var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
@@ -276,7 +280,7 @@ public partial class Table
     /// Semantics are identical (validation, defaults, NOT NULL, PK, indexes, engine batch).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns);
+    internal long[] InsertBatch(object[][] rows) => InsertBatch(rows, this.Columns); // NOSONAR:S2368 - internal API consumed by the SQL batch-INSERT parser
 
     /// <summary>
     /// Dedicated SQL batch-INSERT fast path with an explicit user-facing column order (as used
@@ -290,7 +294,7 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(rows);
 
         if (rows.Length == 0) return [];
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
         ValidateBatchPrimaryKeysUpfront(validatedRows);
@@ -329,111 +333,18 @@ public partial class Table
         }
 
         var normalizedRows = new object[rows.Length][];
-
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
-            var values = rows[rowIdx];
-            var normalized = new object[this.Columns.Count];
-
-            // Place parsed values at their table column positions and track which columns
-            // are explicitly present in the statement (explicit NULLs must stay NULL,
-            // matching the dictionary path — only absent columns get defaults).
-            var present = new bool[this.Columns.Count];
-            for (int c = 0; c < columnIndexMap.Length; c++)
-            {
-                present[columnIndexMap[c]] = true;
-                normalized[columnIndexMap[c]] = values[c];
-            }
-
-            for (int i = 0; i < this.Columns.Count; i++)
-            {
-                var val = normalized[i];
-                if (val is null or DBNull)
-                {
-                    if (this.IsAuto[i])
-                    {
-                        // AUTO: auto-generate for absent columns and explicit NULLs alike.
-                        normalized[i] = GenerateAutoValue(this.ColumnTypes[i], i);
-                    }
-                    else if (!present[i])
-                    {
-                        // Column absent from the statement → default value.
-                        if (this.DefaultExpressions[i] is not null)
-                        {
-                            normalized[i] = TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[i], this.ColumnTypes[i]) ?? DBNull.Value;
-                        }
-                        else
-                        {
-                            normalized[i] = GetDefaultValue(this.ColumnTypes[i]) ?? DBNull.Value;
-                        }
-                    }
-                    // Explicit NULL for a non-auto column stays NULL (dict-path parity).
-                }
-                else if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[i]))
-                {
-                    if (TryCoerceValue(val, this.ColumnTypes[i], out var coercedValue))
-                    {
-                        normalized[i] = coercedValue;
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Type mismatch for column {this.Columns[i]} in row {rowIdx}: expected {this.ColumnTypes[i]}, got {val.GetType().Name}");
-                    }
-                }
-            }
-
-            // NOT NULL validation for batch insert
-            for (int colIdx = 0; colIdx < this.Columns.Count; colIdx++)
-            {
-                if (this.IsNotNull[colIdx] && (normalized[colIdx] == null || normalized[colIdx] == DBNull.Value))
-                {
-                    throw new InvalidOperationException($"Column '{this.Columns[colIdx]}' cannot be NULL in row {rowIdx}");
-                }
-            }
-
-            normalizedRows[rowIdx] = normalized;
+            normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, rowIdx);
         }
 
         var serializedRows = new List<byte[]>(rows.Length);
-        for (int i = 0; i < normalizedRows.Length; i++)
+        foreach (var row in normalizedRows)
         {
-            serializedRows.Add(SerializeRowExact(normalizedRows[i]));
+            serializedRows.Add(SerializeRowExact(row));
         }
 
         return (serializedRows, normalizedRows);
-    }
-
-    /// <summary>
-    /// Column-ordered array variant of the upfront primary-key batch validation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private void ValidateBatchPrimaryKeysUpfront(object[][] rows)
-    {
-        if (this.PrimaryKeyIndex < 0)
-            return;
-
-        var incomingPks = new HashSet<string>();
-        for (int i = 0; i < rows.Length; i++)
-        {
-            var pkValue = rows[i][this.PrimaryKeyIndex];
-            if (pkValue == null || pkValue == DBNull.Value)
-                continue;
-
-            var pkString = pkValue.ToString() ?? string.Empty;
-            if (!incomingPks.Add(pkString))
-            {
-                throw new InvalidOperationException($"Batch contains duplicate primary key value: '{pkString}'");
-            }
-        }
-
-        foreach (var pkString in incomingPks)
-        {
-            var (found, _) = this.Index.Search(pkString);
-            if (found)
-            {
-                throw new InvalidOperationException($"Duplicate key value '{pkString}' violates unique constraint on primary key");
-            }
-        }
     }
 
     /// <summary>
@@ -533,20 +444,166 @@ public partial class Table
     /// </summary>
     /// <summary>
     /// Column-ordered array variant of <see cref="InsertBatchCriticalSection"/>.
+    private object[] NormalizeInsertRow(object[] values, int[] columnIndexMap, int rowIdx)
+    {
+        var normalized = new object[this.Columns.Count];
+
+        // Place parsed values at their table column positions and track which columns
+        // are explicitly present in the statement (explicit NULLs must stay NULL,
+        // matching the dictionary path — only absent columns get defaults).
+        var present = new bool[this.Columns.Count];
+        for (int c = 0; c < columnIndexMap.Length; c++)
+        {
+            present[columnIndexMap[c]] = true;
+            normalized[columnIndexMap[c]] = values[c];
+        }
+
+        for (int i = 0; i < this.Columns.Count; i++)
+        {
+            normalized[i] = NormalizeColumnValue(i, normalized[i], present[i], rowIdx);
+        }
+
+        ValidateNotNullBatch(normalized, rowIdx);
+        return normalized;
+    }
+
+    private object? NormalizeColumnValue(int columnIdx, object? val, bool isPresent, int rowIdx)
+    {
+        if (val is null or DBNull)
+        {
+            if (this.IsAuto[columnIdx])
+            {
+                // AUTO: auto-generate for absent columns and explicit NULLs alike.
+                return GenerateAutoValue(this.ColumnTypes[columnIdx], columnIdx);
+            }
+
+            if (!isPresent)
+            {
+                // Column absent from the statement → default value.
+                return this.DefaultExpressions[columnIdx] is not null
+                    ? TypeConverter.EvaluateDefaultExpression(this.DefaultExpressions[columnIdx], this.ColumnTypes[columnIdx]) ?? DBNull.Value
+                    : GetDefaultValue(this.ColumnTypes[columnIdx]) ?? DBNull.Value;
+            }
+
+            // Explicit NULL for a non-auto column stays NULL (dict-path parity).
+            return null;
+        }
+
+        if (val != DBNull.Value && !IsValidType(val, this.ColumnTypes[columnIdx]))
+        {
+            if (!TryCoerceValue(val, this.ColumnTypes[columnIdx], out var coercedValue))
+            {
+                throw new InvalidOperationException($"Type mismatch for column {this.Columns[columnIdx]} in row {rowIdx}: expected {this.ColumnTypes[columnIdx]}, got {val.GetType().Name}");
+            }
+
+            return coercedValue;
+        }
+
+        return val;
+    }
+
+    private void ValidateNotNullBatch(object[] normalized, int rowIdx)
+    {
+        for (int colIdx = 0; colIdx < this.Columns.Count; colIdx++)
+        {
+            if (this.IsNotNull[colIdx] && (normalized[colIdx] == null || normalized[colIdx] == DBNull.Value))
+            {
+                throw new InvalidOperationException($"Column '{this.Columns[colIdx]}' cannot be NULL in row {rowIdx}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Column-ordered array variant of the upfront primary-key batch validation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void ValidateBatchPrimaryKeysUpfront(object[][] rows)
+    {
+        if (this.PrimaryKeyIndex < 0)
+            return;
+
+        var incomingPks = new HashSet<string>();
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var pkValue = rows[i][this.PrimaryKeyIndex];
+            if (pkValue == null || pkValue == DBNull.Value)
+                continue;
+
+            var pkString = pkValue.ToString() ?? string.Empty;
+            if (!incomingPks.Add(pkString))
+            {
+                throw new InvalidOperationException($"Batch contains duplicate primary key value: '{pkString}'");
+            }
+        }
+
+        foreach (var pkString in incomingPks)
+        {
+            var (found, _) = this.Index.Search(pkString);
+            if (found)
+            {
+                throw new InvalidOperationException($"Duplicate key value '{pkString}' violates unique constraint on primary key");
+            }
+        }
+    }
+
+     /// <summary>
+     /// ✅ PHASE 2A FRIDAY: Batch validates primary keys BEFORE critical section
+     /// Checks for duplicates within the batch AND against existing index.
+     /// This reduces per-row overhead and improves cache locality.
+     /// 
+     /// Performance: 1.1-1.3x improvement from cache locality
+     /// Previous approach: Per-row PK check during index insertion (cold cache)
+     /// New approach: Batch validation upfront (warm cache, fail fast)
+     /// </summary>
+     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+     private void ValidateBatchPrimaryKeysUpfront(List<Dictionary<string, object>> rows)
+     {
+         // Only validate if table has unique primary key index
+         if (this.PrimaryKeyIndex < 0)
+             return;
+         
+         // Step 1: Extract all PKs from incoming rows and check for duplicates within batch
+         var incomingPks = new HashSet<string>();
+         
+         for (int i = 0; i < rows.Count; i++)
+         {
+             var row = rows[i];
+             var pkColumn = this.Columns[this.PrimaryKeyIndex];
+             var pkValue = row[pkColumn];
+             
+
+             // Skip null PKs (null values don't participate in unique constraints)
+             if (pkValue == null || pkValue == DBNull.Value)
+                 continue;
+             
+             var pkString = pkValue.ToString() ?? string.Empty;
+             
+             // Check for duplicate within batch
+             if (!incomingPks.Add(pkString))
+             {
+                 throw new InvalidOperationException(
+                     $"Batch contains duplicate primary key value: '{pkString}'");
+             }
+         }
+         
+         // Step 2: Check all incoming PKs against existing index (single pass)
+         // This validates against existing data without per-row lookups
+         foreach (var pkString in incomingPks)
+         {
+             var (found, _) = this.Index.Search(pkString);
+             if (found)
+             {
+                 throw new InvalidOperationException(
+                     $"Duplicate key value '{pkString}' violates unique constraint on primary key");
+             }
+         }
+     }
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private long[] InsertBatchCriticalSection(object[][] validatedRows, List<byte[]> serializedRows)
     {
         // Validate primary keys (requires lock for index access)
-        if (this.PrimaryKeyIndex >= 0)
-        {
-            for (int rowIdx = 0; rowIdx < validatedRows.Length; rowIdx++)
-            {
-                var pkVal = validatedRows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
-                    throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
-            }
-        }
+        ValidateExistingPrimaryKeys(validatedRows);
 
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
@@ -565,41 +622,19 @@ public partial class Table
                 _database?.SetLastInsertRowId(positions[^1]);
             }
 
-            var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
-                foreach (var col in this.registeredIndexes.Keys)
+                foreach (var col in this.registeredIndexes.Keys.Where(c => !this.loadedIndexes.Contains(c)))
                 {
-                    if (!this.loadedIndexes.Contains(col))
-                    {
-                        unloadedIndexes.Add(col);
-                    }
-                }
-                foreach (var registeredCol in unloadedIndexes)
-                {
-                    EnsureIndexLoaded(registeredCol);
+                    EnsureIndexLoaded(col);
                 }
             }
 
             // Update primary key index (direct array indexing — no dictionary)
-            if (this.PrimaryKeyIndex >= 0)
-            {
-                for (int i = 0; i < validatedRows.Length; i++)
-                {
-                    var pkVal = validatedRows[i][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-                    this.Index.Insert(pkVal, positions[i]);
-                }
-            }
+            UpdatePrimaryKeyIndex(validatedRows, positions);
 
             // Batch hash index updates — build dictionaries only when hash indexes exist.
-            if (this.hashIndexes.Count > 0)
-            {
-                var dictRows = RowsToDictionaries(validatedRows);
-                foreach (var hashIndex in this.hashIndexes.Values)
-                {
-                    hashIndex.AddBatch(dictRows, positions);
-                }
-            }
+            UpdateHashIndexes(validatedRows, positions);
 
             Interlocked.Add(ref _cachedRowCount, validatedRows.Length);
 
@@ -624,26 +659,6 @@ public partial class Table
             }
             throw;
         }
-    }
-
-    /// <summary>
-    /// Converts column-ordered rows to dictionaries. Only used for optional index maintenance
-    /// (hash indexes / B-tree), which is not on the hot benchmark path.
-    /// </summary>
-    private List<Dictionary<string, object>> RowsToDictionaries(object[][] rows)
-    {
-        var result = new List<Dictionary<string, object>>(rows.Length);
-        for (int i = 0; i < rows.Length; i++)
-        {
-            var row = new Dictionary<string, object>(this.Columns.Count);
-            for (int c = 0; c < this.Columns.Count; c++)
-            {
-                row[this.Columns[c]] = rows[i][c];
-            }
-            result.Add(row);
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -743,6 +758,70 @@ public partial class Table
         }
     }
 
+
+    private void ValidateExistingPrimaryKeys(object[][] rows)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return;
+        }
+
+        for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
+        {
+            var pkVal = rows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
+            if (this.Index.Search(pkVal).Found)
+                throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
+        }
+    }
+
+    private void UpdatePrimaryKeyIndex(object[][] rows, long[] positions)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var pkVal = rows[i][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
+            this.Index.Insert(pkVal, positions[i]);
+        }
+    }
+
+    private void UpdateHashIndexes(object[][] rows, long[] positions)
+    {
+        if (this.hashIndexes.Count == 0)
+        {
+            return;
+        }
+
+        var dictRows = RowsToDictionaries(rows);
+        foreach (var hashIndex in this.hashIndexes.Values)
+        {
+            hashIndex.AddBatch(dictRows, positions);
+        }
+    }
+
+    /// <summary>
+    /// Converts column-ordered rows to dictionaries. Only used for optional index maintenance
+    /// (hash indexes / B-tree), which is not on the hot benchmark path.
+    /// </summary>
+    private List<Dictionary<string, object>> RowsToDictionaries(object[][] rows)
+    {
+        var result = new List<Dictionary<string, object>>(rows.Length);
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var row = new Dictionary<string, object>(this.Columns.Count);
+            for (int c = 0; c < this.Columns.Count; c++)
+            {
+                row[this.Columns[c]] = rows[i][c];
+            }
+            result.Add(row);
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// Standard insert batch path (existing logic, kept for backward compatibility).
     /// ✅ DEPRECATED: Use InsertBatch() which now uses optimized path by default.
@@ -750,9 +829,6 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private long[] InsertBatchStandardPath(List<Dictionary<string, object>> rows)
     {
-        // ✅ PERFORMANCE: Get column index cache once for entire batch
-        var columnIndexCache = GetColumnIndexCache();
-
         // ✅ CRITICAL FIX: Start engine transaction for batching!
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
@@ -1603,8 +1679,7 @@ public partial class Table
     {
         // Page-based: In-place update (or relocation when the record grows).
         // WP11: overwrite only the updated fields at their cached fixed column
-        // offsets when they fit (avoiding a full serialize-and-deserialize round trip);
-        // fall back to full serialization otherwise.
+        // offsets when they fit; otherwise fall back to full serialization.
         if (this.PrimaryKeyIndex < 0)
         {
             return;
@@ -1831,7 +1906,6 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            var columnIndexCache = GetColumnIndexCache();
             // Load every registered hash index before the write loop so the append fallback can
             // remove the stale record from all indexes (unloaded indexes would later be rebuilt
             // from the file INCLUDING the stale record).
@@ -1979,18 +2053,20 @@ public partial class Table
                     if (row is null) continue;
                     // v2: capture the old PK and indexed-column values BEFORE applying updates,
                     // avoiding a full row dictionary copy per row (WP3 allocation reduction).
-                    object? oldPkValue = this.PrimaryKeyIndex >= 0
-                        ? row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pk) ? pk : null
-                        : null;
+                    object? oldPkValue = null;
+                    if (this.PrimaryKeyIndex >= 0 && row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pk))
+                    {
+                        oldPkValue = pk;
+                    }
 
                     Dictionary<string, object?>? oldHashValues = null;
                     if (this.hashIndexes.Count > 0)
                     {
                         oldHashValues = new Dictionary<string, object?>(this.hashIndexes.Count, StringComparer.OrdinalIgnoreCase);
-                        foreach (var hashIndex in this.hashIndexes)
+                        foreach (var key in this.hashIndexes.Keys)
                         {
-                            if (row.TryGetValue(hashIndex.Key, out var oldVal) && oldVal is not null)
-                                oldHashValues[hashIndex.Key] = oldVal;
+                            if (row.TryGetValue(key, out var oldVal) && oldVal is not null)
+                                oldHashValues[key] = oldVal;
                         }
                     }
 
@@ -3151,7 +3227,7 @@ public partial class Table
      ArgumentNullException.ThrowIfNull(this.storage);
 
      if (rowCount == 0) return [];
-     if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+     if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
      // ✅ FIX: Decode OUTSIDE the lock, then call optimized path which handles its own locking
      // Decode binary data to Dictionary rows using BinaryRowDecoder
@@ -3178,57 +3254,4 @@ public partial class Table
             results[i].Remove(Constants.PersistenceConstants.InternalRowIdColumnName);
         }
     }
-
-     /// <summary>
-     /// ✅ PHASE 2A FRIDAY: Batch validates primary keys BEFORE critical section
-     /// Checks for duplicates within the batch AND against existing index.
-     /// This reduces per-row overhead and improves cache locality.
-     /// 
-     /// Performance: 1.1-1.3x improvement from cache locality
-     /// Previous approach: Per-row PK check during index insertion (cold cache)
-     /// New approach: Batch validation upfront (warm cache, fail fast)
-     /// </summary>
-     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-     private void ValidateBatchPrimaryKeysUpfront(List<Dictionary<string, object>> rows)
-     {
-         // Only validate if table has unique primary key index
-         if (this.PrimaryKeyIndex < 0)
-             return;
-         
-         // Step 1: Extract all PKs from incoming rows and check for duplicates within batch
-         var incomingPks = new HashSet<string>();
-         
-         for (int i = 0; i < rows.Count; i++)
-         {
-             var row = rows[i];
-             var pkColumn = this.Columns[this.PrimaryKeyIndex];
-             var pkValue = row[pkColumn];
-             
-
-             // Skip null PKs (null values don't participate in unique constraints)
-             if (pkValue == null || pkValue == DBNull.Value)
-                 continue;
-             
-             var pkString = pkValue.ToString() ?? string.Empty;
-             
-             // Check for duplicate within batch
-             if (!incomingPks.Add(pkString))
-             {
-                 throw new InvalidOperationException(
-                     $"Batch contains duplicate primary key value: '{pkString}'");
-             }
-         }
-         
-         // Step 2: Check all incoming PKs against existing index (single pass)
-         // This validates against existing data without per-row lookups
-         foreach (var pkString in incomingPks)
-         {
-             var (found, _) = this.Index.Search(pkString);
-             if (found)
-             {
-                 throw new InvalidOperationException(
-                     $"Duplicate key value '{pkString}' violates unique constraint on primary key");
-             }
-         }
-     }
 }
