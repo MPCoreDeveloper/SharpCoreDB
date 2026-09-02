@@ -353,6 +353,10 @@ class Program
         {
             NoEncryptMode = true,
             StorageEngineType = engineType,
+            // The fair PK comparison intentionally isolates the record-layout variable: the legacy
+            // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
+            // records; the fixed-width arm forces FixedWidthRecordLayout.
+            AutoFixedWidthRecords = !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,
