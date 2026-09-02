@@ -108,7 +108,12 @@ public partial class Table
 
             // Count rows before compaction
             var rowsBeforeCompaction = activePositions.Count;
-            
+
+            // Fixed-width layout (B3): reclaim the overflow arena too — collect the live arena
+            // offsets from the current records, compact the .ovf, and re-point the records' variable
+            // slots in place (records are fixed-width, so re-pointing never changes their length).
+            CompactOverflowArena(activePositions);
+
             // Perform compaction
             long bytesReclaimed = appendEngine.CompactTable(Name, activePositions);
             
@@ -138,6 +143,67 @@ public partial class Table
             rwLock.ExitWriteLock();
         }
     }
+
+    /// <summary>
+    /// B3: copy-on-compact for the out-of-line overflow arena. Collects the arena offsets referenced
+    /// by the current (active) fixed-width records, compacts the <c>.ovf</c>, then re-points the
+    /// variable slots of the active records that referenced a moved block. Called before the data
+    /// file compaction so the rewritten records carry the new offsets.
+    /// </summary>
+    private void CompactOverflowArena(List<long> activePositions)
+    {
+        if (!_fixedWidthRecords || activePositions.Count == 0)
+        {
+            return;
+        }
+
+        var engine = GetOrCreateStorageEngine();
+        var layout = GetFixedWidthLayout();
+        var arena = GetOverflowArena();
+        var liveOffsets = new HashSet<long>();
+
+        foreach (var pos in activePositions)
+        {
+            var data = engine.Read(Name, pos);
+            if (data is not null)
+            {
+                CollectVariableOffsets(data, layout, liveOffsets);
+            }
+        }
+
+        if (liveOffsets.Count == 0)
+        {
+            return;
+        }
+
+        var mapping = arena.Compact(liveOffsets);
+
+        foreach (var pos in activePositions)
+        {
+            var data = engine.Read(Name, pos);
+            if (data is null || data.Length != layout.FixedSize)
+            {
+                continue;
+            }
+
+            var patched = RepointVariableSlots(data, layout, mapping);
+            if (patched is not null)
+            {
+                engine.TryUpdateInPlace(Name, pos, patched);
+            }
+        }
+    }
+
+    /// <summary>Collects the overflow-block offsets referenced by a fixed-width record's variable slots.</summary>
+    private static void CollectVariableOffsets(byte[] record, FixedWidthRecordLayout layout, HashSet<long> live)
+        => FixedWidthCodec.CollectVariableOffsets(record, layout, live);
+
+    /// <summary>
+    /// Returns a copy of a fixed-width record with its variable slots re-pointed through the
+    /// compaction mapping, or null when no slot moved.
+    /// </summary>
+    private static byte[]? RepointVariableSlots(byte[] record, FixedWidthRecordLayout layout, Dictionary<long, long> mapping)
+        => FixedWidthCodec.RepointVariableSlots(record, layout, mapping);
 
     /// <summary>
     /// Rebuilds the primary key index after compaction.

@@ -222,7 +222,15 @@ public sealed partial class ColumnStore<T>
             long partialSum = 0;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<int>.Count)
+            {
+                var vsum = Vector512<int>.Zero;
+                for (; i <= end - Vector512<int>.Count; i += Vector512<int>.Count)
+                    vsum = Vector512.Add(vsum, Vector512.LoadUnsafe(ref data[i]));
+                for (int j = 0; j < Vector512<int>.Count; j++)
+                    partialSum += vsum[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
             {
                 var vsum = Vector256<int>.Zero;
                 for (; i <= end - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -250,7 +258,15 @@ public sealed partial class ColumnStore<T>
             long partialSum = 0;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<long>.Count)
+            {
+                var vsum = Vector512<long>.Zero;
+                for (; i <= end - Vector512<long>.Count; i += Vector512<long>.Count)
+                    vsum = Vector512.Add(vsum, Vector512.LoadUnsafe(ref data[i]));
+                for (int j = 0; j < Vector512<long>.Count; j++)
+                    partialSum += vsum[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
             {
                 var vsum = Vector256<long>.Zero;
                 for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -278,7 +294,15 @@ public sealed partial class ColumnStore<T>
             double partialSum = 0;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<double>.Count)
+            {
+                var vsum = Vector512<double>.Zero;
+                for (; i <= end - Vector512<double>.Count; i += Vector512<double>.Count)
+                    vsum = Vector512.Add(vsum, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<double>.Count; j++)
+                    partialSum += vsum[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
             {
                 var vsum = Vector256<double>.Zero;
                 for (; i <= end - Vector256<double>.Count; i += Vector256<double>.Count)
@@ -306,7 +330,15 @@ public sealed partial class ColumnStore<T>
             int partialMin = int.MaxValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<int>.Count)
+            {
+                var vmin = Vector512.Create(int.MaxValue);
+                for (; i <= end - Vector512<int>.Count; i += Vector512<int>.Count)
+                    vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<int>.Count; j++)
+                    if (vmin[j] < partialMin) partialMin = vmin[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
             {
                 var vmin = Vector256.Create(int.MaxValue);
                 for (; i <= end - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -335,7 +367,15 @@ public sealed partial class ColumnStore<T>
             long partialMin = long.MaxValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<long>.Count)
+            {
+                var vmin = Vector512.Create(long.MaxValue);
+                for (; i <= end - Vector512<long>.Count; i += Vector512<long>.Count)
+                    vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<long>.Count; j++)
+                    if (vmin[j] < partialMin) partialMin = vmin[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
             {
                 var vmin = Vector256.Create(long.MaxValue);
                 for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -364,7 +404,15 @@ public sealed partial class ColumnStore<T>
             double partialMin = double.MaxValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<double>.Count)
+            {
+                var vmin = Vector512.Create(double.MaxValue);
+                for (; i <= end - Vector512<double>.Count; i += Vector512<double>.Count)
+                    vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<double>.Count; j++)
+                    if (vmin[j] < partialMin) partialMin = vmin[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
             {
                 var vmin = Vector256.Create(double.MaxValue);
                 for (; i <= end - Vector256<double>.Count; i += Vector256<double>.Count)
@@ -393,7 +441,15 @@ public sealed partial class ColumnStore<T>
             int partialMax = int.MinValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<int>.Count)
+            {
+                var vmax = Vector512.Create(int.MinValue);
+                for (; i <= end - Vector512<int>.Count; i += Vector512<int>.Count)
+                    vmax = Vector512.Max(vmax, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<int>.Count; j++)
+                    if (vmax[j] > partialMax) partialMax = vmax[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<int>.Count)
             {
                 var vmax = Vector256.Create(int.MinValue);
                 for (; i <= end - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -422,7 +478,15 @@ public sealed partial class ColumnStore<T>
             long partialMax = long.MinValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<long>.Count)
+            {
+                var vmax = Vector512.Create(long.MinValue);
+                for (; i <= end - Vector512<long>.Count; i += Vector512<long>.Count)
+                    vmax = Vector512.Max(vmax, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<long>.Count; j++)
+                    if (vmax[j] > partialMax) partialMax = vmax[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
             {
                 var vmax = Vector256.Create(long.MinValue);
                 for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -451,7 +515,15 @@ public sealed partial class ColumnStore<T>
             double partialMax = double.MinValue;
             int i = start;
 
-            if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
+            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<double>.Count)
+            {
+                var vmax = Vector512.Create(double.MinValue);
+                for (; i <= end - Vector512<double>.Count; i += Vector512<double>.Count)
+                    vmax = Vector512.Max(vmax, Vector512.Create(data.AsSpan(i)));
+                for (int j = 0; j < Vector512<double>.Count; j++)
+                    if (vmax[j] > partialMax) partialMax = vmax[j];
+            }
+            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
             {
                 var vmax = Vector256.Create(double.MinValue);
                 for (; i <= end - Vector256<double>.Count; i += Vector256<double>.Count)
@@ -475,7 +547,15 @@ public sealed partial class ColumnStore<T>
         long sum = 0;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<int>.Count)
+        {
+            var vsum = Vector512<int>.Zero;
+            for (; i <= data.Length - Vector512<int>.Count; i += Vector512<int>.Count)
+                vsum = Vector512.Add(vsum, Vector512.LoadUnsafe(ref data[i]));
+            for (int j = 0; j < Vector512<int>.Count; j++)
+                sum += vsum[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
         {
             var vsum = Vector256<int>.Zero;
             for (; i <= data.Length - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -494,7 +574,15 @@ public sealed partial class ColumnStore<T>
         long sum = 0;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<long>.Count)
+        {
+            var vsum = Vector512<long>.Zero;
+            for (; i <= data.Length - Vector512<long>.Count; i += Vector512<long>.Count)
+                vsum = Vector512.Add(vsum, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<long>.Count; j++)
+                sum += vsum[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
         {
             var vsum = Vector256<long>.Zero;
             for (; i <= data.Length - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -513,7 +601,15 @@ public sealed partial class ColumnStore<T>
         double sum = 0;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<double>.Count)
+        {
+            var vsum = Vector512<double>.Zero;
+            for (; i <= data.Length - Vector512<double>.Count; i += Vector512<double>.Count)
+                vsum = Vector512.Add(vsum, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<double>.Count; j++)
+                sum += vsum[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
         {
             var vsum = Vector256<double>.Zero;
             for (; i <= data.Length - Vector256<double>.Count; i += Vector256<double>.Count)
@@ -533,7 +629,15 @@ public sealed partial class ColumnStore<T>
         int min = int.MaxValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<int>.Count)
+        {
+            var vmin = Vector512.Create(int.MaxValue);
+            for (; i <= data.Length - Vector512<int>.Count; i += Vector512<int>.Count)
+                vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<int>.Count; j++)
+                if (vmin[j] < min) min = vmin[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
         {
             var vmin = Vector256.Create(int.MaxValue);
             for (; i <= data.Length - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -553,7 +657,15 @@ public sealed partial class ColumnStore<T>
         long min = long.MaxValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<long>.Count)
+        {
+            var vmin = Vector512.Create(long.MaxValue);
+            for (; i <= data.Length - Vector512<long>.Count; i += Vector512<long>.Count)
+                vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<long>.Count; j++)
+                if (vmin[j] < min) min = vmin[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
         {
             var vmin = Vector256.Create(long.MaxValue);
             for (; i <= data.Length - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -573,7 +685,15 @@ public sealed partial class ColumnStore<T>
         double min = double.MaxValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<double>.Count)
+        {
+            var vmin = Vector512.Create(double.MaxValue);
+            for (; i <= data.Length - Vector512<double>.Count; i += Vector512<double>.Count)
+                vmin = Vector512.Min(vmin, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<double>.Count; j++)
+                if (vmin[j] < min) min = vmin[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
         {
             var vmin = Vector256.Create(double.MaxValue);
             for (; i <= data.Length - Vector256<double>.Count; i += Vector256<double>.Count)
@@ -593,7 +713,15 @@ public sealed partial class ColumnStore<T>
         int max = int.MinValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<int>.Count)
+        {
+            var vmax = Vector512.Create(int.MinValue);
+            for (; i <= data.Length - Vector512<int>.Count; i += Vector512<int>.Count)
+                vmax = Vector512.Max(vmax, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<int>.Count; j++)
+                if (vmax[j] > max) max = vmax[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<int>.Count)
         {
             var vmax = Vector256.Create(int.MinValue);
             for (; i <= data.Length - Vector256<int>.Count; i += Vector256<int>.Count)
@@ -613,7 +741,15 @@ public sealed partial class ColumnStore<T>
         long max = long.MinValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<long>.Count)
+        {
+            var vmax = Vector512.Create(long.MinValue);
+            for (; i <= data.Length - Vector512<long>.Count; i += Vector512<long>.Count)
+                vmax = Vector512.Max(vmax, Vector512.LoadUnsafe(ref data[i]));
+            for (int j = 0; j < Vector512<long>.Count; j++)
+                if (vmax[j] > max) max = vmax[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<long>.Count)
         {
             var vmax = Vector256.Create(long.MinValue);
             for (; i <= data.Length - Vector256<long>.Count; i += Vector256<long>.Count)
@@ -633,7 +769,15 @@ public sealed partial class ColumnStore<T>
         double max = double.MinValue;
         int i = 0;
 
-        if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
+        if (Vector512.IsHardwareAccelerated && data.Length >= Vector512<double>.Count)
+        {
+            var vmax = Vector512.Create(double.MinValue);
+            for (; i <= data.Length - Vector512<double>.Count; i += Vector512<double>.Count)
+                vmax = Vector512.Max(vmax, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<double>.Count; j++)
+                if (vmax[j] > max) max = vmax[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && data.Length >= Vector256<double>.Count)
         {
             var vmax = Vector256.Create(double.MinValue);
             for (; i <= data.Length - Vector256<double>.Count; i += Vector256<double>.Count)

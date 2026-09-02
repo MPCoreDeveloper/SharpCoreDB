@@ -54,6 +54,21 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public IEnumerable<StructRow> ScanStructRows(bool enableCaching = false)
     {
+        // Fixed-width record layout (out-of-line overflow): the zero-alloc struct scan walks the
+        // variable-length record format, so fixed-width tables fall back to the dictionary path
+        // (correct, allocated). StructRow.FromDictionary is self-consistent (own bytes + schema).
+        if (_fixedWidthRecords)
+        {
+            var columns = Columns.ToArray();
+            var types = ColumnTypes.ToArray();
+            foreach (var row in Select())
+            {
+                yield return StructRow.FromDictionary(row, columns, types);
+            }
+
+            yield break;
+        }
+
         // ✅ FIX: Validate upfront, then delegate to iterator methods
         ArgumentNullException.ThrowIfNull(this.storage);
 
@@ -63,12 +78,18 @@ public partial class Table
         if (this.StorageMode == StorageMode.Columnar)
         {
             // Columnar mode: Read entire file and iterate with position filtering
-            return ScanColumnarStructRowsInternal(schema, enableCaching);
+            foreach (var row in ScanColumnarStructRowsInternal(schema, enableCaching))
+            {
+                yield return row;
+            }
         }
         else // PageBased
         {
             // PageBased mode: Use storage engine's GetAllRecords
-            return ScanPageBasedStructRowsInternal(schema, enableCaching);
+            foreach (var row in ScanPageBasedStructRowsInternal(schema, enableCaching))
+            {
+                yield return row;
+            }
         }
     }
 
@@ -172,7 +193,14 @@ public partial class Table
 
     private IEnumerable<StructRow> ScanStructRowsWhereCoreIterator(string? where, bool enableCaching)
     {
-        var schema = BuildVariableLengthSchema();
+        // Fixed-width records: StructRow's variable-length schema can't walk the fixed-width
+        // format, so matched records are materialized through the dictionary path. The numeric-SIMD
+        // fast path below is still usable (raw constant-offset reads, no schema walk); anything else
+        // falls back to the arena-aware dictionary full scan (see ScanStructRows).
+        bool fixedWidth = _fixedWidthRecords;
+        string[]? fixedColumns = fixedWidth ? Columns.ToArray() : null;
+        DataType[]? fixedTypes = fixedWidth ? ColumnTypes.ToArray() : null;
+        var schema = fixedWidth ? default : BuildVariableLengthSchema();
         var engine = GetOrCreateStorageEngine();
 
         string? simpleColumn = null;
@@ -180,20 +208,22 @@ public partial class Table
         bool hasSimpleWhere = where is { Length: > 0 } &&
             TryParseSimpleWhereClause(where, out simpleColumn, out simpleValue);
 
-        // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-        var hashRows = TryScanHashIndex(simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
-        if (hashRows is not null)
+        // Fast path 1: hash-index point lookup (mirrors SelectInternal). StructRow can only
+        // represent variable-length records, so fixed-width tables skip this path.
+        if (!fixedWidth && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            this.registeredIndexes.ContainsKey(simpleColumn))
         {
-            foreach (var row in hashRows)
+            foreach (var row in ScanByHashIndexPoint(simpleColumn, simpleValue, schema, engine, enableCaching))
                 yield return row;
             yield break;
         }
 
-        // Fast path 2: primary-key lookup.
-        var pkRows = TryScanPrimaryKey(simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
-        if (pkRows is not null)
+        // Fast path 2: primary-key lookup (variable-length layout only — StructRow schema walk).
+        if (!fixedWidth && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            this.PrimaryKeyIndex >= 0 &&
+            string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var row in pkRows)
+            foreach (var row in ScanByPrimaryKeyPoint(simpleValue, schema, engine, enableCaching))
                 yield return row;
             yield break;
         }
@@ -201,67 +231,40 @@ public partial class Table
         // Fast path 3: fixed-width numeric equality — SIMD batch filter over extracted values
         // (no deserialization, no boxing). Integer/Long use portable Vector<T>; Real uses
         // direct per-record reads.
-        var numericRows = TryScanNumeric(
-            simpleColumn, simpleValue, hasSimpleWhere, schema, engine, enableCaching);
-        if (numericRows is not null)
+        if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+            TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) &&
+            TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
         {
-            foreach (var row in numericRows)
+            foreach (var row in ScanByNumericSimd(
+                numericOffset, numericType, numericExpected, schema, engine, enableCaching,
+                fixedWidth, fixedColumns, fixedTypes))
                 yield return row;
             yield break;
         }
 
+        // Fixed-width fallback: arena-aware dictionary full scan (StructRow can't walk the format).
+        if (fixedWidth)
+        {
+            foreach (var row in Select(where))
+            {
+                yield return StructRow.FromDictionary(row, fixedColumns ?? [], fixedTypes ?? []);
+            }
+
+            yield break;
+        }
+
         // Fallback: full scan with a simple equality predicate (scalar, allocation-free per row).
+        // NOSONAR:S3267 - intentional: LINQ Where would allocate per row on the scan hot path.
         foreach (var row in ScanStructRows(enableCaching))
         {
-            bool matches = !hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-                MatchesSimpleWhere(row, schema, simpleColumn, simpleValue);
-            if (matches)
+            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
+                MatchesSimpleWhere(row, schema, simpleColumn, simpleValue))
             {
                 yield return row;
             }
         }
     }
 
-    private IEnumerable<StructRow>? TryScanHashIndex(
-        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
-        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
-    {
-        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-            !this.registeredIndexes.ContainsKey(simpleColumn))
-        {
-            return null;
-        }
-
-        return ScanByHashIndexPoint(simpleColumn, simpleValue, schema, engine, enableCaching);
-    }
-
-    private IEnumerable<StructRow>? TryScanPrimaryKey(
-        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
-        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
-    {
-        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-            this.PrimaryKeyIndex < 0 ||
-            !string.Equals(simpleColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        return ScanByPrimaryKeyPoint(simpleValue, schema, engine, enableCaching);
-    }
-
-    private IEnumerable<StructRow>? TryScanNumeric(
-        string? simpleColumn, object? simpleValue, bool hasSimpleWhere,
-        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
-    {
-        if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-            !TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) ||
-            !TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
-        {
-            return null;
-        }
-
-        return ScanByNumericSimd(numericOffset, numericType, numericExpected, schema, engine, enableCaching);
-    }
     /// <summary>Fast path 1: hash-index point lookup (mirrors SelectInternal).</summary>
     private IEnumerable<StructRow> ScanByHashIndexPoint(
         string simpleColumn, object simpleValue, VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
@@ -313,90 +316,91 @@ public partial class Table
     /// <summary>
     /// Fast path 3: fixed-width numeric equality — SIMD batch filter over extracted values
     /// (no deserialization, no boxing). Integer/Long use portable Vector&lt;T&gt;; Real uses
-    /// direct per-record reads.
+    /// direct per-record reads. Fixed-width tables materialize rows through the dictionary path.
     /// </summary>
     private IEnumerable<StructRow> ScanByNumericSimd(
         int numericOffset, DataType numericType, object numericExpected,
-        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
+        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching,
+        bool fixedWidth, string[]? fixedColumns, DataType[]? fixedTypes)
     {
         if (numericType == DataType.Integer || numericType == DataType.Long)
         {
-            foreach (var row in ScanNumericIntLong(numericOffset, numericType, numericExpected, schema, engine, enableCaching))
-                yield return row;
-            yield break;
-        }
+            List<int>? intValues = numericType == DataType.Integer ? new List<int>(1024) : null;
+            List<long>? longValues = numericType == DataType.Long ? new List<long>(1024) : null;
+            var recordDatas = new List<byte[]>(1024);
+            var recordPositions = new List<long>(1024);
 
-        // Real (double): direct per-record reads.
-        foreach (var (recordPosition, data) in engine.GetAllRecords(Name))
-        {
-            if (data is not { Length: > 0 } ||
-                !MatchesNumericDirect(data, numericOffset, numericType, numericExpected) ||
-                !TryValidateCurrentVersion(data, schema, recordPosition))
+            foreach (var (pos, rec) in engine.GetAllRecords(Name))
             {
-                continue;
+                if (rec is not { Length: > 0 } || !TryExtractNumericDirect(rec, numericOffset, numericType, out var val))
+                {
+                    continue;
+                }
+
+                if (intValues is not null)
+                {
+                    intValues.Add((int)val);
+                }
+                else if (longValues is not null)
+                {
+                    longValues.Add((long)val);
+                }
+
+                recordDatas.Add(rec);
+                recordPositions.Add(pos);
             }
 
-            yield return new StructRow(data.AsMemory(), schema, enableCaching);
-        }
-    }
-
-    /// <summary>
-    /// SIMD batch filter for Integer/Long expected values: collects raw constant-offset numeric
-    /// values, runs the portable <c>Vector&lt;T&gt;</c> equality filter and yields the matches.
-    /// </summary>
-    private IEnumerable<StructRow> ScanNumericIntLong(
-        int numericOffset, DataType numericType, object numericExpected,
-        VariableLengthSchema schema, IStorageEngine engine, bool enableCaching)
-    {
-        List<int>? intValues = numericType == DataType.Integer ? new List<int>(1024) : null;
-        List<long>? longValues = numericType == DataType.Long ? new List<long>(1024) : null;
-        var recordDatas = new List<byte[]>(1024);
-        var recordPositions = new List<long>(1024);
-
-        foreach (var (pos, rec) in engine.GetAllRecords(Name))
-        {
-            if (rec is not { Length: > 0 } || !TryExtractNumericDirect(rec, numericOffset, numericType, out var val))
-            {
-                continue;
-            }
-
+            var matches = new List<int>(16);
             if (intValues is not null)
             {
-                intValues.Add((int)val);
+                SimdFilterInt32Batch(CollectionsMarshal.AsSpan(intValues), (int)numericExpected, matches);
             }
             else if (longValues is not null)
             {
-                longValues.Add((long)val);
+                SimdFilterInt64Batch(CollectionsMarshal.AsSpan(longValues), (long)numericExpected, matches);
             }
 
-            recordDatas.Add(rec);
-            recordPositions.Add(pos);
-        }
-
-        var matches = new List<int>(16);
-        if (intValues is not null)
-        {
-            SimdFilterInt32Batch(CollectionsMarshal.AsSpan(intValues), (int)numericExpected, matches);
-        }
-        else if (longValues is not null)
-        {
-            SimdFilterInt64Batch(CollectionsMarshal.AsSpan(longValues), (long)numericExpected, matches);
-        }
-
-        for (int mi = 0; mi < matches.Count; mi++)
-        {
-            var rec = recordDatas[matches[mi]];
-            if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]]))
+            for (int mi = 0; mi < matches.Count; mi++)
             {
-                continue;
-            }
+                var rec = recordDatas[matches[mi]];
+                if (!TryValidateCurrentVersion(rec, schema, recordPositions[matches[mi]], fixedWidth))
+                {
+                    continue;
+                }
 
-            yield return new StructRow(rec.AsMemory(), schema, enableCaching);
+                if (fixedWidth)
+                {
+                    yield return StructRow.FromDictionary(DeserializeRowFixedWidth(rec.AsSpan()), fixedColumns ?? [], fixedTypes ?? []);
+                }
+                else
+                {
+                    yield return new StructRow(rec.AsMemory(), schema, enableCaching);
+                }
+            }
+        }
+        else
+        {
+            // Real (double): direct per-record reads.
+            foreach (var (recordPosition, data) in engine.GetAllRecords(Name))
+            {
+                if (data is not { Length: > 0 } ||
+                    !MatchesNumericDirect(data, numericOffset, numericType, numericExpected) ||
+                    !TryValidateCurrentVersion(data, schema, recordPosition, fixedWidth))
+                {
+                    continue;
+                }
+
+                if (fixedWidth)
+                {
+                    yield return StructRow.FromDictionary(DeserializeRowFixedWidth(data.AsSpan()), fixedColumns ?? [], fixedTypes ?? []);
+                }
+                else
+                {
+                    yield return new StructRow(data.AsMemory(), schema, enableCaching);
+                }
+            }
         }
     }
-
-
-    /// <summary>
     /// Zero-allocation enumerable for <see cref="ScanStructRowsWhere"/>. Foreach on this concrete
     /// type uses <see cref="StructRowWhereEnumerator"/> (no heap allocation); treating it as
     /// <c>IEnumerable&lt;StructRow&gt;</c> (LINQ, boxing) uses a small class-based enumerator.
@@ -515,83 +519,52 @@ public partial class Table
             bool hasSimpleWhere = _where is { Length: > 0 } &&
                 TryParseSimpleWhereClause(_where, out simpleColumn, out simpleValue);
 
-            // Fast path 1: hash-index point lookup (mirrors SelectInternal).
-            if (TryActivateHashPhase(simpleColumn, simpleValue, hasSimpleWhere, out var hashMoved))
+            // Fast path 1: hash-index point lookup (mirrors SelectInternal). Disabled for
+            // fixed-width tables (their records use the overflow format, not the walkable layout).
+            if (!_table._fixedWidthRecords && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+                _table.registeredIndexes.ContainsKey(simpleColumn))
             {
-                return hashMoved;
+                _table.EnsureIndexLoaded(simpleColumn);
+                if (_table.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))
+                {
+                    var colIdx = _table.Columns.IndexOf(simpleColumn);
+                    if (colIdx >= 0)
+                    {
+                        var key = ParseValueForHashLookup(simpleValue.ToString() ?? string.Empty, _table.ColumnTypes[colIdx]);
+                        if (key is not null)
+                        {
+                            _positions = hashIndex.LookupPositions(key);
+                            _posIndex = 0;
+                            _phase = Phase.Hash;
+                            return MoveNextHash();
+                        }
+                    }
+                }
             }
 
-            // Fast path 2: primary-key lookup.
-            if (TryActivatePkPhase(simpleColumn, simpleValue, hasSimpleWhere, out var pkMoved))
+            // Fast path 2: primary-key lookup. Disabled for fixed-width tables (same reason).
+            if (!_table._fixedWidthRecords && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
+                _table.PrimaryKeyIndex >= 0 &&
+                string.Equals(simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
             {
-                return pkMoved;
+                var pkStr = simpleValue.ToString() ?? string.Empty;
+                var search = _table.Index.Search(pkStr);
+                if (search.Found)
+                {
+                    _pkPosition = search.Value;
+                    _pkFound = true;
+                    _phase = Phase.Pk;
+                    return MoveNextPk();
+                }
+
+                _phase = Phase.Done;
+                return false;
             }
 
             // Fallback: numeric-SIMD batch filter / full scan (allocating by nature).
             _fallback = _table.ScanStructRowsWhereCore(_where, _enableCaching).GetEnumerator();
             _phase = Phase.Fallback;
             return MoveNextFallback();
-        }
-
-        private bool TryActivateHashPhase(string? simpleColumn, object? simpleValue, bool hasSimpleWhere, out bool movedNext)
-        {
-            movedNext = false;
-            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-                !_table.registeredIndexes.ContainsKey(simpleColumn))
-            {
-                return false;
-            }
-
-            _table.EnsureIndexLoaded(simpleColumn);
-            if (!_table.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))
-            {
-                return false;
-            }
-
-            var colIdx = _table.Columns.IndexOf(simpleColumn);
-            if (colIdx < 0)
-            {
-                return false;
-            }
-
-            var key = ParseValueForHashLookup(simpleValue.ToString() ?? string.Empty, _table.ColumnTypes[colIdx]);
-            if (key is null)
-            {
-                return false;
-            }
-
-            _positions = hashIndex.LookupPositions(key);
-            _posIndex = 0;
-            _phase = Phase.Hash;
-            movedNext = MoveNextHash();
-            return true;
-        }
-
-        private bool TryActivatePkPhase(string? simpleColumn, object? simpleValue, bool hasSimpleWhere, out bool movedNext)
-        {
-            movedNext = false;
-            if (!hasSimpleWhere || simpleColumn is null || simpleValue is null ||
-                _table.PrimaryKeyIndex < 0 ||
-                !string.Equals(simpleColumn, _table.Columns[_table.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            var pkStr = simpleValue.ToString() ?? string.Empty;
-            var search = _table.Index.Search(pkStr);
-            if (search.Found)
-            {
-                _pkPosition = search.Value;
-                _pkFound = true;
-                _phase = Phase.Pk;
-                movedNext = MoveNextPk();
-            }
-            else
-            {
-                _phase = Phase.Done;
-            }
-
-            return true;
         }
 
         /// <summary>Advances the hash-index fast path.</summary>
@@ -752,19 +725,33 @@ public partial class Table
     /// <summary>
     /// Stale-version guard: when the table has a PK, the PK index must point to
     /// <paramref name="recordPosition"/> for the record to be the current version.
-    /// Returns true for tables without a PK (no version tracking).
+    /// Returns true for tables without a PK (no version tracking). For fixed-width records the
+    /// PK is read via the arena-aware dictionary deserialization (constant slot offsets).
     /// </summary>
-    private bool TryValidateCurrentVersion(ReadOnlySpan<byte> recordData, VariableLengthSchema schema, long recordPosition)
+    private bool TryValidateCurrentVersion(ReadOnlySpan<byte> recordData, VariableLengthSchema schema, long recordPosition, bool fixedWidth)
     {
         if (this.PrimaryKeyIndex < 0)
         {
             return true;
         }
 
-        var pkValue = ExtractPrimaryKeyValueFromSpan(recordData, schema);
-        if (pkValue is null)
+        string pkValue;
+        if (fixedWidth)
         {
-            return false;
+            var row = DeserializeRowFixedWidth(recordData);
+            pkValue = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var v) && v is not null && v != DBNull.Value
+                ? v.ToString() ?? string.Empty
+                : string.Empty;
+        }
+        else
+        {
+            var pk = ExtractPrimaryKeyValueFromSpan(recordData, schema);
+            if (pk is null)
+            {
+                return false;
+            }
+
+            pkValue = pk;
         }
 
         var search = this.Index.Search(pkValue);
@@ -788,6 +775,19 @@ public partial class Table
         type = this.ColumnTypes[colIdx];
         if (type != DataType.Integer && type != DataType.Long && type != DataType.Real)
             return false;
+
+        if (_fixedWidthRecords)
+        {
+            // Fixed-width layout: every column sits at a constant slot offset (null flag + payload),
+            // so the numeric column can be read directly regardless of preceding variable columns —
+            // no layout walk needed (B4).
+            var layout = GetFixedWidthLayout();
+            if (colIdx >= layout.ColumnCount)
+                return false;
+
+            valueOffset = layout.Offsets[colIdx];
+            return true;
+        }
 
         for (int i = 0; i < colIdx; i++)
         {
@@ -833,7 +833,7 @@ public partial class Table
         DataType type,
         out object value)
     {
-        value = null!; // NOSONAR:S8970 - required: out parameter is non-nullable, set on success paths
+        value = null!;
 
         // valueOffset points at the null flag; value data starts at +1.
         if (valueOffset + 1 >= recordData.Length)
@@ -864,7 +864,7 @@ public partial class Table
     /// </summary>
     private static bool TryParseNumericExpected(object? value, DataType type, out object expected)
     {
-        expected = null!; // NOSONAR:S8970 - required: out parameter is non-nullable, set on success paths
+        expected = null!;
         string text = value?.ToString() ?? string.Empty;
 
         switch (type)
@@ -881,6 +881,31 @@ public partial class Table
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// B4: fixed-width string early-WHERE — reads the variable column's constant slot
+    /// <c>[null-flag(1)][arena-offset(4)]</c>, resolves the payload from the overflow arena and
+    /// compares it byte-wise against the pre-encoded expected UTF-8 (Binary collation). The
+    /// comparison is exact for Binary collation (no full-row deserialization for non-matches).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool MatchesFixedWidthStringDirect(
+        ReadOnlySpan<byte> recordData,
+        int slotOffset,
+        OverflowArena arena,
+        ReadOnlySpan<byte> expectedUtf8)
+    {
+        if (slotOffset + 5 > recordData.Length || recordData[slotOffset] == 0)
+        {
+            return false; // truncated record or NULL slot (NULL never equals a value)
+        }
+
+        // NOTE: offset 0 is a VALID block offset (the first arena block's length prefix sits at 0),
+        // so only the flag byte above distinguishes NULL — never filter on the offset value itself.
+        var arenaOffset = BinaryPrimitives.ReadInt32LittleEndian(recordData.Slice(slotOffset + 1, 4));
+        var payload = arena.Read(arenaOffset);
+        return payload is not null && payload.AsSpan().SequenceEqual(expectedUtf8);
     }
 
     #endregion

@@ -113,7 +113,7 @@ public partial class Table
                             string? newPkValue = PrimaryKeyIndex >= 0
                                 ? row[Columns[PrimaryKeyIndex]]?.ToString()
                                 : null;
-                            RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
+                            RepointIndexesAfterRelocation(oldPos, updatedPos, oldPkValue, newPkValue);
                         }
 
                         updatedCount++;
@@ -351,7 +351,7 @@ public partial class Table
                     string? newPkValue = PrimaryKeyIndex >= 0
                         ? row[Columns[PrimaryKeyIndex]]?.ToString()
                         : null;
-                    RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
                 }
 
                 updatedCount++;
@@ -493,7 +493,7 @@ public partial class Table
                         string? newPkValue = PrimaryKeyIndex >= 0
                             ? row[Columns[PrimaryKeyIndex]]?.ToString()
                             : null;
-                        RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
+                        RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
                     }
 
                     totalUpdated++;
@@ -745,7 +745,7 @@ public partial class Table
                     string? newPkValue = PrimaryKeyIndex >= 0
                         ? row[Columns[PrimaryKeyIndex]]?.ToString()
                         : null;
-                    RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
                 }
 
                 updatedCount++;
@@ -886,7 +886,7 @@ public partial class Table
                         string? newPkValue = PrimaryKeyIndex >= 0
                             ? row[Columns[PrimaryKeyIndex]]?.ToString()
                             : null;
-                        RepointIndexesAfterRelocation(updatedPos, oldPkValue, newPkValue);
+                        RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
                     }
 
                     totalUpdated++;

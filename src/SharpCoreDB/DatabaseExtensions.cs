@@ -712,6 +712,28 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         return converted;
     }
 
+    /// <inheritdoc />
+    public int MigrateTableToFixedWidth(string tableName)
+    {
+        if (_options.IsReadOnly)
+        {
+            throw new InvalidOperationException("Cannot migrate a table in a read-only database.");
+        }
+
+        if (!_tables.TryGetValue(tableName, out var table))
+        {
+            throw new InvalidOperationException($"Unknown table: {tableName}");
+        }
+
+        if (table is not SingleFileTable sft)
+        {
+            throw new NotSupportedException(
+                $"Table '{tableName}' does not support the fixed-width record layout.");
+        }
+
+        return sft.MigrateToFixedWidth();
+    }
+
     /// <summary>
     /// Rewrites every ULID value of a single-file table from the legacy encoding to the spec encoding.
     /// </summary>
@@ -835,6 +857,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             if (metadata != null)
             {
                 var table = new SingleFileTable(tableName, _storageProvider, metadata.Value);
+                // B6: forward the database config's fixed-width flag on reopen too — a legacy JSON
+                // table opened with FixedWidthRecordLayout is auto-migrated on first load. (The
+                // on-disk binary format is still authoritative for reading regardless of config.)
+                table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
                 _tables[tableName] = table;
             }
         }
@@ -1084,6 +1110,9 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         table.ColumnCheckExpressions = columnCheckExpressions;
         table.TableCheckConstraints = tableCheckConstraints;
         table.UniqueConstraints = uniqueConstraints;
+        // B6: forward the database config's fixed-width flag so new single-file tables store
+        // binary fixed-width records (with the overflow block) instead of JSON rows.
+        table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
         _tables[tableName] = table;
 
         // Register table schema with the directory manager so it persists on disk

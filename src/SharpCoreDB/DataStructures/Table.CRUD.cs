@@ -1291,6 +1291,11 @@ public partial class Table
         // RTrim, Locale) require collation-aware comparison that only EvaluateWhere provides.
         int earlyWhereColIdx = -1;
         string? earlyWhereValue = null;
+        // B4: fixed-width tables use a constant slot offset + arena payload compare (pre-encoded
+        // UTF-8, Binary collation) — no per-record variable-length walk needed.
+        int earlyWhereSlotOffset = -1;
+        byte[]? earlyWhereUtf8 = null;
+        OverflowArena? earlyWhereArena = null;
         if (!string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol, out var ewValObj) &&
             ewValObj is string ewStr)
@@ -1304,18 +1309,34 @@ public partial class Table
 
                 if (collation == CollationType.Binary)
                 {
-                    earlyWhereColIdx = idx;
-                    earlyWhereValue = ewStr;
+                    if (_fixedWidthRecords)
+                    {
+                        var fwLayout = GetFixedWidthLayout();
+                        if (idx < fwLayout.ColumnCount)
+                        {
+                            earlyWhereSlotOffset = fwLayout.Offsets[idx];
+                            earlyWhereValue = ewStr;
+                            earlyWhereUtf8 = System.Text.Encoding.UTF8.GetBytes(ewStr);
+                            earlyWhereArena = GetOverflowArena();
+                        }
+                    }
+                    else
+                    {
+                        earlyWhereColIdx = idx;
+                        earlyWhereValue = ewStr;
+                    }
                 }
             }
         }
 
         // v2 (WP9-C): numeric early-WHERE — direct fixed-offset binary reads (no boxing/string
         // allocation), enabled for fixed-width numeric columns at a constant per-record offset.
+        // B4: also enabled for fixed-width tables — the layout provides the constant slot offset
+        // (null flag + raw payload), identical to the variable-length encoding for the offset path.
         int earlyNumericOffset = -1;
         DataType earlyNumericType = DataType.String;
         object? earlyNumericExpected = null;
-        if (earlyWhereColIdx < 0 && !string.IsNullOrEmpty(where) &&
+        if (earlyWhereColIdx < 0 && earlyWhereSlotOffset < 0 && !string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var ewCol2, out var ewVal2) &&
             TryGetFixedNumericWhereInfo(ewCol2, out var ewOffset, out var ewType) &&
             TryParseNumericExpected(ewVal2, ewType, out var ewExpected))
@@ -1331,7 +1352,7 @@ public partial class Table
 
         while (filePosition < dataSpan.Length)
         {
-            // Read the 4-byte record length prefix
+            // Read length prefix (4 bytes)
             if (filePosition + 4 > dataSpan.Length)
                 break;
 
@@ -1368,6 +1389,15 @@ public partial class Table
             {
                 // v2 (WP9-C): fixed-width numeric predicate via direct offset reads.
                 if (!MatchesNumericDirect(recordData, earlyNumericOffset, earlyNumericType, earlyNumericExpected))
+                {
+                    filePosition += 4 + recordLength;
+                    continue;
+                }
+            }
+            else if (earlyWhereSlotOffset >= 0 && earlyWhereUtf8 is not null && earlyWhereArena is not null)
+            {
+                // B4: fixed-width string predicate — constant slot offset + arena payload compare.
+                if (!MatchesFixedWidthStringDirect(recordData, earlyWhereSlotOffset, earlyWhereArena, earlyWhereUtf8))
                 {
                     filePosition += 4 + recordLength;
                     continue;
@@ -1484,18 +1514,25 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            // Use SelectInternal to preserve _rowid in results when it's the PK,
-            // so PK-based storage position lookups work correctly during update.
-            var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+            // Load every registered hash index before the write loop: the append fallback leaves a
+            // stale record in the data file, and an unloaded index would later be rebuilt from the
+            // file INCLUDING that stale record (regression: stale row returned for the same PK).
+            EnsureAllRegisteredIndexesLoaded();
+
+            // Position-aware resolution: simple `pk = value` / hash-indexed WHEREs return the
+            // storage position too, so the write path can patch fields in place (fixed-width
+            // layout). Compound / range / unindexed WHEREs fall back to SelectInternal and resolve
+            // positions via the PK when present.
+            var rows = ResolveUpdateRows(where);
             int affected = 0;
 
-            foreach (var row in rows)
+            foreach (var (rowPos, row) in rows)
             {
                 affected++;
-                UpdateSingleRow(row, engine, updates);
+                UpdateSingleRow(row, engine, updates, rowPos);
             }
 
-            // Auto-compact if the threshold was reached (only the append path creates stale versions).
+            // ✅ NEW: Auto-compact if threshold reached
             if (StorageMode == StorageMode.Columnar)
             {
                 TryAutoCompact();
@@ -1509,24 +1546,22 @@ public partial class Table
         }
     }
 
-    private void UpdateSingleRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates)
+    private void UpdateSingleRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, long rowPos)
     {
         // WP13: capture only what index maintenance needs instead of copying the
         // whole row (CASCADE is not wired in this path).
-        string? oldPkValue = null;
-        if (this.PrimaryKeyIndex >= 0 && row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var oldPk))
-        {
-            oldPkValue = oldPk?.ToString();
-        }
+        string? oldPkValue = this.PrimaryKeyIndex >= 0
+            ? row[this.Columns[this.PrimaryKeyIndex]]?.ToString()
+            : null;
 
         // Snapshot old values of hash-indexed columns for key-only removal.
         Dictionary<string, object>? oldHashKeys = null;
-        foreach (var hashColumn in this.hashIndexes.Keys)
+        foreach (var kvp in this.hashIndexes)
         {
-            if (row.TryGetValue(hashColumn, out var oldVal))
+            if (row.TryGetValue(kvp.Key, out var oldVal))
             {
                 oldHashKeys ??= new Dictionary<string, object>();
-                oldHashKeys[hashColumn] = oldVal;
+                oldHashKeys[kvp.Key] = oldVal;
             }
         }
 
@@ -1540,27 +1575,27 @@ public partial class Table
 
         if (StorageMode == StorageMode.Columnar)
         {
-            UpdateColumnarRow(row, engine, oldPkValue, oldHashKeys);
+            UpdateColumnarRow(row, engine, updates, oldPkValue, oldHashKeys, rowPos);
         }
         else
         {
-            UpdatePageBasedRow(row, engine, oldPkValue, oldHashKeys, updates);
+            UpdatePageBasedRow(row, engine, updates, oldPkValue, oldHashKeys);
         }
     }
 
     private void ValidateUpdatedRow(Dictionary<string, object> row)
     {
-        // NOT NULL validation for UPDATE.
+        // ✅ NOT NULL validation for UPDATE
         for (int i = 0; i < this.Columns.Count; i++)
         {
-            // Bounds check for IsNotNull array.
+            // ✅ FIX: Bounds check for IsNotNull array
             if (i < this.IsNotNull.Count && this.IsNotNull[i] && (row[this.Columns[i]] == null || row[this.Columns[i]] == DBNull.Value))
             {
                 throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
             }
         }
 
-        // Column-level CHECK constraint validation for UPDATE.
+        // ✅ CHECK constraint validation for UPDATE
         for (int i = 0; i < this.Columns.Count; i++)
         {
             if (i < this.ColumnCheckExpressions.Count && this.ColumnCheckExpressions[i] is not null
@@ -1570,7 +1605,7 @@ public partial class Table
             }
         }
 
-        // Table-level CHECK constraints for UPDATE.
+        // Table-level CHECK constraints for UPDATE
         foreach (var checkExpr in this.TableCheckConstraints)
         {
             if (!TypeConverter.EvaluateCheckConstraint(checkExpr, row, this.ColumnTypes))
@@ -1580,32 +1615,39 @@ public partial class Table
         }
     }
 
-    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, string? oldPkValue, Dictionary<string, object>? oldHashKeys)
+    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos)
     {
-        // WP13: exact-size allocation - no ArrayPool.Rent + ToArray double allocation.
-        var rowData = SerializeRowExact(row);
-
-        // Get old position from primary key index.
-        long oldPosition = -1;
-        if (this.PrimaryKeyIndex >= 0)
+        // Fixed-width layout step: when the row's existing bytes can be located, patch
+        // only the updated fields at their actual offsets (avoiding a full serialize
+        // and re-serialize round trip and a full string re-encoding). A fixed-size field keeps
+        // the record length unchanged, so the write is an in-place overwrite (Issue #6)
+        // and the file does not grow. Falls back to full serialization when a field
+        // cannot be patched in place (e.g. a variable-length field that changes size).
+        byte[] rowData;
+        if (rowPos >= 0)
         {
-            var pkVal = oldPkValue ?? string.Empty;
-            var searchResult = this.Index.Search(pkVal);
-            if (searchResult.Found)
-            {
-                oldPosition = searchResult.Value;
-            }
+            var existingData = engine.Read(Name, rowPos);
+            rowData = existingData is { Length: > 0 }
+                && (_fixedWidthRecords
+                    ? TryOverwriteFixedWidthInPlace(existingData, updates)
+                    : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
+                        ? patched
+                        : SerializeRowExact(row);
+        }
+        else
+        {
+            rowData = SerializeRowExact(row);
         }
 
         // Issue #6: in-place UPDATE — overwrite the record in its existing slot when
         // the new record fits (fixed-width rows, or variable-width rows whose stored
         // length is unchanged). No new version is appended, the storage reference and
         // the PK index stay valid, and no stale version is left for compaction.
-        if (oldPosition >= 0 && engine.TryUpdateInPlace(Name, oldPosition, rowData))
+        if (rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData))
         {
             // Position unchanged: move hash entries in place (values may have changed).
-            MoveHashIndexesInPlace(row, oldHashKeys, oldPosition);
-            RepointPrimaryKeyIfChanged(row, oldPkValue, oldPosition);
+            MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
+            RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
         }
         else
         {
@@ -1620,20 +1662,20 @@ public partial class Table
 
             foreach (var kvp in this.hashIndexes)
             {
-                if (oldPosition >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                if (rowPos >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
                 {
-                    kvp.Value.Remove(oldKey, oldPosition); // Remove old ref
+                    kvp.Value.Remove(oldKey, rowPos); // Remove old ref
                 }
 
                 kvp.Value.Add(row, newPosition); // Add new ref
             }
 
-            // Track updates for compaction (only the append path creates stale versions).
+            // ✅ Track updates for compaction (only the append path creates stale versions).
             Interlocked.Increment(ref _updatedRowCount);
         }
     }
 
-    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, string? oldPkValue, Dictionary<string, object>? oldHashKeys, Dictionary<string, object> updates)
+    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys)
     {
         // Page-based: In-place update (or relocation when the record grows).
         // WP11: overwrite only the updated fields at their cached fixed column
@@ -1675,7 +1717,7 @@ public partial class Table
             // Record was relocated to another page (growing record on a
             // full page): re-point the PK index and rebuild hash indexes.
             var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-            RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
+            RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
         }
         else
         {
@@ -1722,6 +1764,100 @@ public partial class Table
         }
     }
     /// <summary>
+    /// Resolves the rows to update as (storage position, row) pairs. A simple <c>pk = value</c>
+    /// WHERE is resolved through the primary-key B-tree directly (single search + one read); a
+    /// simple <c>col = value</c> WHERE on an indexed binary-collation column resolves through the
+    /// hash index. Everything else falls back to <see cref="SelectInternal"/> (positions resolved
+    /// via the PK when present). The position lets the columnar write path patch fields in place
+    /// (fixed-width layout) instead of appending a new version.
+    /// </summary>
+    private List<(long Position, Dictionary<string, object> Row)> ResolveUpdateRows(string? where)
+    {
+        var engine = GetOrCreateStorageEngine();
+        var result = new List<(long, Dictionary<string, object>)>();
+
+        // Issue #7 fast path: simple `pk = value` — single search + one read.
+        if (StorageMode != StorageMode.PageBased &&
+            this.PrimaryKeyIndex >= 0 &&
+            !string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var pkCol, out var pkVal) &&
+            string.Equals(pkCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            var sr = this.Index.Search(pkVal?.ToString() ?? string.Empty);
+            if (sr.Found)
+            {
+                var data = engine.Read(Name, sr.Value);
+                if (data != null)
+                {
+                    var row = DeserializeRowFromSpan(data);
+                    if (row != null)
+                    {
+                        result.Add((sr.Value, row));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Hash index fast path for a simple equality on an indexed binary-collation column.
+        if (!string.IsNullOrEmpty(where) &&
+            TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
+            this.registeredIndexes.ContainsKey(whereCol))
+        {
+            var colIdx = this.Columns.IndexOf(whereCol);
+            var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count
+                ? this.ColumnCollations[colIdx]
+                : CollationType.Binary;
+
+            if (collation == CollationType.Binary)
+            {
+                EnsureIndexLoaded(whereCol);
+                if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex) && colIdx >= 0)
+                {
+                    var key = ParseValueForHashLookup(whereVal?.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+                    if (key != null)
+                    {
+                        foreach (var pos in hashIndex.LookupPositions(key))
+                        {
+                            var data = engine.Read(Name, pos);
+                            if (data != null)
+                            {
+                                var row = DeserializeRowFromSpan(data);
+                                if (row != null) result.Add((pos, row));
+                            }
+                        }
+
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // Fallback: full SELECT (compound/range WHERE or no usable index). Resolve positions via
+        // the PK when present so the write path can still attempt an in-place update.
+        var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+        foreach (var row in rows)
+        {
+            long position = -1;
+            if (this.PrimaryKeyIndex >= 0 &&
+                row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pkValue) &&
+                pkValue != null)
+            {
+                var sr = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                if (sr.Found)
+                {
+                    position = sr.Value;
+                }
+            }
+
+            result.Add((position, row));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Re-points indexes after the storage engine relocated a record to another page
     /// (a growing record on a full page). The PK index is re-pointed precisely; hash
     /// indexes are marked stale so they rebuild lazily on next use.
@@ -1730,7 +1866,7 @@ public partial class Table
     /// <param name="newPosition">The storage position after relocation.</param>
     /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
     /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
-    private void RepointIndexesAfterRelocation(long newPosition, string? oldPkValue, string? newPkValue)
+    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue)
     {
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -1770,14 +1906,32 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
-            int updatedInBatch = 0;
+            // Load every registered hash index before the write loop so the append fallback can
+            // remove the stale record from all indexes (unloaded indexes would later be rebuilt
+            // from the file INCLUDING the stale record).
+            EnsureAllRegisteredIndexesLoaded();
+            int appendedInBatch = 0; // only appends create stale versions that need compaction
 
             foreach (var (where, updates) in operations)
             {
-                // Resolve matching rows — prefer hash index point-lookup.
-                // Carry the storage position + raw bytes so the per-row fast path can
-                // overwrite updated fields in place instead of re-serializing the row.
-                List<(long pos, byte[]? data, Dictionary<string, object> row)>? rows = null;
+                // B7: when the operation only touches non-indexed, non-PK columns on a table
+                // without CHECK constraints, matching rows are patched directly on their raw bytes
+                // (only the changed fields at their actual slot offsets) — no full-row
+                // deserialization. This is the hot path for
+                // `UPDATE t SET score = ... WHERE indexed_col = ...`.
+                bool fastPatch = StorageMode == StorageMode.Columnar &&
+                    !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var fastWhereCol, out _) &&
+                    !updates.ContainsKey(fastWhereCol) &&
+                    (this.PrimaryKeyIndex < 0 || !updates.ContainsKey(this.Columns[this.PrimaryKeyIndex])) &&
+                    this.TableCheckConstraints.Count == 0 &&
+                    !HasColumnCheckConstraints();
+
+                // Resolve matching rows as (storage position, row, raw bytes) so the columnar
+                // write path can patch fields in place even when the table has no primary key.
+                // The position comes from the hash index / PK lookup already performed here; in
+                // fast-patch mode the raw record bytes are kept instead of a deserialized row.
+                List<(long Position, Dictionary<string, object>? Row, byte[]? Raw)>? rows = null;
 
                 // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
                 // on a columnar table with a PK resolves through the PK B-tree directly (single
@@ -1786,20 +1940,18 @@ public partial class Table
                 if (StorageMode != StorageMode.PageBased &&
                     this.PrimaryKeyIndex >= 0 &&
                     !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var fastWhereCol, out var fastWhereVal) &&
-                    string.Equals(fastWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                    TryParseSimpleWhereClause(where, out var pkWhereCol, out var pkWhereVal) &&
+                    string.Equals(pkWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
                 {
-                    var fastSearch = this.Index.Search(fastWhereVal?.ToString() ?? string.Empty);
+                    var fastSearch = this.Index.Search(pkWhereVal?.ToString() ?? string.Empty);
                     if (fastSearch.Found)
                     {
                         var fastData = engine.Read(Name, fastSearch.Value);
                         if (fastData != null)
                         {
-                            var fastRow = DeserializeRow(fastData);
-                            if (fastRow != null)
-                            {
-                                rows = [(fastSearch.Value, fastData, fastRow)];
-                            }
+                            rows = fastPatch
+                                ? [(fastSearch.Value, null, fastData)]
+                                : [(fastSearch.Value, DeserializeRow(fastData), null)];
                         }
                     }
                 }
@@ -1826,8 +1978,15 @@ public partial class Table
                                     var data = engine.Read(Name, pos);
                                     if (data != null)
                                     {
-                                        var row = DeserializeRow(data);
-                                        if (row != null) rows.Add((pos, data, row));
+                                        if (fastPatch)
+                                        {
+                                            rows.Add((pos, null, data));
+                                        }
+                                        else
+                                        {
+                                            var row = DeserializeRow(data);
+                                            if (row != null) rows.Add((pos, row, null));
+                                        }
                                     }
                                 }
                             }
@@ -1837,14 +1996,61 @@ public partial class Table
 
                 if (rows is null)
                 {
-                    var scanned = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
-                    rows = new List<(long, byte[]?, Dictionary<string, object>)>(scanned.Count);
-                    foreach (var r in scanned)
-                        rows.Add((-1, null, r));
+                    rows = [];
+                    foreach (var row in SelectInternal(where, orderBy: null, asc: true, noEncrypt: false))
+                    {
+                        long position = -1;
+                        if (this.PrimaryKeyIndex >= 0 &&
+                            row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var pkValue) &&
+                            pkValue != null)
+                        {
+                            var sr = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                            if (sr.Found)
+                            {
+                                position = sr.Value;
+                            }
+                        }
+
+                        rows.Add((position, row, null));
+                    }
                 }
 
-                foreach (var (storagePos, data, row) in rows)
+                foreach (var (rowPosition, resolvedRow, rawData) in rows)
                 {
+                    // B7: fast patch — overwrite only the changed fields at their slot offsets in
+                    // the existing record bytes (no full-row deserialization). The in-place write
+                    // keeps the storage position, and since no indexed / PK column is touched the
+                    // index entries stay valid.
+                    Dictionary<string, object>? row = resolvedRow;
+                    if (fastPatch && rowPosition >= 0 && rawData is { Length: > 0 })
+                    {
+                        // NOT NULL validation on the changed values only.
+                        for (int i = 0; i < this.Columns.Count; i++)
+                        {
+                            if (i < this.IsNotNull.Count && this.IsNotNull[i] &&
+                                updates.TryGetValue(this.Columns[i], out var newVal) &&
+                                (newVal == null || newVal == DBNull.Value))
+                            {
+                                throw new InvalidOperationException($"Column '{this.Columns[i]}' cannot be NULL");
+                            }
+                        }
+
+                        byte[]? patched = _fixedWidthRecords
+                            ? TryOverwriteFixedWidthInPlace(rawData, updates)
+                            : TryOverwriteFieldsInPlaceActual(rawData, updates);
+
+                        if (patched is not null && engine.TryUpdateInPlace(Name, rowPosition, patched))
+                        {
+                            continue;
+                        }
+
+                        // The patch did not fit (variable-length growth) → full-row fallback below.
+                        row = DeserializeRow(rawData);
+                        if (row is null) continue;
+                    }
+
+                    row ??= resolvedRow;
+                    if (row is null) continue;
                     // v2: capture the old PK and indexed-column values BEFORE applying updates,
                     // avoiding a full row dictionary copy per row (WP3 allocation reduction).
                     object? oldPkValue = null;
@@ -1896,23 +2102,40 @@ public partial class Table
                         }
                     }
 
-                    // Serialize (WP13: exact-size allocation, no pool + copy).
-                    // Fast path: overwrite the updated fields directly in the existing bytes
-                    // (no full deserialize→mutate→re-serialize round trip); fall back to full
-                    // serialization when a field cannot be patched in place.
-                    var rowData = data is not null && TryOverwriteFieldsInPlace(data, updates) is { } patched
-                        ? patched
-                        : SerializeRowExact(row);
+                        // Serialize (WP13: exact-size allocation, no pool + copy). The columnar
+                        // branch patches only the updated fields at their actual offsets instead.
+                        byte[] rowData;
 
                         if (StorageMode == StorageMode.Columnar)
                         {
-                            long oldPosition = storagePos;
+                            long oldPosition = rowPosition;
                             if (oldPosition < 0 && this.PrimaryKeyIndex >= 0)
                             {
                                 var pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
                                     oldPosition = searchResult.Value;
+                            }
+
+                            // Fixed-width layout step: patch only the updated fields at their actual
+                            // offsets in the existing record (no deserialize → mutate → re-serialize
+                            // round trip). A fixed-size field keeps the record length unchanged, so
+                            // the write is an in-place overwrite (Issue #6) and the file does not
+                            // grow. Falls back to full serialization when a field cannot be patched.
+                            if (oldPosition >= 0)
+                            {
+                                var existingData = engine.Read(Name, oldPosition);
+                                rowData = existingData is { Length: > 0 }
+                                    && (_fixedWidthRecords
+                                        ? TryOverwriteFixedWidthInPlace(existingData, updates)
+                                        : TryOverwriteFieldsInPlaceActual(existingData, updates)) is { } patched
+                                            ? patched
+                                            : SerializeRowExact(row);
+                            }
+                            else
+                            {
+                                // Serialize (WP13: exact-size allocation, no pool + copy)
+                                rowData = SerializeRowExact(row);
                             }
 
                             // Issue #6: in-place UPDATE — overwrite the record in its existing slot
@@ -1940,15 +2163,10 @@ public partial class Table
                                     var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                                     if (!string.Equals(newPkVal, oldPkValue?.ToString(), StringComparison.Ordinal))
                                     {
-                                        var oldPkStr = oldPkValue?.ToString();
-                                        if (!string.IsNullOrEmpty(oldPkStr))
-                                        {
-                                            this.Index.Delete(oldPkStr);
-                                        }
+                                        if (!string.IsNullOrEmpty(oldPkValue?.ToString()))
+                                            this.Index.Delete(oldPkValue!.ToString()!);
                                         if (!string.IsNullOrEmpty(newPkVal))
-                                        {
                                             this.Index.Insert(newPkVal, oldPosition);
-                                        }
                                     }
                                 }
                             }
@@ -1976,45 +2194,51 @@ public partial class Table
                                     if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
                                         hashIndex.Value.Add(newKey, newPosition);
                                 }
-                            }
 
-                            updatedInBatch++;
+                                appendedInBatch++; // append fallback: stale version left for compaction
+                            }
                         }
                         else // PageBased
                         {
-                            if (this.PrimaryKeyIndex >= 0)
+                            rowData = SerializeRowExact(row);
+
+                            long position = rowPosition;
+                            string? pkVal = this.PrimaryKeyIndex >= 0 ? oldPkValue?.ToString() : null;
+                            if (position < 0 && this.PrimaryKeyIndex >= 0)
                             {
-                                var pkVal = oldPkValue?.ToString() ?? string.Empty;
+                                pkVal = oldPkValue?.ToString() ?? string.Empty;
                                 var searchResult = this.Index.Search(pkVal);
                                 if (searchResult.Found)
+                                    position = searchResult.Value;
+                            }
+
+                            if (position >= 0)
+                            {
+                                long newPosition = engine.Update(Name, position, rowData);
+
+                                if (newPosition != position)
                                 {
-                                    long position = searchResult.Value;
-                                    long newPosition = engine.Update(Name, position, rowData);
-
-                                    if (newPosition != position)
+                                    // Record was relocated to another page: re-point the PK
+                                    // index and rebuild hash indexes lazily.
+                                    var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
+                                        ? newPk?.ToString() ?? string.Empty
+                                        : string.Empty;
+                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+                                }
+                                else
+                                {
+                                    // In-place update keeps the position; move hash entries in place.
+                                    foreach (var hashIndex in this.hashIndexes)
                                     {
-                                        // Record was relocated to another page: re-point the PK
-                                        // index and rebuild hash indexes lazily.
-                                        var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
-                                            ? newPk?.ToString() ?? string.Empty
-                                            : string.Empty;
-                                        RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
-                                    }
-                                    else
-                                    {
-                                        // In-place update keeps the position; move hash entries in place.
-                                        foreach (var hashIndex in this.hashIndexes)
+                                        if (oldHashValues is not null &&
+                                            oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
+                                            oldKey is not null)
                                         {
-                                            if (oldHashValues is not null &&
-                                                oldHashValues.TryGetValue(hashIndex.Key, out var oldKey) &&
-                                                oldKey is not null)
-                                            {
-                                                hashIndex.Value.Remove(oldKey, position);
-                                            }
-
-                                            if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
-                                                hashIndex.Value.Add(newKey, position);
+                                            hashIndex.Value.Remove(oldKey, position);
                                         }
+
+                                        if (row.TryGetValue(hashIndex.Key, out var newKey) && newKey is not null)
+                                            hashIndex.Value.Add(newKey, position);
                                     }
                                 }
                             }
@@ -2022,9 +2246,9 @@ public partial class Table
                 }
             }
 
-            if (StorageMode == StorageMode.Columnar && updatedInBatch > 0)
+            if (StorageMode == StorageMode.Columnar && appendedInBatch > 0)
             {
-                Interlocked.Add(ref _updatedRowCount, updatedInBatch);
+                Interlocked.Add(ref _updatedRowCount, appendedInBatch);
                 TryAutoCompact();
             }
         }
@@ -2032,6 +2256,47 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// True when any column carries a CHECK expression (the batch fast-patch path is disabled in
+    /// that case because a CHECK may read non-updated columns).
+    /// </summary>
+    private bool HasColumnCheckConstraints()
+    {
+        var expressions = this.ColumnCheckExpressions;
+        if (expressions is null || expressions.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var expr in expressions)
+        {
+            if (expr is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when the column has an index created explicitly via <c>CREATE INDEX</c> (the
+    /// index-name → column map is only populated for named indexes). Used to gate the direct
+    /// hash-index point lookup on trusted, fully-maintained indexes.
+    /// </summary>
+    private bool HasExplicitNamedIndex(string column)
+    {
+        foreach (var (_, indexedColumn) in this.indexNameToColumn)
+        {
+            if (string.Equals(indexedColumn, column, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -2055,7 +2320,17 @@ public partial class Table
         }
 
         // Primary-key B-tree cleanup.
-        DeletePrimaryKeyEntries(recordsToDelete);
+        if (this.PrimaryKeyIndex >= 0)
+        {
+            var pkCol = this.Columns[this.PrimaryKeyIndex];
+            foreach (var (_, row) in recordsToDelete)
+            {
+                if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                {
+                    this.Index.Delete(pkValue.ToString() ?? string.Empty);
+                }
+            }
+        }
 
         // Key-only hash-index cleanup: extract each indexed column's key once per row and
         // remove all positions in a single lock per index.
@@ -2065,35 +2340,6 @@ public partial class Table
             positions[i] = recordsToDelete[i].storagePosition;
         }
 
-        RemoveHashIndexKeys(recordsToDelete, positions);
-
-        // Unloaded indexes rebuild lazily (columnar only - page-based indexes stay in sync).
-        if (StorageMode == StorageMode.Columnar)
-        {
-            MarkUnloadedIndexesStale();
-            TryAutoCompact();
-        }
-
-        Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
-    }
-
-    private void DeletePrimaryKeyEntries(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete)
-    {
-        if (this.PrimaryKeyIndex < 0)
-            return;
-
-        var pkCol = this.Columns[this.PrimaryKeyIndex];
-        foreach (var (_, row) in recordsToDelete)
-        {
-            if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-            {
-                this.Index.Delete(pkValue.ToString() ?? string.Empty);
-            }
-        }
-    }
-
-    private void RemoveHashIndexKeys(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete, long[] positions)
-    {
         foreach (var kvp in this.hashIndexes)
         {
             if (!this.loadedIndexes.Contains(kvp.Key))
@@ -2107,18 +2353,23 @@ public partial class Table
 
             kvp.Value.RemoveBatchKeys(keys, positions);
         }
-    }
 
-    private void MarkUnloadedIndexesStale()
-    {
-        foreach (var col in this.registeredIndexes.Keys)
+        // Unloaded indexes rebuild lazily (columnar only - page-based indexes stay in sync).
+        if (StorageMode == StorageMode.Columnar)
         {
-            if (!this.loadedIndexes.Contains(col))
+            foreach (var col in this.registeredIndexes.Keys)
             {
-                this.staleIndexes.Add(col);
-                _indexReadyCache.TryRemove(col, out _);
+                if (!this.loadedIndexes.Contains(col))
+                {
+                    this.staleIndexes.Add(col);
+                    _indexReadyCache.TryRemove(col, out _);
+                }
             }
+
+            TryAutoCompact();
         }
+
+        Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
     }
 
     /// <summary>
@@ -2201,6 +2452,10 @@ public partial class Table
     private List<(long storagePosition, Dictionary<string, object> row)> CollectDeleteRecords(string? where)
     {
         var engine = GetOrCreateStorageEngine();
+        // Load every registered hash index before the delete so DeleteRecordsCore can remove the
+        // deleted positions from all of them (an unloaded index would later be rebuilt from the
+        // file INCLUDING the logically-deleted record, resurrecting it in hash lookups).
+        EnsureAllRegisteredIndexesLoaded();
 
         // ✅ OPTIMIZATION: Snapshot-based deletion (Option 1)
         // Capture ALL storage references BEFORE any deletions
@@ -2347,6 +2602,9 @@ public partial class Table
         try
         {
             var engine = GetOrCreateStorageEngine();
+            // Load every registered hash index before the delete loop (same reason as
+            // CollectDeleteRecords: stale file records must be removed from every index).
+            EnsureAllRegisteredIndexesLoaded();
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var where in whereConditions)
@@ -2521,6 +2779,92 @@ public partial class Table
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// B8: direct hash-index point lookup for the simple-SELECT fast path
+    /// (<c>SELECT … FROM t WHERE indexed_col = @param|literal</c>). Bypasses the WHERE-string
+    /// round trip (build a string → parse it again → re-detect the index route). Mirrors
+    /// <c>SelectInternal</c>'s indexed path: read lock + <c>EnsureIndexLoaded</c> + binary
+    /// collation only. Returns false when the caller must fall back to the full scan / WHERE
+    /// machinery (no usable index on the column, or a non-binary collation).
+    /// </summary>
+    internal bool TrySelectIndexedPointLookup(string column, object value, out List<Dictionary<string, object>> results)
+    {
+        results = [];
+
+        // The PK B-tree is authoritative for primary-key lookups (the PK hash index may be
+        // stale or not built yet); route PK columns through the legacy path.
+        if (this.PrimaryKeyIndex >= 0 &&
+            string.Equals(column, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Only hash indexes created explicitly via CREATE INDEX are trusted for a direct
+        // point lookup. Auto-registered indexes (primary key / fixed-width layout) can be
+        // stale or incomplete; those columns fall back to SelectInternal, which probes the
+        // B-tree and full scan.
+        if (!HasExplicitNamedIndex(column))
+        {
+            return false;
+        }
+
+        // Upgradeable read lock, matching SelectWithLock: the first index load inside
+        // EnsureIndexLoaded upgrades to a write lock (a plain read lock would deadlock).
+        this.rwLock.EnterUpgradeableReadLock();
+        try
+        {
+            if (!this.registeredIndexes.ContainsKey(column))
+            {
+                return false;
+            }
+
+            EnsureIndexLoaded(column);
+            if (!this.hashIndexes.TryGetValue(column, out var hashIndex))
+            {
+                return false;
+            }
+
+            var colIdx = this.Columns.IndexOf(column);
+            if (colIdx < 0)
+            {
+                return false;
+            }
+
+            // The hash index is only used for binary collation (mirrors SelectInternal).
+            var collation = colIdx < this.ColumnCollations.Count ? this.ColumnCollations[colIdx] : CollationType.Binary;
+            if (collation != CollationType.Binary)
+            {
+                return false;
+            }
+
+            var key = ParseValueForHashLookup(value?.ToString() ?? string.Empty, this.ColumnTypes[colIdx]);
+            if (key is null)
+            {
+                return true; // no matches — the lookup was handled
+            }
+
+            var engine = GetOrCreateStorageEngine();
+            foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
+            {
+                var data = engine.Read(Name, pos);
+                if (data != null)
+                {
+                    var row = DeserializeRow(data);
+                    if (row != null)
+                    {
+                        results.Add(row);
+                    }
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            this.rwLock.ExitUpgradeableReadLock();
+        }
     }
 
     internal bool TryGetConflictingUniquePrimaryKey(
@@ -2777,7 +3121,7 @@ public partial class Table
                     // Record was relocated to another page: re-point the PK index and
                     // rebuild hash indexes lazily.
                     var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    RepointIndexesAfterRelocation(newPosition, pkStr, newPkVal);
+                    RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
                 }
                 else
                 {

@@ -214,6 +214,8 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     {
         string? metaJson;
         bool metaExists;
+        // B5: set when auto-migration converts a legacy (1.x) table to the fixed-width layout.
+        bool migratedAnyTable = false;
         
         if (_storageProvider is not null)
         {
@@ -402,6 +404,24 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                     table.InitializeStorageEngine();
                 }
 
+                // B5 (1.x → 2.0 record-format migration): the persisted fixed-width flag is now
+                // authoritative — a legacy (1.x) table simply lacks it (variable-length records).
+                // Opening a legacy table as fixed-width would misread its records, so when the
+                // config opts into FixedWidthRecordLayout we AUTO-MIGRATE the legacy table instead.
+                // Both Columnar and PageBased tables are migrated (PageBased tables are converted
+                // to Columnar storage in-process first); read-only opens never rewrite data.
+                if (!table.IsFixedWidthRecords && config is { FixedWidthRecordLayout: true })
+                {
+                    var storageMode = table.StorageMode;
+                    if (!isReadOnly &&
+                        (storageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar ||
+                         storageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased))
+                    {
+                        table.MigrateToFixedWidth();
+                        migratedAnyTable = true;
+                    }
+                }
+
                 
                 // ✅ CRITICAL FIX: Complete initialization of new DDL properties
                 // Ensure lists have correct length
@@ -487,6 +507,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 #if DEBUG
         System.Diagnostics.Debug.WriteLine($"[Load] Total tables loaded: {tables.Count}");
 #endif
+
+        // B5: persist the new record-format flags (and rebuilt indexes) when auto-migration
+        // converted any legacy table during this load.
+        if (migratedAnyTable)
+        {
+            SaveMetadata();
+        }
     }
 
     /// <summary>
@@ -514,6 +541,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             ForeignKeys = t.ForeignKeys,  // Added for Phase 1.2
             ColumnCollations = t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
             AutoIncrementCounters = t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
+            IsFixedWidthRecords = t.IsFixedWidthRecords,  // B5: persist the record format (1.x → 2.0)
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
@@ -819,6 +847,12 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         queryCache?.Clear();
         ClearPlanCache();
 
+        // ✅ B6: flush + release each table's storage engine (see the sync Dispose path).
+        foreach (var table in tables.Values.OfType<Table>())
+        {
+            try { table.Dispose(); } catch { /* best-effort */ }
+        }
+
         _disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -861,6 +895,14 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             pageCache?.Clear(false, null);
             queryCache?.Clear();
             ClearPlanCache();  // ✅ Clear query plan cache on disposal
+
+            // ✅ B6: flush + release each table's storage engine so pending page-based writes are
+            // persisted. A single INSERT/UPDATE never flushes the page cache, so without this a
+            // reopened PageBased table returned zero rows (data loss on dispose).
+            foreach (var table in tables.Values.OfType<Table>())
+            {
+                try { table.Dispose(); } catch { /* best-effort */ }
+            }
         }
 
         _disposed = true;
@@ -871,8 +913,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// results (struct enumerable — foreach on the returned value is allocation-free). Avoids
     /// per-row Dictionary allocations and value boxing (~200 B → ~20 B per row). Supports the
     /// simple "SELECT [*|col] FROM t [WHERE col = @param|'literal'] [LIMIT n]" shape; more complex
-    /// queries throw <see cref="NotSupportedException"/>. Parameterized queries reuse the plan
-    /// cache and the zero-reparse point-lookup fast path.
+    /// queries throw <see cref="NotSupportedException"/>.
     /// </summary>
     public DataStructures.StructRowQueryEnumerable ExecuteQueryStruct(string sql, Dictionary<string, object?>? parameters = null)
     {

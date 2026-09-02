@@ -84,7 +84,7 @@ public partial class Storage : IStorage
             }
             
             // ✅ CRITICAL FIX: Flush buffered appends BEFORE closing transaction!
-            FlushBufferedAppends();
+            FlushBufferedAppendsAndOverwrites();
             
             // Flush all buffered writes to disk
             this.transactionBuffer.Flush();
@@ -108,7 +108,7 @@ public partial class Storage : IStorage
                 throw new InvalidOperationException("No active transaction to commit");
             }
             
-            FlushBufferedAppends();
+            FlushBufferedAppendsAndOverwrites();
             this.transactionBuffer.Flush();
         }
     }
@@ -129,10 +129,9 @@ public partial class Storage : IStorage
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            lock (this.transactionLock)
-            {
-                return this.transactionBuffer.IsInTransaction;
-            }
+            // B7: lock-free bool read (atomic in .NET). The transaction lock guards writes; a
+            // stale-by-one-frame read is harmless on this hot path (per-row update check).
+            return this.transactionBuffer.IsInTransaction;
         }
     }
 

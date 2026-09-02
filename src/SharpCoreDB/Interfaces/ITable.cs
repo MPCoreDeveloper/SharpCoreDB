@@ -51,6 +51,14 @@ public interface ITable
     bool HasInternalRowId { get; }
 
     /// <summary>
+    /// B5: gets whether this table uses the fixed-width record layout (out-of-line overflow arena).
+    /// Legacy (1.x) tables store variable-length records and report <c>false</c> until migrated
+    /// with <see cref="IDatabase.MigrateTableToFixedWidth"/> (or auto-migrated on reopen when the
+    /// database config opts into <c>FixedWidthRecordLayout</c>).
+    /// </summary>
+    bool IsFixedWidthRecords => false;
+
+    /// <summary>
     /// Gets whether columns are auto-generated.
     /// </summary>
     List<bool> IsAuto { get; }

@@ -50,8 +50,22 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private readonly DatabaseConfig? _config;
     private readonly Lock _tableLock = new();
     private readonly string _dataBlockName = $"table:{tableName}:data";
+    private readonly string _overflowBlockName = $"table:{tableName}:overflow";
     private List<Dictionary<string, object>> _rowCache = [];
     private bool _cacheLoaded;
+
+    // Fixed-width record layout (out-of-line overflow): binary records in the data block with
+    // variable-length values in the overflow block. The on-disk format is detected on load; the
+    // config flag only selects the format for NEW tables and triggers JSON → binary migration.
+    private bool _fixedWidthRecords;
+    private FixedWidthRecordLayout? _fixedWidthLayout;
+    private SingleFileOverflowArena? _overflowArena;
+
+    // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /
+    // SELECT … WHERE pk = value / UpdateByPrimaryKey / DeleteByPrimaryKey). Keyed by the ordinal
+    // string form of the PK column value (the same comparison FindByPrimaryKey already used).
+    // Maintained incrementally on every row mutation and rebuilt on cache load / rollback.
+    private readonly Dictionary<string, List<Dictionary<string, object>>> _pkIndex = new(StringComparer.Ordinal);
 
     // Comparison operators in precedence order for simple-condition fast-path parsing
     // (must match EvaluateSingleCondition's ordering: >= before >, etc.).
@@ -90,6 +104,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         : this(tableName, storageProvider)
     {
         _config = config;
+        _fixedWidthRecords = config?.FixedWidthRecordLayout ?? false;
     }
 
     /// <summary>
@@ -214,6 +229,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         {
             ApplyDefaults(row);
             _rowCache.Add(row);
+            IndexRow(row);
             _isDirty = true;
         }
 
@@ -240,6 +256,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 var row = rows[i];
                 ApplyDefaults(row);
                 _rowCache.Add(row);
+                IndexRow(row);
                 positions[i] = _rowCache.Count - 1;
             }
 
@@ -278,6 +295,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         lock (_tableLock)
         {
+            // Issue A1 fast path: an exact `pk = value` equality resolves through the primary-key
+            // hash index (O(1)) instead of a full cache scan. Candidates are still verified with
+            // the full predicate so semantics are identical to the scan path.
+            if (TryGetPkLookupResults(where, orderBy, asc, out var pkResults))
+            {
+                return pkResults;
+            }
+
             // PERF: evaluate WHERE/ORDER BY against the cached rows (read-only) and
             // materialize (defensive-copy) only the surviving rows. Previously every
             // row was copied up-front, so a point lookup on a large cache copied the
@@ -291,6 +316,31 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
             return source.Select(row => new Dictionary<string, object>(row)).ToList();
         }
+    }
+
+    private bool TryGetPkLookupResults(string? where, string? orderBy, bool asc, out List<Dictionary<string, object>> results)
+    {
+        results = [];
+        var condition = NormalizeWhereCondition(where);
+
+        if (!IsPkIndexLookupSafe() || !TryParsePkEquality(condition, out var pkValue) || pkValue is null)
+        {
+            return false;
+        }
+
+        results = _pkIndex.TryGetValue(pkValue, out var candidates)
+            ? candidates.Where(row => EvaluateCondition(row, condition))
+                        .Select(row => new Dictionary<string, object>(row)).ToList()
+            : [];
+
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            results = asc
+                ? [.. results.OrderBy(row => GetOrderKey(row, orderBy))]
+                : [.. results.OrderByDescending(row => GetOrderKey(row, orderBy))];
+        }
+
+        return true;
     }
 
     private static string? NormalizeWhereCondition(string? where)
@@ -352,6 +402,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             condition = condition[6..].Trim();
         }
 
+        bool updatesTouchPk = PrimaryKeyIndex >= 0 &&
+            updates.Keys.Any(k => string.Equals(k, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase));
+
         int affected = 0;
         lock (_tableLock)
         {
@@ -359,9 +412,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 if (string.IsNullOrWhiteSpace(condition) || EvaluateCondition(row, condition))
                 {
+                    string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
+
                     foreach (var update in updates)
                     {
                         row[update.Key] = update.Value;
+                    }
+
+                    if (oldPkKey is not null)
+                    {
+                        var newPkKey = GetPkKey(row);
+                        if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                        {
+                            UnindexRow(row, oldPkKey);
+                            IndexRow(row);
+                        }
                     }
 
                     _isDirty = true;
@@ -391,6 +456,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (PrimaryKeyIndex < 0) return;
 
         var pkColumn = Columns[PrimaryKeyIndex];
+        bool updatesTouchPk = updates.Keys.Any(k => string.Equals(k?.ToString(), pkColumn, StringComparison.OrdinalIgnoreCase));
 
         lock (_tableLock)
         {
@@ -406,9 +472,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                     continue;
                 }
 
+                string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
+
                 foreach (var update in rowUpdates)
                 {
                     row[update.Key] = update.Value;
+                }
+
+                if (oldPkKey is not null)
+                {
+                    var newPkKey = GetPkKey(row);
+                    if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                    {
+                        UnindexRow(row, oldPkKey);
+                        IndexRow(row);
+                    }
                 }
 
                 _isDirty = true;
@@ -439,10 +517,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             if (string.IsNullOrWhiteSpace(condition))
             {
                 _rowCache.Clear();
+                _pkIndex.Clear();
             }
             else
             {
-                _rowCache.RemoveAll(row => EvaluateCondition(row, condition));
+                // Remove matching rows while keeping the primary-key index in sync
+                // (reverse iteration avoids index-shift issues).
+                for (int i = _rowCache.Count - 1; i >= 0; i--)
+                {
+                    var row = _rowCache[i];
+                    if (EvaluateCondition(row, condition))
+                    {
+                        UnindexRow(row);
+                        _rowCache.RemoveAt(i);
+                    }
+                }
             }
 
             _isDirty = true;
@@ -483,6 +572,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 foreach (var row in toDelete)
                 {
+                    UnindexRow(row);
                     _rowCache.Remove(row);
                 }
 
@@ -513,19 +603,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return null;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
 
         lock (_tableLock)
         {
-            foreach (var row in _rowCache)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                if (row.TryGetValue(pkColumn, out var pkValue) &&
-                    pkValue is not null &&
-                    string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    return new Dictionary<string, object>(row);
-                }
+                return new Dictionary<string, object>(rows[0]);
             }
         }
 
@@ -550,28 +635,34 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
         bool found = false;
 
         lock (_tableLock)
         {
-            foreach (var row in _rowCache)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
-                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                var row = rows[0];
+                string? oldPkKey = GetPkKey(row);
 
                 foreach (var update in updates)
                 {
                     row[update.Key] = update.Value;
                 }
 
+                if (oldPkKey is not null)
+                {
+                    var newPkKey = GetPkKey(row);
+                    if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                    {
+                        UnindexRow(row, oldPkKey);
+                        IndexRow(row);
+                    }
+                }
+
                 _isDirty = true;
                 found = true;
-                break;
             }
         }
 
@@ -596,25 +687,19 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var pkColumn = Columns[PrimaryKeyIndex];
         var keyStr = key?.ToString();
         bool found = false;
 
         lock (_tableLock)
         {
-            for (int i = 0; i < _rowCache.Count; i++)
+            // Issue A1: O(1) primary-key hash index (was an O(N) cache scan).
+            if (keyStr is not null && _pkIndex.TryGetValue(keyStr, out var rows) && rows.Count > 0)
             {
-                var row = _rowCache[i];
-                if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null ||
-                    !string.Equals(pkValue.ToString(), keyStr, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                _rowCache.RemoveAt(i);
+                var row = rows[0];
+                UnindexRow(row, keyStr);
+                _rowCache.Remove(row);
                 _isDirty = true;
                 found = true;
-                break;
             }
         }
 
@@ -638,17 +723,76 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
 
         List<Dictionary<string, object?>> serializableRows;
+        List<Dictionary<string, object>> rowsToWrite;
         lock (_tableLock)
         {
+            rowsToWrite = _rowCache.ToList();
             serializableRows = _rowCache.Select(ToSerializableRow).ToList();
             _isDirty = false;
         }
 
-        // Serialize to byte array to get exact length
-        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+        if (!_fixedWidthRecords)
+        {
+            // Legacy JSON row format (write using WriteBlockAsync to properly track data length).
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+            _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
+            return;
+        }
 
-        // Write using WriteBlockAsync to properly track data length
-        _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
+        // B6: binary fixed-width records + out-of-line overflow arena.
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var arena = _overflowArena ??= new SingleFileOverflowArena();
+
+        var records = new List<byte[]>(rowsToWrite.Count);
+        foreach (var row in rowsToWrite)
+        {
+            records.Add(FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, layout, arena));
+        }
+
+        // Sweep: values that changed (or rows that were deleted) leave their old blocks
+        // unreferenced — free them so the free-list can reuse them in place on the next flush.
+        var liveOffsets = new HashSet<long>();
+        foreach (var record in records)
+        {
+            FixedWidthCodec.CollectVariableOffsets(record, layout, liveOffsets);
+        }
+
+        arena.FreeUnreferenced(liveOffsets);
+
+        // Copy-on-compact the arena when its dead space grows (freed blocks that were not reused
+        // in place). The records' variable slots are re-pointed through the compaction mapping.
+        if (arena.TotalCount >= 32 && arena.LiveCount * 4 < arena.TotalCount)
+        {
+            var mapping = arena.Compact(liveOffsets);
+            if (mapping.Count > 0)
+            {
+                var repointed = new List<byte[]>(records.Count);
+                foreach (var record in records)
+                {
+                    repointed.Add(FixedWidthCodec.RepointVariableSlots(record, layout, mapping) ?? record);
+                }
+
+                records = repointed;
+            }
+        }
+
+        int total = 0;
+        foreach (var record in records)
+        {
+            total += 4 + record.Length;
+        }
+
+        var buffer = new byte[total];
+        int position = 0;
+        foreach (var record in records)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(position, 4), record.Length);
+            record.CopyTo(buffer, position + 4);
+            position += 4 + record.Length;
+        }
+
+        _storageProvider.WriteBlockAsync(_dataBlockName, buffer).GetAwaiter().GetResult();
+        _storageProvider.WriteBlockAsync(_overflowBlockName, arena.Serialize()).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -727,6 +871,43 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     /// <inheritdoc />
     public void SetDatabase(Database database) { }
 
+    /// <summary>
+    /// B6: gets whether this table uses the fixed-width record layout. The on-disk format is
+    /// detected when the cache is first loaded, so this is accurate even without the config flag.
+    /// </summary>
+    public bool IsFixedWidthRecords
+    {
+        get
+        {
+            EnsureCacheLoaded();
+            return _fixedWidthRecords;
+        }
+    }
+
+    /// <summary>Sets the fixed-width record layout flag (used by DDL to forward the database config).</summary>
+    internal void SetFixedWidthRecords(bool value) => _fixedWidthRecords = value;
+
+    /// <summary>
+    /// B6: converts this table from the legacy JSON row format to the binary fixed-width record
+    /// layout (out-of-line overflow arena). Returns the number of rows written.
+    /// </summary>
+    public int MigrateToFixedWidth()
+    {
+        lock (_tableLock)
+        {
+            EnsureCacheLoaded();
+            if (_fixedWidthRecords)
+            {
+                return 0;
+            }
+
+            _fixedWidthRecords = true;
+            _isDirty = true;
+            FlushCache();
+            return _rowCache.Count;
+        }
+    }
+
     private readonly Dictionary<string, long> _columnUsage = new(StringComparer.OrdinalIgnoreCase);
 
     private void EnsureCacheLoaded()
@@ -747,33 +928,107 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             // are both transparently handled. GetReadStream returns the raw on-disk bytes
             // when encryption is off, which would hand compressed data (Brotli/GZip marker
             // bytes) to the JSON parser on reopen — breaking SELECT after reopen.
-            var jsonBytes = _storageProvider.ReadBlockAsync(_dataBlockName, CancellationToken.None).GetAwaiter().GetResult();
-            if (jsonBytes is null || jsonBytes.Length == 0)
+            var dataBytes = _storageProvider.ReadBlockAsync(_dataBlockName, CancellationToken.None).GetAwaiter().GetResult();
+            if (dataBytes is null || dataBytes.Length == 0)
             {
                 _rowCache = [];
                 _cacheLoaded = true;
+                RebuildPkIndex();
                 return;
             }
 
-            // Trim trailing null bytes
-            var endIndex = jsonBytes.Length;
-            while (endIndex > 0 && jsonBytes[endIndex - 1] == 0)
+            // Detect the on-disk format on the RAW bytes: the legacy JSON row array vs binary
+            // fixed-width records. Trailing-null trimming is ONLY valid for the JSON format — a
+            // binary record can legitimately end with 0x00 bytes (a variable slot whose arena
+            // offset's most significant bytes are zero), so binary blocks are parsed untrimmed.
+            if (IsFixedWidthDataBlock(dataBytes))
             {
-                endIndex--;
+                // Binary fixed-width records: the on-disk format is authoritative (even when the
+                // config flag is off, reading must use the binary codec).
+                _fixedWidthRecords = true;
+                var overflowBytes = _storageProvider.ReadBlockAsync(_overflowBlockName, CancellationToken.None).GetAwaiter().GetResult();
+                _overflowArena = SingleFileOverflowArena.Deserialize(overflowBytes);
+                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+                var binaryRows = new List<Dictionary<string, object>>();
+
+                long position = 0;
+                while (position + 4 <= dataBytes.Length)
+                {
+                    int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(dataBytes.AsSpan((int)position, 4));
+                    if (length <= 0 || position + 4 + length > dataBytes.Length)
+                    {
+                        break; // truncated / corrupt
+                    }
+
+                    binaryRows.Add(FixedWidthCodec.DeserializeRow(
+                        dataBytes.AsSpan((int)position + 4, length), Columns, ColumnTypes, layout, _overflowArena));
+                    position += 4 + length;
+                }
+
+                _rowCache = binaryRows;
             }
-            
-            if (endIndex == 0)
+            else
             {
-                _rowCache = [];
-                _cacheLoaded = true;
-                return;
+                // Legacy JSON row format (trim historical trailing null padding first).
+                var endIndex = dataBytes.Length;
+                while (endIndex > 0 && dataBytes[endIndex - 1] == 0)
+                {
+                    endIndex--;
+                }
+
+                if (endIndex == 0)
+                {
+                    _rowCache = [];
+                    _cacheLoaded = true;
+                    RebuildPkIndex();
+                    return;
+                }
+
+                var trimmedJsonBytes = dataBytes.AsSpan(0, endIndex);
+                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
+                _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
+
+                // Config opts into fixed-width: convert the in-memory rows to binary on next flush.
+                if (_fixedWidthRecords)
+                {
+                    _isDirty = true;
+                }
             }
-            
-            var trimmedJsonBytes = jsonBytes.AsSpan(0, endIndex);
-            var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
-            _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
+
             _cacheLoaded = true;
+            RebuildPkIndex();
         }
+    }
+
+    /// <summary>
+    /// Detects whether the data block holds binary fixed-width records (every record has exactly
+    /// the fixed-width slot size) rather than the legacy JSON row array. The on-disk format is
+    /// authoritative on reopen regardless of the config flag.
+    /// </summary>
+    private bool IsFixedWidthDataBlock(ReadOnlySpan<byte> data)
+    {
+        if (ColumnTypes is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        long position = 0;
+        bool any = false;
+
+        while (position + 4 <= data.Length)
+        {
+            int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data.Slice((int)position, 4));
+            if (length != layout.FixedSize || position + 4 + length > data.Length)
+            {
+                return false;
+            }
+
+            any = true;
+            position += 4 + length;
+        }
+
+        return any;
     }
 
     private void LoadSchemaFromProvider(string tableName)
@@ -885,12 +1140,144 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             if (_transactionSnapshot is not null)
             {
                 _rowCache = _transactionSnapshot.Select(row => new Dictionary<string, object>(row)).ToList();
+                RebuildPkIndex();
             }
 
             _transactionSnapshot = null;
             _isInTransaction = false;
             _isDirty = false; // Clear dirty flag since we discarded changes
         }
+    }
+
+    /// <summary>Returns the ordinal string key for a row's primary key value, or null when the
+    /// table has no PK / the value is null.</summary>
+    private string? GetPkKey(Dictionary<string, object> row)
+    {
+        if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= Columns.Count)
+            return null;
+
+        if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue is not null)
+        {
+            return pkValue.ToString();
+        }
+
+        return null;
+    }
+
+    /// <summary>Adds a row to the primary-key index (no-op without a PK or null PK).</summary>
+    private void IndexRow(Dictionary<string, object> row)
+    {
+        var key = GetPkKey(row);
+        if (key is null)
+            return;
+
+        if (!_pkIndex.TryGetValue(key, out var list))
+        {
+            list = new List<Dictionary<string, object>>(1);
+            _pkIndex[key] = list;
+        }
+
+        list.Add(row);
+    }
+
+    /// <summary>Removes a row from the primary-key index. <paramref name="key"/> is the key to
+    /// remove under (defaults to the row's current PK key) — pass the OLD key when the row's PK
+    /// value has already been changed.</summary>
+    private void UnindexRow(Dictionary<string, object> row, string? key = null)
+    {
+        key ??= GetPkKey(row);
+        if (key is null)
+            return;
+
+        if (_pkIndex.TryGetValue(key, out var list))
+        {
+            list.Remove(row);
+            if (list.Count == 0)
+            {
+                _pkIndex.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>Rebuilds the primary-key index from the current row cache (cache load / rollback).</summary>
+    private void RebuildPkIndex()
+    {
+        _pkIndex.Clear();
+        foreach (var row in _rowCache)
+        {
+            IndexRow(row);
+        }
+    }
+
+    /// <summary>
+    /// Tries to parse an exact <c>pk = value</c> equality. Returns false for compound / range /
+    /// special-syntax conditions (the caller falls back to the full scan).
+    /// </summary>
+    private bool TryParsePkEquality(string condition, out string? value)
+    {
+        value = null;
+        if (PrimaryKeyIndex < 0 || string.IsNullOrWhiteSpace(condition))
+            return false;
+
+        var trimmed = condition.Trim();
+        if (trimmed.Contains(" AND ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" OR ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IN ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("LIKE", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        int eq = trimmed.IndexOf('=');
+        if (eq <= 0 || trimmed.IndexOf('=', eq + 1) >= 0)
+            return false;
+
+        var col = trimmed[..eq].Trim().Trim('"', '[', ']', '`');
+        if (!string.Equals(col, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var val = trimmed[(eq + 1)..].Trim();
+        if (val.Length == 0)
+            return false;
+
+        if ((val.StartsWith('\'') && val.EndsWith('\'')) ||
+            (val.StartsWith('"') && val.EndsWith('"')))
+        {
+            val = val[1..^1];
+        }
+
+        // Normalize numeric literals to the row's canonical ToString() form so `pk = 05`
+        // resolves the same index key ("5") as `pk = 5` — matching the numeric comparison the
+        // typed WHERE predicate performs.
+        switch (ColumnTypes[PrimaryKeyIndex])
+        {
+            case DataType.Integer when int.TryParse(val, out var intVal):
+                val = intVal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+            case DataType.Long when long.TryParse(val, out var longVal):
+                val = longVal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+        }
+
+        value = val;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the PK column's string form is a stable, canonical representation that can be
+    /// compared against SQL literals for index lookups. String, Integer, Long, Boolean, Guid and
+    /// Ulid are canonical; DateTime / Real / Decimal / Blob are not (culture / format), so those
+    /// fall back to the full scan.
+    /// </summary>
+    private bool IsPkIndexLookupSafe()
+    {
+        if (PrimaryKeyIndex < 0 || PrimaryKeyIndex >= ColumnTypes.Count)
+            return false;
+
+        return ColumnTypes[PrimaryKeyIndex] is DataType.String or DataType.Integer or DataType.Long
+            or DataType.Boolean or DataType.Guid or DataType.Ulid;
     }
 
     private void ApplyDefaults(Dictionary<string, object> row)
