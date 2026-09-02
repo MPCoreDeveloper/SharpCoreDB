@@ -19,6 +19,13 @@ public sealed class TenantEncryptionKeyRotationService(
     ILogger<TenantEncryptionKeyRotationService> logger)
 {
     /// <summary>
+    /// Strips CR/LF from a user-provided value so it cannot forge log entries (CWE-117).
+    /// </summary>
+    private static string SanitizeForLog(string value)
+        => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
+
+    /// <summary>
     /// Rotates a tenant database encryption key reference.
     /// </summary>
     /// <param name="tenantId">Tenant identifier.</param>
@@ -55,7 +62,7 @@ public sealed class TenantEncryptionKeyRotationService(
             tenantId,
             "EncryptionKeyRotationStarted",
             TenantEventStatus.InProgress,
-            $"Starting encryption key rotation for database '{databaseName}'.",
+            $"Starting encryption key rotation for database '{SanitizeForLog(databaseName)}'.",
             cancellationToken);
 
         try
@@ -92,12 +99,12 @@ public sealed class TenantEncryptionKeyRotationService(
                         if (!rotation.Success)
                         {
                             throw new InvalidOperationException(
-                                $"Engine-level key rotation failed for database '{databaseName}': {rotation.ErrorMessage}");
+                                $"Engine-level key rotation failed for database '{SanitizeForLog(databaseName)}': {rotation.ErrorMessage}");
                         }
 
                         logger.LogInformation(
                             "Engine-level encryption key rotation completed for database '{Name}' (key id {KeyId}, {Blocks} blocks re-encrypted)",
-                            databaseName, rotation.KeyId, rotation.BlocksReEncrypted);
+                            SanitizeForLog(databaseName), rotation.KeyId, rotation.BlocksReEncrypted);
                     }
                     catch (NotSupportedException nse)
                     {
@@ -105,7 +112,7 @@ public sealed class TenantEncryptionKeyRotationService(
                         // limitation until the server host migrates tenant DBs to single-file mode).
                         logger.LogWarning(nse,
                             "Engine-level key rotation not supported for database '{Name}'; performing catalog-reference rotation only. {Message}",
-                            databaseName, nse.Message);
+                            SanitizeForLog(databaseName), nse.Message);
                     }
                 }
             }
