@@ -1738,7 +1738,7 @@ public partial class Table
             // Record was relocated to another page (growing record on a
             // full page): re-point the PK index and rebuild hash indexes.
             var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-            RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
+            RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
         }
         else
         {
@@ -1883,10 +1883,11 @@ public partial class Table
     /// (a growing record on a full page). The PK index is re-pointed precisely; hash
     /// indexes are marked stale so they rebuild lazily on next use.
     /// </summary>
+    /// <param name="oldPosition">The storage position before relocation.</param>
     /// <param name="newPosition">The storage position after relocation.</param>
     /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
     /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
-    private void RepointIndexesAfterRelocation(long newPosition, string? oldPkValue, string? newPkValue)
+    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue) // NOSONAR:S1172 - oldPosition retained for call-site symmetry with relocation-reporting engines (all callers already hold it)
     {
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -2280,7 +2281,7 @@ public partial class Table
                                     var newPkVal = row.TryGetValue(this.Columns[this.PrimaryKeyIndex], out var newPk)
                                         ? newPk?.ToString() ?? string.Empty
                                         : string.Empty;
-                                    RepointIndexesAfterRelocation(newPosition, pkVal, newPkVal);
+                                    RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
                                 }
                                 else
                                 {
@@ -3178,7 +3179,7 @@ public partial class Table
                     // Record was relocated to another page: re-point the PK index and
                     // rebuild hash indexes lazily.
                     var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    RepointIndexesAfterRelocation(newPosition, pkStr, newPkVal);
+                    RepointIndexesAfterRelocation(storagePosition, newPosition, pkStr, newPkVal);
                 }
                 else
                 {
