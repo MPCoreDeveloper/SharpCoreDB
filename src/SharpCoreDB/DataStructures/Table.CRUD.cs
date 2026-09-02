@@ -1927,6 +1927,22 @@ public partial class Table
                     this.TableCheckConstraints.Count == 0 &&
                     !HasColumnCheckConstraints();
 
+                // The raw-byte patch writes the record in place without re-pointing hash indexes, so
+                // when the update touches a hash-indexed column those entries must be re-pointed
+                // explicitly (old key removed, new key added at the same position) after the write.
+                bool touchesHashIndexedColumn = false;
+                if (this.hashIndexes.Count > 0)
+                {
+                    foreach (var updateKey in updates.Keys)
+                    {
+                        if (this.hashIndexes.ContainsKey(updateKey))
+                        {
+                            touchesHashIndexedColumn = true;
+                            break;
+                        }
+                    }
+                }
+
                 // Resolve matching rows as (storage position, row, raw bytes) so the columnar
                 // write path can patch fields in place even when the table has no primary key.
                 // The position comes from the hash index / PK lookup already performed here; in
@@ -2039,8 +2055,34 @@ public partial class Table
                             ? TryOverwriteFixedWidthInPlace(rawData, updates)
                             : TryOverwriteFieldsInPlaceActual(rawData, updates);
 
-                        if (patched is not null && engine.TryUpdateInPlace(Name, rowPosition, patched))
+                        if (patched is not null && engine.TryUpdateInPlaceSameLength(Name, rowPosition, patched))
                         {
+                            // The record was overwritten in place; when the update changed a
+                            // hash-indexed column, re-point its entries (old key decoded from the
+                            // pre-write row bytes, new key added at the same position). Non-indexed
+                            // updates skip this entirely.
+                            if (touchesHashIndexedColumn)
+                            {
+                                var oldRow = DeserializeRow(rawData);
+                                if (oldRow is not null)
+                                {
+                                    foreach (var (colName, hashIdx) in this.hashIndexes)
+                                    {
+                                        if (!updates.TryGetValue(colName, out var newVal) || newVal is null)
+                                        {
+                                            continue;
+                                        }
+
+                                        if (oldRow.TryGetValue(colName, out var oldVal) && oldVal is not null)
+                                        {
+                                            hashIdx.Remove(oldVal, rowPosition);
+                                        }
+
+                                        hashIdx.Add(newVal, rowPosition);
+                                    }
+                                }
+                            }
+
                             continue;
                         }
 

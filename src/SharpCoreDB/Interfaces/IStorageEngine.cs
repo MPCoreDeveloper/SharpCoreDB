@@ -56,6 +56,16 @@ public interface IStorageEngine : IDisposable
     bool TryUpdateInPlace(string tableName, long storageReference, byte[] newData);
 
     /// <summary>
+    /// Same contract as <see cref="TryUpdateInPlace"/> for the common case where the caller has
+    /// already read the existing record and guarantees <paramref name="newData"/> has the exact same
+    /// byte length as the stored payload (e.g. an in-place field patch built from the existing row).
+    /// Engines that can use the guarantee skip the extra length-prefix read; the default routes to
+    /// <see cref="TryUpdateInPlace"/> so existing implementations keep working unchanged.
+    /// </summary>
+    bool TryUpdateInPlaceSameLength(string tableName, long storageReference, byte[] newData) =>
+        TryUpdateInPlace(tableName, storageReference, newData);
+
+    /// <summary>
     /// Deletes a record at the specified storage reference.
     /// </summary>
     /// <param name="tableName">Name of the table.</param>
