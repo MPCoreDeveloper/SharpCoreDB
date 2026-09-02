@@ -61,6 +61,7 @@
 - SQL UPDATE is ~5–10× slower than SQLite in every version (2.x: 27–43K vs SQLite 218–280K).
 - SQL DELETE is ~5–17× slower (2.x: 21–61K vs SQLite 295–364K), high variance.
 - Root cause is structural: SharpCoreDB's row-store updates/deletes are row-copy based, while SQLite uses fixed-length C records with direct field offsets and in-place writes. This is the targeted v2.1+ engine work (in-place records), **not** something the runtime or allocations fix.
+- **Progress (#6, 2026-08-31):** the in-place UPDATE engine landed on `release/v2.1.0.0` (`3d4cee77` + `68cb5dab`) and `release/v2.0.0.0` (`116fc30e` + `8a13ba2b`). On the columnar/append-only engine, **fixed-width UPDATEs no longer append a new version**: measured ~3.5–5.3K ops/s with **0 file growth** vs ~1.5K ops/s with +90 KB growth per 2,000 updates before. Variable-width updates fall back to the append path unchanged. See `V2_PERFORMANCE_PLAN.md` §3.4. The DELETE gap and the numbers above (measured on the default single-file path) are unchanged by this work.
 
 ### 3.4 Versus competitors
 - SharpCoreDB 2.x beats **LiteDB on every operation** (~5–8× reads, ~4–5× updates, ~3–9× deletes).

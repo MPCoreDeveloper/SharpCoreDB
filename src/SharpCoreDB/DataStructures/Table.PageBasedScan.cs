@@ -114,6 +114,12 @@ public partial class Table
     /// </summary>
     private Dictionary<string, object>? DeserializeRowFromSpan(byte[] data)
     {
+        // Fixed-width record layout (out-of-line overflow): variable slots reference the arena.
+        if (_fixedWidthRecords)
+        {
+            return data is { Length: > 0 } ? DeserializeRowFixedWidth(data.AsSpan()) : null;
+        }
+
         if (data == null || data.Length == 0)
         {
 #if DEBUG

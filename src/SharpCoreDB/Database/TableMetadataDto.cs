@@ -35,6 +35,12 @@ public sealed class TableMetadataDto
     /// <summary>Gets or sets the storage mode.</summary>
     public SharpCoreDB.Storage.Hybrid.StorageMode StorageMode { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether the table uses the fixed-width record layout (out-of-line overflow).
+    /// B5: persisted so a reopened database keeps the record format without needing the config flag.
+    /// </summary>
+    public bool IsFixedWidthRecords { get; set; }
+
     /// <summary>Gets or sets auto-increment flags per column.</summary>
     public List<bool>? IsAuto { get; set; }
 

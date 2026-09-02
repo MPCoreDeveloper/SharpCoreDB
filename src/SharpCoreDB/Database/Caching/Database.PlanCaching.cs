@@ -51,6 +51,27 @@ public partial class Database
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsPlanCachingEnabled() => config?.EnableCompiledPlanCache ?? true;
 
+    // B8: memoizes the normalized SQL per exact SQL text. The same statement text is
+    // normalized on every ExecuteQuery call otherwise (trim + whitespace collapse + string
+    // allocation) — for repeated point-lookups this cache turns 10K normalizations into 10K
+    // dictionary lookups.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _normalizedSqlCache =
+        new(System.StringComparer.Ordinal);
+
+    /// <summary>
+    /// B8: returns the normalized SQL, memoized per exact input text.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetNormalizedSql(string sql)
+    {
+        if (!(config?.NormalizeSqlForPlanCache ?? true))
+        {
+            return sql;
+        }
+
+        return _normalizedSqlCache.GetOrAdd(sql, static s => QueryPlanCache.NormalizeSql(s.Trim()));
+    }
+
     /// <summary>
     /// Caches a query plan for DML operations (INSERT, UPDATE, DELETE).
     /// Normalizes SQL and parameters to maximize cache hit rate.
@@ -65,9 +86,7 @@ public partial class Database
         if (!IsPlanCachingEnabled())
             return null;
 
-        var normalized = (config?.NormalizeSqlForPlanCache ?? true) 
-            ? NormalizeSqlForCaching(sql) 
-            : sql;
+        var normalized = GetNormalizedSql(sql);
         
         var key = BuildCacheKey(normalized, parameters, commandType);
         var cache = GetPlanCache();
@@ -97,9 +116,7 @@ public partial class Database
         if (!IsPlanCachingEnabled() || planCache is null)
             return null;
 
-        var normalized = (config?.NormalizeSqlForPlanCache ?? true) 
-            ? NormalizeSqlForCaching(sql) 
-            : sql;
+        var normalized = GetNormalizedSql(sql);
         
         var key = BuildCacheKey(normalized, parameters, commandType);
 

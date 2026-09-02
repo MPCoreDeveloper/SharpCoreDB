@@ -515,6 +515,332 @@ public partial class Database
     }
 
     /// <summary>
+    /// Phase-2 fast parse: matches exactly the canonical single-row DML shape
+    /// <c>UPDATE &lt;table&gt; SET &lt;col&gt; = &lt;literal&gt; WHERE &lt;col&gt; = &lt;literal&gt;</c>
+    /// (and <c>DELETE FROM &lt;table&gt; WHERE &lt;col&gt; = &lt;literal&gt;</c>) with a quotes-aware
+    /// span scan — no regex. Any deviation (multi-column SET, other operators, top-level commas,
+    /// missing WHERE, trailing semicolons, unterminated strings) returns false so the caller falls
+    /// back to the general regex path. Returns raw literal text (quotes included) so the caller
+    /// still converts via <see cref="SqlParser.ParseValue"/>.
+    /// </summary>
+    private static bool TryScanCanonicalDml(
+        string sql,
+        out string table,
+        out string setCol,
+        out string setValRaw,
+        out string whereCol,
+        out string whereValRaw)
+    {
+        table = string.Empty;
+        setCol = string.Empty;
+        setValRaw = string.Empty;
+        whereCol = string.Empty;
+        whereValRaw = string.Empty;
+
+        var s = sql.AsSpan().Trim();
+        if (s.Length == 0)
+        {
+            return false;
+        }
+
+        int i = 0;
+
+        // verb: UPDATE or DELETE
+        bool isUpdate;
+        if (s[i] is 'U' or 'u')
+        {
+            isUpdate = true;
+            if (!TryConsumeKeyword(s, ref i, "UPDATE") || !TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+        }
+        else if (s[i] is 'D' or 'd')
+        {
+            isUpdate = false;
+            if (!TryConsumeKeyword(s, ref i, "DELETE") || !TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+
+            if (!TryConsumeKeyword(s, ref i, "FROM") || !TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+
+        // table name: simple identifier up to the next whitespace
+        if (!TryReadSimpleIdent(s, ref i, out var tableSpan) || tableSpan.IsEmpty)
+        {
+            return false;
+        }
+
+        table = tableSpan.ToString();
+
+        if (isUpdate)
+        {
+            if (!TryConsumeWhitespace(s, ref i) || !TryConsumeKeyword(s, ref i, "SET") || !TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+
+            // single SET column: <ident> = <literal>
+            if (!TryReadSimpleIdent(s, ref i, out var setColSpan) || setColSpan.IsEmpty)
+            {
+                return false;
+            }
+
+            setCol = setColSpan.ToString();
+
+            if (!TrySkipWsAndEquals(s, ref i))
+            {
+                return false;
+            }
+
+            // set literal: read quotes-aware up to a top-level WHERE keyword
+            if (!TryReadLiteralUntilWhere(s, ref i, out var setValSpan))
+            {
+                return false;
+            }
+
+            setValRaw = setValSpan.ToString();
+
+            // TryReadLiteralUntilWhere advanced i to just after "WHERE"; skip the whitespace
+            // before the WHERE column.
+            if (!TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+        }
+
+        // WHERE <col> = <literal> (to end of statement)
+        if (!TryReadSimpleIdent(s, ref i, out var whereColSpan) || whereColSpan.IsEmpty)
+        {
+            return false;
+        }
+
+        whereCol = whereColSpan.ToString();
+
+        if (!TrySkipWsAndEquals(s, ref i))
+        {
+            return false;
+        }
+
+        int v0 = i;
+        bool inString = false;
+        char quote = '\0';
+        while (i < s.Length)
+        {
+            char ch = s[i];
+            if (inString)
+            {
+                if (ch == quote)
+                {
+                    if (i + 1 < s.Length && s[i + 1] == quote)
+                    {
+                        i += 2; // escaped '' inside a string literal
+                        continue;
+                    }
+
+                    inString = false;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (ch is '\'' or '"')
+            {
+                inString = true;
+                quote = ch;
+                i++;
+                continue;
+            }
+
+            if (ch == ';')
+            {
+                return false; // trailing semicolon not part of the canonical shape
+            }
+
+            i++;
+        }
+
+        if (inString)
+        {
+            return false; // unterminated string literal
+        }
+
+        var whereVal = s[v0..].Trim();
+        if (whereVal.IsEmpty)
+        {
+            return false;
+        }
+
+        whereValRaw = whereVal.ToString();
+        return true;
+    }
+
+    private static bool TryConsumeWhitespace(ReadOnlySpan<char> s, ref int i)
+    {
+        int start = i;
+        while (i < s.Length && char.IsWhiteSpace(s[i]))
+        {
+            i++;
+        }
+
+        return i > start;
+    }
+
+    private static bool TryConsumeKeyword(ReadOnlySpan<char> s, ref int i, string keyword)
+    {
+        if (i + keyword.Length > s.Length)
+        {
+            return false;
+        }
+
+        if (!s.Slice(i, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // word boundary: next char must be whitespace (or end)
+        if (i + keyword.Length < s.Length && !char.IsWhiteSpace(s[i + keyword.Length]))
+        {
+            return false;
+        }
+
+        i += keyword.Length;
+        return true;
+    }
+
+    private static bool TryReadSimpleIdent(ReadOnlySpan<char> s, ref int i, out ReadOnlySpan<char> ident)
+    {
+        ident = default;
+        int start = i;
+        while (i < s.Length && !char.IsWhiteSpace(s[i]) && s[i] != '=' && s[i] != '(' && s[i] != ')')
+        {
+            i++;
+        }
+
+        if (i == start)
+        {
+            return false;
+        }
+
+        ident = s[start..i];
+        return true;
+    }
+
+    private static bool TrySkipWsAndEquals(ReadOnlySpan<char> s, ref int i)
+    {
+        while (i < s.Length && char.IsWhiteSpace(s[i]))
+        {
+            i++;
+        }
+
+        if (i >= s.Length || s[i] != '=')
+        {
+            return false;
+        }
+
+        i++;
+        while (i < s.Length && char.IsWhiteSpace(s[i]))
+        {
+            i++;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a value literal from <paramref name="i"/> up to a top-level <c>WHERE</c> keyword
+    /// (or the end of the span), respecting single/double-quoted strings. Returns false when the
+    /// value contains a top-level comma (multi-column SET), an unterminated string or a trailing
+    /// semicolon, or when no WHERE keyword follows. On success <paramref name="i"/> is left after
+    /// the WHERE keyword.
+    /// </summary>
+    private static bool TryReadLiteralUntilWhere(ReadOnlySpan<char> s, ref int i, out ReadOnlySpan<char> value)
+    {
+        value = default;
+        int v0 = i;
+        bool inString = false;
+        char quote = '\0';
+
+        while (i < s.Length)
+        {
+            char ch = s[i];
+            if (inString)
+            {
+                if (ch == quote)
+                {
+                    if (i + 1 < s.Length && s[i + 1] == quote)
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    inString = false;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (ch is '\'' or '"')
+            {
+                inString = true;
+                quote = ch;
+                i++;
+                continue;
+            }
+
+            if (ch == ',')
+            {
+                return false; // multi-column SET clause -> not canonical
+            }
+
+            if (ch == ';')
+            {
+                return false;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                // boundary check for the WHERE keyword (must follow whitespace)
+                int j = i;
+                while (j < s.Length && char.IsWhiteSpace(s[j]))
+                {
+                    j++;
+                }
+
+                if (j + 5 <= s.Length &&
+                    s.Slice(j, 5).Equals("WHERE".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    (j + 5 == s.Length || char.IsWhiteSpace(s[j + 5])))
+                {
+                    // value ends at the last non-whitespace before the WHERE keyword
+                    int end = i;
+                    while (end > v0 && char.IsWhiteSpace(s[end - 1]))
+                    {
+                        end--;
+                    }
+
+                    value = s[v0..end];
+                    i = j + 5; // position after "WHERE"
+                    return !value.IsEmpty;
+                }
+            }
+
+            i++;
+        }
+
+        return false; // canonical UPDATE must have a WHERE clause
+    }
+
+    /// <summary>
     /// Attempts to parse an UPDATE statement for batch execution.
     /// Extracts the table name, WHERE clause, and SET column-value pairs.
     /// </summary>
@@ -529,6 +855,29 @@ public partial class Database
         where = string.Empty;
         updates = [];
 
+        // Phase-2 fast path: canonical single-column shape
+        // `UPDATE <table> SET <col> = <literal> WHERE <col> = <literal>` — regex-free.
+        if (TryScanCanonicalDml(sql, out var fastTable, out var setCol, out var setValRaw, out var whereCol, out var whereValRaw))
+        {
+            if (!tables.TryGetValue(fastTable, out var fastTableMeta))
+            {
+                return false;
+            }
+
+            int colIdx = fastTableMeta.Columns.IndexOf(setCol);
+            if (colIdx < 0)
+            {
+                return false;
+            }
+
+            var parsed = SqlParser.ParseValue(setValRaw, fastTableMeta.ColumnTypes[colIdx]);
+            updates[setCol] = parsed ?? DBNull.Value;
+            tableName = fastTable;
+            where = whereCol + " = " + whereValRaw;
+            return true;
+        }
+
+        // Fallback: general regex path for non-canonical UPDATE statements.
         var span = sql.AsSpan().Trim();
         if (span.Length < 6 || !span[..6].Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -579,6 +928,21 @@ public partial class Database
         tableName = string.Empty;
         where = string.Empty;
 
+        // Phase-2 fast path: canonical single-row shape
+        // `DELETE FROM <table> WHERE <col> = <literal>` — regex-free.
+        if (TryScanCanonicalDml(sql, out var fastTable, out _, out _, out var whereCol, out var whereValRaw))
+        {
+            if (!tables.ContainsKey(fastTable))
+            {
+                return false;
+            }
+
+            tableName = fastTable;
+            where = whereCol + " = " + whereValRaw;
+            return true;
+        }
+
+        // Fallback: general regex path for non-canonical DELETE statements.
         var span = sql.AsSpan().Trim();
         if (span.Length < 6 || !span[..6].Equals("DELETE", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -825,26 +1189,34 @@ public partial class Database
     {
         try
         {
+            // B9: the only caller already ran IsInsertStatement, so the statement starts with
+            // "INSERT INTO" (after optional leading whitespace) — skip the redundant full-span
+            // IndexOf scan.
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
-            if (insertIdx < 0) return null;
-            
-            insertSql = insertSql.Slice(insertIdx);
-            var tableStart = (SqlInsertPrefix.Length + 1);
-            
-            // Find table name end
-            int tableEnd = -1;
-            for (int i = tableStart; i < insertSql.Length; i++)
+            int idx = 0;
+            while (idx < insertSql.Length && char.IsWhiteSpace(insertSql[idx]))
             {
-                if (insertSql[i] == ' ' || insertSql[i] == '(')
-                {
-                    tableEnd = i;
-                    break;
-                }
+                idx++;
             }
-            if (tableEnd == -1) return null;
 
-            var tableName = insertSql.Slice(tableStart, tableEnd - tableStart).Trim().ToString();
+            insertSql = insertSql.Slice(idx);
+            const int KeywordLen = 11; // "INSERT INTO".Length
+            const int PrefixLen = 12;  // "INSERT INTO ".Length
+            if (insertSql.Length < PrefixLen ||
+                !insertSql[..KeywordLen].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Find table name end (whitespace or opening parenthesis).
+            var nameSpan = insertSql.Slice(KeywordLen).TrimStart();
+            int tableEnd = nameSpan.IndexOfAny(' ', '(');
+            if (tableEnd < 0)
+            {
+                return null;
+            }
+
+            var tableName = nameSpan[..tableEnd].ToString();
             
             if (!tables.ContainsKey(tableName))
                 return null;

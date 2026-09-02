@@ -270,6 +270,26 @@ public partial class Table
     }
 
     /// <summary>
+    /// Loads every registered hash index up front so DML write paths (the append-only UPDATE
+    /// fallback and the DELETE index cleanup) can maintain them incrementally. An unloaded index
+    /// is rebuilt from the data file on next use — which, after an append update or logical
+    /// delete, still contains the stale record — so any write that creates stale versions must
+    /// ensure its registered indexes are loaded first. Cheap after the first load (cached).
+    /// </summary>
+    private void EnsureAllRegisteredIndexesLoaded()
+    {
+        if (this.registeredIndexes.Count == 0)
+            return;
+
+        // Safe to iterate directly: the caller holds the write lock and EnsureIndexLoaded only
+        // mutates hashIndexes/loadedIndexes/staleIndexes, never the registeredIndexes registry.
+        foreach (var columnName in this.registeredIndexes.Keys)
+        {
+            EnsureIndexLoaded(columnName);
+        }
+    }
+
+    /// <summary>
     /// Checks if a hash index exists for the specified column.
     /// </summary>
     /// <param name="columnName">The column name to check.</param>
