@@ -386,6 +386,24 @@ public partial class SqlParser
         });
 
         table.Name = tableName;
+
+        // B7+: new columnar tables with an explicitly declared PRIMARY KEY default to the fixed-width
+        // record layout (DatabaseConfig.AutoFixedWidthRecords, default true) so keyed UPDATE/DELETE
+        // become in-place overwrites. Tables without a declared PK (which get the hidden _rowid
+        // fallback) keep the legacy variable-length records. The per-table flag is persisted in
+        // metadata, so existing tables are never rewritten and FixedWidthRecordLayout stays the
+        // explicit force/auto-migrate switch. Applies to directory-mode (Columnar) tables only —
+        // PageBased tables and the single-file (.scdb) layout are untouched by this default.
+        if (table is Table fixedWidthCandidate &&
+            primaryKeyIndex >= 0 &&
+            !hasInternalRowId &&
+            storageMode == StorageMode.Columnar &&
+            !fixedWidthCandidate.IsFixedWidthRecords &&
+            (this.config?.AutoFixedWidthRecords ?? true))
+        {
+            fixedWidthCandidate.IsFixedWidthRecords = true;
+        }
+
         this.tables[tableName] = table;
 
         // ✅ NEW: Wire database reference so Table.Insert can call SetLastInsertRowId / RecordBatchInsert

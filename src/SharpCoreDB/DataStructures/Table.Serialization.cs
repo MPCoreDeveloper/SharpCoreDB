@@ -512,6 +512,10 @@ public partial class Table
     private byte[] SerializeRowFixedWidth(Dictionary<string, object> row)
         => FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
 
+    /// <summary>Serializes a column-ordered row (full table column order) with the fixed-width layout.</summary>
+    private byte[] SerializeRowFixedWidth(object[] row)
+        => FixedWidthCodec.SerializeRow(row, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values read from the overflow arena).</summary>
     private Dictionary<string, object> DeserializeRowFixedWidth(ReadOnlySpan<byte> data)
         => FixedWidthCodec.DeserializeRow(data, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
@@ -645,10 +649,19 @@ public partial class Table
     /// <summary>
     /// Column-ordered array variant of <see cref="SerializeRowExact(Dictionary{string,object})"/>
     /// for the dedicated batch-INSERT path (no dictionary allocation / lookups).
+    /// Fixed-width tables must use the fixed-width codec here too — writing legacy variable-length
+    /// records into a fixed-width-flagged table would make every subsequent scan misread them.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private byte[] SerializeRowExact(object[] values)
     {
+        // Fixed-width record layout (out-of-line overflow): constant-size record, variable values
+        // stored in the table's overflow arena.
+        if (_fixedWidthRecords)
+        {
+            return SerializeRowFixedWidth(values);
+        }
+
         byte[] buffer = new byte[ComputeExactRowSize(values)];
         int bytesWritten = WriteRowGeneric(buffer.AsSpan(), values);
         return bytesWritten == buffer.Length

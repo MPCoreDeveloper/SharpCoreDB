@@ -35,7 +35,12 @@ public sealed class FixedWidthMigrationTests : IDisposable
         try { if (Directory.Exists(_dirPath)) Directory.Delete(_dirPath, true); } catch { }
     }
 
-    private IDatabase CreateLegacyDb() => _factory.Create(_dirPath, "pw", isReadOnly: false, config: new DatabaseConfig());
+    private IDatabase CreateLegacyDb() => _factory.Create(_dirPath, "pw", isReadOnly: false, config: new DatabaseConfig
+    {
+        // AutoFixedWidthRecords defaults to true since B7+; this fixture deliberately simulates a
+        // pre-fixed-width (1.x / variable-length records) database, so it opts out.
+        AutoFixedWidthRecords = false,
+    });
 
     private IDatabase CreateFixedWidthDb() => _factory.Create(
         _dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { FixedWidthRecordLayout = true });

@@ -101,7 +101,9 @@ public sealed class SqlInPlaceUpdateTests : IDisposable
     [Fact]
     public void SqlUpdate_VariableWidth_GrowsWhenStoredLengthChanges_StillCorrect()
     {
-        var db = _factory.Create(_dirPath, "pw");
+        // This test asserts the LEGACY variable-length layout's append-on-grow semantics, so the
+        // table must not be auto-promoted to the fixed-width layout (AutoFixedWidthRecords default).
+        var db = _factory.Create(_dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { AutoFixedWidthRecords = false });
         try
         {
             db.ExecuteSQL("CREATE TABLE vw (id INTEGER PRIMARY KEY, name TEXT, val INTEGER)");

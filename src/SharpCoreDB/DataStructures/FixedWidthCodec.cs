@@ -29,31 +29,54 @@ public static class FixedWidthCodec
 
         for (int i = 0; i < columns.Count; i++)
         {
-            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
             var value = row.TryGetValue(columns[i], out var v) ? v : DBNull.Value;
-
-            if (layout.IsVariable[i])
-            {
-                if (value == null || value == DBNull.Value)
-                {
-                    slot[0] = 0;
-                    BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
-                }
-                else
-                {
-                    var payload = Table.EncodeVariablePayload(types[i], value);
-                    var offset = arena.Write(payload);
-                    slot[0] = 1;
-                    BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
-                }
-            }
-            else
-            {
-                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
-            }
+            WriteSlot(span.Slice(layout.Offsets[i], layout.SlotSizes[i]), layout.IsVariable[i], types[i], value, arena);
         }
 
         return buffer;
+    }
+
+    /// <summary>Serializes a column-ordered object[] row (full table column order) with the fixed-width codec.</summary>
+    public static byte[] SerializeRow(
+        object[] row,
+        IReadOnlyList<DataType> types,
+        FixedWidthRecordLayout layout,
+        IOverflowArena arena)
+    {
+        var buffer = new byte[layout.FixedSize];
+        var span = buffer.AsSpan();
+
+        for (int i = 0; i < row.Length && i < types.Count; i++)
+        {
+            WriteSlot(span.Slice(layout.Offsets[i], layout.SlotSizes[i]), layout.IsVariable[i], types[i], row[i], arena);
+        }
+
+        return buffer;
+    }
+
+    /// <summary>
+    /// Writes one column value into its fixed-width slot: variable-length types store an out-of-line
+    /// arena block reference, fixed-size types store their payload inline.
+    /// </summary>
+    private static void WriteSlot(Span<byte> slot, bool isVariable, DataType type, object? value, IOverflowArena arena)
+    {
+        if (isVariable)
+        {
+            if (value == null || value == DBNull.Value)
+            {
+                slot[0] = 0;
+                BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+                return;
+            }
+
+            var payload = Table.EncodeVariablePayload(type, value);
+            var offset = arena.Write(payload);
+            slot[0] = 1;
+            BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+            return;
+        }
+
+        _ = Table.WriteTypedValueToSpan(slot, value, type);
     }
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values ← arena).</summary>

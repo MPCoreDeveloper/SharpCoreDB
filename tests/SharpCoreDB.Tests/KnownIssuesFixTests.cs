@@ -151,9 +151,15 @@ public class KnownIssuesFixTests : IDisposable
             db.Flush();
 
             // The payload is still readable as plaintext on disk (guarantee for NoEncrypt users).
+            // Fixed-width tables keep TEXT values out-of-line in the per-table .ovf arena, so scan
+            // both the record file and the overflow arena for the plaintext guarantee.
             var tableFile = Path.Combine(dbPath, "plain.dat");
             Assert.True(File.Exists(tableFile));
-            var content = File.ReadAllText(tableFile, Encoding.UTF8);
+            var dataFiles = new[] { tableFile, Path.ChangeExtension(tableFile, ".ovf") }
+                .Where(File.Exists)
+                .ToArray();
+            Assert.NotEmpty(dataFiles);
+            var content = string.Join("\n", dataFiles.Select(f => File.ReadAllText(f, Encoding.UTF8)));
             Assert.Contains(payload, content);
 
             // And the engine still reads it back correctly.
