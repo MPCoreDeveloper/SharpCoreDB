@@ -22,9 +22,6 @@ internal static class FixedWidthBenchmark
     private const int SelectRows = 100_000;
     private const int SelectRounds = 30;
 
-    private const string FixedWidthLabel = "fixed-width";
-    private const string LegacyLabel = "legacy     ";
-
     public static void Run()
     {
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
@@ -107,7 +104,7 @@ internal static class FixedWidthBenchmark
         // overflow arena, which the auto-compaction (1000-update threshold) keeps bounded.
         foreach (var fixedWidth in new[] { true, false })
         {
-            var label = fixedWidth ? FixedWidthLabel : LegacyLabel;
+            var label = fixedWidth ? "fixed-width" : "legacy     ";
             var (db, dir) = CreateDatabase(factory, fixedWidth);
             try
             {
@@ -135,7 +132,7 @@ internal static class FixedWidthBenchmark
             finally
             {
                 (db as IDisposable)?.Dispose();
-                try { Directory.Delete(dir, true); } catch { /* temp dir best-effort cleanup */ }
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
     }
@@ -144,7 +141,7 @@ internal static class FixedWidthBenchmark
     {
         foreach (var fixedWidth in new[] { true, false })
         {
-            var label = fixedWidth ? FixedWidthLabel : LegacyLabel;
+            var label = fixedWidth ? "fixed-width" : "legacy     ";
             var (db, dir) = CreateDatabase(factory, fixedWidth);
             try
             {
@@ -176,7 +173,7 @@ internal static class FixedWidthBenchmark
             finally
             {
                 (db as IDisposable)?.Dispose();
-                try { Directory.Delete(dir, true); } catch { /* temp dir best-effort cleanup */ }
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
     }
@@ -185,7 +182,7 @@ internal static class FixedWidthBenchmark
     {
         foreach (var fixedWidth in new[] { true, false })
         {
-            var label = fixedWidth ? FixedWidthLabel : LegacyLabel;
+            var label = fixedWidth ? "fixed-width" : "legacy     ";
             var (db, dir) = CreateDatabase(factory, fixedWidth);
             try
             {
@@ -223,7 +220,7 @@ internal static class FixedWidthBenchmark
             finally
             {
                 (db as IDisposable)?.Dispose();
-                try { Directory.Delete(dir, true); } catch { /* temp dir best-effort cleanup */ }
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
     }
@@ -235,7 +232,7 @@ internal static class FixedWidthBenchmark
 
         foreach (var fixedWidth in new[] { true, false })
         {
-            var label = fixedWidth ? FixedWidthLabel : LegacyLabel;
+            var label = fixedWidth ? "fixed-width" : "legacy     ";
             var (db, dir) = CreateDatabase(factory, fixedWidth);
             try
             {
@@ -275,7 +272,7 @@ internal static class FixedWidthBenchmark
             finally
             {
                 (db as IDisposable)?.Dispose();
-                try { Directory.Delete(dir, true); } catch { /* temp dir best-effort cleanup */ }
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
     }
