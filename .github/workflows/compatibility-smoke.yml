@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: '11.0.x'
+  DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -42,7 +42,6 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        dotnet-quality: 'preview'
 
     - name: Setup Python
       uses: actions/setup-python@v7

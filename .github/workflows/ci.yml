@@ -12,7 +12,7 @@ permissions:
   packages: write
 
 env:
-  DOTNET_VERSION: '11.0.x'
+  DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -34,11 +34,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.x'
-        dotnet-quality: 'preview'
+        dotnet-version: '10.0.x'
 
     - name: Display .NET info
       run: dotnet --info
@@ -95,7 +94,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.Tests
-        tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests \
+        tests/SharpCoreDB.Tests/bin/Release/net10.0/SharpCoreDB.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.Tests/SharpCoreDB.Tests.trx"
       timeout-minutes: 30
@@ -108,7 +107,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.VectorSearch.Tests
-        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net11.0/SharpCoreDB.VectorSearch.Tests \
+        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net10.0/SharpCoreDB.VectorSearch.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.trx"
       timeout-minutes: 15
@@ -121,7 +120,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests
-        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net11.0/SharpCoreDB.EntityFrameworkCore.Tests \
+        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net10.0/SharpCoreDB.EntityFrameworkCore.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.trx"
       timeout-minutes: 15
@@ -134,7 +133,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests
-        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net11.0/SharpCoreDB.Functional.Linq2DB.Tests \
+        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net10.0/SharpCoreDB.Functional.Linq2DB.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.trx"
       timeout-minutes: 10
@@ -162,11 +161,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.x'
-        dotnet-quality: 'preview'
+        dotnet-version: '10.0.x'
 
     - name: Discover packable projects
       id: discover-packable
@@ -237,11 +235,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.x'
-        dotnet-quality: 'preview'
+        dotnet-version: '10.0.x'
 
     - name: Download NuGet packages
       uses: actions/download-artifact@v4
