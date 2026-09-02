@@ -75,7 +75,7 @@ public sealed class SingleFileFixedWidthTests : IDisposable
             Assert.Single(row);
             Assert.Equal("beta", row[0]["name"]);
             Assert.Equal(2.5, Convert.ToDouble(row[0]["score"]));
-            Assert.Equal(false, Convert.ToBoolean(row[0]["flag"]));
+            Assert.False(Convert.ToBoolean(row[0]["flag"]));
         }
         finally { (db as IDisposable)?.Dispose(); }
 

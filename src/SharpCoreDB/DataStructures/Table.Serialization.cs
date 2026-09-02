@@ -1021,7 +1021,7 @@ public partial class Table
     /// <param name="type">The data type of the value.</param>
     /// <returns>Number of bytes written.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static int WriteTypedValueToSpan(Span<byte> buffer, object value, DataType type)
+    internal static int WriteTypedValueToSpan(Span<byte> buffer, object value, DataType type) // NOSONAR:S3776 - exhaustive per-DataType binary writer with size guards; splitting would add a dispatch layer on the row-serialization hot path
     {
         if (value == DBNull.Value || value == null)
         {
@@ -1193,7 +1193,7 @@ public partial class Table
     /// <param name="bytesRead">Output: number of bytes consumed.</param>
     /// <returns>The deserialized value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static object ReadTypedValueFromSpan(ReadOnlySpan<byte> buffer, DataType type, out int bytesRead)
+    internal static object ReadTypedValueFromSpan(ReadOnlySpan<byte> buffer, DataType type, out int bytesRead) // NOSONAR:S3776 - exhaustive per-DataType binary reader with size guards; splitting would add a dispatch layer on the row-deserialization hot path
     {
         bytesRead = 1;
         

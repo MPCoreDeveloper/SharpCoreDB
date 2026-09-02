@@ -523,7 +523,7 @@ public partial class Database
     /// back to the general regex path. Returns raw literal text (quotes included) so the caller
     /// still converts via <see cref="SqlParser.ParseValue"/>.
     /// </summary>
-    private static bool TryScanCanonicalDml(
+    private static bool TryScanCanonicalDml( // NOSONAR:S3776 - defensive canonical-shape scanner; each guard rejects a deviation to the regex fallback and must stay sequential to stay allocation-free
         string sql,
         out string table,
         out string setCol,
@@ -965,7 +965,7 @@ public partial class Database
     /// ✅ FIX: Always use outer transaction to prevent concurrent write corruption.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    public void ExecuteBatchSQL(IEnumerable<string> sqlStatements)
+    public void ExecuteBatchSQL(IEnumerable<string> sqlStatements) // NOSONAR:S3776 - grouped multi-table batch dispatcher (INSERT fast path / UPDATE / DELETE / fallback) under one transaction; extraction would fragment the single-lock contract
     {
         ArgumentNullException.ThrowIfNull(sqlStatements);
         

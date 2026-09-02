@@ -296,7 +296,7 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// Returns false (falling back to the full parser) for any condition that cannot be
     /// handled with exact parity to the legacy string-based path.
     /// </summary>
-    private bool TryExecuteSimpleSelect(
+    private bool TryExecuteSimpleSelect( // NOSONAR:S3776 - guarded fast-path cascade (indexed point lookup -> legacy WHERE-string fallback); each guard preserves exact parity with the parser and shares the fall-through
         SimpleSelectPlan simple,
         Dictionary<string, object?>? parameters,
         out List<Dictionary<string, object>> results)

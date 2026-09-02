@@ -208,7 +208,7 @@ public sealed partial class ColumnStore<T>
 
     #region Parallel SIMD Implementations
 
-    private static int SumInt32ParallelSIMD(int[] data)
+    private static int SumInt32ParallelSIMD(int[] data) // NOSONAR:S3776 - sum-int SIMD kernel with per-width guarded fallbacks
     {
         int partitionCount = Math.Min(BufferConstants.MAX_PARALLEL_PARTITIONS,
             data.Length / BufferConstants.MIN_PARALLEL_PARTITION_SIZE);
@@ -623,7 +623,7 @@ public sealed partial class ColumnStore<T>
         return sum;
     }
 
-    private static int MinInt32SIMDDirect(int[] data)
+    private static int MinInt32SIMDDirect(int[] data) // NOSONAR:S3776 - min-int32 SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         int min = int.MaxValue;
@@ -651,7 +651,7 @@ public sealed partial class ColumnStore<T>
         return min;
     }
 
-    private static long MinInt64SIMDDirect(long[] data)
+    private static long MinInt64SIMDDirect(long[] data) // NOSONAR:S3776 - min-int64 SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         long min = long.MaxValue;
@@ -679,7 +679,7 @@ public sealed partial class ColumnStore<T>
         return min;
     }
 
-    private static double MinDoubleSIMDDirect(double[] data)
+    private static double MinDoubleSIMDDirect(double[] data) // NOSONAR:S3776 - min-double SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         double min = double.MaxValue;
@@ -707,7 +707,7 @@ public sealed partial class ColumnStore<T>
         return min;
     }
 
-    private static int MaxInt32SIMDDirect(int[] data)
+    private static int MaxInt32SIMDDirect(int[] data) // NOSONAR:S3776 - max-int32 SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         int max = int.MinValue;
@@ -735,7 +735,7 @@ public sealed partial class ColumnStore<T>
         return max;
     }
 
-    private static long MaxInt64SIMDDirect(long[] data)
+    private static long MaxInt64SIMDDirect(long[] data) // NOSONAR:S3776 - max-int64 SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         long max = long.MinValue;
@@ -763,7 +763,7 @@ public sealed partial class ColumnStore<T>
         return max;
     }
 
-    private static double MaxDoubleSIMDDirect(double[] data)
+    private static double MaxDoubleSIMDDirect(double[] data) // NOSONAR:S3776 - max-double SIMD kernel with per-width guarded fallbacks
     {
         if (data.Length == 0) return 0;
         double max = double.MinValue;
