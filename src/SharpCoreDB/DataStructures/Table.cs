@@ -733,9 +733,10 @@ public partial class Table : ITable, IDisposable
                 }
             }
             
-            // Durable DELETE across reopen: physically compact rows that were logically deleted
-            // since the last flush (Columnar + PK, outside a transaction). Runs after the engine
-            // and any transaction buffer have been flushed.
+            // Transactional deletes (which are intentionally NOT tombstoned at delete time so a
+            // rollback stays correct) become durable by compacting against the current PK once the
+            // owning transaction has committed. No-op when there are no deferred transactional
+            // deletes, so non-transactional DELETE keeps the O(delete) tombstone path.
             CompactPendingDeletes();
 
             // Flush indexes
@@ -783,7 +784,8 @@ public partial class Table : ITable, IDisposable
     {
         if (disposing)
         {
-            // Durable DELETE across reopen for flows that dispose without an explicit flush.
+            // Transactional deletes deferred past their commit flush (e.g. dispose-without-flush
+            // flows) are compacted here; no-op when none are pending.
             CompactPendingDeletes();
 
             // Dispose storage engine first

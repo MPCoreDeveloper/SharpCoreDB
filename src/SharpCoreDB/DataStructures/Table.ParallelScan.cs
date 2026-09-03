@@ -173,6 +173,18 @@ public partial class Table
                 int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
                     data.AsSpan(filePosition, 4));
 
+                if (recordLength < 0)
+                {
+                    int slotSize = -recordLength; // tombstoned slot: skip the full slot
+                    if (slotSize < 4)
+                    {
+                        break;
+                    }
+
+                    filePosition += slotSize;
+                    continue;
+                }
+
                 if (recordLength <= 0 || recordLength > 1_000_000_000) break;
 
                 currentRecordCount++;
@@ -206,6 +218,18 @@ public partial class Table
 
                 int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
                     partitionData.Slice(localFilePosition, 4));
+
+                if (recordLength < 0)
+                {
+                    int slotSize = -recordLength; // tombstoned slot: skip the full slot
+                    if (slotSize < 4)
+                    {
+                        break;
+                    }
+
+                    localFilePosition += slotSize;
+                    continue;
+                }
 
                 if (recordLength <= 0 || recordLength > 1_000_000_000) break;
 
