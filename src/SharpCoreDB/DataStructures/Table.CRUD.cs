@@ -3101,6 +3101,30 @@ public partial class Table
                             var key = ParseValueForHashLookup(value, this.ColumnTypes[colIdx]);
                             if (key != null)
                             {
+                                // W1: when this is the ONLY index the delete core must maintain (no
+                                // PK tree, a single loaded hash index whose key is the condition
+                                // value itself, no secondary B-tree manager), the position can be
+                                // removed with the already-known key — no per-row engine.Read or row
+                                // decode is needed for index cleanup.
+                                bool keyOnlyRow =
+                                    this.PrimaryKeyIndex < 0 &&
+                                    this.hashIndexes.Count == 1 &&
+                                    _btreeManager is null &&
+                                    this.registeredIndexes.Count == 1;
+
+                                if (keyOnlyRow)
+                                {
+                                    foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
+                                    {
+                                        recordsToDelete.Add((pos, new Dictionary<string, object>(1)
+                                        {
+                                            [col] = key
+                                        }));
+                                    }
+
+                                    continue;
+                                }
+
                                 foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
                                 {
                                     var data = engine.Read(Name, pos);

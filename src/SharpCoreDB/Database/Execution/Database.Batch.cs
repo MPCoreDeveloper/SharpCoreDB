@@ -616,6 +616,18 @@ public partial class Database
                 return false;
             }
         }
+        else
+        {
+            // DELETE: consume the whitespace after the table name, then the WHERE keyword, then
+            // the whitespace before the WHERE column. (Missing before — every canonical DELETE fell
+            // back to the regex path, bypassing the structured batch-DELETE fast paths.)
+            if (!TryConsumeWhitespace(s, ref i) ||
+                !TryConsumeKeyword(s, ref i, "WHERE") ||
+                !TryConsumeWhitespace(s, ref i))
+            {
+                return false;
+            }
+        }
 
         // WHERE <col> = <literal> (to end of statement)
         if (!TryReadSimpleIdent(s, ref i, out var whereColSpan) || whereColSpan.IsEmpty)
@@ -944,6 +956,7 @@ public partial class Database
             whereLiteral = whereValRaw;
             // Where stays empty for canonical statements — the table layer reconstructs it only
             // when a fallback actually needs it (B3: no per-statement string allocation).
+            System.Threading.Interlocked.Increment(ref _canonicalDeleteStatements);
             return true;
         }
 
