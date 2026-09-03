@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Fixed-width record layout is now the default for new columnar PK tables (B7)** ÔÇö
+  `DatabaseConfig.AutoFixedWidthRecords` (default `true`) creates new directory-mode Columnar tables
+  with an explicitly declared PRIMARY KEY in the fixed-width layout (constant record size,
+  out-of-line overflow arena, in-place UPDATE/DELETE). Tables without a declared PK, PageBased and
+  single-file (.scdb) layouts are unchanged; existing tables are never rewritten (the persisted
+  per-table flag stays authoritative). Fair-PK harness (`--pk`, AppendOnly): INSERT ~128K,
+  UPDATE ~51K, DELETE ~75K vs 87K/41K/65K on the legacy layout.
+- **Single-pass contiguous UPDATE / DELETE (B8/B9)** ÔÇö batch `UPDATE/DELETE ... WHERE pk = literal`
+  statements with strictly ascending keys on a **plaintext** fixed-width columnar table now read the
+  target records as **one contiguous byte range** (storage cached handle) and patch/remove them in
+  memory: no per-row pread. UPDATE ~45K ÔåÆ **~84K ops/s** (gap vs SQLite 5.1├ù ÔåÆ **3.2├ù**); DELETE
+  ~55-77K ÔåÆ **~135K ops/s** (gap ~4-6├ù ÔåÆ **2.1├ù**). Any shape deviation (gaps, descending keys,
+  PK writes, CHECK constraints, variable-length indexed columns, per-record encryption) falls back
+  to the generic per-row loop before any row is touched. New primitives:
+  `IStorage.HasBufferedOverwrite`, `IStorage.ReadBytesRange` (shared-handle range read) and the
+  runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
+  `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
+  (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **BTree separator-delete corruption fixed (correctness)** ÔÇö `BTree.Delete` removed separator keys
+  from internal nodes without repairing the child-pointer mapping, so sizable delete batches could
+  leave whole key ranges unreachable (and scans/COUNT(*) under-counted). Internal separators are
+  now replaced by their in-order successor from the right subtree's leftmost leaf (leaf underflow is
+  harmless), with empty-neighbour fallbacks keeping child counts consistent. Full suite
+  **1655/1655**.
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new
