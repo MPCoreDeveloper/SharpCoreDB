@@ -42,17 +42,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overflow arena is reclaimed on the next explicit VACUUM/compaction. Regression: delete half the
   rows, `Flush`, reopen ÔÇö exactly the remaining rows come back. Measured DELETE in the `--pk`
   harness now includes this durability rewrite (~18.6K ops/s when deleting 10K of 100K rows).
-- **Durable DELETE is now in-place via tombstones (no rewrite)** ÔÇö non-transactional Columnar
-  deletes write a tombstone marker (the record's 4-byte length prefix is replaced by the NEGATIVE
-  slot size) instead of queueing a flush-time rewrite, and every raw record enumerator/compactor
-  skips the slot, so DELETE survives a reopen in O(delete). Flush/dispose compaction now only
-  covers transactional deletes (a marker written before commit would survive a rollback that
-  restores the row in the PK index; those deletes are compacted against the current PK after commit
-  ÔÇö rollback-safe). Tombstoned space is reclaimed by the tombstone-aware `CompactTable`, including
-  the ULID-migration compaction (which previously produced an empty file when tombstones were
-  present because `CompactTable` broke on a negative prefix). Measured `--pk` DELETE (10K of 100K
-  rows): ~0.54s/18.6K ops/s (flush rewrite) ÔåÆ **~0.16s/~64K ops/s (legacy)** and
-  **~0.12s/~81K ops/s (fixed-width)** ÔÇö DELETE is back on par with UPDATE.
+- **Durable DELETE is now in-place via tombstones (no rewrite)** ÔÇö Columnar deletes write a
+  tombstone marker (the record's 4-byte length prefix is replaced by the NEGATIVE slot size)
+  instead of queueing a flush-time rewrite, and every raw record enumerator/compactor skips the
+  slot, so DELETE survives a reopen in O(delete). Non-transactional deletes write the marker at
+  delete time; transactional deletes (e.g. any `ExecuteBatchSQL` batch, which runs inside a storage
+  transaction) buffer the offsets and apply the markers at COMMIT ÔÇö rollback discards the buffer,
+  so a rolled-back delete keeps its row, and the flush-time full-file rewrite (`CompactPendingDeletes`)
+  is no longer on the batch-DELETE path. Tombstoned space is reclaimed by the tombstone-aware
+  `CompactTable`, including the ULID-migration compaction (which previously produced an empty file
+  when tombstones were present because `CompactTable` broke on a negative prefix). Measured `--pk`
+  DELETE (10K of 100K rows): ~0.54s/18.6K ops/s (flush rewrite) ÔåÆ **~0.16s/~64K ops/s (legacy)** and
+  **~0.13s/~78K ops/s (fixed-width)**; comparative-harness DELETE (docs table): SQL ~0.82s/~12K ÔåÆ
+  **~0.24s/~41K ops/s**, Direct ~0.63s/~16K ÔåÆ **~0.17s/~58K ops/s** ÔÇö DELETE is back on par with UPDATE.
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new

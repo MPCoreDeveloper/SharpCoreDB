@@ -2655,11 +2655,16 @@ public partial class Table
 
             if (this.storage is { IsInTransaction: true })
             {
-                // Transactional delete: writing the tombstone now would survive a rollback that
-                // restores the row in the PK index, so defer the physical removal to the post-commit
-                // flush compaction (rollback-safe: that rewrite is driven by the CURRENT PK, which
-                // still contains the row after a rollback).
-                Interlocked.Add(ref _pendingLogicalDeletes, recordsToDelete.Count);
+                // Transactional delete: buffer the physical offsets so the in-place marker is
+                // applied at COMMIT (rollback discards the buffer). Durable in O(delete) — the
+                // flush-time full-file rewrite is no longer needed for transactional deletes.
+                foreach (var position in positions)
+                {
+                    if (position >= 0)
+                    {
+                        this.storage.BufferTombstoneForCommit(DataFile, position);
+                    }
+                }
             }
             else
             {
@@ -3214,9 +3219,15 @@ public partial class Table
 
         if (this.storage is { IsInTransaction: true })
         {
-            // Transactional delete: defer physical removal to the post-commit flush compaction
-            // (see DeleteRecordsCore — a tombstone would survive a rollback that restores the row).
-            Interlocked.Add(ref _pendingLogicalDeletes, count);
+            // Transactional delete: buffer the physical offsets so the in-place marker is applied
+            // at COMMIT (see DeleteRecordsCore — rollback discards the buffer).
+            foreach (var position in positions)
+            {
+                if (position >= 0)
+                {
+                    this.storage.BufferTombstoneForCommit(DataFile, position);
+                }
+            }
         }
         else
         {
