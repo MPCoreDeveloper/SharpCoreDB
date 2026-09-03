@@ -42,6 +42,9 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
     private IDatabase CreateDb(bool noEncrypt = true) => _factory.Create(_dirPath, "pw", isReadOnly: false,
         config: new DatabaseConfig { NoEncryptMode = noEncrypt });
 
+    private IDatabase CreateEncryptedDb() => _factory.Create(_dirPath, "pw", isReadOnly: false,
+        config: new DatabaseConfig { NoEncryptMode = false, EnableAtRestRecordEncryption = true });
+
     private static Table TableOf(IDatabase db, string tableName)
     {
         Assert.True(db.TryGetTable(tableName, out var t));
@@ -209,9 +212,11 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
     }
 
     [Fact]
-    public void EncryptedOrDefaultConfig_FallsBack_AndStaysCorrect()
+    public void DefaultPlaintextConfig_EngagesBulkPath_AndStaysCorrect()
     {
-        var db = CreateDb(noEncrypt: false); // default config: the gate requires NoEncryptMode
+        // Default config (no NoEncryptMode) stores plaintext records unless per-record encryption
+        // is opted in, so the runtime magic-header gate now admits the fast path here too.
+        var db = CreateDb(noEncrypt: false);
         try
         {
             db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
@@ -221,7 +226,29 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
             var table = TableOf(db, "docs");
             db.ExecuteBatchSQL(BuildUpdates(1, 300, "score = 4.25"));
             db.Flush();
-            Assert.Equal(0, table.BulkContiguousUpdateBatches);
+            Assert.Equal(1, table.BulkContiguousUpdateBatches);
+
+            var rows = db.ExecuteQuery("SELECT score FROM docs WHERE id = 300");
+            Assert.Single(rows);
+            Assert.Equal(4.25, Convert.ToDouble(rows[0]["score"]));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
+    public void PerRecordEncryption_FallsBackToGenericLoop_AndStaysCorrect()
+    {
+        var db = CreateEncryptedDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 300);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            db.ExecuteBatchSQL(BuildUpdates(1, 300, "score = 4.25"));
+            db.Flush();
+            Assert.Equal(0, table.BulkContiguousUpdateBatches); // ciphertext records → generic loop
 
             var rows = db.ExecuteQuery("SELECT score FROM docs WHERE id = 300");
             Assert.Single(rows);

@@ -164,6 +164,13 @@ public interface IStorage
     byte[]? ReadBytesRange(string path, long offset, int length) => null;
 
     /// <summary>
+    /// True when the file at <paramref name="path"/> stores per-record encrypted (ciphertext)
+    /// payloads (it carries the encrypted-table magic header). Raw range reads must never be used on
+    /// such files; the default returns false (plaintext / legacy layouts).
+    /// </summary>
+    bool AreRecordsEncrypted(string path) => false;
+
+    /// <summary>
     /// Enumerates every record in a table data file, yielding the literal file offset of the
     /// 4-byte length prefix (the offset returned by <see cref="AppendBytes"/>) together with the
     /// decrypted (or plaintext) record payload. Format-agnostic: transparently handles both legacy

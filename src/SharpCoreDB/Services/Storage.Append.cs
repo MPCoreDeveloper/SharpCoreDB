@@ -561,6 +561,9 @@ public partial class Storage
         !bufferedOverwrites.IsEmpty && bufferedOverwrites.ContainsKey(path);
 
     /// <inheritdoc />
+    public bool AreRecordsEncrypted(string path) => UseRecordEncryption && FileHasEncryptedHeader(path);
+
+    /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long[] AppendBytesMultiple(string path, List<byte[]> dataBlocks)
     {
