@@ -36,8 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DELETE now survives a reopen (durability)** ÔÇö Columnar deletes were logical only (index removal),
   so the on-load PK-index rebuild resurrected deleted rows from the untouched `.dat`. Logically
   deleted rows are now counted (`_pendingLogicalDeletes`) and physically compacted at flush/dispose
-  (`Table.CompactPendingDeletes`, outside a transaction, Columnar tables with a PK). Regression:
-  delete half the rows, `Flush`, reopen ÔÇö exactly the remaining rows come back.
+  (`Table.CompactPendingDeletes`, outside a transaction, Columnar tables with a PK). Flush
+  compaction rewrites only the data file (live PK positions via B-tree traversal, single-pass index
+  rebuild) so the cost is proportional to the remaining rows (~0.4s for a 90K-live table); the
+  overflow arena is reclaimed on the next explicit VACUUM/compaction. Regression: delete half the
+  rows, `Flush`, reopen ÔÇö exactly the remaining rows come back. Measured DELETE in the `--pk`
+  harness now includes this durability rewrite (~18.6K ops/s when deleting 10K of 100K rows).
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new
