@@ -327,6 +327,102 @@ public class HashIndex : IDisposable
     }
 
     /// <summary>
+    /// Key-based overload of <see cref="AddBatch"/>: callers that already know each indexed key
+    /// (e.g. an in-place UPDATE re-point) add all rows with one lock acquisition per index.
+    /// </summary>
+    /// <param name="keys">The indexed key values (null entries are skipped).</param>
+    /// <param name="positions">Corresponding storage positions.</param>
+    internal void AddBatchKeys(object?[] keys, long[] positions)
+    {
+        if (keys.Length == 0)
+        {
+            return;
+        }
+
+        // PERF: Non-unique unsafe path — batch keys, then a single UnsafeEqualityIndex acquisition.
+        if (_useUnsafeEqualityIndex && !_isUnique)
+        {
+            var keyArrays = ArrayPool<byte[]>.Shared.Rent(keys.Length);
+            var rowIdBuf = ArrayPool<long>.Shared.Rent(keys.Length);
+            int validCount = 0;
+
+            try
+            {
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    if (keys[i] is null)
+                    {
+                        continue;
+                    }
+
+                    keyArrays[validCount] = BuildUnsafeKey(NormalizeKey(keys[i]));
+                    rowIdBuf[validCount] = positions[i];
+                    validCount++;
+                }
+
+                if (validCount > 0)
+                {
+                    _unsafeIndex.AddBatch(keyArrays, rowIdBuf, validCount);
+                    Interlocked.Add(ref _unsafeTotalRows, validCount);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte[]>.Shared.Return(keyArrays, clearArray: true);
+                ArrayPool<long>.Shared.Return(rowIdBuf);
+            }
+
+            return;
+        }
+
+        _lock.EnterWriteLock();
+        try
+        {
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (keys[i] is null)
+                {
+                    continue;
+                }
+
+                var normalizedKey = NormalizeKey(keys[i]);
+
+                if (_useUnsafeEqualityIndex)
+                {
+                    // Unique path: atomic check + add under outer lock.
+                    var keyBytes = BuildUnsafeKey(normalizedKey);
+                    if (HasUnsafeRowsForKey(keyBytes))
+                    {
+                        throw new InvalidOperationException(
+                            $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
+                    }
+
+                    _unsafeIndex.Add(keyBytes, positions[i]);
+                    _unsafeTotalRows++;
+                    continue;
+                }
+
+                if (!_index.TryGetValue(normalizedKey, out var list))
+                {
+                    list = [];
+                    _index[normalizedKey] = list;
+                }
+                else if (_isUnique && list.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
+                }
+
+                list.Add(positions[i]);
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Adds multiple rows to the index in a single lock acquisition.
     /// ✅ PERF: Acquires write lock once for entire batch instead of per-row.
     /// Reduces lock contention by ~95% for batch inserts.

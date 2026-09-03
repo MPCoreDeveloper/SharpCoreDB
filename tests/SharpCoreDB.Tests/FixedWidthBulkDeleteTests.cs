@@ -138,6 +138,38 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
     }
 
     [Fact]
+    public void BulkDelete_ScanAndCountStayConsistent()
+    {
+        var db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 2000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            var stmts = new List<string>(1000);
+            for (int i = 1; i <= 1000; i++)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture, "DELETE FROM docs WHERE id = {0}", i));
+            }
+
+            db.ExecuteBatchSQL(stmts);
+            db.Flush();
+            Assert.Equal(1, table.BulkContiguousDeleteBatches);
+
+            // After logical deletes the full scan and COUNT(*) must reflect exactly the live rows
+            // (regression for the earlier inconsistency, resolved by the BTree separator-delete fix).
+            var scan = db.ExecuteQuery("SELECT id FROM docs");
+            Assert.Equal(1000, scan.Count);
+            Assert.All(scan, r => Assert.True(Convert.ToInt64(r["id"]) > 1000));
+            var c = db.ExecuteQuery("SELECT COUNT(*) AS n FROM docs");
+            Assert.Equal(1000L, Convert.ToInt64(c[0].Values.First()));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
     public void GappedDeletes_FallBackToGenericLoop_AndStayCorrect()
     {
         var db = CreateDb();
@@ -162,6 +194,11 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
             Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 2"));
             Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user3'"));
             Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user2'"));
+
+            // Generic-path deletes keep the scan/count live too.
+            var scan = db.ExecuteQuery("SELECT id FROM docs");
+            Assert.Equal(400, scan.Count);
+            Assert.All(scan, r => Assert.Equal(0L, Convert.ToInt64(r["id"]) % 2));
         }
         finally { (db as IDisposable)?.Dispose(); }
     }

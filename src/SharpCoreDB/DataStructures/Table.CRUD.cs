@@ -2470,35 +2470,56 @@ public partial class Table
             {
                 return false;
             }
+        }
 
-            // Re-point hash-index entries for every fixed-size indexed SET column (mirrors the
-            // generic fastPatch path: old value decoded from the pre-write record, new value at the
-            // same position).
+        // Re-point hash-index entries for every fixed-size indexed SET column with ONE lock
+        // acquisition per index (mirrors the generic fastPatch path: old value decoded from the
+        // pre-write record, new value at the same position). Per-row Remove/Add would take 2 locks
+        // per row per index on the batch-DML hot path.
+        var indexedColumns = new List<int>();
+        for (int i = 0; i < count; i++)
+        {
             var repoints = repointColumns[i];
-            if (repoints is { Count: > 0 })
+            if (repoints is null)
             {
-                foreach (var colIdx in repoints)
+                continue;
+            }
+
+            foreach (var colIdx in repoints)
+            {
+                if (!indexedColumns.Contains(colIdx))
                 {
-                    var colName = this.Columns[colIdx];
-                    if (!this.hashIndexes.TryGetValue(colName, out var hashIdx))
-                    {
-                        continue;
-                    }
-
-                    var slot = payload.AsSpan(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
-                    var oldVal = ReadTypedValueFromSpan(slot, this.ColumnTypes[colIdx], out _);
-                    if (oldVal is not null)
-                    {
-                        hashIdx.Remove(oldVal, positions[i]);
-                    }
-
-                    var newVal = operations[i].updates[colName];
-                    if (newVal is not null)
-                    {
-                        hashIdx.Add(newVal, positions[i]);
-                    }
+                    indexedColumns.Add(colIdx);
                 }
             }
+        }
+
+        foreach (var colIdx in indexedColumns)
+        {
+            var colName = this.Columns[colIdx];
+            if (!this.hashIndexes.TryGetValue(colName, out var hashIdx))
+            {
+                continue;
+            }
+
+            var type = this.ColumnTypes[colIdx];
+            var oldKeys = new object?[count];
+            var newKeys = new object?[count];
+            for (int i = 0; i < count; i++)
+            {
+                var repoints = repointColumns[i];
+                if (repoints is null || !repoints.Contains(colIdx))
+                {
+                    continue;
+                }
+
+                var slot = raw.AsSpan((int)(i * stride) + 4 + layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                oldKeys[i] = ReadTypedValueFromSpan(slot, type, out _);
+                newKeys[i] = operations[i].updates[colName];
+            }
+
+            hashIdx.RemoveBatchKeys(oldKeys, positions);
+            hashIdx.AddBatchKeys(newKeys, positions);
         }
 
         Interlocked.Increment(ref _bulkContiguousUpdateBatches);
