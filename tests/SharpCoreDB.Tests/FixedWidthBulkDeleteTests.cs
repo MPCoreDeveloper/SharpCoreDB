@@ -104,6 +104,40 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
     }
 
     [Fact]
+    public void DescendingUpdateBatch_FallsBackToGenericLoop_AndAppliesEveryRow()
+    {
+        var db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 1000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            var stmts = new List<string>(1000);
+            for (int i = 1000; i >= 1; i--)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture, "UPDATE docs SET score = 7.5 WHERE id = {0}", i));
+            }
+
+            // Descending order must refuse the contiguous fast path AND still apply every row via
+            // the generic loop (regression: large descending batches used to apply nothing).
+            db.ExecuteBatchSQL(stmts);
+            db.Flush();
+            Assert.Equal(0, table.BulkContiguousUpdateBatches);
+
+            for (int i = 1; i <= 1000; i += 137)
+            {
+                var rows = db.ExecuteQuery("SELECT score FROM docs WHERE id = @id",
+                    new Dictionary<string, object?> { ["@id"] = i });
+                Assert.Single(rows);
+                Assert.Equal(7.5, Convert.ToDouble(rows[0]["score"]));
+            }
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
     public void GappedDeletes_FallBackToGenericLoop_AndStayCorrect()
     {
         var db = CreateDb();
