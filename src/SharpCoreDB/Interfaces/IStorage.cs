@@ -180,6 +180,16 @@ public interface IStorage
     bool TombstoneRecord(string path, long offset) => false;
 
     /// <summary>
+    /// Registers a record position to be tombstoned when the CURRENT transaction commits. Deletes
+    /// issued inside a transaction must not write the marker at delete time (it would survive a
+    /// rollback that restores the row), so callers buffer the physical offset here and the storage
+    /// layer applies the in-place marker once the owning transaction commits — durable in O(delete)
+    /// without the flush-time full-file rewrite. On rollback the buffered offsets are discarded.
+    /// The default is a no-op (unsupported layout / mock storage).
+    /// </summary>
+    void BufferTombstoneForCommit(string path, long offset) { }
+
+    /// <summary>
     /// Enumerates every record in a table data file, yielding the literal file offset of the
     /// 4-byte length prefix (the offset returned by <see cref="AppendBytes"/>) together with the
     /// decrypted (or plaintext) record payload. Format-agnostic: transparently handles both legacy

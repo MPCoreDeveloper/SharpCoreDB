@@ -49,6 +49,12 @@ public partial class Storage
     // append because OverwriteRecordAt refused to write inside a transaction.
     private readonly ConcurrentDictionary<string, Dictionary<long, byte[]>> bufferedOverwrites = new(StringComparer.Ordinal);
 
+    // ✅ Commit-time tombstones: physical offsets of records deleted inside the current
+    // transaction. The marker is NOT written at delete time (a rollback must keep the row);
+    // ApplyBufferedTombstones writes the in-place negative-prefix markers when the transaction
+    // commits, after the buffered appends are on disk. Rollback discards the buffer.
+    private readonly Dictionary<string, List<long>> bufferedTombstones = new(StringComparer.Ordinal);
+
     // Base file length captured at the first buffered operation of the transaction. In-place
     // overwrites are only safe below this boundary (records already flushed to disk); offsets
     // at or above it belong to still-buffered appends and must fall back to append.
@@ -564,6 +570,67 @@ public partial class Storage
     public bool AreRecordsEncrypted(string path) => UseRecordEncryption && FileHasEncryptedHeader(path);
 
     /// <inheritdoc />
+    public void BufferTombstoneForCommit(string path, long offset)
+    {
+        if (offset < 0)
+        {
+            return;
+        }
+
+        lock (appendLock)
+        {
+            if (!bufferedTombstones.TryGetValue(path, out var list))
+            {
+                list = new List<long>();
+                bufferedTombstones[path] = list;
+            }
+
+            list.Add(offset);
+        }
+    }
+
+    /// <summary>
+    /// Applies every buffered commit-time tombstone as an in-place negative-prefix marker. Runs
+    /// from <see cref="FlushBufferedAppendsAndOverwrites"/> (the commit path) AFTER the buffered
+    /// appends are on disk, so offsets of rows that were appended AND deleted in the same
+    /// transaction are valid. Rollback discards the buffer instead (<see cref="ClearBufferedAppends"/>).
+    /// </summary>
+    private void ApplyBufferedTombstones()
+    {
+        if (bufferedTombstones.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (path, offsets) in bufferedTombstones)
+        {
+            if (offsets.Count == 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                long fileLength = File.Exists(path) ? new FileInfo(path).Length : 0;
+                foreach (var offset in offsets)
+                {
+                    if (offset >= 0 && offset + 4 <= fileLength)
+                    {
+                        TombstoneRecord(path, offset);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                // Best-effort: a failed marker leaves the row physical; the auto/explicit
+                // compaction reclaims it later.
+            }
+        }
+
+        bufferedTombstones.Clear();
+    }
+
+    /// <inheritdoc />
     public bool TombstoneRecord(string path, long offset)
     {
         // Read the current slot size so the marker can encode the exact number of bytes to skip
@@ -746,6 +813,7 @@ public partial class Storage
         {
             FlushBufferedAppends();
             FlushBufferedOverwrites();
+            ApplyBufferedTombstones();
         }
     }
 
@@ -822,6 +890,7 @@ public partial class Storage
             cachedFileLengths.Clear();  // ✅ Clear cache too
             headerPendingFiles.Clear(); // ✅ Clear pending header markers on rollback
             bufferedFileBaseLengths.Clear();
+            bufferedTombstones.Clear(); // Rollback: discard pending commit-time tombstones
         }
     }
 

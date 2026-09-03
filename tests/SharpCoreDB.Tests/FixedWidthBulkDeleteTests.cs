@@ -218,7 +218,7 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
         }
 
         db.ExecuteBatchSQL(stmts);
-        db.Flush(); // flush-time compaction must physically remove the deleted rows
+        db.Flush(); // commit-time tombstones (or legacy flush compaction) remove the rows physically
         (db as IDisposable)?.Dispose();
 
         db = CreateDb();
@@ -228,6 +228,28 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
         Assert.Equal(100L, Convert.ToInt64(scan[^1]["id"]));
         var c = db.ExecuteQuery("SELECT COUNT(*) AS n FROM docs");
         Assert.Equal(50L, Convert.ToInt64(c[0].Values.First()));
+        (db as IDisposable)?.Dispose();
+    }
+
+    [Fact]
+    public void BatchDelete_CommitTimeTombstones_SurviveReopenWithoutExplicitFlush()
+    {
+        // ExecuteBatchSQL wraps the whole DELETE batch in one storage transaction. The deleted
+        // positions must be tombstoned AT COMMIT (not at a later db.Flush()), so durability must
+        // hold even when the database is disposed without an explicit Flush afterwards.
+        IDatabase? db = CreateDb();
+        db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+        InsertDocs(db, 1, 200);
+        db.Flush();
+
+        db.ExecuteBatchSQL(BuildDeletes(1, 100)); // commits inside ExecuteBatchSQL
+        (db as IDisposable)?.Dispose(); // no explicit Flush after the delete batch
+
+        db = CreateDb();
+        var scan = db.ExecuteQuery("SELECT id FROM docs ORDER BY id");
+        Assert.Equal(100, scan.Count);
+        Assert.Equal(101L, Convert.ToInt64(scan[0]["id"]));
+        Assert.Equal(200L, Convert.ToInt64(scan[^1]["id"]));
         (db as IDisposable)?.Dispose();
     }
 }
