@@ -3062,6 +3062,10 @@ public partial class Table
             // B1: decode only the columns the delete core touches (PK + loaded hash-index columns).
             int[] deleteKeyColumns = BuildDeleteKeyColumns();
 
+            // A1: when the (plaintext, legacy variable-length) data file is small enough, read it
+            // ONCE and resolve every target from memory instead of one pread pair per deleted row.
+            byte[]? wholeFile = TryLoadWholeFileForDeleteResolution();
+
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var (col, literal) in conditions)
@@ -3076,14 +3080,23 @@ public partial class Table
                     var fastSearch = this.Index.Search(value);
                     if (fastSearch.Found)
                     {
-                        var fastData = engine.Read(Name, fastSearch.Value);
-                        if (fastData != null)
+                        Dictionary<string, object>? fastRow = null;
+                        if (wholeFile != null)
                         {
-                            var fastRow = DeserializeDeleteKeyRow(fastData, deleteKeyColumns) ?? DeserializeRowFromSpan(fastData);
-                            if (fastRow != null)
+                            fastRow = DeserializeDeleteKeyRowFromFile(wholeFile, fastSearch.Value, deleteKeyColumns);
+                        }
+                        else
+                        {
+                            var fastData = engine.Read(Name, fastSearch.Value);
+                            if (fastData != null)
                             {
-                                recordsToDelete.Add((fastSearch.Value, fastRow));
+                                fastRow = DeserializeDeleteKeyRow(fastData, deleteKeyColumns) ?? DeserializeRowFromSpan(fastData);
                             }
+                        }
+
+                        if (fastRow != null)
+                        {
+                            recordsToDelete.Add((fastSearch.Value, fastRow));
                         }
 
                         continue;
@@ -3127,12 +3140,21 @@ public partial class Table
 
                                 foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
                                 {
-                                    var data = engine.Read(Name, pos);
-                                    if (data != null)
+                                    Dictionary<string, object>? row = null;
+                                    if (wholeFile != null)
                                     {
-                                        var row = DeserializeDeleteKeyRow(data, deleteKeyColumns) ?? DeserializeRowFromSpan(data);
-                                        if (row != null) recordsToDelete.Add((pos, row));
+                                        row = DeserializeDeleteKeyRowFromFile(wholeFile, pos, deleteKeyColumns);
                                     }
+                                    else
+                                    {
+                                        var data = engine.Read(Name, pos);
+                                        if (data != null)
+                                        {
+                                            row = DeserializeDeleteKeyRow(data, deleteKeyColumns) ?? DeserializeRowFromSpan(data);
+                                        }
+                                    }
+
+                                    if (row != null) recordsToDelete.Add((pos, row));
                                 }
 
                                 continue;
@@ -3237,12 +3259,29 @@ public partial class Table
     /// </summary>
     private Dictionary<string, object>? DeserializeDeleteKeyRow(byte[] data, int[] wanted)
     {
-        if (_fixedWidthRecords || data == null || data.Length == 0 || wanted.Length == 0)
+        if (data == null)
         {
             return null;
         }
 
-        ReadOnlySpan<byte> span = data.AsSpan();
+        return DeserializeDeleteKeyRow(data.AsSpan(), wanted);
+    }
+
+    /// <summary>
+    /// B1: decodes only the columns listed in <paramref name="wanted"/> (ascending) from a legacy
+    /// variable-length serialized row, skipping the unneeded columns' payload parsing entirely.
+    /// Returns a minimal dictionary (pk + hash-index columns only) so <see cref="DeleteRecordsCore"/>
+    /// performs the identical PK/hash lookups without materializing the full row. Returns null for
+    /// fixed-width layouts (those go through the fixed-width codec) or corrupt rows — callers fall
+    /// back to full-row deserialization in that case.
+    /// </summary>
+    private Dictionary<string, object>? DeserializeDeleteKeyRow(ReadOnlySpan<byte> span, int[] wanted)
+    {
+        if (_fixedWidthRecords || span.IsEmpty || wanted.Length == 0)
+        {
+            return null;
+        }
+
         int offset = 0;
         Dictionary<string, object>? row = null;
         int wi = 0;
@@ -3272,6 +3311,44 @@ public partial class Table
         }
 
         return row;
+    }
+
+    // A1: whole-file delete resolution reads the (small) data file once instead of one pread pair
+    // per deleted row. Guarded to plaintext legacy variable-length files below this size.
+    private const long WholeFileDeleteResolutionLimitBytes = 32 * 1024 * 1024;
+
+    private byte[]? TryLoadWholeFileForDeleteResolution()
+    {
+        if (_fixedWidthRecords ||
+            this.storage is null ||
+            this.storage.AreRecordsEncrypted(DataFile))
+        {
+            return null;
+        }
+
+        var fi = new System.IO.FileInfo(DataFile);
+        if (!fi.Exists || fi.Length <= 0 || fi.Length > WholeFileDeleteResolutionLimitBytes)
+        {
+            return null;
+        }
+
+        return this.storage.ReadBytesRange(DataFile, 0, (int)fi.Length);
+    }
+
+    private Dictionary<string, object>? DeserializeDeleteKeyRowFromFile(byte[] wholeFile, long position, int[] wanted)
+    {
+        if (position < 0 || position + 4 > wholeFile.Length)
+        {
+            return null;
+        }
+
+        int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)position, 4));
+        if (recordLength <= 0 || position + 4 + recordLength > wholeFile.Length)
+        {
+            return null;
+        }
+
+        return DeserializeDeleteKeyRow(wholeFile.AsSpan((int)position + 4, recordLength), wanted);
     }
 
     /// <summary>
