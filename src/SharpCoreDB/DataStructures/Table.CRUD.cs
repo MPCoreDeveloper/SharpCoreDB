@@ -2450,51 +2450,12 @@ public partial class Table
             keys[i] = keyStr;
         }
 
-        // Resolve the first record position through the PK B-tree, then require every later key to
-        // sit at the expected contiguous offset (physical adjacency). Verifying every position keeps
-        // the gate sound even when earlier appends/deletes shifted records.
-        var first = this.Index.Search(keys[0]);
-        if (!first.Found)
+        // Resolve every target record's position through the PK B-tree and read + verify the whole
+        // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        if (raw is null)
         {
             return false;
-        }
-
-        long basePosition = first.Value;
-        positions[0] = basePosition;
-        long expected = basePosition;
-        for (int i = 1; i < count; i++)
-        {
-            expected += stride;
-            var search = this.Index.Search(keys[i]);
-            if (!search.Found || search.Value != expected)
-            {
-                return false;
-            }
-
-            positions[i] = expected;
-        }
-
-        // Read the whole contiguous span in ONE range read (plaintext records only — enforced above).
-        long totalBytes = stride * count;
-        if (totalBytes <= 0 || totalBytes > int.MaxValue)
-        {
-            return false;
-        }
-
-        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
-        if (raw is null || raw.Length < totalBytes)
-        {
-            return false;
-        }
-
-        // Verify every 4-byte length prefix matches the fixed record size BEFORE touching anything.
-        for (int i = 0; i < count; i++)
-        {
-            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
-            if (prefix != layout.FixedSize)
-            {
-                return false;
-            }
         }
 
         // Patch and write each record in place (buffered by the storage layer; flushed at commit).
@@ -3001,6 +2962,66 @@ public partial class Table
     }
 
     /// <summary>
+    /// Shared B8/B9 probe: resolves each key's record position through the PK B-tree, requires the
+    /// positions to be physically adjacent at the fixed-width stride, reads the whole contiguous
+    /// span through the storage layer's cached handle and verifies every 4-byte length prefix.
+    /// Returns the raw span bytes, or <see langword="null"/> so the caller falls back to the generic
+    /// per-row loop — nothing is modified before this succeeds.
+    /// </summary>
+    private byte[]? TryReadContiguousFixedWidthRecords(
+        string[] keys,
+        long stride,
+        FixedWidthRecordLayout layout,
+        long[] positions)
+    {
+        int count = keys.Length;
+
+        var first = this.Index.Search(keys[0]);
+        if (!first.Found)
+        {
+            return null;
+        }
+
+        long basePosition = first.Value;
+        positions[0] = basePosition;
+        long expected = basePosition;
+        for (int i = 1; i < count; i++)
+        {
+            expected += stride;
+            var search = this.Index.Search(keys[i]);
+            if (!search.Found || search.Value != expected)
+            {
+                return null;
+            }
+
+            positions[i] = expected;
+        }
+
+        long totalBytes = stride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        {
+            return null;
+        }
+
+        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
+        if (raw is null || raw.Length < totalBytes)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
+            if (prefix != layout.FixedSize)
+            {
+                return null;
+            }
+        }
+
+        return raw;
+    }
+
+    /// <summary>
     /// B9: number of DELETE batches processed by the contiguous single-pass fast path (diagnostics
     /// used by tests to prove the path engages; zero means every batch fell back to the generic loop).
     /// </summary>
@@ -3073,47 +3094,12 @@ public partial class Table
             keys[i] = keyStr;
         }
 
-        // Verify physical adjacency exactly like the UPDATE fast path before touching anything.
-        var first = this.Index.Search(keys[0]);
-        if (!first.Found)
+        // Resolve every target record's position through the PK B-tree and read + verify the whole
+        // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        if (raw is null)
         {
             return false;
-        }
-
-        long basePosition = first.Value;
-        positions[0] = basePosition;
-        long expected = basePosition;
-        for (int i = 1; i < count; i++)
-        {
-            expected += stride;
-            var search = this.Index.Search(keys[i]);
-            if (!search.Found || search.Value != expected)
-            {
-                return false;
-            }
-
-            positions[i] = expected;
-        }
-
-        long totalBytes = stride * count;
-        if (totalBytes <= 0 || totalBytes > int.MaxValue)
-        {
-            return false;
-        }
-
-        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
-        if (raw is null || raw.Length < totalBytes)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
-            if (prefix != layout.FixedSize)
-            {
-                return false;
-            }
         }
 
         // Remove PK entries (the keys are the WHERE literals) and then every loaded hash-index
