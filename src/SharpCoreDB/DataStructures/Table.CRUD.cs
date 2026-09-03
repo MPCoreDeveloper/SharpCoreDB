@@ -2,6 +2,7 @@ namespace SharpCoreDB.DataStructures;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Buffers;
@@ -1931,6 +1932,16 @@ public partial class Table
             // remove the stale record from all indexes (unloaded indexes would later be rebuilt
             // from the file INCLUDING the stale record).
             EnsureAllRegisteredIndexesLoaded();
+
+            // B8: single-pass contiguous UPDATE — when every operation is a `pk = <literal>` match on a
+            // plaintext fixed-width table with physically adjacent PK-ordered records, the old records
+            // are read as ONE contiguous byte range and patched in memory (no per-row pread). Strictly
+            // gated; any mismatch falls back to the generic per-row loop below.
+            if (TryBulkUpdateContiguousFixedWidth(engine, operations))
+            {
+                return;
+            }
+
             int appendedInBatch = 0; // only appends create stale versions that need compaction
 
             foreach (var (where, updates) in operations)
@@ -2314,6 +2325,222 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// B8: number of UPDATE batches processed by the contiguous single-pass fast path (diagnostics
+    /// used by tests to prove the path engages; zero means every batch fell back to the generic loop).
+    /// </summary>
+    public long BulkContiguousUpdateBatches => Interlocked.Read(ref _bulkContiguousUpdateBatches);
+
+    private long _bulkContiguousUpdateBatches;
+
+    /// <summary>
+    /// B8: single-pass contiguous UPDATE fast path for plaintext fixed-width tables. Requires every
+    /// operation to be a simple <c>pk = &lt;numeric literal&gt;</c> match on the primary key, with keys
+    /// strictly increasing AND records physically adjacent in the data file (the fixed-width layout
+    /// makes the on-disk stride constant: <c>[4-byte length][FixedSize payload]</c>). When all
+    /// conditions hold the target records are read as one contiguous byte range, patched in memory
+    /// (field-level in-place patch, exactly like the generic row path) and written back through the
+    /// same buffered same-length overwrite. Any mismatch returns <see langword="false"/> so the caller
+    /// falls back to the generic per-row loop — no records are touched before the range is verified.
+    /// </summary>
+    private bool TryBulkUpdateContiguousFixedWidth(
+        IStorageEngine engine,
+        List<(string where, Dictionary<string, object> updates)> operations)
+    {
+        int count = operations.Count;
+        if (count < 2)
+        {
+            return false;
+        }
+
+        // Narrow, conservative gate: fixed-width columnar table with an explicit PK, plaintext
+        // records only (a raw contiguous read must equal the logical record bytes), no buffered
+        // overwrites for this file, and no CHECK constraints (mirrors the generic fastPatch gate).
+        if (!_fixedWidthRecords ||
+            StorageMode != StorageMode.Columnar ||
+            this.PrimaryKeyIndex < 0 ||
+            this.TableCheckConstraints.Count > 0 ||
+            HasColumnCheckConstraints() ||
+            this.storage is null ||
+            this._config is not { NoEncryptMode: true } ||
+            this.storage.HasBufferedOverwrite(DataFile))
+        {
+            return false;
+        }
+
+        var pkName = this.Columns[this.PrimaryKeyIndex];
+        var layout = GetFixedWidthLayout();
+        long stride = 4L + layout.FixedSize;
+
+        var positions = new long[count];
+        var keys = new string[count];
+        var repointColumns = new List<int>?[count];
+        long parsedPrev = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            var (where, updates) = operations[i];
+            if (string.IsNullOrEmpty(where) ||
+                !TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) ||
+                !string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
+                whereVal is null)
+            {
+                return false;
+            }
+
+            var keyStr = whereVal.ToString();
+            if (string.IsNullOrEmpty(keyStr))
+            {
+                return false;
+            }
+
+            foreach (var updateKey in updates.Keys)
+            {
+                // Resolve the column; unknown columns must fall back so the generic loop surfaces the error.
+                int colIdx = -1;
+                for (int c = 0; c < this.Columns.Count; c++)
+                {
+                    if (this.Columns[c].Equals(updateKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        colIdx = c;
+                        break;
+                    }
+                }
+
+                if (colIdx < 0)
+                {
+                    return false;
+                }
+
+                // Updating the PK itself must fall back (the PK B-tree position must be re-pointed).
+                if (colIdx == this.PrimaryKeyIndex)
+                {
+                    return false;
+                }
+
+                // Hash-indexed SET columns need their entries re-pointed after the in-place write.
+                // Fixed-size values decode from the raw slot cheaply; variable-length (TEXT/BLOB)
+                // indexed columns would need an overflow-arena read, so they fall back to the
+                // generic per-row loop.
+                if (this.hashIndexes.ContainsKey(this.Columns[colIdx]))
+                {
+                    if (layout.IsVariable[colIdx])
+                    {
+                        return false;
+                    }
+
+                    (repointColumns[i] ??= new List<int>(2)).Add(colIdx);
+                }
+            }
+
+            // Strictly increasing numeric keys keep the physical records adjacent for fixed-width.
+            if (!long.TryParse(keyStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out long key))
+            {
+                return false;
+            }
+
+            if (i > 0 && key <= parsedPrev)
+            {
+                return false;
+            }
+
+            parsedPrev = key;
+            keys[i] = keyStr;
+        }
+
+        // Resolve the first record position through the PK B-tree, then require every later key to
+        // sit at the expected contiguous offset (physical adjacency). Verifying every position keeps
+        // the gate sound even when earlier appends/deletes shifted records.
+        var first = this.Index.Search(keys[0]);
+        if (!first.Found)
+        {
+            return false;
+        }
+
+        long basePosition = first.Value;
+        positions[0] = basePosition;
+        long expected = basePosition;
+        for (int i = 1; i < count; i++)
+        {
+            expected += stride;
+            var search = this.Index.Search(keys[i]);
+            if (!search.Found || search.Value != expected)
+            {
+                return false;
+            }
+
+            positions[i] = expected;
+        }
+
+        // Read the whole contiguous span in ONE range read (plaintext records only — enforced above).
+        long totalBytes = stride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        {
+            return false;
+        }
+
+        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
+        if (raw is null || raw.Length < totalBytes)
+        {
+            return false;
+        }
+
+        // Verify every 4-byte length prefix matches the fixed record size BEFORE touching anything.
+        for (int i = 0; i < count; i++)
+        {
+            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
+            if (prefix != layout.FixedSize)
+            {
+                return false;
+            }
+        }
+
+        // Patch and write each record in place (buffered by the storage layer; flushed at commit).
+        for (int i = 0; i < count; i++)
+        {
+            var payload = new byte[layout.FixedSize];
+            raw.AsSpan((int)(i * stride) + 4, layout.FixedSize).CopyTo(payload);
+
+            var patched = TryOverwriteFixedWidthInPlace(payload, operations[i].updates);
+            if (patched is null || !engine.TryUpdateInPlaceSameLength(Name, positions[i], patched))
+            {
+                return false;
+            }
+
+            // Re-point hash-index entries for every fixed-size indexed SET column (mirrors the
+            // generic fastPatch path: old value decoded from the pre-write record, new value at the
+            // same position).
+            var repoints = repointColumns[i];
+            if (repoints is { Count: > 0 })
+            {
+                foreach (var colIdx in repoints)
+                {
+                    var colName = this.Columns[colIdx];
+                    if (!this.hashIndexes.TryGetValue(colName, out var hashIdx))
+                    {
+                        continue;
+                    }
+
+                    var slot = payload.AsSpan(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                    var oldVal = ReadTypedValueFromSpan(slot, this.ColumnTypes[colIdx], out _);
+                    if (oldVal is not null)
+                    {
+                        hashIdx.Remove(oldVal, positions[i]);
+                    }
+
+                    var newVal = operations[i].updates[colName];
+                    if (newVal is not null)
+                    {
+                        hashIdx.Add(newVal, positions[i]);
+                    }
+                }
+            }
+        }
+
+        Interlocked.Increment(ref _bulkContiguousUpdateBatches);
+        return true;
     }
 
     /// <summary>

@@ -114,6 +114,13 @@ public interface IStorage
         OverwriteRecordAt(path, offset, data);
 
     /// <summary>
+    /// True when an in-place overwrite is currently buffered for <paramref name="path"/> (the
+    /// transaction write-behind buffer overlays reads of those offsets). Callers that bypass the
+    /// per-record read path must check this first so they never read stale disk bytes.
+    /// </summary>
+    bool HasBufferedOverwrite(string path) => false;
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>
@@ -147,6 +154,14 @@ public interface IStorage
     /// <param name="noEncrypt">If true, bypasses encryption for this operation.</param>
     /// <returns>The read data, or null if file does not exist or position is invalid.</returns>
     byte[]? ReadBytesAt(string path, long position, int maxLength, bool noEncrypt);
+
+    /// <summary>
+    /// Reads a raw contiguous byte range starting at <paramref name="offset"/> using the storage
+    /// layer's cached file handle (no per-call handle open). Used by the fixed-width contiguous
+    /// UPDATE fast path, which only engages on plaintext files. Implementations that cannot serve a
+    /// raw range (encrypted layouts, mocks) return null so the caller falls back to per-record reads.
+    /// </summary>
+    byte[]? ReadBytesRange(string path, long offset, int length) => null;
 
     /// <summary>
     /// Enumerates every record in a table data file, yielding the literal file offset of the
