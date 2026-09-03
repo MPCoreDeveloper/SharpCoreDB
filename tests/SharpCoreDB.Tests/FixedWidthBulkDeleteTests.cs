@@ -1,0 +1,134 @@
+// <copyright file="FixedWidthBulkDeleteTests.cs" company="MPCoreDeveloper">
+// Copyright (c) 2026 MPCoreDeveloper. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+// </copyright>
+namespace SharpCoreDB.Tests;
+
+using Microsoft.Extensions.DependencyInjection;
+using SharpCoreDB.DataStructures;
+using SharpCoreDB.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using Xunit;
+
+/// <summary>
+/// B9: single-pass contiguous DELETE fast path (Table.TryBulkDeleteContiguousFixedWidth). Strictly
+/// ascending `pk = literal` DELETEs on a plaintext fixed-width table with physically adjacent
+/// records remove every PK/hash-index entry in one pass (no per-row pread or full-row
+/// deserialization). Any other shape falls back to the generic loop and stays correct.
+/// </summary>
+public sealed class FixedWidthBulkDeleteTests : IDisposable
+{
+    private readonly DatabaseFactory _factory;
+    private readonly string _dirPath;
+
+    public FixedWidthBulkDeleteTests()
+    {
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        _factory = services.BuildServiceProvider().GetRequiredService<DatabaseFactory>();
+        _dirPath = Path.Combine(Path.GetTempPath(), $"SCDB_BulkDel_{Guid.NewGuid():N}");
+    }
+
+    public void Dispose()
+    {
+        try { if (Directory.Exists(_dirPath)) Directory.Delete(_dirPath, true); } catch { }
+    }
+
+    private IDatabase CreateDb(bool noEncrypt = true) => _factory.Create(_dirPath, "pw", isReadOnly: false,
+        config: new DatabaseConfig { NoEncryptMode = noEncrypt });
+
+    private static Table TableOf(IDatabase db, string tableName)
+    {
+        Assert.True(db.TryGetTable(tableName, out var t));
+        return Assert.IsType<Table>(t);
+    }
+
+    private static void InsertDocs(IDatabase db, int fromId, int toId)
+    {
+        var stmts = new List<string>(Math.Abs(toId - fromId) + 1);
+        for (int i = fromId; i <= toId; i++)
+        {
+            stmts.Add(string.Format(CultureInfo.InvariantCulture,
+                "INSERT INTO docs VALUES ({0}, 'user{0}', {1})", i, i * 0.5));
+        }
+
+        db.ExecuteBatchSQL(stmts);
+    }
+
+    private static List<string> BuildDeletes(int fromId, int toId)
+    {
+        var stmts = new List<string>(Math.Abs(toId - fromId) + 1);
+        for (int i = fromId; i <= toId; i++)
+        {
+            stmts.Add(string.Format(CultureInfo.InvariantCulture, "DELETE FROM docs WHERE id = {0}", i));
+        }
+
+        return stmts;
+    }
+
+    [Fact]
+    public void ContiguousAscendingDeletes_EngageBulkPath_AndRemoveEveryIndex()
+    {
+        var db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            InsertDocs(db, 1, 2000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+            db.ExecuteBatchSQL(BuildDeletes(1, 1000));
+            db.Flush();
+            Assert.Equal(1, table.BulkContiguousDeleteBatches);
+
+            // Deleted rows are gone from the PK and hash-index paths; live rows stay reachable.
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user500'"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 1500"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user1500'"));
+
+            // A second contiguous DELETE batch over the remaining rows engages again.
+            db.ExecuteBatchSQL(BuildDeletes(1001, 2000));
+            db.Flush();
+            Assert.Equal(2, table.BulkContiguousDeleteBatches);
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 1500"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user1500'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
+    public void GappedDeletes_FallBackToGenericLoop_AndStayCorrect()
+    {
+        var db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 800);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            var stmts = new List<string>(400);
+            for (int i = 1; i <= 800; i += 2)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture, "DELETE FROM docs WHERE id = {0}", i));
+            }
+
+            db.ExecuteBatchSQL(stmts);
+            db.Flush();
+            Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 3"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 2"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user3'"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user2'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+}

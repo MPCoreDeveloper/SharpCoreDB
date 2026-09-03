@@ -2890,6 +2890,16 @@ public partial class Table
             // Load every registered hash index before the delete loop (same reason as
             // CollectDeleteRecords: stale file records must be removed from every index).
             EnsureAllRegisteredIndexesLoaded();
+
+            // B9: single-pass contiguous DELETE — mirror of the UPDATE fast path: when every
+            // condition is a strictly ascending `pk = <literal>` match on a plaintext fixed-width
+            // table with physically adjacent records, the rows are removed from every index in one
+            // pass (no per-row pread or full-row deserialization). Falls back to the generic loop.
+            if (TryBulkDeleteContiguousFixedWidth(whereConditions))
+            {
+                return;
+            }
+
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var where in whereConditions)
@@ -2988,6 +2998,181 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// B9: number of DELETE batches processed by the contiguous single-pass fast path (diagnostics
+    /// used by tests to prove the path engages; zero means every batch fell back to the generic loop).
+    /// </summary>
+    public long BulkContiguousDeleteBatches => Interlocked.Read(ref _bulkContiguousDeleteBatches);
+
+    private long _bulkContiguousDeleteBatches;
+
+    /// <summary>
+    /// B9: single-pass contiguous DELETE for plaintext fixed-width tables (mirror of the UPDATE fast
+    /// path). Requires strictly ascending <c>pk = &lt;numeric literal&gt;</c> conditions whose records are
+    /// physically adjacent; when the shape holds, the target records are read as one contiguous byte
+    /// range and every PK / loaded hash-index entry is removed in one pass (the physical rows are
+    /// reclaimed lazily by compaction exactly like the generic delete path). Any mismatch returns
+    /// <see langword="false"/> and the caller falls back to the generic per-condition loop — nothing
+    /// is removed before the range is verified.
+    /// </summary>
+    private bool TryBulkDeleteContiguousFixedWidth(List<string> whereConditions)
+    {
+        int count = whereConditions.Count;
+        if (count < 2)
+        {
+            return false;
+        }
+
+        // Identical safety gate to the UPDATE fast path: fixed-width columnar table with an explicit
+        // PK, plaintext records only, and no buffered overwrites (a raw range read must equal the
+        // logical record bytes). DeleteMultiple loads every registered hash index before calling this.
+        if (!_fixedWidthRecords ||
+            StorageMode != StorageMode.Columnar ||
+            this.PrimaryKeyIndex < 0 ||
+            this.storage is null ||
+            this._config is not { NoEncryptMode: true } ||
+            this.storage.HasBufferedOverwrite(DataFile))
+        {
+            return false;
+        }
+
+        var pkName = this.Columns[this.PrimaryKeyIndex];
+        var layout = GetFixedWidthLayout();
+        long stride = 4L + layout.FixedSize;
+
+        var positions = new long[count];
+        var keys = new string[count];
+        long parsedPrev = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            var where = whereConditions[i];
+            if (string.IsNullOrEmpty(where) ||
+                !TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) ||
+                !string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
+                whereVal is null)
+            {
+                return false;
+            }
+
+            var keyStr = whereVal.ToString();
+            if (string.IsNullOrEmpty(keyStr) ||
+                !long.TryParse(keyStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out long key))
+            {
+                return false;
+            }
+
+            if (i > 0 && key <= parsedPrev)
+            {
+                return false;
+            }
+
+            parsedPrev = key;
+            keys[i] = keyStr;
+        }
+
+        // Verify physical adjacency exactly like the UPDATE fast path before touching anything.
+        var first = this.Index.Search(keys[0]);
+        if (!first.Found)
+        {
+            return false;
+        }
+
+        long basePosition = first.Value;
+        positions[0] = basePosition;
+        long expected = basePosition;
+        for (int i = 1; i < count; i++)
+        {
+            expected += stride;
+            var search = this.Index.Search(keys[i]);
+            if (!search.Found || search.Value != expected)
+            {
+                return false;
+            }
+
+            positions[i] = expected;
+        }
+
+        long totalBytes = stride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        {
+            return false;
+        }
+
+        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
+        if (raw is null || raw.Length < totalBytes)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
+            if (prefix != layout.FixedSize)
+            {
+                return false;
+            }
+        }
+
+        // Remove PK entries (the keys are the WHERE literals) and then every loaded hash-index
+        // entry, decoding only the indexed columns from the raw fixed-width records (no full-row
+        // deserialization). Variable values resolve through the overflow arena, mirroring the
+        // fixed-width codec used by the generic path.
+        for (int i = 0; i < count; i++)
+        {
+            this.Index.Delete(keys[i]);
+        }
+
+        var arena = GetOverflowArena();
+        foreach (var (colName, hashIdx) in this.hashIndexes)
+        {
+            int colIdx = -1;
+            for (int c = 0; c < this.Columns.Count; c++)
+            {
+                if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
+                {
+                    colIdx = c;
+                    break;
+                }
+            }
+
+            if (colIdx < 0)
+            {
+                continue;
+            }
+
+            var type = this.ColumnTypes[colIdx];
+            var decoded = new object?[count];
+            for (int i = 0; i < count; i++)
+            {
+                var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
+                var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                if (layout.IsVariable[colIdx])
+                {
+                    if (slot[0] == 0)
+                    {
+                        decoded[i] = null;
+                        continue;
+                    }
+
+                    var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                    var block = arena.Read(blockOffset);
+                    decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
+                }
+                else
+                {
+                    decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                }
+            }
+
+            hashIdx.RemoveBatchKeys(decoded, positions);
+        }
+
+        Interlocked.Add(ref _cachedRowCount, -count);
+        Interlocked.Increment(ref _bulkContiguousDeleteBatches);
+        return true;
     }
 
     /// <summary>
