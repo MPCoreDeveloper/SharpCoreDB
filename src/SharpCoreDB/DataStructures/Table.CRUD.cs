@@ -2450,51 +2450,12 @@ public partial class Table
             keys[i] = keyStr;
         }
 
-        // Resolve the first record position through the PK B-tree, then require every later key to
-        // sit at the expected contiguous offset (physical adjacency). Verifying every position keeps
-        // the gate sound even when earlier appends/deletes shifted records.
-        var first = this.Index.Search(keys[0]);
-        if (!first.Found)
+        // Resolve every target record's position through the PK B-tree and read + verify the whole
+        // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        if (raw is null)
         {
             return false;
-        }
-
-        long basePosition = first.Value;
-        positions[0] = basePosition;
-        long expected = basePosition;
-        for (int i = 1; i < count; i++)
-        {
-            expected += stride;
-            var search = this.Index.Search(keys[i]);
-            if (!search.Found || search.Value != expected)
-            {
-                return false;
-            }
-
-            positions[i] = expected;
-        }
-
-        // Read the whole contiguous span in ONE range read (plaintext records only — enforced above).
-        long totalBytes = stride * count;
-        if (totalBytes <= 0 || totalBytes > int.MaxValue)
-        {
-            return false;
-        }
-
-        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
-        if (raw is null || raw.Length < totalBytes)
-        {
-            return false;
-        }
-
-        // Verify every 4-byte length prefix matches the fixed record size BEFORE touching anything.
-        for (int i = 0; i < count; i++)
-        {
-            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
-            if (prefix != layout.FixedSize)
-            {
-                return false;
-            }
         }
 
         // Patch and write each record in place (buffered by the storage layer; flushed at commit).
@@ -2890,6 +2851,16 @@ public partial class Table
             // Load every registered hash index before the delete loop (same reason as
             // CollectDeleteRecords: stale file records must be removed from every index).
             EnsureAllRegisteredIndexesLoaded();
+
+            // B9: single-pass contiguous DELETE — mirror of the UPDATE fast path: when every
+            // condition is a strictly ascending `pk = <literal>` match on a plaintext fixed-width
+            // table with physically adjacent records, the rows are removed from every index in one
+            // pass (no per-row pread or full-row deserialization). Falls back to the generic loop.
+            if (TryBulkDeleteContiguousFixedWidth(whereConditions))
+            {
+                return;
+            }
+
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var where in whereConditions)
@@ -2988,6 +2959,206 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Shared B8/B9 probe: resolves each key's record position through the PK B-tree, requires the
+    /// positions to be physically adjacent at the fixed-width stride, reads the whole contiguous
+    /// span through the storage layer's cached handle and verifies every 4-byte length prefix.
+    /// Returns the raw span bytes, or <see langword="null"/> so the caller falls back to the generic
+    /// per-row loop — nothing is modified before this succeeds.
+    /// </summary>
+    private byte[]? TryReadContiguousFixedWidthRecords(
+        string[] keys,
+        long stride,
+        FixedWidthRecordLayout layout,
+        long[] positions)
+    {
+        int count = keys.Length;
+
+        var first = this.Index.Search(keys[0]);
+        if (!first.Found)
+        {
+            return null;
+        }
+
+        long basePosition = first.Value;
+        positions[0] = basePosition;
+        long expected = basePosition;
+        for (int i = 1; i < count; i++)
+        {
+            expected += stride;
+            var search = this.Index.Search(keys[i]);
+            if (!search.Found || search.Value != expected)
+            {
+                return null;
+            }
+
+            positions[i] = expected;
+        }
+
+        long totalBytes = stride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        {
+            return null;
+        }
+
+        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
+        if (raw is null || raw.Length < totalBytes)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
+            if (prefix != layout.FixedSize)
+            {
+                return null;
+            }
+        }
+
+        return raw;
+    }
+
+    /// <summary>
+    /// B9: number of DELETE batches processed by the contiguous single-pass fast path (diagnostics
+    /// used by tests to prove the path engages; zero means every batch fell back to the generic loop).
+    /// </summary>
+    public long BulkContiguousDeleteBatches => Interlocked.Read(ref _bulkContiguousDeleteBatches);
+
+    private long _bulkContiguousDeleteBatches;
+
+    /// <summary>
+    /// B9: single-pass contiguous DELETE for plaintext fixed-width tables (mirror of the UPDATE fast
+    /// path). Requires strictly ascending <c>pk = &lt;numeric literal&gt;</c> conditions whose records are
+    /// physically adjacent; when the shape holds, the target records are read as one contiguous byte
+    /// range and every PK / loaded hash-index entry is removed in one pass (the physical rows are
+    /// reclaimed lazily by compaction exactly like the generic delete path). Any mismatch returns
+    /// <see langword="false"/> and the caller falls back to the generic per-condition loop — nothing
+    /// is removed before the range is verified.
+    /// </summary>
+    private bool TryBulkDeleteContiguousFixedWidth(List<string> whereConditions)
+    {
+        int count = whereConditions.Count;
+        if (count < 2)
+        {
+            return false;
+        }
+
+        // Identical safety gate to the UPDATE fast path: fixed-width columnar table with an explicit
+        // PK, plaintext records only, and no buffered overwrites (a raw range read must equal the
+        // logical record bytes). DeleteMultiple loads every registered hash index before calling this.
+        if (!_fixedWidthRecords ||
+            StorageMode != StorageMode.Columnar ||
+            this.PrimaryKeyIndex < 0 ||
+            this.storage is null ||
+            this._config is not { NoEncryptMode: true } ||
+            this.storage.HasBufferedOverwrite(DataFile))
+        {
+            return false;
+        }
+
+        var pkName = this.Columns[this.PrimaryKeyIndex];
+        var layout = GetFixedWidthLayout();
+        long stride = 4L + layout.FixedSize;
+
+        var positions = new long[count];
+        var keys = new string[count];
+        long parsedPrev = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            var where = whereConditions[i];
+            if (string.IsNullOrEmpty(where) ||
+                !TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) ||
+                !string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
+                whereVal is null)
+            {
+                return false;
+            }
+
+            var keyStr = whereVal.ToString();
+            if (string.IsNullOrEmpty(keyStr) ||
+                !long.TryParse(keyStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out long key))
+            {
+                return false;
+            }
+
+            if (i > 0 && key <= parsedPrev)
+            {
+                return false;
+            }
+
+            parsedPrev = key;
+            keys[i] = keyStr;
+        }
+
+        // Resolve every target record's position through the PK B-tree and read + verify the whole
+        // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        if (raw is null)
+        {
+            return false;
+        }
+
+        // Remove PK entries (the keys are the WHERE literals) and then every loaded hash-index
+        // entry, decoding only the indexed columns from the raw fixed-width records (no full-row
+        // deserialization). Variable values resolve through the overflow arena, mirroring the
+        // fixed-width codec used by the generic path.
+        for (int i = 0; i < count; i++)
+        {
+            this.Index.Delete(keys[i]);
+        }
+
+        var arena = GetOverflowArena();
+        foreach (var (colName, hashIdx) in this.hashIndexes)
+        {
+            int colIdx = -1;
+            for (int c = 0; c < this.Columns.Count; c++)
+            {
+                if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
+                {
+                    colIdx = c;
+                    break;
+                }
+            }
+
+            if (colIdx < 0)
+            {
+                continue;
+            }
+
+            var type = this.ColumnTypes[colIdx];
+            var decoded = new object?[count];
+            for (int i = 0; i < count; i++)
+            {
+                var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
+                var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                if (layout.IsVariable[colIdx])
+                {
+                    if (slot[0] == 0)
+                    {
+                        decoded[i] = null;
+                        continue;
+                    }
+
+                    var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                    var block = arena.Read(blockOffset);
+                    decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
+                }
+                else
+                {
+                    decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                }
+            }
+
+            hashIdx.RemoveBatchKeys(decoded, positions);
+        }
+
+        Interlocked.Add(ref _cachedRowCount, -count);
+        Interlocked.Increment(ref _bulkContiguousDeleteBatches);
+        return true;
     }
 
     /// <summary>

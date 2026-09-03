@@ -333,8 +333,60 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
 
         if (i < node.keysCount && CompareKeys(key, node.keysArray[i]) == 0)
         {
-            // Key found in this node — RemoveKeyAt already shifts both keys AND values
+            if (node.IsLeaf)
+            {
+                // Leaf: values live here — remove the entry. Leaf underflow is harmless (no child
+                // pointers depend on leaf occupancy), so no rebalancing is required for correctness.
+                RemoveKeyAt(node, i);
+                return true;
+            }
+
+            // Internal (separator) node: values live in leaves, so this node only routes ranges.
+            // Removing the separator outright would leave the child-pointer ↔ separator mapping
+            // inconsistent (keys between the deleted separator and the next one would become
+            // unreachable), so the separator is replaced by its in-order successor taken from the
+            // right subtree's leftmost leaf, and that leaf entry is then deleted recursively.
+            var successorChild = node.childrenArray[i + 1];
+            while (!successorChild.IsLeaf)
+            {
+                successorChild = successorChild.childrenArray[0];
+            }
+
+            if (successorChild.keysCount > 0)
+            {
+                node.keysArray[i] = successorChild.keysArray[0];
+                if (i < node.valuesCount)
+                {
+                    node.valuesArray[i] = successorChild.valuesArray[0];
+                }
+
+                return DeleteFromNode(node.childrenArray[i + 1], node.keysArray[i]);
+            }
+
+            // The right subtree is empty (fully drained) — fall back to the left subtree's maximum
+            // when it still holds entries.
+            var predecessorChild = node.childrenArray[i];
+            while (!predecessorChild.IsLeaf)
+            {
+                predecessorChild = predecessorChild.childrenArray[predecessorChild.childrenCount - 1];
+            }
+
+            if (predecessorChild.keysCount > 0)
+            {
+                int predPos = predecessorChild.keysCount - 1;
+                node.keysArray[i] = predecessorChild.keysArray[predPos];
+                if (i < node.valuesCount)
+                {
+                    node.valuesArray[i] = predecessorChild.valuesArray[predPos];
+                }
+
+                return DeleteFromNode(node.childrenArray[i], node.keysArray[i]);
+            }
+
+            // Both neighbour subtrees are drained — drop the separator together with its empty
+            // right child so the child pointer count stays consistent with the key count.
             RemoveKeyAt(node, i);
+            RemoveChildAt(node, i + 1);
             return true;
         }
         else if (!node.IsLeaf)
@@ -343,6 +395,23 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
         }
 
         return false;
+    }
+
+    private static void RemoveChildAt(Node node, int pos)
+    {
+        if (pos < 0 || pos >= node.childrenCount)
+        {
+            return;
+        }
+
+        var span = node.childrenArray.AsSpan();
+        if (pos < node.childrenCount - 1)
+        {
+            span.Slice(pos + 1, node.childrenCount - pos - 1).CopyTo(span.Slice(pos, node.childrenCount - pos - 1));
+        }
+
+        node.childrenArray[node.childrenCount - 1] = default!;
+        node.childrenCount--;
     }
 
     private static void RemoveKeyAt(Node node, int pos)
