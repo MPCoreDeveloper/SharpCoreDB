@@ -923,10 +923,12 @@ public partial class Database
     /// <param name="tableName">The parsed table name.</param>
     /// <param name="where">The parsed WHERE clause.</param>
     /// <returns>True if the statement was successfully parsed as a DELETE.</returns>
-    private bool TryParseDeleteForBatch(string sql, out string tableName, out string where)
+    private bool TryParseDeleteForBatch(string sql, out string tableName, out string where, out string? whereColumn, out string? whereLiteral)
     {
         tableName = string.Empty;
         where = string.Empty;
+        whereColumn = null;
+        whereLiteral = null;
 
         // Phase-2 fast path: canonical single-row shape
         // `DELETE FROM <table> WHERE <col> = <literal>` — regex-free.
@@ -938,7 +940,10 @@ public partial class Database
             }
 
             tableName = fastTable;
-            where = whereCol + " = " + whereValRaw;
+            whereColumn = whereCol;
+            whereLiteral = whereValRaw;
+            // Where stays empty for canonical statements — the table layer reconstructs it only
+            // when a fallback actually needs it (B3: no per-statement string allocation).
             return true;
         }
 
@@ -997,7 +1002,9 @@ public partial class Database
 
         // ✅ PERF: Group UPDATE/DELETE by table for single-lock batch execution
         Dictionary<string, List<(string where, Dictionary<string, object> updates)>> updatesByTable = [];
-        Dictionary<string, List<string>> deletesByTable = [];
+        // Canonical DELETE statements carry the pre-parsed column + raw literal so the table layer
+        // can skip the per-statement WHERE rebuild/re-parse (B3); Where stays empty for those.
+        Dictionary<string, List<(string Where, string? Column, string? Literal)>> deletesByTable = [];
 
         foreach (var sql in statements)
         {
@@ -1031,14 +1038,14 @@ public partial class Database
                 }
                 updList.Add((updWhere, updSets));
             }
-            else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere))
+            else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere, out var delCol, out var delLiteral))
             {
                 if (!deletesByTable.TryGetValue(delTableName, out var delList))
                 {
                     delList = [];
                     deletesByTable[delTableName] = delList;
                 }
-                delList.Add(delWhere);
+                delList.Add((delWhere, delCol, delLiteral));
             }
             else
             {
@@ -1097,11 +1104,42 @@ public partial class Database
                 }
 
                 // ✅ PERF: Batch DELETE — single lock per table instead of per-statement
-                foreach (var (tableName, wheres) in deletesByTable)
+                foreach (var (tableName, deletes) in deletesByTable)
                 {
                     if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
                     {
-                        concreteDelete.DeleteMultiple(wheres);
+                        // Canonical batches go through the structured path (no WHERE rebuild/re-parse);
+                        // any non-canonical statement forces the string form for the whole table.
+                        bool allCanonical = true;
+                        foreach (var (_, column, _) in deletes)
+                        {
+                            if (column is null)
+                            {
+                                allCanonical = false;
+                                break;
+                            }
+                        }
+
+                        if (allCanonical)
+                        {
+                            var keys = new List<(string Column, string Literal)>(deletes.Count);
+                            foreach (var (_, column, literal) in deletes)
+                            {
+                                keys.Add((column!, literal!));
+                            }
+
+                            concreteDelete.DeleteMultipleKeys(keys);
+                        }
+                        else
+                        {
+                            var wheres = new List<string>(deletes.Count);
+                            foreach (var (where, column, literal) in deletes)
+                            {
+                                wheres.Add(where.Length > 0 ? where : column + " = " + literal);
+                            }
+
+                            concreteDelete.DeleteMultiple(wheres);
+                        }
                     }
                 }
 
