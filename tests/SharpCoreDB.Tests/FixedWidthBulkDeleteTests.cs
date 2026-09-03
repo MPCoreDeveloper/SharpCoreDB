@@ -232,6 +232,31 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
     }
 
     [Fact]
+    public void CanonicalBatchDelete_EngagesStructuredPath()
+    {
+        // Regression: TryScanCanonicalDml's DELETE branch did not consume whitespace/WHERE after
+        // the table name, so every canonical `DELETE ... WHERE col = literal` fell back to the
+        // regex path and bypassed the structured batch-DELETE fast paths (DeleteMultipleKeys).
+        IDatabase? db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 50);
+            db.Flush();
+
+            var before = ((SharpCoreDB.Database)db).CanonicalDeleteStatementsParsed;
+            db.ExecuteBatchSQL(BuildDeletes(1, 10));
+            db.Flush();
+
+            Assert.True(
+                ((SharpCoreDB.Database)db).CanonicalDeleteStatementsParsed >= before + 10,
+                "canonical DELETE statements must flow through the structured batch path");
+            Assert.Equal(40, db.ExecuteQuery("SELECT id FROM docs").Count);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
     public void BatchDelete_CommitTimeTombstones_SurviveReopenWithoutExplicitFlush()
     {
         // ExecuteBatchSQL wraps the whole DELETE batch in one storage transaction. The deleted

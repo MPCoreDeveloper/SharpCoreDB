@@ -32,6 +32,11 @@ using System.Threading;
 /// </summary>
 public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 {
+    // Diagnostics: number of DELETE statements routed through the canonical structured batch path
+    // (proves the scanner/batch fast paths are engaged; 0 means everything fell back to regex).
+    private static long _canonicalDeleteStatements;
+    public long CanonicalDeleteStatementsParsed => Interlocked.Read(ref _canonicalDeleteStatements);
+
     private readonly IServiceProvider _serviceProvider;
     private readonly IStorage storage;
     private readonly IUserService userService;
