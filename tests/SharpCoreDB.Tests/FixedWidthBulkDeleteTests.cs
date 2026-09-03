@@ -202,4 +202,32 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
         }
         finally { (db as IDisposable)?.Dispose(); }
     }
+
+    [Fact]
+    public void DeletesPersistAcrossReopen_AfterFlushCompaction()
+    {
+        IDatabase? db = CreateDb();
+        db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+        InsertDocs(db, 1, 100);
+        db.Flush();
+
+        var stmts = new List<string>(50);
+        for (int i = 1; i <= 50; i++)
+        {
+            stmts.Add(string.Format(CultureInfo.InvariantCulture, "DELETE FROM docs WHERE id = {0}", i));
+        }
+
+        db.ExecuteBatchSQL(stmts);
+        db.Flush(); // flush-time compaction must physically remove the deleted rows
+        (db as IDisposable)?.Dispose();
+
+        db = CreateDb();
+        var scan = db.ExecuteQuery("SELECT id FROM docs ORDER BY id");
+        Assert.Equal(50, scan.Count);
+        Assert.Equal(51L, Convert.ToInt64(scan[0]["id"]));
+        Assert.Equal(100L, Convert.ToInt64(scan[^1]["id"]));
+        var c = db.ExecuteQuery("SELECT COUNT(*) AS n FROM docs");
+        Assert.Equal(50L, Convert.ToInt64(c[0].Values.First()));
+        (db as IDisposable)?.Dispose();
+    }
 }

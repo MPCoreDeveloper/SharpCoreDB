@@ -2586,6 +2586,11 @@ public partial class Table
             foreach (var (storagePosition, _) in recordsToDelete)
                 engine.Delete(Name, storagePosition);
         }
+        else
+        {
+            // Track Columnar logical deletes so flush-time compaction makes them durable.
+            Interlocked.Add(ref _pendingLogicalDeletes, recordsToDelete.Count);
+        }
 
         // Primary-key B-tree cleanup.
         if (this.PrimaryKeyIndex >= 0)
@@ -3180,6 +3185,7 @@ public partial class Table
         }
 
         Interlocked.Add(ref _cachedRowCount, -count);
+        Interlocked.Add(ref _pendingLogicalDeletes, count);
         Interlocked.Increment(ref _bulkContiguousDeleteBatches);
         return true;
     }
