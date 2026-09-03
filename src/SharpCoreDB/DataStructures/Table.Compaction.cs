@@ -8,6 +8,7 @@ namespace SharpCoreDB.DataStructures;
 using SharpCoreDB.Storage.Engines;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -52,12 +53,14 @@ public partial class Table
     }
 
     /// <summary>
-    /// Physically removes rows that were logically deleted since the last flush (Columnar tables
-    /// with a primary key) so DELETE survives a reopen — the on-load PK-index rebuild would otherwise
-    /// resurrect them from the untouched <c>.dat</c>. Runs synchronously at flush/dispose, outside a
-    /// transaction, when any logical deletes are pending. Data-file only: the overflow arena is left
-    /// untouched (its space is reclaimed by a later explicit compaction/VACUUM) so the flush stays
-    /// proportional to the rewritten live rows.
+    /// Makes TRANSACTIONAL deletes durable (Columnar tables with a primary key). Deletes issued
+    /// inside a transaction are intentionally not tombstoned at delete time (a marker would survive a
+    /// rollback that restores the row in the PK index), so they are physically removed here by
+    /// compacting against the CURRENT PK once the owning transaction has committed. Runs at
+    /// flush/dispose, outside a transaction, when any transactional deletes are pending. No-op when
+    /// none are pending — non-transactional DELETE is already durable via the per-row tombstone and
+    /// must not pay a rewrite. Data-file only: the overflow arena is left untouched (its space is
+    /// reclaimed by a later explicit compaction/VACUUM).
     /// </summary>
     public void CompactPendingDeletes()
     {
@@ -102,6 +105,30 @@ public partial class Table
         {
             Interlocked.Exchange(ref _pendingLogicalDeletes, 0);
             rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Writes the deleted-record marker over the length prefix of each position that is physically
+    /// present in the data file, making the Columnar logical delete durable across reopen (readers
+    /// skip the marker) without rewriting the remaining rows. Rows appended inside an uncommitted
+    /// transaction (positions beyond the current file length) are skipped — their delete commits
+    /// with the rest of the transaction.
+    /// </summary>
+    private void TombstoneDeletedPositions(long[] positions)
+    {
+        if (this.storage is null || positions.Length == 0)
+        {
+            return;
+        }
+
+        long fileLength = File.Exists(DataFile) ? new FileInfo(DataFile).Length : 0;
+        foreach (var position in positions)
+        {
+            if (position >= 0 && position + 4 <= fileLength)
+            {
+                this.storage.TombstoneRecord(DataFile, position);
+            }
         }
     }
 

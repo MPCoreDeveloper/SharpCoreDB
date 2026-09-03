@@ -1364,7 +1364,20 @@ public partial class Table
                 dataSpan.Slice(filePosition, 4));
 
             const int MaxRecordSize = 1_000_000_000;
-            if (recordLength < 0 || recordLength > MaxRecordSize)
+            if (recordLength < 0)
+            {
+                // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
+                int slotSize = -recordLength;
+                if (slotSize < 4)
+                {
+                    break;
+                }
+
+                filePosition += slotSize;
+                continue;
+            }
+
+            if (recordLength > MaxRecordSize)
             {
                 break;
             }
@@ -2586,9 +2599,10 @@ public partial class Table
             foreach (var (storagePosition, _) in recordsToDelete)
                 engine.Delete(Name, storagePosition);
         }
-        else
+        else if (StorageMode != StorageMode.Columnar)
         {
-            // Track Columnar logical deletes so flush-time compaction makes them durable.
+            // Legacy logical-delete accounting (Columnar deletes are tracked in the branch below,
+            // which decides between an immediate durable tombstone and deferred flush compaction).
             Interlocked.Add(ref _pendingLogicalDeletes, recordsToDelete.Count);
         }
 
@@ -2637,6 +2651,20 @@ public partial class Table
                     this.staleIndexes.Add(col);
                     _indexReadyCache.TryRemove(col, out _);
                 }
+            }
+
+            if (this.storage is { IsInTransaction: true })
+            {
+                // Transactional delete: writing the tombstone now would survive a rollback that
+                // restores the row in the PK index, so defer the physical removal to the post-commit
+                // flush compaction (rollback-safe: that rewrite is driven by the CURRENT PK, which
+                // still contains the row after a rollback).
+                Interlocked.Add(ref _pendingLogicalDeletes, recordsToDelete.Count);
+            }
+            else
+            {
+                // Durable DELETE: physically mark the removed records so a reopen skips them.
+                TombstoneDeletedPositions(positions);
             }
 
             TryAutoCompact();
@@ -3184,8 +3212,19 @@ public partial class Table
             hashIdx.RemoveBatchKeys(decoded, positions);
         }
 
+        if (this.storage is { IsInTransaction: true })
+        {
+            // Transactional delete: defer physical removal to the post-commit flush compaction
+            // (see DeleteRecordsCore — a tombstone would survive a rollback that restores the row).
+            Interlocked.Add(ref _pendingLogicalDeletes, count);
+        }
+        else
+        {
+            // Durable DELETE: physically mark the removed records so a reopen skips them.
+            TombstoneDeletedPositions(positions);
+        }
+
         Interlocked.Add(ref _cachedRowCount, -count);
-        Interlocked.Add(ref _pendingLogicalDeletes, count);
         Interlocked.Increment(ref _bulkContiguousDeleteBatches);
         return true;
     }

@@ -564,6 +564,56 @@ public partial class Storage
     public bool AreRecordsEncrypted(string path) => UseRecordEncryption && FileHasEncryptedHeader(path);
 
     /// <inheritdoc />
+    public bool TombstoneRecord(string path, long offset)
+    {
+        // Read the current slot size so the marker can encode the exact number of bytes to skip
+        // (4-byte prefix + payload), keeping every record enumerator aligned.
+        int slotSize;
+        try
+        {
+            SafeFileHandle readHandle = GetOrOpenReadHandle(path);
+            Span<byte> lengthBuffer = stackalloc byte[4];
+            if (RandomAccess.Read(readHandle, lengthBuffer, offset) != 4)
+            {
+                return false;
+            }
+
+            int currentLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+            if (currentLength <= 0)
+            {
+                return false; // already tombstoned or invalid
+            }
+
+            slotSize = 4 + currentLength;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        Span<byte> marker = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(marker, -slotSize);
+
+        try
+        {
+            WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        // Invalidate the app-level page cache (mirrors the other in-place writers).
+        if (this.pageCache != null)
+        {
+            int pageId = ComputePageId(path, offset);
+            this.pageCache.EvictPage(pageId);
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long[] AppendBytesMultiple(string path, List<byte[]> dataBlocks)
     {
@@ -924,6 +974,19 @@ public partial class Storage
             }
 
             int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+            if (length < 0)
+            {
+                // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
+                int slotSize = -length;
+                if (slotSize < 4)
+                {
+                    yield break;
+                }
+
+                position += slotSize;
+                continue;
+            }
+
             if (length <= 0 || length > MaxRecordSize || position + 4 + length > fileLength)
             {
                 yield break; // Invalid or incomplete record tail

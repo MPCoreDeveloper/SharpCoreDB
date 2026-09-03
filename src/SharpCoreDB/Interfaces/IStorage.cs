@@ -171,6 +171,15 @@ public interface IStorage
     bool AreRecordsEncrypted(string path) => false;
 
     /// <summary>
+    /// Marks the record whose 4-byte length prefix sits at <paramref name="offset"/> as deleted by
+    /// replacing the prefix with the NEGATIVE slot size (4-byte prefix + payload). Every record
+    /// enumerator treats a negative prefix as a deleted record and skips |value| bytes, so the
+    /// delete survives a reopen without rewriting the file. The default returns false (unsupported
+    /// layout / mock storage).
+    /// </summary>
+    bool TombstoneRecord(string path, long offset) => false;
+
+    /// <summary>
     /// Enumerates every record in a table data file, yielding the literal file offset of the
     /// 4-byte length prefix (the offset returned by <see cref="AppendBytes"/>) together with the
     /// decrypted (or plaintext) record payload. Format-agnostic: transparently handles both legacy

@@ -214,8 +214,21 @@ public class AppendOnlyEngine : IStorageEngine
             // Read record length (4 bytes, little-endian)
             int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
                 allData.AsSpan((int)position, 4));
-            
-            if (recordLength <= 0 || position + 4 + recordLength > allData.Length)
+
+            if (recordLength < 0)
+            {
+                // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
+                int slotSize = -recordLength;
+                if (slotSize < 4)
+                {
+                    break;
+                }
+
+                position += slotSize;
+                continue;
+            }
+
+            if (recordLength == 0 || position + 4 + recordLength > allData.Length)
             {
                 break; // Invalid or incomplete record
             }
@@ -354,10 +367,23 @@ public class AppendOnlyEngine : IStorageEngine
             
             int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
                 allData.AsSpan((int)position, 4));
-            
-            if (recordLength <= 0 || position + 4 + recordLength > allData.Length)
+
+            if (recordLength < 0)
+            {
+                // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
+                int slotSize = -recordLength;
+                if (slotSize < 4)
+                {
+                    break;
+                }
+
+                position += slotSize;
+                continue;
+            }
+
+            if (recordLength == 0 || position + 4 + recordLength > allData.Length)
                 break;
-            
+
             // Check if this position is active
             if (activeSet.Contains(position))
             {

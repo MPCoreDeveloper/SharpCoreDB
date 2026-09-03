@@ -65,10 +65,23 @@ public partial class Table
             // ✅ C# 14: Range operator - extract length prefix span first
             var lengthSpan = dataSpan[filePosition..(filePosition + 4)];
             int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthSpan);
-            
+
+            if (recordLength < 0)
+            {
+                // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
+                int slotSize = -recordLength;
+                if (slotSize < 4)
+                {
+                    break;
+                }
+
+                filePosition += slotSize;
+                continue;
+            }
+
             // Sanity check: record length must be reasonable
             const int MaxRecordSize = 1_000_000_000; // 1 GB max per record
-            if (recordLength < 0 || recordLength > MaxRecordSize)
+            if (recordLength > MaxRecordSize)
             {
                 break;
             }
