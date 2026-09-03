@@ -52,6 +52,36 @@ public partial class Table
     }
 
     /// <summary>
+    /// Physically removes rows that were logically deleted since the last flush (Columnar tables
+    /// with a primary key) so DELETE survives a reopen — the on-load PK-index rebuild would otherwise
+    /// resurrect them from the untouched <c>.dat</c>. Runs synchronously at flush/dispose, outside a
+    /// transaction, when any logical deletes are pending.
+    /// </summary>
+    public void CompactPendingDeletes()
+    {
+        if (StorageMode != SharpCoreDB.Storage.Hybrid.StorageMode.Columnar ||
+            this.PrimaryKeyIndex < 0 ||
+            Interlocked.Read(ref _pendingLogicalDeletes) == 0)
+        {
+            return;
+        }
+
+        if (this.storage is { IsInTransaction: true })
+        {
+            return; // defer until the transaction commits (the next flush will run again)
+        }
+
+        try
+        {
+            CompactStorage();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _pendingLogicalDeletes, 0);
+        }
+    }
+
+    /// <summary>
     /// Compacts the table storage by removing deleted and stale rows.
     /// Only applicable for columnar (append-only) storage mode.
     /// </summary>

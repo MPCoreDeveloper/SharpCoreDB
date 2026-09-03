@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now replaced by their in-order successor from the right subtree's leftmost leaf (leaf underflow is
   harmless), with empty-neighbour fallbacks keeping child counts consistent. Full suite
   **1655/1655**.
+- **DELETE now survives a reopen (durability)** ÔÇö Columnar deletes were logical only (index removal),
+  so the on-load PK-index rebuild resurrected deleted rows from the untouched `.dat`. Logically
+  deleted rows are now counted (`_pendingLogicalDeletes`) and physically compacted at flush/dispose
+  (`Table.CompactPendingDeletes`, outside a transaction, Columnar tables with a PK). Regression:
+  delete half the rows, `Flush`, reopen ÔÇö exactly the remaining rows come back.
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new

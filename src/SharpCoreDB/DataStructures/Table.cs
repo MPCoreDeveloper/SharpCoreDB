@@ -289,6 +289,9 @@ public partial class Table : ITable, IDisposable
     private long _updatedRowCount = 0;
     private long COMPACTION_THRESHOLD = 1000; // Default; can be overridden by DatabaseConfig
 
+    // Logical deletes awaiting physical compaction at flush (durable DELETE across reopen).
+    private long _pendingLogicalDeletes = 0;
+
     // ✅ NEW: Dictionary pooling for SELECT operations (Phase 1 optimization)
     // Reduces allocations by 60% during full table scans
     private readonly ObjectPool<Dictionary<string, object>> _dictPool;
@@ -730,6 +733,11 @@ public partial class Table : ITable, IDisposable
                 }
             }
             
+            // Durable DELETE across reopen: physically compact rows that were logically deleted
+            // since the last flush (Columnar + PK, outside a transaction). Runs after the engine
+            // and any transaction buffer have been flushed.
+            CompactPendingDeletes();
+
             // Flush indexes
             if (indexManager != null)
             {
@@ -775,6 +783,9 @@ public partial class Table : ITable, IDisposable
     {
         if (disposing)
         {
+            // Durable DELETE across reopen for flows that dispose without an explicit flush.
+            CompactPendingDeletes();
+
             // Dispose storage engine first
             DisposeStorageEngine();
             
