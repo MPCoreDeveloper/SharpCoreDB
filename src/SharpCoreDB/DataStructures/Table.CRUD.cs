@@ -2356,15 +2356,16 @@ public partial class Table
         }
 
         // Narrow, conservative gate: fixed-width columnar table with an explicit PK, plaintext
-        // records only (a raw contiguous read must equal the logical record bytes), no buffered
-        // overwrites for this file, and no CHECK constraints (mirrors the generic fastPatch gate).
+        // records only (no per-record encryption magic — a raw contiguous read must equal the
+        // logical record bytes), no buffered overwrites for this file, and no CHECK constraints
+        // (mirrors the generic fastPatch gate).
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.TableCheckConstraints.Count > 0 ||
             HasColumnCheckConstraints() ||
             this.storage is null ||
-            this._config is not { NoEncryptMode: true } ||
+            this.storage.AreRecordsEncrypted(DataFile) ||
             this.storage.HasBufferedOverwrite(DataFile))
         {
             return false;
@@ -3047,13 +3048,14 @@ public partial class Table
         }
 
         // Identical safety gate to the UPDATE fast path: fixed-width columnar table with an explicit
-        // PK, plaintext records only, and no buffered overwrites (a raw range read must equal the
-        // logical record bytes). DeleteMultiple loads every registered hash index before calling this.
+        // PK, plaintext records only (no per-record encryption magic — a raw range read must equal
+        // the logical record bytes), and no buffered overwrites. DeleteMultiple loads every
+        // registered hash index before calling this.
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.storage is null ||
-            this._config is not { NoEncryptMode: true } ||
+            this.storage.AreRecordsEncrypted(DataFile) ||
             this.storage.HasBufferedOverwrite(DataFile))
         {
             return false;
