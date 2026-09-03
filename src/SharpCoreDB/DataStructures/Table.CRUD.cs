@@ -3059,6 +3059,9 @@ public partial class Table
                 }
             }
 
+            // B1: decode only the columns the delete core touches (PK + loaded hash-index columns).
+            int[] deleteKeyColumns = BuildDeleteKeyColumns();
+
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
             foreach (var (col, literal) in conditions)
@@ -3076,7 +3079,7 @@ public partial class Table
                         var fastData = engine.Read(Name, fastSearch.Value);
                         if (fastData != null)
                         {
-                            var fastRow = DeserializeRowFromSpan(fastData);
+                            var fastRow = DeserializeDeleteKeyRow(fastData, deleteKeyColumns) ?? DeserializeRowFromSpan(fastData);
                             if (fastRow != null)
                             {
                                 recordsToDelete.Add((fastSearch.Value, fastRow));
@@ -3103,7 +3106,7 @@ public partial class Table
                                     var data = engine.Read(Name, pos);
                                     if (data != null)
                                     {
-                                        var row = DeserializeRowFromSpan(data);
+                                        var row = DeserializeDeleteKeyRow(data, deleteKeyColumns) ?? DeserializeRowFromSpan(data);
                                         if (row != null) recordsToDelete.Add((pos, row));
                                     }
                                 }
@@ -3173,6 +3176,78 @@ public partial class Table
     private static string UnquoteSqlLiteral(string raw)
     {
         return raw.AsSpan().Trim().Trim("'\"".AsSpan()).ToString();
+    }
+
+    /// <summary>
+    /// B1: column indexes a delete target actually needs — the PK value (B-tree cleanup) plus every
+    /// loaded hash-index column (key-only hash cleanup). Ascending, de-duplicated.
+    /// </summary>
+    private int[] BuildDeleteKeyColumns()
+    {
+        var list = new List<int>(4);
+        if (this.PrimaryKeyIndex >= 0)
+        {
+            list.Add(this.PrimaryKeyIndex);
+        }
+
+        foreach (var kvp in this.hashIndexes)
+        {
+            int colIdx = this.Columns.IndexOf(kvp.Key);
+            if (colIdx >= 0 && !list.Contains(colIdx))
+            {
+                list.Add(colIdx);
+            }
+        }
+
+        list.Sort();
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// B1: decodes only the columns listed in <paramref name="wanted"/> (ascending) from a legacy
+    /// variable-length serialized row, skipping the unneeded columns' payload parsing entirely.
+    /// Returns a minimal dictionary (pk + hash-index columns only) so <see cref="DeleteRecordsCore"/>
+    /// performs the identical PK/hash lookups without materializing the full row. Returns null for
+    /// fixed-width layouts (those go through the fixed-width codec) or corrupt rows — callers fall
+    /// back to full-row deserialization in that case.
+    /// </summary>
+    private Dictionary<string, object>? DeserializeDeleteKeyRow(byte[] data, int[] wanted)
+    {
+        if (_fixedWidthRecords || data == null || data.Length == 0 || wanted.Length == 0)
+        {
+            return null;
+        }
+
+        ReadOnlySpan<byte> span = data.AsSpan();
+        int offset = 0;
+        Dictionary<string, object>? row = null;
+        int wi = 0;
+
+        for (int i = 0; i < Columns.Count; i++)
+        {
+            if (offset >= span.Length)
+            {
+                return null;
+            }
+
+            int size = ReadColumnEncodedSize(span, offset, ColumnTypes[i]);
+            if (size <= 0 || offset + size > span.Length)
+            {
+                return null; // corrupt / unexpected layout → full-row fallback
+            }
+
+            if (wi < wanted.Length && wanted[wi] == i)
+            {
+                var value = ReadTypedValueFromSpan(span.Slice(offset), ColumnTypes[i], out _);
+                row ??= new Dictionary<string, object>(wanted.Length);
+                row[Columns[i]] = value;
+                wi++;
+            }
+
+            offset += size;
+        }
+
+        return row;
     }
 
     /// <summary>
