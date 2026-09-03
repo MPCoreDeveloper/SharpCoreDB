@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Services;
 
+using Microsoft.Win32.SafeHandles;
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -57,6 +58,48 @@ public partial class Storage
     public byte[]? ReadBytesAt(string path, long position, int maxLength)
     {
         return ReadBytesAt(path, position, maxLength, false);
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesRange(string path, long offset, int length)
+    {
+        if (length <= 0 || length > 512 * 1024 * 1024)
+        {
+            return null;
+        }
+
+        SafeFileHandle handle;
+        try
+        {
+            handle = GetOrOpenReadHandle(path);
+        }
+        catch
+        {
+            _readHandleCache.TryRemove(path, out _);
+            try
+            {
+                handle = GetOrOpenReadHandle(path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        var buffer = new byte[length];
+        int total = 0;
+        while (total < length)
+        {
+            int read = RandomAccess.Read(handle, buffer.AsSpan(total), offset + total);
+            if (read <= 0)
+            {
+                return null;
+            }
+
+            total += read;
+        }
+
+        return buffer;
     }
 
     /// <summary>

@@ -557,6 +557,10 @@ public partial class Storage
     }
 
     /// <inheritdoc />
+    public bool HasBufferedOverwrite(string path) =>
+        !bufferedOverwrites.IsEmpty && bufferedOverwrites.ContainsKey(path);
+
+    /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long[] AppendBytesMultiple(string path, List<byte[]> dataBlocks)
     {
