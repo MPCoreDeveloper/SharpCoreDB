@@ -190,6 +190,25 @@ public interface IStorage
     void BufferTombstoneForCommit(string path, long offset) { }
 
     /// <summary>
+    /// Bulk <see cref="TombstoneRecord"/>: marks every listed record offset as deleted. The default
+    /// implementation applies <see cref="TombstoneRecord"/> per offset (for alternative/mock
+    /// <see cref="IStorage"/> implementations); the real storage backend batches the in-place
+    /// marker writes and de-duplicates page-cache evictions per page.
+    /// </summary>
+    void TombstoneRecords(string path, long[] offsets)
+    {
+        if (offsets is null)
+        {
+            return;
+        }
+
+        foreach (var offset in offsets)
+        {
+            TombstoneRecord(path, offset);
+        }
+    }
+
+    /// <summary>
     /// Enumerates every record in a table data file, yielding the literal file offset of the
     /// 4-byte length prefix (the offset returned by <see cref="AppendBytes"/>) together with the
     /// decrypted (or plaintext) record payload. Format-agnostic: transparently handles both legacy

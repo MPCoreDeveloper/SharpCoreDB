@@ -8,7 +8,6 @@ namespace SharpCoreDB.DataStructures;
 using SharpCoreDB.Storage.Engines;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -113,7 +112,8 @@ public partial class Table
     /// present in the data file, making the Columnar logical delete durable across reopen (readers
     /// skip the marker) without rewriting the remaining rows. Rows appended inside an uncommitted
     /// transaction (positions beyond the current file length) are skipped — their delete commits
-    /// with the rest of the transaction.
+    /// with the rest of the transaction. The storage layer batches the in-place marker writes and
+    /// de-duplicates page-cache evictions per page.
     /// </summary>
     private void TombstoneDeletedPositions(long[] positions)
     {
@@ -122,14 +122,7 @@ public partial class Table
             return;
         }
 
-        long fileLength = File.Exists(DataFile) ? new FileInfo(DataFile).Length : 0;
-        foreach (var position in positions)
-        {
-            if (position >= 0 && position + 4 <= fileLength)
-            {
-                this.storage.TombstoneRecord(DataFile, position);
-            }
-        }
+        this.storage.TombstoneRecords(DataFile, positions);
     }
 
     /// <summary>

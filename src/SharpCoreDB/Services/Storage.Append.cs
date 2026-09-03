@@ -609,22 +609,7 @@ public partial class Storage
                 continue;
             }
 
-            try
-            {
-                long fileLength = File.Exists(path) ? new FileInfo(path).Length : 0;
-                foreach (var offset in offsets)
-                {
-                    if (offset >= 0 && offset + 4 <= fileLength)
-                    {
-                        TombstoneRecord(path, offset);
-                    }
-                }
-            }
-            catch (IOException)
-            {
-                // Best-effort: a failed marker leaves the row physical; the auto/explicit
-                // compaction reclaims it later.
-            }
+            TombstoneRecords(path, offsets.ToArray());
         }
 
         bufferedTombstones.Clear();
@@ -678,6 +663,60 @@ public partial class Storage
         }
 
         return true;
+    }
+
+    /// <inheritdoc />
+    public void TombstoneRecords(string path, long[] offsets)
+    {
+        if (offsets == null || offsets.Length == 0)
+        {
+            return;
+        }
+
+        HashSet<int>? pagesToEvict = this.pageCache != null ? new HashSet<int>() : null;
+
+        try
+        {
+            SafeFileHandle readHandle = GetOrOpenReadHandle(path);
+            Span<byte> lengthBuffer = stackalloc byte[4];
+            Span<byte> marker = stackalloc byte[4];
+
+            foreach (var offset in offsets)
+            {
+                if (offset < 0)
+                {
+                    continue;
+                }
+
+                if (RandomAccess.Read(readHandle, lengthBuffer, offset) != 4)
+                {
+                    continue; // offset at/beyond EOF — not a physical record
+                }
+
+                int currentLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+                if (currentLength <= 0)
+                {
+                    continue; // already tombstoned or invalid
+                }
+
+                BinaryPrimitives.WriteInt32LittleEndian(marker, -(4 + currentLength));
+                WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
+
+                pagesToEvict?.Add(ComputePageId(path, offset));
+            }
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        if (pagesToEvict != null)
+        {
+            foreach (var pageId in pagesToEvict)
+            {
+                this.pageCache!.EvictPage(pageId);
+            }
+        }
     }
 
     /// <inheritdoc />
