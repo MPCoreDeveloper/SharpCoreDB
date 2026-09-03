@@ -55,7 +55,9 @@ public partial class Table
     /// Physically removes rows that were logically deleted since the last flush (Columnar tables
     /// with a primary key) so DELETE survives a reopen — the on-load PK-index rebuild would otherwise
     /// resurrect them from the untouched <c>.dat</c>. Runs synchronously at flush/dispose, outside a
-    /// transaction, when any logical deletes are pending.
+    /// transaction, when any logical deletes are pending. Data-file only: the overflow arena is left
+    /// untouched (its space is reclaimed by a later explicit compaction/VACUUM) so the flush stays
+    /// proportional to the rewritten live rows.
     /// </summary>
     public void CompactPendingDeletes()
     {
@@ -71,13 +73,35 @@ public partial class Table
             return; // defer until the transaction commits (the next flush will run again)
         }
 
+        rwLock.EnterWriteLock();
         try
         {
-            CompactStorage();
+            var engine = GetOrCreateStorageEngine();
+            if (engine is not AppendOnlyEngine appendEngine)
+            {
+                return;
+            }
+
+            var activePositions = new List<long>();
+            if (this.Index is BTree<string, long> pkTree)
+            {
+                foreach (var (_, position) in pkTree.InOrderTraversal())
+                {
+                    activePositions.Add(position);
+                }
+            }
+            else
+            {
+                return; // no enumerable PK tree — cannot rewrite safely; keep logical deletes
+            }
+
+            appendEngine.CompactTable(Name, activePositions);
+            RebuildAllIndexesFromFile();
         }
         finally
         {
             Interlocked.Exchange(ref _pendingLogicalDeletes, 0);
+            rwLock.ExitWriteLock();
         }
     }
 
@@ -108,24 +132,30 @@ public partial class Table
             
             if (PrimaryKeyIndex >= 0)
             {
-                // Collect all positions from primary key index.
-                // ✅ FIX (1.9.5): Include the hidden _rowid column when present — otherwise rows in
-                // tables with an internal ULID primary key cannot be resolved to storage positions
-                // and compaction would drop every row.
-                var pkColumn = Columns[PrimaryKeyIndex];
-                var allRows = HasInternalRowId
-                    ? SelectIncludingRowId(where: null, orderBy: null, asc: true, noEncrypt: false)
-                    : Select();
-                
-                foreach (var row in allRows)
+                if (this.Index is BTree<string, long> pkTree)
                 {
-                    if (row.TryGetValue(pkColumn, out var pkValue) && pkValue != null)
+                    // Collect the live (key → position) pairs straight from the PK B-tree — no row
+                    // materialization and no per-row re-search. Covers the hidden _rowid PK too,
+                    // because every live row has an entry in the tree.
+                    foreach (var (_, position) in pkTree.InOrderTraversal())
                     {
-                        var pkStr = pkValue.ToString() ?? string.Empty;
-                        var searchResult = Index.Search(pkStr);
-                        if (searchResult.Found)
+                        activePositions.Add(position);
+                    }
+                }
+                else
+                {
+                    // Non-BTree index fallback: resolve positions through the current rows.
+                    var pkColumn = Columns[PrimaryKeyIndex];
+                    var allRows = SelectIncludingRowId(where: null, orderBy: null, asc: true, noEncrypt: false);
+                    foreach (var row in allRows)
+                    {
+                        if (row.TryGetValue(pkColumn, out var pkValue) && pkValue != null)
                         {
-                            activePositions.Add(searchResult.Value);
+                            var searchResult = Index.Search(pkValue.ToString() ?? string.Empty);
+                            if (searchResult.Found)
+                            {
+                                activePositions.Add(searchResult.Value);
+                            }
                         }
                     }
                 }
@@ -150,17 +180,13 @@ public partial class Table
             // Reset counters
             Interlocked.Exchange(ref _deletedRowCount, 0);
             Interlocked.Exchange(ref _updatedRowCount, 0);
-            
-            // Rebuild primary key index with new positions
-            // Note: After compaction, positions change! We need to rebuild the index.
-            RebuildPrimaryKeyIndex();
-            
-            // Rebuild hash indexes
-            foreach (var col in loadedIndexes.ToList())
-            {
-                RebuildHashIndex(col);
-            }
-            
+            Interlocked.Exchange(ref _pendingLogicalDeletes, 0);
+
+            // Rebuild the PK B-tree and every loaded hash index in ONE file pass (positions change
+            // after compaction; a per-index rescan would re-read + re-decode the whole file once
+            // per index, which is pathological on large tables).
+            RebuildAllIndexesFromFile();
+
             return new CompactionStats
             {
                 BytesReclaimed = bytesReclaimed,
@@ -234,6 +260,56 @@ public partial class Table
     /// </summary>
     private static byte[]? RepointVariableSlots(byte[] record, FixedWidthRecordLayout layout, Dictionary<long, long> mapping)
         => FixedWidthCodec.RepointVariableSlots(record, layout, mapping);
+
+    /// <summary>
+    /// Rebuilds the PK B-tree and every loaded hash index from the rewritten data file in ONE pass:
+    /// each record is read and decoded once and feeds all indexes, instead of rescanning the whole
+    /// file (with full deserialization, including overflow-arena reads) once per index.
+    /// </summary>
+    private void RebuildAllIndexesFromFile()
+    {
+        var engine = GetOrCreateStorageEngine();
+
+        if (PrimaryKeyIndex >= 0)
+        {
+            Index = new BTree<string, long>();
+        }
+
+        foreach (var hashIndex in hashIndexes.Values)
+        {
+            hashIndex.Clear();
+        }
+
+        var loadedHashIndexes = new List<HashIndex>();
+        foreach (var kvp in hashIndexes)
+        {
+            if (loadedIndexes.Contains(kvp.Key))
+            {
+                loadedHashIndexes.Add(kvp.Value);
+            }
+        }
+
+        foreach (var (position, data) in engine.GetAllRecords(Name))
+        {
+            var row = DeserializeRow(data);
+            if (row is null)
+            {
+                continue;
+            }
+
+            if (PrimaryKeyIndex >= 0 &&
+                row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) &&
+                pkValue != null)
+            {
+                Index.Insert(pkValue.ToString() ?? string.Empty, position);
+            }
+
+            foreach (var hashIndex in loadedHashIndexes)
+            {
+                hashIndex.Add(row, position);
+            }
+        }
+    }
 
     /// <summary>
     /// Rebuilds the primary key index after compaction.
