@@ -3022,6 +3022,160 @@ public partial class Table
     }
 
     /// <summary>
+    /// Structured variant of <see cref="DeleteMultiple"/> used by the SQL batch dispatcher for
+    /// canonical single-row DELETE statements (`DELETE FROM t WHERE col = literal`, as detected by
+    /// the canonical-DML scanner). The WHERE column and raw literal are already known, so the
+    /// per-statement `col = literal` string rebuild and the second <see cref="TryParseSimpleWhereClause"/>
+    /// pass are skipped on the hot path. Semantics mirror <see cref="DeleteMultiple"/> exactly
+    /// (PK fast path → hash-index fast path → generic fallback with a lazily rebuilt WHERE string,
+    /// only reached for unusual shapes).
+    /// </summary>
+    /// <param name="conditions">Column name and RAW literal value (quotes as written in SQL).</param>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal void DeleteMultipleKeys(List<(string Column, string Literal)> conditions)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyDeleteError);
+        if (conditions.Count == 0) return;
+
+        this.rwLock.EnterWriteLock();
+        try
+        {
+            var engine = GetOrCreateStorageEngine();
+            EnsureAllRegisteredIndexesLoaded();
+
+            // B9 single-pass contiguous DELETE consumes WHERE strings; attempt it (without touching
+            // anything) only when every condition is a literal on the PK column, like the caller.
+            if (this.PrimaryKeyIndex >= 0 && AllPkLiteralConditions(conditions))
+            {
+                var wheres = new List<string>(conditions.Count);
+                foreach (var (col, literal) in conditions)
+                {
+                    wheres.Add(col + " = " + literal);
+                }
+
+                if (TryBulkDeleteContiguousFixedWidth(wheres))
+                {
+                    return;
+                }
+            }
+
+            var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
+
+            foreach (var (col, literal) in conditions)
+            {
+                string value = UnquoteSqlLiteral(literal);
+
+                // Issue #7 PK fast path (structured: no WHERE-string re-parse).
+                if (StorageMode != StorageMode.PageBased &&
+                    this.PrimaryKeyIndex >= 0 &&
+                    string.Equals(col, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                {
+                    var fastSearch = this.Index.Search(value);
+                    if (fastSearch.Found)
+                    {
+                        var fastData = engine.Read(Name, fastSearch.Value);
+                        if (fastData != null)
+                        {
+                            var fastRow = DeserializeRowFromSpan(fastData);
+                            if (fastRow != null)
+                            {
+                                recordsToDelete.Add((fastSearch.Value, fastRow));
+                            }
+                        }
+
+                        continue;
+                    }
+                }
+                // Hash index fast path.
+                if (this.registeredIndexes.ContainsKey(col))
+                {
+                    EnsureIndexLoaded(col);
+                    if (this.hashIndexes.TryGetValue(col, out var hashIndex))
+                    {
+                        var colIdx = this.Columns.IndexOf(col);
+                        if (colIdx >= 0)
+                        {
+                            var key = ParseValueForHashLookup(value, this.ColumnTypes[colIdx]);
+                            if (key != null)
+                            {
+                                foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
+                                {
+                                    var data = engine.Read(Name, pos);
+                                    if (data != null)
+                                    {
+                                        var row = DeserializeRowFromSpan(data);
+                                        if (row != null) recordsToDelete.Add((pos, row));
+                                    }
+                                }
+
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                // Generic fallback (rare for canonical shapes): rebuild the WHERE string exactly as
+                // the caller would have and mirror DeleteMultiple.
+                string where = col + " = " + literal;
+                if (this.PrimaryKeyIndex >= 0)
+                {
+                    var rows = SelectInternal(where, orderBy: null, asc: true, noEncrypt: false);
+                    var pkCol = this.Columns[this.PrimaryKeyIndex];
+                    foreach (var row in rows)
+                    {
+                        if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+                        {
+                            var searchResult = this.Index.Search(pkValue.ToString() ?? string.Empty);
+                            if (searchResult.Found)
+                                recordsToDelete.Add((searchResult.Value, row));
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var (storageRef, data) in engine.GetAllRecords(Name))
+                    {
+                        var row = DeserializeRowFromSpan(data);
+                        if (row != null && (string.IsNullOrEmpty(where) || EvaluateSimpleWhere(row, where)))
+                            recordsToDelete.Add((storageRef, row));
+                    }
+                }
+            }
+
+            if (recordsToDelete.Count == 0) return;
+
+            DeleteRecordsCore(recordsToDelete);
+        }
+        finally
+        {
+            this.rwLock.ExitWriteLock();
+        }
+    }
+
+    private bool AllPkLiteralConditions(List<(string Column, string Literal)> conditions)
+    {
+        var pkCol = this.Columns[this.PrimaryKeyIndex];
+        foreach (var (col, _) in conditions)
+        {
+            if (!string.Equals(col, pkCol, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Mirrors the value normalization of <see cref="TryParseSimpleWhereClause"/> (trim whitespace,
+    /// then trim enclosing <c>'</c>/<c>"</c> quotes) on a raw SQL literal.
+    /// </summary>
+    private static string UnquoteSqlLiteral(string raw)
+    {
+        return raw.AsSpan().Trim().Trim("'\"".AsSpan()).ToString();
+    }
+
+    /// <summary>
     /// Shared B8/B9 probe: resolves each key's record position through the PK B-tree, requires the
     /// positions to be physically adjacent at the fixed-width stride, reads the whole contiguous
     /// span through the storage layer's cached handle and verifies every 4-byte length prefix.
