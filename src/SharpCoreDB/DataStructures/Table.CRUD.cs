@@ -1946,6 +1946,13 @@ public partial class Table
             // from the file INCLUDING the stale record).
             EnsureAllRegisteredIndexesLoaded();
 
+            // Whole-file snapshot for the per-row fastPatch reads below (same guard as the DELETE
+            // path): reading the small plaintext file once replaces one pread pair per updated row.
+            // A position that already has a buffered in-place overwrite in this transaction is
+            // NEVER served from the snapshot (its disk bytes would be stale) — it falls back to the
+            // per-record read, which honors the write-behind buffer.
+            byte[]? wholeFile = TryLoadWholeFileForRowAccess();
+
             // B8: single-pass contiguous UPDATE — when every operation is a `pk = <literal>` match on a
             // plaintext fixed-width table with physically adjacent PK-ordered records, the old records
             // are read as ONE contiguous byte range and patched in memory (no per-row pread). Strictly
@@ -2007,7 +2014,17 @@ public partial class Table
                     var fastSearch = this.Index.Search(pkWhereVal?.ToString() ?? string.Empty);
                     if (fastSearch.Found)
                     {
-                        var fastData = engine.Read(Name, fastSearch.Value);
+                        byte[]? fastData;
+                        if (fastPatch && wholeFile != null &&
+                            (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, fastSearch.Value)))
+                        {
+                            fastData = TrySlicePayloadFromFile(wholeFile, fastSearch.Value);
+                        }
+                        else
+                        {
+                            fastData = engine.Read(Name, fastSearch.Value);
+                        }
+
                         if (fastData != null)
                         {
                             rows = fastPatch
@@ -2036,7 +2053,17 @@ public partial class Table
                                 rows = [];
                                 foreach (var pos in hashIndex.LookupPositionsUnsafe(key))
                                 {
-                                    var data = engine.Read(Name, pos);
+                                    byte[]? data;
+                                    if (fastPatch && wholeFile != null &&
+                                        (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, pos)))
+                                    {
+                                        data = TrySlicePayloadFromFile(wholeFile, pos);
+                                    }
+                                    else
+                                    {
+                                        data = engine.Read(Name, pos);
+                                    }
+
                                     if (data != null)
                                     {
                                         if (fastPatch)
@@ -3064,7 +3091,7 @@ public partial class Table
 
             // A1: when the (plaintext, legacy variable-length) data file is small enough, read it
             // ONCE and resolve every target from memory instead of one pread pair per deleted row.
-            byte[]? wholeFile = TryLoadWholeFileForDeleteResolution();
+            byte[]? wholeFile = TryLoadWholeFileForRowAccess();
 
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
@@ -3317,7 +3344,7 @@ public partial class Table
     // per deleted row. Guarded to plaintext legacy variable-length files below this size.
     private const long WholeFileDeleteResolutionLimitBytes = 32 * 1024 * 1024;
 
-    private byte[]? TryLoadWholeFileForDeleteResolution()
+    private byte[]? TryLoadWholeFileForRowAccess()
     {
         if (_fixedWidthRecords ||
             this.storage is null ||
@@ -3349,6 +3376,29 @@ public partial class Table
         }
 
         return DeserializeDeleteKeyRow(wholeFile.AsSpan((int)position + 4, recordLength), wanted);
+    }
+
+    /// <summary>
+    /// Copies the raw (plaintext) payload of the record at <paramref name="position"/> out of a
+    /// whole-file snapshot. Returns null when the position/length is not fully contained in the
+    /// snapshot (caller falls back to the per-record read).
+    /// </summary>
+    private byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position)
+    {
+        if (position < 0 || position + 4 > wholeFile.Length)
+        {
+            return null;
+        }
+
+        int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)position, 4));
+        if (recordLength <= 0 || position + 4 + recordLength > wholeFile.Length)
+        {
+            return null;
+        }
+
+        var payload = new byte[recordLength];
+        wholeFile.AsSpan((int)position + 4, recordLength).CopyTo(payload);
+        return payload;
     }
 
     /// <summary>
