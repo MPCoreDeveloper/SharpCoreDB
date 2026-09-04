@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Hardening
 
+- **Same-window interleaved A/B harness (`--pk-ab`) (P3c)** - new harness mode runs two default-
+  config variants as alternating rep pairs (A1,B1,A2,B2,...) and reports the per-rep paired median
+  ratio B/A per phase, so machine drift affects both arms of a pair and cancels out. Smoke (1 rep,
+  pure default vs `plain`/NoEncryptMode=true): UPDATE 1.41x, DELETE 1.28x, INSERT 1.21x, READ 1.10x
+  in the same window. Use `SHARPCOREDB_PK_AB_ARM_A` / `SHARPCOREDB_PK_AB_ARM_B` /
+  `SHARPCOREDB_BENCH_REPS`; documented in `docs/benchmarks/default-config-pk.md`.
+
 - **Default-config benchmark follow-up: FullSync hypothesis falsified (P3b)** - single-knob
   isolation via `SHARPCOREDB_PK_DEFAULT_VARIANT` (`async`, `bufferedio`, `novalidate`,
   `noadaptive`, `hsinsert`, `plain`, `tuned`) disproved the earlier “FullSync dominates the
