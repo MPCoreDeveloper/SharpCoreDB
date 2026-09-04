@@ -697,7 +697,7 @@ public partial class Storage
             if (offsets.Length >= 64)
             {
                 fileLength = File.Exists(path) ? new FileInfo(path).Length : 0;
-                if (fileLength > 0 && fileLength <= RangeMarkerReadLimitBytes && fileLength <= int.MaxValue)
+                if (fileLength > 0 && fileLength <= RangeMarkerReadLimitBytes)
                 {
                     wholeFile = new byte[(int)fileLength];
                     if (RandomAccess.Read(readHandle, wholeFile, 0) != fileLength)
