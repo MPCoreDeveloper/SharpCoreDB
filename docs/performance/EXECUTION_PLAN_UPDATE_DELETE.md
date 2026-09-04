@@ -70,6 +70,25 @@ DELETE 10K op de docs-tabel (comparative, Release) — attributie in de structur
 
 **Ontdekte bug (gefixed):** `TryScanCanonicalDml`'s DELETE-tak consumente nooit de whitespace/het `WHERE`-keyword na de tabelnaam → elke canonieke `DELETE ... WHERE col = literal` viel terug op de regex-path → `DeleteMultipleKeys` + B1/W1 (PR #369/#370) waren **dead code in de benchmark-harness**. Fix + diagnostische teller `Database.CanonicalDeleteStatementsParsed` + regressietest `CanonicalBatchDelete_EngagesStructuredPath` (deze PR).
 
+
+## 8. Eindstatus 2026-09-03 (alles gemerged op master `0a9b9fc1`)
+Gemeten op master (Release, zelfde machine; median van 3 runs voor de comparative, 2 voor `--pk`):
+
+| Operatie | SCDB SQL | SCDB Direct | SQLite | opmerking |
+|---|---:|---:|---:|---|
+| INSERT 100K | ~98-102K | ~103K | ~126-138K | al competitief |
+| UPDATE 10K | ~44K | ~63K | ~228K | voor sessie: SQL ~35K / Direct ~49K |
+| DELETE 10K | ~59K | ~86K | ~294K | **voor sessie: SQL ~12K / Direct ~16K** |
+| `--pk` DELETE legacy / FW | 68K / 93K | — | ~320K | FW was ~78K |
+
+**Merged deze sessie (chronologisch):** #367 tombstones · #368 commit-time tombstones · #369 C4+B3 · #370 B1 · #371 canonieke DELETE-scanner-fix + W1 · #372 whole-file DELETE-resolutie · #373 marker range-read · #374 whole-file UPDATE-resolutie.
+
+### Bewuste vervolgstappen (niet in deze sessie, zie secties 3-4)
+1. **Batch-PK stale/lazy-rebuild** na grote delete-batches — grootste open post; vereist eerst PK-index-refresh-infra (`Table.Index` is een plain property zonder lazy rebuild). Ontwerp nodig; daarna kan de per-rij read in DELETE vervallen.
+2. **Commit-marker schrijfbatching** (writes blijven per-offset; range-read zit er al in via #373).
+3. **Fase B (structureel):** fixed-width in-place engine + PageBased als OLTP-default — de weg naar ~1,2-1,5× van SQLite op UPDATE/DELETE.
+4. **Fase C/D (platform):** AOT/R2R als aparte meet-as, median-of-N in de harness, `dotnet-trace` per Fase-B-stap.
+
 **Gevolg voor de attributie:** de per-rij read blijft nodig zolang de delete-core de auto-`rowid`-PK-waarde per rij moet wissen (gate-onderzoek: docs heeft PK-achtige index >1 geregistreerd). Grootste resterende hefbomen, nu met cijfers onderbouwd:
 1. **PK-onderhoud vervangen door één stale/lazy-rebuild** na een grote delete-batch (i.p.v. per-rij `Index.Delete`) → verwijdert ~30-50% van `core` én maakt de per-rij read overbodig (grootste winst op deze workload).
 2. **Marker-batching over een range-read** (commit-tombstones ~50 ms → enkele ms) als vervolg op C4.
