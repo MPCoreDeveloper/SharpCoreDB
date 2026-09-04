@@ -37,7 +37,10 @@ Recommended upgrade order:
 - Planned (CI): a true **cross-version** job that writes a database with a pinned older commit and
   reads it with `master` (requires an old-binary generator; tracked as follow-up).
 
-## Changelog
+## Changelog & release notes
 
-See `docs/CHANGELOG.md` → `[Unreleased]` → **Hardening** for the marker/downgrade notes that
-accompanied the tombstone work (PRs #367/#368) and this policy document.
+- `docs/CHANGELOG.md` → `[2.0.0.2]` → **Hardening** for the marker/downgrade notes that accompanied
+  the tombstone work (PRs #367/#368) and the 2.0.0.2 hardening batch.
+- `docs/2.0.0.2_WHAT_CHANGED.md` — full release notes incl. the consolidated
+  **2.x-vs-1.9.x major steps** table.
+- `docs/2.0.0.0_WHAT_CHANGED.md` — the original 2.0.0.0 report.

@@ -1,4 +1,4 @@
-# SharpCoreDB v2.0.0.1 — Performance-First Database Engine
+# SharpCoreDB v2.0.0.2 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 10**
 
@@ -9,6 +9,20 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![.NET 10](https://img.shields.io/badge/.NET-10-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.0.0.2
+
+- **Commit & overwrite writes are batched per storage page** — tombstone markers (C5) and buffered
+  in-place UPDATE overwrites (C6) are flushed with one write per touched page instead of one/two
+  pwrites per row; the fixed-width contiguous path (B8/B9) no longer does a B-tree search per key
+  (decode verification instead) and removes PK entries with one `DeleteBulk`.
+- **Legacy (variable-length) ascending-PK batches** resolve with one sequential decode pass +
+  early exit; duplicate-key hash removal is no longer quadratic.
+- **Production hardening** — `StorageEngineType.Auto` never silently selects PageBased (not yet
+  OLTP-ready); upgrade/downgrade policy documented with format-compat regression tests; a
+  pure-default-config benchmark arm (`--pk-default`) and a same-window interleaved A/B mode
+  (`--pk-ab`) now guard the numbers.
+- Full report (incl. the 2.x-vs-1.9.x major steps): `docs/2.0.0.2_WHAT_CHANGED.md`.
 
 ## What's New in 2.0.0.1
 
@@ -175,16 +189,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0.1
+dotnet add package SharpCoreDB --version 2.0.0.2
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.0.0.1
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.1
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.1
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.1
+dotnet add package SharpCoreDB.Functional --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.2
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.2
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -212,7 +226,7 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.0.0.1 (September 2026)  
+**Latest Version:** 2.0.0.2 (September 2026)  
 **Target:** .NET 10 / C# 14  
 **Tests:** 1,700+ (100% passing)  
 **Status:** ✅ Stable — performance-first v2.0.0 release  
