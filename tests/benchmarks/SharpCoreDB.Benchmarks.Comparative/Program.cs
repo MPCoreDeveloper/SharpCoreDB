@@ -32,7 +32,7 @@ class Program
     const string BannerTop = "╔══════════════════════════════════════════════════════════╗";
     const string BannerBottom = "╚══════════════════════════════════════════════════════════╝";
     const string ResultsDirName = "results";
-    const string BenchDbPassword = "bench123";
+    const string BenchDbPassword = "bench123"; // NOSONAR:S2068 - throwaway local benchmark credential, not a real secret
     const string EmailColumn = "email";
     const string ScoreColumn = "score";
     const string NameParam = "@name";
@@ -441,8 +441,8 @@ class Program
             },
             "noadaptive" => new DatabaseConfig { StorageEngineType = engineType, EnableAdaptiveWalBatching = false },
             "hsinsert" => new DatabaseConfig { StorageEngineType = engineType, HighSpeedInsertMode = true },
-            // "plain" == the tuned harness config with NoEncryptMode=true (BuildConfig default);
-            // "tuned" == the same knob set but NoEncryptMode=false (isolates that flag).
+            // "plain" and "tuned" both select the tuned harness config built by BuildConfig; the
+            // only difference is that "tuned" turns the NoEncryptMode flag off (isolating it).
             "plain" => BuildConfig(engineType, fixedWidth: true),
             "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
             _ => new DatabaseConfig { StorageEngineType = engineType },

@@ -1572,15 +1572,11 @@ public partial class Table
             : null;
 
         // Snapshot old values of hash-indexed columns for key-only removal.
-        Dictionary<string, object>? oldHashKeys = null;
-        foreach (var kvp in this.hashIndexes)
-        {
-            if (row.TryGetValue(kvp.Key, out var oldVal))
-            {
-                oldHashKeys ??= new Dictionary<string, object>();
-                oldHashKeys[kvp.Key] = oldVal;
-            }
-        }
+        Dictionary<string, object>? oldHashKeys = this.hashIndexes.Count == 0
+            ? null
+            : this.hashIndexes.Keys
+                .Where(row.ContainsKey)
+                .ToDictionary(key => key, key => row[key]);
 
         // Apply updates to the row
         foreach (var update in updates)
@@ -3411,6 +3407,54 @@ public partial class Table
     }
 
     /// <summary>
+    /// Returns true when the file is physically PK-ordered (strictly ascending keys, no tombstone or
+    /// zero-length anomalies) from offset 0 up to <paramref name="firstSearch"/>. This is the
+    /// pre-pass guard for the sequential PK batch scan: only a proven-ordered file lets the
+    /// forward-only main pass skip the rows before the first target — an unordered file could
+    /// otherwise place a later target before the first target's position.
+    /// </summary>
+    private bool IsFilePkOrderedUpTo(byte[] wholeFile, string pkCol, long firstSearch)
+    {
+        var pkWantedPre = new[] { this.PrimaryKeyIndex };
+        long walk = 0;
+        long prev = long.MinValue;
+        while (walk + 4 <= wholeFile.Length && walk < firstSearch)
+        {
+            int len = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)walk, 4));
+            if (len > 0 && walk + 4 + len <= wholeFile.Length)
+            {
+                var r = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)walk + 4, len), pkWantedPre);
+                if (r != null && r.TryGetValue(pkCol, out var v) && v is not null && v is not DBNull)
+                {
+                    long pk = Convert.ToInt64(v, CultureInfo.InvariantCulture);
+                    if (pk < prev)
+                    {
+                        return false; // physically unordered file -> per-row resolution
+                    }
+
+                    prev = pk;
+                }
+
+                walk += 4 + len;
+            }
+            else
+            {
+                if (len == 0)
+                {
+                    return false;
+                }
+
+                // Tombstone marker: the negative value already encodes the whole slot span
+                // (4-byte prefix + payload), so skipping by |len| lands exactly on the next
+                // record's prefix.
+                walk += Math.Abs(len);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Sequential ascending-INTEGER-PK batch resolution for the legacy (variable-length, plaintext,
     /// Columnar) DELETE path. When every condition is a strictly-ascending literal on an INTEGER PK
     /// and the physical byte range between the first and last target is compact (≤ 2 MB), all
@@ -3481,42 +3525,9 @@ public partial class Table
         // target's position. Only then may the main pass skip those leading rows — an unordered
         // file could otherwise place a later target *before* the first target's position, which a
         // forward-only scan would never see. Any disorder falls back to the per-row path.
+        if (!IsFilePkOrderedUpTo(wholeFile, pkCol, firstSearch.Value))
         {
-            var pkWantedPre = new[] { this.PrimaryKeyIndex };
-            long walk = 0;
-            long prev = long.MinValue;
-            while (walk + 4 <= wholeFile.Length && walk < firstSearch.Value)
-            {
-                int len = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)walk, 4));
-                if (len > 0 && walk + 4 + len <= wholeFile.Length)
-                {
-                    var r = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)walk + 4, len), pkWantedPre);
-                    if (r != null && r.TryGetValue(pkCol, out var v) && v is not null && v is not DBNull)
-                    {
-                        long pk = Convert.ToInt64(v, CultureInfo.InvariantCulture);
-                        if (pk < prev)
-                        {
-                            return false; // physically unordered file -> per-row resolution
-                        }
-
-                        prev = pk;
-                    }
-
-                    walk += 4 + len;
-                }
-                else
-                {
-                    if (len == 0)
-                    {
-                        return false;
-                    }
-
-                    // Tombstone marker: the negative value already encodes the whole slot span
-                    // (4-byte prefix + payload), so skipping by |len| lands exactly on the next
-                    // record's prefix.
-                    walk += Math.Abs(len);
-                }
-            }
+            return false;
         }
 
         var remaining = new HashSet<long>(targets); // set-based matching keeps unordered files correct

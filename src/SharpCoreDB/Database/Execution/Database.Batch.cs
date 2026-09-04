@@ -1121,8 +1121,9 @@ public partial class Database
                 {
                     if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
                     {
-                        // Canonical batches go through the structured path (no WHERE rebuild/re-parse);
-                        // any non-canonical statement forces the string form for the whole table.
+                        // Canonical batches go through the structured path (no WHERE rebuild or re-parse).
+                        // NOSONAR:S125 - prose description: any non-canonical statement forces the
+                        // string form for the whole table, not commented-out code.
                         bool allCanonical = true;
                         foreach (var (_, column, _) in deletes)
                         {

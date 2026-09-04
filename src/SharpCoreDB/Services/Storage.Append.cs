@@ -53,8 +53,8 @@ public partial class Storage
     // append because OverwriteRecordAt refused to write inside a transaction.
     private readonly ConcurrentDictionary<string, Dictionary<long, byte[]>> bufferedOverwrites = new(StringComparer.Ordinal);
 
-    // ✅ Commit-time tombstones: physical offsets of records deleted inside the current
-    // transaction. The marker is NOT written at delete time (a rollback must keep the row);
+    // ✅ Commit-time tombstones: physical offsets of records deleted inside the current transaction.
+    // The marker is NOT written at delete time — a rollback must keep the row. NOSONAR:S125 (prose, not dead code)
     // ApplyBufferedTombstones writes the in-place negative-prefix markers when the transaction
     // commits, after the buffered appends are on disk. Rollback discards the buffer.
     private readonly Dictionary<string, List<long>> bufferedTombstones = new(StringComparer.Ordinal);
