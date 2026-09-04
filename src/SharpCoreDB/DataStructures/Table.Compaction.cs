@@ -300,14 +300,10 @@ public partial class Table
             hashIndex.Clear();
         }
 
-        var loadedHashIndexes = new List<HashIndex>();
-        foreach (var kvp in hashIndexes)
-        {
-            if (loadedIndexes.Contains(kvp.Key))
-            {
-                loadedHashIndexes.Add(kvp.Value);
-            }
-        }
+        var loadedHashIndexes = hashIndexes
+            .Where(kvp => loadedIndexes.Contains(kvp.Key))
+            .Select(kvp => kvp.Value)
+            .ToList();
 
         foreach (var (position, data) in engine.GetAllRecords(Name))
         {
