@@ -22,6 +22,12 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
   OLTP-ready); upgrade/downgrade policy documented with format-compat regression tests; a
   pure-default-config benchmark arm (`--pk-default`) and a same-window interleaved A/B mode
   (`--pk-ab`) now guard the numbers.
+- **Reopen data-integrity fixes** — a reopen round-trip hardening sweep fixed three silent-data-loss
+  edge cases: empty TEXT/BLOB values no longer truncate the overflow-arena reload; the single-file
+  fixed-width overflow arena persists freed slots as markers (no misaligned zero gaps); and legacy
+  (1.x-upgrade) variable-length tables purge older row versions when a row is deleted, so deleted
+  rows can no longer resurrect after a reopen. Locked in by the new `ReopenRoundTripMatrixTests`
+  and outbox/CQRS integration coverage.
 - Full report (incl. the 2.x-vs-1.9.x major steps): `docs/2.0.0.2_WHAT_CHANGED.md`.
 
 ## What's New in 2.0.0.1

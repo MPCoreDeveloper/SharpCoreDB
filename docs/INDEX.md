@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`2.0.0.0`)
+**Status:** Active documentation set (`2.0.0.2`)
 
 ## 0. Manual (start here)
 
@@ -23,6 +23,8 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 0b. Release notes
 
+- `2.0.0.2_WHAT_CHANGED.md` — **what's new in 2.0.0.2** (2.x-vs-1.9.x major steps + the hardening
+  and data-integrity batch)
 - `2.0.0.0_WHAT_CHANGED.md` — **what's new in v2.0 vs v1.9** (features + benchmarks vs SQLite/LiteDB)
 
 ## 1. Project Entry Points
