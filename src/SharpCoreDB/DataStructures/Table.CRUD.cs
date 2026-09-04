@@ -2525,13 +2525,7 @@ public partial class Table
                 continue;
             }
 
-            foreach (var colIdx in repoints)
-            {
-                if (!indexedColumns.Contains(colIdx))
-                {
-                    indexedColumns.Add(colIdx);
-                }
-            }
+            indexedColumns.AddRange(repoints.Where(colIdx => !indexedColumns.Contains(colIdx)));
         }
 
         foreach (var colIdx in indexedColumns)
@@ -3745,7 +3739,7 @@ public partial class Table
     /// whole-file snapshot. Returns null when the position/length is not fully contained in the
     /// snapshot (caller falls back to the per-record read).
     /// </summary>
-    private byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position)
+    private static byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position)
     {
         if (position < 0 || position + 4 > wholeFile.Length)
         {
@@ -3973,12 +3967,9 @@ public partial class Table
         {
             // Transactional delete: buffer the physical offsets so the in-place marker is applied
             // at COMMIT (see DeleteRecordsCore — rollback discards the buffer).
-            foreach (var position in positions)
+            foreach (var position in positions.Where(static position => position >= 0))
             {
-                if (position >= 0)
-                {
-                    this.storage.BufferTombstoneForCommit(DataFile, position);
-                }
+                this.storage.BufferTombstoneForCommit(DataFile, position);
             }
         }
         else
