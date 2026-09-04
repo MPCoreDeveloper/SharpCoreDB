@@ -21,6 +21,10 @@ public sealed class SingleFileOverflowArena : IOverflowArena
     private readonly Dictionary<long, byte[]> _blocks = new();
     private readonly Dictionary<int, List<long>> _freeByLength = new();
     private readonly Dictionary<string, long> _contentIndex = new(System.StringComparer.Ordinal);
+    // Dead (freed) block slots that must be re-emitted as tombstone markers on every serialize so
+    // the byte stream stays aligned for the sequential deserializer. Populated on load (markers)
+    // and on Free; cleared when a slot is reused in place or the arena is compacted.
+    private readonly Dictionary<long, int> _deadSlots = new();
     private long _nextOffset;
     private int _blockReuses;
 
@@ -101,6 +105,7 @@ public sealed class SingleFileOverflowArena : IOverflowArena
                 _freeByLength.Remove(payload.Length);
             }
 
+            _deadSlots.Remove(offset); // reused in place: no longer a dead slot
             _blocks[offset] = payload;
             _contentIndex[contentKey] = offset;
             _blockReuses++;
@@ -138,6 +143,7 @@ public sealed class SingleFileOverflowArena : IOverflowArena
         }
 
         offsets.Add(offset);
+        _deadSlots[offset] = 4 + payload.Length;
     }
 
     /// <summary>Serializes all blocks (live and freed) as a contiguous <c>[length][payload]</c> stream.</summary>
@@ -153,6 +159,18 @@ public sealed class SingleFileOverflowArena : IOverflowArena
         {
             BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan((int)offset, 4), payload.Length);
             payload.CopyTo(buffer, (int)offset + 4);
+        }
+
+        // Dead slots (freed blocks from this session or loaded from a previous one) are written as
+        // tombstone markers (negative length = total slot span to skip). Without them a dead region
+        // would be serialized as a zero-filled gap that misaligns the sequential deserializer and
+        // drops every later block on reload.
+        foreach (var (offset, slotSize) in _deadSlots)
+        {
+            if (offset >= 0 && offset + 4 <= buffer.Length)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan((int)offset, 4), -slotSize);
+            }
         }
 
         return buffer;
@@ -175,7 +193,32 @@ public sealed class SingleFileOverflowArena : IOverflowArena
         while (position + 4 <= data.Length)
         {
             int length = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan((int)position, 4));
-            if (length < 0 || position + 4 + length > data.Length)
+            if (length < 0)
+            {
+                // Tombstone marker: the negative value encodes the whole slot span to skip
+                // (freed overflow blocks are serialized as markers, not zero-filled gaps).
+                int slotSize = -length;
+                if (slotSize < 4 || position + slotSize > data.Length)
+                {
+                    break; // truncated / corrupt
+                }
+
+                // Track the dead slot so this flush re-emits the marker (a marker consumed on load
+                // would otherwise come back as a zero-filled gap on the next serialize).
+                arena._deadSlots[position] = slotSize;
+                int deadPayloadLength = slotSize - 4;
+                if (!arena._freeByLength.TryGetValue(deadPayloadLength, out var deadOffsets))
+                {
+                    deadOffsets = [];
+                    arena._freeByLength[deadPayloadLength] = deadOffsets;
+                }
+
+                deadOffsets.Add(position);
+                position += slotSize;
+                continue;
+            }
+
+            if (position + 4 + length > data.Length)
             {
                 break; // truncated / corrupt
             }
@@ -213,6 +256,7 @@ public sealed class SingleFileOverflowArena : IOverflowArena
 
         _blocks.Clear();
         _freeByLength.Clear();
+        _deadSlots.Clear();
         _contentIndex.Clear();
         foreach (var (newOffset, payload) in newBlocks)
         {

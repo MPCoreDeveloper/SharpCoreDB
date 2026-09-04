@@ -2704,12 +2704,187 @@ public partial class Table
             {
                 // Durable DELETE: physically mark the removed records so a reopen skips them.
                 TombstoneDeletedPositions(positions);
+
+                // Legacy variable-length (non-fixed-width) columnar tables keep older stale versions
+                // of a key in the file (UPDATE appends a new version). Tombstoning only the newest
+                // version would let an older stale version win the reopen index rebuild ("keep the
+                // latest position per key") and resurrect the deleted row — purge the remaining
+                // records that carry a deleted key too.
+                if (StorageMode == StorageMode.Columnar && !_fixedWidthRecords && PrimaryKeyIndex >= 0)
+                {
+                    TombstoneRemainingVersionsOfDeletedKeys(recordsToDelete);
+                }
             }
 
             TryAutoCompact();
         }
 
         Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
+    }
+
+    /// <summary>
+    /// Legacy (variable-length) columnar tables append a new row version on every UPDATE, leaving
+    /// older stale versions of the same key in the data file. A durable DELETE tombstones only the
+    /// newest version; an older stale version would then win the reopen index rebuild and resurrect
+    /// the deleted row. This scans the file once and tombstones every remaining (non-tombstoned)
+    /// record whose primary key was just deleted. Fixed-width tables are unaffected (their UPDATEs
+    /// are in-place overwrites, so at most one live version per key exists).
+    /// </summary>
+    private void TombstoneRemainingVersionsOfDeletedKeys(List<(long storagePosition, Dictionary<string, object> row)> recordsToDelete)
+    {
+        if (this.storage is null || recordsToDelete.Count == 0)
+        {
+            return;
+        }
+
+        var pkCol = this.Columns[this.PrimaryKeyIndex];
+        var deletedKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (_, row) in recordsToDelete)
+        {
+            if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
+            {
+                deletedKeys.Add(pkValue.ToString() ?? string.Empty);
+            }
+        }
+
+        if (deletedKeys.Count == 0 || !File.Exists(DataFile))
+        {
+            return;
+        }
+
+        List<long>? remainingPositions = null;
+        if (!this.storage.AreRecordsEncrypted(DataFile))
+        {
+            remainingPositions = ScanLegacyPlaintextRemainingKeys(DataFile, pkCol, deletedKeys);
+        }
+
+        remainingPositions ??= ScanLegacyRemainingKeysViaStorage(DataFile, pkCol, deletedKeys);
+        if (remainingPositions is { Count: > 0 })
+        {
+            TombstoneDeletedPositions(remainingPositions.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Single buffered pass over a plaintext legacy data file: parse the length-prefixed record
+    /// stream inline (skipping tombstone markers) and decode only the PK column. Returns the
+    /// physical offsets of records whose PK is in <paramref name="deletedKeys"/>, or
+    /// <see langword="null"/> when the raw layout could not be parsed safely (the caller then falls
+    /// back to the storage-layer scan, which understands per-record encryption).
+    /// </summary>
+    private List<long>? ScanLegacyPlaintextRemainingKeys(string dataFile, string pkCol, HashSet<string> deletedKeys)
+    {
+        var matches = new List<long>();
+        try
+        {
+            using var fs = new FileStream(
+                dataFile, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete, 65536, FileOptions.SequentialScan);
+
+            Span<byte> lengthBuf = stackalloc byte[4];
+            long position = 0;
+            while (fs.Position < fs.Length)
+            {
+                if (fs.Read(lengthBuf) < 4)
+                {
+                    break;
+                }
+
+                int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBuf);
+                if (length < 0)
+                {
+                    int slotSize = -length;
+                    if (slotSize < 4 || position + slotSize > fs.Length)
+                    {
+                        break;
+                    }
+
+                    fs.Seek(slotSize - 4, SeekOrigin.Current);
+                    position += slotSize;
+                    continue;
+                }
+
+                if (length == 0)
+                {
+                    // Valid zero-length record (empty payload): nothing to read, keep scanning.
+                    position += 4;
+                    continue;
+                }
+
+                if (position + 4 + length > fs.Length)
+                {
+                    break;
+                }
+
+                byte[] recordData = new byte[length];
+                if (fs.Read(recordData) < length)
+                {
+                    break;
+                }
+
+                if (TryReadPrimaryKeyFromLegacyRecord(recordData, pkCol, out var pkStr) && deletedKeys.Contains(pkStr))
+                {
+                    matches.Add(position);
+                }
+
+                position += 4 + length;
+            }
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Storage-layer scan used for encrypted per-record data files (and as the fallback when the
+    /// plaintext raw scan is unavailable): iterates the records through
+    /// <c>storage.ReadAllRecords</c>, which decrypts payloads and already skips tombstone markers.
+    /// </summary>
+    private List<long> ScanLegacyRemainingKeysViaStorage(string dataFile, string pkCol, HashSet<string> deletedKeys)
+    {
+        var matches = new List<long>();
+        foreach (var (recordOffset, recordData) in this.storage!.ReadAllRecords(dataFile))
+        {
+            if (TryReadPrimaryKeyFromLegacyRecord(recordData, pkCol, out var pkStr) && deletedKeys.Contains(pkStr))
+            {
+                matches.Add(recordOffset);
+            }
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Walks a legacy variable-length record and returns the value of the primary-key column
+    /// (the same layout walk used by the reopen index rebuild).
+    /// </summary>
+    private bool TryReadPrimaryKeyFromLegacyRecord(byte[] recordData, string pkCol, out string? pkValue)
+    {
+        pkValue = null;
+        try
+        {
+            int offset = 0;
+            for (int i = 0; i < Columns.Count && offset < recordData.Length; i++)
+            {
+                var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
+                if (i == PrimaryKeyIndex && value != null)
+                {
+                    pkValue = value.ToString();
+                    return true;
+                }
+
+                offset += bytesRead;
+            }
+        }
+        catch
+        {
+            // Corrupt / unexpected record — mirror the index-rebuild tolerance.
+        }
+
+        return false;
     }
 
     /// <summary>

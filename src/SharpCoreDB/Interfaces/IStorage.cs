@@ -247,7 +247,17 @@ public interface IStorage
         while (position + 4 <= data.Length)
         {
             int length = BitConverter.ToInt32(data, (int)position);
-            if (length <= 0 || length > MaxRecordSizeLocal || position + 4 + length > data.Length)
+            if (length == 0)
+            {
+                // Valid zero-length record (e.g. an overflow-arena block for an empty TEXT/BLOB
+                // value). Yield an empty payload and keep scanning so later records/blocks are
+                // not silently dropped on reload.
+                yield return (position, []);
+                position += 4;
+                continue;
+            }
+
+            if (length < 0 || length > MaxRecordSizeLocal || position + 4 + length > data.Length)
             {
                 yield break;
             }
