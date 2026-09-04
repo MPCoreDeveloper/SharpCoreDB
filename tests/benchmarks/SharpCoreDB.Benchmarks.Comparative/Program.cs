@@ -955,6 +955,39 @@ class Program
     }
 
     /// <summary>
+    /// D1: runs a fair-PK arm several times and reports the per-phase median time so the printed
+    /// ops/s is robust to run-to-run noise (single-shot arms fluctuated by roughly ±30%).
+    /// </summary>
+    private static BenchmarkResult RunPkMedian(Func<BenchmarkResult> arm, int reps = 3)
+    {
+        var runs = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            runs.Add(arm());
+        }
+
+        static double MedianOf(IEnumerable<BenchmarkResult> xs, Func<BenchmarkResult, double> select)
+        {
+            var sorted = xs.Select(select).Where(x => x > 0).OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+        }
+
+        var median = new BenchmarkResult
+        {
+            InsertTime = MedianOf(runs, static r => r.InsertTime),
+            ReadTime = MedianOf(runs, static r => r.ReadTime),
+            UpdateTime = MedianOf(runs, static r => r.UpdateTime),
+            DeleteTime = MedianOf(runs, static r => r.DeleteTime),
+        };
+
+        median.InsertOpsPerSec = InsertCount > 0 && median.InsertTime > 0 ? (int)(InsertCount / median.InsertTime) : 0;
+        median.ReadOpsPerSec = ReadCount > 0 && median.ReadTime > 0 ? (int)(ReadCount / median.ReadTime) : 0;
+        median.UpdateOpsPerSec = UpdateCount > 0 && median.UpdateTime > 0 ? (int)(UpdateCount / median.UpdateTime) : 0;
+        median.DeleteOpsPerSec = DeleteCount > 0 && median.DeleteTime > 0 ? (int)(DeleteCount / median.DeleteTime) : 0;
+        return median;
+    }
+
+    /// <summary>
     /// Runs the fair PK scenario (SharpCoreDB vs SQLite) and prints the comparison.
     /// </summary>
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
@@ -966,17 +999,18 @@ class Program
         Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("(fair-PK arms run 3x; median time per phase is reported)");
 
         Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length) ━━━");
-        var scdb = RunSharpCoreDBPk(engineType);
+        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType));
         Console.WriteLine();
 
         Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width) ━━━");
-        var scdbFw = RunSharpCoreDBPk(engineType, fixedWidth: true);
+        var scdbFw = RunPkMedian(() => RunSharpCoreDBPk(engineType, fixedWidth: true));
         Console.WriteLine();
 
         Console.WriteLine("━━━ SQLite (reference) ━━━");
-        var sqlite = RunSQLite();
+        var sqlite = RunPkMedian(() => RunSQLite());
         Console.WriteLine();
 
         Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
