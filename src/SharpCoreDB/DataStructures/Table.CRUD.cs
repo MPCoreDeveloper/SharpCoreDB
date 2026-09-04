@@ -3102,8 +3102,16 @@ public partial class Table
 
             var recordsToDelete = new List<(long storagePosition, Dictionary<string, object> row)>();
 
-            foreach (var (col, literal) in conditions)
+            // Sequential ascending-INTEGER-PK batch resolution (legacy variable-length layout): one
+            // decode pass with an early exit instead of one B-tree search + row decode per target.
+            if (TryResolvePkBatchSequentially(conditions, wholeFile, deleteKeyColumns, out var sequentialRecords))
             {
+                recordsToDelete = sequentialRecords;
+            }
+            else
+            {
+                foreach (var (col, literal) in conditions)
+                {
                 string value = UnquoteSqlLiteral(literal);
 
                 // Issue #7 PK fast path (structured: no WHERE-string re-parse).
@@ -3223,6 +3231,7 @@ public partial class Table
                             recordsToDelete.Add((storageRef, row));
                     }
                 }
+                }
             }
 
             if (recordsToDelete.Count == 0) return;
@@ -3233,6 +3242,180 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Sequential ascending-INTEGER-PK batch resolution for the legacy (variable-length, plaintext,
+    /// Columnar) DELETE path. When every condition is a strictly-ascending literal on an INTEGER PK
+    /// and the physical byte range between the first and last target is compact (≤ 2 MB), all
+    /// targets are resolved with a single decode pass starting at the first target's position
+    /// instead of one B-tree search + row decode per target (the per-target cost of the issue-#7
+    /// fast path). The pass early-exits as soon as every target matched while the file has proven
+    /// physically PK-ordered; if an out-of-order row is seen the scan continues to EOF so the
+    /// result stays identical to the per-row search path. Handled batches return true with the
+    /// matched records (possibly empty); any shape/type/layout deviation returns false so the
+    /// caller falls back to the existing per-condition resolution.
+    /// </summary>
+    private bool TryResolvePkBatchSequentially(
+        List<(string Column, string Literal)> conditions,
+        byte[]? wholeFile,
+        int[] deleteKeyColumns,
+        out List<(long storagePosition, Dictionary<string, object> row)> records)
+    {
+        records = [];
+
+        if (StorageMode == StorageMode.PageBased || wholeFile is null || _fixedWidthRecords)
+        {
+            return false;
+        }
+
+        if (this.PrimaryKeyIndex < 0 || this.ColumnTypes[this.PrimaryKeyIndex] != DataType.Integer || conditions.Count < 32)
+        {
+            return false;
+        }
+
+        // All conditions must target the PK column with strictly ascending, duplicate-free integer
+        // literals (numeric ordering equals the INTEGER PK key ordering).
+        var targets = new long[conditions.Count];
+        for (int i = 0; i < conditions.Count; i++)
+        {
+            var (col, literal) = conditions[i];
+            if (!string.Equals(col, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var value = UnquoteSqlLiteral(literal).Trim();
+            if (!long.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return false;
+            }
+
+            if (i > 0 && parsed <= targets[i - 1])
+            {
+                return false;
+            }
+
+            targets[i] = parsed;
+        }
+
+        // Bound the worst-case scan to a compact physical region: locate the first and last target
+        // through the PK B-tree and require their byte distance to stay below 2 MB. Sparse or
+        // full-file-spanning target sets stay on the per-row search path.
+        var firstSearch = this.Index.Search(targets[0].ToString(CultureInfo.InvariantCulture));
+        var lastSearch = this.Index.Search(targets[^1].ToString(CultureInfo.InvariantCulture));
+        if (!firstSearch.Found || !lastSearch.Found || lastSearch.Value - firstSearch.Value > 2 * 1024 * 1024)
+        {
+            return false;
+        }
+
+        string pkCol = this.Columns[this.PrimaryKeyIndex];
+
+        // Pre-pass: verify the file is physically PK-ordered from offset 0 up to the first
+        // target's position. Only then may the main pass skip those leading rows — an unordered
+        // file could otherwise place a later target *before* the first target's position, which a
+        // forward-only scan would never see. Any disorder falls back to the per-row path.
+        {
+            var pkWantedPre = new[] { this.PrimaryKeyIndex };
+            long walk = 0;
+            long prev = long.MinValue;
+            while (walk + 4 <= wholeFile.Length && walk < firstSearch.Value)
+            {
+                int len = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)walk, 4));
+                if (len > 0 && walk + 4 + len <= wholeFile.Length)
+                {
+                    var r = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)walk + 4, len), pkWantedPre);
+                    if (r != null && r.TryGetValue(pkCol, out var v) && v is not null && v is not DBNull)
+                    {
+                        long pk = Convert.ToInt64(v, CultureInfo.InvariantCulture);
+                        if (pk < prev)
+                        {
+                            return false; // physically unordered file -> per-row resolution
+                        }
+
+                        prev = pk;
+                    }
+
+                    walk += 4 + len;
+                }
+                else
+                {
+                    if (len == 0)
+                    {
+                        return false;
+                    }
+
+                    // Tombstone marker: the negative value already encodes the whole slot span
+                    // (4-byte prefix + payload), so skipping by |len| lands exactly on the next
+                    // record's prefix.
+                    walk += Math.Abs(len);
+                }
+            }
+        }
+
+        var remaining = new HashSet<long>(targets); // set-based matching keeps unordered files correct
+        int matchedCount = 0;
+        long previousPk = long.MinValue;
+        bool ordered = true;
+        var pkWanted = new[] { this.PrimaryKeyIndex };
+
+        long position = firstSearch.Value;
+        while (position + 4 <= wholeFile.Length)
+        {
+            int recordLength = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)position, 4));
+            int advance;
+            if (recordLength > 0 && position + 4 + recordLength <= wholeFile.Length)
+            {
+                advance = 4 + recordLength;
+
+                var pkRow = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)position + 4, recordLength), pkWanted);
+                if (pkRow != null && pkRow.TryGetValue(pkCol, out var pkValue) && pkValue is not null && pkValue is not DBNull)
+                {
+                    long pk = Convert.ToInt64(pkValue, CultureInfo.InvariantCulture);
+                    if (pk < previousPk)
+                    {
+                        ordered = false;
+                    }
+
+                    previousPk = pk;
+
+                    if (remaining.Remove(pk))
+                    {
+                        matchedCount++;
+                        var row = DeserializeDeleteKeyRowFromFile(wholeFile, position, deleteKeyColumns);
+                        if (row != null)
+                        {
+                            records.Add((position, row));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Tombstoned record (negative prefix) or truncated tail. The marker encodes the whole
+                // slot span (4-byte prefix + payload) as its magnitude, so |recordLength| skips
+                // exactly to the next record's prefix; a zero-length prefix cannot be walked safely.
+                if (recordLength == 0)
+                {
+                    return false;
+                }
+
+                advance = Math.Abs(recordLength);
+                if (advance <= 4)
+                {
+                    return false;
+                }
+            }
+
+            if (ordered && matchedCount == targets.Length)
+            {
+                break; // early exit: monotonically ordered file, every target resolved
+            }
+
+            position += advance;
+        }
+
+        return true;
     }
 
     private bool AllPkLiteralConditions(List<(string Column, string Literal)> conditions)

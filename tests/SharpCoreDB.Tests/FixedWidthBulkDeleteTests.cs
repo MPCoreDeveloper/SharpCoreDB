@@ -312,6 +312,72 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
     }
 
     [Fact]
+    public void LegacyUnorderedLayout_AscendingPkBatchDelete_StaysCorrectAcrossReopen()
+    {
+        // Sequential ascending-PK batch resolution may not assume physical row order: when rows
+        // were inserted in a shuffled order the batch must still delete exactly the requested keys
+        // (the sequential scan detects the disorder, keeps scanning to EOF and matches by set).
+        IDatabase? db = _factory.Create(_dirPath, "pw", isReadOnly: false,
+            config: new DatabaseConfig { NoEncryptMode = true, AutoFixedWidthRecords = false });
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+
+            // Shuffle 1..2000 with a fixed seed so the physical file order is not PK-ordered.
+            var ids = new List<int>(2000);
+            for (int i = 1; i <= 2000; i++) ids.Add(i);
+            var rng = new Random(20260904);
+            for (int i = ids.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (ids[i], ids[j]) = (ids[j], ids[i]);
+            }
+
+            var stmts = new List<string>(2000);
+            foreach (int id in ids)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "INSERT INTO docs VALUES ({0}, 'user{0}', {1})", id, id * 0.5));
+            }
+
+            db.ExecuteBatchSQL(stmts);
+            db.Flush();
+            Assert.Equal(2000, db.ExecuteQuery("SELECT id FROM docs").Count);
+
+            // Ascending pk batch over a physically unordered file: keys 101..140.
+            var dels = new List<string>(40);
+            for (int i = 101; i <= 140; i++)
+            {
+                dels.Add(string.Format(CultureInfo.InvariantCulture, "DELETE FROM docs WHERE id = {0}", i));
+            }
+
+            db.ExecuteBatchSQL(dels);
+            db.Flush();
+
+            Assert.Equal(1960, db.ExecuteQuery("SELECT id FROM docs").Count);
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 120"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 100"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 141"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user150'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Reopen: the deleted rows stay gone, live rows stay reachable.
+        db = _factory.Create(_dirPath, "pw", isReadOnly: false,
+            config: new DatabaseConfig { NoEncryptMode = true, AutoFixedWidthRecords = false });
+        try
+        {
+            Assert.Equal(1960, db.ExecuteQuery("SELECT id FROM docs").Count);
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 101"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 140"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 100"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 141"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
     public void BatchDelete_CommitTimeTombstones_SurviveReopenWithoutExplicitFlush()
     {
         // ExecuteBatchSQL wraps the whole DELETE batch in one storage transaction. The deleted

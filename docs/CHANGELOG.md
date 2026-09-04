@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **Sequential ascending-PK batch resolution for legacy DELETE (Fase B: legacy fast paths)** -
+  `DeleteMultipleKeys` on a legacy (variable-length, plaintext, non-fixed-width) Columnar table now
+  resolves a strictly-ascending INTEGER-PK literal batch with a single sequential decode pass that
+  starts at the first target's position and early-exits once every target matched — instead of one
+  B-tree search + row decode per target. Strictly gated: page-based/fixed-width/encrypted layouts,
+  non-PK or non-ascending keys, sparse batches spanning more than 2 MB and physically unordered
+  files (detected by a monotonicity pre-pass) all fall back to the existing per-row path, so the
+  result is identical. Two regression tests cover an ascending batch over an **unordered** physical
+  layout (must delete exactly the requested keys across reopen) and re-validate the existing
+  legacy prefix delete; full suite 1766 tests, 0 failed. Legacy `--pk` DELETE stays within noise on
+  this harness; the gate is groundwork for the wide-row legacy arms.
 - **Buffered in-place UPDATE overwrites are now flushed per storage page (C6, Fase B)** - the
   UPDATE commit path buffered one record per row (B7) and flushed each with two pwrites
   (length prefix + payload), so ~10K-row UPDATEs were dominated by per-row write syscalls
