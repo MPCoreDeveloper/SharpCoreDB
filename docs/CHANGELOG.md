@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Hardening
 
+- **Upgrade/downgrade policy documented + format-compat regression tests** - new
+  `docs/manual/upgrade-and-downgrade.md` records the compatibility matrix: reading legacy
+  (variable-length, pre-marker) databases with the current version is supported; opening a database
+  that already contains commit-time tombstone markers with a version that predates them is **not**
+  supported (negative length-prefix markers), and the recommended read-only-first upgrade order.
+  `FormatCompatPolicyTests` locks in the two forward-compatibility guarantees: legacy files read
+  back and accept marker writes across reopens, and commit-time tombstone markers stay stable
+  across reopen cycles while rows appended afterwards coexist.
+
 - **Auto engine selection no longer lands on PageBased (production hardening)** - with default
   configuration (`StorageEngineType.Auto` + `WorkloadHint.General`) `GetOptimalStorageEngine`
   returned PageBased, which is not yet OLTP-ready (measured UPDATE ~26K ops/s vs ~245K ops/s on the
