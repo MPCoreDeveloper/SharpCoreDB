@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [2.0.0.2] - 2026-09-04
+
+> Full release notes incl. the 2.x-vs-1.9.x major steps: [`docs/2.0.0.2_WHAT_CHANGED.md`](2.0.0.2_WHAT_CHANGED.md).
+
 ### Hardening
 
 - **NoEncryptMode root cause quantified + explained (P3d)** - definitive 3-rep same-window `--pk-ab`

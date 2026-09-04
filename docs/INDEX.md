@@ -145,6 +145,11 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 10. Benchmarks & Performance
 
+- `2.0.0.2_WHAT_CHANGED.md` — ⭐ **release notes (2.0.0.2)**: the 2.x-vs-1.9.x major steps + the
+  2.0.0.2 hardening/perf batch
+- `CHANGELOG.md` — full per-version change log (`[2.0.0.2]`, new `[Unreleased]` on top)
+- `manual/upgrade-and-downgrade.md` — compatibility matrix & downgrade policy
+- `benchmarks/default-config-pk.md` — default-config fair-PK benchmark + NoEncryptMode root cause
 - `manual/performance.md` — ⭐ **Performance Guide**: when SharpCoreDB is fastest + v2.0 results
 - `performance/V2_PERFORMANCE_PLAN.md` — v2.x performance roadmap, root-cause analysis, .NET 11 plan
 - `benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md` — comparative report vs SQLite/LiteDB/BLite
