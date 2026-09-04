@@ -129,4 +129,76 @@ public sealed class DirectoryFixedWidthDefaultTests : IDisposable
         }
         finally { (db as IDisposable)?.Dispose(); }
     }
+
+    [Fact]
+    public void DefaultConfig_EmptyTextValue_DoesNotHideLaterRowsAfterReopen()
+    {
+        // Regression: the overflow arena stores an empty TEXT/BLOB value as a valid zero-length
+        // record, and reloading an arena file treated that record as the end of the file — every
+        // later row (and every later arena block of the same row) came back empty after a reopen.
+        IDatabase? db = null;
+        try
+        {
+            db = CreateDb();
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, tag TEXT, payload TEXT)");
+            Assert.True(IsFixedWidth(db, "t"));
+
+            // Row 1 contains an empty TEXT value whose arena block precedes all later blocks.
+            db.ExecuteSQL("INSERT INTO t VALUES (1, '', 'first')");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'b2', 'second')");
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        try
+        {
+            db = CreateDb();
+            var rows = db.ExecuteQuery("SELECT * FROM t ORDER BY id");
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(1, Convert.ToInt32(rows[0]["id"]));
+            Assert.Equal(string.Empty, rows[0]["tag"]);
+            Assert.Equal("first", rows[0]["payload"]);
+            Assert.Equal(2, Convert.ToInt32(rows[1]["id"]));
+            Assert.Equal("b2", rows[1]["tag"]);
+            Assert.Equal("second", rows[1]["payload"]);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
+    public void DefaultConfig_UpdateToEmptyAndReopen_KeepsAllRowsIntact()
+    {
+        // Follow-up hardening on the same arena reload bug: a value that changes from empty to
+        // non-empty (and vice versa) writes/rewrites arena blocks that live after the first
+        // zero-length block. After reopen every block must still resolve.
+        IDatabase? db = null;
+        try
+        {
+            db = CreateDb();
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, tag TEXT, payload TEXT, score INTEGER)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'x', 'y', 10)");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, '', '', 20)");
+
+            // Row 2: empty -> non-empty appends a payload after the row's earlier empty blocks.
+            // Row 1: non-empty -> empty exercises an empty payload write on a fresh update.
+            db.ExecuteSQL("UPDATE t SET payload = 'now' WHERE id = 2");
+            db.ExecuteSQL("UPDATE t SET tag = '' WHERE id = 1");
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        try
+        {
+            db = CreateDb();
+            var rows = db.ExecuteQuery("SELECT * FROM t ORDER BY id");
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(1, Convert.ToInt32(rows[0]["id"]));
+            Assert.Equal(string.Empty, rows[0]["tag"]);
+            Assert.Equal("y", rows[0]["payload"]);
+            Assert.Equal(10, Convert.ToInt32(rows[0]["score"]));
+            Assert.Equal(2, Convert.ToInt32(rows[1]["id"]));
+            Assert.Equal(string.Empty, rows[1]["tag"]);
+            Assert.Equal("now", rows[1]["payload"]);
+            Assert.Equal(20, Convert.ToInt32(rows[1]["score"]));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
 }

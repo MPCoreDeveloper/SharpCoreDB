@@ -1346,7 +1346,18 @@ public partial class Storage
                 continue;
             }
 
-            if (length <= 0 || length > MaxRecordSize || position + 4 + length > fileLength)
+            if (length == 0)
+            {
+                // Valid empty record (a zero-length payload — e.g. an overflow-arena block written
+                // for an empty TEXT/BLOB value). There are no payload bytes to read, but the block
+                // occupies a real offset, so yield an empty payload and keep scanning. Treating it
+                // as the end-of-file would silently drop every later record/block on reload.
+                yield return (position, []);
+                position += 4;
+                continue;
+            }
+
+            if (length > MaxRecordSize || position + 4 + length > fileLength)
             {
                 yield break; // Invalid or incomplete record tail
             }

@@ -196,6 +196,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at 0.69ÔÇô0.85├ù of SQLite). Full report:
   `docs/benchmarks/AVX512_2026-09-01.md` (+ raw per-run `.md`/`.json` in `docs/benchmarks/avx512-2026-09-01/`).
 
+### Fixed
+
+- **Fixed-width overflow arena silently dropped later rows after an empty value on reopen**
+  - the per-table `.ovf` loader (`Storage.ReadAllRecords`) treated a valid zero-length block (written
+    for an empty TEXT/BLOB value, e.g. the CQRS outbox `last_error`/`next_attempt_utc` columns) as the
+    end of the file. After a reopen every arena block written after such an empty value was never
+    loaded, so later rows came back with empty string/BLOB fields and later in-place UPDATE payloads
+    read as empty. The persisted `.dat`/`.ovf` bytes were intact - only the reload scan stopped early.
+  - Fixed by parsing length-0 records as valid empty records and continuing the scan in both
+    `Storage.ReadAllRecords` and the default `IStorage.ReadAllRecords`.
+  - Reproduced and verified via the SharpCoreDB.CQRS outbox integration tests
+    (`GetUnpublishedAsync` scheduled-future exclusion, `RecordFailureAsync` retry metadata,
+    `RequeueDeadLetterAsync` attempt reset) - all previously failed, all green again. Regression
+    tests `DirectoryFixedWidthDefaultTests.DefaultConfig_EmptyTextValue_DoesNotHideLaterRowsAfterReopen`
+    and `..._UpdateToEmptyAndReopen_KeepsAllRowsIntact`.
+
+- **Single-file (.scdb) fixed-width overflow arena lost values after a reopen with freed blocks**
+  - freed arena blocks were serialized as zero-filled gaps; the sequential arena loader misreads the
+    first dead region as a corrupt/truncated stream and silently drops every later block, so updated
+    and later values came back empty after a reopen (same writer/reader edge-value class as the
+    directory-mode fix above, found by the new reopen round-trip matrix). Fixed by persisting freed
+    slots as negative-length tombstone markers that are tracked across sessions (`_deadSlots`) and
+    skipped on load - the byte stream stays aligned and dead space is reclaimed by the existing
+    copy-on-compact pass.
+
+- **New reopen round-trip matrix (`ReopenRoundTripMatrixTests`)** - four storage variants
+  (directory fixed-width default, directory legacy variable-length, single-file JSON,
+  single-file fixed-width) run insert/update/delete cycles with empty TEXT values interleaved with
+  non-empty ones across three reopen + content-verification rounds.
+
+- **Legacy (1.x-upgrade) variable-length delete-after-update resurrection fixed (critical)** - on a
+  directory-mode table without fixed-width records (`AutoFixedWidthRecords = false`, i.e. 1.x /
+  pre-B7 databases that have not been migrated), an UPDATE appends a new version and the durable
+  DELETE tombstone only marked the newest version. An older stale version of the key then won the
+  reopen index rebuild ("keep latest position") and the deleted row reappeared after a reopen -
+  any 1.x database upgraded to 2.0 was exposed to this on the normal update-then-delete workflow.
+  Fixed by purging every remaining (non-tombstoned) record of a deleted key at DELETE time for
+  legacy columnar tables (single buffered scan for plaintext files, storage-layer fallback for
+  per-record encrypted files). Fixed-width tables (the 2.0 default for new PK tables) were
+  unaffected. Regression: `ReopenRoundTripMatrixTests.DirectoryLegacy_UpdateThenDelete_DoesNotResurrectAfterReopen`
+  and the round-trip matrix legacy variant now exercises delete-after-update across reopen.
+
+  Full core suite 1777 tests, 0 failed; SharpCoreDB.CQRS.Tests 64/64.
+
 ## [2.0.0.1] - 2026-09-01
 
 ### Fixed
