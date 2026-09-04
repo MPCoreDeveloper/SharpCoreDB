@@ -708,24 +708,7 @@ public partial class Storage
 
             if (wholeFile is not null)
             {
-                foreach (var offset in offsets)
-                {
-                    if (offset < 0 || offset + 4 > wholeFile.Length)
-                    {
-                        continue;
-                    }
-
-                    int currentLength = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)offset, 4));
-                    if (currentLength <= 0)
-                    {
-                        continue; // already tombstoned or invalid
-                    }
-
-                    BinaryPrimitives.WriteInt32LittleEndian(marker, -(4 + currentLength));
-                    WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
-
-                    pagesToEvict?.Add(ComputePageId(path, offset));
-                }
+                WriteTombstoneMarkersBatched(path, offsets, wholeFile, pagesToEvict);
             }
             else
             {
@@ -765,6 +748,97 @@ public partial class Storage
             {
                 this.pageCache!.EvictPage(pageId);
             }
+        }
+    }
+
+    /// <summary>
+    /// Applies commit-time tombstone markers for a batch whose record lengths are already resolved
+    /// from a whole-file snapshot. The snapshot is patched in memory first (a marker is just a
+    /// 4-byte negative length-prefix flip, possibly crossing a storage-page boundary), then every
+    /// touched page is flushed with a single write — #373 batched the per-marker length reads; this
+    /// batches the marker writes (previously one 4-byte pwrite per marker, which dominated the
+    /// DELETE commit phase on dense batches). A flushed page differs from the on-disk bytes only in
+    /// its marker words, so the full-page write is byte-for-byte equivalent to the individual
+    /// marker writes it replaces.
+    /// </summary>
+    /// <remarks>
+    /// Safety: this helper runs under the same lock as the old per-marker loop. In the transaction
+    /// commit path that is <see cref="appendLock"/> (only the committing thread writes the file);
+    /// in the durable non-transactional DELETE path the caller already holds the table write lock.
+    /// Because each page is written at most once and always from the patched in-memory snapshot, a
+    /// rollback can never observe a partially applied marker.
+    /// </remarks>
+    private void WriteTombstoneMarkersBatched(string path, long[] offsets, byte[] wholeFile, HashSet<int>? pagesToEvict)
+    {
+        int pageSizeInt = this.pageSize > 0 ? this.pageSize : 4096;
+        long pageBytes = pageSizeInt;
+
+        // Pass 1 — patch every valid marker into the snapshot buffer and record the pages touched.
+        // A marker's 4 bytes may straddle a page boundary (records are not page-aligned), which is
+        // why the patch happens on the contiguous buffer and NOT on per-page copies.
+        var pages = new HashSet<long>();
+        for (int i = 0; i < offsets.Length; i++)
+        {
+            long offset = offsets[i];
+            if (offset < 0 || offset + 4 > wholeFile.Length)
+            {
+                continue;
+            }
+
+            int currentLength = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)offset, 4));
+            if (currentLength <= 0)
+            {
+                continue; // already tombstoned or invalid
+            }
+
+            BinaryPrimitives.WriteInt32LittleEndian(wholeFile.AsSpan((int)offset, 4), -(4 + currentLength));
+            pages.Add((offset / pageBytes) * pageBytes);
+            pages.Add(((offset + 3) / pageBytes) * pageBytes);
+        }
+
+        if (pages.Count == 0)
+        {
+            return;
+        }
+
+        // Pass 2 — flush each touched page once from the patched buffer.
+        bool isOvf = path.EndsWith(".ovf", StringComparison.OrdinalIgnoreCase);
+        SafeFileHandle? writeHandle = isOvf ? null : GetOrOpenWriteHandle(path);
+        FileStream? ovfStream = null;
+        try
+        {
+            if (isOvf)
+            {
+                ovfStream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None);
+            }
+
+            var sortedPages = new long[pages.Count];
+            pages.CopyTo(sortedPages);
+            Array.Sort(sortedPages);
+
+            foreach (long pageStart in sortedPages)
+            {
+                int writeLength = (int)Math.Min(pageBytes, wholeFile.Length - pageStart);
+                if (writeLength <= 0)
+                {
+                    continue;
+                }
+
+                pagesToEvict?.Add(ComputePageId(path, pageStart));
+                if (isOvf)
+                {
+                    ovfStream!.Position = pageStart;
+                    ovfStream.Write(wholeFile, (int)pageStart, writeLength);
+                }
+                else
+                {
+                    RandomAccess.Write(writeHandle!, wholeFile.AsSpan((int)pageStart, writeLength), pageStart);
+                }
+            }
+        }
+        finally
+        {
+            ovfStream?.Dispose();
         }
     }
 

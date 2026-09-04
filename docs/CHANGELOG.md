@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **Commit-time tombstones now batch the marker writes (C5)** - the DELETE commit phase read the
+  whole file once (#373) but still applied one 4-byte negative-prefix marker per row
+  (one pwrite each). `TombstoneRecords` now patches every marker into the in-memory snapshot first
+  (markers may straddle page boundaries, so patching happens on the contiguous buffer) and flushes
+  each touched storage page once, byte-for-byte equivalent. Fair-PK harness (`--pk`, median of runs,
+  same machine as master): legacy DELETE ~70K -> **~81K ops/s** (+16%); fixed-width DELETE
+  ~97K -> **~141K ops/s** (+45%) - the DELETE gap vs SQLite on fixed-width drops to ~2.4x.
 - **Bulk descending PK-delete on the generic DELETE path** - `IIndex` now offers `DeleteBulk`;
   `BTree.DeleteBulk` sorts each batch in **descending key order** so consecutive removals run along
   the rightmost leaf path (dramatically fewer internal-separator promotions than deleting in
