@@ -1,9 +1,9 @@
-# SharpCoreDB.Client v1.9.5
+# SharpCoreDB.Client v2.0.0.2
 
 .NET client library for `SharpCoreDB.Server`.
 
 
-## Patch updates in v1.9.5
+## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.

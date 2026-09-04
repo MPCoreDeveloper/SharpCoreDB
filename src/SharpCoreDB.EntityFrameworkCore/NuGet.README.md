@@ -1,4 +1,4 @@
-# SharpCoreDB.EntityFrameworkCore v1.9.1
+# SharpCoreDB.EntityFrameworkCore v2.0.0.2
 
 **Entity Framework Core Provider for SharpCoreDB**
 
@@ -11,7 +11,7 @@ Full EF Core integration with SharpCoreDB's encryption and performance for moder
 - Root cause was missing Guid normalization during INSERT parameter binding (now aligned with DateTime handling).
 - The recommended pattern now works reliably with Guid primary keys and foreign keys.
 
-## Patch updates in v1.9.5
+## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
 
 - ✅ Fixed EF Core materialization for aliased and quoted SELECT columns by normalizing DataReader column names and fallback value resolution.
 - ✅ Added targeted regression tests for aliased and qualified column lookup behavior.

@@ -28,6 +28,10 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
   (1.x-upgrade) variable-length tables purge older row versions when a row is deleted, so deleted
   rows can no longer resurrect after a reopen. Locked in by the new `ReopenRoundTripMatrixTests`
   and outbox/CQRS integration coverage.
+- **Measured performance (fair-PK, median-of-3, tuned harness):** UPDATE **~163–245K ops/s**,
+  DELETE **~106–172K ops/s**, INSERT **~125–152K ops/s**, READ **~72–110K ops/s**. Honest
+  default-config caveat: the pure default config runs ~1.3–1.6x slower (file-level wrapper still
+  pays AES work while per-record at-rest encryption is off — `NoEncryptMode` root cause, P3d).
 - Full report (incl. the 2.x-vs-1.9.x major steps): `docs/2.0.0.2_WHAT_CHANGED.md`.
 
 ## What's New in 2.0.0.1

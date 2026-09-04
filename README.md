@@ -33,6 +33,19 @@ Use it when you need:
 > than SQLite** on `GROUP BY` SUM, and the engine is **Native AOT-ready**. Full results:
 > [docs/manual/performance.md](docs/manual/performance.md).
 
+> **Latest release: 2.0.0.2 (2026-09-04)** — the 2.x engine line: fixed-width record layout is the
+> default for new PK tables, UPDATE/DELETE run in-place with commit-time tombstones, and a reopen
+> data-integrity hardening batch closed silent-data-loss edge cases (empty-value overflow reload,
+> single-file fixed-width arena markers, legacy 1.x delete-after-update purge).
+>
+> **Performance (fair-PK, median-of-3, tuned harness):** UPDATE **~163–245K ops/s**, DELETE
+> **~106–172K ops/s**, INSERT **~125–152K ops/s**, READ **~72–110K ops/s** (SQLite reference:
+> UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K). Honest default-config caveat: the pure
+> default config runs ~1.3–1.6x slower because the file-level wrapper still pays AES work while
+> per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full report:
+> [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
+> [`docs/benchmarks/default-config-pk.md`](docs/benchmarks/default-config-pk.md).
+
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**
 
 ---
@@ -106,7 +119,7 @@ Track the v2.x plan: **[`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performa
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.0.0.2
 ```
 
 ```csharp
@@ -143,8 +156,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 2.0.0
-dotnet add package SharpCoreDB.Client --version 2.0.0
+dotnet add package SharpCoreDB.Server --version 2.0.0.2
+dotnet add package SharpCoreDB.Client --version 2.0.0.2
 ```
 
 
@@ -160,36 +173,36 @@ dotnet add package SharpCoreDB.Client --version 2.0.0
 
 ---
 
-## Available NuGet packages (v2.0.0)
+## Available NuGet packages (v2.0.0.2)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.0.0.2
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 2.0.0
-dotnet add package SharpCoreDB.Client --version 2.0.0
+dotnet add package SharpCoreDB.Server --version 2.0.0.2
+dotnet add package SharpCoreDB.Client --version 2.0.0.2
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.0.0
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
-dotnet add package SharpCoreDB.Graph --version 2.0.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
-dotnet add package SharpCoreDB.Distributed --version 2.0.0
-dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0
-dotnet add package SharpCoreDB.Extensions --version 2.0.0
+dotnet add package SharpCoreDB.Analytics --version 2.0.0.2
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.2
+dotnet add package SharpCoreDB.Graph --version 2.0.0.2
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.2
+dotnet add package SharpCoreDB.Distributed --version 2.0.0.2
+dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.2
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.2
+dotnet add package SharpCoreDB.Extensions --version 2.0.0.2
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.0.0
-dotnet add package SharpCoreDB.Projections --version 2.0.0
-dotnet add package SharpCoreDB.CQRS --version 2.0.0
+dotnet add package SharpCoreDB.EventSourcing --version 2.0.0.2
+dotnet add package SharpCoreDB.Projections --version 2.0.0.2
+dotnet add package SharpCoreDB.CQRS --version 2.0.0.2
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.0.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0
+dotnet add package SharpCoreDB.Functional --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.2
 ```
 
 ---
