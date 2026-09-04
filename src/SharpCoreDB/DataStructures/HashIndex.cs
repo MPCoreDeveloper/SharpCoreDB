@@ -335,12 +335,9 @@ public class HashIndex : IDisposable
 
             if (deferred != null)
             {
-                foreach (var kvp in deferred)
+                foreach (var kvp in deferred.Where(static kvp => kvp.Value is not null))
                 {
-                    if (kvp.Value is not null)
-                    {
-                        CompactPositionList(kvp.Key, kvp.Value);
-                    }
+                    CompactPositionList(kvp.Key, kvp.Value!);
                 }
             }
         }

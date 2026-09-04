@@ -326,9 +326,9 @@ public partial class Storage
     /// </summary>
     public void CloseWriteHandles()
     {
-        foreach (var (key, handle) in _writeHandleCache)
+        foreach (var (handleKey, handle) in _writeHandleCache)
         {
-            if (_writeHandleCache.TryRemove(key, out _))
+            if (_writeHandleCache.TryRemove(handleKey, out _))
             {
                 handle.Dispose();
             }

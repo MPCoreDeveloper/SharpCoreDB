@@ -481,12 +481,9 @@ public partial class Table
             return;
         }
 
-        foreach (var offset in _overflowArena.GetAllOffsets().ToList())
+        foreach (var offset in _overflowArena.GetAllOffsets().Where(offset => !live.Contains(offset)).ToList())
         {
-            if (!live.Contains(offset))
-            {
-                _overflowArena.Free(offset);
-            }
+            _overflowArena.Free(offset);
         }
     }
 

@@ -27,6 +27,17 @@ class Program
     const int ReadCount = 10_000;
     const int UpdateCount = 10_000;
     const int DeleteCount = 10_000;
+    const string EngineArgPrefix = "--engine=";
+    const string EnginePageBased = "pagebased";
+    const string BannerTop = "╔══════════════════════════════════════════════════════════╗";
+    const string BannerBottom = "╚══════════════════════════════════════════════════════════╝";
+    const string ResultsDirName = "results";
+    const string BenchDbPassword = "bench123";
+    const string EmailColumn = "email";
+    const string ScoreColumn = "score";
+    const string NameParam = "@name";
+    const string CreateDocsIndexSql = "CREATE INDEX idx_docs_name ON docs(name)";
+    const string SelectDocsByNameSql = "SELECT * FROM docs WHERE name = @name";
 
     static async Task Main(string[] args)
     {
@@ -56,9 +67,9 @@ class Program
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
         if (args.Any(a => a.Equals("--pk", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgPk = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineArgPk = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
             var engineTypePk = engineArgPk is not null
-                && engineArgPk.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                && engineArgPk.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
                     ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
                     : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
             RunPkComparison(engineTypePk);
@@ -70,9 +81,9 @@ class Program
         // out-of-the-box default path engages the fixed-width fast paths vs SQLite.
         if (args.Any(a => a.Equals("--pk-default", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgDefault = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineArgDefault = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
             var engineTypeDefault = engineArgDefault is not null
-                && engineArgDefault.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                && engineArgDefault.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
                     ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
                     : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
             RunPkDefaultComparison(engineTypeDefault);
@@ -85,9 +96,9 @@ class Program
         // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
         if (args.Any(a => a.Equals("--pk-ab", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgAb = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineArgAb = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
             var engineTypeAb = engineArgAb is not null
-                && engineArgAb.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                && engineArgAb.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
                     ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
                     : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
             RunPkAbComparison(engineTypeAb);
@@ -96,17 +107,17 @@ class Program
 
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
-        var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+        var engineArg = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
         var engineType = engineArg is not null
-            && engineArg.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+            && engineArg.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
                 ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
                 : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
 
-        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine(BannerTop);
         Console.WriteLine("║  SharpCoreDB vs BLite vs LiteDB vs SQLite               ║");
         Console.WriteLine("║  Comparative Document CRUD Benchmark                     ║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
         Console.WriteLine($"OS:      {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
@@ -159,7 +170,7 @@ class Program
         PrintComparison(results);
 
         // Save JSON
-        var dir = "results";
+        var dir = ResultsDirName;
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
@@ -197,7 +208,7 @@ class Program
         try
         {
             db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateDocsIndexSql);
 
             for (int batch = 0; batch < rows; batch += 10_000)
             {
@@ -207,9 +218,9 @@ class Program
                     list.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [EmailColumn] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ScoreColumn] = i * 0.1,
                         ["data"] = $"payload-{i}",
                     });
                 }
@@ -222,8 +233,8 @@ class Program
             // Warmup (JIT + index load).
             for (int i = 0; i < 1000; i++)
             {
-                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
-                    new Dictionary<string, object?> { ["@name"] = $"User{i}" });
+                db.ExecuteQuery(SelectDocsByNameSql,
+                    new Dictionary<string, object?> { [NameParam] = $"User{i}" });
                 db.FindByIndex("docs", "name", $"User{i}");
             }
 
@@ -235,8 +246,8 @@ class Program
                 var sw = Stopwatch.StartNew();
                 for (int i = 0; i < queries; i++)
                 {
-                    db.ExecuteQuery("SELECT * FROM docs WHERE name = @name",
-                        new Dictionary<string, object?> { ["@name"] = $"User{i}" });
+                    db.ExecuteQuery(SelectDocsByNameSql,
+                        new Dictionary<string, object?> { [NameParam] = $"User{i}" });
                 }
 
                 sw.Stop();
@@ -266,7 +277,7 @@ class Program
         finally
         {
             try { Directory.Delete(dbPath, true); }
-            catch { }
+            catch { /* best-effort temp-dir cleanup */ }
         }
     }
 
@@ -296,7 +307,7 @@ class Program
             using (var db = (SharpCoreDB.Database)factory.Create(sqlPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+                db.ExecuteSQL(CreateDocsIndexSql);
 
                 // Build the statements once (outside the timed region — this is caller work,
                 // identical for SQLite in the comparative benchmark).
@@ -324,13 +335,13 @@ class Program
                 sqlTimes[r] = sw.Elapsed.TotalSeconds;
             }
 
-            try { Directory.Delete(sqlPath, true); } catch { }
+            try { Directory.Delete(sqlPath, true); } catch { /* best-effort temp-dir cleanup */ }
 
             var directPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-direct-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(directPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
-                db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+                db.ExecuteSQL(CreateDocsIndexSql);
 
                 var rowBatches = new List<List<Dictionary<string, object>>>();
                 for (int b = 0; b < inserts; b += batch)
@@ -341,9 +352,9 @@ class Program
                         rows.Add(new Dictionary<string, object>
                         {
                             ["name"] = $"User{i}",
-                            ["email"] = $"user{i}@test.com",
+                            [EmailColumn] = $"user{i}@test.com",
                             ["age"] = 20 + i % 60,
-                            ["score"] = i * 0.1,
+                            [ScoreColumn] = i * 0.1,
                             ["data"] = $"payload-{i}",
                         });
                     }
@@ -361,7 +372,7 @@ class Program
                 directTimes[r] = sw.Elapsed.TotalSeconds;
             }
 
-            try { Directory.Delete(directPath, true); } catch { }
+            try { Directory.Delete(directPath, true); } catch { /* best-effort temp-dir cleanup */ }
         }
 
         Array.Sort(sqlTimes);
@@ -454,7 +465,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: BenchDbPassword,
                 isReadOnly: false,
                 config: config);
 
@@ -467,7 +478,7 @@ class Program
             )");
 
             // Index lookup path used by READ/UPDATE/DELETE in this benchmark
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (batched via InsertBatch API for optimal performance)
             var sw = Stopwatch.StartNew();
@@ -480,9 +491,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [EmailColumn] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ScoreColumn] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -498,9 +509,9 @@ class Program
             sw.Restart();
             for (int i = 0; i < ReadCount; i++)
             {
-                db.ExecuteQuery("SELECT * FROM docs WHERE name = @name", new Dictionary<string, object?>
+                db.ExecuteQuery(SelectDocsByNameSql, new Dictionary<string, object?>
                 {
-                    ["@name"] = $"User{i}"
+                    [NameParam] = $"User{i}"
                 });
             }
             sw.Stop();
@@ -574,7 +585,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: BenchDbPassword,
                 isReadOnly: false,
                 config: config);
 
@@ -586,7 +597,7 @@ class Program
                 data TEXT
             )");
 
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (same batched API — no SQL parsing either way)
             var sw = Stopwatch.StartNew();
@@ -599,9 +610,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [EmailColumn] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ScoreColumn] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -693,7 +704,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: BenchDbPassword,
                 isReadOnly: false,
                 config: config);
 
@@ -705,7 +716,7 @@ class Program
                 data TEXT
             )");
 
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (same batched API as the other SharpCoreDB rows)
             var sw = Stopwatch.StartNew();
@@ -718,9 +729,9 @@ class Program
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [EmailColumn] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ScoreColumn] = i * 0.1,
                         ["data"] = $"payload-{i}"
                     });
                 }
@@ -736,9 +747,9 @@ class Program
             sw.Restart();
             for (int i = 0; i < ReadCount; i++)
             {
-                var parameters = new Dictionary<string, object?> { ["@name"] = $"User{i}" };
+                var parameters = new Dictionary<string, object?> { [NameParam] = $"User{i}" };
                 int matched = 0;
-                foreach (var row in db.ExecuteQueryStruct("SELECT * FROM docs WHERE name = @name", parameters))
+                foreach (var row in db.ExecuteQueryStruct(SelectDocsByNameSql, parameters))
                 {
                     matched++;
                 }
@@ -818,7 +829,7 @@ class Program
                 {
                     using var cmd = conn.CreateCommand();
                     cmd.CommandText = "INSERT INTO docs (name, email, age, score, data) VALUES (@name, @email, @age, @score, @payload)";
-                    var pName = cmd.CreateParameter(); pName.ParameterName = "@name"; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
+                    var pName = cmd.CreateParameter(); pName.ParameterName = NameParam; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
                     var pEmail = cmd.CreateParameter(); pEmail.ParameterName = "@email"; pEmail.Value = $"user{i}@test.com"; cmd.Parameters.Add(pEmail);
                     var pAge = cmd.CreateParameter(); pAge.ParameterName = "@age"; pAge.Value = 20 + i % 60; cmd.Parameters.Add(pAge);
                     var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 0.1; cmd.Parameters.Add(pScore);
@@ -932,7 +943,7 @@ class Program
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
-                masterPassword: "bench123",
+                masterPassword: BenchDbPassword,
                 isReadOnly: false,
                 config: config);
 
@@ -944,7 +955,7 @@ class Program
                 score REAL,
                 data TEXT
             )");
-            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (batched via InsertBatch with explicit ids, mirroring SQLite's rowid 1..N)
             var sw = Stopwatch.StartNew();
@@ -958,9 +969,9 @@ class Program
                     {
                         ["id"] = i + 1,
                         ["name"] = $"User{i}",
-                        ["email"] = $"user{i}@test.com",
+                        [EmailColumn] = $"user{i}@test.com",
                         ["age"] = 20 + i % 60,
-                        ["score"] = i * 0.1,
+                        [ScoreColumn] = i * 0.1,
                         ["data"] = $"payload-{i}",
                     });
                 }
@@ -1057,10 +1068,10 @@ class Program
             DeleteTime = MedianOf(runs, static r => r.DeleteTime),
         };
 
-        median.InsertOpsPerSec = InsertCount > 0 && median.InsertTime > 0 ? (int)(InsertCount / median.InsertTime) : 0;
-        median.ReadOpsPerSec = ReadCount > 0 && median.ReadTime > 0 ? (int)(ReadCount / median.ReadTime) : 0;
-        median.UpdateOpsPerSec = UpdateCount > 0 && median.UpdateTime > 0 ? (int)(UpdateCount / median.UpdateTime) : 0;
-        median.DeleteOpsPerSec = DeleteCount > 0 && median.DeleteTime > 0 ? (int)(DeleteCount / median.DeleteTime) : 0;
+        median.InsertOpsPerSec = median.InsertTime > 0 ? (int)(InsertCount / median.InsertTime) : 0;
+        median.ReadOpsPerSec = median.ReadTime > 0 ? (int)(ReadCount / median.ReadTime) : 0;
+        median.UpdateOpsPerSec = median.UpdateTime > 0 ? (int)(UpdateCount / median.UpdateTime) : 0;
+        median.DeleteOpsPerSec = median.DeleteTime > 0 ? (int)(DeleteCount / median.DeleteTime) : 0;
         return median;
     }
 
@@ -1070,10 +1081,10 @@ class Program
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
-        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine(BannerTop);
         Console.WriteLine("║  Fair PK comparison: SharpCoreDB vs SQLite              ║");
         Console.WriteLine("║  (id INTEGER PRIMARY KEY, UPDATE/DELETE by PK)           ║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
         Console.WriteLine("(fair-PK arms run 3x; median time per phase is reported)");
@@ -1104,7 +1115,7 @@ class Program
             ["SQLite"] = sqlite,
         };
 
-        var dir = "results";
+        var dir = ResultsDirName;
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"pk_comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
@@ -1120,10 +1131,10 @@ class Program
     static void RunPkDefaultComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
-        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine(BannerTop);
         Console.WriteLine("║  Fair PK with DEFAULT DatabaseConfig vs SQLite           ║");
         Console.WriteLine("║  (NoEncryptMode=false; no harness-only performance flags)║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
         Console.WriteLine("(median of 3 per phase)");
@@ -1148,7 +1159,7 @@ class Program
             ["SQLite"] = sqlite,
         };
 
-        var dir = "results";
+        var dir = ResultsDirName;
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"pk_default_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
@@ -1170,9 +1181,9 @@ class Program
             reps = envReps;
         }
 
-        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine(BannerTop);
         Console.WriteLine("║  Same-window interleaved A/B (default-config variants)    ║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Arm A variant: '{armA}'   Arm B variant: '{armB}'   reps: {reps}");
         Console.WriteLine("(each rep: A then B back-to-back; per-rep ratios cancel drift)");
@@ -1227,7 +1238,7 @@ class Program
             ["medianReadRatio_B_over_A"] = Ratio(listA, listB, static r => r.ReadOpsPerSec),
         };
 
-        var dir = "results";
+        var dir = ResultsDirName;
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"pk_ab_{armA}_{armB}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
