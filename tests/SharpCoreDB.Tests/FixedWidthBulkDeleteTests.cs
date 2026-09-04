@@ -277,4 +277,52 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
         Assert.Equal(200L, Convert.ToInt64(scan[^1]["id"]));
         (db as IDisposable)?.Dispose();
     }
+
+    [Fact]
+    public void LegacyLayoutBatchDelete_BulkPkRemove_StaysCorrectAcrossReopen()
+    {
+        // Regression for DeleteRecordsCore's PK cleanup: with fixed-width disabled the table uses
+        // the legacy layout, so an ascending `pk = literal` batch cannot take the contiguous
+        // fast path and flows through the generic loop + Index.DeleteBulk (descending order).
+        // Every deleted row must vanish from PK/hash lookups and from a reopened database.
+        IDatabase? db = _factory.Create(_dirPath, "pw", isReadOnly: false,
+            config: new DatabaseConfig { NoEncryptMode = true, AutoFixedWidthRecords = false });
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            InsertDocs(db, 1, 2000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+            db.ExecuteBatchSQL(BuildDeletes(1, 1000));
+            db.Flush();
+
+            // Legacy layout must NOT engage the fixed-width contiguous fast path.
+            Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user500'"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 1500"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user1500'"));
+            Assert.Equal(1000, db.ExecuteQuery("SELECT id FROM docs").Count);
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Reopen: tombstones keep the deleted rows gone; the PK index rebuilt from the file must
+        // not resurrect any of them.
+        db = CreateDb();
+        try
+        {
+            var scan = db.ExecuteQuery("SELECT id FROM docs ORDER BY id");
+            Assert.Equal(1000, scan.Count);
+            Assert.Equal(1001L, Convert.ToInt64(scan[0]["id"]));
+            Assert.Equal(2000L, Convert.ToInt64(scan[^1]["id"]));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user500'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
 }

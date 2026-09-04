@@ -11,6 +11,7 @@
 | #368 | **Commit-time tombstones** (transactionele/batch deletes) | **SQL DELETE 0,82 s → 0,24 s** (~12K → ~41-58K ops/s) — de grote sprong |
 | #369 | C4 (batch markers + evict-dedup) + B3 (structured delete, geen dubbele parse) | veilig; neutraal binnen ruis op benchmark |
 | #370 | B1 (key-only decode: alleen PK + hash-indexkolommen) | veilig; neutraal binnen ruis op small-row benchmark |
+| B5-bulk (open) | **Bulk aflopende PK-delete** (`DeleteRecordsCore` verzamelt PK-sleutels eenmalig; `IIndex.DeleteBulk`/`BTree.DeleteBulk` sorteert aflopend → rechter-bladpad, minder separator-promoties) | correct (identieke keyset, één bezoek per key); fair-PK legacy-DELETE ~69-72K ops/s (binnen ruis op geordende batches) — winst bij ongeordende keysets |
 
 **Root cause (niet in Grok-doc):** `ExecuteBatchSQL` draait elke batch in een storage-transactie; zonder #368 deed batch-DELETE nog steeds de #366 full-file compactie (~690 ms in `tableFlushLoop`). Daardoor waren eerdere “winst”-metingen niet-duurzaam/logisch-only.
 

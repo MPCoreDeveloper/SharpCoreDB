@@ -27,7 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
-- **BTree separator-delete corruption fixed (correctness)** ÔÇö `BTree.Delete` removed separator keys
+- **Bulk descending PK-delete on the generic DELETE path** - `IIndex` now offers `DeleteBulk`;
+  `BTree.DeleteBulk` sorts each batch in **descending key order** so consecutive removals run along
+  the rightmost leaf path (dramatically fewer internal-separator promotions than deleting in
+  arbitrary per-row resolution order). `DeleteRecordsCore` collects the batch's PK keys once and
+  removes them through `DeleteBulk` instead of per-key `Delete`. Correctness is unchanged (identical
+  key set, one visit per key). Fair-PK harness (`--pk`, AppendOnly legacy): DELETE stays ~69-72K
+  ops/s on strictly ascending batches (within noise), with the win concentrating on unordered key
+  sets (hash-filtered subselects, reverse/random batches) that previously paid a separator
+  promotion per jump. Regression test drives the generic bulk path on a legacy-layout table and
+  reopens to prove tombstones + PK-index rebuild do not resurrect rows.
+- **BTree separator-delete corruption fixed (correctness)** - `BTree.Delete` removed separator keys
   from internal nodes without repairing the child-pointer mapping, so sizable delete batches could
   leave whole key ranges unreachable (and scans/COUNT(*) under-counted). Internal separators are
   now replaced by their in-order successor from the right subtree's leftmost leaf (leaf underflow is
