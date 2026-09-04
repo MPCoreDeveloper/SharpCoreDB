@@ -39,13 +39,26 @@ Observed (2026-09-04 afternoon):
 Machine drift is significant: SQLite's own UPDATE varied 275K-315K across these runs. Single-knob
 deltas below ~1.3x are not reliably attributable outside a same-window interleaved A/B.
 
+## Same-window interleaved A/B (--pk-ab)
+
+Run: `dotnet run --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -- -c Release -- --pk-ab`
+Arm names: `SHARPCOREDB_PK_AB_ARM_A` / `SHARPCOREDB_PK_AB_ARM_B` (defaults: `""` pure default vs
+`plain`); reps via `SHARPCOREDB_BENCH_REPS` (default 3). Each rep runs A then B back-to-back and
+the per-rep **paired ratio** B/A per phase is reported (median), so slow-machine windows affect
+both arms of a pair and cancel out — this is the reliable way to attribute default-vs-tuned deltas.
+
+Preliminary smoke result (1 rep, 2026-09-04, default vs `plain`): UPDATE **1.41x**, DELETE **1.28x**,
+INSERT 1.21x, READ 1.10x — direction consistent with the earlier medians, now measured inside a
+single window. Re-run with the default 3 reps before quoting final numbers.
+
 ## Honest conclusion
 
 1. The earlier claim that the default `WalDurabilityMode.FullSync` dominates the gap is **wrong**
    (disproven by the `async` variant). Do **not** implement a “FullSync commit-flush optimization”
    based on it.
-2. The default path is correct and engages the fast paths; part of the remaining gap correlates
-   with `NoEncryptMode` (record/at-rest toggles and file-format decisions), part is machine drift.
-3. Next step: add a **same-window interleaved A/B** mode to this harness (arms round-robin within
-   one process) so default-vs-tuned deltas are attributable, then re-open the optimization only on
-   a measured knob.
+2. The default path is correct and engages the fast paths; the `--pk-ab` smoke (same window) shows
+   `plain` (NoEncryptMode=true) ahead by UPDATE 1.41x / DELETE 1.28x, so the remaining gap
+   correlates with `NoEncryptMode`; the exact mechanism (record/at-rest toggles and file-format
+   decisions) still needs a code-level explanation before any change.
+3. The same-window A/B tooling now exists; re-run with 3 reps to quantify the paired ratio, then
+   investigate the `NoEncryptMode` mechanism in code and only then consider a change.

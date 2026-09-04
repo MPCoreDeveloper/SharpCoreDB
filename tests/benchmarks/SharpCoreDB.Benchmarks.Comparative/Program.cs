@@ -79,6 +79,21 @@ class Program
             return;
         }
 
+        // Optional: --pk-ab → same-window interleaved A/B: runs arm A and arm B as alternating
+        // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
+        // machine drift affects both arms of each pair equally. Arms are config variants named by
+        // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
+        if (args.Any(a => a.Equals("--pk-ab", StringComparison.OrdinalIgnoreCase)))
+        {
+            var engineArgAb = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineTypeAb = engineArgAb is not null
+                && engineArgAb.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
+                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
+            RunPkAbComparison(engineTypeAb);
+            return;
+        }
+
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
         var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
@@ -392,6 +407,34 @@ class Program
             CollectGCAfterBatches = false,
             SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
             StrictParameterValidation = false
+        };
+    }
+
+    /// <summary>
+    /// Builds the variant DatabaseConfig used by the --pk-default arm. The variant name comes from
+    /// SHARPCOREDB_PK_DEFAULT_VARIANT or the --pk-ab arm selector; "" is the pure default config.
+    /// </summary>
+    private static DatabaseConfig BuildPkDefaultVariantConfig(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        string? variant)
+    {
+        return variant switch
+        {
+            "async" => new DatabaseConfig { StorageEngineType = engineType, WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async },
+            "bufferedio" => new DatabaseConfig { StorageEngineType = engineType, UseBufferedIO = true },
+            "novalidate" => new DatabaseConfig
+            {
+                StorageEngineType = engineType,
+                SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                StrictParameterValidation = false,
+            },
+            "noadaptive" => new DatabaseConfig { StorageEngineType = engineType, EnableAdaptiveWalBatching = false },
+            "hsinsert" => new DatabaseConfig { StorageEngineType = engineType, HighSpeedInsertMode = true },
+            // "plain" == the tuned harness config with NoEncryptMode=true (BuildConfig default);
+            // "tuned" == the same knob set but NoEncryptMode=false (isolates that flag).
+            "plain" => BuildConfig(engineType, fixedWidth: true),
+            "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
+            _ => new DatabaseConfig { StorageEngineType = engineType },
         };
     }
 
@@ -862,7 +905,8 @@ class Program
     static BenchmarkResult RunSharpCoreDBPk(
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool fixedWidth = false,
-        bool useDefaultConfig = false)
+        bool useDefaultConfig = false,
+        string? defaultVariant = null)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -877,25 +921,9 @@ class Program
             DatabaseConfig config;
             if (useDefaultConfig)
             {
-                var variant = Environment.GetEnvironmentVariable("SHARPCOREDB_PK_DEFAULT_VARIANT")?.ToLowerInvariant();
-                config = variant switch
-                {
-                    "async" => new DatabaseConfig { StorageEngineType = engineType, WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async },
-                    "bufferedio" => new DatabaseConfig { StorageEngineType = engineType, UseBufferedIO = true },
-                    "novalidate" => new DatabaseConfig
-                    {
-                        StorageEngineType = engineType,
-                        SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
-                        StrictParameterValidation = false,
-                    },
-                    "noadaptive" => new DatabaseConfig { StorageEngineType = engineType, EnableAdaptiveWalBatching = false },
-                    "hsinsert" => new DatabaseConfig { StorageEngineType = engineType, HighSpeedInsertMode = true },
-                    // "plain" == the tuned harness config with NoEncryptMode=true (BuildConfig default);
-                    // "tuned" == the same knob set but NoEncryptMode=false (isolates that flag).
-                    "plain" => BuildConfig(engineType, fixedWidth: true),
-                    "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
-                    _ => new DatabaseConfig { StorageEngineType = engineType },
-                };
+                var variant = defaultVariant
+                    ?? Environment.GetEnvironmentVariable("SHARPCOREDB_PK_DEFAULT_VARIANT")?.ToLowerInvariant();
+                config = BuildPkDefaultVariantConfig(engineType, variant);
             }
             else
             {
@@ -1124,6 +1152,85 @@ class Program
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"pk_default_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// P3c: same-window interleaved A/B comparison of two default-config variants. Each rep runs
+    /// arm A then arm B back-to-back, and the result reports the per-rep paired ratio B/A per phase
+    /// (median), so slow-machine windows affect both arms of a pair and cancel out.
+    /// </summary>
+    static void RunPkAbComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var armA = Environment.GetEnvironmentVariable("SHARPCOREDB_PK_AB_ARM_A")?.ToLowerInvariant() ?? string.Empty;
+        var armB = Environment.GetEnvironmentVariable("SHARPCOREDB_PK_AB_ARM_B")?.ToLowerInvariant() ?? "plain";
+        int reps = 3;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
+        {
+            reps = envReps;
+        }
+
+        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  Same-window interleaved A/B (default-config variants)    ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+        Console.WriteLine($"Arm A variant: '{armA}'   Arm B variant: '{armB}'   reps: {reps}");
+        Console.WriteLine("(each rep: A then B back-to-back; per-rep ratios cancel drift)");
+        Console.WriteLine();
+
+        var listA = new List<BenchmarkResult>(reps);
+        var listB = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            Console.WriteLine($"── rep {r + 1}/{reps} · A='{armA}' ──");
+            listA.Add(RunSharpCoreDBPk(engineType, useDefaultConfig: true, defaultVariant: armA));
+            Console.WriteLine($"── rep {r + 1}/{reps} · B='{armB}' ──");
+            listB.Add(RunSharpCoreDBPk(engineType, useDefaultConfig: true, defaultVariant: armB));
+        }
+
+        static double Med(IEnumerable<double> xs)
+        {
+            var sorted = xs.Where(x => x > 0).OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+        }
+
+        static int Ops(IEnumerable<BenchmarkResult> runs, Func<BenchmarkResult, int> select)
+        {
+            var arr = runs.Select(select).Where(x => x > 0).OrderBy(x => x).ToArray();
+            return arr.Length == 0 ? 0 : arr[arr.Length / 2];
+        }
+
+        static double Ratio(IEnumerable<BenchmarkResult> a, IEnumerable<BenchmarkResult> b, Func<BenchmarkResult, int> sel)
+        {
+            var ratios = a.Zip(b, (x, y) => sel(x) > 0 ? sel(y) / (double)sel(x) : 0.0);
+            return Med(ratios);
+        }
+
+        var aUpdate = Ops(listA, static r => r.UpdateOpsPerSec);
+        var bUpdate = Ops(listB, static r => r.UpdateOpsPerSec);
+        var aDelete = Ops(listA, static r => r.DeleteOpsPerSec);
+        var bDelete = Ops(listB, static r => r.DeleteOpsPerSec);
+
+        Console.WriteLine("║ phase   │ A median ops/s │ B median ops/s │ median B/A (per rep) ║");
+        Console.WriteLine($"║ UPDATE  │ {aUpdate,13:N0} │ {bUpdate,14:N0} │ {Ratio(listA, listB, static r => r.UpdateOpsPerSec):F2}x");
+        Console.WriteLine($"║ DELETE  │ {aDelete,13:N0} │ {bDelete,14:N0} │ {Ratio(listA, listB, static r => r.DeleteOpsPerSec):F2}x");
+        Console.WriteLine($"║ INSERT  │ {Ops(listA, static r => r.InsertOpsPerSec),13:N0} │ {Ops(listB, static r => r.InsertOpsPerSec),14:N0} │ {Ratio(listA, listB, static r => r.InsertOpsPerSec):F2}x");
+        Console.WriteLine($"║ READ    │ {Ops(listA, static r => r.ReadOpsPerSec),13:N0} │ {Ops(listB, static r => r.ReadOpsPerSec),14:N0} │ {Ratio(listA, listB, static r => r.ReadOpsPerSec):F2}x");
+
+        var summary = new Dictionary<string, object>
+        {
+            ["armA"] = armA,
+            ["armB"] = armB,
+            ["medianUpdateRatio_B_over_A"] = Ratio(listA, listB, static r => r.UpdateOpsPerSec),
+            ["medianDeleteRatio_B_over_A"] = Ratio(listA, listB, static r => r.DeleteOpsPerSec),
+            ["medianInsertRatio_B_over_A"] = Ratio(listA, listB, static r => r.InsertOpsPerSec),
+            ["medianReadRatio_B_over_A"] = Ratio(listA, listB, static r => r.ReadOpsPerSec),
+        };
+
+        var dir = "results";
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"pk_ab_{armA}_{armB}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
     }
 
