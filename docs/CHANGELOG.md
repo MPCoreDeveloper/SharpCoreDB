@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Hardening
 
+- **Default-config benchmark follow-up: FullSync hypothesis falsified (P3b)** - single-knob
+  isolation via `SHARPCOREDB_PK_DEFAULT_VARIANT` (`async`, `bufferedio`, `novalidate`,
+  `noadaptive`, `hsinsert`, `plain`, `tuned`) disproved the earlier “FullSync dominates the
+  default gap” claim: the durability mode is only honored by GroupCommitWAL (off by default) and
+  the `async` variant measured the same. `NoEncryptMode` moves default UPDATE ~1.3x (144K vs
+  109K), machine drift spans ~275-315K on SQLite itself. `docs/benchmarks/default-config-pk.md`
+  is corrected accordingly; the next step is a same-window interleaved A/B mode before any
+  further optimization is implemented.
+
 - **Default-config benchmark published (P3)** - `docs/benchmarks/default-config-pk.md` records a
   median-of-3 fair-PK run where the SharpCoreDB arm uses a PURE default `DatabaseConfig`
   (NoEncryptMode=false, no harness flags). Honest result: the default path engages the Columnar

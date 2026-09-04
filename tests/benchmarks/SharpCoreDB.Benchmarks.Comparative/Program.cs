@@ -361,11 +361,11 @@ class Program
         Console.WriteLine($"  SQL/Direct overhead: {(sqlMedian / directMedian):F2}x");
     }
 
-    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false)
+    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false, bool noEncrypt = true)
     {
         return new DatabaseConfig
         {
-            NoEncryptMode = true,
+            NoEncryptMode = noEncrypt,
             StorageEngineType = engineType,
             // The fair PK comparison intentionally isolates the record-layout variable: the legacy
             // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
@@ -874,9 +874,33 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = useDefaultConfig
-                ? new DatabaseConfig { StorageEngineType = engineType }
-                : BuildConfig(engineType, fixedWidth);
+            DatabaseConfig config;
+            if (useDefaultConfig)
+            {
+                var variant = Environment.GetEnvironmentVariable("SHARPCOREDB_PK_DEFAULT_VARIANT")?.ToLowerInvariant();
+                config = variant switch
+                {
+                    "async" => new DatabaseConfig { StorageEngineType = engineType, WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async },
+                    "bufferedio" => new DatabaseConfig { StorageEngineType = engineType, UseBufferedIO = true },
+                    "novalidate" => new DatabaseConfig
+                    {
+                        StorageEngineType = engineType,
+                        SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
+                        StrictParameterValidation = false,
+                    },
+                    "noadaptive" => new DatabaseConfig { StorageEngineType = engineType, EnableAdaptiveWalBatching = false },
+                    "hsinsert" => new DatabaseConfig { StorageEngineType = engineType, HighSpeedInsertMode = true },
+                    // "plain" == the tuned harness config with NoEncryptMode=true (BuildConfig default);
+                    // "tuned" == the same knob set but NoEncryptMode=false (isolates that flag).
+                    "plain" => BuildConfig(engineType, fixedWidth: true),
+                    "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
+                    _ => new DatabaseConfig { StorageEngineType = engineType },
+                };
+            }
+            else
+            {
+                config = BuildConfig(engineType, fixedWidth);
+            }
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -979,6 +1003,12 @@ class Program
     /// </summary>
     private static BenchmarkResult RunPkMedian(Func<BenchmarkResult> arm, int reps = 3)
     {
+        // Allow quick single-shot profiling via SHARPCOREDB_BENCH_REPS (diagnostic only).
+        if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
+        {
+            reps = envReps;
+        }
+
         var runs = new List<BenchmarkResult>(reps);
         for (int r = 0; r < reps; r++)
         {
