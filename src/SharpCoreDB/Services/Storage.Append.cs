@@ -35,6 +35,9 @@ public partial class Storage
     /// <summary>Maximum accepted record/ciphertext length (1 GB).</summary>
     private const int MaxRecordSize = 1_000_000_000;
 
+    /// <summary>Upper bound for the whole-file tombstone-marker range read (DELETE commit path).</summary>
+    private const long RangeMarkerReadLimitBytes = 32 * 1024 * 1024;
+
     /// <summary>AES-GCM overhead = nonce(12) + tag(16).</summary>
     private const int GcmOverhead = CryptoConstants.GCM_NONCE_SIZE + CryptoConstants.GCM_TAG_SIZE;
 
@@ -681,28 +684,70 @@ public partial class Storage
             Span<byte> lengthBuffer = stackalloc byte[4];
             Span<byte> marker = stackalloc byte[4];
 
-            foreach (var offset in offsets)
+            // Range fast path: for a large batch on a bounded file, read the whole file ONCE and
+            // resolve every record length from the buffer instead of one pread per offset (the
+            // per-marker pread dominated the DELETE commit in profiling: ~50ms/10K markers).
+            long fileLength = 0;
+            byte[]? wholeFile = null;
+            if (offsets.Length >= 64)
             {
-                if (offset < 0)
+                fileLength = File.Exists(path) ? new FileInfo(path).Length : 0;
+                if (fileLength > 0 && fileLength <= RangeMarkerReadLimitBytes && fileLength <= int.MaxValue)
                 {
-                    continue;
+                    wholeFile = new byte[(int)fileLength];
+                    if (RandomAccess.Read(readHandle, wholeFile, 0) != fileLength)
+                    {
+                        wholeFile = null;
+                    }
                 }
+            }
 
-                if (RandomAccess.Read(readHandle, lengthBuffer, offset) != 4)
+            if (wholeFile is not null)
+            {
+                foreach (var offset in offsets)
                 {
-                    continue; // offset at/beyond EOF — not a physical record
-                }
+                    if (offset < 0 || offset + 4 > wholeFile.Length)
+                    {
+                        continue;
+                    }
 
-                int currentLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
-                if (currentLength <= 0)
+                    int currentLength = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)offset, 4));
+                    if (currentLength <= 0)
+                    {
+                        continue; // already tombstoned or invalid
+                    }
+
+                    BinaryPrimitives.WriteInt32LittleEndian(marker, -(4 + currentLength));
+                    WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
+
+                    pagesToEvict?.Add(ComputePageId(path, offset));
+                }
+            }
+            else
+            {
+                foreach (var offset in offsets)
                 {
-                    continue; // already tombstoned or invalid
+                    if (offset < 0)
+                    {
+                        continue;
+                    }
+
+                    if (RandomAccess.Read(readHandle, lengthBuffer, offset) != 4)
+                    {
+                        continue; // offset at/beyond EOF — not a physical record
+                    }
+
+                    int currentLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
+                    if (currentLength <= 0)
+                    {
+                        continue; // already tombstoned or invalid
+                    }
+
+                    BinaryPrimitives.WriteInt32LittleEndian(marker, -(4 + currentLength));
+                    WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
+
+                    pagesToEvict?.Add(ComputePageId(path, offset));
                 }
-
-                BinaryPrimitives.WriteInt32LittleEndian(marker, -(4 + currentLength));
-                WriteRecordInPlace(path, offset, marker, ReadOnlySpan<byte>.Empty);
-
-                pagesToEvict?.Add(ComputePageId(path, offset));
             }
         }
         catch (IOException)
