@@ -55,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DELETE (10K of 100K rows): ~0.54s/18.6K ops/s (flush rewrite) ÔåÆ **~0.16s/~64K ops/s (legacy)** and
   **~0.13s/~78K ops/s (fixed-width)**; comparative-harness DELETE (docs table): SQL ~0.82s/~12K ÔåÆ
   **~0.24s/~41K ops/s**, Direct ~0.63s/~16K ÔåÆ **~0.17s/~58K ops/s** ÔÇö DELETE is back on par with UPDATE.
+- **Whole-file DML resolution + marker range-read (2026-09-03)** ÔÇö batch DELETE/UPDATE on the
+  comparative docs table no longer pays one pread pair per touched row: the small (Ôëñ32 MB,
+  plaintext, legacy variable-length) `.dat` is read once and every target record is resolved from
+  that snapshot (B1 key-only decode for DELETE, raw slice for the UPDATE fastPatch). Positions with
+  an in-batch buffered overwrite are detected via `IStorage.HasBufferedOverwriteAt` and always fall
+  back to the per-record read, so transaction write-behind semantics stay intact. DELETE tombstone
+  markers resolve their record lengths from a single whole-file read instead of one pread per marker.
+  The canonical-DELETE scanner (which never consumed `WHERE`, so the structured batch path was dead
+  code in the harness) is fixed and covered by `CanonicalBatchDelete_EngagesStructuredPath`.
+  Measured (same machine, Release, median of 3): comparative DELETE SQL ~12K ÔåÆ **~59K ops/s** and
+  Direct ~16K ÔåÆ **~86K ops/s**; UPDATE SQL ~35K ÔåÆ **~44K ops/s**, Direct ~49K ÔåÆ **~63K ops/s**;
+  `--pk` DELETE legacy ~64K ÔåÆ **~68K ops/s**, fixed-width ~78K ÔåÆ **~93K ops/s**. Session plan +
+  attribution in `docs/performance/EXECUTION_PLAN_UPDATE_DELETE.md`.
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new
