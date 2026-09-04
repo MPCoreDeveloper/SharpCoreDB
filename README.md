@@ -24,26 +24,19 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by **2,412 tests** and **backward compatibility**
+- A production-focused stack validated by a **1,777-test core suite** (0 failed; plus CQRS, VectorSearch, EF Core and Linq2DB suites) and **backward compatibility**
 
-> **v2.0 — the performance-first release.** Point reads **beat SQLite** on the default engine, batch INSERTs
-> **beat SQLite** on the PageBased engine (**194–206K vs 109K ops/s**), every CRUD operation **beats LiteDB**,
-> and the v2.0 storage-engine roadmap (WP10–WP13) narrowed single-row UPDATE/DELETE from ~5–7x behind SQLite
-> to **~2.5–4x** (in-place field patches + unified delete core). SIMD columnar analytics run **~682x faster
-> than SQLite** on `GROUP BY` SUM, and the engine is **Native AOT-ready**. Full results:
-> [docs/manual/performance.md](docs/manual/performance.md).
-
-> **Latest release: 2.0.0.2 (2026-09-04)** — the 2.x engine line: fixed-width record layout is the
+> **Current release: v2.0.0.2 (2026-09-04)** — the v2.x engine line: fixed-width record layout is the
 > default for new PK tables, UPDATE/DELETE run in-place with commit-time tombstones, and a reopen
 > data-integrity hardening batch closed silent-data-loss edge cases (empty-value overflow reload,
 > single-file fixed-width arena markers, legacy 1.x delete-after-update purge).
 >
 > **Performance (fair-PK, median-of-3, tuned harness):** UPDATE **~163–245K ops/s**, DELETE
 > **~106–172K ops/s**, INSERT **~125–152K ops/s**, READ **~72–110K ops/s** (SQLite reference:
-> UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K). Honest default-config caveat: the pure
-> default config runs ~1.3–1.6x slower because the file-level wrapper still pays AES work while
-> per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full report:
-> [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
+> UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K, READ ~95–107K). Honest default-config
+> caveat: the pure default config runs ~1.3–1.6x slower because the file-level wrapper still pays
+> AES work while per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full
+> report: [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
 > [`docs/benchmarks/default-config-pk.md`](docs/benchmarks/default-config-pk.md).
 
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**
@@ -74,26 +67,34 @@ Use it when you need:
 
 ---
 
-## What's new in v2.0 (performance-first)
+## What's new in v2.x (current engine line)
 
-The benchmark gap that made v1.x **16–52x slower than SQLite** on point reads/updates/deletes is closed.
-Latest runs (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative`, 100K inserts + 10K reads/updates/deletes,
-2026-08-29): the default **AppendOnly** engine and the **PageBased** storage-engine roadmap (WP10–WP13):
+The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite**) is closed. The
+numbers below are the **fair-PK harness (median-of-3, tuned config, ascending-PK batches)** from
+`docs/2.0.0.2_WHAT_CHANGED.md`:
 
-| Operation (ops/sec, latest runs) | **v2.0 — AppendOnly** | **v2.0 — PageBased** | SQLite | LiteDB |
-|---|---|---|---|---|
-| **READ — Direct** | **114K** | 34K | 99K | 16K |
-| **READ — SQL / StructRow** | 64–93K | 30–36K | 99K | 16K |
-| **INSERT — batch (Direct/StructRow)** | 100–103K | **194–206K** | 109–144K | 75K |
-| **UPDATE** | 42–50K | **58–65K** | 239–279K | 10–11K |
-| **DELETE** | 29–128K | **107–129K** | 317–376K | 13–14K |
+| Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
+|---|---:|---:|---:|
+| **UPDATE** | **~163–245K** | ~270–315K | ~0.8–1.7x of SQLite |
+| **DELETE** | **~106–172K** | ~353–420K | ~2.1–3.5x |
+| **INSERT** | **~125–152K** | ~186–190K | competitive |
+| **READ** | **~72–110K** | ~95–107K | competitive |
 
-🔧 **Storage-engine roadmap (WP10–WP13) head-to-head** (PageBased vs AppendOnly, same API):
-INSERT **+89%** (103K→194K Direct), UPDATE **+31–39%** (42–50K→58–65K, in-place field patches),
-DELETE **+271%** on the SQL path (29K→107K, unified delete core). The remaining UPDATE/DELETE gap vs SQLite
-(**~2.5–4x**) is the tracked v2.1 target in the [V2 performance plan](docs/performance/V2_PERFORMANCE_PLAN.md).
+Honest notes: these are ascending-PK batches on the fixed-width Columnar fast path — other query
+shapes fall back to correct-but-slower generic paths. The **pure default config** runs ~1.3–1.6x
+slower than `NoEncryptMode=true` (documented `NoEncryptMode` root cause, see
+`docs/benchmarks/default-config-pk.md`). SQLite comparison, honest guidance and the API ladder:
+**[Performance Guide](docs/manual/performance.md)**. Roadmap:
+**[`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)**.
 
 Headline changes:
+- ⚡ **Fixed-width record layout (default for new PK tables)** — constant-stride records with an
+  out-of-line `.ovf` overflow arena; UPDATE/DELETE are **in-place overwrites** with commit-time
+  tombstone markers (no full-file rewrite)
+- ⚡ **Single-pass contiguous UPDATE/DELETE (B8/B9)** — strictly ascending `pk = literal` batches
+  resolved as ONE contiguous range with decode verification (no per-key B-tree search)
+- ⚡ **Reopen data-integrity hardening (2.0.0.2)** — empty-value overflow reload, single-file
+  fixed-width arena markers, and legacy 1.x delete-after-update purge (`ReopenRoundTripMatrixTests`)
 - ⚡ **Zero-allocation reads** — first-class `ExecuteQueryStruct(sql, params)` API + `VariableLengthSchema` cache
 - ⚡ **In-place UPDATE patches (WP11)** — single-row UPDATE overwrites changed fields at cached fixed column offsets
   (no deserialize → re-serialize round trip); growing records relocate across pages with correct PK/hash re-pointing
@@ -105,14 +106,10 @@ Headline changes:
 - ⚡ **Removed hidden `D:\*.log` debug writes** that throttled every SELECT/execute/transaction/INSERT
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
   source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
-- ✅ **2,412 tests / 0 failures** across all 15 test projects; every operation beats LiteDB
+- ✅ validated by a **1,777-test core suite (0 failed)** plus CQRS (64), VectorSearch (143), EF Core (116) and Functional.Linq2DB (24)
 - 🛡️ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL, key & password rotation APIs (#341 follow-on)
 - 🗜️ **Block-level Brotli/GZip compression** for single-file (`.scdb`) storage — transparent, per-block, applied before encryption / removed after decryption (#344)
 - ⚙️ **Configurable metadata region sizing** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` remove the 512 MB single-file ceiling; byte-based file extension (~10 MB regardless of `PageSize`) (#345)
-
-Full details, honest guidance on where SQLite still wins, and the API ladder: **[Performance Guide](docs/manual/performance.md)**.
-Track the v2.x plan: **[`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)**.
-
 
 ## Quick Start (under 30 seconds)
 
@@ -141,7 +138,7 @@ db.ExecuteBatchSQL([
 db.Flush();
 ```
 
-> ⚡ v2.0 hot paths: read point lookups with `db.FindByPrimaryKey("Users", key: 1)` (Direct API,
+> ⚡ v2.x hot paths: read point lookups with `db.FindByPrimaryKey("Users", key: 1)` (Direct API,
 > no SQL parsing) and batch-load with `db.InsertBatch("Users", rows)`. See the [Performance Guide](docs/manual/performance.md).
 
 ### 2) Server mode (gRPC-first)
@@ -210,7 +207,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.2
 ## Important documentation links
 
 - **Manual (start here):** [`docs/manual/README.md`](docs/manual/README.md) — full feature manual with index
-- **Performance Guide:** [`docs/manual/performance.md`](docs/manual/performance.md) — when SharpCoreDB is fastest + measured v2.0 numbers
+- **Performance Guide:** [`docs/manual/performance.md`](docs/manual/performance.md) — when SharpCoreDB is fastest + measured v2.x numbers
 - **Roadmap:** [`ROADMAP.md`](./ROADMAP.md) — shipped features, near-term plans, long-term vision
 - Documentation hub: `docs/INDEX.md`
 - Feature matrix: `docs/FEATURE_MATRIX.md`
