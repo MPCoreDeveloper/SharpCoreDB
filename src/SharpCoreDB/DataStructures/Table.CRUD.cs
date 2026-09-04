@@ -2633,16 +2633,23 @@ public partial class Table
             Interlocked.Add(ref _pendingLogicalDeletes, recordsToDelete.Count);
         }
 
-        // Primary-key B-tree cleanup.
+        // Primary-key B-tree cleanup: bulk-delete in descending key order (one pass through the
+        // rightmost leaf path instead of arbitrary per-row order → fewer separator promotions).
         if (this.PrimaryKeyIndex >= 0)
         {
             var pkCol = this.Columns[this.PrimaryKeyIndex];
+            var pkKeys = new List<string>(recordsToDelete.Count);
             foreach (var (_, row) in recordsToDelete)
             {
                 if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
                 {
-                    this.Index.Delete(pkValue.ToString() ?? string.Empty);
+                    pkKeys.Add(pkValue.ToString() ?? string.Empty);
                 }
+            }
+
+            if (pkKeys.Count > 0)
+            {
+                this.Index.DeleteBulk(pkKeys);
             }
         }
 

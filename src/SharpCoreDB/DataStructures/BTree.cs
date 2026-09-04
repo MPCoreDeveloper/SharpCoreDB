@@ -320,6 +320,31 @@ public class BTree<TKey, TValue> : IIndex<TKey, TValue>
     }
 
     /// <inheritdoc />
+    public void DeleteBulk(IEnumerable<TKey> keys)
+    {
+        var sorted = keys as TKey[] ?? keys.ToArray();
+        if (sorted.Length <= 1)
+        {
+            if (sorted.Length == 1)
+            {
+                Delete(sorted[0]);
+            }
+
+            return;
+        }
+
+        // Descending order: consecutive deletes hit the rightmost leaf path, so the batch
+        // stays in (close to) a single node chain and triggers far fewer separator promotions
+        // / rebalances than deleting in arbitrary per-row order. Correctness is unaffected:
+        // every key is deleted exactly once.
+        Array.Sort(sorted, Comparer<TKey>.Default);
+        for (int i = sorted.Length - 1; i >= 0; i--)
+        {
+            Delete(sorted[i]);
+        }
+    }
+
+    /// <inheritdoc />
     public void Clear()
     {
         this.root = null;

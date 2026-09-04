@@ -35,4 +35,17 @@ public interface IIndex<TKey, TValue>
     /// Clears all entries from the index (used for bulk index rebuild).
     /// </summary>
     void Clear();
+
+    /// <summary>
+    /// Deletes a batch of keys from the index. The default implementation deletes per key;
+    /// specialized indexes may reorder the batch (e.g. descending) to reduce rebalancing cost.
+    /// </summary>
+    /// <param name="keys">The keys to delete.</param>
+    void DeleteBulk(IEnumerable<TKey> keys)
+    {
+        foreach (var key in keys)
+        {
+            Delete(key);
+        }
+    }
 }
