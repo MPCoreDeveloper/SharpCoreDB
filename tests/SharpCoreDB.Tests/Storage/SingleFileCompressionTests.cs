@@ -7,6 +7,7 @@ namespace SharpCoreDB.Tests.Storage;
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -473,7 +474,13 @@ public sealed class SingleFileCompressionTests
         // Reopen and SELECT must survive with the data intact.
         var db2 = factory.CreateWithOptions(_testDbPath, "unused", options);
         var results = db2.ExecuteQuery("SELECT * FROM t ORDER BY id");
-        Assert.Equal(500, results.Count);
+        var actualIds = results.Select(r => Convert.ToInt64(r["id"])).OrderBy(id => id).ToList();
+        var expectedIds = Enumerable.Range(0, 500).Select(i => (long)i).ToList();
+        var missing = expectedIds.Except(actualIds).ToList();
+        var extra = actualIds.Except(expectedIds).ToList();
+        Assert.True(
+            missing.Count == 0 && extra.Count == 0,
+            $"Row set mismatch after reopen: missing={missing.Count} [{string.Join(",", missing.Take(10))}], extra={extra.Count} [{string.Join(",", extra.Take(10))}].");
         Assert.Equal("user42", results[42]["name"]?.ToString());
         Assert.Equal("user499", results[499]["name"]?.ToString());
         DisposeDatabase(db2);
