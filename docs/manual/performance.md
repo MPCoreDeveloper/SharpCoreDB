@@ -1,23 +1,48 @@
 # 7. Performance Guide
 
-> **The headline:** SharpCoreDB v2.0 is a *performance-first* release. The benchmark gap that
-> made v1.x ~16–52x slower than SQLite on point reads/updates/deletes is closed: **point reads
-> now beat SQLite, all four CRUD operations beat LiteDB, and SIMD columnar analytics remain in
-> a class of their own.**
+> **The headline:** SharpCoreDB v2.0.0.2 is the current *performance-first* release on the v2.x
+> engine line. The v1.x benchmark gap (point reads/updates/deletes ~16–52x behind SQLite) is
+> closed: on the fair-PK harness (median-of-3, tuned config) **UPDATE is ~0.8–1.7x of SQLite,
+> INSERT is competitive, and DELETE ~2.1–3.5x** — see §7.1 for the current table.
 >
-> This chapter explains **when SharpCoreDB is fastest**, how to write code that gets there, and
-> — honestly — where SQLite is still ahead (and why). Every number in this chapter comes from
-> the two-run final v2.0.0 comparison on the reference machine; run them yourself with
-> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release).
+> This chapter explains **when SharpCoreDB is fastest**, how to write code that gets there, and —
+> honestly — where SQLite is still ahead (and why). Run the current fair-PK numbers yourself with
+> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release, `--pk`), or use the published
+> `docs/2.0.0.2_WHAT_CHANGED.md` / `docs/benchmarks/default-config-pk.md` results.
 
 ---
 
-## 7.1 The measured v2.0.0 numbers (ops/sec, latest runs)
+## 7.1 The current v2.0.0.2 numbers (fair-PK harness)
 
-Latest runs (2026-08-29, 12 cores, .NET 10.0.11, Windows 11, NVMe SSD) with
-`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release, `--engine=appendonly|pagebased`).
-Schema: 5 columns (`name TEXT`, `email TEXT`, `age INTEGER`, `score REAL`, `data TEXT`);
-100K inserts in 10K batches, 10K reads/updates/deletes.
+Harness: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` fair-PK mode (`--pk`, median of 3
+runs), fixed-width Columnar fast path, ascending-PK batches. Methodology and SQLite reference:
+`docs/2.0.0.2_WHAT_CHANGED.md` and `docs/benchmarks/default-config-pk.md`.
+
+| Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
+|---|---:|---:|---:|
+| **UPDATE** | **~163–245K** | ~270–315K | ~0.8–1.7x of SQLite |
+| **DELETE** | **~106–172K** | ~353–420K | ~2.1–3.5x |
+| **INSERT** | **~125–152K** | ~186–190K | competitive |
+| **READ** | **~72–110K** | ~95–107K | competitive |
+
+**Read the table honestly:**
+
+- ✅ **UPDATE is now competitive with SQLite on the keyed fast path** (~0.8–1.7x) — fixed-width
+  record layout (default for new PK tables) makes UPDATE an in-place overwrite, and strictly
+  ascending `pk = literal` batches run as one contiguous range (B8/B9).
+- ⚠️ **DELETE still trails SQLite ~2.1–3.5x** — SQLite’s row store is extremely fast at pure
+  deletes; closing the rest of that gap is the tracked v2.1 target.
+- ⚠️ The **pure default config** runs ~1.3–1.6x slower than the tuned harness because the
+  file-level wrapper still pays AES work while per-record at-rest encryption is off (documented
+  `NoEncryptMode` root cause, see `docs/benchmarks/default-config-pk.md`).
+- ✅ **Analytics remain the crown jewel** — SIMD columnar aggregates run far faster than SQLite
+  on `GROUP BY` SUM workloads (see §7.5).
+
+### 7.1.1 Historical reference — v2.0.0 launch numbers (2026-08-29)
+
+Superseded by §7.1 (the fixed-width layout is now the default for new PK tables); kept for the
+AppendOnly-vs-PageBased roadmap archive. Runs: 2026-08-29, 12 cores, .NET 10.0.11, Windows 11,
+NVMe SSD; 100K inserts in 10K batches, 10K reads/updates/deletes.
 
 | Operation | **v2.0 — AppendOnly** | **v2.0 — PageBased** | SQLite | LiteDB |
 |-----------|-----------------------|----------------------|--------|--------|
@@ -28,21 +53,8 @@ Schema: 5 columns (`name TEXT`, `email TEXT`, `age INTEGER`, `score REAL`, `data
 | **UPDATE** | 42–50K | **58–65K** | 239–279K | 10–11K |
 | **DELETE** | 29–128K | **107–129K** | 317–376K | 13–14K |
 
-**Read the table honestly:**
-
-- ✅ **Point reads beat SQLite on the default engine** — through the **Direct** API (114K vs 99K).
-  `ExecuteQuery` (SQL + `Dictionary` rows) still costs a row-materialization allocation (~0.65x).
-- ✅ **Batch INSERT beats SQLite on the PageBased engine** — 194–206K vs 109K (Direct/StructRow paths).
-- ✅ **Every operation beats LiteDB** — sometimes by an order of magnitude.
-- ⚠️ **Single-row UPDATE/DELETE are ~2.5–4x behind SQLite.** The WP10–WP13 storage-engine roadmap
-  (in-place field patches, unified delete core, exact-size serialization) narrowed this from the
-  original ~5–7x; closing the remaining gap (fixed-width record layouts) is the tracked v2.1 target.
-- ✅ **Analytics are the crown jewel** — SIMD columnar aggregates run **~682x faster than
-  SQLite** on `GROUP BY` SUM workloads (see §7.5).
-
-> The comparative harness and raw JSON results live in
-> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/` (latest runs
-> `comparative_20260829_135914.json` AppendOnly, `comparative_20260829_140203.json` PageBased).
+> Raw JSON: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/`
+> (`comparative_20260829_135914.json` AppendOnly, `comparative_20260829_140203.json` PageBased).
 
 ---
 
@@ -64,7 +76,9 @@ Use SharpCoreDB as your *first choice* for these workloads:
 
 | Workload | Honest guidance |
 |----------|-----------------|
-| **Single-row UPDATE/DELETE vs SQLite** | SQLite wins ~5–7x on pure row-store in-place writes (v2.1 target). If a workload is 90% update-in-place, consider SQLite — or batch the writes (§7.3.3). |
+| **Single-row UPDATE vs SQLite** | now competitive on the keyed path (~0.8–1.7x, §7.1) with the fixed-width default; the tuned-harness numbers assume ascending-PK batches |
+| **Pure DELETE vs SQLite** | SQLite still wins ~2.1–3.5x on pure row-store deletes (v2.1 target). If a workload is ~90% delete-in-place, consider SQLite or batch/compact (§7.3.3). |
+| **Pure default config** | runs ~1.3–1.6x slower than the tuned harness (`NoEncryptMode` file-level wrapper overhead — documented root cause, see `docs/benchmarks/default-config-pk.md`) |
 | **Very large complex multi-way joins** | SQLite's mature query engine can still win on pathological joins; profile first. |
 | **Maximum raw INSERT** | SQLite edges ahead by ~10–20% using its fastest C bulk path. |
 
@@ -291,7 +305,7 @@ harness, and the two-run final ranges are recorded in §7.1.
 
 | Item | Expected win |
 |------|--------------|
-| **In-place row updates / fixed-width records** | Close the UPDATE/DELETE gap vs SQLite (the last remaining CRUD gap) |
+| **DELETE fast path + default-config overhead** | Close the remaining DELETE gap (~2.1–3.5x vs SQLite) and remove the `NoEncryptMode` file-level wrapper overhead (~1.3–1.6x on the pure default config) |
 | **.NET 11 / C# 15** | Runtime-native async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 — free speedups in hot paths |
 | **AOT interface-dispatch improvements** | Faster interface-heavy storage paths under NativeAOT |
 
