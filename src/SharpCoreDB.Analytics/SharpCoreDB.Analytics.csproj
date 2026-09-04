@@ -13,7 +13,7 @@
     <Product>SharpCoreDB.Analytics</Product>
     <Description>Analytics extensions for SharpCoreDB: aggregates, window functions, SIMD-accelerated analytics, and time-series helpers for .NET 10.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v1.9.6: Fixes the critical WHERE IN (...) regression (#339) that silently returned ALL rows: IN / NOT IN are now evaluated correctly for literal and parameterized lists across single-file and directory mode, and single-file parameterized queries normalize @-prefixed parameter names. Includes all v1.9.5 fixes (token-aware parameter binding resolving @t/@tid collisions, server parameter pass-through, standards-compliant ULID encoding, legacy UI removal, English-only documentation, updated dependencies).</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
     <PackageTags>analytics;aggregates;window-functions;statistics;timeseries;database;sharpcoredb;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
