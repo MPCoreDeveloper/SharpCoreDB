@@ -563,9 +563,15 @@ public class DatabaseConfig
     /// ✅ NEW: Smart storage selection based on workload characteristics!
     /// - ReadHeavy: Optimized for SELECT queries → COLUMNAR storage
     /// - Analytics: Optimized for aggregates/scans → COLUMNAR storage
-    /// - WriteHeavy: Optimized for INSERT/UPDATE → PAGE_BASED storage
-    /// - General: Balanced for mixed workloads → PAGE_BASED storage
-    /// 
+    /// - WriteHeavy: Optimized for INSERT/UPDATE → currently APPEND_ONLY/COLUMNAR too (PageBased is
+    ///   opt-in only via an explicit <see cref="StorageEngineType.PageBased"/>; see the note below)
+    /// - General: Balanced for mixed workloads → APPEND_ONLY/COLUMNAR storage (the fast, hardened path)
+    ///
+    /// NOTE (production hardening): the PageBased engine is NOT yet OLTP-ready — measured UPDATE is
+    /// ~26K ops/s vs ~245K ops/s on the fixed-width Columnar (AppendOnly) path. Auto selection
+    /// therefore routes the default General workload (and the unknown-hint fallback) to
+    /// AppendOnly/Columnar until PageBased reaches UPDATE/DELETE parity.
+    ///
     /// When StorageEngineType = Auto, the engine is selected based on this hint.
     /// </summary>
     public WorkloadHint WorkloadHint { get; init; } = WorkloadHint.General;
@@ -583,14 +589,15 @@ public class DatabaseConfig
             return StorageEngineType;
         }
 
-        // Auto-select based on workload hint
+        // Auto-select based on workload hint. PageBased is deliberately not selected for General /
+        // unknown hints (and should be treated as opt-in only) until its UPDATE/DELETE fast paths
+        // reach the fixed-width Columnar engine's parity (see class-level note).
         return WorkloadHint switch
         {
             WorkloadHint.ReadHeavy => Interfaces.StorageEngineType.Columnar,
             WorkloadHint.Analytics => Interfaces.StorageEngineType.Columnar,
-            WorkloadHint.WriteHeavy => Interfaces.StorageEngineType.PageBased,
-            WorkloadHint.General => Interfaces.StorageEngineType.PageBased,
-            _ => Interfaces.StorageEngineType.PageBased // Default to PAGE_BASED (safest choice)
+            WorkloadHint.General => Interfaces.StorageEngineType.AppendOnly,
+            _ => Interfaces.StorageEngineType.AppendOnly
         };
     }
 
