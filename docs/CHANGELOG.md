@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Hardening
+
+- **Auto engine selection no longer lands on PageBased (production hardening)** - with default
+  configuration (`StorageEngineType.Auto` + `WorkloadHint.General`) `GetOptimalStorageEngine`
+  returned PageBased, which is not yet OLTP-ready (measured UPDATE ~26K ops/s vs ~245K ops/s on the
+  fixed-width Columnar path). Auto selection now routes General / WriteHeavy / unknown hints to
+  AppendOnly/Columnar; PageBased remains reachable only through an explicit
+  `StorageEngineType.PageBased` until its UPDATE/DELETE fast paths reach parity. Regression tests
+  assert the mapping AND that a default database creates Columnar fixed-width PK tables that engage
+  the single-pass contiguous DELETE path (no `.pages` artifacts). Full suite 1768 tests, 0 failed.
+
 ### Performance
 
 - **Fixed-width record layout is now the default for new columnar PK tables (B7)** ÔÇö
