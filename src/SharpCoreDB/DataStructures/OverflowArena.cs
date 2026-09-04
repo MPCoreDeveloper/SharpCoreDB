@@ -121,34 +121,29 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     private bool TryReuseFreeBlock(byte[] payload, out long offset)
     {
         offset = 0;
-        if (!_freeByLength.TryGetValue(payload.Length, out var offsets))
+        if (!_freeByLength.TryGetValue(payload.Length, out var offsets) || offsets.Count == 0)
         {
             return false;
         }
 
-        while (offsets.Count > 0)
+        offset = offsets[^1];
+        offsets.RemoveAt(offsets.Count - 1);
+
+        if (_storage.OverwriteRecordAt(_filePath, offset, payload))
         {
-            offset = offsets[^1];
-            offsets.RemoveAt(offsets.Count - 1);
-
-            if (_storage.OverwriteRecordAt(_filePath, offset, payload))
+            if (offsets.Count == 0)
             {
-                if (offsets.Count == 0)
-                {
-                    _freeByLength.Remove(payload.Length);
-                }
-
-                _cache[offset] = payload;
-                _blockReuses++;
-                return true;
+                _freeByLength.Remove(payload.Length);
             }
 
-            // In-place overwrite refused (e.g. transaction active): keep the block free for a
-            // later write and try the next candidate; if none succeeds we fall back to append.
-            offsets.Add(offset);
-            break;
+            _cache[offset] = payload;
+            _blockReuses++;
+            return true;
         }
 
+        // In-place overwrite refused (e.g. transaction active): keep the block free for a later
+        // write and fall back to appending.
+        offsets.Add(offset);
         offset = 0;
         return false;
     }

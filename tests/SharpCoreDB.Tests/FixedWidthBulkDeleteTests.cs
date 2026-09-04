@@ -299,12 +299,12 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
             InsertDocs(db, 1, 50);
             db.Flush();
 
-            var before = ((SharpCoreDB.Database)db).CanonicalDeleteStatementsParsed;
+            var before = SharpCoreDB.Database.CanonicalDeleteStatementsParsed;
             db.ExecuteBatchSQL(BuildDeletes(1, 10));
             db.Flush();
 
             Assert.True(
-                ((SharpCoreDB.Database)db).CanonicalDeleteStatementsParsed >= before + 10,
+                SharpCoreDB.Database.CanonicalDeleteStatementsParsed >= before + 10,
                 "canonical DELETE statements must flow through the structured batch path");
             Assert.Equal(40, db.ExecuteQuery("SELECT id FROM docs").Count);
         }

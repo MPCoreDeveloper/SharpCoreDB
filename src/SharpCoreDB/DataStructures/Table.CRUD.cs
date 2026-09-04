@@ -2272,8 +2272,8 @@ public partial class Table
                                     var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                                     if (!string.Equals(newPkVal, oldPkValue?.ToString(), StringComparison.Ordinal))
                                     {
-                                        if (!string.IsNullOrEmpty(oldPkValue?.ToString()))
-                                            this.Index.Delete(oldPkValue!.ToString()!);
+                                        if (oldPkValue?.ToString() is { Length: > 0 } oldPkString)
+                                            this.Index.Delete(oldPkString);
                                         if (!string.IsNullOrEmpty(newPkVal))
                                             this.Index.Insert(newPkVal, oldPosition);
                                     }
@@ -2692,12 +2692,9 @@ public partial class Table
                 // Transactional delete: buffer the physical offsets so the in-place marker is
                 // applied at COMMIT (rollback discards the buffer). Durable in O(delete) — the
                 // flush-time full-file rewrite is no longer needed for transactional deletes.
-                foreach (var position in positions)
+                foreach (var position in positions.Where(static position => position >= 0))
                 {
-                    if (position >= 0)
-                    {
-                        this.storage.BufferTombstoneForCommit(DataFile, position);
-                    }
+                    this.storage.BufferTombstoneForCommit(DataFile, position);
                 }
             }
             else
@@ -2755,10 +2752,10 @@ public partial class Table
         List<long>? remainingPositions = null;
         if (!this.storage.AreRecordsEncrypted(DataFile))
         {
-            remainingPositions = ScanLegacyPlaintextRemainingKeys(DataFile, pkCol, deletedKeys);
+            remainingPositions = ScanLegacyPlaintextRemainingKeys(DataFile, deletedKeys);
         }
 
-        remainingPositions ??= ScanLegacyRemainingKeysViaStorage(DataFile, pkCol, deletedKeys);
+        remainingPositions ??= ScanLegacyRemainingKeysViaStorage(DataFile, deletedKeys);
         if (remainingPositions is { Count: > 0 })
         {
             TombstoneDeletedPositions(remainingPositions.ToArray());
@@ -2772,7 +2769,7 @@ public partial class Table
     /// <see langword="null"/> when the raw layout could not be parsed safely (the caller then falls
     /// back to the storage-layer scan, which understands per-record encryption).
     /// </summary>
-    private List<long>? ScanLegacyPlaintextRemainingKeys(string dataFile, string pkCol, HashSet<string> deletedKeys)
+    private List<long>? ScanLegacyPlaintextRemainingKeys(string dataFile, HashSet<string> deletedKeys)
     {
         var matches = new List<long>();
         try
@@ -2822,7 +2819,7 @@ public partial class Table
                     break;
                 }
 
-                if (TryReadPrimaryKeyFromLegacyRecord(recordData, pkCol, out var pkStr) && deletedKeys.Contains(pkStr))
+                if (TryReadPrimaryKeyFromLegacyRecord(recordData, out var pkStr) && deletedKeys.Contains(pkStr))
                 {
                     matches.Add(position);
                 }
@@ -2843,12 +2840,12 @@ public partial class Table
     /// plaintext raw scan is unavailable): iterates the records through
     /// <c>storage.ReadAllRecords</c>, which decrypts payloads and already skips tombstone markers.
     /// </summary>
-    private List<long> ScanLegacyRemainingKeysViaStorage(string dataFile, string pkCol, HashSet<string> deletedKeys)
+    private List<long> ScanLegacyRemainingKeysViaStorage(string dataFile, HashSet<string> deletedKeys)
     {
         var matches = new List<long>();
-        foreach (var (recordOffset, recordData) in this.storage!.ReadAllRecords(dataFile))
+        foreach (var (recordOffset, recordData) in this.storage.ReadAllRecords(dataFile))
         {
-            if (TryReadPrimaryKeyFromLegacyRecord(recordData, pkCol, out var pkStr) && deletedKeys.Contains(pkStr))
+            if (TryReadPrimaryKeyFromLegacyRecord(recordData, out var pkStr) && deletedKeys.Contains(pkStr))
             {
                 matches.Add(recordOffset);
             }
@@ -2861,7 +2858,7 @@ public partial class Table
     /// Walks a legacy variable-length record and returns the value of the primary-key column
     /// (the same layout walk used by the reopen index rebuild).
     /// </summary>
-    private bool TryReadPrimaryKeyFromLegacyRecord(byte[] recordData, string pkCol, out string? pkValue)
+    private bool TryReadPrimaryKeyFromLegacyRecord(byte[] recordData, out string? pkValue)
     {
         pkValue = null;
         try
