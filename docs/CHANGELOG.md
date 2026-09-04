@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Hardening
 
+- **NoEncryptMode root cause quantified + explained (P3d)** - definitive 3-rep same-window `--pk-ab`
+  (tuned vs plain, only NoEncryptMode differs): UPDATE 1.62x, DELETE 1.59x, INSERT 1.31x, READ 1.45x
+  in favour of `NoEncryptMode=true`. Code audit shows two encryption layers in Storage: per-record
+  at-rest (`EnableAtRestRecordEncryption`, default off) AND file-level wrappers
+  (`Storage.ReadWrite`/`PageCache`, `effectiveNoEncrypt = noEncrypt || noEncryption`) gated purely
+  by `NoEncryptMode`. The default therefore pays AES work on resolution/point/page-cache reads even
+  though the raw contiguous fast paths are plaintext and still engage. Follow-up (measured via
+  `--pk-ab`): route hot reads through the raw range path or make the wrapper a no-op when
+  at-rest encryption is off. Documented in `docs/benchmarks/default-config-pk.md`.
+
 - **Same-window interleaved A/B harness (`--pk-ab`) (P3c)** - new harness mode runs two default-
   config variants as alternating rep pairs (A1,B1,A2,B2,...) and reports the per-rep paired median
   ratio B/A per phase, so machine drift affects both arms of a pair and cancels out. Smoke (1 rep,
