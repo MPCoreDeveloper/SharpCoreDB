@@ -39,7 +39,7 @@
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v2.0.0 (performance-first): removes debug file logging from all hot paths (SELECT, parameterized ExecuteSQL, batch transactions, INSERT) that caused per-operation disk I/O and throttled point reads/updates/deletes. See docs/performance/V2_PERFORMANCE_PLAN.md for the v2.x performance roadmap: prepared/compiled query execution, allocation reduction, storage/index tuning, and C# 15 / .NET 11 readiness.</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
     <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
