@@ -3592,11 +3592,16 @@ public partial class Table
     }
 
     /// <summary>
-    /// Shared B8/B9 probe: resolves each key's record position through the PK B-tree, requires the
-    /// positions to be physically adjacent at the fixed-width stride, reads the whole contiguous
-    /// span through the storage layer's cached handle and verifies every 4-byte length prefix.
-    /// Returns the raw span bytes, or <see langword="null"/> so the caller falls back to the generic
-    /// per-row loop — nothing is modified before this succeeds.
+    /// Shared B8/B9 probe: locates the FIRST key through the PK B-tree, requires the records to be
+    /// physically adjacent at the fixed-width stride, reads the whole contiguous span through the
+    /// storage layer's cached handle and verifies every record by its 4-byte length prefix AND its
+    /// decoded PK slot (equal to the batch key). It deliberately avoids one B-tree search per key:
+    /// with the whole span already in memory, decoding each record's fixed-width PK slot (~100 ns)
+    /// is two orders of magnitude cheaper than ~10K tree searches and rejects the same batches
+    /// (gaps/tombstones surface as prefix mismatches; a record whose PK differs from the requested
+    /// key falls back like the old per-key search miss). Returns the raw span bytes, or
+    /// <see langword="null"/> so the caller falls back to the generic per-row loop — nothing is
+    /// modified before this succeeds.
     /// </summary>
     private byte[]? TryReadContiguousFixedWidthRecords(
         string[] keys,
@@ -3605,6 +3610,10 @@ public partial class Table
         long[] positions)
     {
         int count = keys.Length;
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return null;
+        }
 
         var first = this.Index.Search(keys[0]);
         if (!first.Found)
@@ -3613,18 +3622,11 @@ public partial class Table
         }
 
         long basePosition = first.Value;
-        positions[0] = basePosition;
         long expected = basePosition;
-        for (int i = 1; i < count; i++)
+        for (int i = 0; i < count; i++)
         {
-            expected += stride;
-            var search = this.Index.Search(keys[i]);
-            if (!search.Found || search.Value != expected)
-            {
-                return null;
-            }
-
             positions[i] = expected;
+            expected += stride;
         }
 
         long totalBytes = stride * count;
@@ -3639,12 +3641,23 @@ public partial class Table
             return null;
         }
 
+        int pkIdx = this.PrimaryKeyIndex;
+        var pkType = this.ColumnTypes[pkIdx];
         for (int i = 0; i < count; i++)
         {
-            int prefix = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan((int)(i * stride), 4));
+            var record = raw.AsSpan((int)(i * stride), 4 + layout.FixedSize);
+            int prefix = BinaryPrimitives.ReadInt32LittleEndian(record);
             if (prefix != layout.FixedSize)
             {
-                return null;
+                return null; // tombstoned slot or layout mismatch -> generic per-row path
+            }
+
+            var pkSlot = record.Slice(4 + layout.Offsets[pkIdx], layout.SlotSizes[pkIdx]);
+            var pkValue = ReadTypedValueFromSpan(pkSlot, pkType, out _);
+            if (pkValue is null || pkValue is System.DBNull ||
+                !string.Equals(pkValue.ToString(), keys[i], StringComparison.Ordinal))
+            {
+                return null; // record PK differs from the requested key -> generic per-row path
             }
         }
 
@@ -3733,14 +3746,11 @@ public partial class Table
             return false;
         }
 
-        // Remove PK entries (the keys are the WHERE literals) and then every loaded hash-index
-        // entry, decoding only the indexed columns from the raw fixed-width records (no full-row
-        // deserialization). Variable values resolve through the overflow arena, mirroring the
-        // fixed-width codec used by the generic path.
-        for (int i = 0; i < count; i++)
-        {
-            this.Index.Delete(keys[i]);
-        }
+        // Remove PK entries (the keys are the WHERE literals) in one sorted bulk pass and then every
+        // loaded hash-index entry, decoding only the indexed columns from the raw fixed-width records
+        // (no full-row deserialization). Variable values resolve through the overflow arena, mirroring
+        // the fixed-width codec used by the generic path.
+        this.Index.DeleteBulk(keys);
 
         var arena = GetOverflowArena();
         foreach (var (colName, hashIdx) in this.hashIndexes)

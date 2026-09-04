@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **FW contiguous path: per-key B-tree probe replaced by decode verification + `DeleteBulk` (M3)** -
+  the shared B8/B9 probe resolved every key with one `Index.Search` (~10K per batch) and the FW
+  DELETE removed the PK entries one `Delete` at a time. The probe now locates only the FIRST key
+  through the tree, computes the remaining positions by the fixed-width stride, reads the
+  contiguous span once and verifies every record by its length prefix AND its decoded fixed-width
+  PK slot (equal to the batch key); the DELETE removes the PK entries with one `DeleteBulk` pass.
+  The same batches are rejected as before (gaps/tombstones surface as prefix mismatches; a
+  differing PK falls back like a tree miss). Fair-PK median-of-3 (sequential, uncontended):
+  fixed-width UPDATE ~245K and DELETE ~172K ops/s on this branch (master baseline reported in the PR).
 - **Sequential ascending-PK batch resolution for legacy DELETE (Fase B: legacy fast paths)** -
   `DeleteMultipleKeys` on a legacy (variable-length, plaintext, non-fixed-width) Columnar table now
   resolves a strictly-ascending INTEGER-PK literal batch with a single sequential decode pass that
