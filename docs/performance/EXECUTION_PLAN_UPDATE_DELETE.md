@@ -11,7 +11,8 @@
 | #368 | **Commit-time tombstones** (transactionele/batch deletes) | **SQL DELETE 0,82 s → 0,24 s** (~12K → ~41-58K ops/s) — de grote sprong |
 | #369 | C4 (batch markers + evict-dedup) + B3 (structured delete, geen dubbele parse) | veilig; neutraal binnen ruis op benchmark |
 | #370 | B1 (key-only decode: alleen PK + hash-indexkolommen) | veilig; neutraal binnen ruis op small-row benchmark |
-| B5-bulk (open) | **Bulk aflopende PK-delete** (`DeleteRecordsCore` verzamelt PK-sleutels eenmalig; `IIndex.DeleteBulk`/`BTree.DeleteBulk` sorteert aflopend → rechter-bladpad, minder separator-promoties) | correct (identieke keyset, één bezoek per key); fair-PK legacy-DELETE ~69-72K ops/s (binnen ruis op geordende batches) — winst bij ongeordende keysets |
+| #376 | **Bulk aflopende PK-delete** (`DeleteRecordsCore` verzamelt PK-sleutels eenmalig; `IIndex.DeleteBulk`/`BTree.DeleteBulk` sorteert aflopend → rechter-bladpad, minder separator-promoties) | correct (identieke keyset, één bezoek per key); fair-PK legacy-DELETE ~69-72K ops/s (binnen ruis op geordende batches) — winst bij ongeordende keysets |
+| C5 (open) | **Commit-marker writes gebatcht** (`TombstoneRecords` patcht alle markers eerst in het whole-file snapshot — markers mogen page-grenzen kruisen — en flusht elke geraakte storage-page één keer i.p.v. één 4B-pwrite per marker) | fair-PK (median, zelfde machine): legacy ~70K → **~81K ops/s** (+16%); fixed-width ~97K → **~141K ops/s** (+45%) — DELETE-gap vs SQLite op FW → ~2,4x |
 
 **Root cause (niet in Grok-doc):** `ExecuteBatchSQL` draait elke batch in een storage-transactie; zonder #368 deed batch-DELETE nog steeds de #366 full-file compactie (~690 ms in `tableFlushLoop`). Daardoor waren eerdere “winst”-metingen niet-duurzaam/logisch-only.
 
@@ -86,7 +87,7 @@ Gemeten op master (Release, zelfde machine; median van 3 runs voor de comparativ
 
 ### Bewuste vervolgstappen (niet in deze sessie, zie secties 3-4)
 1. **Batch-PK stale/lazy-rebuild** na grote delete-batches — grootste open post; vereist eerst PK-index-refresh-infra (`Table.Index` is een plain property zonder lazy rebuild). Ontwerp nodig; daarna kan de per-rij read in DELETE vervallen.
-2. **Commit-marker schrijfbatching** (writes blijven per-offset; range-read zit er al in via #373).
+2. **Commit-marker schrijfbatching** (writes blijven per-offset; range-read zit er al in via #373) — **opgelost op de C5-branch**: markers worden per storage-page gebundeld weggeschreven.
 3. **Fase B (structureel):** fixed-width in-place engine + PageBased als OLTP-default — de weg naar ~1,2-1,5× van SQLite op UPDATE/DELETE.
 4. **Fase C/D (platform):** AOT/R2R als aparte meet-as, median-of-N in de harness, `dotnet-trace` per Fase-B-stap.
 
