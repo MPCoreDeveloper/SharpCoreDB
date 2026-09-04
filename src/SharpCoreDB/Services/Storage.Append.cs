@@ -7,6 +7,7 @@ namespace SharpCoreDB.Services;
 
 using SharpCoreDB.Constants;
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -1081,11 +1082,14 @@ public partial class Storage
 
             try
             {
-                Span<byte> lengthPrefix = stackalloc byte[4];
-                foreach (var (offset, record) in overwrites)
+                if (!TryFlushBufferedOverwritesBatched(path, overwrites))
                 {
-                    BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, record.Length);
-                    WriteRecordInPlace(path, offset, lengthPrefix, record);
+                    Span<byte> lengthPrefix = stackalloc byte[4];
+                    foreach (var (offset, record) in overwrites)
+                    {
+                        BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, record.Length);
+                        WriteRecordInPlace(path, offset, lengthPrefix, record);
+                    }
                 }
             }
             catch (IOException)
@@ -1095,6 +1099,130 @@ public partial class Storage
         }
 
         bufferedOverwrites.Clear();
+    }
+
+    /// <summary>
+    /// Batch-flushes buffered in-place overwrites with one write per touched storage page instead
+    /// of two pwrites per row (the UPDATE commit previously did one length-prefix write + one
+    /// payload write per buffered row). Current on-disk page content is read once, row payloads are
+    /// patched into the copy, and the page is written once; length prefixes are unchanged
+    /// (same-length overwrites only). Cross-page payloads take the direct per-record path first so
+    /// later page reads already include them.
+    /// </summary>
+    /// <remarks>
+    /// Safety: runs under <see cref="appendLock"/> in the commit path (single writer per file).
+    /// Returns false when batching is not applicable so the caller falls back to the per-record
+    /// loop — re-writing the same bytes is idempotent.
+    /// </remarks>
+    /// <returns>True when every overwrite was flushed by this method.</returns>
+    private bool TryFlushBufferedOverwritesBatched(string path, Dictionary<long, byte[]> overwrites)
+    {
+        if (overwrites.Count < 64 || path.EndsWith(".ovf", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        int pageBytes = this.pageSize > 0 ? this.pageSize : 4096;
+        long fileLength = File.Exists(path) ? new FileInfo(path).Length : 0;
+        if (fileLength <= 0)
+        {
+            return false;
+        }
+
+        var entries = new (long Offset, byte[] Payload)[overwrites.Count];
+        int n = 0;
+        foreach (var (offset, payload) in overwrites)
+        {
+            if (offset >= 0 && offset + 4 + payload.Length <= fileLength)
+            {
+                entries[n++] = (offset, payload);
+            }
+        }
+
+        if (n == 0)
+        {
+            return false;
+        }
+
+        Array.Sort(entries, 0, n, Comparer<(long Offset, byte[] Payload)>.Create(static (a, b) => a.Offset.CompareTo(b.Offset)));
+
+        var pages = new Dictionary<long, List<(int RelOffset, byte[] Payload)>>();
+        var pageStarts = new List<long>();
+        var direct = new List<(long Offset, byte[] Payload)>();
+        for (int i = 0; i < n; i++)
+        {
+            long offset = entries[i].Offset;
+            byte[] payload = entries[i].Payload;
+            long pageStart = (offset / pageBytes) * pageBytes;
+            if (offset + 4 + payload.Length - pageStart > pageBytes)
+            {
+                direct.Add((offset, payload));
+                continue;
+            }
+
+            if (!pages.TryGetValue(pageStart, out var patches))
+            {
+                patches = new List<(int, byte[])>();
+                pages[pageStart] = patches;
+                pageStarts.Add(pageStart);
+            }
+
+            patches.Add(((int)(offset - pageStart + 4), payload));
+        }
+
+        Span<byte> lengthPrefix = stackalloc byte[4];
+        foreach (var (offset, payload) in direct)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, payload.Length);
+            WriteRecordInPlace(path, offset, lengthPrefix, payload);
+        }
+
+        if (pages.Count == 0)
+        {
+            return direct.Count > 0;
+        }
+
+        SafeFileHandle readHandle = GetOrOpenReadHandle(path);
+        SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
+        byte[]? pageBuffer = null;
+        try
+        {
+            pageBuffer = ArrayPool<byte>.Shared.Rent(pageBytes);
+            pageStarts.Sort();
+            foreach (long pageStart in pageStarts)
+            {
+                int writeLength = (int)Math.Min(pageBytes, fileLength - pageStart);
+                if (writeLength <= 0)
+                {
+                    continue;
+                }
+
+                if (RandomAccess.Read(readHandle, pageBuffer.AsSpan(0, writeLength), pageStart) != writeLength)
+                {
+                    return false; // partial read — fall back to the idempotent per-record loop
+                }
+
+                foreach (var (relOffset, payload) in pages[pageStart])
+                {
+                    payload.CopyTo(pageBuffer.AsSpan(relOffset, payload.Length));
+                }
+
+                RandomAccess.Write(writeHandle, pageBuffer.AsSpan(0, writeLength), pageStart);
+                if (this.pageCache != null)
+                {
+                    this.pageCache.EvictPage(ComputePageId(path, pageStart));
+                }
+            }
+        }
+        finally
+        {
+            if (pageBuffer != null)
+            {
+                ArrayPool<byte>.Shared.Return(pageBuffer);
+            }
+        }
+
+        return true;
     }
 
     /// <inheritdoc />

@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **Buffered in-place UPDATE overwrites are now flushed per storage page (C6, Fase B)** - the
+  UPDATE commit path buffered one record per row (B7) and flushed each with two pwrites
+  (length prefix + payload), so ~10K-row UPDATEs were dominated by per-row write syscalls
+  (~88K ops/s on the fair-PK fixed-width table). `FlushBufferedOverwrites` now batches: the
+  current on-disk page content is read once, the row payloads are patched into the copy, and each
+  touched page is written once (payloads crossing a page boundary take the direct path first;
+  length prefixes are unchanged because same-length overwrites are the only in-place case).
+  Fair-PK harness (`--pk`, same machine as master): fixed-width UPDATE ~88K -> **~153-164K ops/s**
+  (+75-85%, gap vs SQLite ~2,75x -> ~1,7x); legacy UPDATE ~53-56K -> ~64-70K (+20-25%); DELETE
+  unchanged within noise. Runs under the same commit lock; rollback semantics unchanged.
 - **Duplicate-key hash-index removal is no longer quadratic (P5)** - `HashIndex.RemoveBatchKeys`/
   `RemoveBatch` previously removed every position from a key's list with one O(list) shift per
   duplicate, i.e. O(m·n) for a key holding n rows with m duplicate-key deletions in one batch.
