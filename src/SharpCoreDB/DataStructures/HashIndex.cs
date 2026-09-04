@@ -240,40 +240,15 @@ public class HashIndex : IDisposable
     {
         if (rows.Count == 0) return;
 
-        _lock.EnterWriteLock();
-        try
+        // Extract each row's indexed key once (null when the column is absent) and delegate to
+        // the key-based batch removal, which compacts duplicate-key lists in a single pass.
+        var keys = new object?[rows.Count];
+        for (int i = 0; i < rows.Count; i++)
         {
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (!rows[i].TryGetValue(_columnName, out var key) || key is null)
-                    continue;
-
-                var normalizedKey = NormalizeKey(key);
-
-                if (_useUnsafeEqualityIndex)
-                {
-                    var keyBytes = BuildUnsafeKey(normalizedKey);
-                    if (_unsafeIndex.Remove(keyBytes, positions[i]))
-                    {
-                        _unsafeTotalRows--;
-                    }
-                    continue;
-                }
-
-                if (_index.TryGetValue(normalizedKey, out var list))
-                {
-                    list.Remove(positions[i]);
-                    if (list.Count == 0)
-                    {
-                        _index.Remove(normalizedKey);
-                    }
-                }
-            }
+            rows[i].TryGetValue(_columnName, out keys[i]);
         }
-        finally
-        {
-            _lock.ExitWriteLock();
-        }
+
+        RemoveBatchKeys(keys, positions);
     }
 
     /// <summary>
@@ -292,11 +267,21 @@ public class HashIndex : IDisposable
         _lock.EnterWriteLock();
         try
         {
+            // Deferred duplicate-key removals. A key whose position list has more than one entry and
+            // appears more than once in the batch previously cost one O(list) List.Remove shift per
+            // duplicate — O(m·n) for a key with n rows and m duplicate-key deletions in the batch.
+            // Instead the first occurrence is removed directly and later occurrences are collected,
+            // after which the list is compacted in one O(list) pass. Single-row keys (the common
+            // case for unique-ish indexed values) stay on the allocation-free direct path.
+            Dictionary<object, HashSet<long>>? deferred = null;
+
             for (int i = 0; i < keys.Length; i++)
             {
                 var key = keys[i];
                 if (key is null)
+                {
                     continue;
+                }
 
                 var normalizedKey = NormalizeKey(key);
 
@@ -307,15 +292,54 @@ public class HashIndex : IDisposable
                     {
                         _unsafeTotalRows--;
                     }
+
                     continue;
                 }
 
-                if (_index.TryGetValue(normalizedKey, out var list))
+                if (!_index.TryGetValue(normalizedKey, out var list))
                 {
-                    list.Remove(positions[i]);
-                    if (list.Count == 0)
+                    continue;
+                }
+
+                if (list.Count > 1)
+                {
+                    deferred ??= new Dictionary<object, HashSet<long>>(_comparer);
+                    if (deferred.TryGetValue(normalizedKey, out var dupSet))
                     {
-                        _index.Remove(normalizedKey);
+                        (dupSet ??= new HashSet<long>()).Add(positions[i]);
+                        deferred[normalizedKey] = dupSet;
+                    }
+                    else
+                    {
+                        list.Remove(positions[i]);
+                        if (list.Count == 0)
+                        {
+                            _index.Remove(normalizedKey);
+                        }
+                        else
+                        {
+                            deferred.Add(normalizedKey, null);
+                        }
+                    }
+
+                    continue;
+                }
+
+                // Single-row key: direct removal, no duplicate tracking needed.
+                list.Remove(positions[i]);
+                if (list.Count == 0)
+                {
+                    _index.Remove(normalizedKey);
+                }
+            }
+
+            if (deferred != null)
+            {
+                foreach (var kvp in deferred)
+                {
+                    if (kvp.Value is not null)
+                    {
+                        CompactPositionList(kvp.Key, kvp.Value);
                     }
                 }
             }
@@ -323,6 +347,36 @@ public class HashIndex : IDisposable
         finally
         {
             _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Removes every position in <paramref name="removed"/> from the key's position list with one
+    /// O(list) compaction pass (value-based membership, so ordering is irrelevant).
+    /// </summary>
+    private void CompactPositionList(object key, HashSet<long> removed)
+    {
+        if (!_index.TryGetValue(key, out var list))
+        {
+            return;
+        }
+
+        int write = 0;
+        for (int read = 0; read < list.Count; read++)
+        {
+            if (!removed.Contains(list[read]))
+            {
+                list[write++] = list[read];
+            }
+        }
+
+        if (write == 0)
+        {
+            _index.Remove(key);
+        }
+        else if (write < list.Count)
+        {
+            list.RemoveRange(write, list.Count - write);
         }
     }
 

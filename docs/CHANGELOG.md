@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runtime `AreRecordsEncrypted` gate (so default-config plaintext databases benefit without
   `NoEncryptMode`). Fixed-size hash-indexed SET columns are re-pointed with one lock per index
   (`HashIndex.RemoveBatchKeys`/`AddBatchKeys`).
+- **Duplicate-key hash-index removal is no longer quadratic (P5)** - `HashIndex.RemoveBatchKeys`/
+  `RemoveBatch` previously removed every position from a key's list with one O(list) shift per
+  duplicate, i.e. O(m·n) for a key holding n rows with m duplicate-key deletions in one batch.
+  Batch removal now keeps the direct allocation-free path for single-row keys and defers
+  duplicate-key positions into a per-key set that is applied in one O(list) compaction. New
+  regression tests cover full and partial duplicate-group deletes on both index backends
+  (managed `List` + unsafe native backend) including a reopen; full suite 1764 tests, 0 failed.
 - **Commit-time tombstones now batch the marker writes (C5)** - the DELETE commit phase read the
   whole file once (#373) but still applied one 4-byte negative-prefix marker per row
   (one pwrite each). `TombstoneRecords` now patches every marker into the in-memory snapshot first
