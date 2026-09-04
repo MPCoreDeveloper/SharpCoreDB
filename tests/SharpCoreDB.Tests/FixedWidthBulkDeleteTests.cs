@@ -138,6 +138,61 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
     }
 
     [Fact]
+    public void AscendingUpdateBatch_BatchedPageFlush_AppliesEveryRow_AcrossReopen()
+    {
+        // Regression for the commit flush of buffered in-place overwrites: a single UPDATE batch of
+        // 2000 rows lands in one transaction with 2000 buffered overwrites, which FlushBuffered-
+        // Overwrites now writes with one read-modify-write per touched storage page instead of two
+        // pwrites per row. Values must survive point reads and a reopen.
+        IDatabase? db = CreateDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            InsertDocs(db, 1, 2000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            var stmts = new List<string>(2000);
+            for (int i = 1; i <= 2000; i++)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE docs SET score = 9.25 WHERE id = {0}", i));
+            }
+
+            db.ExecuteBatchSQL(stmts);
+            db.Flush();
+            Assert.Equal(1, table.BulkContiguousUpdateBatches);
+
+            var c = db.ExecuteQuery("SELECT COUNT(*) AS n FROM docs");
+            Assert.Equal(2000L, Convert.ToInt64(c[0].Values.First()));
+            for (int i = 1; i <= 2000; i += 137)
+            {
+                var rows = db.ExecuteQuery("SELECT score, name FROM docs WHERE id = @id",
+                    new Dictionary<string, object?> { ["@id"] = i });
+                Assert.Single(rows);
+                Assert.Equal(9.25, Convert.ToDouble(rows[0]["score"]));
+            }
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Reopen: the read-modify-write page flushes must have persisted exactly.
+        db = CreateDb();
+        try
+        {
+            var scan = db.ExecuteQuery("SELECT id FROM docs");
+            Assert.Equal(2000, scan.Count);
+            for (int i = 1; i <= 2000; i += 333)
+            {
+                var rows = db.ExecuteQuery("SELECT score FROM docs WHERE id = @id",
+                    new Dictionary<string, object?> { ["@id"] = i });
+                Assert.Single(rows);
+                Assert.Equal(9.25, Convert.ToDouble(rows[0]["score"]));
+            }
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
     public void BulkDelete_ScanAndCountStayConsistent()
     {
         var db = CreateDb();
