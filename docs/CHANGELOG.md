@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Hardening
 
+- **Default-config benchmark published (P3)** - `docs/benchmarks/default-config-pk.md` records a
+  median-of-3 fair-PK run where the SharpCoreDB arm uses a PURE default `DatabaseConfig`
+  (NoEncryptMode=false, no harness flags). Honest result: the default path engages the Columnar
+  fixed-width fast paths (verified by counters) but UPDATE/DELETE land at ~84K/~93K ops/s
+  (~3.5x/~4.2x behind SQLite) versus ~245K/~172K with the tuned harness config — the gap is
+  dominated by the default `WalDurabilityMode.FullSync` per-commit flush. The default durability
+  stays FullSync (safe); the follow-up is to optimize the synchronous commit flush itself. New
+  harness mode: `--pk-default`.
+
 - **Upgrade/downgrade policy documented + format-compat regression tests** - new
   `docs/manual/upgrade-and-downgrade.md` records the compatibility matrix: reading legacy
   (variable-length, pre-marker) databases with the current version is supported; opening a database

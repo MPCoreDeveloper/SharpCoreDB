@@ -65,6 +65,20 @@ class Program
             return;
         }
 
+        // Optional: --pk-default → fair PK comparison using PURE default DatabaseConfig
+        // (NoEncryptMode stays at its default false, no harness-only flags). Proves that the
+        // out-of-the-box default path engages the fixed-width fast paths vs SQLite.
+        if (args.Any(a => a.Equals("--pk-default", StringComparison.OrdinalIgnoreCase)))
+        {
+            var engineArgDefault = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
+            var engineTypeDefault = engineArgDefault is not null
+                && engineArgDefault.Substring("--engine=".Length).Equals("pagebased", StringComparison.OrdinalIgnoreCase)
+                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
+                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
+            RunPkDefaultComparison(engineTypeDefault);
+            return;
+        }
+
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
         var engineArg = args.FirstOrDefault(a => a.StartsWith("--engine=", StringComparison.OrdinalIgnoreCase));
@@ -845,7 +859,10 @@ class Program
     /// <c>ExecuteBatchSQL</c> (single transaction). This exercises the PK B-tree fast paths and the
     /// recommended usage; the no-PK harness scenario above under-measures the engine on DML.
     /// </summary>
-    static BenchmarkResult RunSharpCoreDBPk(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false)
+    static BenchmarkResult RunSharpCoreDBPk(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool fixedWidth = false,
+        bool useDefaultConfig = false)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -857,7 +874,9 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = BuildConfig(engineType, fixedWidth);
+            var config = useDefaultConfig
+                ? new DatabaseConfig { StorageEngineType = engineType }
+                : BuildConfig(engineType, fixedWidth);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -1030,6 +1049,50 @@ class Program
         var dir = "results";
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"pk_comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// P3 hardening: fair PK comparison where the SharpCoreDB arm uses a PURE default
+    /// <see cref="DatabaseConfig"/> (no NoEncryptMode / page-cache / query-cache harness flags) —
+    /// only the engine type is pinned to the runner's engine. Proves the out-of-the-box default
+    /// path (Columnar + fixed-width PK tables) engages the fast paths against SQLite.
+    /// </summary>
+    static void RunPkDefaultComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║  Fair PK with DEFAULT DatabaseConfig vs SQLite           ║");
+        Console.WriteLine("║  (NoEncryptMode=false; no harness-only performance flags)║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("(median of 3 per phase)");
+
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, default config = Columnar fixed-width) ━━━");
+        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType, useDefaultConfig: true));
+        Console.WriteLine();
+
+        Console.WriteLine("━━━ SQLite (reference) ━━━");
+        var sqlite = RunPkMedian(() => RunSQLite());
+        Console.WriteLine();
+
+        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"\n  UPDATE gap: SQLite vs default-config {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x");
+        Console.WriteLine($"  DELETE gap: SQLite vs default-config {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL, PK, default config)"] = scdb,
+            ["SQLite"] = sqlite,
+        };
+
+        var dir = "results";
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"pk_default_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
     }
