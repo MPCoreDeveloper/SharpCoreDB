@@ -51,6 +51,44 @@ Preliminary smoke result (1 rep, 2026-09-04, default vs `plain`): UPDATE **1.41x
 INSERT 1.21x, READ 1.10x — direction consistent with the earlier medians, now measured inside a
 single window. Re-run with the default 3 reps before quoting final numbers.
 
+### Definitive paired A/B (3 reps, tuned vs plain — isolates NoEncryptMode)
+
+`--pk-ab` with `SHARPCOREDB_PK_AB_ARM_A=tuned` (full knob set, `NoEncryptMode=false`) vs
+`SHARPCOREDB_PK_AB_ARM_B=plain` (same set, `NoEncryptMode=true`). Same-window per-rep paired medians
+(2026-09-04):
+
+| phase | A `tuned` ops/s | B `plain` ops/s | median B/A |
+|---|---:|---:|---:|
+| UPDATE | 100,647 | 163,083 | **1.62x** |
+| DELETE | 87,251 | 105,932 | **1.59x** |
+| INSERT | 95,958 | 125,400 | **1.31x** |
+| READ | 58,742 | 71,768 | **1.45x** |
+
+`NoEncryptMode` alone is worth a uniform ~1.3-1.6x across every phase.
+
+## Root cause (code audit)
+
+`NoEncryptMode` is NOT only the per-record at-rest gate. In `Storage` there are two layers:
+
+1. **Per-record at-rest encryption** — `EnableAtRestRecordEncryption` (default false) gates
+   `UseRecordEncryption` for record payloads.
+2. **File-level encrypt/decrypt wrappers** — `Storage.noEncryption = !config.NoEncryptMode`
+   (Storage.Core) is used unconditionally by the whole-file/point read paths that run through
+   `Storage.ReadWrite` (`ReadBytes`/`WriteBytes`, `effectiveNoEncrypt = noEncrypt || noEncryption`)
+   and by the page-cache loader `Storage.PageCache.LoadPageFromDisk`. With the default
+   `NoEncryptMode=false`, every such read pays AES-GCM work even though per-record at-rest
+   encryption is off.
+
+That is why the fixed-width fast paths still "engage" (raw contiguous `ReadBytesRange` reads are
+plaintext and the counters fire) yet default-config throughput is ~1.3-1.6x lower on ALL phases:
+the DML resolution, point reads and page-cache reads around the fast paths still flow through the
+encrypting/decrypting wrappers. The paired A/B isolates exactly this flag.
+
+Follow-up candidates (only after a measured `--pk-ab` confirmation on each): route the hot
+resolution/scan reads through the same raw range path that already bypasses the wrappers, or make
+the file-level wrapper a no-op for the (default, at-rest-off) case without weakening real
+encryption when `EnableAtRestRecordEncryption` is on.
+
 ## Honest conclusion
 
 1. The earlier claim that the default `WalDurabilityMode.FullSync` dominates the gap is **wrong**
