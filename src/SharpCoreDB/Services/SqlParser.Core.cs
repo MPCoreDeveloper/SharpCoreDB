@@ -311,20 +311,19 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             // B8: direct hash-index point lookup for `WHERE indexed_col = @param|literal`. This
             // skips building a WHERE string and re-parsing it inside SelectInternal — the single
             // biggest overhead difference vs the Direct API (FindByIndex) on point reads.
-            if (TryResolveWhereValue(simple, parameters, out var whereValue) && whereValue is not null)
+            if (TryResolveWhereValue(simple, parameters, out var whereValue) &&
+                whereValue is not null &&
+                table is DataStructures.Table concrete &&
+                concrete.TrySelectIndexedPointLookup(simple.WhereColumn, whereValue, out var indexRows))
             {
-                if (table is DataStructures.Table concrete &&
-                    concrete.TrySelectIndexedPointLookup(simple.WhereColumn, whereValue, out var indexRows))
-                {
-                    if (simple.Offset.HasValue && simple.Offset.Value > 0)
-                        indexRows = [.. indexRows.Skip(simple.Offset.Value)];
+                if (simple.Offset.HasValue && simple.Offset.Value > 0)
+                    indexRows = [.. indexRows.Skip(simple.Offset.Value)];
 
-                    if (simple.Limit.HasValue && simple.Limit.Value > 0)
-                        indexRows = [.. indexRows.Take(simple.Limit.Value)];
+                if (simple.Limit.HasValue && simple.Limit.Value > 0)
+                    indexRows = [.. indexRows.Take(simple.Limit.Value)];
 
-                    results = concrete.DeduplicateByPrimaryKey(indexRows);
-                    return true;
-                }
+                results = concrete.DeduplicateByPrimaryKey(indexRows);
+                return true;
             }
 
             // Fallback: build the WHERE string exactly like the legacy binder and let the table
