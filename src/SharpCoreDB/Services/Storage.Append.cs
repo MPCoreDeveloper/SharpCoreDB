@@ -570,6 +570,10 @@ public partial class Storage
         !bufferedOverwrites.IsEmpty && bufferedOverwrites.ContainsKey(path);
 
     /// <inheritdoc />
+    public bool HasBufferedOverwriteAt(string path, long offset) =>
+        bufferedOverwrites.TryGetValue(path, out var overwrites) && overwrites.ContainsKey(offset);
+
+    /// <inheritdoc />
     public bool AreRecordsEncrypted(string path) => UseRecordEncryption && FileHasEncryptedHeader(path);
 
     /// <inheritdoc />

@@ -121,6 +121,15 @@ public interface IStorage
     bool HasBufferedOverwrite(string path) => false;
 
     /// <summary>
+    /// True when an in-place overwrite is currently buffered for exactly <paramref name="offset"/>
+    /// of <paramref name="path"/>. Used by whole-file row-resolution fast paths (DELETE/UPDATE) to
+    /// decide whether a disk snapshot slice of a position is fresh or must go through the
+    /// per-record read path (which honors the write-behind buffer). Defaults to false (mock/
+    /// alternative storages have no write-behind buffer to bypass).
+    /// </summary>
+    bool HasBufferedOverwriteAt(string path, long offset) => false;
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>
