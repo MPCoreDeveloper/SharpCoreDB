@@ -58,7 +58,7 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
             Assert.Single(row);
             Assert.Equal("beta", row[0]["name"]);
             Assert.Equal(2.5, Convert.ToDouble(row[0]["score"]));
-            Assert.Equal(false, Convert.ToBoolean(row[0]["flag"]));
+            Assert.False(Convert.ToBoolean(row[0]["flag"]));
 
             var all = db.ExecuteQuery("SELECT * FROM t ORDER BY id");
             Assert.Equal(2, all.Count);
