@@ -1,6 +1,6 @@
 # ── SharpCoreDB Server ──
 # Multi-stage build for .NET 10 production container
-# Image: sharpcoredb/server:1.5.0
+# Image: ghcr.io/mpcoredeveloper/sharpcoredb-server
 
 # ── Stage 1: Build ──
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -37,6 +37,7 @@ RUN dotnet publish src/SharpCoreDB.Server/SharpCoreDB.Server.csproj \
 
 # ── Stage 2: Runtime ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+ARG VERSION=2.0.0.2
 WORKDIR /app
 
 # Install runtime dependencies for health checks
@@ -47,7 +48,7 @@ RUN apt-get update && \
 # Labels
 LABEL maintainer="MPCoreDeveloper" \
       org.opencontainers.image.title="SharpCoreDB Server" \
-      org.opencontainers.image.version="1.5.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.description="SharpCoreDB network database server (gRPC + HTTPS)" \
       org.opencontainers.image.source="https://github.com/MPCoreDeveloper/SharpCoreDB"
 

@@ -1,0 +1,66 @@
+name: Docker
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/mpcoredeveloper/sharpcoredb-server
+
+jobs:
+  build-and-push:
+    name: Build & push SharpCoreDB server image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Compute image tags
+      id: meta
+      shell: pwsh
+      run: |
+        $version = if ("${{ github.ref_type }}" -eq 'tag') { "${{ github.ref_name }}".TrimStart('v') } else { "${{ github.sha }}".Substring(0, 7) }
+        $tags = @("${{ env.IMAGE_NAME }}:$version")
+        if ("${{ github.ref_type }}" -eq 'tag') {
+          $tags += "${{ env.IMAGE_NAME }}:latest"
+        }
+        Write-Host "Version: $version"
+        Write-Host "Tags: $($tags -join ', ')"
+        "version=$version" >> $env:GITHUB_OUTPUT
+        "tags=$($tags -join ',')" >> $env:GITHUB_OUTPUT
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: src/SharpCoreDB.Server/Dockerfile
+        push: true
+        platforms: linux/amd64, linux/arm64
+        tags: ${{ steps.meta.outputs.tags }}
+        build-args: |
+          VERSION=${{ steps.meta.outputs.version }}
+        labels: |
+          org.opencontainers.image.title=SharpCoreDB Server
+          org.opencontainers.image.description=SharpCoreDB network database server (gRPC + HTTPS)
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.revision=${{ github.sha }}

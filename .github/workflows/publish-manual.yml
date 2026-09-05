@@ -95,6 +95,7 @@ jobs:
 
         push_layer "Layer 0 (core)" \
           "SharpCoreDB.[0-9]*.nupkg" \
+          "SharpCoreDB.Aspire.Hosting.*.nupkg" \
           "SharpCoreDB.Client.Protocol.*.nupkg" \
           "SharpCoreDB.Server.Protocol.*.nupkg"
 

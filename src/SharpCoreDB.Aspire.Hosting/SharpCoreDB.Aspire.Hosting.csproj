@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Aspire.Hosting resolves a large transitive graph that does not participate in the
+         repo-wide central package version pinning. Central package management is disabled
+         for this project only (same approach as src/SharpCoreDB.AppHost). -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Assembly info -->
+    <AssemblyName>SharpCoreDB.Aspire.Hosting</AssemblyName>
+    <Version>2.0.0.2</Version>
+    <Description>.NET Aspire hosting integration for the SharpCoreDB network server</Description>
+
+    <!-- NuGet Package Properties -->
+    <PackageId>SharpCoreDB.Aspire.Hosting</PackageId>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Aspire.Hosting</Product>
+    <PackageTags>database;aspire;hosting;grpc;container;sharpcoredb;net10</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReleaseNotes>v2.0.0.2 (2026-09-05): first .NET Aspire hosting package for SharpCoreDB.Server - container image ghcr.io/mpcoredeveloper/sharpcoredb-server with HTTPS gRPC (5001) and HTTPS REST API (8443) endpoints. Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/ASPIRE_INTEGRATION.md</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Aspire hosting (matches SharpCoreDB.AppHost / Aspire.Hosting.AppHost 13.5.3). -->
+    <PackageReference Include="Aspire.Hosting" Version="13.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="NuGet.README.md" Pack="true" PackagePath="/" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Link="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

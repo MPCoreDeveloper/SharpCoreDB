@@ -32,6 +32,7 @@
     <File Path="docs/server/QUICKSTART.md" />
     <File Path="docs/server/REST_API.md" />
     <File Path="docs/server/SECURITY.md" />
+    <File Path="docs/server/ASPIRE_INTEGRATION.md" />
   </Folder>
   <Folder Name="/Examples/">
     <Project Path="Examples/SharpCoreDB.GraphRAG.AIAssistant/SharpCoreDB.GraphRAG.AIAssistant.csproj" />
@@ -92,6 +93,7 @@
   <Folder Name="/src/">
     <Project Path="src/SharpCoreDB.Analytics/SharpCoreDB.Analytics.csproj" />
     <Project Path="src/SharpCoreDB.AppHost/SharpCoreDB.AppHost.csproj" />
+    <Project Path="src/SharpCoreDB.Aspire.Hosting/SharpCoreDB.Aspire.Hosting.csproj" />
     <Project Path="src/SharpCoreDB.Client.Protocol/SharpCoreDB.Client.Protocol.csproj" />
     <Project Path="src/SharpCoreDB.Client/SharpCoreDB.Client.csproj" />
     <Project Path="src/SharpCoreDB.CQRS/SharpCoreDB.CQRS.csproj" />
