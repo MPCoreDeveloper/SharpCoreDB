@@ -1280,11 +1280,24 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 
                     if (completedTask == flushTask && await flushTask)
                     {
-                        // ✅ Flush signal received - process immediately
-                        while (_writeQueue.Reader.TryRead(out var op))
+                        // ✅ Flush signal received - process immediately. Dequeue + write atomically
+                        // under _writeBatchLock so a concurrent FlushPendingWritesAsync can never
+                        // pass its own lock barrier while this worker holds dequeued-but-unwritten
+                        // operations (Issue #400: the registry + fsync could be persisted before the
+                        // newest block version reached the file, so a reopen observed the previous
+                        // block version - 500 vs 499 rows on slow macOS/Linux/container runners).
+                        lock (_writeBatchLock)
                         {
-                            batch.Add(op);
-                            if (batch.Count >= WRITE_BATCH_SIZE) break;
+                            while (_writeQueue.Reader.TryRead(out var op))
+                            {
+                                batch.Add(op);
+                                if (batch.Count >= WRITE_BATCH_SIZE) break;
+                            }
+
+                            if (batch.Count > 0)
+                            {
+                                WriteBatchToDiskCoreLocked(batch);
+                            }
                         }
                     }
                     else
@@ -1297,23 +1310,30 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                             break;
                         }
 
-                        // Normal batch collection
-                        while (batch.Count < WRITE_BATCH_SIZE && _writeQueue.Reader.TryRead(out var op))
+                        // Normal batch collection + write (atomic under the lock, see above).
+                        lock (_writeBatchLock)
                         {
-                            batch.Add(op);
+                            while (batch.Count < WRITE_BATCH_SIZE && _writeQueue.Reader.TryRead(out var op))
+                            {
+                                batch.Add(op);
+                            }
+
+                            if (batch.Count > 0)
+                            {
+                                WriteBatchToDiskCoreLocked(batch);
+                            }
                         }
                     }
                 }
                 catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested)
                 {
-                    // Timeout reached - flush current batch
+                    // Timeout reached - SemaphoreSlim.WaitAsync returns false on timeout rather
+                    // than throwing, so this path only runs on real cancellation; loop re-checks.
                 }
 
-                if (batch.Count > 0)
-                {
-                    // ✅ Write batch to disk (single I/O operation)
-                    await WriteBatchToDiskAsync(batch, _writeCts.Token).ConfigureAwait(false);
-                }
+                // Hand buffered data to the OS (outside the lock for better concurrency).
+                await _fileStream.FlushAsync(_writeCts.Token).ConfigureAwait(false);
+                await Task.Yield(); // ✅ Allow other work between batches
             }
         }
         catch (OperationCanceledException)
@@ -1322,113 +1342,95 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         }
         finally
         {
-            // ✅ Flush remaining writes before shutdown
-            while (_writeQueue.Reader.TryRead(out var op))
+            // ✅ Flush remaining writes before shutdown (atomic dequeue + write).
+            lock (_writeBatchLock)
             {
-                batch.Add(op);
-            }
+                while (_writeQueue.Reader.TryRead(out var op))
+                {
+                    batch.Add(op);
+                }
 
-            if (batch.Count > 0)
-            {
-                await WriteBatchToDiskAsync(batch, CancellationToken.None).ConfigureAwait(false);
+                if (batch.Count > 0)
+                {
+                    WriteBatchToDiskCoreLocked(batch);
+                }
             }
         }
     }
 
     /// <summary>
-    /// ✅ C# 14: Writes a batch of operations to disk with sequential I/O.
-    /// ✅ Phase 2 Fix: Coalesces overlapping writes to same block for 95% I/O reduction.
-    /// Sorts operations by offset for optimal disk access patterns.
-    /// Phase 3.1: Uses async flush for better performance.
-    /// Phase 3.3: Uses Span for zero-copy writes.
+    /// Coalesces a batch of write operations and performs the physical data writes plus the
+    /// in-memory registry/cache update.
+    /// MUST be called while holding <see cref="_writeBatchLock"/>; performs only synchronous I/O
+    /// so the caller can make (dequeue + write) atomic with respect to FlushPendingWritesAsync.
+    /// Issue #400: keeping the dequeued operations and their disk write inside one lock scope
+    /// closes the reopen race where the newest block version was dequeued by the worker but not
+    /// yet written when a flush persisted the registry and fsynced (500 vs 499 rows on slow
+    /// macOS/Linux/container runners).
     /// </summary>
-    private async Task WriteBatchToDiskAsync(List<WriteOperation> batch, CancellationToken cancellationToken)
+    private void WriteBatchToDiskCoreLocked(List<WriteOperation> batch)
     {
         if (batch.Count == 0) return;
 
         // ✅ Phase 2 Fix: Coalesce overlapping writes to same block
         using var coalescedBuffer = new CoalescedWriteBuffer(_header.PageSize);
-        
+
         foreach (var op in batch)
         {
             // Add each write to the coalescing buffer
             coalescedBuffer.AddFullBlockWrite(op.BlockName, op.Data.AsSpan(), op.Entry);
         }
-        
+
         var coalescedWrites = coalescedBuffer.GetCoalescedWrites();
-        
-        #if DEBUG
-        var originalWriteCount = batch.Count;
-        var coalescedCount = coalescedWrites.Count;
-        if (originalWriteCount > coalescedCount)
-        {
-            Console.WriteLine($"[Phase 2] Coalesced {originalWriteCount} writes into {coalescedCount} blocks (saved {originalWriteCount - coalescedCount} I/O operations)");
-        }
-        #endif
 
         // ✅ Sort coalesced writes by offset for sequential I/O (reduces disk seeks)
         coalescedWrites.Sort((a, b) => a.Entry.Offset.CompareTo(b.Entry.Offset));
 
-        // ✅ Write all coalesced operations sequentially within a lock, then update the
-        // registry + cache under the SAME lock. Keeping (data write + registry update)
-        // atomic guarantees consistency even when the async flush below is cancelled
-        // during Dispose (previously the registry update was skipped -> block lost /
-        // data/registry mismatch on reopen). Issue #345.
-        lock (_writeBatchLock)
+        // Write all coalesced operations sequentially, then update the registry + cache. Keeping
+        // (data write + registry update) atomic under the caller-held lock guarantees consistency
+        // even when the async flush is cancelled during Dispose (previously the registry update was
+        // skipped -> block lost / data/registry mismatch on reopen). Issue #345.
+        foreach (var coalesced in coalescedWrites)
         {
-            foreach (var coalesced in coalescedWrites)
+            if (coalesced.IsFullBlock)
             {
-                if (coalesced.IsFullBlock)
-                {
-                    // Full block write - write entire data
-                    _fileStream.Position = (long)coalesced.Entry.Offset;
-                    _fileStream.Write(coalesced.Data.AsSpan());
-                }
-                else
-                {
-                    // ✅ Delta update - write only dirty ranges (95% I/O reduction!)
-                    foreach (var (offset, length) in coalesced.DirtyRanges)
-                    {
-                        var absoluteOffset = coalesced.Entry.Offset + (ulong)offset;
-                        _fileStream.Position = (long)absoluteOffset;
-                        _fileStream.Write(coalesced.Data.AsSpan((int)offset, length));
-                    }
-                    
-                    #if DEBUG
-                    Console.WriteLine($"[Phase 2] Delta-update '{coalesced.BlockName}': {coalesced.TotalBytesToWrite} bytes written (of {coalesced.Data.Length} total, {coalesced.IoReductionRatio:P0} I/O reduction)");
-                    #endif
-                }
+                // Full block write - write entire data
+                _fileStream.Position = (long)coalesced.Entry.Offset;
+                _fileStream.Write(coalesced.Data.AsSpan());
             }
-
-            // Update registry + cache (fast, in-memory) under the same lock so the
-            // on-disk data and the registry entry can never diverge.
-            foreach (var coalesced in coalescedWrites)
+            else
             {
-                _blockRegistry.AddOrUpdateBlock(coalesced.BlockName, coalesced.Entry);
-
-                // Compute checksum for cache
-                var checksum = SHA256.HashData(coalesced.Data);
-                
-                _blockCache[coalesced.BlockName] = new BlockMetadata
+                // ✅ Delta update - write only dirty ranges (95% I/O reduction!)
+                foreach (var (offset, length) in coalesced.DirtyRanges)
                 {
-                    Name = coalesced.BlockName,
-                    BlockType = coalesced.Entry.BlockType,
-                    Size = (long)coalesced.Entry.Length,
-                    Offset = (long)coalesced.Entry.Offset,
-                    Checksum = checksum,
-                    IsEncrypted = _options.EnableEncryption,
-                    IsDirty = (coalesced.Entry.Flags & (uint)BlockFlags.Dirty) != 0,
-                    LastModified = DateTime.UtcNow,
-                };
+                    var absoluteOffset = coalesced.Entry.Offset + (ulong)offset;
+                    _fileStream.Position = (long)absoluteOffset;
+                    _fileStream.Write(coalesced.Data.AsSpan((int)offset, length));
+                }
             }
         }
 
-        // ✅ Phase 3: Async flush outside lock for better concurrency.
-        // The data + registry are already updated above, so a cancellation here
-        // (e.g. during Dispose) does not lose the block.
-        await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        // Update registry + cache (fast, in-memory) so the on-disk data and the registry entry can
+        // never diverge.
+        foreach (var coalesced in coalescedWrites)
+        {
+            _blockRegistry.AddOrUpdateBlock(coalesced.BlockName, coalesced.Entry);
 
-        await Task.Yield(); // ✅ Allow other work between batches
+            // Compute checksum for cache
+            var checksum = SHA256.HashData(coalesced.Data);
+
+            _blockCache[coalesced.BlockName] = new BlockMetadata
+            {
+                Name = coalesced.BlockName,
+                BlockType = coalesced.Entry.BlockType,
+                Size = (long)coalesced.Entry.Length,
+                Offset = (long)coalesced.Entry.Offset,
+                Checksum = checksum,
+                IsEncrypted = _options.EnableEncryption,
+                IsDirty = (coalesced.Entry.Flags & (uint)BlockFlags.Dirty) != 0,
+                LastModified = DateTime.UtcNow,
+            };
+        }
     }
 
 
@@ -1486,26 +1488,37 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
         // (No fixed delay — the drain loop below handles any remaining items)
         await Task.Yield();
 
-        // ✅ Drain the queue by reading all pending operations (non-blocking)
-        List<WriteOperation> pendingOps = [];
-        while (_writeQueue.Reader.TryRead(out var op))
-        {
-            pendingOps.Add(op);
-        }
-
-        // ✅ Write remaining operations immediately (bypasses batch timeout)
-        if (pendingOps.Count > 0)
-        {
-            await WriteBatchToDiskAsync(pendingOps, cancellationToken).ConfigureAwait(false);
-        }
-
-        // ✅ Synchronize with the background worker: it may have dequeued operations
-        // concurrently with our drain and be mid-batch. Since the worker holds
-        // _writeBatchLock across (data write + registry update), acquiring it here
-        // guarantees any in-flight batch has fully completed before we flush / return.
+        // ✅ Drain the queue AND write under ONE _writeBatchLock scope. The write-behind worker
+        // also dequeues + writes under the same lock, so acquiring it here guarantees that when we
+        // release it every operation that was enqueued before this flush began has been physically
+        // written and reflected in the in-memory registry. Issue #400: previously the flush drained
+        // the queue, wrote it, and then re-acquired the lock as a barrier - but the worker could
+        // dequeue the newest operations into its local batch in between, so the barrier passed
+        // while the newest block version was still unwritten. The registry flush + fsync that
+        // followed then persisted a stale view of the file, so a reopen could observe the previous
+        // block version (500 vs 499 rows) on slow macOS/Linux/container filesystems.
+        bool wroteBatch;
         lock (_writeBatchLock)
         {
+            List<WriteOperation> pendingOps = [];
+            while (_writeQueue.Reader.TryRead(out var op))
+            {
+                pendingOps.Add(op);
+            }
+
+            wroteBatch = pendingOps.Count > 0;
+            if (wroteBatch)
+            {
+                WriteBatchToDiskCoreLocked(pendingOps);
+            }
+
             Thread.MemoryBarrier(); // intentional: drain waits for the in-flight batch
+        }
+
+        // Hand buffered data to the OS before persisting the registry / fsyncing below.
+        if (wroteBatch)
+        {
+            await _fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (flushToDisk)
