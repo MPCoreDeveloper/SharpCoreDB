@@ -33,6 +33,7 @@ In server mode, SharpCoreDB runs as a network service instead of an in-process e
 - **Linux systemd:** `installers/linux/install.sh`
 - **macOS launchd:** `installers/macos/install.sh`
 - **Docker:** `src/SharpCoreDB.Server/docker-compose.yml`
+- **.NET Aspire:** `ASPIRE_INTEGRATION.md` — `SharpCoreDB.Aspire.Hosting` package + server container image
 
 For complete production installation instructions, see `INSTALLATION.md`.
 

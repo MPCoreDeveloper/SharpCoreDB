@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Analytics" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="SharpCoreDB.Aspire.Hosting" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Client" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Client.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.CQRS" Version="$(SharpCoreDBVersion)" />
@@ -30,6 +31,7 @@
     <PackageVersion Include="SharpCoreDB.Server.Core" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.5.3" />
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
     <PackageVersion Include="AngleSharp" Version="1.7.2" />
     <PackageVersion Include="AWSSDK.Core" Version="4.0.102.1" />
