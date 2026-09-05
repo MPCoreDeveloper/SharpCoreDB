@@ -554,15 +554,27 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
-    /// Rebuilds the Primary Key B-Tree index from disk by scanning all rows in the data file.
+    /// Rebuilds the Primary Key B-Tree index from disk by scanning all rows in the data file
+    /// (or the storage engine's page files for PageBased tables).
     /// ✅ CRITICAL FIX: Properly handles multi-version rows by keeping the latest position (highest offset).
     /// ✅ COLLATE Phase 4: Initializes BTree with primary key column collation.
+    /// ✅ Issue #404: PageBased tables store their rows inside the engine's page files (.pages),
+    /// not in <see cref="DataFile"/> as length-prefixed records, so the index is rebuilt from the
+    /// engine's record enumeration. Without this branch the PK index stayed empty after a reopen
+    /// and FindByPrimaryKey returned null for every row even though Select() saw all of them.
     /// </summary>
     public void RebuildPrimaryKeyIndexFromDisk()
     {
         if (PrimaryKeyIndex < 0)
         {
             return; // No primary key, nothing to rebuild
+        }
+
+        // PageBased: rows live in engine-managed page files; rebuild through the storage engine.
+        if (StorageMode == StorageMode.PageBased)
+        {
+            RebuildPageBasedPrimaryKeyIndexFromDisk();
+            return;
         }
 
         if (storage == null)
@@ -597,48 +609,7 @@ public partial class Table : ITable, IDisposable
             // Parse just enough to get the primary key value
             try
             {
-                string? pkStr = null;
-
-                if (_fixedWidthRecords)
-                {
-                    // Fixed-width layout: variable columns reference the overflow arena, so the
-                    // record must be deserialized through the fixed-width codec (a raw walk would
-                    // misread the 5-byte variable slots as length-prefixed values).
-                    var fwRow = DeserializeRowFixedWidth(recordData.AsSpan());
-                    if (fwRow.TryGetValue(Columns[PrimaryKeyIndex], out var fwPk) && fwPk is not null)
-                    {
-                        pkStr = fwPk.ToString();
-                    }
-                }
-                else
-                {
-                    var row = new Dictionary<string, object>();
-                    int offset = 0;
-
-                    for (int i = 0; i < Columns.Count; i++)
-                    {
-                        if (offset >= recordData.Length)
-                        {
-                            break;
-                        }
-
-                        var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
-
-                        // Only store PK column, we don't need the rest for index rebuild
-                        if (i == PrimaryKeyIndex)
-                        {
-                            row[Columns[i]] = value;
-                        }
-
-                        offset += bytesRead;
-                    }
-
-                    // Extract PK value
-                    if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
-                    {
-                        pkStr = pkValue.ToString() ?? string.Empty;
-                    }
-                }
+                var pkStr = ExtractPrimaryKeyStringFromRecord(recordData);
 
                 if (pkStr is not null)
                 {
@@ -666,6 +637,115 @@ public partial class Table : ITable, IDisposable
 #if DEBUG
         System.Diagnostics.Debug.WriteLine($"[RebuildPrimaryKeyIndexFromDisk] ✅ Indexed {recordsIndexed} records");
 #endif
+    }
+
+    /// <summary>
+    /// Rebuilds the Primary Key B-Tree index for a PageBased table from the storage engine's
+    /// records. PageBased rows are stored in engine-managed page files (.pages), so this method
+    /// enumerates them through <see cref="GetOrCreateStorageEngine"/> instead of parsing
+    /// <see cref="DataFile"/> as length-prefixed records. The B-tree stores the engine storage
+    /// reference (encoded page + slot), which is exactly what <c>FindByPrimaryKey</c> resolves
+    /// through <c>IStorageEngine.Read</c>.
+    /// ✅ Issue #404: fixes FindByPrimaryKey returning null after reopen for PageBased tables.
+    /// </summary>
+    private void RebuildPageBasedPrimaryKeyIndexFromDisk()
+    {
+        var pkCollation = PrimaryKeyIndex < ColumnCollations.Count
+            ? ColumnCollations[PrimaryKeyIndex]
+            : CollationType.Binary;
+
+        // Clear existing index and initialize with collation
+        Index = new BTree<string, long>(pkCollation);
+
+        var engine = GetOrCreateStorageEngine();
+
+        int recordsIndexed = 0;
+        foreach (var (storageReference, recordData) in engine.GetAllRecords(Name))
+        {
+            // Parse just enough to get the primary key value
+            try
+            {
+                var pkStr = ExtractPrimaryKeyStringFromRecord(recordData);
+                if (pkStr is not null)
+                {
+                    // PageBased UPDATE/DELETE keep the storage reference up to date (in-place or
+                    // page-local relocation), so each PK maps to exactly one live record. If the
+                    // same PK is ever seen twice, keep the latest reference for consistency.
+                    var existing = Index.Search(pkStr);
+                    if (!existing.Found)
+                    {
+                        Index.Insert(pkStr, storageReference);
+                        recordsIndexed++;
+                    }
+                    else
+                    {
+                        Index.Delete(pkStr);
+                        Index.Insert(pkStr, storageReference);
+                    }
+                }
+            }
+            catch
+            {
+                // Skip corrupted records
+            }
+        }
+
+#if DEBUG
+        System.Diagnostics.Debug.WriteLine($"[RebuildPageBasedPrimaryKeyIndexFromDisk] ✅ Indexed {recordsIndexed} records for table: {Name}");
+#endif
+    }
+
+    /// <summary>
+    /// Extracts the primary key column value from a serialized record as the B-tree key string.
+    /// Handles both the variable-length layout and the fixed-width (+ overflow arena) layout.
+    /// Returns null when the record is malformed or the PK column value is missing.
+    /// </summary>
+    private string? ExtractPrimaryKeyStringFromRecord(byte[] recordData)
+    {
+        string? pkStr = null;
+
+        if (_fixedWidthRecords)
+        {
+            // Fixed-width layout: variable columns reference the overflow arena, so the
+            // record must be deserialized through the fixed-width codec (a raw walk would
+            // misread the 5-byte variable slots as length-prefixed values).
+            var fwRow = DeserializeRowFixedWidth(recordData.AsSpan());
+            if (fwRow.TryGetValue(Columns[PrimaryKeyIndex], out var fwPk) && fwPk is not null)
+            {
+                pkStr = fwPk.ToString();
+            }
+        }
+        else
+        {
+            var row = new Dictionary<string, object>();
+            int offset = 0;
+
+            for (int i = 0; i < Columns.Count; i++)
+            {
+                if (offset >= recordData.Length)
+                {
+                    break;
+                }
+
+                var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
+
+                // Only store PK column, we don't need the rest for index rebuild
+                if (i == PrimaryKeyIndex)
+                {
+                    row[Columns[i]] = value;
+                }
+
+                offset += bytesRead;
+            }
+
+            // Extract PK value
+            if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
+            {
+                pkStr = pkValue.ToString() ?? string.Empty;
+            }
+        }
+
+        return pkStr;
     }
 
     /// <summary>
