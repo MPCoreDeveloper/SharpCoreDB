@@ -31,30 +31,30 @@
     <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
-    <PackageVersion Include="AngleSharp" Version="1.7.2" />
-    <PackageVersion Include="AWSSDK.Core" Version="4.0.102.1" />
+    <PackageVersion Include="AngleSharp" Version="1.8.0" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.102.3" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.15.8" />
-    <PackageVersion Include="BLite" Version="5.0.9" />
+    <PackageVersion Include="BLite" Version="5.1.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <PackageVersion Include="Dotmim.Sync.Core" Version="1.3.0" />
     <PackageVersion Include="Dotmim.Sync.Sqlite" Version="1.3.0" />
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.0" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.2" />
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
     <PackageVersion Include="FluentMigrator" Version="8.0.1" />
     <PackageVersion Include="FluentMigrator.Runner" Version="8.0.1" />
     <PackageVersion Include="FluentMigrator.Runner.Core" Version="8.0.1" />
     <PackageVersion Include="FluentMigrator.Runner.SQLite" Version="8.0.1" />
-    <PackageVersion Include="Google.Protobuf" Version="3.36.0" />
+    <PackageVersion Include="Google.Protobuf" Version="3.36.1" />
     <PackageVersion Include="Grpc.AspNetCore" Version="2.83.0" />
     <PackageVersion Include="Grpc.AspNetCore.Server.Reflection" Version="2.83.0" />
     <PackageVersion Include="Grpc.Core.Api" Version="2.83.0" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.83.0" />
     <PackageVersion Include="Grpc.Tools" Version="2.83.0" />
-    <PackageVersion Include="HtmlSanitizer" Version="9.2.995" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
     <PackageVersion Include="KubernetesClient" Version="19.0.2" />
     <PackageVersion Include="LiteDB" Version="5.0.21" />
     <PackageVersion Include="linq2db" Version="6.4.0" />
@@ -96,7 +96,7 @@
     <!-- MTP coverage module for xunit.v3 test hosts on .NET 10.
          Required because the VSTest collects flow used by the old dotnet test path is no
          longer supported by MTP on .NET 10+; CI runs the MTP test host directly. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
