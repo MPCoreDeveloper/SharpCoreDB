@@ -35,4 +35,4 @@ jobs:
         dotnet-quality: 'preview'
 
     - name: Submit dependencies
-      uses: advanced-security/component-detection-dependency-submission-action@v0.1.4
+      uses: advanced-security/component-detection-dependency-submission-action@v0.1.6
