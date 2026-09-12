@@ -55,12 +55,8 @@ internal static class BlockCompressor
     {
         BlockCompressionMode.Brotli => new BrotliStream(output, level, leaveOpen: false),
         BlockCompressionMode.GZip => new GZipStream(output, level, leaveOpen: false),
-#if NET11_0_OR_GREATER
-        BlockCompressionMode.Zstd => new ZstandardStream(output, level, leaveOpen: false),
-#else
         BlockCompressionMode.Zstd => throw new PlatformNotSupportedException(
-            "Zstd compression requires .NET 11 or later. Current runtime: " + Environment.Version),
-#endif
+            "Zstd compression is not available in the current .NET runtime (System.IO.Compression does not ship a Zstandard stream yet)."),
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 
@@ -68,12 +64,8 @@ internal static class BlockCompressor
     {
         BlockCompressionMode.Brotli => new BrotliStream(input, CompressionMode.Decompress, leaveOpen: false),
         BlockCompressionMode.GZip => new GZipStream(input, CompressionMode.Decompress, leaveOpen: false),
-#if NET11_0_OR_GREATER
-        BlockCompressionMode.Zstd => new ZstandardStream(input, CompressionMode.Decompress, leaveOpen: false),
-#else
         BlockCompressionMode.Zstd => throw new PlatformNotSupportedException(
-            "Zstd decompression requires .NET 11 or later. Current runtime: " + Environment.Version),
-#endif
+            "Zstd decompression is not available in the current .NET runtime (System.IO.Compression does not ship a Zstandard stream yet)."),
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 
