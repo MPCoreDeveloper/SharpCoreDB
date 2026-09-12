@@ -5,9 +5,15 @@ name: CI v2.1 Preview (.NET 11)
 
 on:
   push:
-    branches: [ release/v2.1.0.0-preview.1 ]
+    branches: [ 'release/v2.1.0.0-*' ]
   pull_request:
-    branches: [ release/v2.1.0.0-preview.1 ]
+    branches: [ 'release/v2.1.0.0-*' ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual publish'
+        required: false
+        default: 'Manual v2.1 RC publish'
 
 permissions:
   contents: read
@@ -71,3 +77,45 @@ jobs:
       env:
         CI: "true"
         GITHUB_ACTIONS: "true"
+
+  # Manual publish to NuGet.org (only via workflow_dispatch, using the repo's
+  # NUGET_API_KEY secret). Packs the net10.0;net11.0 core at the version pinned in the csproj.
+  publish:
+    name: Pack + Publish to NuGet.org
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Setup .NET 11 (RC)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '11.0.100-rc.1'
+        include-prerelease: true
+
+    - name: Pack SharpCoreDB core
+      run: dotnet pack src/SharpCoreDB/SharpCoreDB.csproj --configuration Release --output ./artifacts --configfile NuGet.Config
+
+    - name: Push to NuGet.org
+      shell: bash
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        set -euo pipefail
+        for pkg in ./artifacts/SharpCoreDB.*.nupkg; do
+          [ -f "$pkg" ] || continue
+          echo "  Pushing $(basename "$pkg")"
+          dotnet nuget push "$pkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        done
