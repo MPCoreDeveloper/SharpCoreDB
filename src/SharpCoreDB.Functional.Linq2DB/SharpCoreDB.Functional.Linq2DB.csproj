@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
 
     <PackageId>SharpCoreDB.Functional.Linq2DB</PackageId>
-    <Version>2.0.0.2</Version>
+    <Version>2.0.0.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Functional.Linq2DB</Product>
     <Description>Production-ready linq2db adapter for SharpCoreDB.Functional. Zero-dependency Option/Fin/Seq APIs, compile-time LINQ safety, BulkCopy batching, full type mappings (ULID/GUID), and low-overhead queries. Perfect for AI/agentic and GraphRAG workloads on .NET 10 / C# 14.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.0.0.3 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
     <PackageTags>sharpcoredb;functional;linq2db;linq;option;fin;net10;csharp14;aot</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
@@ -49,3 +49,4 @@
   </ItemGroup>
 
 </Project>
+

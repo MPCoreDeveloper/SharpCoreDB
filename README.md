@@ -26,17 +26,17 @@ Use it when you need:
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
 - A production-focused stack validated by a **1,777-test core suite** (0 failed; plus CQRS, VectorSearch, EF Core and Linq2DB suites) and **backward compatibility**
 
-> **Current release: v2.0.0.2 (2026-09-04)** — the v2.x engine line: fixed-width record layout is the
-> default for new PK tables, UPDATE/DELETE run in-place with commit-time tombstones, and a reopen
-> data-integrity hardening batch closed silent-data-loss edge cases (empty-value overflow reload,
-> single-file fixed-width arena markers, legacy 1.x delete-after-update purge).
+> **Current release: v2.0.0.3 (2026-09-12)** — maintenance release on the v2.x engine line:
+> 13 SonarCloud cognitive-complexity refactors (behavior unchanged) and a NuGet dependency update
+> batch (Microsoft.* 10.0.12 servicing, Dapper, linq2db, Identity.Client, Test.Sdk). No API or
+> storage-format changes; benchmark-verified no regression (INSERT 187K ops/s, READ 178K ops/s).
 >
 > **Performance (fair-PK, median-of-3, tuned harness):** UPDATE **~163–245K ops/s**, DELETE
 > **~106–172K ops/s**, INSERT **~125–152K ops/s**, READ **~72–110K ops/s** (SQLite reference:
 > UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K, READ ~95–107K). Honest default-config
 > caveat: the pure default config runs ~1.3–1.6x slower because the file-level wrapper still pays
 > AES work while per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full
-> report: [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
+> report: [`docs/2.0.0.3_WHAT_CHANGED.md`](docs/2.0.0.3_WHAT_CHANGED.md) and
 > [`docs/benchmarks/default-config-pk.md`](docs/benchmarks/default-config-pk.md).
 
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**

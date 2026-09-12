@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>2.0.0.2</Version>
+    <Version>2.0.0.3</Version>
     <LangVersion>14.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -69,4 +69,5 @@
   </ItemGroup>
 
 </Project>
+
 

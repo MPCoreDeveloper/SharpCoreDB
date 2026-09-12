@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [2.0.0.3] - 2026-09-12
+
+> Maintenance release after 2.0.0.2: code-quality refactors and dependency updates **only** — no
+> public-API changes, no storage-format changes, no behavior changes. Full notes:
+> [`docs/2.0.0.3_WHAT_CHANGED.md`](2.0.0.3_WHAT_CHANGED.md).
+
+### Maintenance
+
+- **SonarCloud cognitive-complexity quick wins (S3776)** — 13 methods refactored across `BTree.cs`,
+  `HashIndex.cs`, `Table.CRUD.cs`, `Table.Serialization.cs`, `Table.cs`,
+  `Table.FixedWidthMigration.cs`, `Storage.Append.cs`, `ColumnStore.Aggregates.cs` and the
+  comparative-benchmark harness (method extraction only — behavior unchanged, **1679 tests green**).
+- **NuGet dependency updates** — Microsoft.* servicing train to **10.0.12** (AspNetCore,
+  EF Core, Extensions.*, Data.Sqlite, ObjectPool, PerformanceCounter), Dapper **2.1.86**,
+  linq2db **6.5.0**, Microsoft.Identity.Client **4.89.0**, Microsoft.NET.Test.Sdk **18.10.0**,
+  Microsoft.Testing.Extensions.CodeCoverage **18.11.2**, Microsoft.SourceLink.GitHub **10.0.401**,
+  SharpDispatch **1.0.2**.
+- **Benchmark verification (no regression)** — INSERT **187K ops/s** (Direct), READ **178K ops/s**,
+  fair-PK UPDATE/DELETE consistent with the 2.0.0.2 baseline (fixed-width UPDATE ~237K ops/s).
+
 ## [2.0.0.2] - 2026-09-04
 
 > Full release notes incl. the 2.x-vs-1.9.x major steps: [`docs/2.0.0.2_WHAT_CHANGED.md`](2.0.0.2_WHAT_CHANGED.md).

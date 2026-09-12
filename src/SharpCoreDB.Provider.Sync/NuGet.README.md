@@ -1,11 +1,11 @@
-# SharpCoreDB.Provider.Sync v2.0.0.2
+# SharpCoreDB.Provider.Sync v2.0.0.3
 
 **Dotmim.Sync Provider for SharpCoreDB**
 
 Bidirectional synchronization with SQL Server, PostgreSQL, MySQL, and SQLite - Phase 10.1 complete with enterprise conflict resolution.
 
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+## Patch updates in v1.9.5 (archived; current release 2.0.0.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -80,6 +80,7 @@ dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.0
 ---
 
 **Version:** 1.9.5 | **Status:** ✅ Production Ready | **Phase:** 10.1 Complete
+
 
 
 

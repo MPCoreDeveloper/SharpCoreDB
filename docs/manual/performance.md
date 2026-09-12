@@ -1,6 +1,6 @@
 # 7. Performance Guide
 
-> **The headline:** SharpCoreDB v2.0.0.2 is the current *performance-first* release on the v2.x
+> **The headline:** SharpCoreDB v2.0.0.3 is the current *performance-first* release on the v2.x
 > engine line. The v1.x benchmark gap (point reads/updates/deletes ~16–52x behind SQLite) is
 > closed: on the fair-PK harness (median-of-3, tuned config) **UPDATE is ~0.8–1.7x of SQLite,
 > INSERT is competitive, and DELETE ~2.1–3.5x** — see §7.1 for the current table.
@@ -8,15 +8,15 @@
 > This chapter explains **when SharpCoreDB is fastest**, how to write code that gets there, and —
 > honestly — where SQLite is still ahead (and why). Run the current fair-PK numbers yourself with
 > `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release, `--pk`), or use the published
-> `docs/2.0.0.2_WHAT_CHANGED.md` / `docs/benchmarks/default-config-pk.md` results.
+> `docs/2.0.0.3_WHAT_CHANGED.md` / `docs/benchmarks/default-config-pk.md` results.
 
 ---
 
-## 7.1 The current v2.0.0.2 numbers (fair-PK harness)
+## 7.1 The current v2.0.0.3 numbers (fair-PK harness)
 
 Harness: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` fair-PK mode (`--pk`, median of 3
 runs), fixed-width Columnar fast path, ascending-PK batches. Methodology and SQLite reference:
-`docs/2.0.0.2_WHAT_CHANGED.md` and `docs/benchmarks/default-config-pk.md`.
+`docs/2.0.0.3_WHAT_CHANGED.md` and `docs/benchmarks/default-config-pk.md`.
 
 | Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
 |---|---:|---:|---:|

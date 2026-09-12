@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
 
     <PackageId>SharpCoreDB.Functional.EntityFrameworkCore</PackageId>
-    <Version>2.0.0.2</Version>
+    <Version>2.0.0.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Functional.EntityFrameworkCore</Product>
     <Description>Entity Framework Core adapter for SharpCoreDB.Functional with zero-dependency Option/Fin APIs and fluent functional composition for .NET 10 and C# 14.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.0.0.3 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
     <PackageTags>sharpcoredb;functional;entityframeworkcore;efcore;option;fin;net10;csharp14</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
@@ -50,6 +50,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

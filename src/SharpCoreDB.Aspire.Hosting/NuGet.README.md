@@ -10,7 +10,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var db = builder.AddSharpCoreDB("db")
     .WithServerContainer()
-    .WithImageTag("2.0.0.2")
+    .WithImageTag("2.0.0.3")
     .WithJwtSecret("replace-with-a-secret-of-at-least-32-characters");
 
 builder.Build().Run();
@@ -45,3 +45,4 @@ certificate in the consuming app, or connect over the Aspire network with certif
 validation disabled for the `grpc` endpoint. See
 [docs/server/ASPIRE_INTEGRATION.md](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/ASPIRE_INTEGRATION.md)
 for the full guide.
+

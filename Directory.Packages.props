@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <SharpCoreDBVersion>2.0.0.2</SharpCoreDBVersion>
+    <SharpCoreDBVersion>2.0.0.3</SharpCoreDBVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="SharpCoreDB" Version="$(SharpCoreDBVersion)" />
@@ -122,3 +122,4 @@
     <PackageVersion Include="YesSql.Provider.Sqlite" Version="6.0.0" />
   </ItemGroup>
 </Project>
+

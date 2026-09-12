@@ -1,11 +1,11 @@
-# SharpCoreDB.Data.Provider v2.0.0.2
+# SharpCoreDB.Data.Provider v2.0.0.3
 
 **ADO.NET Data Provider for SharpCoreDB**
 
 Complete ADO.NET provider enabling standard database connectivity patterns with SharpCoreDB's encryption and performance.
 
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+## Patch updates in v1.9.5 (archived; current release 2.0.0.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -66,6 +66,7 @@ dotnet add package SharpCoreDB.Data.Provider --version 2.0.0.0
 ---
 
 **Version:** 1.9.5 | **Status:** ✅ Production Ready
+
 
 
 

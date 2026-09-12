@@ -16,7 +16,7 @@
 
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Aspire.Hosting</AssemblyName>
-    <Version>2.0.0.2</Version>
+    <Version>2.0.0.3</Version>
     <Description>.NET Aspire hosting integration for the SharpCoreDB network server</Description>
 
     <!-- NuGet Package Properties -->
@@ -33,7 +33,7 @@
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-05): first .NET Aspire hosting package for SharpCoreDB.Server - container image ghcr.io/mpcoredeveloper/sharpcoredb-server with HTTPS gRPC (5001) and HTTPS REST API (8443) endpoints. Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/ASPIRE_INTEGRATION.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.0.0.3 (2026-09-05): first .NET Aspire hosting package for SharpCoreDB.Server - container image ghcr.io/mpcoredeveloper/sharpcoredb-server with HTTPS gRPC (5001) and HTTPS REST API (8443) endpoints. Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/server/ASPIRE_INTEGRATION.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -54,3 +54,4 @@
   </ItemGroup>
 
 </Project>
+

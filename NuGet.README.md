@@ -35,16 +35,16 @@
 
 ```bash
 # Install SharpCoreDB core
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.0.0.3
 
 # Install graph extensions
-dotnet add package SharpCoreDB.Graph --version 2.0.0
+dotnet add package SharpCoreDB.Graph --version 2.0.0.3
 
 # Install advanced analytics (includes GraphRAG)
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.3
 
 # Optional: Vector search for GraphRAG
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.3
 ```
 
 **Requirements:**
@@ -344,4 +344,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 **Documentation**: [docs/](docs/)  
 **Examples**: [docs/examples/](docs/examples/)  
 **API Reference**: [docs/api/](docs/api/)
+
 
