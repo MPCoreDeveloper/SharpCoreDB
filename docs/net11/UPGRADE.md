@@ -49,7 +49,7 @@ List<string> names = Net11Additions.NewList<string>(128); // collection-expressi
 
 | Item | Reason |
 |---|---|
-| **Union types** | Available in the C# 15 preview compiler, but the syntax is still stabilizing; will be designed as a new opt-in namespace (never retrofitted onto existing result types). |
+| **Union types** | Verified working in RC1 (`union` keyword + `[Union]`/`IUnion`); blueprint ready in `docs/net11/UNION_TYPES_DESIGN.md`. Held back from shipping until the preview syntax stabilizes at GA; will live in a new opt-in `SharpCoreDB.Unions` namespace (never retrofitted onto existing result types). |
 | **SIMD Zip / Unzip / Concat / CreateGeometricSequence** | Not applied yet — needs benchmarking against the existing `SimdHelper` AVX-512 → AVX2 → SSE/Neon kernels first. |
 | **Broad `[with(capacity: …)]` rewrites** | Would require `#if` gating across shared hot-path code; only exposed via the net11-only helper for now. |
 
