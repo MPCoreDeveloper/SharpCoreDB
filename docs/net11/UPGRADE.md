@@ -25,9 +25,12 @@ The v2.1 preview is built from current `master` and multi-targets:
 - On **net10.0**, `Zstd` throws `PlatformNotSupportedException` (documented in `BlockCompressionMode`).
 
 ### 2. Runtime Async
-The net11.0 target compiles with `Features=runtime-async=on`: async/await emits **runtime-native state machines**
-instead of per-method generated ones — fewer heap allocations and cleaner stack traces. No API or behavior change.
-The net10.0 target is untouched.
+The net11.0 target compiles with `Features=runtime-async=on` (official reference:
+<https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime>): async/await emits
+**runtime-native state machines** instead of per-method generated ones — cleaner stack traces, better
+debuggability, lower overhead. No API or behavior change. The net10.0 target is untouched.
+To opt a single project out, set `<UseRuntimeAsync>false</UseRuntimeAsync>` in its project file
+(the old `DOTNET_RuntimeAsync` / `UNSUPPORTED_RuntimeAsync` environment variables are removed).
 
 ### 3. C# 15 preview API surface (`SharpCoreDB.Net11`, opt-in)
 Import `using SharpCoreDB.Net11;` to unlock additive members:
