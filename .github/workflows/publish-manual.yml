@@ -8,7 +8,7 @@ on:
         required: false
         default: 'Manual publish'
       versionSuffix:
-        description: 'NuGet pre-release suffix (e.g. "preview.1" → 2.0.0-preview.1). Leave empty for a stable 2.0.0 publish.'
+        description: 'NuGet pre-release suffix (e.g. "rc.1" → 2.0.0.3-rc.1). Leave empty for a stable 2.0.0.3 publish.'
         required: false
         default: ''
 
@@ -49,9 +49,9 @@ jobs:
       env:
         VERSION_SUFFIX: ${{ github.event.inputs.versionSuffix }}
       run: |
-        PACK_VERSION="2.0.0.0"
+        PACK_VERSION="2.0.0.3"
         if [ -n "$VERSION_SUFFIX" ]; then
-          PACK_VERSION="2.0.0.0-${VERSION_SUFFIX}"
+          PACK_VERSION="2.0.0.3-${VERSION_SUFFIX}"
           echo "::warning::Publishing PRE-RELEASE NuGet version ${PACK_VERSION}"
         fi
         echo "::group::Pack NuGet packages (${PACK_VERSION})"
