@@ -28,8 +28,7 @@ internal static class BlockCompressor
         if (mode == BlockCompressionMode.None) return data.ToArray();
 
         using var output = new MemoryStream(data.Length / 2);
-        var compressionLevel = ToBcl(level);
-        using (var compressor = CreateCompressor(output, mode, compressionLevel))
+        using (var compressor = CreateCompressor(output, mode, level))
         {
             compressor.Write(data);
         }
@@ -51,12 +50,12 @@ internal static class BlockCompressor
         return output.ToArray();
     }
 
-    private static Stream CreateCompressor(Stream output, BlockCompressionMode mode, CompressionLevel level) => mode switch
+    private static Stream CreateCompressor(Stream output, BlockCompressionMode mode, OptionalCompressionLevel level) => mode switch
     {
-        BlockCompressionMode.Brotli => new BrotliStream(output, level, leaveOpen: false),
-        BlockCompressionMode.GZip => new GZipStream(output, level, leaveOpen: false),
+        BlockCompressionMode.Brotli => new BrotliStream(output, ToBcl(level), leaveOpen: false),
+        BlockCompressionMode.GZip => new GZipStream(output, ToBcl(level), leaveOpen: false),
 #if NET11_0_OR_GREATER
-        BlockCompressionMode.Zstd => new ZstandardStream(output, level, leaveOpen: false),
+        BlockCompressionMode.Zstd => new ZstandardStream(output, ZstdOptions(level), leaveOpen: false),
 #else
         BlockCompressionMode.Zstd => throw new PlatformNotSupportedException(
             "Zstd compression requires .NET 11 or later. Current runtime: " + Environment.Version),
@@ -87,4 +86,23 @@ internal static class BlockCompressor
             OptionalCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
             _ => CompressionLevel.Optimal
         };
+
+#if NET11_0_OR_GREATER
+    /// <summary>
+    /// Builds Zstandard compression options for the net11.0 native Zstandard path.
+    /// <see cref="OptionalCompressionLevel"/> is mapped onto Zstandard's quality scale (1 = fastest,
+    /// 22 = best ratio), and a frame checksum is appended so corruption is detected on read.
+    /// </summary>
+    private static ZstandardCompressionOptions ZstdOptions(OptionalCompressionLevel level) =>
+        new()
+        {
+            Quality = level switch
+            {
+                OptionalCompressionLevel.Fastest => 1,
+                OptionalCompressionLevel.SmallestSize => 19,
+                _ => 5, // Optimal: balanced, above zstd's default level 3
+            },
+            AppendChecksum = true,
+        };
+#endif
 }
