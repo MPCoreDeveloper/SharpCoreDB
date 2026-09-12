@@ -96,34 +96,7 @@ public partial class Table
             // 5. Write the new records to a temp file and swap it in atomically (the same pattern
             //    as AppendOnlyEngine.CompactTable, so encryption handling is identical).
             var tempPath = DataFile + ".fwmig.tmp";
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-
-                if (records.Count > 0)
-                {
-                    storage.AppendBytesMultiple(tempPath, records);
-                }
-                else
-                {
-                    File.WriteAllBytes(tempPath, Array.Empty<byte>());
-                }
-
-                File.Delete(DataFile);
-                File.Move(tempPath, DataFile);
-            }
-            catch
-            {
-                if (File.Exists(tempPath))
-                {
-                    try { File.Delete(tempPath); } catch { /* best-effort cleanup */ }
-                }
-
-                throw;
-            }
+            WriteMigratedRecordsAndSwap(tempPath, records);
 
             // 6. Rebuild the indexes against the new fixed-width records (DeserializeRow dispatches
             //    to the fixed-width codec now) and fix the cached row count.
@@ -140,6 +113,43 @@ public partial class Table
         finally
         {
             rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Writes the migrated fixed-width records to <paramref name="tempPath"/> and atomically swaps
+    /// it over <see cref="DataFile"/>. Any leftover temp file from an earlier failed migration is
+    /// removed first; on failure the temp file is cleaned up and the exception re-thrown.
+    /// </summary>
+    private void WriteMigratedRecordsAndSwap(string tempPath, List<byte[]> records)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            if (records.Count > 0)
+            {
+                storage.AppendBytesMultiple(tempPath, records);
+            }
+            else
+            {
+                File.WriteAllBytes(tempPath, Array.Empty<byte>());
+            }
+
+            File.Delete(DataFile);
+            File.Move(tempPath, DataFile);
+        }
+        catch
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* best-effort cleanup */ }
+            }
+
+            throw;
         }
     }
 

@@ -429,47 +429,57 @@ public class HashIndex : IDisposable
         _lock.EnterWriteLock();
         try
         {
-            for (int i = 0; i < keys.Length; i++)
+            AddBatchKeysLockedCore(keys, positions);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Per-key insert loop for the batched add, executed under the outer write lock. Handles the
+    /// unique (unsafe equality index) path via an atomic per-key check-and-add and the regular
+    /// dictionary path via list append; duplicate keys on a unique index throw.
+    /// </summary>
+    private void AddBatchKeysLockedCore(object?[] keys, long[] positions)
+    {
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (keys[i] is null)
             {
-                if (keys[i] is null)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var normalizedKey = NormalizeKey(keys[i]);
+            var normalizedKey = NormalizeKey(keys[i]);
 
-                if (_useUnsafeEqualityIndex)
-                {
-                    // Unique path: atomic check + add under outer lock.
-                    var keyBytes = BuildUnsafeKey(normalizedKey);
-                    if (HasUnsafeRowsForKey(keyBytes))
-                    {
-                        throw new InvalidOperationException(
-                            $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
-                    }
-
-                    _unsafeIndex.Add(keyBytes, positions[i]);
-                    _unsafeTotalRows++;
-                    continue;
-                }
-
-                if (!_index.TryGetValue(normalizedKey, out var list))
-                {
-                    list = [];
-                    _index[normalizedKey] = list;
-                }
-                else if (_isUnique && list.Count > 0)
+            if (_useUnsafeEqualityIndex)
+            {
+                // Unique path: atomic check + add under outer lock.
+                var keyBytes = BuildUnsafeKey(normalizedKey);
+                if (HasUnsafeRowsForKey(keyBytes))
                 {
                     throw new InvalidOperationException(
                         $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
                 }
 
-                list.Add(positions[i]);
+                _unsafeIndex.Add(keyBytes, positions[i]);
+                _unsafeTotalRows++;
+                continue;
             }
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
+
+            if (!_index.TryGetValue(normalizedKey, out var list))
+            {
+                list = [];
+                _index[normalizedKey] = list;
+            }
+            else if (_isUnique && list.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
+            }
+
+            list.Add(positions[i]);
         }
     }
 

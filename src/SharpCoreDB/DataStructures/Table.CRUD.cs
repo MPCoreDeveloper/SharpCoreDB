@@ -3420,37 +3420,50 @@ public partial class Table
         long prev = long.MinValue;
         while (walk + 4 <= wholeFile.Length && walk < firstSearch)
         {
-            int len = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)walk, 4));
-            if (len > 0 && walk + 4 + len <= wholeFile.Length)
+            if (!TryAdvancePkOrderedWalk(wholeFile, pkWantedPre, pkCol, ref walk, ref prev))
             {
-                var r = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)walk + 4, len), pkWantedPre);
-                if (r != null && r.TryGetValue(pkCol, out var v) && v is not null && v is not DBNull)
-                {
-                    long pk = Convert.ToInt64(v, CultureInfo.InvariantCulture);
-                    if (pk < prev)
-                    {
-                        return false; // physically unordered file -> per-row resolution
-                    }
-
-                    prev = pk;
-                }
-
-                walk += 4 + len;
-            }
-            else
-            {
-                if (len == 0)
-                {
-                    return false;
-                }
-
-                // Tombstone marker: the negative value already encodes the whole slot span
-                // (4-byte prefix + payload), so skipping by |len| lands exactly on the next
-                // record's prefix.
-                walk += Math.Abs(len);
+                return false; // physically unordered or malformed file -> per-row resolution
             }
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// Advances <paramref name="walk"/> over one physical record (or tombstone marker) of a
+    /// variable-length file, verifying the decoded PK keeps ascending order. Returns false when
+    /// the file is malformed (a zero length) or proves physically unordered.
+    /// </summary>
+    private bool TryAdvancePkOrderedWalk(byte[] wholeFile, int[] pkWanted, string pkCol, ref long walk, ref long prev)
+    {
+        int len = BinaryPrimitives.ReadInt32LittleEndian(wholeFile.AsSpan((int)walk, 4));
+        if (len > 0 && walk + 4 + len <= wholeFile.Length)
+        {
+            var r = DeserializeDeleteKeyRow(wholeFile.AsSpan((int)walk + 4, len), pkWanted);
+            if (r != null && r.TryGetValue(pkCol, out var v) && v is not null && v is not DBNull)
+            {
+                long pk = Convert.ToInt64(v, CultureInfo.InvariantCulture);
+                if (pk < prev)
+                {
+                    return false; // physically unordered file -> per-row resolution
+                }
+
+                prev = pk;
+            }
+
+            walk += 4 + len;
+            return true;
+        }
+
+        if (len == 0)
+        {
+            return false;
+        }
+
+        // Tombstone marker: the negative value already encodes the whole slot span
+        // (4-byte prefix + payload), so skipping by |len| lands exactly on the next
+        // record's prefix.
+        walk += Math.Abs(len);
         return true;
     }
 

@@ -702,8 +702,6 @@ public partial class Table : ITable, IDisposable
     /// </summary>
     private string? ExtractPrimaryKeyStringFromRecord(byte[] recordData)
     {
-        string? pkStr = null;
-
         if (_fixedWidthRecords)
         {
             // Fixed-width layout: variable columns reference the overflow arena, so the
@@ -712,40 +710,49 @@ public partial class Table : ITable, IDisposable
             var fwRow = DeserializeRowFixedWidth(recordData.AsSpan());
             if (fwRow.TryGetValue(Columns[PrimaryKeyIndex], out var fwPk) && fwPk is not null)
             {
-                pkStr = fwPk.ToString();
+                return fwPk.ToString();
             }
+
+            return null;
         }
-        else
+
+        return ExtractPrimaryKeyLegacy(recordData);
+    }
+
+    /// <summary>
+    /// Extracts the primary key value from a legacy variable-length record by walking the
+    /// length-prefixed column values, decoding only the PK column.
+    /// </summary>
+    private string? ExtractPrimaryKeyLegacy(byte[] recordData)
+    {
+        var row = new Dictionary<string, object>();
+        int offset = 0;
+
+        for (int i = 0; i < Columns.Count; i++)
         {
-            var row = new Dictionary<string, object>();
-            int offset = 0;
-
-            for (int i = 0; i < Columns.Count; i++)
+            if (offset >= recordData.Length)
             {
-                if (offset >= recordData.Length)
-                {
-                    break;
-                }
-
-                var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
-
-                // Only store PK column, we don't need the rest for index rebuild
-                if (i == PrimaryKeyIndex)
-                {
-                    row[Columns[i]] = value;
-                }
-
-                offset += bytesRead;
+                break;
             }
 
-            // Extract PK value
-            if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
+            var value = ReadTypedValueFromSpan(recordData.AsSpan(offset), ColumnTypes[i], out int bytesRead);
+
+            // Only store PK column, we don't need the rest for index rebuild
+            if (i == PrimaryKeyIndex)
             {
-                pkStr = pkValue.ToString() ?? string.Empty;
+                row[Columns[i]] = value;
             }
+
+            offset += bytesRead;
         }
 
-        return pkStr;
+        // Extract PK value
+        if (row.TryGetValue(Columns[PrimaryKeyIndex], out var pkValue) && pkValue != null)
+        {
+            return pkValue.ToString() ?? string.Empty;
+        }
+
+        return null;
     }
 
     /// <summary>

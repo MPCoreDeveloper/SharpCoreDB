@@ -802,7 +802,16 @@ public partial class Storage
             return;
         }
 
-        // Pass 2 — flush each touched page once from the patched buffer.
+        FlushTombstonedPages(path, pagesToEvict, wholeFile, pages, pageBytes);
+    }
+
+    /// <summary>
+    /// Pass 2 of <see cref="WriteTombstoneMarkersBatched"/>: flushes each touched page once from
+    /// the already-patched in-memory snapshot. Pages are written in ascending order (one write per
+    /// page) directly to the file or the overflow stream for <c>.ovf</c> arenas.
+    /// </summary>
+    private void FlushTombstonedPages(string path, HashSet<int>? pagesToEvict, byte[] wholeFile, HashSet<long> pages, long pageBytes)
+    {
         bool isOvf = path.EndsWith(".ovf", StringComparison.OrdinalIgnoreCase);
         SafeFileHandle? writeHandle = isOvf ? null : GetOrOpenWriteHandle(path);
         FileStream? ovfStream = null;
@@ -1130,14 +1139,7 @@ public partial class Storage
         }
 
         var entries = new (long Offset, byte[] Payload)[overwrites.Count];
-        int n = 0;
-        foreach (var (offset, payload) in overwrites)
-        {
-            if (offset >= 0 && offset + 4 + payload.Length <= fileLength)
-            {
-                entries[n++] = (offset, payload);
-            }
-        }
+        int n = CollectValidOverwriteEntries(overwrites, fileLength, entries);
 
         if (n == 0)
         {
@@ -1149,6 +1151,54 @@ public partial class Storage
         var pages = new Dictionary<long, List<(int RelOffset, byte[] Payload)>>();
         var pageStarts = new List<long>();
         var direct = new List<(long Offset, byte[] Payload)>();
+        BucketOverwritesByPage(entries, n, pageBytes, pages, pageStarts, direct);
+
+        Span<byte> lengthPrefix = stackalloc byte[4];
+        foreach (var (offset, payload) in direct)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, payload.Length);
+            WriteRecordInPlace(path, offset, lengthPrefix, payload);
+        }
+
+        if (pages.Count == 0)
+        {
+            return direct.Count > 0;
+        }
+
+        return FlushOverwritePages(path, fileLength, pageBytes, pages, pageStarts);
+    }
+
+    /// <summary>
+    /// Copies the in-bounds overwrites (offset ≥ 0 and the full [prefix + payload] range inside the
+    /// file) into <paramref name="entries"/> and returns how many were copied.
+    /// </summary>
+    private static int CollectValidOverwriteEntries(Dictionary<long, byte[]> overwrites, long fileLength, (long Offset, byte[] Payload)[] entries)
+    {
+        int n = 0;
+        foreach (var (offset, payload) in overwrites)
+        {
+            if (offset >= 0 && offset + 4 + payload.Length <= fileLength)
+            {
+                entries[n++] = (offset, payload);
+            }
+        }
+
+        return n;
+    }
+
+    /// <summary>
+    /// Classifies each sorted overwrite entry as either a page-local patch (its full range stays
+    /// inside one storage page — recorded for the batched flush) or a cross-page record (added to
+    /// <paramref name="direct"/> for the per-record fallback write).
+    /// </summary>
+    private static void BucketOverwritesByPage(
+        (long Offset, byte[] Payload)[] entries,
+        int n,
+        int pageBytes,
+        Dictionary<long, List<(int RelOffset, byte[] Payload)>> pages,
+        List<long> pageStarts,
+        List<(long Offset, byte[] Payload)> direct)
+    {
         for (int i = 0; i < n; i++)
         {
             long offset = entries[i].Offset;
@@ -1169,19 +1219,15 @@ public partial class Storage
 
             patches.Add(((int)(offset - pageStart + 4), payload));
         }
+    }
 
-        Span<byte> lengthPrefix = stackalloc byte[4];
-        foreach (var (offset, payload) in direct)
-        {
-            BinaryPrimitives.WriteInt32LittleEndian(lengthPrefix, payload.Length);
-            WriteRecordInPlace(path, offset, lengthPrefix, payload);
-        }
-
-        if (pages.Count == 0)
-        {
-            return direct.Count > 0;
-        }
-
+    /// <summary>
+    /// Flushes every patched page once: the current on-disk page bytes are read into a pooled
+    /// buffer, every page-local overwrite payload is copied in, and the page is written back.
+    /// Returns false on a partial read so the caller can fall back to the idempotent per-record loop.
+    /// </summary>
+    private bool FlushOverwritePages(string path, long fileLength, int pageBytes, Dictionary<long, List<(int RelOffset, byte[] Payload)>> pages, List<long> pageStarts)
+    {
         SafeFileHandle readHandle = GetOrOpenReadHandle(path);
         SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
         byte[]? pageBuffer = null;
@@ -1319,20 +1365,11 @@ public partial class Storage
 
         while (position + 4 <= fileLength)
         {
-            Span<byte> lengthBuffer = stackalloc byte[4];
-            int read;
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            {
-                fs.Position = position;
-                read = fs.Read(lengthBuffer);
-            }
-
-            if (read < 4)
+            if (!TryReadInt32At(path, position, out int length))
             {
                 yield break;
             }
 
-            int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBuffer);
             if (length < 0)
             {
                 // Tombstoned (deleted) record: the prefix stores the negative slot size to skip.
@@ -1363,13 +1400,7 @@ public partial class Storage
             }
 
             byte[] payload = new byte[length];
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            {
-                fs.Position = position + 4;
-                read = fs.Read(payload, 0, length);
-            }
-
-            if (read != length)
+            if (!TryReadPayloadAt(path, position + 4, payload))
             {
                 yield break;
             }
@@ -1383,5 +1414,35 @@ public partial class Storage
             yield return (position, recordData);
             position += 4 + length;
         }
+    }
+
+    /// <summary>
+    /// Reads a 4-byte integer at <paramref name="position"/> with a dedicated file stream.
+    /// Returns false when fewer than 4 bytes could be read.
+    /// </summary>
+    private static bool TryReadInt32At(string path, long position, out int value)
+    {
+        value = 0;
+        Span<byte> buffer = stackalloc byte[4];
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        fs.Position = position;
+        if (fs.Read(buffer) < 4)
+        {
+            return false;
+        }
+
+        value = BinaryPrimitives.ReadInt32LittleEndian(buffer);
+        return true;
+    }
+
+    /// <summary>
+    /// Reads <paramref name="payload"/>.Length bytes at <paramref name="position"/> into the
+    /// given buffer with a dedicated file stream. Returns false on a partial/incomplete read.
+    /// </summary>
+    private static bool TryReadPayloadAt(string path, long position, byte[] payload)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        fs.Position = position;
+        return fs.Read(payload, 0, payload.Length) == payload.Length;
     }
 }

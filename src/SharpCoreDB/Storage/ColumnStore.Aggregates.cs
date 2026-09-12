@@ -255,29 +255,34 @@ public sealed partial class ColumnStore<T>
         {
             int start = (data.Length / partitionCount) * threadId;
             int end = threadId == partitionCount - 1 ? data.Length : start + (data.Length / partitionCount);
-            long partialSum = 0;
-            int i = start;
-
-            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<long>.Count)
-            {
-                var vsum = Vector512<long>.Zero;
-                for (; i <= end - Vector512<long>.Count; i += Vector512<long>.Count)
-                    vsum = Vector512.Add(vsum, Vector512.LoadUnsafe(ref data[i]));
-                for (int j = 0; j < Vector512<long>.Count; j++)
-                    partialSum += vsum[j];
-            }
-            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
-            {
-                var vsum = Vector256<long>.Zero;
-                for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
-                    vsum = Vector256.Add(vsum, Vector256.LoadUnsafe(ref data[i]));
-                for (int j = 0; j < Vector256<long>.Count; j++)
-                    partialSum += vsum[j];
-            }
-            for (; i < end; i++) partialSum += data[i];
-            partialSums[threadId] = partialSum;
+            partialSums[threadId] = SumInt64RangeSIMD(data, start, end);
         });
         return partialSums.Sum();
+    }
+
+    private static long SumInt64RangeSIMD(long[] data, int start, int end)
+    {
+        long partialSum = 0;
+        int i = start;
+
+        if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<long>.Count)
+        {
+            var vsum = Vector512<long>.Zero;
+            for (; i <= end - Vector512<long>.Count; i += Vector512<long>.Count)
+                vsum = Vector512.Add(vsum, Vector512.LoadUnsafe(ref data[i]));
+            for (int j = 0; j < Vector512<long>.Count; j++)
+                partialSum += vsum[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<long>.Count)
+        {
+            var vsum = Vector256<long>.Zero;
+            for (; i <= end - Vector256<long>.Count; i += Vector256<long>.Count)
+                vsum = Vector256.Add(vsum, Vector256.LoadUnsafe(ref data[i]));
+            for (int j = 0; j < Vector256<long>.Count; j++)
+                partialSum += vsum[j];
+        }
+        for (; i < end; i++) partialSum += data[i];
+        return partialSum;
     }
 
     private static double SumDoubleParallelSIMD(double[] data)
@@ -291,29 +296,34 @@ public sealed partial class ColumnStore<T>
         {
             int start = (data.Length / partitionCount) * threadId;
             int end = threadId == partitionCount - 1 ? data.Length : start + (data.Length / partitionCount);
-            double partialSum = 0;
-            int i = start;
-
-            if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<double>.Count)
-            {
-                var vsum = Vector512<double>.Zero;
-                for (; i <= end - Vector512<double>.Count; i += Vector512<double>.Count)
-                    vsum = Vector512.Add(vsum, Vector512.Create(data.AsSpan(i)));
-                for (int j = 0; j < Vector512<double>.Count; j++)
-                    partialSum += vsum[j];
-            }
-            else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
-            {
-                var vsum = Vector256<double>.Zero;
-                for (; i <= end - Vector256<double>.Count; i += Vector256<double>.Count)
-                    vsum = Vector256.Add(vsum, Vector256.Create(data.AsSpan(i)));
-                for (int j = 0; j < Vector256<double>.Count; j++)
-                    partialSum += vsum[j];
-            }
-            for (; i < end; i++) partialSum += data[i];
-            partialSums[threadId] = partialSum;
+            partialSums[threadId] = SumDoubleRangeSIMD(data, start, end);
         });
         return partialSums.Sum();
+    }
+
+    private static double SumDoubleRangeSIMD(double[] data, int start, int end)
+    {
+        double partialSum = 0;
+        int i = start;
+
+        if (Vector512.IsHardwareAccelerated && (end - start) >= Vector512<double>.Count)
+        {
+            var vsum = Vector512<double>.Zero;
+            for (; i <= end - Vector512<double>.Count; i += Vector512<double>.Count)
+                vsum = Vector512.Add(vsum, Vector512.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector512<double>.Count; j++)
+                partialSum += vsum[j];
+        }
+        else if (Vector256.IsHardwareAccelerated && (end - start) >= Vector256<double>.Count)
+        {
+            var vsum = Vector256<double>.Zero;
+            for (; i <= end - Vector256<double>.Count; i += Vector256<double>.Count)
+                vsum = Vector256.Add(vsum, Vector256.Create(data.AsSpan(i)));
+            for (int j = 0; j < Vector256<double>.Count; j++)
+                partialSum += vsum[j];
+        }
+        for (; i < end; i++) partialSum += data[i];
+        return partialSum;
     }
 
     private static int MinInt32ParallelSIMD(int[] data)

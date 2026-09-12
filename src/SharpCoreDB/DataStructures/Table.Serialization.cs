@@ -546,32 +546,7 @@ public partial class Table
             var slot = span.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
             if (layout.IsVariable[colIdx])
             {
-                // B6: offset 0 is a VALID arena block (the first block's length prefix sits at 0), so
-                // -1 is the sentinel for "no block" (NULL slot) — a real offset 0 must be freed too,
-                // otherwise the first variable block leaks and the free-list cannot reuse it.
-                int oldOffset = slot[0] == 0 ? -1 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                if (value == null || value == DBNull.Value)
-                {
-                    if (oldOffset >= 0)
-                    {
-                        arena.Free(oldOffset);
-                    }
-
-                    slot[0] = 0;
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
-                }
-                else
-                {
-                    var payload = EncodeVariablePayload(ColumnTypes[colIdx], value);
-                    var offset = arena.Write(payload);
-                    if (oldOffset >= 0)
-                    {
-                        arena.Free(oldOffset);
-                    }
-
-                    slot[0] = 1;
-                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
-                }
+                WriteVariableSlotInPlace(arena, slot, value, ColumnTypes[colIdx]);
             }
             else
             {
@@ -580,6 +555,45 @@ public partial class Table
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Patches one variable-length slot of a fixed-width record in place, growing into a new
+    /// overflow block (or reusing a freed same-length block) and freeing the previous one.
+    /// A NULL value clears the slot entirely.
+    /// </summary>
+    /// <param name="arena">The table overflow arena that owns the referenced blocks.</param>
+    /// <param name="slot">Span over the fixed-width record's variable slot (marker + 4-byte offset).</param>
+    /// <param name="value">The new column value (null/DBNull clears the slot).</param>
+    /// <param name="columnType">The column's data type, used to encode the payload.</param>
+    private void WriteVariableSlotInPlace(OverflowArena arena, Span<byte> slot, object? value, DataType columnType)
+    {
+        // B6: offset 0 is a VALID arena block (the first block's length prefix sits at 0), so
+        // -1 is the sentinel for "no block" (NULL slot) — a real offset 0 must be freed too,
+        // otherwise the first variable block leaks and the free-list cannot reuse it.
+        int oldOffset = slot[0] == 0 ? -1 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+        if (value == null || value == DBNull.Value)
+        {
+            if (oldOffset >= 0)
+            {
+                arena.Free(oldOffset);
+            }
+
+            slot[0] = 0;
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+        }
+        else
+        {
+            var payload = EncodeVariablePayload(columnType, value);
+            var offset = arena.Write(payload);
+            if (oldOffset >= 0)
+            {
+                arena.Free(oldOffset);
+            }
+
+            slot[0] = 1;
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+        }
     }
 
     #endregion

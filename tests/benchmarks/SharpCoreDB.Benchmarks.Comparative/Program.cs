@@ -67,12 +67,7 @@ class Program
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
         if (args.Any(a => a.Equals("--pk", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgPk = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
-            var engineTypePk = engineArgPk is not null
-                && engineArgPk.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
-                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
-                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
-            RunPkComparison(engineTypePk);
+            RunPkComparison(ParseEngineType(args));
             return;
         }
 
@@ -81,12 +76,7 @@ class Program
         // out-of-the-box default path engages the fixed-width fast paths vs SQLite.
         if (args.Any(a => a.Equals("--pk-default", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgDefault = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
-            var engineTypeDefault = engineArgDefault is not null
-                && engineArgDefault.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
-                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
-                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
-            RunPkDefaultComparison(engineTypeDefault);
+            RunPkDefaultComparison(ParseEngineType(args));
             return;
         }
 
@@ -96,22 +86,13 @@ class Program
         // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
         if (args.Any(a => a.Equals("--pk-ab", StringComparison.OrdinalIgnoreCase)))
         {
-            var engineArgAb = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
-            var engineTypeAb = engineArgAb is not null
-                && engineArgAb.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
-                    ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
-                    : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
-            RunPkAbComparison(engineTypeAb);
+            RunPkAbComparison(ParseEngineType(args));
             return;
         }
 
         // Optional: --engine=appendonly (default) | --engine=pagebased
         // PageBased is the v2.0 in-place-update engine (WP10-WP13 storage engine roadmap).
-        var engineArg = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
-        var engineType = engineArg is not null
-            && engineArg.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
-                ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
-                : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
+        var engineType = ParseEngineType(args);
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
 
         Console.WriteLine(BannerTop);
@@ -175,6 +156,20 @@ class Program
         var path = Path.Combine(dir, $"comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// Resolves the optional <c>--engine=</c> argument into a storage engine type
+    /// (<c>pagebased</c> → <see cref="SharpCoreDB.Interfaces.StorageEngineType.PageBased"/>,
+    /// anything else → <see cref="SharpCoreDB.Interfaces.StorageEngineType.AppendOnly"/>).
+    /// </summary>
+    static SharpCoreDB.Interfaces.StorageEngineType ParseEngineType(string[] args)
+    {
+        var engineArg = args.FirstOrDefault(a => a.StartsWith(EngineArgPrefix, StringComparison.OrdinalIgnoreCase));
+        return engineArg is not null
+            && engineArg.Substring(EngineArgPrefix.Length).Equals(EnginePageBased, StringComparison.OrdinalIgnoreCase)
+                ? SharpCoreDB.Interfaces.StorageEngineType.PageBased
+                : SharpCoreDB.Interfaces.StorageEngineType.AppendOnly;
     }
 
     // ══════════════════════════════════════
@@ -311,19 +306,7 @@ class Program
 
                 // Build the statements once (outside the timed region — this is caller work,
                 // identical for SQLite in the comparative benchmark).
-                var stmtBatches = new List<List<string>>();
-                for (int b = 0; b < inserts; b += batch)
-                {
-                    var stmts = new List<string>(batch);
-                    for (int i = b; i < b + batch; i++)
-                    {
-                        stmts.Add(string.Format(CultureInfo.InvariantCulture,
-                            "INSERT INTO docs VALUES ('User{0}', 'user{0}@test.com', {1}, {2}, 'payload-{0}')",
-                            i, 20 + i % 60, i * 0.1));
-                    }
-
-                    stmtBatches.Add(stmts);
-                }
+                var stmtBatches = BuildSqlStatementBatches(inserts, batch);
 
                 var sw = Stopwatch.StartNew();
                 foreach (var stmts in stmtBatches)
@@ -343,24 +326,7 @@ class Program
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
                 db.ExecuteSQL(CreateDocsIndexSql);
 
-                var rowBatches = new List<List<Dictionary<string, object>>>();
-                for (int b = 0; b < inserts; b += batch)
-                {
-                    var rows = new List<Dictionary<string, object>>(batch);
-                    for (int i = b; i < b + batch; i++)
-                    {
-                        rows.Add(new Dictionary<string, object>
-                        {
-                            ["name"] = $"User{i}",
-                            [EmailColumn] = $"user{i}@test.com",
-                            ["age"] = 20 + i % 60,
-                            [ScoreColumn] = i * 0.1,
-                            ["data"] = $"payload-{i}",
-                        });
-                    }
-
-                    rowBatches.Add(rows);
-                }
+                var rowBatches = BuildRowBatches(inserts, batch);
 
                 var sw = Stopwatch.StartNew();
                 foreach (var rows in rowBatches)
@@ -385,6 +351,56 @@ class Program
         Console.WriteLine($"  SQL    : {sqlMedian:F3}s  ({inserts / sqlMedian:N0} ops/s)");
         Console.WriteLine($"  Direct : {directMedian:F3}s  ({inserts / directMedian:N0} ops/s)");
         Console.WriteLine($"  SQL/Direct overhead: {(sqlMedian / directMedian):F2}x");
+    }
+
+    /// <summary>
+    /// Builds the SQL INSERT statement batches for the insert micro-benchmark (outside the timed
+    /// region — this is caller work, identical for SQLite in the comparative benchmark).
+    /// </summary>
+    static List<List<string>> BuildSqlStatementBatches(int inserts, int batch)
+    {
+        var stmtBatches = new List<List<string>>();
+        for (int b = 0; b < inserts; b += batch)
+        {
+            var stmts = new List<string>(batch);
+            for (int i = b; i < b + batch; i++)
+            {
+                stmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "INSERT INTO docs VALUES ('User{0}', 'user{0}@test.com', {1}, {2}, 'payload-{0}')",
+                    i, 20 + i % 60, i * 0.1));
+            }
+
+            stmtBatches.Add(stmts);
+        }
+
+        return stmtBatches;
+    }
+
+    /// <summary>
+    /// Builds the Direct-API row batches for the insert micro-benchmark (outside the timed region).
+    /// </summary>
+    static List<List<Dictionary<string, object>>> BuildRowBatches(int inserts, int batch)
+    {
+        var rowBatches = new List<List<Dictionary<string, object>>>();
+        for (int b = 0; b < inserts; b += batch)
+        {
+            var rows = new List<Dictionary<string, object>>(batch);
+            for (int i = b; i < b + batch; i++)
+            {
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["name"] = $"User{i}",
+                    [EmailColumn] = $"user{i}@test.com",
+                    ["age"] = 20 + i % 60,
+                    [ScoreColumn] = i * 0.1,
+                    ["data"] = $"payload-{i}",
+                });
+            }
+
+            rowBatches.Add(rows);
+        }
+
+        return rowBatches;
     }
 
     static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false, bool noEncrypt = true)
