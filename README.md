@@ -24,7 +24,7 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by a **1,777-test core suite** (0 failed; plus CQRS, VectorSearch, EF Core and Linq2DB suites) and **backward compatibility**
+- A production-focused stack validated by a **1,679-test core suite** (CI-filtered, 0 failed; plus CQRS, VectorSearch, EF Core and Linq2DB suites) and **backward compatibility**
 
 > **Current release: v2.0.0.3 (2026-09-12)** — maintenance release on the v2.x engine line:
 > 13 SonarCloud cognitive-complexity refactors (behavior unchanged) and a NuGet dependency update
@@ -71,7 +71,7 @@ Use it when you need:
 
 The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite**) is closed. The
 numbers below are the **fair-PK harness (median-of-3, tuned config, ascending-PK batches)** from
-`docs/2.0.0.2_WHAT_CHANGED.md`:
+`docs/2.0.0.3_WHAT_CHANGED.md` (a 2.0.0.3 re-run confirmed no regression):
 
 | Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
 |---|---:|---:|---:|
@@ -106,7 +106,7 @@ Headline changes:
 - ⚡ **Removed hidden `D:\*.log` debug writes** that throttled every SELECT/execute/transaction/INSERT
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
   source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
-- ✅ validated by a **1,777-test core suite (0 failed)** plus CQRS (64), VectorSearch (143), EF Core (116) and Functional.Linq2DB (24)
+- ✅ validated by a **1,679-test core suite (CI-filtered, 0 failed)** plus CQRS (64), VectorSearch (143), EF Core (116) and Functional.Linq2DB (24)
 - 🛡️ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL, key & password rotation APIs (#341 follow-on)
 - 🗜️ **Block-level Brotli/GZip compression** for single-file (`.scdb`) storage — transparent, per-block, applied before encryption / removed after decryption (#344)
 - ⚙️ **Configurable metadata region sizing** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` remove the 512 MB single-file ceiling; byte-based file extension (~10 MB regardless of `PageSize`) (#345)
