@@ -51,7 +51,7 @@ jobs:
     - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.100-rc.1'
+        dotnet-version: '11.0.100-rc.1.26425.128'
         include-prerelease: true
 
     - name: Display .NET info
@@ -99,7 +99,7 @@ jobs:
     - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.100-rc.1'
+        dotnet-version: '11.0.100-rc.1.26425.128'
         include-prerelease: true
 
     - name: Pack SharpCoreDB core
