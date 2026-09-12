@@ -47,8 +47,8 @@
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
-    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;csharp14;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
+    <PackageReleaseNotes>v2.1.0-RC.1 (2026-09-12): .NET 11 / C# 15 preview release line — multi-targets net10.0;net11.0, native Zstandard compression (quality presets 1/5/19 + frame checksum), Runtime Async on net11, and an additive C# 15 API surface (SharpCoreDB.Net11). Fully backward compatible with v2.0 on the net10.0 target. See docs/net11/UPGRADE.md for details.</PackageReleaseNotes>
+    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;net11;csharp14;csharp15;zstd;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
