@@ -116,7 +116,7 @@ Headline changes:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0.2
+dotnet add package SharpCoreDB --version 2.0.0.3
 ```
 
 ```csharp
@@ -153,8 +153,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 2.0.0.2
-dotnet add package SharpCoreDB.Client --version 2.0.0.2
+dotnet add package SharpCoreDB.Server --version 2.0.0.3
+dotnet add package SharpCoreDB.Client --version 2.0.0.3
 ```
 
 
@@ -170,36 +170,36 @@ dotnet add package SharpCoreDB.Client --version 2.0.0.2
 
 ---
 
-## Available NuGet packages (v2.0.0.2)
+## Available NuGet packages (v2.0.0.3)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.0.0.2
+dotnet add package SharpCoreDB --version 2.0.0.3
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 2.0.0.2
-dotnet add package SharpCoreDB.Client --version 2.0.0.2
+dotnet add package SharpCoreDB.Server --version 2.0.0.3
+dotnet add package SharpCoreDB.Client --version 2.0.0.3
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.0.0.2
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.2
-dotnet add package SharpCoreDB.Graph --version 2.0.0.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.2
-dotnet add package SharpCoreDB.Distributed --version 2.0.0.2
-dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.2
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.2
-dotnet add package SharpCoreDB.Extensions --version 2.0.0.2
+dotnet add package SharpCoreDB.Analytics --version 2.0.0.3
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.3
+dotnet add package SharpCoreDB.Graph --version 2.0.0.3
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.3
+dotnet add package SharpCoreDB.Distributed --version 2.0.0.3
+dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.3
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.3
+dotnet add package SharpCoreDB.Extensions --version 2.0.0.3
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.0.0.2
-dotnet add package SharpCoreDB.Projections --version 2.0.0.2
-dotnet add package SharpCoreDB.CQRS --version 2.0.0.2
+dotnet add package SharpCoreDB.EventSourcing --version 2.0.0.3
+dotnet add package SharpCoreDB.Projections --version 2.0.0.3
+dotnet add package SharpCoreDB.CQRS --version 2.0.0.3
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.3
 ```
 
 ---
@@ -237,6 +237,7 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 ---
 
 **Made with ❤️ for the .NET community**
+
 
 
 
