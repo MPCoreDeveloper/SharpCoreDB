@@ -11,13 +11,17 @@ on:
         description: 'NuGet pre-release suffix (e.g. "preview.1" → 2.0.0-preview.1). Leave empty for a stable 2.0.0 publish.'
         required: false
         default: ''
+      packVersion:
+        description: 'Explicit full package version (e.g. 2.1.0-RC.2). Leave empty to use the version each project declares.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
   packages: write
 
 env:
-  DOTNET_VERSION: '10.0.x'
+  DOTNET_VERSION: '11.0.100-rc.1.26425.128'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -33,10 +37,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 10
+    - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '10.0.x'
+        dotnet-version: '11.0.100-rc.1.26425.128'
 
     - name: Restore dependencies
       run: dotnet restore SharpCoreDB.CI.slnf --configfile NuGet.Config
@@ -48,16 +52,26 @@ jobs:
       shell: bash
       env:
         VERSION_SUFFIX: ${{ github.event.inputs.versionSuffix }}
+        EXPLICIT_VERSION: ${{ github.event.inputs.packVersion }}
       run: |
-        PACK_VERSION="2.0.0.0"
-        if [ -n "$VERSION_SUFFIX" ]; then
-          PACK_VERSION="2.0.0.0-${VERSION_SUFFIX}"
-          echo "::warning::Publishing PRE-RELEASE NuGet version ${PACK_VERSION}"
-        fi
-        echo "::group::Pack NuGet packages (${PACK_VERSION})"
-        dotnet pack SharpCoreDB.CI.slnf --configuration Release --output ./artifacts \
-          /p:ContinuousIntegrationBuild=true /p:Version="$PACK_VERSION" \
+        PACK_ARGS=(
+          SharpCoreDB.CI.slnf
+          --configuration Release
+          --output ./artifacts
+          /p:ContinuousIntegrationBuild=true
           --configfile NuGet.Config
+        )
+        if [ -n "$EXPLICIT_VERSION" ]; then
+          PACK_ARGS+=("/p:Version=${EXPLICIT_VERSION}")
+          echo "::warning::Publishing with explicit version ${EXPLICIT_VERSION}"
+        elif [ -n "$VERSION_SUFFIX" ]; then
+          PACK_ARGS+=("/p:VersionSuffix=${VERSION_SUFFIX}")
+          echo "::warning::Publishing PRE-RELEASE packages with suffix ${VERSION_SUFFIX}"
+        else
+          echo "Packing with the version declared by each project."
+        fi
+        echo "::group::Pack NuGet packages"
+        dotnet pack "${PACK_ARGS[@]}"
         echo "::endgroup::"
 
     - name: Publish packages in dependency order
