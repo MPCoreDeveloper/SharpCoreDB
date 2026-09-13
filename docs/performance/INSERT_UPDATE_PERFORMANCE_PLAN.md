@@ -134,7 +134,10 @@ first attempt at that build optimization was aimed at the wrong phase until inst
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage
 instrumentation accounts for ≥90% of wall time in a write loop.
 
-5. **Both encryption modes in every number (§0.1-6).** Every table this plan publishes reports
+5. **Both encryption modes in every number (§0.1-6).** The tool is
+   `SharpCoreDB.Benchmarks.Comparative --dual-mode` — three arms (raw / default / at-rest records),
+   medians over alternating reps, JSON archived under the project's `results/`. Every table this plan
+   publishes reports
    **encrypted (default) and unencrypted (`NoEncryptMode=true`)** side by side, per operation, on the
    same run. Neither mode may be quoted alone: the difference is a product decision the user makes, so
    hiding either half of it would be the same mistake as quoting build times without recall.
@@ -274,6 +277,57 @@ means something, and only then do §3-1a and the rest of the plan proceed.
 1a: the decrypt attempt disappears from the profile for plaintext files, with no measurable regression
 and every encryption test green. 1b: whichever posture is chosen, the gain is measured with the §2
 protocol and all guards above pass.
+
+---
+
+### 1d. The measured cost of each mode *(first dual-mode runs, 2026-09-13)*
+
+`SharpCoreDB.Benchmarks.Comparative --dual-mode` (added for this plan) runs one CRUD workload in three
+configurations and prints the columns together: medians over 3 reps per arm, with the arm order
+alternated per rep so machine drift hits every arm. Two consecutive runs on the same machine:
+
+| Run | operation | raw | default | at-rest | raw/default | raw/at-rest |
+|---|---|---:|---:|---:|---:|---:|
+| 1 | INSERT | 142,906 | 145,751 | 115,805 | 0.98× | **1.23×** |
+| 1 | READ | 125,484 | 92,719 | 11,170 | 1.35× | **11.23×** |
+| 1 | UPDATE | 150,636 | 153,564 | 10,460 | 0.98× | **14.40×** |
+| 1 | DELETE | 148,734 | 149,984 | 10,564 | 0.99× | **14.08×** |
+| 2 | INSERT | 147,541 | 142,747 | 122,374 | 1.03× | **1.21×** |
+| 2 | READ | 130,586 | 129,414 | 11,185 | 1.01× | **11.68×** |
+| 2 | UPDATE | 110,556 | 151,717 | 10,370 | 0.73× | **10.66×** |
+| 2 | DELETE | 138,266 | 94,732 | 10,792 | 1.46× | **12.81×** |
+
+**What reproduces, and therefore what may be concluded:**
+
+- **At-rest per-record encryption is nearly free for INSERT (+21–23%) and catastrophically expensive
+  for READ/UPDATE/DELETE: ~11–14× slower** (≈10.5K ops/s vs ≈130–150K). Both runs agree, and the
+  run-to-run spread is small relative to the effect.
+- That completes the picture for §0.1-6: "make the default true" is not a test-fixing exercise.
+  Flipping the default today would multiply the cost of exactly the operations this plan targets —
+  UPDATE by an order of magnitude — because the read, in-place-update and delete paths are not
+  encryption-aware (the same root cause as the ≥45 failures in §3-1c). **The plan's order (make the
+  paths encryption-aware first, then flip the default) is now supported by measurement, not assumption.**
+- INSERT being cheap under at-rest encryption is good news for §5's "beat SQLite" target: the append
+  path already handles the encrypted framing.
+
+**What does NOT reproduce, and therefore must not be quoted as a result:**
+
+- The **raw versus default** column. Across the two runs it moved between 0.73× and 1.46× **in both
+  directions** (run 1: default 1.35× slower on READ; run 2: default 1.37× *faster* on UPDATE) — the
+  machine's documented ±20%+ noise band, not signal. Resolving a 1.0–1.5× effect needs more reps
+  and/or a quiet box. **Do not publish a raw-versus-default claim from these runs.**
+- Consequence for the §3-1a READ hypothesis: run 1's 1.35× is *consistent with* the
+  decrypt-attempt-with-`catch` waste found by reading the code, but it is not proof. §3-1a must still be
+  measured with a proper protocol (more reps) before and after.
+
+**Harness caveat:** `--dual-mode` uses the comparative harness's tuned configuration (`BuildConfig`:
+async durability, group-commit off, high-speed insert mode, page cache, memory mapping, validation
+disabled), so absolute ops/sec are *not* product defaults. That is acceptable for this table because the
+arms differ **only** in encryption settings — which is what the A/B isolates — but a pure-default variant
+is a separate run (§2's protocol, item 5).
+
+Evidence: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/dual-mode-*.json`, archived next
+to the `comparative_*.json` evidence that earlier benchmark documents cite.
 
 ---
 

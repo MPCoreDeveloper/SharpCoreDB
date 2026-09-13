@@ -84,6 +84,15 @@ class Program
         // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
         // machine drift affects both arms of each pair equally. Arms are config variants named by
         // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
+        // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
+        // the columns side by side, so the cost of protection is a published per-operation number
+        // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
+        if (args.Any(a => a.Equals("--dual-mode", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunDualModeComparison(ParseEngineType(args));
+            return;
+        }
+
         if (args.Any(a => a.Equals("--pk-ab", StringComparison.OrdinalIgnoreCase)))
         {
             RunPkAbComparison(ParseEngineType(args));
@@ -403,11 +412,19 @@ class Program
         return rowBatches;
     }
 
-    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false, bool noEncrypt = true)
+    static DatabaseConfig BuildConfig(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool fixedWidth = false,
+        bool noEncrypt = true,
+        bool atRestRecords = false)
     {
         return new DatabaseConfig
         {
             NoEncryptMode = noEncrypt,
+            // Per-record at-rest encryption of table payloads (the 8-byte magic header format).
+            // Off by default in the product; the benchmark arms turn it on explicitly so its cost is
+            // a published number (see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md).
+            EnableAtRestRecordEncryption = atRestRecords,
             StorageEngineType = engineType,
             // The fair PK comparison intentionally isolates the record-layout variable: the legacy
             // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
@@ -466,6 +483,17 @@ class Program
     }
 
     static BenchmarkResult RunSharpCoreDB(SharpCoreDB.Interfaces.StorageEngineType engineType)
+        => RunSharpCoreDbMode(engineType, noEncrypt: true, atRestRecords: false);
+
+    /// <summary>
+    /// Runs the SQL CRUD workload in one encryption configuration:
+    /// <paramref name="noEncrypt"/> true is the raw-speed arm (<c>NoEncryptMode=true</c>);
+    /// false with <paramref name="atRestRecords"/> false is today's default;
+    /// false with <paramref name="atRestRecords"/> true is per-record at-rest encryption (the
+    /// magic-header format the default is meant to become).
+    /// </summary>
+    static BenchmarkResult RunSharpCoreDbMode(
+        SharpCoreDB.Interfaces.StorageEngineType engineType, bool noEncrypt, bool atRestRecords)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -477,7 +505,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = BuildConfig(engineType);
+            var config = BuildConfig(engineType, noEncrypt: noEncrypt, atRestRecords: atRestRecords);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -1366,6 +1394,159 @@ class Program
     // ══════════════════════════════════════
     // Comparison Table
     // ══════════════════════════════════════
+    /// <summary>
+    /// Runs the CRUD workload in every encryption configuration and prints the columns side by side.
+    /// Medians over <paramref name="reps"/> runs per arm, with the arm order alternated per rep so a
+    /// warming machine cannot systematically favour one configuration (the <c>--pk-ab</c> pattern).
+    /// </summary>
+    /// <remarks>
+    /// The labels are deliberately literal, because the audit in
+    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c> §3-1c showed that the default
+    /// (<c>NoEncryptMode=false</c>) encrypts metadata and transaction flushes while storing table
+    /// records as PLAINTEXT. Calling that arm "encrypted" would repeat a claim the code does not
+    /// keep. Publish the columns together or not at all.
+    /// </remarks>
+    static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 3)
+    {
+        const int Failed = -1;
+        Console.WriteLine();
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║ Encryption-mode comparison — one workload, three configurations          ║");
+        Console.WriteLine("║   raw      NoEncryptMode=true                        (opt-out, fastest)  ║");
+        Console.WriteLine("║   default  NoEncryptMode=false, at-rest records OFF  (today's default)   ║");
+        Console.WriteLine("║   at-rest  NoEncryptMode=false, at-rest records ON   (table data encrypted)║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine($"  engine={engineType} · inserts={InsertCount:N0} · reads/updates/deletes={ReadCount:N0} each · reps={reps}");
+        Console.WriteLine();
+
+        var raw = new List<BenchmarkResult>();
+        var deflt = new List<BenchmarkResult>();
+        var atRest = new List<BenchmarkResult>();
+
+        for (int rep = 0; rep < reps; rep++)
+        {
+            // Alternate the order per rep: machine drift then affects every arm, not just one.
+            if (rep % 2 == 0)
+            {
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: false, "default", Failed));
+                atRest.Add(RunArm(engineType, noEncrypt: false, atRestRecords: true, "at-rest", Failed));
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: false, "raw", Failed));
+            }
+            else
+            {
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: false, "raw", Failed));
+                atRest.Add(RunArm(engineType, noEncrypt: false, atRestRecords: true, "at-rest", Failed));
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: false, "default", Failed));
+            }
+
+            Console.WriteLine($"     rep {rep + 1}/{reps} complete");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {"operation",-10}{"raw",13}{"default",13}{"at-rest",13}{"raw/default",14}{"raw/at-rest",14}");
+        PrintModeRow("INSERT", raw, deflt, atRest, static r => r.InsertOpsPerSec, Failed);
+        PrintModeRow("READ", raw, deflt, atRest, static r => r.ReadOpsPerSec, Failed);
+        PrintModeRow("UPDATE", raw, deflt, atRest, static r => r.UpdateOpsPerSec, Failed);
+        PrintModeRow("DELETE", raw, deflt, atRest, static r => r.DeleteOpsPerSec, Failed);
+        Console.WriteLine();
+        Console.WriteLine("  /default and /at-rest are the multipliers paid for protection versus the opt-out arm.");
+        Console.WriteLine("  FAILED means that configuration could not complete the workload (message printed above).");
+
+        try
+        {
+            var payload = new
+            {
+                timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                engine = engineType.ToString(),
+                reps,
+                inserts = InsertCount,
+                reads = ReadCount,
+                updates = UpdateCount,
+                deletes = DeleteCount,
+                raw = raw.Select(ToRecord).ToList(),
+                @default = deflt.Select(ToRecord).ToList(),
+                atRest = atRest.Select(ToRecord).ToList(),
+            };
+
+            // Anchor the archive at the PROJECT directory, not the process CWD: `dotnet run` may be
+            // invoked from the repo root, and the project's results/ folder is the tracked evidence
+            // location (the comparative_*.json runs live there).
+            string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+            string resultsDir = Path.Combine(projectDir, ResultsDirName);
+            Directory.CreateDirectory(resultsDir);
+            string path = Path.Combine(resultsDir, $"dual-mode-{DateTime.Now:yyyyMMdd_HHmmss}.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"  JSON archived: {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  (could not archive JSON: {ex.Message})");
+        }
+    }
+
+    static object ToRecord(BenchmarkResult r) => new
+    {
+        r.InsertOpsPerSec,
+        r.ReadOpsPerSec,
+        r.UpdateOpsPerSec,
+        r.DeleteOpsPerSec,
+    };
+
+    /// <summary>Runs one arm, turning a failure into a marked result instead of killing the run.</summary>
+    static BenchmarkResult RunArm(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool noEncrypt,
+        bool atRestRecords,
+        string label,
+        int failed)
+    {
+        try
+        {
+            return RunSharpCoreDbMode(engineType, noEncrypt, atRestRecords);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  !! {label} arm FAILED: {ex.GetType().Name}: {ex.Message}");
+            return new BenchmarkResult
+            {
+                InsertOpsPerSec = failed,
+                ReadOpsPerSec = failed,
+                UpdateOpsPerSec = failed,
+                DeleteOpsPerSec = failed,
+            };
+        }
+    }
+
+    static void PrintModeRow(
+        string op,
+        List<BenchmarkResult> raw,
+        List<BenchmarkResult> deflt,
+        List<BenchmarkResult> atRest,
+        Func<BenchmarkResult, int> select,
+        int failed)
+    {
+        int r = MedianOps(raw, select, failed);
+        int d = MedianOps(deflt, select, failed);
+        int a = MedianOps(atRest, select, failed);
+        Console.WriteLine($"  {op,-10}{Cell(r),13}{Cell(d),13}{Cell(a),13}{Ratio(r, d),14}{Ratio(r, a),14}");
+    }
+
+    static int MedianOps(List<BenchmarkResult> xs, Func<BenchmarkResult, int> select, int failed)
+    {
+        if (xs.Count == 0)
+        {
+            return failed;
+        }
+
+        var sorted = xs.Select(select).OrderBy(x => x).ToList();
+        return sorted[sorted.Count / 2];
+    }
+
+    static string Cell(int ops) => ops < 0 ? "FAILED" : ops.ToString("N0", CultureInfo.InvariantCulture);
+
+    static string Ratio(int numerator, int denominator)
+        => numerator < 0 || denominator <= 0 ? "n/a" : $"{(double)numerator / denominator:F2}x";
+
     static void PrintComparison(Dictionary<string, BenchmarkResult> results)
     {
         Console.WriteLine("╔══════════════════════════════════════════════════════════════════════════════╗");
