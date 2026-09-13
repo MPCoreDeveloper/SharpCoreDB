@@ -90,6 +90,67 @@ public sealed class SharpCoreDbEventStore(IDatabase database, string tableName =
     }
 
     /// <inheritdoc />
+    public Task<ConditionalAppendResult> TryAppendEventsAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        IEnumerable<EventAppendEntry> entries,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var entryList = entries as IList<EventAppendEntry> ?? entries.ToList();
+
+        lock (_lock)
+        {
+            EnsureSchema();
+
+            // GetNextStreamSequence returns the next (highest + 1) sequence, or 1 for
+            // an empty stream, so the current stream length is that value minus one.
+            var currentVersion = GetNextStreamSequence(streamId) - 1;
+
+            if (expectedVersion != ExpectedVersion.Any && expectedVersion != currentVersion)
+            {
+                return Task.FromResult(ConditionalAppendResult.Conflict(expectedVersion, currentVersion));
+            }
+
+            if (entryList.Count == 0)
+            {
+                return Task.FromResult(ConditionalAppendResult.Ok(expectedVersion, currentVersion, []));
+            }
+
+            var nextStreamSequence = currentVersion + 1;
+            var nextGlobalSequence = GetNextGlobalSequence();
+
+            List<string> statements = new(entryList.Count);
+            List<AppendResult> results = new(entryList.Count);
+
+            foreach (var entry in entryList)
+            {
+                statements.Add(BuildInsertStatement(streamId, nextStreamSequence, nextGlobalSequence, entry));
+                results.Add(AppendResult.Ok(streamId, nextStreamSequence, nextGlobalSequence));
+
+                nextStreamSequence++;
+                nextGlobalSequence++;
+            }
+
+            _database.ExecuteBatchSQL(statements);
+            _database.Flush();
+            _database.ForceSave();
+
+            return Task.FromResult(ConditionalAppendResult.Ok(expectedVersion, nextStreamSequence - 1, results));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<ConditionalAppendResult> TryAppendEventAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        EventAppendEntry entry,
+        CancellationToken cancellationToken = default) =>
+        TryAppendEventsAsync(streamId, expectedVersion, [entry], cancellationToken);
+
+    /// <inheritdoc />
     public Task<ReadResult> ReadStreamAsync(
         EventStreamId streamId,
         EventReadRange range,
