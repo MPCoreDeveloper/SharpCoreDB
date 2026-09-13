@@ -7,13 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (Munarium-inspired features — Phase 4 & 5 complete)
+### Added (Munarium-inspired features — v2.1.0-RC.3, net11.0 / C# 15 preview)
 
-- **Content-verified immutable artifacts**: `ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex` with `Verify()` and `BuildResult` (Success/VerificationFailed/LimitExceeded). Inspired by munarium-datastore `model.rs`, `canonical.rs` and `verify.rs`.
-- **Hybrid fusion**: `HybridFusionAlpha` in `VectorSearchOptions` for balanced lexical + vector scoring (0.0–1.0). Integrates with GraphRAG and vector queries.
-- **DiskANN index**: Full `DiskAnnIndex` + `DiskAnnConfig` (high-recall graph, crossover testing helper, selective "disk" access pattern). Inspired by `vector_diskann.rs` and `tests/vector_crossover.rs`. Implements `IVerifiableIndex`.
-- **Phase 5**: Updated `ROADMAP.md`, `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` (full plan), `VectorSearchOptions`, package metadata, and build targets (`net11.0` + `LangVersion=latest`).
-- All features are **opt-in**, pure native C# 15 / .NET 11, backward-compatible, and work alongside existing HNSW, SIMD, and EventSourcing (conditional appends).
+- **Content-verified immutable artifacts**: `ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex` with `Verify()` and `BuildResult` (Success/VerificationFailed/LimitExceeded). `Verify()` is content-addressed, so tampering with any manifest field is reported as `VerificationFailed`. Inspired by munarium-datastore `model.rs`, `canonical.rs` and `verify.rs`.
+- **Hybrid fusion**: `HybridFusionAlpha` in `VectorSearchOptions` for balanced lexical + vector scoring (0.0–1.0). Recorded in the artifact manifest; wiring the weighted scorer into GraphRAG ranking is still open (Phase 3, partial).
+- **DiskANN index**: `DiskAnnIndex` + `DiskAnnConfig` — a real **Vamana** graph (seeded R-regular init, greedy search, robust prune with α=1.2, medoid entry point) with `MeasureRecallAgainstExact` for crossover testing. Inspired by `vector_diskann.rs` and `tests/vector_crossover.rs`. Implements `IVerifiableIndex`.
+  - **Tuning knobs**: `MaxNeighbors` (R), `ConstructionSearchListSize` (L_build), `QuerySearchListSize` (L_search floor), `Alpha`, `BuildPasses`, plus a per-query beam override `Search(query, k, searchListSize)` so recall/latency can be traded per query without rebuilding the graph.
+- **SQL DDL**: `CREATE VECTOR INDEX … USING DISKANN` is recognised by the parser, stored as table metadata, and now builds a real `DiskAnnIndex` through the optimiser (see Fixed below).
+
+### Fixed
+
+- **`USING DISKANN` silently built a `FlatIndex`** — `VectorQueryOptimizer.BuildIndex` fell through to the `Flat` default arm for the `"DISKANN"` string, so the DDL produced an exact scan behind a DiskANN-shaped name. `DISKANN` now maps to `VectorIndexType.DiskAnn`.
+
+### Performance
+
+- **DiskANN build 2.06× faster with better recall** — the build was dominated by back-edge pruning: a full prune ran after *every* overflowing insertion (O(R³) per target). Back-edges are now batched per target and pruned **once** per target, then applied in parallel. At n=10,000 / dims=256: build **13.8 s → 6.7 s** and recall@10 **90.7% → 91.9%**.
+- **DiskANN queries are effectively allocation-free** — the traversal state (visited set, two heaps, hit list) moved to per-thread scratch buffers, cutting the per-query allocation from **2,376 B to 184 B** (12.9×; the remainder is the returned result array).
+- **Measured at 100K vectors**: 7.0× over the exact scan at 80.6% recall@10, or **22.5× at 73.0%** with one extra build pass. Full curve in `docs/Vectors/PERFORMANCE_NOTES.md`.
+- **Graph-construction candidate dedup** — the prune's candidate list was the greedy search's hits *plus* the node's current edges, and those overlap, so ~13% of the prune's working set was duplicate slots and the dominance loop recomputed the same pairs. Skipping candidates the search already returned (via the hit set the search now publishes) cut **14.4% off the prune and 2.7% off the whole build at identical recall**.
+- **Beam-search visited marking moved from `HashSet<int>` to a stamped `int[]`** — the visited set is touched once per neighbour examined, and an array read is several times cheaper than hashing plus a bucket probe. The stamp keeps a reused per-thread array safe (a slot counts as visited only if it carries this search's id), so semantics — and recall — are identical. Build: **2,976 ms → ~2,735 ms** at n=10,000 and **17,727 ms → ~16,600 ms** at n=40,000 (dims=64, R=32, L_build=64, 2 passes).
+- **Cosine distance hoists the query's squared norm out of the traversal** — a search evaluates thousands of candidates against one query, so the query-side norm is constant; `DistanceMetrics.SquaredNorm` + `CosineDistanceWithQuerySquaredNorm` compute it once. Accumulation order is unchanged, so distances are **bit-identical** (guarded by 21 cases over every SIMD tier in `CosineNormHoistingTests`), and a cosine call drops from 20.4 ns to 17.0 ns at dims=64 in isolation. **End-to-end it is neutral, which is itself the finding: the search phase is memory-bound**, so the remaining lever is a block-parallel search phase (a deliberate recall trade) rather than more arithmetic work.
+- **Pairwise-distance caching was evaluated and rejected on measurement** — a build-wide memo showed **83.8% reuse but ran 54× slower** (44.8 s vs 0.825 s at n=2,000) and needed 195 MB of memo at that size. A 64-dim SIMD distance (~15–30 ns) is cheaper than a dictionary lookup+insert (~30–80 ns), so caching costs more than recomputing. Recorded in `docs/Vectors/PERFORMANCE_NOTES.md` §4 so it is not re-attempted.
+- **Phase instrumentation showed the build's bottleneck has moved** from the prune (now 29%) to the sequential greedy search (**65%** of build time at n=10,000 / dims=64 / R=32 / L_build=64) — that is the next target.
+- **Build targets**: the v2.1 RC branch is **net11.0-only** with **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 line remains the v2.0 stable packages on `master`.
+- All features are **opt-in**, pure managed C# 15 / .NET 11, and work alongside existing HNSW, SIMD, and EventSourcing (conditional appends). Phase status is tracked in `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md`.
 
 See `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` for details and usage.
 
@@ -193,7 +210,7 @@ See `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` for details and usage.
   Measured (same machine, Release, median of 3): comparative DELETE SQL ~12K ÔåÆ **~59K ops/s** and
   Direct ~16K ÔåÆ **~86K ops/s**; UPDATE SQL ~35K ÔåÆ **~44K ops/s**, Direct ~49K ÔåÆ **~63K ops/s**;
   `--pk` DELETE legacy ~64K ÔåÆ **~68K ops/s**, fixed-width ~78K ÔåÆ **~93K ops/s**. Session plan +
-  attribution in `docs/performance/EXECUTION_PLAN_UPDATE_DELETE.md`.
+  results: `docs/performance/V2_PERFORMANCE_PLAN.md`.
 - **Dedicated SQL batch-INSERT fast path (WP14)** ÔÇö `ExecuteBatchSQL` INSERTs no longer build a
   per-row `Dictionary<string, object>`; VALUES clauses are parsed directly into column-ordered
   `object[]` rows (`PreparedInsertStatement.ParseValuesToArray`) and inserted via the new

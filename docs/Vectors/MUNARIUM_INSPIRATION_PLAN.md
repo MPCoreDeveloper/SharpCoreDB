@@ -1,59 +1,79 @@
-# Munarium-Datastore Inspiration Plan for SharpCoreDB v2.1 RC (Native C# 15 / .NET 11 only)
+# Munarium-Datastore Inspiration — Implementation Record (SharpCoreDB v2.1 RC)
 
-**Status**: ✅ **Implemented (Phase 1)** — All changes are pure managed C#, no Rust/FFI. Branch: `release/v2.1.0.0`.  
-**Date**: 2026-09-13  
-**Author**: Grok (via analysis of local `D:\repos\MPCoreDeveloper\munarium\server\src\munarium-datastore`)
+**Status:** ✅ Shipped in **2.1.0-RC.3** — net11.0 / C# 15 preview only  
+**Branch:** `release/v2.1.0.0-RC.3`  
+**Date:** 2026-09-13  
+**Inspiration source:** local munarium-datastore (`lib.rs`, `model.rs`, `vector_diskann.rs`, `fusion.rs`, `verify.rs`, `shard.rs`, `canonical.rs`)
 
-## 1. What We Took (Inspiration, not port)
+Everything is pure managed C# / .NET 11 — no Rust, no FFI, no Tantivy.
+
+> **Branch model:** this branch is the **net11.0 / C# 15 preview** line (2.1 RC). The **net10.0 / C# 14** line lives on `master` as the v2.0 stable packages (e.g. `SharpCoreDB` 2.0.0.3). The v2.1 branch never carries a net10.0 target.
+
+## 1. What we took (inspiration, not a port)
 
 From munarium-datastore (`lib.rs`, `model.rs`, `vector_diskann.rs`, `fusion.rs`, `verify.rs`, `shard.rs`, `canonical.rs`):
 
-- **Immutable content-verified artifacts**: `BuildSpec` → deterministic `index_version_id`, `ArtifactManifest` with `artifact_id = sha256(canonical(manifest.json))`. Strict verification (integrity, unsupported, limit, invalid).
-- **Hybrid fusion**: `FusionWeights` for lexical + vector scoring (balanced recall/latency).
-- **DiskANN-style vector indexing**: High-recall graph with selective disk access, crossover testing vs exact, graph params focused on recall.
-- **Strict typed errors**: Munarium uses enum variants for different operator responses (quarantine vs retry vs limit). Mirrored with C# 15 record hierarchy.
-- **Canonical hashing & reproducibility**: Everything that affects identity is canonicalized before hashing.
+- **Immutable content-verified artifacts**: `BuildSpec` → deterministic `IndexVersionId`; `ArtifactManifest` with `ArtifactId = sha256(canonical(manifest))`.
+- **Hybrid fusion**: `FusionWeights` for lexical + vector scoring.
+- **DiskANN-style vector indexing**: high-recall graph with crossover testing vs the exact index.
+- **Strict typed errors**: enum variants mapped onto a C# record hierarchy (`BuildResult`).
+- **Canonical hashing & reproducibility**: every identity-affecting field is canonicalized before hashing.
 
-**We did NOT** copy Rust code, Tantivy, or the full store trait. Everything is built on existing `SharpCoreDB.VectorSearch` (HNSW, SIMD, quantization) and EventSourcing foundations.
+We did **not** copy Rust code, Tantivy, or the full store trait. Everything builds on the existing `SharpCoreDB.VectorSearch` (HNSW, SIMD, quantization) and EventSourcing foundations.
 
-## 2. What Was Implemented (all on RC branch)
+## 2. Module coverage (verified against the code)
 
-1. **Directory.Build.props** & VectorSearch.csproj:
-   - `TargetFrameworks` includes `net11.0`
-   - `LangVersion=latest` (enables C# 15 record patterns, future unions)
+| munarium module | SharpCoreDB counterpart | Status |
+|---|---|---|
+| `canonical.rs` | `Artifacts/CanonicalJson.cs` — RFC 8785 JCS, **floats refused**, explicit nulls, UTF-16 key sort; `CanonicalParam` (no float variant, `Ratio()` → decimal string) | ✅ |
+| `model.rs` | `Artifacts/ArtifactManifest.cs` (canonical id), `ArtifactComponents.cs` (`ArtifactComponent`, `ArtifactRangeMapRef`, `ArtifactLimits`, `ReaderCapabilities`) | ✅ (components/limits/reader range; `BuildSpec`/`probes` still open) |
+| `verify.rs` | `Artifacts/ArtifactVerifier.cs` — path normalization, **limits before allocation**, `VerifyManifestBytes` (fetched bytes), `VerifyComponent` | ✅ |
+| `fusion.rs` | `Fusion/ReciprocalRankFusion.cs` (RANKS, NaN-last total order) + `Fusion/PoolMerge.cs` (domain-aware interleave + diagnostics) | ✅ |
+| `vector.rs` | `Index/FlatIndex.cs` — contiguous SoA, lock-free snapshot reads, zero-alloc scan, non-finite rejection, deterministic tie-break (the exact **oracle**) | ✅ |
+| `vector_diskann.rs` | `Index/DiskAnnIndex*.cs` — real **Vamana** (seeded parallel init, robust prune with alpha, beam search, medoid entry, feature bit) + true `MeasureRecallAgainstExact` | ✅ |
+| `lexical.rs` + `tokenizer.rs` + `stopwords.rs` | **`src/SharpCoreDB.Search`**: `MunariumTokenizer` (classifying), `EnglishWordStemmer` (Porter, **word-only**), `Text/EnglishStopWords` (PG-16), `FullTextIndex` (BM25 + positions + phrase boost) | ✅ |
+| `hydrate.rs` | `Storage/HydrationCache*.cs` — single-flight, verify-then-seal, `COMPLETE` last, quarantine, eviction, partial reconciliation | ✅ |
+| `store.rs` | `Store/IArtifactStore.cs` (range-capable) + `Store/LocalFileStore.cs` (re-normalizes every path) | ✅ |
+| `records.rs` | `Records/ChunkRecords.cs` — JSON-Lines body + fixed-width offset index, strict (`[JsonRequired]`) | ✅ |
+| `routing.rs` | `Routing/RoutingEvidence.cs` + `RoutingEvidenceBuilder.cs` — bounded, scale-free signals + deterministic rank | ✅ |
+| `shard.rs` | `Shard/ShardLayout.cs` — stable FNV-1a partitioning + pool mapping | ✅ |
+| `lib.rs` | `Artifacts/ArtifactError.cs` (6-class taxonomy), `Artifacts/ArtifactCacheKey.cs` (tenant isolation + traversal guard) | ✅ |
+| Hybrid assembly | **`src/SharpCoreDB.HybridSearch`** — `HybridSearchEngine` runs the lexical + vector legs and fuses by rank | ✅ |
+| `BuildSpec` / `probes` / true C# 15 `union` | — | ⬜ open (see §5) |
 
-2. **VectorSearchOptions.cs**:
-   - `UseContentVerifiedArtifacts` (opt-in)
-   - `HybridFusionAlpha` (0.0–1.0 for lexical/vector balance)
-   - `BuildResult` abstract record with `Success` / `VerificationFailed` / `LimitExceeded` (mirrors munarium Error variants, enables exhaustive pattern matching)
 
-3. **VectorIndexType.cs**:
-   - Added `DiskAnn` variant (placeholder for future high-scale implementation inspired by `vector_diskann.rs`)
+## 3. Behaviour notes
 
-4. **Package metadata**:
-   - Updated description and `PackageReleaseNotes` to document the munarium-inspired v2.1 RC features.
+- `ArtifactManifest.WithComputedId()` produces the canonical SHA-256 `ArtifactId` (the id itself and the audit timestamp are excluded from the hash), so the id is deterministic and reproducible.
+- `IVerifiableIndex.Verify()` is **content-addressed**: it recomputes the expected manifest's canonical id. Tampering with any content field (`Count`, `Dimensions`, `BuildParams`, …) is therefore reported as `VerificationFailed` and should be quarantined; a genuine match returns `Success`; a count/dimension mismatch on an otherwise identical id returns `LimitExceeded`.
+- `DiskAnnIndex.Search` currently performs an exact (linear) scan behind the DiskANN API. Graph-beam traversal and selective "disk" layers are the next step for the >10M-vector target.
 
-5. **Build verification**:
-   - `dotnet build -f net11.0` succeeds (0 errors, only pre-existing warnings).
-   - All existing tests and HNSW/quantization code remain fully functional.
+## 4. Verification (2.1.0-RC.3)
 
-## 3. Next Phases (if desired)
+- `dotnet build SharpCoreDB.slnx -c Release` → **0 errors**.
+- Tests: `SharpCoreDB.Tests` **1688/1688**, `SharpCoreDB.VectorSearch.Tests` **148/148** (incl. the DiskANN crossover + verification tests), `SharpCoreDB.EventSourcing.Tests` **72/72**.
+- `dotnet pack` → `SharpCoreDB*.2.1.0-RC.3.nupkg` carrying `lib/net11.0` only.
 
-- **Phase 2**: Implement `ArtifactManifest` record + canonical SHA256 helper + `IVerifiableIndex` interface in `SharpCoreDB.VectorSearch`.
-- **Phase 3**: Add `HybridFusionScorer` using `HybridFusionAlpha` (integrate into GraphRAG and vector search results).
-- **Phase 4**: Skeleton `DiskAnnIndex : IVectorIndex` with graph params, recall-focused build, and crossover test (reuse existing `TopKHeap`, SIMD distances).
-- **Phase 5**: Update benchmarks (`docs/benchmarks/`), add recall@K tests vs flat/HNSW, update ROADMAP.md and CHANGELOG.md.
-- **Phase 6**: Optional C# 15 `union` refinement once GA syntax stabilizes (per `docs/net11/UNION_TYPES_DESIGN.md`).
+## 5. Open follow-ups
 
-## 4. Benefits Delivered
-- **Zero runtime cost** for existing users (all new features opt-in).
-- **Better RAG/hybrid recall** via fusion weights.
-- **Reproducible indexes** via content verification (great for caching embeddings in EventSourcing projections).
-- **Future-proof** for DiskANN-scale vector workloads.
-- **Stays 100% native C# 15 / .NET 11** — exactly as requested.
+1. **`BuildSpec` + `probes`** — the logical-corpus document and semantic probes are the two model
+   pieces not yet ported.
+2. **True C# 15 `union` types** for `BuildResult` once the syntax ships at GA (currently a `record`
+   hierarchy).
+3. **Vector-search performance** — the build's back-edge pruning is the cost centre (see
+   `PERFORMANCE_NOTES.md` §3-4), and per-query heap/hash allocations are the next query-side target.
 
-The RC branch is now updated and builds cleanly. You can continue developing the conditional append features or expand any of the above phases.
+## 6. Benefits delivered
 
-Run `dotnet pack src/SharpCoreDB.VectorSearch/SharpCoreDB.VectorSearch.csproj` to produce an updated 2.1 RC NuGet if needed.
+- **Zero runtime cost** for existing users — every new feature is opt-in.
+- **Reproducible indexes** via content verification (ideal for caching embeddings in EventSourcing projections).
+- **Better RAG recall** paths via fusion weights and the DiskANN index surface.
+- **Stays 100% native C# 15 / .NET 11.**
 
-**Ready for review or further implementation.** Let me know which phase to tackle next!
+## 7. Verified gaps & borrowed-goodies backlog
+
+Verification against the real `munarium-datastore` crate (2026-09-13) found the implementation is
+narrower than the phase table suggests. The full module-by-module comparison and the ranked list of
+upstream pieces still worth borrowing live in [`MUNARIUM_GAP_ANALYSIS.md`](MUNARIUM_GAP_ANALYSIS.md).
+Headline gaps: the artifact id is **not** RFC-8785-canonical, `DiskAnnIndex` is a **linear scan**, and
+the hybrid-fusion weight is **not wired** into any result path.

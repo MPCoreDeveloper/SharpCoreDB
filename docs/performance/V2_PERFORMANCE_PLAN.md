@@ -54,6 +54,10 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 
 ## 3. Work packages
 
+> **Write-path follow-up:** INSERT/UPDATE (and the DELETE machinery that shares it) now have their own
+> phased plan with measured baselines, acceptance targets and the open owner decisions —
+> see [`INSERT_UPDATE_PERFORMANCE_PLAN.md`](INSERT_UPDATE_PERFORMANCE_PLAN.md).
+
 | WP | Area | Scope | Status |
 |----|------|-------|--------|
 | **WP1** | Remove hot-path debug logging | SELECT, parameterized `ExecuteSQL`, batch transactions, INSERT | ✅ **DONE in v2.0.0** |

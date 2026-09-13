@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`2.0.0.2`)
+**Status:** Active documentation set (`2.1.0-RC.3`, branch `release/v2.1.0.0-RC.3` — net11.0 / C# 15 preview; the v2.0 stable line lives on `master`)
 
 ## 0. Manual (start here)
 
@@ -108,8 +108,6 @@ guide explaining when SharpCoreDB is fastest.
 - `scdb/PRODUCTION_GUIDE.md`
 - `serialization/README.md`
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
-- `storage/QUICK_REFERENCE_v1.7.0.md`
-- `storage/METADATA_IMPROVEMENTS_v1.7.0.md`
 - `storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 
 ## 6. Engine Implementation Notes
@@ -129,7 +127,22 @@ guide explaining when SharpCoreDB is fastest.
 - `graphrag/METRICS_AND_OBSERVABILITY_GUIDE.md`
 - `analytics/README.md`
 - `Vectors/README.md`
+- `Vectors/DISKANN_SQL_DDL.md` — `CREATE VECTOR INDEX … USING DISKANN` SQL DDL
+- `Vectors/MUNARIUM_INSPIRATION_PLAN.md` — munarium-inspired implementation record + phase status
+- `Vectors/MUNARIUM_GAP_ANALYSIS.md` — verified module-by-module gaps + borrowed-goodies backlog
+- `Vectors/PERFORMANCE_NOTES.md` — measured vector-search numbers + open performance work
+- `performance/INSERT_UPDATE_PERFORMANCE_PLAN.md` — ⭐ **Insert & Update Performance Plan** (write-path phased plan: measurement protocol, encryption-tax removal, in-place records, targets, owner decisions)
+
+## 7c. Lexical & hybrid search (v2.1 RC)
+
+- `../src/SharpCoreDB.Search/NuGet.README.md` — BM25 full-text index, classifying tokenizer, word-only stemmer
+- `../src/SharpCoreDB.HybridSearch/NuGet.README.md` — lexical + vector fused by reciprocal-rank fusion
 - `performance/graphrag-performance-tuning.md`
+
+## 7b. .NET 11 / C# 15 (v2.1 RC)
+
+- `net11/UPGRADE.md` — what .NET 11 consumers get (Zstd, Runtime Async, `SharpCoreDB.Net11`)
+- `net11/UNION_TYPES_DESIGN.md` — union-types blueprint (deferred to .NET 11 GA)
 
 ## 8. Distributed, Sync, and Migration
 
@@ -137,8 +150,6 @@ guide explaining when SharpCoreDB is fastest.
 - `sync/README.md`
 - `migration/README.md`
 - `migration/MIGRATION_GUIDE.md`
-- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
-- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
 ## 9. Functional Programming & Null Safety
 
