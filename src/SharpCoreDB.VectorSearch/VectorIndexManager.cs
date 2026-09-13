@@ -6,6 +6,7 @@ namespace SharpCoreDB.VectorSearch;
 
 using System.Collections.Concurrent;
 using SharpCoreDB.Interfaces;
+using SharpCoreDB.VectorSearch.Index;
 
 /// <summary>
 /// Manages live <see cref="IVectorIndex"/> instances for all vector-indexed columns.
@@ -147,6 +148,16 @@ public sealed class VectorIndexManager : IDisposable
                 Dimensions = dimensions,
                 M = _options.DefaultM,
                 EfConstruction = _options.DefaultEfConstruction,
+            }),
+            VectorIndexType.DiskAnn => new DiskAnnIndex(new DiskAnnConfig
+            {
+                Dimensions = dimensions,
+                MaxNeighbors = 32,
+                ConstructionSearchListSize = 200,
+                QuerySearchListSize = 100,
+                TargetRecall = 0.95
+            }),
+            _ => throw new ArgumentOutOfRangeException(nameof(indexType), indexType, "Unsupported vector index type")
                 EfSearch = _options.DefaultEfSearch,
             }),
             _ => throw new ArgumentOutOfRangeException(nameof(indexType)),

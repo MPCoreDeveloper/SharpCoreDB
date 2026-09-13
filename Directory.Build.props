@@ -28,4 +28,11 @@
     <!-- CS8629, CA1416, CS0649: Remaining nullable, platform-specific (PerformanceCounter on Windows-only examples), and unassigned field warnings (low impact) -->
     <NoWarn>$(NoWarn);CS8629;CA1416;CS0649</NoWarn>
   </PropertyGroup>
+
+  <!-- Munarium-inspired improvements (v2.1 RC) -->
+  <PropertyGroup>
+    <!-- Enable C# 15 on .NET 11 RC for union types, SIMD lane APIs, etc. -->
+    <LangVersion>latest</LangVersion>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
+  </PropertyGroup>
 </Project>

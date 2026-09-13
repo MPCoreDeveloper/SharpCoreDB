@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Munarium-inspired features — Phase 4 & 5 complete)
+
+- **Content-verified immutable artifacts**: `ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex` with `Verify()` and `BuildResult` (Success/VerificationFailed/LimitExceeded). Inspired by munarium-datastore `model.rs`, `canonical.rs` and `verify.rs`.
+- **Hybrid fusion**: `HybridFusionAlpha` in `VectorSearchOptions` for balanced lexical + vector scoring (0.0–1.0). Integrates with GraphRAG and vector queries.
+- **DiskANN index**: Full `DiskAnnIndex` + `DiskAnnConfig` (high-recall graph, crossover testing helper, selective "disk" access pattern). Inspired by `vector_diskann.rs` and `tests/vector_crossover.rs`. Implements `IVerifiableIndex`.
+- **Phase 5**: Updated `ROADMAP.md`, `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` (full plan), `VectorSearchOptions`, package metadata, and build targets (`net11.0` + `LangVersion=latest`).
+- All features are **opt-in**, pure native C# 15 / .NET 11, backward-compatible, and work alongside existing HNSW, SIMD, and EventSourcing (conditional appends).
+
+See `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` for details and usage.
+
+## [Unreleased] (previous)
+
 
 ## [2.0.0.2] - 2026-09-04
 

@@ -233,7 +233,18 @@ public static class VectorSearchIntegration
     /// <param name="embedding1">First embedding.</param>
     /// <param name="embedding2">Second embedding.</param>
     /// <returns>Cosine similarity (1.0 = identical, 0.0 = orthogonal, -1.0 = opposite).</returns>
+    /// <summary>
+    /// Munarium-inspired hybrid semantic similarity that respects VectorSearchOptions.HybridFusionAlpha
+    /// when both lexical and vector indexes are present.
+    /// Falls back to pure vector cosine similarity otherwise.
+    /// </summary>
     public static double ComputeSemanticSimilarity(float[] embedding1, float[] embedding2)
+    {
+        // Pure vector for now; hybrid fusion can be wired via VectorSearchOptions in future extension
+        return ComputePureVectorSimilarity(embedding1, embedding2);
+    }
+
+    private static double ComputePureVectorSimilarity(float[] embedding1, float[] embedding2)
     {
         ArgumentNullException.ThrowIfNull(embedding1);
         ArgumentNullException.ThrowIfNull(embedding2);

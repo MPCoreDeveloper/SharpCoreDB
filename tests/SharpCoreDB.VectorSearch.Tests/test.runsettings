@@ -4,6 +4,8 @@
     <!-- Keep the session timeout above CI blame-hang timeout to avoid false aborts during coverage collection. -->
     <TestSessionTimeout>1200000</TestSessionTimeout>
     <TestTimeout>120000</TestTimeout>
+    <!-- Opt-in to new Microsoft.Testing.Platform to fix VSTest compatibility on .NET 11 RC -->
+    <UseMicrosoftTestingPlatform>true</UseMicrosoftTestingPlatform>
   </RunConfiguration>
   <DataCollectionRunSettings>
     <DataCollectors>

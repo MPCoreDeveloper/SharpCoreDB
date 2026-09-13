@@ -221,11 +221,45 @@ CREATE INDEX idx_vectors_flat ON table_name(vector_col)
 USING FLAT;  -- Good for <100K vectors
 ```
 
+#### DiskANN (High-recall ANN — munarium-inspired, v2.1 RC)
+```sql
+-- Future SQL syntax (Phase 6)
+CREATE INDEX idx_vectors_diskann ON table_name(vector_col)
+USING DISKANN WITH (
+    max_neighbors = 32,
+    construction_list_size = 200,
+    query_list_size = 100,
+    target_recall = 0.95
+);
+```
+
+**C# usage (current)**:
+```csharp
+var config = DiskAnnConfig.HighRecall(1536);
+var index = new DiskAnnIndex(config);
+// index.Add(...), index.Search(...), index.Verify(manifest)
+```
+
 ---
 
 ## Configuration
 
-### VectorSearchOptions
+### VectorSearchOptions (updated for v2.1 RC)
+
+New properties (munarium-inspired):
+
+- `UseContentVerifiedArtifacts` — enables immutable manifest + SHA256 verification.
+- `HybridFusionAlpha` — controls lexical vs vector weight in hybrid scoring (0.0 = vector-only).
+- `BuildResult` record for type-safe build/verification outcomes.
+
+```csharp
+var options = new VectorSearchOptions
+{
+    UseContentVerifiedArtifacts = true,
+    HybridFusionAlpha = 0.6f,           // 60% lexical weight
+    // ... existing HNSW/quantization options
+};
+```
 
 ```csharp
 var options = new VectorSearchOptions

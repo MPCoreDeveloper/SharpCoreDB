@@ -1077,10 +1077,10 @@ public partial class SqlParser
         if (this.isReadOnly)
             throw new InvalidOperationException("Cannot create vector index in readonly mode");
 
-        // Expected: CREATE VECTOR INDEX idx_name ON table(column) [USING type[(params)]]
+        // Expected: CREATE VECTOR INDEX idx_name ON table(column) [USING FLAT|HNSW|DISKANN[(params)]]
         // parts[0]=CREATE, parts[1]=VECTOR, parts[2]=INDEX, parts[3]=idx_name
         if (parts.Length < 6)
-            throw new InvalidOperationException("CREATE VECTOR INDEX requires: CREATE VECTOR INDEX name ON table(column) [USING FLAT|HNSW]");
+            throw new InvalidOperationException("CREATE VECTOR INDEX requires: CREATE VECTOR INDEX name ON table(column) [USING FLAT|HNSW|DISKANN]");
 
         var indexName = parts[3];
 
@@ -1132,6 +1132,8 @@ public partial class SqlParser
                 indexType = "HNSW";
             else if (afterUsing.StartsWith("FLAT", StringComparison.OrdinalIgnoreCase))
                 indexType = "FLAT";
+            else if (afterUsing.StartsWith("DISKANN", StringComparison.OrdinalIgnoreCase))
+                indexType = "DISKANN";
         }
 
         // Store vector index metadata on the table for the extension module to consume
@@ -1140,6 +1142,7 @@ public partial class SqlParser
         table.SetMetadata($"vector_index:{columnName}:sql", sql);
 
         // Phase 5.4: Build live in-memory index if optimizer is registered
+        // Supports DISKANN via VectorIndexManager / DiskAnnIndex
         SqlParser.VectorQueryOptimizer?.BuildIndex(table, tableName, columnName, indexType);
 
         wal?.Log(sql);

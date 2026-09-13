@@ -6,6 +6,11 @@ namespace SharpCoreDB.VectorSearch;
 
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using SharpCoreDB.VectorSearch; // for VectorSearchOptions.BuildResult
+using SharpCoreDB.VectorSearch.Artifacts;
 
 /// <summary>
 /// Hierarchical Navigable Small World (HNSW) approximate nearest neighbor index.
@@ -18,7 +23,7 @@ using System.Runtime.CompilerServices;
 /// and volatile neighbor arrays. Writes (Insert/Remove) are serialized via <see cref="Lock"/>.
 /// </para>
 /// </summary>
-public sealed class HnswIndex : IVectorIndex
+public sealed class HnswIndex : IVectorIndex, IVerifiableIndex
 {
     private readonly ConcurrentDictionary<long, HnswNode> _nodes = new();
     private readonly HnswConfig _config;
@@ -27,6 +32,11 @@ public sealed class HnswIndex : IVectorIndex
 
     private volatile HnswNode? _entryPoint;
     private volatile int _maxLevel;
+
+    /// <summary>
+    /// Munarium-inspired immutable manifest. Computed once on first access or after build.
+    /// </summary>
+    private ArtifactManifest? _manifest;
 
     /// <summary>
     /// Initializes a new HNSW index with the specified configuration.
@@ -60,6 +70,57 @@ public sealed class HnswIndex : IVectorIndex
 
     /// <summary>Gets the HNSW configuration for this index.</summary>
     public HnswConfig Config => _config;
+
+    /// <inheritdoc />
+    public ArtifactManifest Manifest
+    {
+        get
+        {
+            if (_manifest is null)
+            {
+                _manifest = new ArtifactManifest
+                {
+                    IndexVersionId = $"idx-hnsw-{_config.Dimensions}-{_config.M}-{_config.EfConstruction}",
+                    Dimensions = _config.Dimensions,
+                    Count = Count,
+                    IndexType = IndexType,
+                    DistanceFunction = DistanceFunction,
+                    HybridFusionAlpha = 0.5f, // default, can be overridden via options
+                    BuildParams = new()
+                    {
+                        ["M"] = _config.M,
+                        ["EfConstruction"] = _config.EfConstruction,
+                        ["EfSearch"] = _config.EfSearch
+                    }
+                }.WithComputedId();
+            }
+            return _manifest;
+        }
+    }
+
+    /// <inheritdoc />
+    public BuildResult Verify(ArtifactManifest expectedManifest)
+    {
+        if (expectedManifest.ArtifactId != Manifest.ArtifactId)
+        {
+            return new BuildResult.VerificationFailed(
+                "Manifest hash mismatch - possible tampering or version drift",
+                Manifest.ArtifactId);
+        }
+
+        if (expectedManifest.Dimensions != Dimensions || expectedManifest.Count != Count)
+        {
+            return new BuildResult.LimitExceeded("dimension or count mismatch", Count, expectedManifest.Count);
+        }
+
+        return new BuildResult.Success(Manifest.ArtifactId, 0);
+    }
+
+    /// <inheritdoc />
+    public byte[] SerializeManifest()
+    {
+        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Manifest));
+    }
 
     /// <inheritdoc />
     public long EstimatedMemoryBytes

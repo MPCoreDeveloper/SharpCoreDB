@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>14.0</LangVersion>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -19,7 +19,7 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>
-    <Description>Vector search extension for SharpCoreDB — SIMD-accelerated similarity search with HNSW indexing. Pure managed C# 14, zero external dependencies, NativeAOT compatible.</Description>
+    <Description>Vector search extension for SharpCoreDB — SIMD-accelerated similarity search with HNSW + DiskANN-inspired indexing, hybrid fusion, and content-verified immutable artifacts (Munarium-inspired). Native C# 15 / .NET 11 support in v2.1 RC.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
     <PackageTags>vector;search;embedding;similarity;hnsw;simd;ai;rag;database;sharpcoredb</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -28,7 +28,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.1 RC (2026-09-13): Munarium-inspired native C# features - DiskAnn index type, content-verified artifacts (canonical manifest + SHA256 artifact_id + verification), hybrid fusion weights, C# 15 record-based BuildResult for strict error handling. All changes are pure managed .NET 11 / C# 15 on the release/v2.1.0.0 branch. See docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

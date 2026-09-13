@@ -141,6 +141,13 @@
 
 ---
 
+### Munarium-inspired Vector & Artifact features (v2.1 RC)
+
+- ✅ **Content-verified immutable artifacts** (`ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex`, `Verify()` with `BuildResult`).
+- ✅ **Hybrid fusion scoring** (`HybridFusionAlpha` in `VectorSearchOptions` for lexical + vector balance).
+- ✅ **DiskANN-style index** (`DiskAnnIndex`, `DiskAnnConfig`, recall-focused graph, crossover testing helper — inspired by munarium-datastore `vector_diskann.rs`).
+- All features are pure native C# 15 / .NET 11, opt-in, and backward compatible.
+
 ### .NET 11 / C# 15 migration (v2.1, after Nov 2026 GA)
 >> **Why:** Runtime Async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 are
 >> automatic wins on hot paths. v2.0.x stays on .NET 10 / C# 14 (locked).
