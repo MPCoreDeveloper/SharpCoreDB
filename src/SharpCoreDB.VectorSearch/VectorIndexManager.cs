@@ -158,9 +158,6 @@ public sealed class VectorIndexManager : IDisposable
                 TargetRecall = 0.95
             }),
             _ => throw new ArgumentOutOfRangeException(nameof(indexType), indexType, "Unsupported vector index type")
-                EfSearch = _options.DefaultEfSearch,
-            }),
-            _ => throw new ArgumentOutOfRangeException(nameof(indexType)),
         };
     }
 
