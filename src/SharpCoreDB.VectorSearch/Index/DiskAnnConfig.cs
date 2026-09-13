@@ -50,6 +50,20 @@ public sealed class DiskAnnConfig
     public double TargetRecall { get; init; } = 0.95;
 
     /// <summary>
+    /// Vamana pruning diversity factor (the DiskANN paper's alpha). Values &gt; 1.0 keep
+    /// longer-range edges and improve recall at a small build cost. Default: 1.2.
+    /// </summary>
+    public double Alpha { get; init; } = 1.2;
+
+    /// <summary>
+    /// Number of Vamana refinement passes over the whole set. The paper's default is 2; extra
+    /// passes keep improving recall (more long-range links get re-evaluated against the grown
+    /// graph) at a linear build cost, which is usually cheaper than raising
+    /// <see cref="MaxNeighbors"/>. Default: 2.
+    /// </summary>
+    public int BuildPasses { get; init; } = 2;
+
+    /// <summary>
     /// Validates configuration parameters.
     /// </summary>
     internal void Validate()
@@ -59,6 +73,8 @@ public sealed class DiskAnnConfig
         ArgumentOutOfRangeException.ThrowIfLessThan(ConstructionSearchListSize, 10);
         ArgumentOutOfRangeException.ThrowIfLessThan(QuerySearchListSize, 10);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(TargetRecall);
+        ArgumentOutOfRangeException.ThrowIfLessThan(Alpha, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(BuildPasses);
     }
 
     /// <summary>Default high-recall configuration (matches munarium diskann defaults).</summary>

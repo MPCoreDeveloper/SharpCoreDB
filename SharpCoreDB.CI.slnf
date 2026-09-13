@@ -25,6 +25,8 @@
       "src\\SharpCoreDB.Serilog.Sinks\\SharpCoreDB.Serilog.Sinks.csproj",
       "src\\SharpCoreDB.Server.Core\\SharpCoreDB.Server.Core.csproj",
       "src\\SharpCoreDB.Server.Protocol\\SharpCoreDB.Server.Protocol.csproj",
+      "src\\SharpCoreDB.HybridSearch\\SharpCoreDB.HybridSearch.csproj",
+      "src\\SharpCoreDB.Search\\SharpCoreDB.Search.csproj",
       "src\\SharpCoreDB.VectorSearch\\SharpCoreDB.VectorSearch.csproj",
       "tests\\SharpCoreDB.Tests\\SharpCoreDB.Tests.csproj",
       "tests\\SharpCoreDB.VectorSearch.Tests\\SharpCoreDB.VectorSearch.Tests.csproj",

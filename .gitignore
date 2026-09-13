@@ -400,6 +400,9 @@ PageCacheTest/
 
 # NuGet packaging artifacts
 artifacts/
+# ...but keep SOURCE folders named Artifacts (the ignore above matches case-insensitively on Windows)
+!src/**/Artifacts/
+!src/**/Artifacts/**
 packages/
 *.nupkg
 *.snupkg

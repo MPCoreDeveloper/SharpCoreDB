@@ -29,10 +29,9 @@
     <NoWarn>$(NoWarn);CS8629;CA1416;CS0649</NoWarn>
   </PropertyGroup>
 
-  <!-- Munarium-inspired improvements (v2.1 RC) -->
+  <!-- v2.1 RC branch uses net11.0 + C# 15 preview across the whole suite.
+       (The net10.0 / C# 14 line is the v2.0 stable packages on master.) -->
   <PropertyGroup>
-    <!-- Enable C# 15 on .NET 11 RC for union types, SIMD lane APIs, etc. -->
-    <LangVersion>latest</LangVersion>
-    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
+    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 </Project>

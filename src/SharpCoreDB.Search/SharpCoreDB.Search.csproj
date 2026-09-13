@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
+
+    <PackageId>SharpCoreDB.Search</PackageId>
+    <Version>2.1.0-RC.3</Version>
+    <Authors>MPCoreDeveloper</Authors>
+    <Company>SharpCoreDB</Company>
+    <Product>SharpCoreDB.Search</Product>
+    <Description>Lexical (full-text) search for SharpCoreDB — a classifying tokenizer, PostgreSQL-16 English stop words, an English word-only stemmer and a BM25 inverted index. Pure managed C# 15 / .NET 11.</Description>
+    <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
+    <PackageTags>full-text;search;bm25;tokenizer;stemmer;lexical;database;sharpcoredb;net11;csharp15</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageIcon>SharpCoreDB.jpg</PackageIcon>
+    <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
+    <PackageReleaseNotes>v2.1.0-RC.3 (2026-09-13): net11.0-only (C# 15 preview). Munarium-inspired lexical stack: a classifying tokenizer (numbers, sign absorption, hyphen compounds), PostgreSQL-16 English stop words, an English word-only stemmer and a BM25 inverted index with positions.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCoreDB\SharpCoreDB.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="NuGet.README.md" Pack="true" PackagePath="/" />
+    <None Include="..\SharpCoreDB\SharpCoreDB.jpg" Link="SharpCoreDB.jpg" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

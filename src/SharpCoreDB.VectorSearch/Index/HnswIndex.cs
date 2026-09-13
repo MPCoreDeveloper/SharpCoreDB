@@ -85,7 +85,7 @@ public sealed class HnswIndex : IVectorIndex, IVerifiableIndex
                     Count = Count,
                     IndexType = IndexType,
                     DistanceFunction = DistanceFunction,
-                    HybridFusionAlpha = 0.5f, // default, can be overridden via options
+                    HybridFusionAlpha = "0.5", // default, can be overridden via options
                     BuildParams = new()
                     {
                         ["M"] = _config.M,
@@ -101,11 +101,17 @@ public sealed class HnswIndex : IVectorIndex, IVerifiableIndex
     /// <inheritdoc />
     public BuildResult Verify(ArtifactManifest expectedManifest)
     {
-        if (expectedManifest.ArtifactId != Manifest.ArtifactId)
+        ArgumentNullException.ThrowIfNull(expectedManifest);
+        var current = Manifest;
+
+        // Content-addressed verification: recompute the id from the expected manifest's fields so a
+        // manifest whose claimed id no longer matches its own content is detected as tampered/drifted.
+        var recomputedExpected = expectedManifest.WithComputedId();
+        if (current.ArtifactId != recomputedExpected.ArtifactId || current.ArtifactId != expectedManifest.ArtifactId)
         {
             return new BuildResult.VerificationFailed(
                 "Manifest hash mismatch - possible tampering or version drift",
-                Manifest.ArtifactId);
+                current.ArtifactId);
         }
 
         if (expectedManifest.Dimensions != Dimensions || expectedManifest.Count != Count)
@@ -113,7 +119,7 @@ public sealed class HnswIndex : IVectorIndex, IVerifiableIndex
             return new BuildResult.LimitExceeded("dimension or count mismatch", Count, expectedManifest.Count);
         }
 
-        return new BuildResult.Success(Manifest.ArtifactId, 0);
+        return new BuildResult.Success(current.ArtifactId, 0);
     }
 
     /// <inheritdoc />

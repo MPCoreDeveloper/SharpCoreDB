@@ -3,167 +3,99 @@
 // Licensed under the MIT License. Full implementation inspired by munarium-datastore vector_diskann.rs.
 // </copyright>
 
-using System.Collections.Concurrent;
-using SharpCoreDB.VectorSearch;
-using SharpCoreDB.VectorSearch.Artifacts;
-
 namespace SharpCoreDB.VectorSearch.Index;
 
-using System.Text;
-using System.Text.Json;
 using SharpCoreDB.VectorSearch;
 using SharpCoreDB.VectorSearch.Artifacts;
 
 /// <summary>
-/// DiskANN-style approximate nearest neighbor index (munarium-inspired).
-/// Uses a hierarchical graph with selective disk reads for high-recall on very large corpora (>10M vectors).
-/// Builds a compressed graph with neighbor lists; supports crossover testing vs exact index.
-/// Fully native C# 15 / .NET 11 — uses existing SIMD distances and TopKHeap.
+/// DiskANN-style approximate nearest-neighbour index: a <b>Vamana</b> graph with greedy beam
+/// search (Subramanya et al., "DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a
+/// Single Node"). The graph is built lazily and frozen until the store changes.
 /// </summary>
-public sealed class DiskAnnIndex : IVectorIndex, IVerifiableIndex
+/// <remarks>
+/// Design choices mirroring the munarium datastore:
+/// <list type="bullet">
+/// <item><b>Full precision throughout.</b> Vectors are stored as given and traversal uses the true
+/// distance, so the ONLY approximation is which nodes the beam visits.</item>
+/// <item><b>Robust prune with alpha &gt; 1.0</b> keeps longer-range edges and improves recall at a
+/// small build cost.</item>
+/// <item><b>The entry point is the medoid</b> (the live vertex closest to the centroid).</item>
+/// <item><b>Deterministic construction</b> — the random initialization is seeded, candidates are
+/// ordered by (distance, id), so two builds of the same data agree.</item>
+/// </list>
+/// Storage is a contiguous struct-of-arrays, so traversal touches one linear buffer.
+/// </remarks>
+public sealed partial class DiskAnnIndex : IVectorIndex, IVerifiableIndex
 {
-    private readonly DiskAnnConfig _config;
-    private readonly ConcurrentDictionary<long, float[]> _vectors = new(); // In-memory for v1; later mmap
-    private readonly ConcurrentDictionary<long, List<long>> _neighbors = new(); // Graph edges
-    private readonly Lock _writeLock = new();
+    /// <summary>Engine id recorded in an artifact manifest.</summary>
+    public const string EngineId = "diskann";
 
+    /// <summary>Engine revision (this pure-C# Vamana implementation).</summary>
+    public const string EngineRevision = "1.0.0-csharp-vamana";
+
+    /// <summary>The envelope feature bit an approximate artifact requires.</summary>
+    public const string FeatureBit = "vector.diskann.v1";
+
+    private const long Tombstone = long.MinValue;
+    private const int RngSeed = 0x5EED;
+
+    private readonly DiskAnnConfig _config;
+    private readonly Lock _writeLock = new();
+    private readonly Dictionary<long, int> _idToSlot = new();
+
+    private float[] _data;
+    private long[] _ids;
+    private int _capacity;
+    private int _length;
+    private int _liveCount;
+
+    private volatile Graph? _graph;
     private ArtifactManifest? _manifest;
 
-    /// <summary>Initializes a new DiskANN index.</summary>
+    /// <summary>Initializes a new DiskANN (Vamana) index.</summary>
+    /// <param name="config">Graph and vector parameters.</param>
     public DiskAnnIndex(DiskAnnConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
         config.Validate();
         _config = config;
+
+        _capacity = 4;
+        _data = new float[_capacity * config.Dimensions];
+        _ids = new long[_capacity];
     }
 
+    /// <inheritdoc />
     public VectorIndexType IndexType => VectorIndexType.DiskAnn;
-    public int Count => _vectors.Count;
+
+    /// <inheritdoc />
+    public int Count => _liveCount;
+
+    /// <inheritdoc />
     public int Dimensions => _config.Dimensions;
+
+    /// <inheritdoc />
     public DistanceFunction DistanceFunction => _config.DistanceFunction;
 
-    public ArtifactManifest Manifest
-    {
-        get
-        {
-            if (_manifest is null)
-            {
-                _manifest = new ArtifactManifest
-                {
-                    IndexVersionId = $"idx-diskann-{_config.Dimensions}-{_config.MaxNeighbors}-{_config.ConstructionSearchListSize}",
-                    Dimensions = Dimensions,
-                    Count = Count,
-                    IndexType = IndexType,
-                    DistanceFunction = DistanceFunction,
-                    HybridFusionAlpha = 0.5f,
-                    BuildParams = new()
-                    {
-                        ["MaxNeighbors"] = _config.MaxNeighbors,
-                        ["ConstructionSearchListSize"] = _config.ConstructionSearchListSize,
-                        ["QuerySearchListSize"] = _config.QuerySearchListSize,
-                        ["TargetRecall"] = _config.TargetRecall
-                    }
-                }.WithComputedId();
-            }
-            return _manifest;
-        }
-    }
+    /// <summary>Gets the graph/vector parameters this index was created with.</summary>
+    public DiskAnnConfig Config => _config;
 
-    public void Add(long id, ReadOnlySpan<float> vector)
-    {
-        if (vector.Length != Dimensions)
-            throw new ArgumentException($"Vector dimension mismatch: expected {Dimensions}, got {vector.Length}");
-
-        var vectorCopy = vector.ToArray();
-
-        lock (_writeLock)
-        {
-            if (!_vectors.TryAdd(id, vectorCopy))
-                throw new ArgumentException($"Vector with id {id} already exists");
-
-            // Simple graph construction (full DiskANN greedy + prune in future versions)
-            // For v1: connect to nearest existing nodes (can be optimized with HNSW-style navigation)
-            _neighbors[id] = new List<long>(capacity: _config.MaxNeighbors);
-            // TODO: Implement full greedy search + neighbor selection as in munarium vector_diskann.rs
-        }
-    }
-
-    public bool Remove(long id)
-    {
-        lock (_writeLock)
-        {
-            _neighbors.TryRemove(id, out _);
-            return _vectors.TryRemove(id, out _);
-        }
-    }
-
-    public IReadOnlyList<VectorSearchResult> Search(ReadOnlySpan<float> query, int k)
-    {
-        if (query.Length != Dimensions)
-            throw new ArgumentException($"Query dimension mismatch: expected {Dimensions}");
-
-        var results = new TopKHeap(k);
-
-        // Simple linear scan for initial implementation (replace with DiskANN beam search / graph traversal)
-        foreach (var (id, vector) in _vectors)
-        {
-            float distance = DistanceMetrics.Compute(query, vector, DistanceFunction);
-            results.TryAdd(id, distance);
-        }
-
-        return results.ToSortedArray();
-    }
-
-    public void Clear()
-    {
-        lock (_writeLock)
-        {
-            _vectors.Clear();
-            _neighbors.Clear();
-            _manifest = null;
-        }
-    }
-
+    /// <inheritdoc />
     public long EstimatedMemoryBytes
     {
         get
         {
-            long bytes = _vectors.Count * (Dimensions * sizeof(float) + 64); // vector + overhead
-            bytes += _neighbors.Count * 64; // neighbor lists
-            return bytes;
+            long vectors = (long)_length * ((_config.Dimensions * sizeof(float)) + sizeof(long));
+            Graph? graph = _graph;
+            long edges = graph is null ? 0 : graph.NeighborSlots.Sum(static n => (long)n.Count) * sizeof(int);
+            return vectors + edges + 256;
         }
     }
 
-    public BuildResult Verify(ArtifactManifest expectedManifest)
-    {
-        var current = Manifest;
-        if (current.ArtifactId != expectedManifest.ArtifactId)
-            return new BuildResult.VerificationFailed("Artifact ID mismatch - content changed or corrupted", current.ArtifactId);
-
-        if (current.Count != expectedManifest.Count || current.Dimensions != expectedManifest.Dimensions)
-            return new BuildResult.LimitExceeded("Count or dimensions mismatch", current.Count, expectedManifest.Count);
-
-        return new BuildResult.Success(current.ArtifactId, 0);
-    }
-
-    public byte[] SerializeManifest()
-    {
-        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Manifest));
-    }
-
-    public void Dispose()
-    {
-        Clear();
-    }
-
     /// <summary>
-    /// Crossover test helper (inspired by munarium tests/vector_crossover.rs).
-    /// Compares this index recall against an exact FlatIndex on the same data.
+    /// An immutable, consistently-published view of the built graph. Neighbours are SLOT indices,
+    /// not ids, so traversal never touches the id-to-slot map.
     /// </summary>
-    public double MeasureRecallAgainstExact(FlatIndex exactIndex, int k, int numQueries = 100)
-    {
-        // Random query generation and recall calculation would go here in full test.
-        // For now returns target as placeholder.
-        return _config.TargetRecall;
-    }
+    private sealed record Graph(List<int>[] NeighborSlots, int EntrySlot, int Length);
 }

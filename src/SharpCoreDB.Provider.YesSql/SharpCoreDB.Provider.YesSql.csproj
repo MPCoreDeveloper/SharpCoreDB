@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>SharpCoreDB.Provider.YesSql</RootNamespace>
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Provider.YesSql</PackageId>
-    <Version>2.0.0.2</Version>
+    <Version>2.1.0-RC.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.YesSql</Product>

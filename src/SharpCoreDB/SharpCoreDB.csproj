@@ -1,16 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
-    <!-- C# 15 preview features (union types, closed hierarchies, extension indexers, collection
-         expression arguments) are only enabled on the net11.0 target; net10.0 stays on C# 14 so
-         .NET 10 consumers keep byte-identical behavior. -->
-    <LangVersion Condition="'$(TargetFramework)' == 'net11.0'">preview</LangVersion>
-    <LangVersion Condition="'$(TargetFramework)' != 'net11.0'">14.0</LangVersion>
-    <!-- .NET 11 Runtime Async (net11.0 only): the compiler emits runtime-native async state machines
-         instead of per-method generated ones (fewer heap allocations, cleaner stack traces). The
-         net10.0 target is untouched, so .NET 10 consumers keep the exact same async behavior. -->
-    <Features Condition="'$(TargetFramework)' == 'net11.0'">$(Features);runtime-async=on</Features>
+    <TargetFramework>net11.0</TargetFramework>
+    <!-- v2.1 RC line is net11.0-only: C# 15 preview features (union types, closed hierarchies,
+         extension indexers, collection expression arguments) are always enabled. The net10.0 / C# 14
+         line remains the v2.0 stable packages on master. -->
+    <LangVersion>preview</LangVersion>
+    <!-- .NET 11 Runtime Async: the compiler emits runtime-native async state machines instead of
+         per-method generated ones (fewer heap allocations, cleaner stack traces). -->
+    <Features>$(Features);runtime-async=on</Features>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -30,7 +28,7 @@
     <!-- Suppress only StyleCop warnings that conflict with project style -->
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309;S3267;S1135;S1144;S1172;S2325;S1186;S927;S1006;S4144</NoWarn>
     
-    <!-- Phase 2C: Dynamic PGO Optimization (NET 10 / C# 14) -->
+    <!-- Phase 2C: Dynamic PGO Optimization (NET 11 / C# 15) -->
     <!-- Enables tiered JIT compilation with profile-guided optimization -->
     <!-- Expected improvement: 1.2-2x for hot paths -->
     <TieredPGO>true</TieredPGO>
@@ -39,7 +37,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB</PackageId>
-    <Version>2.1.0-RC.1</Version>
+    <Version>2.1.0-RC.3</Version>
     <AssemblyVersion>2.1.0.0</AssemblyVersion>
     <FileVersion>2.1.0.0</FileVersion>
     <Authors>MPCoreDeveloper</Authors>
@@ -47,8 +45,8 @@
     <Product>SharpCoreDB</Product>
     <Description>A lightweight, encrypted, file-based database engine with SQL support, AES-256-GCM encryption, modern C# features, and production-ready performance for time-tracking, invoicing, and project management applications. Supports Windows, Linux, macOS, Android, iOS, and IoT/embedded devices.</Description>
     <Copyright>Copyright (c) 2026 MPCoreDeveloper</Copyright>
-    <PackageReleaseNotes>v2.1.0-RC.1 (2026-09-12): .NET 11 / C# 15 preview release line — multi-targets net10.0;net11.0, native Zstandard compression (quality presets 1/5/19 + frame checksum), Runtime Async on net11, and an additive C# 15 API surface (SharpCoreDB.Net11). Fully backward compatible with v2.0 on the net10.0 target. See docs/net11/UPGRADE.md for details.</PackageReleaseNotes>
-    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net10;net11;csharp14;csharp15;zstd;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
+    <PackageReleaseNotes>v2.1.0-RC.3 (2026-09-13): .NET 11 / C# 15 preview release line — net11.0-only, native Zstandard compression (quality presets 1/5/19 + frame checksum), Runtime Async, an additive C# 15 API surface (SharpCoreDB.Net11), and the Munarium-inspired DiskANN index + content-verified index artifacts. The net10.0 / C# 14 line remains the v2.0 stable packages on master. See docs/net11/UPGRADE.md for details.</PackageReleaseNotes>
+    <PackageTags>database;embedded;encryption;sql;nosql;time-tracking;invoicing;net11;csharp15;zstd;performance;android;ios;mobile;iot;arm64;x64;distributed;sync</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>

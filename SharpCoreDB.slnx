@@ -108,11 +108,13 @@
     <Project Path="src/SharpCoreDB.Functional/SharpCoreDB.Functional.csproj" />
     <Project Path="src/SharpCoreDB.Graph.Advanced/SharpCoreDB.Graph.Advanced.csproj" />
     <Project Path="src/SharpCoreDB.Graph/SharpCoreDB.Graph.csproj" />
+    <Project Path="src/SharpCoreDB.HybridSearch/SharpCoreDB.HybridSearch.csproj" />
     <Project Path="src/SharpCoreDB.Identity/SharpCoreDB.Identity.csproj" />
     <Project Path="src/SharpCoreDB.Projections/SharpCoreDB.Projections.csproj" />
     <Project Path="src/SharpCoreDB.Provider.Sync/SharpCoreDB.Provider.Sync.csproj" />
     <Project Path="src/SharpCoreDB.Provider.YesSql/SharpCoreDB.Provider.YesSql.csproj" />
     <Project Path="src/SharpCoreDB.Serilog.Sinks/SharpCoreDB.Serilog.Sinks.csproj" />
+    <Project Path="src/SharpCoreDB.Search/SharpCoreDB.Search.csproj" />
     <Project Path="src/SharpCoreDB.Server.Core/SharpCoreDB.Server.Core.csproj" />
     <Project Path="src/SharpCoreDB.Server.Protocol/SharpCoreDB.Server.Protocol.csproj" />
     <Project Path="src/SharpCoreDB.Server/SharpCoreDB.Server.csproj" />
@@ -127,10 +129,12 @@
     <Project Path="tests/SharpCoreDB.CQRS.Tests/SharpCoreDB.CQRS.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.DemoJoinsSubQ/SharpCoreDB.DemoJoinsSubQ.csproj" />
     <Project Path="tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="tests/SharpCoreDB.HybridSearch.Tests/SharpCoreDB.HybridSearch.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.EventSourcing.Tests/SharpCoreDB.EventSourcing.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Profiling/SharpCoreDB.Profiling.csproj" />
+    <Project Path="tests/SharpCoreDB.Search.Tests/SharpCoreDB.Search.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Projections.Tests/SharpCoreDB.Projections.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj" />
     <Project Path="tests/SharpCoreDB.Server.IntegrationTests/SharpCoreDB.Server.IntegrationTests.csproj" />

@@ -1,19 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>preview</LangVersion>
     <AssemblyName>SharpCoreDB.Graph.Advanced</AssemblyName>
     <RootNamespace>SharpCoreDB.Graph.Advanced</RootNamespace>
-    <Version>2.0.0.2</Version>
+    <Version>2.1.0-RC.3</Version>
     <PackageId>SharpCoreDB.Graph.Advanced</PackageId>
     <Authors>MPCoreDeveloper</Authors>
     <Company>MPCoreDeveloper</Company>
     <Product>SharpCoreDB.Graph.Advanced</Product>
     <Description>`SharpCoreDB.Graph` provides traversal and pathfinding; `SharpCoreDB.Graph.Advanced` adds analytics, centrality metrics, subgraph analysis, and GraphRAG with vector search integration.</Description>
     <Copyright>Copyright © 2026 MPCoreDeveloper</Copyright>
-    <PackageTags>database;graph;analytics;community-detection;centrality;graphrag;vector-search;c14;net10</PackageTags>
+    <PackageTags>database;graph;analytics;community-detection;centrality;graphrag;vector-search;csharp15;net11</PackageTags>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

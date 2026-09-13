@@ -1,10 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
-    <Version>2.1.0-RC.1</Version>
-    <LangVersion Condition="'$(TargetFramework)' == 'net11.0'">preview</LangVersion>
-    <LangVersion Condition="'$(TargetFramework)' != 'net11.0'">14.0</LangVersion>
+    <TargetFramework>net11.0</TargetFramework>
+    <Version>2.1.0-RC.3</Version>
+    <LangVersion>preview</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

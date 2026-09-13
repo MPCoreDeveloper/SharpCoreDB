@@ -101,9 +101,13 @@ public sealed class VectorQueryOptimizer(VectorIndexManager indexManager) : IVec
     /// <inheritdoc />
     public void BuildIndex(ITable table, string tableName, string columnName, string indexType)
     {
+        // The SQL parser whitelists FLAT / HNSW / DISKANN (see SqlParser.DDL.cs). DISKANN used to
+        // fall into the default arm and silently build a FlatIndex, so `USING DISKANN` produced an
+        // exact scan behind a DiskANN-shaped name.
         var type = indexType.ToUpperInvariant() switch
         {
             "HNSW" => VectorIndexType.Hnsw,
+            "DISKANN" => VectorIndexType.DiskAnn,
             "FLAT" => VectorIndexType.Flat,
             _ => VectorIndexType.Flat,
         };

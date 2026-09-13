@@ -1,13 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- v2.1.0-RC.2: multi-target net10 (C# 14) + net11 (C# 15 preview) and add
-         optimistic-concurrency conditional appends (TryAppendEventsAsync /
-         TryAppendEventAsync with expectedVersion). -->
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
-    <LangVersion Condition="'$(TargetFramework)' == 'net11.0'">preview</LangVersion>
-    <LangVersion Condition="'$(TargetFramework)' != 'net11.0'">14.0</LangVersion>
-    <Features Condition="'$(TargetFramework)' == 'net11.0'">$(Features);runtime-async=on</Features>
+    <!-- v2.1.0-RC.3: net11.0-only (C# 15 preview) with optimistic-concurrency conditional
+         appends (TryAppendEventsAsync / TryAppendEventAsync with expectedVersion). -->
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Features>$(Features);runtime-async=on</Features>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -16,7 +14,7 @@
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
 
     <PackageId>SharpCoreDB.EventSourcing</PackageId>
-    <Version>2.1.0-RC.2</Version>
+    <Version>2.1.0-RC.3</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.EventSourcing</Product>
@@ -29,7 +27,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v2.1.0-RC.2: adds a .NET 11 (C# 15 preview) target alongside .NET 10 (C# 14), and introduces optimistic-concurrency conditional appends - IEventStore.TryAppendEventsAsync / TryAppendEventAsync with an expectedVersion, returning ConditionalAppendResult (Conflict carries the expected and actual stream lengths). This is the append-only ledger's compare-and-set primitive: a writer that lost the race is told so and nothing is written. Additive; no breaking changes.</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.1.0-RC.3: net11.0-only (C# 15 preview) with optimistic-concurrency conditional appends - IEventStore.TryAppendEventsAsync / TryAppendEventAsync with an expectedVersion, returning ConditionalAppendResult (Conflict carries the expected and actual stream lengths). This is the append-only ledger's compare-and-set primitive: a writer that lost the race is told so and nothing is written.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

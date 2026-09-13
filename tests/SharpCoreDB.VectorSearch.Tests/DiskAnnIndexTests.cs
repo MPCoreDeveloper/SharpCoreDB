@@ -17,7 +17,7 @@ public class DiskAnnIndexTests
         // Arrange
         var config = DiskAnnConfig.HighRecall(8); // small dims for test speed
         using var diskAnn = new DiskAnnIndex(config);
-        using var flat = new FlatIndex(DistanceFunction.Cosine, 8);
+        using var flat = new FlatIndex(8, DistanceFunction.Cosine);
 
         var rng = new Random(42);
         const int count = 1000;
