@@ -1,36 +1,36 @@
-# SharpCoreDB v2.1 Preview — .NET 11 / C# 15
+# SharpCoreDB v2.1 RC — .NET 11 / C# 15
 
-> Branch: `release/v2.1.0.0-preview.1` · Package version: `2.1.0-preview.1`
+> Branch: `release/v2.1.0.0-RC.3` · Package version: `2.1.0-RC.3`
 
 ## What this is
 
-The v2.1 preview is built from current `master` and multi-targets:
+The v2.1 RC line is **net11.0-only**, built with **C# 15 preview**:
 
 ```xml
-<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+<TargetFramework>net11.0</TargetFramework>
+<LangVersion>preview</LangVersion>
 ```
 
-- **net10.0** consumers get exactly the same API and behavior as v2.0 (C# 14, byte-identical, 1679 tests green).
-- **net11.0** consumers get the net11-native features below. C# 15 preview language is enabled **only** on this target
-  (net10.0 stays on C# 14), so nothing about the existing API surface changes.
+- The **net10.0 / C# 14** line is the **v2.0 stable packages on `master`** (e.g. `SharpCoreDB` 2.0.0.3).
+- The two lines are maintained on separate branches. The v2.1 branch never carries a net10.0 target, so
+  there is no multi-targeting and no per-target `#if` drift in the shipped assemblies.
 
-## What .NET 11 consumers get automatically
+## What .NET 11 consumers get
 
 ### 1. Native Zstandard compression
-`BlockCompressionMode.Zstd` is now backed by `System.IO.Compression.ZstandardStream` (native zstd):
+`BlockCompressionMode.Zstd` is backed by `System.IO.Compression.ZstandardStream` (native zstd):
 
 - `OptionalCompressionLevel` maps to zstd quality: `Fastest → 1`, `Optimal → 5`, `SmallestSize → 19`.
 - A frame checksum is appended (`ZstandardCompressionOptions.AppendChecksum = true`), so corruption is
   detected on read.
-- On **net10.0**, `Zstd` throws `PlatformNotSupportedException` (documented in `BlockCompressionMode`).
 
 ### 2. Runtime Async
-The net11.0 target compiles with `Features=runtime-async=on` (official reference:
-<https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime>): async/await emits
-**runtime-native state machines** instead of per-method generated ones — cleaner stack traces, better
-debuggability, lower overhead. No API or behavior change. The net10.0 target is untouched.
-To opt a single project out, set `<UseRuntimeAsync>false</UseRuntimeAsync>` in its project file
-(the old `DOTNET_RuntimeAsync` / `UNSUPPORTED_RuntimeAsync` environment variables are removed).
+The project compiles with `Features=runtime-async=on`: async/await emits **runtime-native state machines**
+instead of per-method generated ones — cleaner stack traces, better debuggability, lower overhead. No API
+or behavior change. Opt a single project out with `<UseRuntimeAsync>false</UseRuntimeAsync>`
+(the old `DOTNET_RuntimeAsync` / `UNSUPPORTED_RuntimeAsync` environment variables are gone).
+
+Reference: <https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime>
 
 ### 3. C# 15 preview API surface (`SharpCoreDB.Net11`, opt-in)
 Import `using SharpCoreDB.Net11;` to unlock additive members:
@@ -38,35 +38,34 @@ Import `using SharpCoreDB.Net11;` to unlock additive members:
 ```csharp
 using SharpCoreDB.Net11;
 
-TableInfo? docs = db["docs"];                 // extension indexer → TableInfo? (case-insensitive)
-List<string> names = Net11Additions.NewList<string>(128); // collection-expression capacity argument
+TableInfo? docs = db["docs"];                              // extension indexer → TableInfo? (case-insensitive)
+List<string> names = Net11Additions.NewList<string>(128);  // collection-expression capacity argument
 ```
 
-- The extension indexer cannot conflict with existing members: `Database` has no indexer of its own.
-- These members are source-gated (`#if NET11_0_OR_GREATER`) and compiled only for net11.0.
+These members are source-gated (`#if NET11_0_OR_GREATER`) and compiled only for net11.0.
 
-## What is deliberately NOT in this preview
+## Munarium-inspired vector features (also in this RC)
+
+- `DiskAnnIndex` + `DiskAnnConfig` (high-recall ANN), `IVerifiableIndex` with canonical SHA-256
+  `ArtifactManifest`, `HybridFusionAlpha`, and the `BuildResult` hierarchy.
+- SQL DDL: `CREATE VECTOR INDEX … USING DISKANN`. See `docs/Vectors/DISKANN_SQL_DDL.md` and
+  `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md`.
+
+## What is deliberately NOT in this RC
 
 | Item | Reason |
 |---|---|
-| **Union types** | Verified working in RC1 (`union` keyword + `[Union]`/`IUnion`); blueprint ready in `docs/net11/UNION_TYPES_DESIGN.md`. Held back from shipping until the preview syntax stabilizes at GA; will live in a new opt-in `SharpCoreDB.Unions` namespace (never retrofitted onto existing result types). |
+| **Union types** | Verified working in RC1 (`union` keyword + `[Union]`/`IUnion`); blueprint in `docs/net11/UNION_TYPES_DESIGN.md`. Held back until the preview syntax stabilizes at GA; will live in a new opt-in `SharpCoreDB.Unions` namespace (never retrofitted onto existing result types). |
 | **SIMD Zip / Unzip / Concat / CreateGeometricSequence** | Not applied yet — needs benchmarking against the existing `SimdHelper` AVX-512 → AVX2 → SSE/Neon kernels first. |
-| **Broad `[with(capacity: …)]` rewrites** | Would require `#if` gating across shared hot-path code; only exposed via the net11-only helper for now. |
+| **Broad `[with(capacity: …)]` rewrites** | Would require `#if` gating across shared hot-path code; exposed only through the net11-only helper for now. |
 
-None of the above touches the net10.0 target.
-
-## Backward compatibility guarantees
-
-- No existing member changed; only additive members were introduced.
-- net10.0: 1679 tests green (unchanged).
-- net11.0: 1688 tests green, including Zstd round-trip, storage compression/reopen, and the new net11 tests.
-
-## Consuming the preview
+## Consuming the RC
 
 ```
-git fetch origin release/v2.1.0.0-preview.1
-git checkout release/v2.1.0.0-preview.1
+git fetch origin release/v2.1.0.0-RC.3
+git checkout release/v2.1.0.0-RC.3
 dotnet pack src/SharpCoreDB/SharpCoreDB.csproj -c Release
 ```
 
-The `.nupkg` carries both `net10.0` and `net11.0` assets; NuGet picks the appropriate one per consuming project.
+The `.nupkg` carries **only `net11.0` assets** (plus the per-RID assemblies). A project that targets
+net10.0 must stay on the `master` 2.0 packages.

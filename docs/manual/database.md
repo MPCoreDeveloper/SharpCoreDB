@@ -3,7 +3,6 @@
 > Storage modes, transactions, security, and metadata. Deep dives:
 > [`docs/storage/README.md`](../storage/README.md) · [`docs/storage/STORAGE_MODE_GUIDANCE.md`](../storage/STORAGE_MODE_GUIDANCE.md) ·
 > [`docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`](../storage/SINGLE_FILE_SQL_LIMITATIONS.md) ·
-> [`docs/storage/METADATA_IMPROVEMENTS_v1.7.0.md`](../storage/METADATA_IMPROVEMENTS_v1.7.0.md)
 
 ---
 
@@ -115,4 +114,3 @@ The catalog (tables, columns, indexes, statistics) is versioned and cached in me
 > **Backup & repair** are handled by `RepairTool` and `ScdbMigrator` for `.scdb` files
 > ([`docs/scdb/PRODUCTION_GUIDE.md`](../scdb/PRODUCTION_GUIDE.md)), and by the server-mode
 > backup/restore runbook
-> ([`docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md`](../server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md)).

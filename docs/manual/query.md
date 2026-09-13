@@ -1,7 +1,6 @@
 # 6. Querying
 
 > SQL dialect, aggregates, window functions, joins, subqueries, and query APIs.
-> Deep dives: [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md) ·
 > [`docs/internals/SUBQUERY_IMPLEMENTATION.md`](../internals/SUBQUERY_IMPLEMENTATION.md) ·
 > [`docs/internals/JOIN_IMPLEMENTATION.md`](../internals/JOIN_IMPLEMENTATION.md) ·
 > [`docs/QUERY_PLAN_CACHE.md`](../QUERY_PLAN_CACHE.md)
@@ -90,7 +89,6 @@ SharpCoreDB adds engine-specific keywords:
 | `COLLATE` everywhere | per-expression collation |
 | `INSERT … ON CONFLICT DO NOTHING / DO UPDATE` | upsert |
 
-See [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md).
 
 ## 6.6 Query plan cache & prepared statements
 

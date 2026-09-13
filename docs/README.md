@@ -38,15 +38,11 @@ This folder contains the maintained documentation set for SharpCoreDB (`v2.0.0`)
 
 ## SQL extension docs
 
-- `sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md` - SharpCoreDB-specific SQL extensions including `GRAPH_RAG`, `OPTIONALLY`, and `IS SOME`/`IS NONE`.
 - `graphrag/GRAPH_RAG_SINGLE_SQL.md` - Single-statement GraphRAG SQL syntax and DI integration.
-- `functional/OPTIONALLY_SQL_OPTION_SUPPORT_v1.7.2.md` - Option<T> mapping semantics and usage patterns.
 
 ## Migration and compatibility docs
 
 - `migration/README.md` - FluentMigrator and migration scenarios overview.
-- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md` - Embedded migration setup and lifecycle.
-- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md` - In-process and remote server migration setup.
 - `storage/SINGLE_FILE_SQL_LIMITATIONS.md` - Single-file SQL support matrix and parser behavior details.
 
 ## Cleanup policy

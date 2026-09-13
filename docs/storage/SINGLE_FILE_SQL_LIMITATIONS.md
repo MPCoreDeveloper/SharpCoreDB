@@ -217,7 +217,7 @@ storage backend.
 ## See Also
 
 - [`docs/storage/STORAGE_MODE_GUIDANCE.md`](STORAGE_MODE_GUIDANCE.md) — Columnar vs Page-Based storage within a database
-- [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md) — full SQL dialect reference
+- [`docs/manual/query.md`](../manual/query.md) — full SQL dialect reference
 - [`Examples/FluentMigrator/`](../../Examples/FluentMigrator/) — working FluentMigrator + SingleFileDatabase demo
 
 ---

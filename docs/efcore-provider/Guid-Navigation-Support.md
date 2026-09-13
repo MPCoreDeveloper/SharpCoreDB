@@ -61,8 +61,7 @@ This is **not** a Microsoft EF Core bug — it is a limitation in our custom pro
 - **Seed Data Structure:**  
   `tests/companies.vacancies.seed.json`
 
-- **GitHub Issue (with full plan):**  
-  See `docs/issues/efcore-guid-navigation-bug.md`
+-  
 
 ## Implementation Plan (Summary)
 
@@ -101,7 +100,6 @@ The full detailed plan is registered in the repository planning system and mirro
 |------------|-------|--------|--------|-------|
 | 2025-02-28 | -     | Bug reported + reproduction tests added | ✅ | `GetActiveWithVacanciesAsync_GuidKey_*` tests created |
 | 2025-02-28 | -     | Defensive improvements to reader | 🔧 | Partial – still hitting ordinal issues on complex Includes |
-| 2025-02-28 | -     | GitHub issue + formal plan created | ✅ | `docs/issues/efcore-guid-navigation-bug.md` |
 | 2025-02-28 | -     | This tracking document created | ✅ | `docs/efcore-provider/Guid-Navigation-Support.md` |
 | 2025-02-28 | Phase 1 | Reader hardening + best-match ordinal logic | ✅ | No more hard crashes on Include |
 | 2025-02-28 | Root Cause | Identified in `BuildParameterDictionary` (missing Guid normalization) | ✅ | Guid FKs were not persisted as strings |

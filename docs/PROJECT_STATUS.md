@@ -37,8 +37,6 @@ SharpCoreDB core .NET packages are release-labeled on `2.0.0` and build successf
 
 - Embedded mode integration: available
 - gRPC migration mode integration: available
-- See `docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md` and
-  `docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
 ## Documentation Governance
 

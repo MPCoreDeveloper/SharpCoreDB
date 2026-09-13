@@ -213,7 +213,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.2
 - Feature matrix: `docs/FEATURE_MATRIX.md`
 - Server docs: `docs/server/README.md` · Server quick start: `docs/server/QUICKSTART.md`
 - GraphRAG docs: `docs/graphrag/00_START_HERE.md`
-- SQL dialect extensions: `docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`
+- SQL dialect: `docs/manual/query.md`
 - Migration docs: `docs/migration/README.md`
 - Single-file SQL support and limits: `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`

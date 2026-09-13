@@ -452,7 +452,6 @@ var relatedConcepts = await db.Concepts
 
 ## See Also
 
-- [GraphRAG Architecture](../GRAPHRAG_PROPOSAL_ANALYSIS.md)
 - [SharpCoreDB EF Core Provider](../SharpCoreDB.EntityFrameworkCore/README.md)
 - [Graph Traversal Engine](../../SharpCoreDB.Graph/README.md)
 - [Performance Benchmarks](./GraphTraversalPerformanceBenchmarks.cs)

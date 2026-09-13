@@ -172,7 +172,6 @@ public class UserRepositoryTests
 5. **Flush after write batches** — one durability point per batch.
 6. **Use transactions** for multi-statement operations (`BeginTransaction`/`Commit`).
 7. **Monitor database size** and plan retention (`db.GetTables()`, `db.VacuumAsync()`).
-8. **Back up regularly** — server-mode backup/restore runbook:
-   `docs/server/MULTITENANT_BACKUP_RESTORE_MIGRATION_v1.7.0.md`; `.scdb` repair:
+8. **Back up regularly** — `.scdb` repair:
    `docs/scdb/PRODUCTION_GUIDE.md`.
 9. **Benchmark on the target machine** — see [Performance Guide](performance.md).

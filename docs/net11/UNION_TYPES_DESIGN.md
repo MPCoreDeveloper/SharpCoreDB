@@ -1,6 +1,6 @@
 # Union Types in SharpCoreDB — Design Pass (v2.1 Preview)
 
-> Branch: `release/v2.1.0.0-preview.1` · Reference: [Union types — C# reference](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/union)
+> Branch: `release/v2.1.0.0-RC.3` · Status: deferred to .NET 11 GA (see `MUNARIUM_INSPIRATION_PLAN.md`, Phase 6) · Reference: [Union types — C# reference](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/union)
 
 ## Status
 
