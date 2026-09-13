@@ -126,6 +126,12 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    UPDATE: `parse → plan → WHERE resolve → row locate (index) → row decode → in-place decision →
    engine write → WAL append/flush → index maintenance → commit`. For INSERT the same minus locate.
    This is the only way to answer the §1.4 question of *row copying vs fsync vs index maintenance*.
+   **Implemented (2026-09-13):** `SharpCoreDB.Diagnostics.WritePathProfiler` — stages `validate`,
+   `encode`, `index-maint`, `row-locate`, `in-place-patch`, `engine-write`, `wal-append`, `wal-flush`,
+   `commit`; enabled with `WritePathProfiler.Enable()` or `SHARPCOREDB_WRITE_PROFILE=1`; **zero cost
+   when off** (`Stamp()` returns 0, `Add` no-ops before reading a timestamp). Wired so far on the
+   UPDATE path in `Table.CRUD.cs`; the INSERT path and the WAL flush are the next wiring points.
+   Guarded by `WritePathProfilerTests` (free when off, attributes real workload, report ordering).
 3. **Reconcile the two UPDATE harnesses** (§1.4) so absolute numbers are comparable across documents.
 4. **A regression gate.** The benchmark must be runnable as a non-gating (nightly/manual) CI job so
    future work cannot silently regress INSERT/UPDATE the way UPDATE did between 2.0 and 2.1

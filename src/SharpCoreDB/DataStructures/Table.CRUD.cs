@@ -619,7 +619,9 @@ public partial class Table
 
         try
         {
+            long engineStart = Diagnostics.WritePathProfiler.Stamp();
             long[] positions = engine.InsertBatch(Name, serializedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineStart);
 
             if (positions.Length > 0)
             {
@@ -1662,28 +1664,47 @@ public partial class Table
         byte[] rowData;
         if (rowPos >= 0)
         {
+            long locateStart = Diagnostics.WritePathProfiler.Stamp();
             var existingData = engine.Read(Name, rowPos);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
+
+            long patchStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = TryPatchOrSerializeRow(existingData, updates, row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
         }
         else
         {
+            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = SerializeRowExact(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         }
 
         // Issue #6: in-place UPDATE — overwrite the record in its existing slot when
         // the new record fits (fixed-width rows, or variable-width rows whose stored
         // length is unchanged). No new version is appended, the storage reference and
         // the PK index stay valid, and no stale version is left for compaction.
-        if (rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData))
+        long updateStart = Diagnostics.WritePathProfiler.Stamp();
+        bool updatedInPlace = rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, updateStart);
+
+        if (updatedInPlace)
         {
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
+
             // Position unchanged: move hash entries in place (values may have changed).
             MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
             RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
+
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
         }
         else
         {
             // Columnar fallback: append new version (old ref becomes stale) + re-point indexes.
+            long appendStart = Diagnostics.WritePathProfiler.Stamp();
             long newPosition = engine.Insert(Name, rowData);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, appendStart);
+
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
 
             if (this.PrimaryKeyIndex >= 0)
             {
@@ -1700,6 +1721,8 @@ public partial class Table
 
                 kvp.Value.Add(row, newPosition); // Add new ref
             }
+
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
 
             // ✅ Track updates for compaction (only the append path creates stale versions).
             Interlocked.Increment(ref _updatedRowCount);
