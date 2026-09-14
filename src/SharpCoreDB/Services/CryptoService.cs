@@ -8,6 +8,9 @@ using SharpCoreDB.Constants;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,12 +22,37 @@ using System.Threading;
 /// OPTIMIZATION: Uses stackalloc and Span&lt;byte&gt; to eliminate LINQ allocations in Encrypt/Decrypt.
 /// SECURITY: Tracks GCM operations to prevent nonce exhaustion (2^32 limit).
 /// </summary>
-public sealed class CryptoService : ICryptoService
+public sealed class CryptoService : ICryptoService, IDisposable
 {
     private const int StackAllocThreshold = 256;
-    
+
+    /// <summary>Bytes of the GCM nonce reserved for the per-instance random fixed field.</summary>
+    private const int GcmNoncePrefixSize = 8;
+
     // SECURITY: Track encryption operations to prevent GCM nonce exhaustion
     private long _encryptionCount = 0;
+
+    /// <summary>
+    /// SECURITY: the 64-bit random *fixed field* of this instance's GCM nonces. Every nonce is
+    /// <c>[prefix(8)][counter(4)]</c> where the counter is <see cref="_encryptionCount"/> — whose 2^32 cap is
+    /// already enforced below — so a nonce can never repeat for any key used with this instance, and two
+    /// instances collide only if their 64-bit prefixes do (2^-64 per pair, independent of how many records
+    /// are written). In NIST SP 800-38D terms this is a deterministic construction with a unique fixed field
+    /// plus a unique invocation field, which is explicitly acceptable; a random nonce per call was not — its
+    /// collision probability grows with the number of records, which is why the 2^32 guard existed.
+    /// Swapped (never mutated in place) so a reader can never observe a torn prefix.
+    /// </summary>
+    private byte[] _noncePrefix = CreateNoncePrefix();
+
+    /// <summary>
+    /// PERF: one <see cref="AesGcm"/> per key instead of one per call. Constructing the cipher imports the
+    /// key — measured **0.69 µs per call, 59% of an Encrypt call** on this machine — and the storage layer
+    /// makes one Encrypt/Decrypt call per record *and* per overflow-arena block, so a row with three TEXT
+    /// columns paid that import three to four times (the whole measured at-rest INSERT tax on the acceptance
+    /// shape). Keyed by the full key bytes with structural comparison: a fingerprint could serve a
+    /// wrong-but-similar key a cipher, which is silent corruption, and is not worth the saved nanoseconds.
+    /// </summary>
+    private readonly ConcurrentDictionary<byte[], AesGcm> _ciphers = new(KeyComparer.Instance);
 
     /// <summary>
     /// Gets a value indicating whether AES hardware acceleration (AES-NI) is available.
@@ -126,42 +154,18 @@ public sealed class CryptoService : ICryptoService
                 $"Plan for key rotation soon.");
         }
         
-        using var aes = new AesGcm(key, CryptoConstants.GCM_TAG_SIZE);
-        
-        // OPTIMIZED: stackalloc for nonce and tag (small fixed-size buffers)
-        Span<byte> nonce = stackalloc byte[CryptoConstants.GCM_NONCE_SIZE];
-        Span<byte> tag = stackalloc byte[CryptoConstants.GCM_TAG_SIZE];
-        
-        RandomNumberGenerator.Fill(nonce);
-        
-        byte[]? cipherArray = null;
-        try
-        {
-            // OPTIMIZED: Rent from pool for cipher data
-            cipherArray = ArrayPool<byte>.Shared.Rent(data.Length);
-            Span<byte> cipher = cipherArray.AsSpan(0, data.Length);
-            
-            // Encrypt
-            aes.Encrypt(nonce, data, cipher, tag);
-            
-            // OPTIMIZED: Build result using Span.CopyTo instead of LINQ Concat
-            var result = new byte[CryptoConstants.GCM_NONCE_SIZE + data.Length + CryptoConstants.GCM_TAG_SIZE];
-            nonce.CopyTo(result.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE));
-            cipher.CopyTo(result.AsSpan(CryptoConstants.GCM_NONCE_SIZE, data.Length));
-            tag.CopyTo(result.AsSpan(CryptoConstants.GCM_NONCE_SIZE + data.Length, CryptoConstants.GCM_TAG_SIZE));
-            
-            return result;
-        }
-        finally
-        {
-            // SECURITY: Clear cipher data
-            if (cipherArray != null)
-                ArrayPool<byte>.Shared.Return(cipherArray, clearArray: true);
-            
-            // SECURITY: Clear stack buffers
-            nonce.Clear();
-            tag.Clear();
-        }
+        // PERF: ciphertext and tag go straight into the result buffer. The previous code rented a pooled
+        // buffer for the ciphertext and then copied it into the result, so the rent bought nothing except a
+        // second buffer; the pooled cipher removes the per-call key import (see _ciphers).
+        var result = new byte[CryptoConstants.GCM_NONCE_SIZE + data.Length + CryptoConstants.GCM_TAG_SIZE];
+        Span<byte> nonce = result.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE);
+        Span<byte> cipher = result.AsSpan(CryptoConstants.GCM_NONCE_SIZE, data.Length);
+        Span<byte> tag = result.AsSpan(CryptoConstants.GCM_NONCE_SIZE + data.Length, CryptoConstants.GCM_TAG_SIZE);
+
+        BuildNonce(nonce, currentCount);
+        GetCipher(key).Encrypt(nonce, data, cipher, tag);
+
+        return result;
     }
 
     /// <inheritdoc />
@@ -172,7 +176,7 @@ public sealed class CryptoService : ICryptoService
         if (cipherLength < 0)
             throw new ArgumentException("Invalid encrypted data length", nameof(encryptedData));
 
-        using var aes = new AesGcm(key, CryptoConstants.GCM_TAG_SIZE);
+        var aes = GetCipher(key);
         
         // OPTIMIZED: Use Span slicing instead of LINQ Take/Skip/TakeLast (zero allocation)
         ReadOnlySpan<byte> nonce = encryptedData.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE);
@@ -211,8 +215,84 @@ public sealed class CryptoService : ICryptoService
     /// Resets the encryption counter.
     /// SECURITY: Should only be called after key rotation (database export/import with new password).
     /// </summary>
+    /// <remarks>
+    /// The counter is half of every nonce, so a reset must never replay one: a fresh random prefix is swapped
+    /// in FIRST, which makes every (prefix, counter) pair from before the reset unreachable — even if a caller
+    /// resets the counter without rotating the key (which the contract forbids, but silent nonce reuse would
+    /// be catastrophic, so it is defended against rather than trusted).
+    /// </remarks>
     public void ResetEncryptionCounter()
     {
+        Interlocked.Exchange(ref _noncePrefix, CreateNoncePrefix());
         Interlocked.Exchange(ref _encryptionCount, 0);
+    }
+
+    /// <summary>Releases the cached ciphers (each holds a native key handle).</summary>
+    public void Dispose()
+    {
+        foreach (var cipher in _ciphers.Values)
+        {
+            cipher.Dispose();
+        }
+
+        _ciphers.Clear();
+    }
+
+    /// <summary>Draws a fresh 64-bit nonce prefix from the OS CSPRNG.</summary>
+    private static byte[] CreateNoncePrefix()
+    {
+        var prefix = new byte[GcmNoncePrefixSize];
+        RandomNumberGenerator.Fill(prefix);
+        return prefix;
+    }
+
+    /// <summary>
+    /// Writes <c>[prefix(8)][counter(4)]</c> into <paramref name="nonce"/>. Only the low 32 bits of the counter
+    /// are used, which is sound because the exhaustion guard above throws before the counter reaches 2^32 — so
+    /// the invocation field never repeats within this instance, and with a fixed prefix the nonce never does.
+    /// </summary>
+    private void BuildNonce(Span<byte> nonce, long counter)
+    {
+        Volatile.Read(ref _noncePrefix).CopyTo(nonce);
+        BinaryPrimitives.WriteUInt32LittleEndian(nonce[GcmNoncePrefixSize..], (uint)counter);
+    }
+
+    /// <summary>
+    /// Returns the cached cipher for <paramref name="key"/>, creating it once. The dictionary key is a COPY of
+    /// the caller's key: if a caller mutated its array in place, an entry built from the old bytes must never
+    /// match the new bytes — that would encrypt with the wrong key.
+    /// </summary>
+    private AesGcm GetCipher(byte[] key)
+    {
+        if (_ciphers.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var keyCopy = (byte[])key.Clone();
+        var created = new AesGcm(keyCopy, CryptoConstants.GCM_TAG_SIZE);
+        var stored = _ciphers.GetOrAdd(keyCopy, created);
+        if (!ReferenceEquals(stored, created))
+        {
+            created.Dispose(); // another thread inserted first
+        }
+
+        return stored;
+    }
+
+    /// <summary>Structural equality over the full key bytes — no fingerprinting, so no false match.</summary>
+    private sealed class KeyComparer : IEqualityComparer<byte[]>
+    {
+        internal static readonly KeyComparer Instance = new();
+
+        public bool Equals(byte[]? x, byte[]? y) =>
+            ReferenceEquals(x, y) || (x is not null && y is not null && x.AsSpan().SequenceEqual(y));
+
+        public int GetHashCode(byte[] obj)
+        {
+            var hash = new HashCode();
+            hash.AddBytes(obj);
+            return hash.ToHashCode();
+        }
     }
 }

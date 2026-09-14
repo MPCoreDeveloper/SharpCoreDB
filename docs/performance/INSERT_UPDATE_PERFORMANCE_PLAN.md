@@ -874,9 +874,51 @@ indexes off the at-rest INSERT tax is still 1.76× (103,754 → 59,083 ops/s). S
 **28% of INSERT in both postures** (74,605 → 103,754 plaintext), which makes them a posture-independent lever
 of their own.
 
-**Open:** ~6 µs/row of the at-rest INSERT cost is still unattributed. Next probe: per-row allocation/GC counts
+**Open:** ~6 µs/row of the at-rest INSERT cost was unattributed. Next probe: per-row allocation/GC counts
 and the pooled-cipher prototype **in the product** (not only in a micro-benchmark), because the standalone
 `Encrypt` timing may not survive the insert path's allocation pressure.
+
+**Both were then executed, and the attribution closed.** The allocation/GC probe on the acceptance INSERT
+shape (50K rows, 5×10K batches) gave:
+
+| arm | ops/s | allocated B/row | gen0 |
+|---|---:|---:|---:|
+| plaintext, TEXT columns | 94,317 | 2,139 | 15 |
+| at-rest, TEXT columns | 58,837 | 2,743 | 22 |
+| plaintext, fixed-size only | 318,036 | 1,098 | 9 |
+| at-rest, fixed-size only | 217,357 | 1,260 | 10 |
+
+The fixed-size arm's +1.5 µs/row matches **one** `Encrypt` call (1.34 µs) almost exactly, while the TEXT arm
+cost +6.4 µs/row — i.e. **3–4 GCM calls per row**: the record itself *plus one per variable value*, because
+each TEXT value becomes its own overflow-arena block and each block is encrypted with its own nonce and its
+own cipher. The tax was never the arena *I/O* and never the index build: it was the per-call cipher import,
+paid several times per row. (`WritePathProfiler` recorded **no stages** on the batch INSERT path — §2's
+instrumentation does not cover it, which is why the profiler could not answer this.)
+
+**Option B is therefore implemented** in `CryptoService`: one `AesGcm` cached per key (keyed by the full key
+bytes with structural comparison, never a fingerprint), and nonces built as
+`[random prefix(8)][operation counter(4)]` where the counter is the field that already guards GCM exhaustion
+(2^32), so a nonce cannot repeat within an instance and two instances collide only on their 64-bit prefixes
+(2^-64, independent of record count — stronger than the previous random nonce per call, whose collision
+probability grew with the number of records). `ResetEncryptionCounter` swaps the prefix *first*, so even a
+reset without key rotation cannot replay a nonce. Ciphertext and tag are written straight into the result
+buffer (the pooled ciphertext rent was copying into a buffer that was allocated anyway). The security-relevant
+properties are pinned by `CryptoServiceNonceTests`: uniqueness + counter sequence, key-switch round-trips,
+thread safety under concurrency, the prefix swap on reset, and per-instance prefixes.
+
+Published result (same run, four arms):
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW, plaintext | 119,160 | 122,549 | 240,244 | 171,026 |
+| SharpCoreDB FW, at-rest | 88,906 | 91,283 | 183,434 | 159,045 |
+| SQLite | 186,832 | 98,807 | 285,226 | 379,299 |
+
+At-rest tax: **INSERT 1.90× → 1.34×, READ 1.51× → 1.34×, UPDATE 1.62× → 1.31×, DELETE 1.10× → 1.08×**; on the
+same arm shape that is **INSERT +40%, UPDATE +24%, READ +20%, DELETE +8%**. Gaps vs SQLite in the shipping
+posture: **UPDATE 1.8× → 1.6×, INSERT 2.8× → 2.1×, DELETE 2.5× → 2.4×, READ 1.33× → 1.08×**. The residual
+~1.3× is the framing itself (28 bytes per record, one extra allocation) and the AES work, not setup — which is
+what a storage-format change would have to attack, not another crypto tweak.
 
 ---
 
