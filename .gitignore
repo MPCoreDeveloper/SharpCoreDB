@@ -58,7 +58,7 @@ dlldata.c
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
 # Comparative benchmark harness output (tests/benchmarks/SharpCoreDB.Benchmarks.Comparative)
-results/
+/results/
 
 # .NET Core
 project.lock.json
@@ -430,3 +430,9 @@ dist/
 # SonarScanner local analysis artifacts
 .sonarqube/
 .scannerwork/
+
+# Generated databases: runtime artifacts that the examples and the server create on first run.
+# The compatibility-smoke fixture (tests/CompatibilitySmoke/smoke-data) is CI input and stays tracked.
+Examples/**/*.scdb
+Examples/**/*.scdb/
+src/SharpCoreDB.Server/data/
