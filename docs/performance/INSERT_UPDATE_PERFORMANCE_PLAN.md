@@ -403,6 +403,53 @@ fallback. That is the next work item, and it is now scoped to one method plus it
 
 ---
 
+### 1f. The next item, specified to the line *(hand-off design, 2026-09-13)*
+
+**Target:** make `TryBulkUpdateContiguousFixedWidth` work on encrypted records, so an at-rest database
+regains the bulk path that §3-1e identified as the 5–7×.
+
+**Where it stops today:** one precondition, `Table.CRUD.cs:2437` —
+`this.storage.AreRecordsEncrypted(DataFile) ||` — rejects the entire path. Everything after it is
+already encryption-agnostic in shape:
+
+| Piece | Location | What it assumes |
+|---|---|---|
+| `stride = 4L + layout.FixedSize` | `:2445` | the *physical* distance between two records; used for the range read, the patch slice and the index re-pointing |
+| `TryReadContiguousFixedWidthRecords` | `:3829` | ONE `storage.ReadBytesRange`, then verifies each record by its 4-byte prefix (`== layout.FixedSize`) and its decoded PK slot |
+| patch loop | `:2532-2540` | copies the payload, patches it with the existing `TryOverwriteFixedWidthInPlace`, writes it back through `engine.TryUpdateInPlaceSameLength` |
+| index re-pointing | `:2560-2586` | reads the old slot values from the returned buffer with the same stride |
+
+The important part: **the write goes through `TryUpdateInPlaceSameLength`, the same API the per-row path
+uses — and that one already encrypts** (`Storage.Append` → `ShouldEncryptWrites` / `EncryptRecord`).
+That is precisely why per-row in-place updates keep working at rest with 0% growth (§3-1e). So the write
+half needs nothing.
+
+**The change, in two parts:**
+
+1. **Stride.** For an encrypted file the physical record is `[len_cipher:4][nonce(12)][cipher][tag(16)]`
+   (`PersistenceConstants`), so the physical stride is `layout.FixedSize + 4 + 28` and the length prefix
+   holds `FixedSize + 28`. A fixed-width record's plaintext length never changes, so the ciphertext
+   length never changes either — **the physical stride is constant too**, which is what keeps an
+   equal-length in-place overwrite valid.
+2. **Layout of the buffer handed back.** The caller slices with the *plaintext* stride
+   (`i * stride + 4 + offset`), so the range read must return a plaintext-laid-out buffer when the file
+   is encrypted: read the physical span once (`physicalStride * count`) and, per record, decrypt the
+   payload and repack it as `[len:4][plaintext]` into a buffer with the plaintext stride. That preserves
+   the single-I/O-read advantage; the added cost is one copy and one AEAD decrypt per record, in memory.
+
+**Two small enablers:** `Table` needs to decrypt a single record payload (`Storage.DecryptRecord` is
+private — expose it as `internal`, or route through the `ReadAllBytes` path that already returns the
+whole file with records decrypted), and the DELETE mirror `TryBulkDeleteContiguousFixedWidth` (`:3907`)
+carries the identical plaintext gate and should get the same treatment.
+
+**Gate before this can ship:** `FixedWidthBulkUpdateTests`, `FixedWidthPatchTests`,
+`ReopenRoundTripMatrixTests` and `SingleFileDirectoryParityTests` all green **with
+`EnableAtRestRecordEncryption = true`**, then re-run the 2,000-row measurement from §3-1e. Expected:
+most of the 5–7× gone (the bulk path returns), leaving the honest remainder — per-record AEAD (measured
+at +21–23% on INSERT) and the 2.5× disk framing.
+
+---
+
 ## 4. Phase 2 — the structural fix: in-place UPDATE on the SQL path
 
 **Goal:** stop copying rows on update. Half of this already exists (`TryOverwriteFieldsInPlace`,
