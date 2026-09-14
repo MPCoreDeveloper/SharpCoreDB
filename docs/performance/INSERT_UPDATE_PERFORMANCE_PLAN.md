@@ -751,9 +751,29 @@ An explicit `Disable()` now wins over the environment variable — otherwise the
 `WritePathProfilerTests` fails for anyone running the suite with that variable set (it did, during this
 investigation).
 
-**What is left of the outlier:** the indexed same-length shape (19.1K) still trails the unindexed one
-(35.7K) by ~2×, i.e. ~45 µs per row of hash-index maintenance on a value that becomes a duplicate for
-every row — that is §4c's territory and now has a measured number attached.
+### 4a-2. The per-call handle sweep *(2026-09-13)*
+
+Three separate hotspots of the same class — **a handle or a metadata probe per call instead of per path** —
+were found and fixed during this work: the per-record walk helpers in `ReadAllRecords` (§1d-2), the
+`FileHasEncryptedHeader` read probe (§1d-2, ~11× → ~1.2–2.2×), and the arena in-place overwrite (§4a).
+Because "found by accident" is not a method, the remaining sites were then audited on purpose
+(`new FileStream`, `File.OpenHandle`, `RandomAccess.Read/Write`, `File.Exists`, `new FileInfo` across
+`Services/`, `DataStructures/` and `Storage/`), triaged by call frequency:
+
+| site | frequency | verdict |
+|---|---|---|
+| `AppendBytes` (`FileMode.Append` + `FileOptions.WriteThrough`) | **once per single-row INSERT** | **hot — and a durability choice; moved to §5 as the first Phase 3 item with its measurement** |
+| `AppendBytesMultiple` | once per *batch* | fine (65 KB buffer, one write-through for the batch) |
+| `FlushBufferedAppends` | once per file per commit | fine |
+| `TryUpdateInPlaceSameLength`, `ReadBytesFrom`, `ReadBytesRange` | per record | fine — cached read handle already |
+| `BufferOrWriteOverwriteInPlace`, `FlushBufferedOverwritesBatched` | once per path / per flush | fine |
+| `DecideEncryptWrites`, `EnsureAppendInitialized` | once per path (memoised) | fine |
+| `LoadPageFromDisk` | once per page-cache **miss** | fine — a page holds many records |
+| tombstone batch writer, compaction, migration, arena load | per operation, not per row | fine |
+
+**Verdict: the per-record hot paths are clean.** The single remaining hot per-call open is the
+`synchronous` append in `AppendBytes`, which is a durability setting rather than an oversight — it is
+recorded in §5 with the 1,000×-class measurement and left for the owner's call.
 
 ### 4b. Two-region records for variable-width columns *(decided: Option B)*
 
@@ -793,7 +813,32 @@ column's value, that maintenance is pure overhead.
 
 ## 5. Phase 3 — INSERT: from competitive to ahead
 
-INSERT is already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
+**Measured first (the sweep behind §4a-2): the single-row append path pays a synchronous write-through per
+record.** `Storage.AppendBytes` — the non-transactional single-record append behind every one-at-a-time
+SQL `INSERT`, the Direct API and the provider ladders (§0.1-5) — opens a `FileStream` with
+`FileOptions.WriteThrough` *per record*, while `AppendBytesMultiple` opens one for the whole batch.
+Isolated at the `IStorage` level (5,000 × 64-byte appends, same process, same storage instance):
+
+| mode | single `AppendBytes` | batched `AppendBytesMultiple` | ratio |
+|---|---:|---:|---:|
+| `NoEncryptMode=true` | **477.97 µs/record** | 0.43 µs/record | **1,122×** |
+| encrypted default | **466.09 µs/record** | 2.02 µs/record | **231×** |
+
+So a row-at-a-time insert runs at ~2.1K rows/s while the same bytes through the batch API run at ~2.3M
+rows/s: **the batch/durability machinery already exists (and the transaction path already buffers
+appends), but the single-append path never uses it.** Note also that the append path ignores the
+configured `WalDurabilityMode` — it is unconditionally write-through, so a caller who explicitly chose
+`Async` (or a `HighPerformance`/`BulkImport` config, which set `NoEncryptMode`) still pays a flush per
+row.
+
+**That makes this a durability decision, not a free optimisation**, and it is the first Phase 3 item: the
+fix is to let the single-append path honour the configured durability (buffered append + the existing
+flush-on-commit boundary) instead of hard-coding `WriteThrough`, with the crash-consistency question
+answered explicitly — a process crash is already safe (the OS cache survives it), a power loss is the
+open question and is what the WAL/`WalDurabilityMode` settings exist to answer. Because it changes when
+bytes reach the platter, it needs the owner's call and a crash-recovery test, not a unilateral edit.
+
+INSERT is otherwise already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
 SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The remaining, ranked items:
 
 1. **Extend the StructRow insert path to the SQL INSERT path.** WP14 did this for the *batch* INSERT
