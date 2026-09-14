@@ -54,12 +54,33 @@ public class DatabaseConfig
 
     /// <summary>
     /// Gets a value indicating whether table payload records are encrypted at rest with
-    /// per-record AES-256-GCM (opt-in; default <see langword="false"/> for full backward
-    /// compatibility). When <see langword="true"/>, NEW table data files carry an 8-byte
-    /// magic header followed by per-record ciphertext (Known Issue 1). Legacy plaintext
-    /// files and NoEncryptMode databases remain byte-for-byte unchanged and readable.
-    /// ⚠️ OPT-IN FORMAT: only enable on databases whose tables are created/opened with the
-    /// same flag, and never share such databases with tooling built before this option.
+    /// per-record AES-256-GCM (opt-in; default <see langword="false"/>).
+    /// <para>
+    /// ⚠️ <b>With the default (<see langword="false"/>) a database stores its TABLE DATA — records and
+    /// the overflow arena — as PLAINTEXT, while metadata and transaction files are still encrypted.</b>
+    /// That asymmetry is a documented, measured gap (audit §3-1c of
+    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c>), not a claim that the data is
+    /// protected; <see cref="NoEncryptMode"/> being <see langword="false"/> does not by itself encrypt
+    /// table payloads.
+    /// </para>
+    /// <para>
+    /// Set <see langword="true"/> to protect the data: NEW table data files then carry an 8-byte magic
+    /// header followed by per-record ciphertext. Measured cost: ≈1.11× CREATE/INSERT, no measurable
+    /// UPDATE penalty on the contiguous paths, and roughly double the file size (5,600 → 11,208 B in
+    /// the §3-1c probe) for the per-record GCM framing. <c>NoEncryptMode=true</c> is the single
+    /// documented raw-speed opt-out and leaves everything plaintext.
+    /// </para>
+    /// <para>
+    /// ⚠️ OPT-IN FORMAT: only enable on databases whose tables are created/opened with the same flag,
+    /// and never share such databases with tooling built before this option. Legacy plaintext files
+    /// stay byte-for-byte readable either way.
+    /// </para>
+    /// <para>
+    /// Flipping this default to <see langword="true"/> is a work package, not a config change: measured
+    /// on 2026-09-13 it still fails 21 tests across 10 classes (StructRow fast paths, the overflow
+    /// arena, legacy ULID migration, batch canonical parse, in-place field patching). See plan §3-1c
+    /// deliverable 2 for the list and the gate.
+    /// </para>
     /// </summary>
     public bool EnableAtRestRecordEncryption { get; init; } = false;
 

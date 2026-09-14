@@ -281,11 +281,33 @@ because the data is not encrypted.
    in-place patch path, the overflow arena and the reopen path all assume plaintext records and must be
    made encryption-aware first, with the reopen round-trip matrix as the gate. Until that lands the
    default stays exactly as shipped, and the gap stays documented rather than silently claimed closed.
-3. **Document the two modes as a first-class choice** with the measured cost of each — including the
-   caveat that a default database currently writes table data as plaintext.
-4. **A test that fails if the promise regresses**: default config ⇒ a plaintext scan of the data files
-   must not find a known inserted value; `NoEncryptMode=true` ⇒ it may. The probe above is the
-   template; it ships as a permanent regression test rather than a throwaway.
+   **Re-measured 2026-09-13 after §3-1f/§3-1g/§3-1h/§3-1i** (the same one-line flip, reverted again):
+   the blast radius dropped from **≥45 failures across 12 classes** to **21 across 10** — the
+   durability matrix, the contiguous patch paths and the at-rest scan/index defects that made up the
+   first wave are closed. The remaining 21 *are* the work package, exactly:
+
+   | class | what it exercises |
+   |---|---|
+   | `FixedWidthPatchTests` (2) | in-place field patching, "file does not grow" |
+   | `SqlInPlaceUpdateTests` (3) | batch fast-patch, CHECK / where-column fallbacks |
+   | `FixedWidthRecordLayoutTests` (3) | `StructRow` numeric fast path, arena compaction |
+   | `StructRowQueryTests` (3) | struct point / literal / numeric lookups |
+   | `BatchCanonicalParseTests` (3) | canonical batch parse (update, delete, spaced literal) |
+   | `LegacyUlidMigrationTests` (2) | legacy database ULID migration and reopen |
+   | `DatabaseTests` (2) | `UPDATE … RETURNING`, session change counts |
+   | `ParametricInsertTests` (1) | repeated named parameters |
+   | `FixedWidthMigrationTests` (1) | explicit PageBased → Columnar/fixed-width migration |
+   | `CompiledQueryTests` (1) | compiled-query latency (1000 repeated selects) |
+3. ~~Document the two modes as a first-class choice~~ — **done:** the caveat now lives on
+   `DatabaseConfig.EnableAtRestRecordEncryption` itself (the property states that the default stores
+   table data as plaintext while metadata is encrypted, what enabling it costs, and that flipping the
+   default is a work package), so it cannot be missed by anyone who never opens this plan.
+4. ~~A test that fails if the promise regresses~~ — **done:** `EncryptionCoverageTests` (3 cases) scans
+   the table payload files (`*.dat` / `*.ovf`; journal/WAL files are deliberately excluded because they
+   legitimately contain the INSERT statement text) for a known inserted value and asserts the documented
+   posture: default ⇒ present, `NoEncryptMode=true` ⇒ present, at-rest ⇒ **absent**. It simultaneously
+   pins that the flag covers the overflow arena too, and that the rows round-trip through a reopen in
+   every configuration.
 
 Only after (2) — the posture is made true — does "encryption costs 1.3–1.6×" become a number that
 means something, and only then do §3-1a and the rest of the plan proceed.
