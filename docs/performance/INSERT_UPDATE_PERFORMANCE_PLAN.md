@@ -284,20 +284,30 @@ because the data is not encrypted.
    **Re-measured 2026-09-13 after §3-1f/§3-1g/§3-1h/§3-1i** (the same one-line flip, reverted again):
    the blast radius dropped from **≥45 failures across 12 classes** to **21 across 10** — the
    durability matrix, the contiguous patch paths and the at-rest scan/index defects that made up the
-   first wave are closed. The remaining 21 *are* the work package, exactly:
+   first wave are closed.
 
-   | class | what it exercises |
-   |---|---|
-   | `FixedWidthPatchTests` (2) | in-place field patching, "file does not grow" |
-   | `SqlInPlaceUpdateTests` (3) | batch fast-patch, CHECK / where-column fallbacks |
-   | `FixedWidthRecordLayoutTests` (3) | `StructRow` numeric fast path, arena compaction |
-   | `StructRowQueryTests` (3) | struct point / literal / numeric lookups |
-   | `BatchCanonicalParseTests` (3) | canonical batch parse (update, delete, spaced literal) |
-   | `LegacyUlidMigrationTests` (2) | legacy database ULID migration and reopen |
-   | `DatabaseTests` (2) | `UPDATE … RETURNING`, session change counts |
-   | `ParametricInsertTests` (1) | repeated named parameters |
-   | `FixedWidthMigrationTests` (1) | explicit PageBased → Columnar/fixed-width migration |
-   | `CompiledQueryTests` (1) | compiled-query latency (1000 repeated selects) |
+   **Re-measured again after the second wave** (at-rest index build, `GetAllRecords` offsets and
+   compaction — see the list below): **21 → 2 failures**. Both survivors are decisions, not defects:
+
+   1. `EncryptionCoverageTests(Default)` — the §3-1c-4 tripwire firing *by design*, because the default
+      no longer writes plaintext. It must be updated in the same commit as the flip.
+   2. `CompiledQueryTests.CompiledQuery_1000RepeatedSelects_CompletesUnder8ms` — a latency budget: with
+      an at-rest default a full-scan-shaped compiled query decrypts the whole data file per execution,
+      so 1000 repeated selects exceed 8 ms. That is the honest price of the default and needs an owner
+      decision (budget + documentation, or a read-path change), not a silent test tweak.
+
+   **The second wave consisted of three pre-existing defects of the opt-in flag itself**, all guarded
+   by `AreRecordsEncrypted` so plaintext behaviour is byte-for-byte untouched:
+   - the lazily built hash index came out **empty** for an at-rest file (the raw walk read the magic
+     header as a record length), so every indexed lookup missed — `EnsureIndexLoaded` now walks
+     `ReadAllRecords` for at-rest files;
+   - `AppendOnlyEngine.GetAllRecords` yielded **buffer** offsets for an at-rest file while every caller
+     resolves records by **physical** offset, so the StructRow numeric/SIMD paths filtered every row
+     away — it now yields `(physical offset, decrypted payload)` pairs;
+   - `AppendOnlyEngine.CompactTable` matched its active set (physical positions) against the decrypted
+     buffer walk, so **compaction dropped nearly every row** of an at-rest table (and would have
+     rewritten the file as plaintext); it now collects from the records' physical offsets, and the
+     brand-new temp file keeps the at-rest format because `Storage` encrypts brand-new files.
 3. ~~Document the two modes as a first-class choice~~ — **done:** the caveat now lives on
    `DatabaseConfig.EnableAtRestRecordEncryption` itself (the property states that the default stores
    table data as plaintext while metadata is encrypted, what enabling it costs, and that flipping the

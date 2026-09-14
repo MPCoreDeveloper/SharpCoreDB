@@ -194,6 +194,21 @@ public class AppendOnlyEngine : IStorageEngine
             yield break;
         }
         
+        // At-rest file: the records are ciphertext behind an 8-byte magic header, and the decrypted
+        // buffer walk below would yield BUFFER offsets — while every caller (index rebuilds, the
+        // StructRow SIMD/numeric paths) resolves records through this engine by PHYSICAL offset, so a
+        // buffer offset makes each row look like a superseded version and gets filtered away.
+        // ReadAllRecords yields (physical offset, decrypted payload) pairs with tombstones skipped.
+        if (storage.AreRecordsEncrypted(filePath))
+        {
+            foreach (var (recordOffset, recordData) in storage.ReadAllRecords(filePath))
+            {
+                yield return (recordOffset, recordData);
+            }
+
+            yield break;
+        }
+
         // Read entire file
         var allData = storage.ReadBytes(filePath, noEncrypt: false);
         if (allData == null || allData.Length == 0)
@@ -357,10 +372,21 @@ public class AppendOnlyEngine : IStorageEngine
         var activeRows = new List<byte[]>();
         var newPositions = new Dictionary<long, long>(); // old position -> new position
         
+        // At-rest files: the ReadBytes buffer above is a decrypted, header-stripped re-pack whose offsets
+        // are NOT the file's — so `activeSet` (physical positions, as the indexes store them) could never
+        // match the buffer walk below and compaction silently dropped nearly every row. Collect from the
+        // records' PHYSICAL offsets instead; the temp file below is brand-new, and Storage encrypts
+        // brand-new files, so the compacted file keeps the at-rest format.
+        bool encryptedFile = storage.AreRecordsEncrypted(filePath);
+        if (encryptedFile)
+        {
+            CollectActiveRowsFromEncryptedFile(filePath, activeSet, activeRows, newPositions);
+        }
+
         long position = 0;
         long newPosition = 0;
         
-        while (position < allData.Length)
+        while (!encryptedFile && position < allData.Length)
         {
             if (position + 4 > allData.Length)
                 break;
@@ -439,6 +465,32 @@ public class AppendOnlyEngine : IStorageEngine
                 try { File.Delete(tempPath); } catch { /* Ignore */ }
             }
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Collects the active records of an at-rest table file for compaction, pairing every decrypted
+    /// payload with the PHYSICAL offset of its length prefix (the unit <see cref="IStorage.ReadAllRecords"/>
+    /// reports, the unit the indexes store, and the key of the old→new position mapping the caller
+    /// applies to those indexes) — and skipping tombstoned slots.
+    /// </summary>
+    private void CollectActiveRowsFromEncryptedFile(
+        string filePath,
+        HashSet<long> activeSet,
+        List<byte[]> activeRows,
+        Dictionary<long, long> newPositions)
+    {
+        long newPosition = 0;
+        foreach (var (recordOffset, recordData) in storage.ReadAllRecords(filePath))
+        {
+            if (!activeSet.Contains(recordOffset))
+            {
+                continue;
+            }
+
+            activeRows.Add(recordData);
+            newPositions[recordOffset] = newPosition;
+            newPosition += 4 + recordData.Length; // length prefix + payload
         }
     }
 

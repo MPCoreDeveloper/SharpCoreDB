@@ -192,6 +192,26 @@ public partial class Table
                     index.Add(row, pos);
             }
         }
+        else if (this.storage != null && File.Exists(this.DataFile) && this.storage.AreRecordsEncrypted(this.DataFile))
+        {
+            // At-rest file: records are ciphertext behind an 8-byte magic header with a per-record GCM
+            // frame, so the plaintext walk below cannot parse them (it reads the header as a record
+            // length and stops, leaving an EMPTY index — which made every indexed lookup miss).
+            // ReadAllRecords yields each record DECRYPTED together with the PHYSICAL offset of its
+            // 4-byte length prefix: exactly the position the index stores and the read path resolves,
+            // and it skips tombstones for us.
+            foreach (var (recordOffset, recordData) in this.storage.ReadAllRecords(this.DataFile))
+            {
+                var record = _fixedWidthRecords
+                    ? DeserializeRowFixedWidth(recordData.AsSpan())
+                    : DeserializeRowFromSpan(recordData);
+
+                if (record is not null && record.TryGetValue(columnName, out var recordValue) && recordValue != null)
+                {
+                    index.Add(record, recordOffset);
+                }
+            }
+        }
         else if (this.storage != null && File.Exists(this.DataFile))
         {
             // PERF: Use a single buffered FileStream with SequentialScan hint instead of
