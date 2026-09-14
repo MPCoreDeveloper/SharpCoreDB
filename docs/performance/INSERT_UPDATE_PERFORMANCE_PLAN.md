@@ -279,22 +279,33 @@ because the data is not encrypted.
 
    **Conclusion: making the default true is a work package, not a config flip.** The write path, the
    in-place patch path, the overflow arena and the reopen path all assume plaintext records and must be
-   made encryption-aware first, with the reopen round-trip matrix as the gate. Until that lands the
-   default stays exactly as shipped, and the gap stays documented rather than silently claimed closed.
+   made encryption-aware first, with the reopen round-trip matrix as the gate. *(That work package has
+   since landed — see the two re-measurements below — and the default was flipped to
+   `true` on 2026-09-13.)*
    **Re-measured 2026-09-13 after §3-1f/§3-1g/§3-1h/§3-1i** (the same one-line flip, reverted again):
    the blast radius dropped from **≥45 failures across 12 classes** to **21 across 10** — the
    durability matrix, the contiguous patch paths and the at-rest scan/index defects that made up the
    first wave are closed.
 
    **Re-measured again after the second wave** (at-rest index build, `GetAllRecords` offsets and
-   compaction — see the list below): **21 → 2 failures**. Both survivors are decisions, not defects:
+   compaction — see the list below): **21 → 2 failures**, and the last two were then resolved:
 
-   1. `EncryptionCoverageTests(Default)` — the §3-1c-4 tripwire firing *by design*, because the default
-      no longer writes plaintext. It must be updated in the same commit as the flip.
-   2. `CompiledQueryTests.CompiledQuery_1000RepeatedSelects_CompletesUnder8ms` — a latency budget: with
-      an at-rest default a full-scan-shaped compiled query decrypts the whole data file per execution,
-      so 1000 repeated selects exceed 8 ms. That is the honest price of the default and needs an owner
-      decision (budget + documentation, or a read-path change), not a silent test tweak.
+   1. `EncryptionCoverageTests(Default)` — the §3-1c-4 tripwire, updated in the same commit as the flip:
+      the default is now *expected* to keep a known inserted value out of the table data files.
+   2. `CompiledQueryTests.CompiledQuery_1000RepeatedSelects_CompletesUnder8ms` — a latency budget an
+      at-rest default blew, because a full-scan-shaped compiled query decrypted the whole data file per
+      execution. The cause was the read path, and the fix deliberately is **not** a cache (invalidation
+      across the append/in-place/tombstone paths would be too easy to get wrong): `ReadAllRecords`
+      opened **two `FileStream`s per record** — one for the length prefix, one for the payload — so 1000
+      queries over 100 rows meant ~200,000 handle open/close pairs. It now reads the file once into a
+      buffer and walks it in memory: **1000 compiled queries went from >2000 ms to 552 ms** (budget
+      2000 ms), with the plaintext walk byte-for-byte unchanged and very large files still on the
+      incremental path.
+
+   **Result: the flip is done.** `EnableAtRestRecordEncryption` defaults to `true`, and the full suite is
+   green with it — **1834 tests, 0 failed, 16 skipped**. The default now protects table data, the
+   overflow arena, metadata and transaction files alike, and `NoEncryptMode=true` is the single
+   documented raw-speed opt-out.
 
    **The second wave consisted of three pre-existing defects of the opt-in flag itself**, all guarded
    by `AreRecordsEncrypted` so plaintext behaviour is byte-for-byte untouched:

@@ -1366,9 +1366,34 @@ public partial class Storage
         long position = encrypted ? PersistenceConstants.EncryptedTableMagicLength : 0;
         long fileLength = new FileInfo(path).Length;
 
+        // PERF (encrypted files only): read the file ONCE into a buffer instead of using the
+        // per-record helpers below, which each open a FileStream — two handle open/close pairs PER
+        // RECORD. Every at-rest caller of this method already materialises the whole file
+        // (`ReadBytesWithRecordOffsets`, `DecryptTableFileToPlaintext`, the index build and
+        // compaction), so this adds no new worst case, and it took 1000 repeated full-scan queries
+        // from ~2×N handle opens per query to one read. Plaintext files keep the incremental walk
+        // byte-for-byte (`buffer` stays null), which also keeps arbitrarily large files working.
+        byte[]? buffer = null;
+        if (encrypted && fileLength > 0 && fileLength <= MaxBufferedRecordWalkBytes)
+        {
+            try
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                buffer = new byte[fs.Length];
+                fs.ReadExactly(buffer);
+            }
+            catch (IOException)
+            {
+                yield break;
+            }
+        }
+
         while (position + 4 <= fileLength)
         {
-            if (!TryReadInt32At(path, position, out int length))
+            bool haveLength = buffer is not null
+                ? TryReadInt32FromBuffer(buffer, position, out int length)
+                : TryReadInt32At(path, position, out length);
+            if (!haveLength)
             {
                 yield break;
             }
@@ -1403,7 +1428,10 @@ public partial class Storage
             }
 
             byte[] payload = new byte[length];
-            if (!TryReadPayloadAt(path, position + 4, payload))
+            bool havePayload = buffer is not null
+                ? TryCopyPayloadFromBuffer(buffer, position + 4, payload)
+                : TryReadPayloadAt(path, position + 4, payload);
+            if (!havePayload)
             {
                 yield break;
             }
@@ -1447,5 +1475,38 @@ public partial class Storage
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         fs.Position = position;
         return fs.Read(payload, 0, payload.Length) == payload.Length;
+    }
+
+    /// <summary>
+    /// Upper bound for the single-read buffered record walk in <see cref="ReadAllRecords"/>; larger
+    /// at-rest files fall back to the per-record reads (the same 512 MB ceiling
+    /// <c>ReadBytesRange</c> uses). Every at-rest caller already materialises the whole file, so the
+    /// buffered walk is the normal case and the fallback exists only for very large files.
+    /// </summary>
+    private const long MaxBufferedRecordWalkBytes = 512L * 1024 * 1024;
+
+    /// <summary>Reads a 4-byte length prefix out of the buffered record walk. False past the end.</summary>
+    private static bool TryReadInt32FromBuffer(byte[] buffer, long position, out int value)
+    {
+        value = 0;
+        if (position + 4 > buffer.Length)
+        {
+            return false;
+        }
+
+        value = BinaryPrimitives.ReadInt32LittleEndian(buffer.AsSpan((int)position, 4));
+        return true;
+    }
+
+    /// <summary>Copies a record payload out of the buffered record walk. False past the end.</summary>
+    private static bool TryCopyPayloadFromBuffer(byte[] buffer, long position, byte[] payload)
+    {
+        if (position + payload.Length > buffer.Length)
+        {
+            return false;
+        }
+
+        Array.Copy(buffer, position, payload, 0, payload.Length);
+        return true;
     }
 }

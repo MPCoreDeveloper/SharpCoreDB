@@ -53,36 +53,29 @@ public class DatabaseConfig
     public bool UseSqliteIntegerAffinity { get; init; } = false;
 
     /// <summary>
-    /// Gets a value indicating whether table payload records are encrypted at rest with
-    /// per-record AES-256-GCM (opt-in; default <see langword="false"/>).
+    /// Gets a value indicating whether table payload records are encrypted at rest with per-record
+    /// AES-256-GCM. <b>Enabled by default.</b>
     /// <para>
-    /// ⚠️ <b>With the default (<see langword="false"/>) a database stores its TABLE DATA — records and
-    /// the overflow arena — as PLAINTEXT, while metadata and transaction files are still encrypted.</b>
-    /// That asymmetry is a documented, measured gap (audit §3-1c of
-    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c>), not a claim that the data is
-    /// protected; <see cref="NoEncryptMode"/> being <see langword="false"/> does not by itself encrypt
-    /// table payloads.
+    /// With this on (the default) a table's data file carries an 8-byte magic header followed by
+    /// per-record ciphertext, and the overflow arena holds ciphertext as well — so table data, arena,
+    /// metadata and transaction files are all protected. <see cref="NoEncryptMode"/> being
+    /// <see langword="true"/> is the single, documented raw-speed opt-out and leaves every file
+    /// plaintext.
     /// </para>
     /// <para>
-    /// Set <see langword="true"/> to protect the data: NEW table data files then carry an 8-byte magic
-    /// header followed by per-record ciphertext. Measured cost: ≈1.11× CREATE/INSERT, no measurable
-    /// UPDATE penalty on the contiguous paths, and roughly double the file size (5,600 → 11,208 B in
-    /// the §3-1c probe) for the per-record GCM framing. <c>NoEncryptMode=true</c> is the single
-    /// documented raw-speed opt-out and leaves everything plaintext.
+    /// Measured cost of the default versus that opt-out: ≈1.11× CREATE/INSERT, no measurable UPDATE
+    /// penalty on the contiguous paths, roughly double the file size for the per-record GCM framing,
+    /// and one whole-file decrypt per full-scan-shaped query (the scan reads the file once). Numbers in
+    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c> §3-1c and §3-1d.
     /// </para>
     /// <para>
-    /// ⚠️ OPT-IN FORMAT: only enable on databases whose tables are created/opened with the same flag,
-    /// and never share such databases with tooling built before this option. Legacy plaintext files
-    /// stay byte-for-byte readable either way.
-    /// </para>
-    /// <para>
-    /// Flipping this default to <see langword="true"/> is a work package, not a config change: measured
-    /// on 2026-09-13 it still fails 21 tests across 10 classes (StructRow fast paths, the overflow
-    /// arena, legacy ULID migration, batch canonical parse, in-place field patching). See plan §3-1c
-    /// deliverable 2 for the list and the gate.
+    /// ⚠️ FORMAT: a file is encrypted only when it was CREATED with this option on. A pre-existing
+    /// plaintext database stays byte-for-byte readable and is never mixed with encrypted records — but
+    /// its tables are upgraded to the encrypted format when they are compacted, because compaction
+    /// rewrites them through a brand-new file.
     /// </para>
     /// </summary>
-    public bool EnableAtRestRecordEncryption { get; init; } = false;
+    public bool EnableAtRestRecordEncryption { get; init; } = true;
 
     /// <summary>
     /// Gets a value indicating whether batch encryption is enabled during bulk operations.

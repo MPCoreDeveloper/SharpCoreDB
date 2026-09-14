@@ -15,11 +15,10 @@ using Xunit;
 
 /// <summary>
 /// Plan §3-1c deliverable 4: a permanent guard for what "encrypted" actually means per configuration.
-/// The audit found that the DEFAULT configuration stores table data (records and the overflow arena) as
-/// PLAINTEXT while still encrypting metadata and transaction files — so this test pins the posture, and
-/// doubles as the tripwire: flipping <c>EnableAtRestRecordEncryption</c> to the default changes the
-/// <see cref="Kind.Default"/> expectation, and that must only happen together with the work package
-/// listed in plan §3-1c deliverable 2.
+/// The shipped default encrypts table data (records and the overflow arena) as well as metadata and
+/// transaction files, so this test pins that posture; it doubles as the tripwire — if the default ever
+/// stops protecting table payloads, the <see cref="Kind.Default"/> case fails, and that may only happen
+/// as a deliberate decision (plan §3-1c deliverable 2).
 /// </summary>
 public sealed class EncryptionCoverageTests : IDisposable
 {
@@ -28,13 +27,13 @@ public sealed class EncryptionCoverageTests : IDisposable
 
     public enum Kind
     {
-        /// <summary>Default config: NoEncryptMode=false, at-rest records off.</summary>
+        /// <summary>Default config: NoEncryptMode=false, at-rest records ON (the shipped default).</summary>
         Default,
 
         /// <summary>The documented raw-speed opt-out.</summary>
         Raw,
 
-        /// <summary>Per-record encryption opted in.</summary>
+        /// <summary>Per-record encryption opted in explicitly.</summary>
         AtRest,
     }
 
@@ -69,7 +68,7 @@ public sealed class EncryptionCoverageTests : IDisposable
         fileBytes.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Marker)) >= 0;
 
     [Theory]
-    [InlineData(Kind.Default, true)]
+    [InlineData(Kind.Default, false)]
     [InlineData(Kind.Raw, true)]
     [InlineData(Kind.AtRest, false)]
     public void TableDataFiles_MarkerPresence_MatchesTheDocumentedPosture(Kind kind, bool expectPlaintext)
