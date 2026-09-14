@@ -71,15 +71,30 @@ public static class WritePathProfiler
 
     private static int _enabled;
     private static int _probed;
+    private static int _explicitlyDisabled;
 
     /// <summary>Gets a value indicating whether accumulation is active.</summary>
     public static bool Enabled => Volatile.Read(ref _enabled) != 0;
 
     /// <summary>Starts accumulating stage timings.</summary>
-    public static void Enable() => Volatile.Write(ref _enabled, 1);
+    public static void Enable()
+    {
+        Volatile.Write(ref _explicitlyDisabled, 0);
+        Volatile.Write(ref _enabled, 1);
+    }
 
-    /// <summary>Stops accumulating. Counters keep their values until <see cref="Reset"/>.</summary>
-    public static void Disable() => Volatile.Write(ref _enabled, 0);
+    /// <summary>
+    /// Stops accumulating. Counters keep their values until <see cref="Reset"/>. An explicit disable
+    /// wins over the <c>SHARPCOREDB_WRITE_PROFILE</c> environment variable: otherwise the next
+    /// <see cref="Stamp"/> silently re-armed the profiler, so "Disable" meant "stop until the next
+    /// write" — which broke the disable assertion in <c>WritePathProfilerTests</c> for anyone running
+    /// the suite with that variable set.
+    /// </summary>
+    public static void Disable()
+    {
+        Volatile.Write(ref _enabled, 0);
+        Volatile.Write(ref _explicitlyDisabled, 1);
+    }
 
     /// <summary>Clears every counter.</summary>
     public static void Reset()
@@ -95,7 +110,8 @@ public static class WritePathProfiler
     /// </summary>
     public static long Stamp()
     {
-        if (Volatile.Read(ref _enabled) == 0 && !TryAutoEnableFromEnvironment())
+        if (Volatile.Read(ref _enabled) == 0 &&
+            (Volatile.Read(ref _explicitlyDisabled) != 0 || !TryAutoEnableFromEnvironment()))
         {
             return 0L;
         }

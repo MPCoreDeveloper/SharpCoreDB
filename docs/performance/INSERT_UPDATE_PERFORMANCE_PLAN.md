@@ -727,9 +727,33 @@ growth stays at zero there as well.
 
 So the write path is **no longer the UPDATE bottleneck**: for the worst shape ~90% of the wall time sits
 in the SQL/batch layer above it, and the same-length TEXT shape is a **10× outlier** against the
-different-length shape (10.4K vs 71.9K ops/s in raw) although both end in place with zero growth. That is
-now its own item — it must be attributed with the same profiler (the batch path's canonicalization and
-planning for string literals) before anything is changed, exactly as §4c insists for index maintenance.
+different-length shape (10.4K vs 71.9K ops/s in raw) although both end in place with zero growth.
+
+**That outlier is now fixed, and it was the arena — not the SQL layer.** Splitting the timing into
+execution versus flush killed the "flush" theory (1–2 ms of a 249 ms batch), and the hash index turned out
+not to be the cause either (8.9K with it, 11.3K without). What differed was *which* write the update
+needed: a different-length TEXT value appends a new arena block (fast, buffered append), while a
+same-length value **reuses a freed block in place** — and `Storage.WriteRecordInPlace` special-cased the
+arena file to open and close a **fresh `FileStream` per overwrite**, i.e. one handle open/close pair per
+row. It now uses the cached write handle like every other table file (safe because whole-file replacement
+drops handles — the `InvalidateFileHandles` work from §1d-2, which is exactly what the special case was
+guarding against):
+
+| shape (raw, 2,000 rows) | before | after |
+|---|---:|---:|
+| same-length TEXT, indexed column | 8,902 ops/s | **19,109 ops/s** |
+| same-length TEXT, no index | 11,293 ops/s | **35,711 ops/s** |
+| different-length TEXT, indexed | 65,547 ops/s | 44,637 ops/s (unchanged within noise) |
+
+A second fix came out of the same hunt: `WritePathProfiler.Stamp()` re-armed itself from
+`SHARPCOREDB_WRITE_PROFILE` after an explicit `Disable()`, so "disabled" meant "until the next write".
+An explicit `Disable()` now wins over the environment variable — otherwise the disable assertion in
+`WritePathProfilerTests` fails for anyone running the suite with that variable set (it did, during this
+investigation).
+
+**What is left of the outlier:** the indexed same-length shape (19.1K) still trails the unindexed one
+(35.7K) by ~2×, i.e. ~45 µs per row of hash-index maintenance on a value that becomes a duplicate for
+every row — that is §4c's territory and now has a measured number attached.
 
 ### 4b. Two-region records for variable-width columns *(decided: Option B)*
 

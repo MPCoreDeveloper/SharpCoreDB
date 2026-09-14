@@ -314,19 +314,16 @@ public partial class Storage
     /// </summary>
     private void WriteRecordInPlace(string path, long offset, ReadOnlySpan<byte> lengthPrefix, ReadOnlySpan<byte> record)
     {
-        if (path.EndsWith(".ovf", StringComparison.OrdinalIgnoreCase))
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None);
-            fs.Position = offset;
-            fs.Write(lengthPrefix);
-            fs.Write(record);
-        }
-        else
-        {
-            SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
-            RandomAccess.Write(writeHandle, lengthPrefix, offset);
-            RandomAccess.Write(writeHandle, record, offset + 4);
-        }
+        // PERF: one cached write handle for every table file, INCLUDING the overflow arena. The .ovf
+        // branch used to open (and close) a FileStream per overwrite, which made a same-length TEXT
+        // update — the shape that reuses a freed arena block instead of appending — ~8x slower than the
+        // different-length one (123 us vs 16 us per row; plan §4a). A cached handle for .ovf is safe now
+        // that whole-file replacement drops handles (IStorage.InvalidateFileHandles, called by the arena
+        // compaction, the table compaction and the fixed-width migration), which is what the special case
+        // was presumably guarding against.
+        SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
+        RandomAccess.Write(writeHandle, lengthPrefix, offset);
+        RandomAccess.Write(writeHandle, record, offset + 4);
     }
 
     /// <summary>
