@@ -861,6 +861,14 @@ govern the table append, which is the owner's decision.** Both need a crash-reco
 be a config flip. The room is large — 512 µs → 4.5 µs per row — but it is bought with durability, and that
 is not a trade to make silently on a database.
 
+The file-sharing constraint narrows the shape of (a): a *long-lived buffered stream* has the same problem
+as the cached handle, so the viable form is **buffer the records in memory and flush with a single
+open/write/close at the boundary** — exactly the shape the transaction path already uses
+(`bufferedAppends` + `FlushBufferedAppends`), where the handle is only live during the flush and readers
+are unaffected. The real work in (a) is therefore not the buffering, which exists, but read-your-writes:
+`ReadBytesFrom` does not consult buffered appends, so a row appended in buffered mode is invisible until
+the flush. That is the piece to design (and to decide on) before this item can move.
+
 INSERT is otherwise already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
 SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The remaining, ranked items:
 
