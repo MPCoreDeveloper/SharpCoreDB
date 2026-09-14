@@ -141,6 +141,10 @@ public partial class Table
 
             File.Delete(DataFile);
             File.Move(tempPath, DataFile);
+
+            // The data file was REPLACED: cached handles still read the old, deleted file (which can
+            // answer "no magic header" for a file that now has one), so they must be dropped here.
+            storage.InvalidateFileHandles(DataFile);
         }
         catch
         {

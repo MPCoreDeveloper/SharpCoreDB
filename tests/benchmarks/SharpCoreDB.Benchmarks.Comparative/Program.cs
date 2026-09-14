@@ -416,15 +416,17 @@ class Program
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool fixedWidth = false,
         bool noEncrypt = true,
-        bool atRestRecords = false)
+        bool? atRestRecords = null)
     {
         return new DatabaseConfig
         {
             NoEncryptMode = noEncrypt,
             // Per-record at-rest encryption of table payloads (the 8-byte magic header format).
-            // Off by default in the product; the benchmark arms turn it on explicitly so its cost is
-            // a published number (see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md).
-            EnableAtRestRecordEncryption = atRestRecords,
+            // null keeps whatever the PRODUCT default is (true since the 2026-09-13 flip; read from a
+            // fresh instance so a benchmark arm can never drift from it), true/false force it. The old
+            // "default" arm forced it OFF — a configuration no default database has had since the flip,
+            // see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c/§3-1d.
+            EnableAtRestRecordEncryption = atRestRecords ?? ProductAtRestDefault,
             StorageEngineType = engineType,
             // The fair PK comparison intentionally isolates the record-layout variable: the legacy
             // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
@@ -455,6 +457,13 @@ class Program
     }
 
     /// <summary>
+    /// The product's per-record at-rest encryption default, read from a fresh
+    /// <see cref="DatabaseConfig"/> so a benchmark arm can never drift from it. It flipped to
+    /// <see langword="true"/> on 2026-09-13 (plan §3-1c deliverable 2), and the arms report it.
+    /// </summary>
+    static bool ProductAtRestDefault => new DatabaseConfig().EnableAtRestRecordEncryption;
+
+    /// <summary>
     /// Builds the variant DatabaseConfig used by the --pk-default arm. The variant name comes from
     /// SHARPCOREDB_PK_DEFAULT_VARIANT or the --pk-ab arm selector; "" is the pure default config.
     /// </summary>
@@ -483,17 +492,18 @@ class Program
     }
 
     static BenchmarkResult RunSharpCoreDB(SharpCoreDB.Interfaces.StorageEngineType engineType)
-        => RunSharpCoreDbMode(engineType, noEncrypt: true, atRestRecords: false);
+        => RunSharpCoreDbMode(engineType, noEncrypt: true, atRestRecords: null);
 
     /// <summary>
     /// Runs the SQL CRUD workload in one encryption configuration:
-    /// <paramref name="noEncrypt"/> true is the raw-speed arm (<c>NoEncryptMode=true</c>);
-    /// false with <paramref name="atRestRecords"/> false is today's default;
-    /// false with <paramref name="atRestRecords"/> true is per-record at-rest encryption (the
-    /// magic-header format the default is meant to become).
+    /// <paramref name="noEncrypt"/> true is the raw-speed arm (<c>NoEncryptMode=true</c>, everything
+    /// plaintext); false is an encrypted-metadata run, with
+    /// <paramref name="atRestRecords"/> <see langword="null"/> keeping the PRODUCT default for
+    /// per-record at-rest encryption (<see langword="true"/> since the 2026-09-13 flip) and an explicit
+    /// <see langword="true"/>/<see langword="false"/> overriding it.
     /// </summary>
     static BenchmarkResult RunSharpCoreDbMode(
-        SharpCoreDB.Interfaces.StorageEngineType engineType, bool noEncrypt, bool atRestRecords)
+        SharpCoreDB.Interfaces.StorageEngineType engineType, bool noEncrypt, bool? atRestRecords)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -1400,56 +1410,55 @@ class Program
     /// warming machine cannot systematically favour one configuration (the <c>--pk-ab</c> pattern).
     /// </summary>
     /// <remarks>
-    /// The labels are deliberately literal, because the audit in
-    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c> §3-1c showed that the default
-    /// (<c>NoEncryptMode=false</c>) encrypts metadata and transaction flushes while storing table
-    /// records as PLAINTEXT. Calling that arm "encrypted" would repeat a claim the code does not
-    /// keep. Publish the columns together or not at all.
+    /// TWO arms since the 2026-09-13 flip, labelled literally: <c>raw</c> is
+    /// <c>NoEncryptMode=true</c> (the documented opt-out, every file plaintext) and <c>default</c> is
+    /// the product default, which now encrypts table records as well as metadata. Before the flip the
+    /// default stored table records as PLAINTEXT while still encrypting metadata; that configuration is
+    /// now only reachable by forcing <c>EnableAtRestRecordEncryption=false</c>, so it is no longer an
+    /// arm — the §3-1c audit table stays as the historical record. Publish the columns together or not
+    /// at all.
     /// </remarks>
     static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 3)
     {
         const int Failed = -1;
         Console.WriteLine();
         Console.WriteLine(BannerTop);
-        Console.WriteLine("║ Encryption-mode comparison — one workload, three configurations          ║");
-        Console.WriteLine("║   raw      NoEncryptMode=true                        (opt-out, fastest)  ║");
-        Console.WriteLine("║   default  NoEncryptMode=false, at-rest records OFF  (today's default)   ║");
-        Console.WriteLine("║   at-rest  NoEncryptMode=false, at-rest records ON   (table data encrypted)║");
+        Console.WriteLine("║ Encryption-mode comparison — one workload, two configurations          ║");
         Console.WriteLine(BannerBottom);
+        Console.WriteLine("    raw      NoEncryptMode=true              (opt-out; plaintext everywhere)");
+        Console.WriteLine("    default  product default                 (table data encrypted)");
+        Console.WriteLine($"    product default: NoEncryptMode=false, EnableAtRestRecordEncryption={ProductAtRestDefault}");
         Console.WriteLine($"  engine={engineType} · inserts={InsertCount:N0} · reads/updates/deletes={ReadCount:N0} each · reps={reps}");
         Console.WriteLine();
 
         var raw = new List<BenchmarkResult>();
         var deflt = new List<BenchmarkResult>();
-        var atRest = new List<BenchmarkResult>();
 
         for (int rep = 0; rep < reps; rep++)
         {
-            // Alternate the order per rep: machine drift then affects every arm, not just one.
+            // Alternate the order per rep: machine drift then affects both arms, not just one.
             if (rep % 2 == 0)
             {
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: false, "default", Failed));
-                atRest.Add(RunArm(engineType, noEncrypt: false, atRestRecords: true, "at-rest", Failed));
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: false, "raw", Failed));
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed));
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed));
             }
             else
             {
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: false, "raw", Failed));
-                atRest.Add(RunArm(engineType, noEncrypt: false, atRestRecords: true, "at-rest", Failed));
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: false, "default", Failed));
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed));
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed));
             }
 
             Console.WriteLine($"     rep {rep + 1}/{reps} complete");
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {"operation",-10}{"raw",13}{"default",13}{"at-rest",13}{"raw/default",14}{"raw/at-rest",14}");
-        PrintModeRow("INSERT", raw, deflt, atRest, static r => r.InsertOpsPerSec, Failed);
-        PrintModeRow("READ", raw, deflt, atRest, static r => r.ReadOpsPerSec, Failed);
-        PrintModeRow("UPDATE", raw, deflt, atRest, static r => r.UpdateOpsPerSec, Failed);
-        PrintModeRow("DELETE", raw, deflt, atRest, static r => r.DeleteOpsPerSec, Failed);
+        Console.WriteLine($"  {"operation",-10}{"raw",13}{"default",13}{"raw/default",14}");
+        PrintModeRow("INSERT", raw, deflt, static r => r.InsertOpsPerSec, Failed);
+        PrintModeRow("READ", raw, deflt, static r => r.ReadOpsPerSec, Failed);
+        PrintModeRow("UPDATE", raw, deflt, static r => r.UpdateOpsPerSec, Failed);
+        PrintModeRow("DELETE", raw, deflt, static r => r.DeleteOpsPerSec, Failed);
         Console.WriteLine();
-        Console.WriteLine("  /default and /at-rest are the multipliers paid for protection versus the opt-out arm.");
+        Console.WriteLine("  /default is the multiplier paid for the encrypted default versus the opt-out arm.");
         Console.WriteLine("  FAILED means that configuration could not complete the workload (message printed above).");
 
         try
@@ -1463,9 +1472,13 @@ class Program
                 reads = ReadCount,
                 updates = UpdateCount,
                 deletes = DeleteCount,
+                arms = new
+                {
+                    raw = "NoEncryptMode=true (opt-out; plaintext everywhere)",
+                    @default = $"product default (EnableAtRestRecordEncryption={ProductAtRestDefault})",
+                },
                 raw = raw.Select(ToRecord).ToList(),
                 @default = deflt.Select(ToRecord).ToList(),
-                atRest = atRest.Select(ToRecord).ToList(),
             };
 
             // Anchor the archive at the PROJECT directory, not the process CWD: `dotnet run` may be
@@ -1496,7 +1509,7 @@ class Program
     static BenchmarkResult RunArm(
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool noEncrypt,
-        bool atRestRecords,
+        bool? atRestRecords,
         string label,
         int failed)
     {
@@ -1521,14 +1534,12 @@ class Program
         string op,
         List<BenchmarkResult> raw,
         List<BenchmarkResult> deflt,
-        List<BenchmarkResult> atRest,
         Func<BenchmarkResult, int> select,
         int failed)
     {
         int r = MedianOps(raw, select, failed);
         int d = MedianOps(deflt, select, failed);
-        int a = MedianOps(atRest, select, failed);
-        Console.WriteLine($"  {op,-10}{Cell(r),13}{Cell(d),13}{Cell(a),13}{Ratio(r, d),14}{Ratio(r, a),14}");
+        Console.WriteLine($"  {op,-10}{Cell(r),13}{Cell(d),13}{Ratio(r, d),14}");
     }
 
     static int MedianOps(List<BenchmarkResult> xs, Func<BenchmarkResult, int> select, int failed)

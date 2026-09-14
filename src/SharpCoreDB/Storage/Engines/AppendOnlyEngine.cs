@@ -451,6 +451,10 @@ public class AppendOnlyEngine : IStorageEngine
             // Replace original file with compacted file
             File.Delete(filePath);
             File.Move(tempPath, filePath);
+
+            // The table file was REPLACED: cached handles would keep reading the deleted file, whose
+            // first bytes decide whether records are read as plaintext or ciphertext.
+            storage.InvalidateFileHandles(filePath);
             
             var newSize = new FileInfo(filePath).Length;
             var bytesReclaimed = originalSize - newSize;

@@ -389,6 +389,54 @@ is a separate run (§2's protocol, item 5).
 Evidence: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/dual-mode-*.json`, archived next
 to the `comparative_*.json` evidence that earlier benchmark documents cite.
 
+#### 1d-2. Re-measured with the flipped default, and what the "11× tax" really was *(2026-09-13)*
+
+Once §3-1c deliverable 2 landed, `default` and `at-rest` are the same configuration, so the harness now
+runs **two** arms (`raw` = `NoEncryptMode=true`, `default` = the shipped encrypted default; it reads the
+product default from a fresh `DatabaseConfig` so an arm can never drift from it). The first two-arm run
+reproduced the old at-rest column exactly — and then the cause turned out not to be encryption:
+
+| operation | raw | default (first two-arm run) | ratio |
+|---|---:|---:|---:|
+| INSERT | 133,322 | 119,431 | 1.12× |
+| READ | 124,897 | 11,035 | **11.32×** |
+| UPDATE | 112,741 | 10,418 | **10.82×** |
+| DELETE | 128,722 | 10,843 | **11.87×** |
+
+`Storage.ReadBytesFrom` — every per-record read — asked `FileHasEncryptedHeader` whether the file is
+encrypted, and that probe did `File.Exists` + `new FileInfo(path).Length` + a fresh `FileStream`
+open/read/close, **per record**. The `raw` arm short-circuits the probe (`UseRecordEncryption && …`),
+which is why only the encrypted arm paid it. A micro-probe isolated it: the storage layer's per-record
+read cost **57 µs encrypted vs 4.9 µs raw**, while `AesGcm` construction (the next suspect) measures
+0.77 µs.
+
+**Fix:** the probe now does exactly one 8-byte `RandomAccess.Read` through the cached read handle — no
+`File.Exists`, no `FileInfo`, no handle open. A short read is the same answer the removed length check
+gave, and a failed handle open the same answer `File.Exists` gave. There is deliberately **no cache** of
+the verdict: the answer can change when a file is created or replaced (compaction rewrites through a
+brand-new temp file), and every candidate invalidation point is a chance to serve a stale format verdict.
+
+| operation | raw | default (after) | ratio before → after |
+|---|---:|---:|---:|
+| INSERT | 137,197 | 122,077 | 1.12× → **1.12×** |
+| READ | 119,588 | 77,746 | 11.32× → **1.54×** |
+| UPDATE | 104,890 | 58,972 | 10.82× → **1.78×** |
+| DELETE | 119,039 | 63,646 | 11.87× → **1.87×** |
+
+**What this changes:** the "catastrophically expensive at-rest READ/UPDATE/DELETE" reading in the table
+above is **an artifact of that probe, not the price of encryption**. The honest cost of the shipped
+encrypted default is ≈1.5–1.9× on READ/UPDATE/DELETE and ≈1.1× on INSERT on this machine (3 reps per arm,
+one run — a *published* number still wants §2's protocol with more reps, and the raw-vs-default column is
+the noise-prone one). It also reframes §8: the UPDATE target (≥120K) is now a row-copy problem rather than
+an encryption problem, since the default already runs at ~59K on this harness.
+
+Note that §3-1e's 5–7× at-rest UPDATE diagnosis (the loss of the contiguous bulk path) is a *different*
+shape — ascending `pk = literal` batches — and §3-1f's fix stands on its own measurement (261.6 ms →
+43.3 ms). This section is the random-key per-row workload.
+
+Evidence: `dual-mode-20260914_174541.json` (before) and `dual-mode-20260914_180312.json` (after), both
+archived in the benchmark results directory.
+
 ---
 
 ### 1e. Why at-rest UPDATE costs 5–7× — diagnosed *(2026-09-13)*

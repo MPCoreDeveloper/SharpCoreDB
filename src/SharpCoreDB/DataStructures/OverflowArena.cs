@@ -215,6 +215,9 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
                 File.Move(tempPath, _filePath);
             }
 
+            // The arena file was REPLACED — cached handles would keep reading the deleted one.
+            _storage.InvalidateFileHandles(_filePath);
+
             _cache.Clear();
             foreach (var (newOffset, payload) in newCache)
             {

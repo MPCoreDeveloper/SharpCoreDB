@@ -211,6 +211,16 @@ public interface IStorage
     byte[]? DecryptRecordPayload(byte[] payload) => null;
 
     /// <summary>
+    /// Drops (and closes) any cached file handles for <paramref name="path"/>. Callers MUST invoke this
+    /// after a whole-file replacement — write a temp file, then move it over the target — because a
+    /// cached handle keeps reading the REPLACED file: both the record bytes and the per-record format
+    /// verdict would be stale, the latter surfacing as ciphertext being read as plaintext (this broke
+    /// the fixed-width layout migration and the arena compaction). The default is a no-op
+    /// (mock/alternative storages hold no handles).
+    /// </summary>
+    void InvalidateFileHandles(string path) { }
+
+    /// <summary>
     /// Marks the record whose 4-byte length prefix sits at <paramref name="offset"/> as deleted by
     /// replacing the prefix with the NEGATIVE slot size (4-byte prefix + payload). Every record
     /// enumerator treats a negative prefix as a deleted record and skips |value| bytes, so the

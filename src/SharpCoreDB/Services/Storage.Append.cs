@@ -176,30 +176,35 @@ public partial class Storage
     /// Detects whether <paramref name="path"/> is an encrypted per-record table file by
     /// checking for the 8-byte magic header. Missing/empty/short files → false.
     /// </summary>
-    private static bool FileHasEncryptedHeader(string path)
+    /// <remarks>
+    /// PERF: this probe runs on EVERY per-record read once record encryption is on
+    /// (<c>ReadBytesFrom</c>/<c>ReadAllRecords</c>), so it must not do more than one cached-handle read:
+    /// it used to open a <see cref="FileStream"/> per call, and even a <c>File.Exists</c> +
+    /// <c>FileInfo.Length</c> pair costs two metadata syscalls per read. The measured effect of those
+    /// syscalls on the two-arm <c>--dual-mode</c> harness was ~11× slower READ/UPDATE/DELETE for the
+    /// encrypted default versus <c>NoEncryptMode=true</c>, whose short-circuit skips the probe.
+    /// A short read is the same answer the removed length check gave, and the handle open failure the
+    /// same answer <c>File.Exists</c> gave.
+    /// </remarks>
+    private bool FileHasEncryptedHeader(string path)
     {
         try
         {
-            if (!File.Exists(path))
-            {
-                return false;
-            }
-
-            var info = new FileInfo(path);
-            if (info.Length < PersistenceConstants.EncryptedTableMagicLength)
-            {
-                return false;
-            }
-
             Span<byte> header = stackalloc byte[PersistenceConstants.EncryptedTableMagicLength];
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            int read = fs.Read(header);
-            if (read < PersistenceConstants.EncryptedTableMagicLength)
+            int read;
+            try
             {
-                return false;
+                read = RandomAccess.Read(GetOrOpenReadHandle(path), header, 0);
+            }
+            catch
+            {
+                // Stale cache entry (file replaced/removed) — evict and retry once, like ReadBytesRange.
+                _readHandleCache.TryRemove(path, out _);
+                read = RandomAccess.Read(GetOrOpenReadHandle(path), header, 0);
             }
 
-            return header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
+            return read == header.Length &&
+                header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
         }
         catch
         {
@@ -353,6 +358,20 @@ public partial class Storage
         }
 
         CloseWriteHandles();
+    }
+
+    /// <inheritdoc />
+    public void InvalidateFileHandles(string path)
+    {
+        if (_readHandleCache.TryRemove(path, out var readHandle))
+        {
+            readHandle.Dispose();
+        }
+
+        if (_writeHandleCache.TryRemove(path, out var writeHandle))
+        {
+            writeHandle.Dispose();
+        }
     }
 
     /// <inheritdoc />
