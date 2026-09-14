@@ -1976,7 +1976,10 @@ public partial class Table
             // plaintext fixed-width table with physically adjacent PK-ordered records, the old records
             // are read as ONE contiguous byte range and patched in memory (no per-row pread). Strictly
             // gated; any mismatch falls back to the generic per-row loop below.
-            if (TryBulkUpdateContiguousFixedWidth(engine, operations))
+            long contiguousStart = Diagnostics.WritePathProfiler.Stamp();
+            bool handledContiguously = TryBulkUpdateContiguousFixedWidth(engine, operations);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, contiguousStart);
+            if (handledContiguously)
             {
                 return;
             }
@@ -2142,11 +2145,18 @@ public partial class Table
                             }
                         }
 
+                        long patchStart = Diagnostics.WritePathProfiler.Stamp();
                         byte[]? patched = _fixedWidthRecords
                             ? TryOverwriteFixedWidthInPlace(rawData, updates)
                             : TryOverwriteFieldsInPlaceActual(rawData, updates);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
 
-                        if (patched is not null && engine.TryUpdateInPlaceSameLength(Name, rowPosition, patched))
+                        long writeStart = Diagnostics.WritePathProfiler.Stamp();
+                        bool patchedInPlace = patched is not null &&
+                            engine.TryUpdateInPlaceSameLength(Name, rowPosition, patched);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
+                        if (patchedInPlace)
                         {
                             // The record was overwritten in place; when the update changed a
                             // hash-indexed column, re-point its entries (old key decoded from the

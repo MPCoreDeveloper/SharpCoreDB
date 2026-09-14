@@ -90,6 +90,12 @@ public sealed class WritePathProfilerTests : IDisposable
         Assert.True(engineWriteCalls > 0, $"expected engine-write calls, got {engineWriteCalls}");
         Assert.True(indexCalls > 0, $"expected index-maint calls, got {indexCalls}");
 
+        // The PK-ordered 50-row update batch is handled by the contiguous fast path, which must be
+        // attributed too (it is the path that disappears when records are encrypted — see §3-1e).
+        Assert.True(
+            snapshot.Single(r => r.Stage == "row-locate").Calls > 0,
+            "expected the contiguous batch update path to be attributed");
+
         string report = WritePathProfiler.Report();
         Assert.Contains("engine-write", report, StringComparison.Ordinal);
         Assert.Contains("index-maint", report, StringComparison.Ordinal);
@@ -99,6 +105,42 @@ public sealed class WritePathProfilerTests : IDisposable
         long afterDisable = WritePathProfiler.Snapshot().Single(r => r.Stage == "engine-write").Calls;
         WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, WritePathProfiler.Stamp());
         Assert.Equal(afterDisable, WritePathProfiler.Snapshot().Single(r => r.Stage == "engine-write").Calls);
+    }
+
+    /// <summary>
+    /// The batch UPDATE path (<c>ExecuteBatchSQL</c> → <c>Table.UpdateMultiple</c>) must be attributed
+    /// too, not just the single-statement path. This test exists because §3-1e of the write-path plan
+    /// found the profiler accounting for ~4 ms of a 235 ms batch update.
+    /// </summary>
+    [Fact]
+    public async Task BatchUpdate_ThroughExecuteBatchSql_IsAttributed()
+    {
+        WritePathProfiler.Reset();
+        WritePathProfiler.Enable();
+
+        const int rows = 100;
+        await using (IDatabase db = _factory.Create(
+            _dir, "pw", isReadOnly: false, config: new DatabaseConfig { NoEncryptMode = true }))
+        {
+            // No primary key, and the WHERE column is hash-indexed: the contiguous PK-ordered fast
+            // path cannot apply, so this batch goes through the per-row in-place loop — the path the
+            // profiler must cover for §3-1e to be measurable at all.
+            db.ExecuteSQL("CREATE TABLE docs (name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            db.ExecuteBatchSQL([.. Enumerable.Range(0, rows).Select(i => $"INSERT INTO docs VALUES ('n{i}', {i})")]);
+            db.ExecuteBatchSQL([.. Enumerable.Range(0, rows).Select(i => $"UPDATE docs SET score = {i * 2} WHERE name = 'n{i}'")]);
+            db.Flush();
+        }
+
+        WritePathProfiler.Disable();
+
+        var snapshot = WritePathProfiler.Snapshot();
+        long patchCalls = snapshot.Single(r => r.Stage == "in-place-patch").Calls;
+        long writeCalls = snapshot.Single(r => r.Stage == "engine-write").Calls;
+
+        // One patch attempt and one in-place write attempt per updated row (plus the insert batch).
+        Assert.True(patchCalls >= rows, $"expected >= {rows} in-place-patch calls, got {patchCalls}");
+        Assert.True(writeCalls >= rows, $"expected >= {rows} engine-write calls, got {writeCalls}");
     }
 
     [Fact]
