@@ -426,6 +426,28 @@ values) and `PerRecordEncryption_ContiguousDeletes_EngageBulkPath_AndSurviveReop
 
 **A blocking, pre-existing defect surfaced while validating this — see §3-1g.**
 
+**Measured** (same machine, same probe — 2,000 ascending `pk = literal` UPDATEs, i.e. the §3-1e shape;
+`src/` swapped between the two commits, nothing else changed):
+
+| src | arm | time | bulk batches | vs raw |
+|---|---|---|---|---|
+| `747aae09` (before) | raw | 43.6 ms | 1 | 1.00× |
+| `747aae09` (before) | at-rest | **261.6 ms** | **0** | **6.00×** |
+| `ae83be57` (this change) | raw | 47.2 ms | 1 | 1.00× |
+| `ae83be57` (this change) | **at-rest** | **43.3 ms** | **1** | **0.92×** |
+
+The §3-1e figure (5.2–7.5×) reproduced at **6.00×** before the change; afterwards the at-rest penalty
+for this shape is gone — the bulk path now engages on the ciphertext span (`batches=1`) and the
+per-record AEAD open/seal is invisible next to the per-row reads it replaces (~218 ms of 261.6 ms
+eliminated).
+
+The whole-workload dual-mode run (`results/dual-mode-20260914_064721.json`, archived with this change)
+still reports at-rest UPDATE at **12.75×** raw, but that workload updates **random** keys: its records
+are not physically adjacent, so the contiguous path cannot engage by design and what it measures is the
+per-row loop — which §3-1f does not change. The remaining at-rest costs stay honest and unchanged:
+INSERT at **1.11×** raw (per-record AEAD, now visible as its own line) and the ~2.5× disk framing from
+§3-1c.
+
 ### 1g. A blocking, pre-existing defect: at-rest tables cannot be scanned *(found 2026-09-13)*
 
 While validating §3-1f, a full scan of an at-rest database returned **zero rows**. Isolated with a
