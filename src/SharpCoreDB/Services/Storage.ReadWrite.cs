@@ -27,6 +27,7 @@ public partial class Storage
         if (IsInTransaction)
         {
             var dataToWrite = this.noEncryption ? plain : this.crypto.Encrypt(this.key, plain);
+            InvalidateReadEncryption(path);
             this.transactionBuffer.BufferWrite(path, dataToWrite);
             return;
         }
@@ -41,6 +42,8 @@ public partial class Storage
             var encrypted = this.crypto.Encrypt(this.key, plain);
             File.WriteAllBytes(path, encrypted);
         }
+
+        InvalidateReadEncryption(path);
     }
 
     /// <inheritdoc />
@@ -112,14 +115,25 @@ public partial class Storage
             return DecryptTableFileToPlaintext(path) ?? fileData;
         }
 
-        // Legacy single-blob whole-file encryption (meta.dat, .salt, etc.)
+        // Legacy single-blob whole-file encryption (meta.dat, .salt, etc.). The verdict is memoised:
+        // probing by "decrypt and catch" costs a full-size allocation plus an exception, and for a
+        // plaintext file that used to be the price of every single read.
+        if (!ShouldAttemptLegacyDecrypt(path))
+        {
+            return fileData;
+        }
+
         try
         {
-            return this.crypto.Decrypt(this.key, fileData);
+            byte[] plain = this.crypto.Decrypt(this.key, fileData);
+            RememberLegacyEncryption(path, encrypted: true);
+            return plain;
         }
         catch
         {
-            // Legacy plaintext file (no header, not encrypted) — return raw bytes.
+            // Legacy plaintext file (no header, not encrypted) — return raw bytes, and remember the
+            // answer so the next read does not pay for the probe again.
+            RememberLegacyEncryption(path, encrypted: false);
             return fileData;
         }
     }
@@ -156,6 +170,7 @@ public partial class Storage
         if (IsInTransaction)
         {
             var dataToWrite = this.noEncryption ? data : this.crypto.Encrypt(this.key, data);
+            InvalidateReadEncryption(path);
             this.transactionBuffer.BufferWrite(path, dataToWrite);
             return;
         }
@@ -171,7 +186,8 @@ public partial class Storage
             File.WriteAllBytes(path, encrypted);
         }
         
-        // Invalidate all cached pages for this file
+        // Invalidate all cached pages for this file, and re-decide what the file is on the next read.
+        InvalidateReadEncryption(path);
         if (this.pageCache != null)
         {
             this.pageCache.Clear(flushDirty: false);

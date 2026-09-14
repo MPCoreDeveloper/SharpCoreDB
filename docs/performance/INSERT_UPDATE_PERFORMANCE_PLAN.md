@@ -191,6 +191,17 @@ magic header first (8 unambiguous bytes) turns it into a branch. `ReadAllBytes` 
 allocates the whole file twice before giving up on decrypting it. **Nothing security-relevant
 changes** — the same files decrypt, the same files pass through raw.
 
+**Implemented (2026-09-13):** `Storage` now memoises the verdict per path
+(`Services/Storage.ReadEncryption.cs`), so `ReadBytes` and the page-cache read probe **once** and then
+take a branch; the whole-file writers re-seed the verdict (`Write`/`WriteBytes` — plaintext is recorded
+outright, otherwise the answer is forgotten so the next read re-probes), which makes a stale verdict
+impossible. Guarded by `StorageReadEncryptionCacheTests` with a counting `ICryptoService` double: ten
+reads of a plaintext file cost **one** decrypt attempt, `NoEncryptMode` costs **zero**, an encrypted
+file still decrypts once per read, and a write that changes a file's framing is picked up.
+
+The *throughput* effect is deliberately **not** claimed yet: §3-1d showed the raw-versus-default
+difference sits inside this machine's noise band, so it needs the higher-rep protocol before/after.
+
 ### 1b. Write side — the encryption posture *(decided: security stays the default, and must be real)*
 
 Four write-side sites encrypt purely on `!NoEncryptMode`:
