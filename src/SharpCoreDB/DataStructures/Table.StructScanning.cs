@@ -981,18 +981,20 @@ public partial class Table
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private IEnumerable<StructRow> ScanColumnarStructRowsInternal(VariableLengthSchema schema, bool enableCaching)
     {
-        // Read entire data file
-        var data = this.storage.ReadBytes(this.DataFile, noEncrypt: false);
+        // Read entire data file. An at-rest file comes back as a decrypted, header-stripped re-pack, so
+        // the physical offset map is what lets the stale-version check below recognise a row's current
+        // version (buffer offsets differ from file offsets there).
+        var data = this.storage.ReadBytesWithRecordOffsets(this.DataFile, noEncrypt: false, out var recordOffsets);
         if (data == null || data.Length == 0)
         {
             return Array.Empty<StructRow>();
         }
 
         // ✅ FIX: Extract all valid rows FIRST (no Span across yield)
-        var validRows = ExtractValidColumnarRows(data, schema);
+        var validRows = ExtractValidColumnarRows(data, schema, recordOffsets);
         
-        // Then yield from the list
-        return YieldStructRows(validRows, schema, enableCaching);
+        // Then yield from the list — reusing this buffer so the file is read/decrypted only once.
+        return YieldStructRows(validRows, schema, enableCaching, data);
     }
 
     /// <summary>
@@ -1000,11 +1002,15 @@ public partial class Table
     /// Returns list of (offset, length) for valid current-version rows.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private List<(int offset, int length)> ExtractValidColumnarRows(byte[] data, VariableLengthSchema schema)
+    private List<(int offset, int length)> ExtractValidColumnarRows(
+        byte[] data,
+        VariableLengthSchema schema,
+        long[]? physicalOffsets = null)
     {
         var validRows = new List<(int offset, int length)>();
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
         int filePosition = 0;
+        int recordOrdinal = 0; // index into physicalOffsets (at-rest files only)
 
         while (filePosition < dataSpan.Length)
         {
@@ -1015,14 +1021,41 @@ public partial class Table
             int recordLength = BinaryPrimitives.ReadInt32LittleEndian(
                 dataSpan.Slice(filePosition, 4));
 
+            // Tombstoned (deleted) record: the prefix stores the negative slot size to skip. This
+            // mirrors the CRUD columnar walk — treating it as "end of data" ended the scan at the
+            // first deleted record and silently dropped every row after it.
+            if (recordLength < 0)
+            {
+                int slotSize = -recordLength;
+                if (slotSize < 4)
+                    break;
+
+                filePosition += slotSize;
+                continue;
+            }
+
+            // Zero-length payload: still a real record slot (it counts towards the offset map), but
+            // there is nothing to read.
+            if (recordLength == 0)
+            {
+                recordOrdinal++;
+                filePosition += 4;
+                continue;
+            }
+
             // Validate record length
-            if (recordLength <= 0 || recordLength > 1_000_000_000)
+            if (recordLength > 1_000_000_000)
                 break;
 
             if (filePosition + 4 + recordLength > dataSpan.Length)
                 break;
 
-            long currentRecordPosition = filePosition;
+            // An at-rest file is scanned from a decrypted re-pack whose offsets differ from the file's,
+            // so the stale-version check below must compare against the record's PHYSICAL offset.
+            long currentRecordPosition = physicalOffsets is not null && recordOrdinal < physicalOffsets.Length
+                ? physicalOffsets[recordOrdinal]
+                : filePosition;
+            recordOrdinal++;
             int dataOffset = filePosition + 4;
 
             // ✅ Check if this row is the current version (not stale)
@@ -1054,10 +1087,12 @@ public partial class Table
     private IEnumerable<StructRow> YieldStructRows(
         List<(int offset, int length)> rowPositions,
         VariableLengthSchema schema,
-        bool enableCaching)
+        bool enableCaching,
+        byte[]? buffer = null)
     {
-        // Re-read data for Memory references (can't store Span)
-        var data = this.storage.ReadBytes(this.DataFile, noEncrypt: false);
+        // Memory references (can't store Span): reuse the caller's buffer when given, so an at-rest
+        // file is decrypted once per scan instead of twice; otherwise read it here.
+        var data = buffer ?? this.storage.ReadBytes(this.DataFile, noEncrypt: false);
         if (data == null)
             yield break;
 

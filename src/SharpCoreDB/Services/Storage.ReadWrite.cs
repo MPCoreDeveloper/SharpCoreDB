@@ -143,24 +143,58 @@ public partial class Storage
     /// and rejoins them into a plaintext length-prefixed buffer. Returns null if the file
     /// doesn't exist or no complete records could be read.
     /// </summary>
-    private byte[]? DecryptTableFileToPlaintext(string path)
+    private byte[]? DecryptTableFileToPlaintext(string path) => DecryptTableFileToPlaintext(path, out _);
+
+    /// <summary>
+    /// Same as <see cref="DecryptTableFileToPlaintext(string)"/>, additionally reporting the PHYSICAL
+    /// file offset of each record in the rejoined buffer (index i = the i-th record in walk order).
+    /// Scan callers need that map because the rejoined buffer's offsets are not the file's, while the
+    /// PK index stores physical offsets.
+    /// </summary>
+    private byte[]? DecryptTableFileToPlaintext(string path, out long[]? physicalOffsets)
     {
+        physicalOffsets = null;
+
         var records = ReadAllRecords(path)?.ToList();
         if (records is null || records.Count == 0)
         {
             return null;
         }
 
+        var offsets = new long[records.Count];
         using var ms = new MemoryStream();
         Span<byte> lengthBuffer = stackalloc byte[4];
-        foreach (var (_, data) in records)
+        for (int i = 0; i < records.Count; i++)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+            offsets[i] = records[i].RecordOffset;
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, records[i].Data.Length);
             ms.Write(lengthBuffer);
-            ms.Write(data);
+            ms.Write(records[i].Data);
         }
 
+        physicalOffsets = offsets;
         return ms.ToArray();
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesWithRecordOffsets(string path, bool noEncrypt, out long[]? physicalOffsets)
+    {
+        physicalOffsets = null;
+
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        // Plaintext (and every legacy layout): the buffer IS the file, so the buffer offset is already
+        // the physical offset and the caller needs no map. Gated on the magic header (not on
+        // AreRecordsEncrypted) to stay recursion-free with ReadBytes.
+        if (noEncrypt || this.noEncryption || !FileHasEncryptedHeader(path))
+        {
+            return ReadBytes(path, noEncrypt);
+        }
+
+        return DecryptTableFileToPlaintext(path, out physicalOffsets);
     }
 
     /// <inheritdoc />

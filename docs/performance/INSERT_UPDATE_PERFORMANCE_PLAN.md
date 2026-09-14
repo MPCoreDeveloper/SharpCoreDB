@@ -464,25 +464,56 @@ throwaway probe (insert → flush → query), both modes:
 The rows are not gone: PK lookups still resolve (after a reopen, `WHERE id = 1500` returns exactly one
 row, read off disk). Only the *walk* sees nothing.
 
-**Root cause:** the columnar full scan (`Table.Scanning.cs`, `ScanRowsWithSimd`) walks its whole-file
-snapshot from `filePosition = 0` and reads the first four bytes as a record length. On an at-rest file
-those bytes are the 8-byte encrypted-table magic header
-(`PersistenceConstants.EncryptedTableMagicLength`), so `recordLength` fails the `> MaxRecordSize`
-sanity check and the walk `break`s immediately → zero rows. `Storage.ReadAllRecords`
-(`Storage.Append.cs:1356`) already does this correctly — it skips the header and decrypts — but the
-scan does neither. Second consequence: hash indexes are rebuilt **from that scan**, so they come back
-empty after a reopen on an at-rest database (observed: `WHERE name = 'user1500'` empty after reopen,
-while `WHERE id = 1500` works).
+**Root cause (the first hypothesis — "the scan reads the magic header as a record length" — was wrong;
+the walk is fed an already decrypted buffer):** `Storage.ReadBytes` returns, for an at-rest table file,
+a *decrypted, header-stripped re-pack* of the records (`DecryptTableFileToPlaintext`, built from
+`ReadAllRecords`). The columnar scan then walks that buffer and, for every row, keeps it only when
+`Index.Search(pk).Value == <record position in the buffer>` — a "is this the current version?" test
+comparing a **buffer offset** against a **physical file offset**. For an at-rest file those differ by
+the 8-byte header plus 28 bytes of GCM frame per preceding record, so **every** row failed the test and
+the scan returned nothing. Same shape in the parallel scan and in the `StructRow` scan. Second
+consequence: hash indexes are rebuilt **from that scan**, so they came back empty after a reopen on an
+at-rest database (`WHERE name = 'user1500'` empty after reopen, while `WHERE id = 1500` worked).
 
-**Not a regression from §3-1f, and not from §3-1a:** the probe reproduces identically with this work
+**Fixed as:** `IStorage.ReadBytesWithRecordOffsets(path, noEncrypt, out long[]? physicalOffsets)` —
+default returns the plain buffer with a null map; `Storage` returns the decrypted buffer **plus each
+record's physical offset** in walk order (plaintext files keep a null map, because there the buffer
+offset already is the physical offset, and `noEncrypt` is honoured so raw readers are unchanged). The
+three stale-version checks now compare against the physical offset: `ScanRowsWithSimdAndFilterStale`
+(which also advances its record ordinal for the zero-length and early-WHERE skip paths, or the map
+would slip by one), `ExtractValidColumnarRows`, and the parallel scan — the last one takes the
+sequential scan for at-rest files, since its partitions work on buffer offsets. `ExtractValidColumnarRows`
+also learned to skip tombstones and empty slots instead of ending the scan at the first one.
+
+**Verified:** new `AtRestScanTests` (8 cases) — scan + `COUNT(*)` in-session and after reopen, scan after
+a single and a contiguous batch DELETE, hash-index lookup after reopen, filtered scans through the
+early-WHERE paths (with a full scan after them to prove the offset map stayed aligned), and the
+`StructRow` scan — each expectation run in **both** modes, all green.
+
+**Not a regression from §3-1f, and not from §3-1a:** the probe reproduced identically with this work
 stashed, and again with `src/` checked out at `8e6ab4fe` (before the read-encryption memoisation). The
 defect is older than this plan; it went unnoticed because §3-1c established that the *default* config
-stores records as plaintext, so almost nothing exercises `EnableAtRestRecordEncryption = true`.
+stores records as plaintext, so almost nothing exercises `EnableAtRestRecordEncryption = true`. With it
+fixed, §3-1c deliverable 2 (flip at-rest to the default) is **no longer blocked by scans**.
 
-**Why it blocks §3-1c deliverable 2** (flip at-rest to the default): with this defect, making at-rest
-the default would break every scan, every `COUNT(*)` and every hash-index rebuild on reopen. Fix the
-scan first — skip `EncryptedTableMagicLength` when the file is encrypted and put every record payload
-through `DecryptRecordPayload` (exposed by §3-1f) — then turn the table above into permanent tests.
+### 1h. A separate, mode-independent WHERE defect found on the way *(found 2026-09-13, not fixed)*
+
+Writing the §3-1g tests surfaced a second pre-existing defect, unrelated to encryption: a **simple
+equality on a REAL column only matches when the literal has no decimal point**. Probe: ten rows with
+`score = i * 0.5`, then a simple WHERE —
+
+| query | raw | at-rest |
+|---|---|---|
+| `WHERE score = 5.0` | **0 rows** | **0 rows** |
+| `WHERE score = 5` | 1 row | 1 row |
+| `WHERE id = 10` (control) | 1 row | 1 row |
+| `WHERE age = 110` (control, INTEGER) | 1 row | 1 row |
+
+Identical in both modes, so this is not the at-rest layout and not §3-1g: `WHERE price = 19.99` silently
+returns nothing, which is a correctness problem for any real-valued column. It needs its own diagnosis
+(the simple-WHERE literal path versus `EvaluateWhere`'s numeric comparison) and its own tests; the
+AtRestScanTests case that exposed it deliberately uses an INTEGER predicate instead of pinning the
+broken behaviour.
 
 ---
 

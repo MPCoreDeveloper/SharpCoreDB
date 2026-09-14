@@ -125,10 +125,18 @@ public partial class Table
         // 3. Parallel full scan - storage mode specific
         if (this.StorageMode == StorageMode.Columnar)
         {
-            // Columnar: Read entire file and scan in parallel, filtering out deleted/stale rows
-            var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
+            // Columnar: Read entire file and scan in parallel, filtering out deleted/stale rows.
+            // At-rest files cannot be partitioned this way: their buffer is a decrypted, header-
+            // stripped re-pack, so the stale-version filter needs the physical offset map that only
+            // the sequential scan receives — take that path instead.
+            var data = this.storage.ReadBytesWithRecordOffsets(this.DataFile, noEncrypt, out var recordOffsets);
             if (data != null && data.Length > 0)
             {
+                if (recordOffsets is not null)
+                {
+                    return ApplyOrdering(ScanRowsWithSimdAndFilterStale(data, where, recordOffsets), orderBy, asc);
+                }
+
                 return ScanRowsParallel(data, where, orderBy, asc);
             }
         }

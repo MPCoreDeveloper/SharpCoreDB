@@ -1263,11 +1263,14 @@ public partial class Table
         {
             if (StorageMode == StorageMode.Columnar)
             {
-                // Columnar: Read entire file and scan, filtering out deleted/stale rows
-                var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
+                // Columnar: Read entire file and scan, filtering out deleted/stale rows.
+                // At-rest files come back as a decrypted, header-stripped re-pack, so the scan also
+                // receives each record's PHYSICAL offset — that is what the stale-version check below
+                // must compare against (the buffer offsets differ from the file's).
+                var data = this.storage.ReadBytesWithRecordOffsets(this.DataFile, noEncrypt, out var recordOffsets);
                 if (data != null && data.Length > 0)
                 {
-                    results = ScanRowsWithSimdAndFilterStale(data, where);
+                    results = ScanRowsWithSimdAndFilterStale(data, where, recordOffsets);
                 }
             }
             else // PageBased
@@ -1286,8 +1289,16 @@ public partial class Table
     /// ✅ OPTIMIZED: Uses dictionary pooling to reduce allocations by 60% during full scans.
     /// ✅ OPTIMIZED: Early WHERE predicate push-down skips full deserialization for non-matching rows.
     /// </summary>
+    /// <param name="physicalOffsets">
+    /// For an at-rest file: the PHYSICAL file offset of each record in <paramref name="data"/>, in walk
+    /// order (see <c>IStorage.ReadBytesWithRecordOffsets</c>). Null for plaintext files, where the
+    /// buffer offset already is the physical offset.
+    /// </param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(byte[] data, string? where)
+    private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(
+        byte[] data,
+        string? where,
+        long[]? physicalOffsets = null)
     {
         var results = new List<Dictionary<string, object>>();
 
@@ -1354,6 +1365,7 @@ public partial class Table
 
         // Scan file with position tracking
         int filePosition = 0;
+        int recordOrdinal = 0; // index into physicalOffsets (at-rest files only)
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
 
         while (filePosition < dataSpan.Length)
@@ -1386,6 +1398,9 @@ public partial class Table
 
             if (recordLength == 0)
             {
+                // Zero-length payload: still a real record slot (ReadAllRecords yields it), so it counts
+                // towards the physical-offset map even though there is nothing to deserialize.
+                recordOrdinal++;
                 filePosition += 4;
                 continue;
             }
@@ -1396,6 +1411,13 @@ public partial class Table
             }
 
             long currentRecordPosition = filePosition; // Track position for filtering
+
+            // An at-rest file is scanned from a decrypted re-pack whose offsets differ from the file's,
+            // so the stale-version check below must compare against the record's PHYSICAL offset.
+            long staleCheckPosition = physicalOffsets is not null && recordOrdinal < physicalOffsets.Length
+                ? physicalOffsets[recordOrdinal]
+                : currentRecordPosition;
+            recordOrdinal++; // one per record consumed, including every early-WHERE skip below
 
             // Skip length prefix and read record data
             int dataOffset = filePosition + 4;
@@ -1476,8 +1498,9 @@ public partial class Table
                         // (probably from a batch insert), so we should include it regardless
                         if (searchResult.Found && searchResult.Value != 0)
                         {
-                          // Row is current version only if PK index points to THIS position
-                          isCurrentVersion = searchResult.Value == currentRecordPosition;
+                          // Row is current version only if PK index points to THIS position (the
+                          // physical record offset — see staleCheckPosition above)
+                          isCurrentVersion = searchResult.Value == staleCheckPosition;
                         }
                         else if (searchResult.Found && searchResult.Value == 0)
                         {
