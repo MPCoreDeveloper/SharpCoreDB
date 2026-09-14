@@ -381,12 +381,25 @@ Four conclusions, the second of which refutes the working hypothesis:
 the three plaintext-gated fast paths to operate on a decrypted record payload — decrypt once, apply
 the existing raw-byte patch, re-encrypt — instead of falling through to the generic per-row path.
 
-**Instrumentation gap this diagnosis exposed:** the profiler's UPDATE wiring sits on the single-row
-`Table.Update` path, but the batch workload goes through `Table.UpdateMultiple` (in `Table.CRUD.cs`,
-called from `Database.Batch.cs`), so the profile accounted for only ~4 ms of a 235 ms phase. Wiring
-`UpdateMultiple` and its fast-path decisions is the next instrumentation step; until then the
-profiler's UPDATE numbers describe the single-statement path only. (That is this plan's own §2 lesson
-repeating: instrument the path the workload actually takes.)
+**Instrumentation gap this diagnosis exposed — now closed, and it sharpened the answer.** The
+profiler's UPDATE wiring sat on the single-row `Table.Update` path, but batch workloads go through
+`Table.UpdateMultiple` (in `Table.CRUD.cs`, called from `Database.Batch.cs`), so the profile accounted
+for only ~4 ms of a 235 ms phase. Both of that method's paths are now attributed — the contiguous bulk
+patch (`RowLocate`) and the per-row in-place attempt (`InPlacePatch` + `EngineWrite`) — and
+`WritePathProfilerTests` pins both down (a PK-ordered batch for the first, a PK-less table with an
+indexed WHERE column for the second).
+
+Writing that test produced the sharper diagnosis: **for a PK-ordered fixed-width batch — the shape the
+benchmark uses — the contiguous fast path takes the whole batch and returns early.** Zero per-row work,
+a single attributed call. That path is gated on plaintext records, so an encrypted file cannot use it
+and every row falls into the per-row in-place loop instead. **The 5–7× is therefore mostly the loss of
+the bulk path, not slow per-row code** — which is also why file growth is 0%: the per-row path still
+patches in place, it just does it one row at a time, with a decrypt and an encrypt around each row.
+
+**The fix is consequently narrower than "make everything encryption-aware":** teach
+`TryBulkUpdateContiguousFixedWidth` to operate on a decrypted run of record payloads — decrypt the run,
+apply the existing contiguous patch, re-encrypt — and keep the per-row loop as the (already correct)
+fallback. That is the next work item, and it is now scoped to one method plus its re-encryption.
 
 ---
 
