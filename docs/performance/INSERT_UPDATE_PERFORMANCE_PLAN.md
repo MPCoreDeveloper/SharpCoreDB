@@ -696,20 +696,40 @@ at +21–23% on INSERT) and the 2.5× disk framing.
 runtime offsets, `TotalInPlacePatches` instrumentation, PK fast path); the remaining work is coverage
 and the engine underneath it.
 
-### 4a. Route the SQL UPDATE path through the existing in-place machinery
+### 4a. Route the SQL UPDATE path through the existing in-place machinery — **verified: it already is**
 
-`#7/#8` gave `ExecuteUpdate` a single-pass `UpdateAffectedCount(where, updates)` and a PK fast path
-for `pk = value`, and WP14 wired `UpdateMultiple` to `TryOverwriteFieldsInPlace`. What is still
-missing is the general SQL `UPDATE ... WHERE <non-PK>` path reaching the same in-place attempt
-instead of the append path.
+`#7/#8` gave `ExecuteUpdate` a single-pass `UpdateAffectedCount(where, updates)` and a PK fast path for
+`pk = value`, and WP14 wired `UpdateMultiple` to `TryOverwriteFieldsInPlace`. The general SQL UPDATE path
+then reaches `UpdateColumnarRow`, which locates the row and writes it through `engine.TryUpdateInPlace`
+(`Table.CRUD.cs:1712`), appending only when the engine refuses (length changed, transaction active). This
+plan asked for that to *become* the default; measurement (2026-09-13) shows it already is. 2,000 rows with
+an indexed TEXT column, 2,000 batch `UPDATE … WHERE id = i`, shipped default config:
 
-- **Change:** make "try in-place first, fall back to append" the default in the one place where a row
-  is rewritten, rather than something two of the three call paths do.
-- **Evidence for the win:** the existing in-place path already produces **0 file growth** where the
-  append path grew +90 KB per 2,000 updates — the write amplification is real and already measured.
-- **Expected effect:** the bulk of the UPDATE gap on the SQL path.
-- **Risk:** the in-place decision must be conservative — any column whose encoded width can change
-  (TEXT/JSON/BLOB) must fall back, exactly as `TryOverwriteFieldsInPlace` does today.
+| updated column | raw (`NoEncryptMode=true`) | default (encrypted) | file growth | in place |
+|---|---:|---:|---:|---|
+| `score = 9.5` (REAL) | 32,449 ops/s | 56,259 | **0 B** | ✓ |
+| `age = 33` (INTEGER) | 152,220 | 46,215 | **0 B** | ✓ |
+| `name = 'Test0001'` (same length) | 10,420 | 9,641 | **0 B** | ✓ |
+| `name = 'much-longer-name-0001'` | 71,868 | 51,754 | **0 B** | ✓ |
+
+Zero growth in every shape *is* the §4a evidence: no update falls back to the append path, and the old
+"the append path grew +90 KB per 2,000 updates" figure no longer reproduces. The overflow arena does its
+part too — a same-length TEXT update reuses the freed block in place (B6 free-list), which is why the
+growth stays at zero there as well.
+
+**What the profile says instead** (`WritePathProfiler.Reset/Enable/Snapshot` around the batch):
+
+| shape | wall time | profiled write stages |
+|---|---:|---|
+| same-length TEXT | 210 ms | in-place-patch 17 ms/2000 + engine-write 5 ms/2000 → **~10%** |
+| longer TEXT | 29 ms | in-place-patch 4 ms + engine-write 3 ms → ~24% |
+| INTEGER | 40 ms | row-locate 30 ms (batch fast path) |
+
+So the write path is **no longer the UPDATE bottleneck**: for the worst shape ~90% of the wall time sits
+in the SQL/batch layer above it, and the same-length TEXT shape is a **10× outlier** against the
+different-length shape (10.4K vs 71.9K ops/s in raw) although both end in place with zero growth. That is
+now its own item — it must be attributed with the same profiler (the batch path's canonicalization and
+planning for string literals) before anything is changed, exactly as §4c insists for index maintenance.
 
 ### 4b. Two-region records for variable-width columns *(decided: Option B)*
 
