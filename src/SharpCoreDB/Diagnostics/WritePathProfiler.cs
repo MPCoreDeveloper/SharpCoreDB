@@ -57,16 +57,31 @@ public static class WritePathProfiler
 
         /// <summary>Committing a transaction.</summary>
         Commit = 8,
+
+        /// <summary>
+        /// Parsing a SQL statement and resolving its execution plan. Instrumented on the batch dispatcher
+        /// (2026-09-14) because a stage report previously showed only the work *inside* the table, so its
+        /// total was never wall time — the missing share was parse/plan/dispatch.
+        /// </summary>
+        Parse = 9,
+
+        /// <summary>
+        /// Decoding the indexed columns of a row to compute the keys for index maintenance. Separated from
+        /// <see cref="IndexMaintenance"/> (2026-09-14) because a DELETE measured 82% in that bucket, and the
+        /// question "is it the decode or the removal?" decides the fix: the decode of a TEXT column resolves
+        /// an overflow-arena block (and decrypts it at rest), while the removal is a hashed bucket update.
+        /// </summary>
+        IndexDecode = 10,
     }
 
-    private const int StageCount = 9;
+    private const int StageCount = 11;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
     private static readonly string[] StageNames =
     [
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
-        "engine-write", "wal-append", "wal-flush", "commit",
+        "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
     ];
 
     private static int _enabled;

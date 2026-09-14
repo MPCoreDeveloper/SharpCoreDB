@@ -1021,6 +1021,11 @@ public partial class Database
 
         foreach (var sql in statements)
         {
+            // §2 instrumentation (2026-09-14): the batch dispatcher's own cost — statement classification and
+            // the per-table parse passes below — was invisible, so a stage report looked complete while a
+            // large share of the wall time was spent here. Only the classification, not the DML (which the
+            // table layer stamps itself), so nothing is double counted.
+            long batchParseStart = Diagnostics.WritePathProfiler.Stamp();
             if (IsInsertStatement(sql))
             {
                 // ✅ PHASE 3: Fast path — parse directly into column-ordered object[] rows
@@ -1064,6 +1069,8 @@ public partial class Database
             {
                 nonInserts.Add(sql);
             }
+
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Parse, batchParseStart);
         }
 
         lock (_walLock)
@@ -1175,8 +1182,10 @@ public partial class Database
                 // Only commit if we started the transaction
                 if (!isInTransactionBefore)
                 {
+                    long commitStart = Diagnostics.WritePathProfiler.Stamp();
                     storage.CommitSync();
                     storage.FlushTransactionBuffer();
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
                 }
                 
                 // ✅ FIX: Force tables to refresh row count from disk to ensure visibility

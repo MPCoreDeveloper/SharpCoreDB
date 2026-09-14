@@ -1095,11 +1095,35 @@ Stage shares at-rest: **`index-maintenance` 81.9%** (42.2 ms of 10K deletes), `r
   key. So the lever is **not** "make the delete cheaper" but "do the index removal in bulk / deferred", which
   is what `DeferredIndexUpdater` exists for. The tombstone (the part the plan expected to matter) is noise.
 
-**Instrumentation coverage (2026-09-14, §2).** Added: `Table.InsertBatch` (Validate — covering validation and
-serialization — plus RowLocate around the batch PK probes; the path had none) and the fixed-width bulk-delete
-fast path (RowLocate / IndexMaintenance / EngineWrite). Still uncovered, recorded honestly: the bulk **UPDATE**
-path's index-maintenance block and the SQL/engine overhead outside the table (parse, plan cache, commit) —
-the last column above is exactly that share, and it is why the totals in a stage report are not wall time.
+**Follow-up (2026-09-14, decode vs removal vs parse).** With `IndexDecode` and `Parse` now separate stages,
+the same workload (10K deletes by PK, 50K rows, one batch transaction) splits as follows — TEXT column
+indexed vs INTEGER column indexed, which isolates the cost of a *variable-length* index key:
+
+| arm | ops/s | wall µs/row |
+|---|---:|---:|
+| TEXT indexed, plaintext | 97,528 | 10.25 |
+| TEXT indexed, at-rest | 91,917 | 10.88 |
+| INTEGER indexed, plaintext | 193,001 | 5.18 |
+| INTEGER indexed, at-rest | 154,004 | 6.49 |
+
+Stage shares (at-rest): `index-maintenance` **58.6%** (42.2 ms, only **7 calls** — the PK `DeleteBulk` plus one
+`RemoveBatchKeys` per loaded index), `parse` **19.3%** (13.9 ms, **10,000 calls** — 1.4 µs per statement),
+`index-decode` **11.3%**, `row-locate` 7.1%, `commit` 2.6%, `engine-write` **1.2%**. So:
+- the public decode hypothesis was **wrong**: decoding the indexed columns (arena reads, decrypts at rest) is
+  11%, not the bulk — the removal itself is, and a TEXT key costs roughly **3× an INTEGER key** there
+  (42.2 ms vs 14.4 ms), i.e. string hashing/equality on the key is the expensive part;
+- **SQL statement parsing is 1.4 µs per statement and 19–45% of a DELETE batch** — a share that was completely
+  invisible before `Parse` existed, and it is the same cost the `--pk` harness pays for every row of its
+  UPDATE/DELETE phases;
+- the tombstone (1.2%) is confirmed as noise for the third time.
+
+**Instrumentation coverage (2026-09-14, §2).** Covered now: `Table.InsertBatch` (Validate — validation *and*
+serialization — plus RowLocate around the batch PK probes; the path had none), the fixed-width bulk-delete fast
+path (RowLocate / IndexMaintenance / IndexDecode / EngineWrite), bulk-update per-row hash-index maintenance
+(IndexMaintenance), the batch dispatcher's statement classification (Parse) and the batch commit (Commit).
+Still uncovered, recorded honestly: the *second* batch dispatcher path, parser internals below the dispatcher,
+and `WalAppend`/`WalFlush` — those stages exist in the enum but nothing writes them yet, so a stage report
+still cannot be read as wall time.
 
 ---
 

@@ -2209,10 +2209,18 @@ public partial class Table
 
                                         if (oldRow.TryGetValue(colName, out var oldVal) && oldVal is not null)
                                         {
+                                            long hashRemoveStart = Diagnostics.WritePathProfiler.Stamp();
                                             hashIdx.Remove(oldVal, rowPosition);
+                                            Diagnostics.WritePathProfiler.Add(
+                                                Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
+                                                hashRemoveStart);
                                         }
 
+                                        long hashAddStart = Diagnostics.WritePathProfiler.Stamp();
                                         hashIdx.Add(newVal, rowPosition);
+                                        Diagnostics.WritePathProfiler.Add(
+                                            Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
+                                            hashAddStart);
                                     }
                                 }
                             }
@@ -4074,8 +4082,9 @@ public partial class Table
         // loaded hash-index entry, decoding only the indexed columns from the raw fixed-width records
         // (no full-row deserialization). Variable values resolve through the overflow arena, mirroring
         // the fixed-width codec used by the generic path.
-        long deleteIndexStart = WritePathProfiler.Stamp();
+        long deletePkIndexStart = WritePathProfiler.Stamp();
         this.Index.DeleteBulk(keys);
+        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, deletePkIndexStart);
 
         var arena = GetOverflowArena();
         foreach (var (colName, hashIdx) in this.hashIndexes)
@@ -4097,6 +4106,10 @@ public partial class Table
 
             var type = this.ColumnTypes[colIdx];
             var decoded = new object?[count];
+
+            // §2 split: the DECODE (per row, per index — an arena read per variable value) is measured
+            // separately from the REMOVAL, because they have completely different fixes.
+            long decodeStart = WritePathProfiler.Stamp();
             for (int i = 0; i < count; i++)
             {
                 var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
@@ -4119,10 +4132,12 @@ public partial class Table
                 }
             }
 
-            hashIdx.RemoveBatchKeys(decoded, positions);
-        }
+            WritePathProfiler.Add(WritePathProfiler.Stage.IndexDecode, decodeStart);
 
-        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, deleteIndexStart);
+            long removeStart = WritePathProfiler.Stamp();
+            hashIdx.RemoveBatchKeys(decoded, positions);
+            WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, removeStart);
+        }
 
         if (this.storage is { IsInTransaction: true })
         {
