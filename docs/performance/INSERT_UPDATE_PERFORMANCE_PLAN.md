@@ -598,7 +598,7 @@ exposed it (`age = 25` with three matches) now pass unchanged.
 
 ---
 
-## 4. Phase 2 — the structural fix: in-place UPDATE on the SQL path
+### 1f-h. §1f hand-over design, kept for the record *(superseded by §1f — the line numbers below are stale)*
 
 **Where it stops today:** one precondition, `Table.CRUD.cs:2437` —
 `this.storage.AreRecordsEncrypted(DataFile) ||` — rejects the entire path. Everything after it is
