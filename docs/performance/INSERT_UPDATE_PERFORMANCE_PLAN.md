@@ -843,6 +843,41 @@ arena and points at the per-record GCM work itself. §0.1-6 already requires eve
 attributing the GCM cost (per-record nonce generation / cipher instance vs raw AES throughput), is the next
 measurement task.
 
+**Follow-up (2026-09-14, executed): both postures are now published, and the GCM hypothesis is partly
+disproven.** The `--pk` runner gained a third SharpCoreDB arm (`fixed-width, at-rest default`), its labels
+carry the posture, and it prints the gap per posture plus a per-operation at-rest tax:
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW, plaintext | 120,832 | 114,747 | 238,446 | 162,449 |
+| **SharpCoreDB FW, at-rest (product default)** | **63,532** | **75,875** | **147,458** | **147,964** |
+| SQLite | 180,200 | 101,020 | 268,956 | 366,695 |
+
+Gaps vs SQLite in the shipping posture: **UPDATE 1.8×, DELETE 2.5×, INSERT 2.8×, READ 1.33×**. At-rest tax
+(same arm, same knobs): **INSERT 1.90×, READ 1.51×, UPDATE 1.62×, DELETE 1.10×** — i.e. the tax is spread
+across the whole write path, not concentrated on one operation.
+
+Crypto-level split (120-byte payload, 200K iterations):
+
+| part | µs/call |
+|---|---:|
+| `Encrypt` as shipped | 1.34 |
+| `Decrypt` as shipped | 1.01 |
+| fresh `AesGcm` per call (inside both) | 0.69 |
+| OS CSPRNG nonce per call | 0.10 |
+| **raw AEAD, pooled cipher + counter nonce** | **0.27** |
+
+Per-call cipher setup is ~59% of an `Encrypt` call, so pooling the cipher and replacing the per-record CSPRNG
+nonce is worth ~5× on that call — but it is only ~15% of the measured UPDATE tax and less of the INSERT tax:
+one 1.34 µs `Encrypt` cannot explain +7.4 µs/row. The remainder is **not** the index build either: with hash
+indexes off the at-rest INSERT tax is still 1.76× (103,754 → 59,083 ops/s). Separately, hash indexes cost
+**28% of INSERT in both postures** (74,605 → 103,754 plaintext), which makes them a posture-independent lever
+of their own.
+
+**Open:** ~6 µs/row of the at-rest INSERT cost is still unattributed. Next probe: per-row allocation/GC counts
+and the pooled-cipher prototype **in the product** (not only in a micro-benchmark), because the standalone
+`Encrypt` timing may not survive the insert path's allocation pressure.
+
 ---
 
 ## 5. Phase 3 — INSERT: from competitive to ahead

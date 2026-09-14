@@ -971,7 +971,9 @@ class Program
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool fixedWidth = false,
         bool useDefaultConfig = false,
-        string? defaultVariant = null)
+        string? defaultVariant = null,
+        bool noEncrypt = true,
+        bool? atRestRecords = null)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -992,7 +994,7 @@ class Program
             }
             else
             {
-                config = BuildConfig(engineType, fixedWidth);
+                config = BuildConfig(engineType, fixedWidth, noEncrypt, atRestRecords);
             }
 
             using var db = (SharpCoreDB.Database)factory.Create(
@@ -1143,29 +1145,49 @@ class Program
         Console.WriteLine($"Engine: {engineLabel}");
         Console.WriteLine("(fair-PK arms run 3x; median time per phase is reported)");
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length) ━━━");
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length, plaintext) ━━━");
         var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType));
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width) ━━━");
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width, plaintext) ━━━");
         var scdbFw = RunPkMedian(() => RunSharpCoreDBPk(engineType, fixedWidth: true));
+        Console.WriteLine();
+
+        // §0.1-6: every target table must carry the encryption posture beside the plaintext number. The
+        // arms above are NoEncryptMode=true (BuildConfig's default); this arm is the PRODUCT default
+        // posture (at-rest records on, read from a fresh DatabaseConfig so it cannot drift).
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width, at-rest default) ━━━");
+        var scdbFwAtRest = RunPkMedian(() => RunSharpCoreDBPk(engineType, fixedWidth: true, noEncrypt: false));
         Console.WriteLine();
 
         Console.WriteLine("━━━ SQLite (reference) ━━━");
         var sqlite = RunPkMedian(() => RunSQLite());
         Console.WriteLine();
 
-        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
-        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SharpCoreDB FW│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap: SQLite vs legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   vs fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x");
-        Console.WriteLine($"  DELETE gap: SQLite vs legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   vs fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x");
+        Console.WriteLine("║ Database                     │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB legacy  plaintext│ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SharpCoreDB FW      plaintext│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SharpCoreDB FW      at-rest  │ {scdbFwAtRest.InsertOpsPerSec,10:N0} │ {scdbFwAtRest.ReadOpsPerSec,8:N0} │ {scdbFwAtRest.UpdateOpsPerSec,8:N0} │ {scdbFwAtRest.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite                       │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"\n  UPDATE gap vs SQLite: legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F1}x");
+        Console.WriteLine($"  DELETE gap vs SQLite: legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.DeleteOpsPerSec / (double)scdbFwAtRest.DeleteOpsPerSec:F1}x");
+        Console.WriteLine($"  INSERT gap vs SQLite: legacy {sqlite.InsertOpsPerSec / (double)scdb.InsertOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.InsertOpsPerSec / (double)scdbFw.InsertOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F1}x");
+        Console.WriteLine($"  At-rest tax (same arm shape): INSERT {scdbFw.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F2}x   "
+            + $"READ {scdbFw.ReadOpsPerSec / (double)scdbFwAtRest.ReadOpsPerSec:F2}x   "
+            + $"UPDATE {scdbFw.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F2}x   "
+            + $"DELETE {scdbFw.DeleteOpsPerSec / (double)scdbFwAtRest.DeleteOpsPerSec:F2}x");
 
         var results = new Dictionary<string, BenchmarkResult>
         {
-            ["SharpCoreDB (SQL, PK, legacy)"] = scdb,
-            ["SharpCoreDB (SQL, PK, fixed-width)"] = scdbFw,
+            ["SharpCoreDB (SQL, PK, legacy, plaintext)"] = scdb,
+            ["SharpCoreDB (SQL, PK, fixed-width, plaintext)"] = scdbFw,
+            ["SharpCoreDB (SQL, PK, fixed-width, at-rest default)"] = scdbFwAtRest,
             ["SQLite"] = sqlite,
         };
 
