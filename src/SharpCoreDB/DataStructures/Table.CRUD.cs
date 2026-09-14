@@ -10,6 +10,7 @@ using System.Buffers.Binary;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 using SharpCoreDB.Optimizations;
+using SharpCoreDB.Diagnostics;
 
 /// <summary>
 /// CRUD operations for Table - Insert, Select, Update, Delete.
@@ -258,11 +259,18 @@ public partial class Table
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
         // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
+        // §2 instrumentation: this path had NO stage coverage before (measured 2026-09-14), which is why
+        // attributing the at-rest INSERT tax needed ad-hoc probes instead of the profiler. This stamp covers
+        // validation *and* serialization (the method does both).
+        long validateStart = Diagnostics.WritePathProfiler.Stamp();
         var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
-        
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
+
         // ✅ PHASE 2A FRIDAY: Batch validate primary keys BEFORE critical section
         // This improves cache locality and fails fast on duplicates
+        long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
         ValidateBatchPrimaryKeysUpfront(validatedRows);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
 
         // ✅ MINIMAL LOCK: Only for PK check, engine insert, and index updates
         this.rwLock.EnterWriteLock();
@@ -2675,8 +2683,10 @@ public partial class Table
         // Physical deletes (PageBased marks slots deleted; Columnar/AppendOnly are logical).
         if (StorageMode == StorageMode.PageBased)
         {
+            long pageDeleteStart = WritePathProfiler.Stamp();
             foreach (var (storagePosition, _) in recordsToDelete)
                 engine.Delete(Name, storagePosition);
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, pageDeleteStart);
         }
         else if (StorageMode != StorageMode.Columnar)
         {
@@ -2687,6 +2697,7 @@ public partial class Table
 
         // Primary-key B-tree cleanup: bulk-delete in descending key order (one pass through the
         // rightmost leaf path instead of arbitrary per-row order → fewer separator promotions).
+        long indexStart = WritePathProfiler.Stamp();
         if (this.PrimaryKeyIndex >= 0)
         {
             var pkCol = this.Columns[this.PrimaryKeyIndex];
@@ -2727,6 +2738,8 @@ public partial class Table
             kvp.Value.RemoveBatchKeys(keys, positions);
         }
 
+        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
         // Unloaded indexes rebuild lazily (columnar only - page-based indexes stay in sync).
         if (StorageMode == StorageMode.Columnar)
         {
@@ -2744,15 +2757,20 @@ public partial class Table
                 // Transactional delete: buffer the physical offsets so the in-place marker is
                 // applied at COMMIT (rollback discards the buffer). Durable in O(delete) — the
                 // flush-time full-file rewrite is no longer needed for transactional deletes.
+                long bufferStart = WritePathProfiler.Stamp();
                 foreach (var position in positions.Where(static position => position >= 0))
                 {
                     this.storage.BufferTombstoneForCommit(DataFile, position);
                 }
+
+                WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, bufferStart);
             }
             else
             {
                 // Durable DELETE: physically mark the removed records so a reopen skips them.
+                long tombstoneStart = WritePathProfiler.Stamp();
                 TombstoneDeletedPositions(positions);
+                WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, tombstoneStart);
 
                 // Legacy variable-length (non-fixed-width) columnar tables keep older stale versions
                 // of a key in the file (UPDATE appends a new version). Tombstoning only the newest
@@ -4042,7 +4060,11 @@ public partial class Table
 
         // Resolve every target record's position through the PK B-tree and read + verify the whole
         // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
+        // §2 instrumentation: this fast path bypassed DeleteRecordsCore entirely (measured 2026-09-14: the
+        // profiler recorded nothing for a 10K-row DELETE while 100% of the wall time was spent here).
+        long deleteLocateStart = WritePathProfiler.Stamp();
         var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions, encrypted);
+        WritePathProfiler.Add(WritePathProfiler.Stage.RowLocate, deleteLocateStart);
         if (raw is null)
         {
             return false;
@@ -4052,6 +4074,7 @@ public partial class Table
         // loaded hash-index entry, decoding only the indexed columns from the raw fixed-width records
         // (no full-row deserialization). Variable values resolve through the overflow arena, mirroring
         // the fixed-width codec used by the generic path.
+        long deleteIndexStart = WritePathProfiler.Stamp();
         this.Index.DeleteBulk(keys);
 
         var arena = GetOverflowArena();
@@ -4099,19 +4122,26 @@ public partial class Table
             hashIdx.RemoveBatchKeys(decoded, positions);
         }
 
+        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, deleteIndexStart);
+
         if (this.storage is { IsInTransaction: true })
         {
             // Transactional delete: buffer the physical offsets so the in-place marker is applied
             // at COMMIT (see DeleteRecordsCore — rollback discards the buffer).
+            long deleteBufferStart = WritePathProfiler.Stamp();
             foreach (var position in positions.Where(static position => position >= 0))
             {
                 this.storage.BufferTombstoneForCommit(DataFile, position);
             }
+
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, deleteBufferStart);
         }
         else
         {
             // Durable DELETE: physically mark the removed records so a reopen skips them.
+            long deleteTombstoneStart = WritePathProfiler.Stamp();
             TombstoneDeletedPositions(positions);
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, deleteTombstoneStart);
         }
 
         Interlocked.Add(ref _cachedRowCount, -count);

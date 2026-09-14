@@ -1073,6 +1073,34 @@ the SQL path reach the contiguous fast path where one exists.
 **Lower priority than UPDATE** (Direct-API DELETE is already 118.9–132.5K), but it falls out of
 Phase 2's engine work almost for free, so sequence it there rather than as its own project.
 
+**Measured (2026-09-14), and the answer is not the row copy.** The delete path had NO stage coverage at all
+before this measurement — `WritePathProfiler` recorded nothing for a 10K-row DELETE because the fixed-width
+fast path bypasses `DeleteRecordsCore` entirely, so the profiler is now wired into that fast path
+(`RowLocate` around the contiguous span read, `IndexMaintenance` around the PK `DeleteBulk` + every loaded
+hash index, `EngineWrite` around the tombstone/buffer step). With it, on the acceptance DELETE shape (10K
+deletes by PK, 50K rows, one batch transaction):
+
+| arm | ops/s | wall µs/row | in stages | uninstrumented |
+|---|---:|---:|---:|---:|
+| plaintext, with `idx_docs_name` | 103,495 | 9.66 | 4.29 | 5.37 |
+| at-rest, with `idx_docs_name` | 100,209 | 9.98 | 5.15 | 4.83 |
+| at-rest, **without** the index | 140,489 | 7.12 | 4.01 | 3.11 |
+
+Stage shares at-rest: **`index-maintenance` 81.9%** (42.2 ms of 10K deletes), `row-locate` 16.3%,
+`engine-write` (the tombstone) **1.8%**. Two conclusions that change the plan:
+- **the at-rest tax on DELETE is zero (1.03×)** — unlike INSERT/UPDATE, there is no encryption cost to chase;
+- **index maintenance is the cost (a 1.40× win from dropping one index, 82% of the instrumented time)**, and it
+  is paid *per loaded index per row*: the delete decodes each indexed column out of the fixed-width record —
+  which for a TEXT column means an overflow-arena read (and, at-rest, a decrypt) — purely to compute the hash
+  key. So the lever is **not** "make the delete cheaper" but "do the index removal in bulk / deferred", which
+  is what `DeferredIndexUpdater` exists for. The tombstone (the part the plan expected to matter) is noise.
+
+**Instrumentation coverage (2026-09-14, §2).** Added: `Table.InsertBatch` (Validate — covering validation and
+serialization — plus RowLocate around the batch PK probes; the path had none) and the fixed-width bulk-delete
+fast path (RowLocate / IndexMaintenance / EngineWrite). Still uncovered, recorded honestly: the bulk **UPDATE**
+path's index-maintenance block and the SQL/engine overhead outside the table (parse, plan cache, commit) —
+the last column above is exactly that share, and it is why the totals in a stage report are not wall time.
+
 ---
 
 ## 8. Acceptance targets
