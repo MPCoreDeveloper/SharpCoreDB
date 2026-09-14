@@ -2,6 +2,7 @@ namespace SharpCoreDB.DataStructures;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using SharpCoreDB.Services;
@@ -340,11 +341,11 @@ public partial class Table
         switch (op)
         {
             case "=":
-                return rowValue.ToString() == value;
+                return ValuesEqual(rowValue, value);
 
             case "!=":
             case "<>":
-                return rowValue.ToString() != value;
+                return !ValuesEqual(rowValue, value);
 
             case ">":
                 return CompareValues(rowValue, value) > 0;
@@ -364,24 +365,59 @@ public partial class Table
     }
     
     /// <summary>
-    /// Compares two values for ordering (supports numbers and strings).
+    /// Equality for a non-string row value. Numbers are compared NUMERICALLY against an
+    /// invariant-culture parse of the literal; comparing textual forms made <c>score = 5.0</c> miss a
+    /// stored 5.0 (double.ToString() yields "5") and made the outcome depend on the machine's culture
+    /// (a decimal literal does not survive a comma-decimal culture). Non-numeric values keep the
+    /// historical string comparison.
     /// </summary>
-    private static int CompareValues(object rowValue, string compareValue)
+    private static bool ValuesEqual(object rowValue, string literal) =>
+        TryCompareNumeric(rowValue, literal, out int comparison)
+            ? comparison == 0
+            : rowValue.ToString() == literal;
+
+    /// <summary>
+    /// Compares two values for ordering (numbers numerically with an invariant-culture parse of the
+    /// literal, everything else as strings).
+    /// </summary>
+    private static int CompareValues(object rowValue, string compareValue) =>
+        TryCompareNumeric(rowValue, compareValue, out int comparison)
+            ? comparison
+            : string.Compare(rowValue.ToString(), compareValue, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Numeric comparison of a row value against a SQL literal. Returns false when the row value is not
+    /// numeric or the literal does not parse with invariant culture (the SQL literal format), so the
+    /// caller can fall back to its string comparison.
+    /// </summary>
+    private static bool TryCompareNumeric(object rowValue, string literal, out int comparison)
     {
-        // Try numeric comparison first
-        if (rowValue is int intVal && int.TryParse(compareValue, out var intCompare))
-            return intVal.CompareTo(intCompare);
-            
-        if (rowValue is long longVal && long.TryParse(compareValue, out var longCompare))
-            return longVal.CompareTo(longCompare);
-            
-        if (rowValue is double doubleVal && double.TryParse(compareValue, out var doubleCompare))
-            return doubleVal.CompareTo(doubleCompare);
-            
-        if (rowValue is decimal decimalVal && decimal.TryParse(compareValue, out var decimalCompare))
-            return decimalVal.CompareTo(decimalCompare);
-        
-        // Fallback to string comparison
-        return string.Compare(rowValue.ToString(), compareValue, StringComparison.Ordinal);
+        comparison = 0;
+        switch (rowValue)
+        {
+            case int intValue when int.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intLiteral):
+                comparison = intValue.CompareTo(intLiteral);
+                return true;
+            case long longValue when long.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longLiteral):
+                comparison = longValue.CompareTo(longLiteral);
+                return true;
+            case short shortValue when short.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out short shortLiteral):
+                comparison = shortValue.CompareTo(shortLiteral);
+                return true;
+            case byte byteValue when byte.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out byte byteLiteral):
+                comparison = byteValue.CompareTo(byteLiteral);
+                return true;
+            case double doubleValue when double.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out double doubleLiteral):
+                comparison = doubleValue.CompareTo(doubleLiteral);
+                return true;
+            case float floatValue when float.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatLiteral):
+                comparison = floatValue.CompareTo(floatLiteral);
+                return true;
+            case decimal decimalValue when decimal.TryParse(literal, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal decimalLiteral):
+                comparison = decimalValue.CompareTo(decimalLiteral);
+                return true;
+            default:
+                return false;
+        }
     }
 }

@@ -210,34 +210,46 @@ public partial class Table
                     break;
 
                 int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBuf);
-                if (length <= 0 || length > 1_000_000_000)
+
+                // Tombstoned record: the prefix stores the negative slot size to skip. Treating this as
+                // end-of-data (the old `length <= 0 → break`) hid every live row behind the first
+                // deleted one from the index.
+                if (length < 0)
+                {
+                    int slotSize = -length;
+                    if (slotSize < 4)
+                        break;
+
+                    fs.Seek(slotSize - 4, SeekOrigin.Current); // the 4 prefix bytes are already read
+                    position += slotSize;
+                    continue;
+                }
+
+                // Empty slot (no payload): nothing to index.
+                if (length == 0)
+                {
+                    position += 4;
+                    continue;
+                }
+
+                if (length > 1_000_000_000)
                     break;
 
                 byte[] rowData = new byte[length];
                 if (fs.Read(rowData) < length)
                     break;
 
-                var row = new Dictionary<string, object>();
-                int offset = 0;
-                ReadOnlySpan<byte> dataSpan = rowData.AsSpan();
-                bool valid = true;
+                // Decode with the layout the records were WRITTEN with: the fixed-width codec (constant
+                // slots + overflow arena) or the variable-length record format. Parsing fixed-width
+                // records with the variable-length walk silently produced a near-empty index — and
+                // because CREATE TABLE registers a hash index for every column, that made a
+                // `WHERE <non-unique column> = value` lookup return only the rows that happened to
+                // parse instead of every match.
+                var row = _fixedWidthRecords
+                    ? DeserializeRowFixedWidth(rowData.AsSpan())
+                    : DeserializeRowFromSpan(rowData);
 
-                for (int i = 0; i < this.Columns.Count; i++)
-                {
-                    try
-                    {
-                        var columnValue = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
-                        row[this.Columns[i]] = columnValue;
-                        offset += bytesRead;
-                    }
-                    catch
-                    {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (valid && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
+                if (row is not null && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
                 {
                     index.Add(row, position);
                 }

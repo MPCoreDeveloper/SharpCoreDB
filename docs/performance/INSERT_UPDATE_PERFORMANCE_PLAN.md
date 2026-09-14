@@ -496,11 +496,10 @@ defect is older than this plan; it went unnoticed because §3-1c established tha
 stores records as plaintext, so almost nothing exercises `EnableAtRestRecordEncryption = true`. With it
 fixed, §3-1c deliverable 2 (flip at-rest to the default) is **no longer blocked by scans**.
 
-### 1h. A separate, mode-independent WHERE defect found on the way *(found 2026-09-13, not fixed)*
+### 1h. The numeric-WHERE defect — fixed *(found and fixed 2026-09-13)*
 
-Writing the §3-1g tests surfaced a second pre-existing defect, unrelated to encryption: a **simple
-equality on a REAL column only matches when the literal has no decimal point**. Probe: ten rows with
-`score = i * 0.5`, then a simple WHERE —
+Writing the §3-1g tests surfaced a pre-existing, mode-independent defect: a **simple equality on a
+numeric column was compared as TEXT**. Probe: ten rows with `score = i * 0.5`, then a simple WHERE —
 
 | query | raw | at-rest |
 |---|---|---|
@@ -509,11 +508,50 @@ equality on a REAL column only matches when the literal has no decimal point**. 
 | `WHERE id = 10` (control) | 1 row | 1 row |
 | `WHERE age = 110` (control, INTEGER) | 1 row | 1 row |
 
-Identical in both modes, so this is not the at-rest layout and not §3-1g: `WHERE price = 19.99` silently
-returns nothing, which is a correctness problem for any real-valued column. It needs its own diagnosis
-(the simple-WHERE literal path versus `EvaluateWhere`'s numeric comparison) and its own tests; the
-AtRestScanTests case that exposed it deliberately uses an INTEGER predicate instead of pinning the
-broken behaviour.
+**Root cause:** `Table.Scanning.EvaluateWhere` compared the row value's *text* against the literal
+(`case "=": return rowValue.ToString() == value;`) — and `double.ToString()` renders 5.0 as `"5"`, so
+`score = 5.0` could never match while `score = 5` matched by accident. The ordering operators
+(`CompareValues`) parsed the literal with `CultureInfo.CurrentCulture`, so on a comma-decimal machine a
+literal like `875.0` did not even parse. `WHERE price = 19.99` therefore returned nothing — a silent
+wrong answer for every real-valued column.
+
+**Fixed as:** `ValuesEqual` / `CompareValues` delegate to a new `TryCompareNumeric` that compares
+numbers **numerically** against an invariant-culture parse of the literal (int, long, short, byte,
+double, float, decimal), falling back to the historical ordinal string comparison for non-numeric values
+and unparseable literals. String columns are untouched (a numeric-looking literal is not coerced).
+
+**Verified:** new `NumericWhereEqualityTests` (19 cases) — every equivalent literal form (`5`, `5.0`,
+`5.00`, `5.000`), a non-representable decimal (`19.99`), all six comparison operators with decimal
+literals, INTEGER equality, unchanged string semantics, an explicit `nl-NL` culture run, and a
+storage-layout matrix (raw / at-rest × fixed-width / variable-length).
+
+### 1i. A second defect the same tests exposed: the hash-index build — fixed *(found and fixed 2026-09-13)*
+
+`CREATE TABLE` registers a hash index for **every** column (`SqlParser.DDL.cs:425/432`) and
+`Table.EnsureIndexLoaded` builds it lazily on the first query by walking the raw data file. That walk
+decoded each record with the **variable-length** record parser, so on a default (fixed-width) table it
+only indexed the rows that happened to parse correctly — and because the query planner prefers the hash
+index, a plain `WHERE <non-unique column> = value` returned a **single row instead of every match**.
+
+Evidence (identical data, identical literals, five rows, three of them `age = 25`):
+
+| query | fixed-width (default) | variable-length |
+|---|---|---|
+| `WHERE age = 25` | **1 row** | 3 rows |
+| `WHERE age = 25 AND id <= 5` (no index path) | 3 rows | 3 rows |
+| `WHERE score = 5.0` where three rows share the value | 3 rows | 3 rows |
+
+The build also stopped at the **first tombstone** (`length <= 0 → break`), which hid every live row
+physically behind a deleted one from the index.
+
+**Fixed as:** the build decodes with the layout the records were written in
+(`DeserializeRowFixedWidth` for fixed-width tables, `DeserializeRowFromSpan` otherwise), skips tombstoned
+slots (`length < 0` → skip `-length` bytes) and empty slots instead of ending the scan.
+
+**Verified:** new `HashIndexBuildTests` (4 cases, both layouts) — duplicate-value equality on INTEGER and
+TEXT columns, a decimal literal on REAL, and a delete-then-reopen run that proves the tombstone neither
+hides later rows nor resurrects the deleted one. The two `NumericWhereEqualityTests` cases that had
+exposed it (`age = 25` with three matches) now pass unchanged.
 
 ---
 

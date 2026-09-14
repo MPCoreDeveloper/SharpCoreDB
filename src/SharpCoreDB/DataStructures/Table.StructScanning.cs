@@ -764,9 +764,11 @@ public partial class Table
     }
 
     /// <summary>
-    /// Determines whether a column is a fixed-width numeric type (Integer/Long/Real) that sits
-    /// at a constant per-record byte offset (every preceding column is fixed-width). Returns the
-    /// offset of the column's null flag within the record data.
+    /// Determines whether a column is a numeric type (Integer/Long/Real) that can be compared straight
+    /// from raw record bytes, and at which offset. Fixed-width tables keep a constant slot offset for
+    /// every column; the variable-length format needs every preceding column to be fixed-size.
+    /// The returned offset points at the slot's null flag — both layouts store
+    /// <c>[null-flag(1)][payload]</c> for a fixed-size column (see <c>FixedWidthRecordLayout</c>).
     /// </summary>
     private bool TryGetFixedNumericWhereInfo(string column, out int valueOffset, out DataType type)
     {
@@ -783,9 +785,8 @@ public partial class Table
 
         if (_fixedWidthRecords)
         {
-            // Fixed-width layout: every column sits at a constant slot offset (null flag + payload),
-            // so the numeric column can be read directly regardless of preceding variable columns —
-            // no layout walk needed (B4).
+            // Fixed-width layout: every column sits at a constant slot offset, so the numeric column can
+            // be read directly regardless of preceding variable columns — no layout walk needed (B4).
             var layout = GetFixedWidthLayout();
             if (colIdx >= layout.ColumnCount)
                 return false;
@@ -840,7 +841,8 @@ public partial class Table
     {
         value = null!;
 
-        // valueOffset points at the null flag; value data starts at +1.
+        // valueOffset points at the null flag; value data starts at +1 (same slot shape in both record
+        // layouts — see FixedWidthRecordLayout).
         if (valueOffset + 1 >= recordData.Length)
             return false;
 

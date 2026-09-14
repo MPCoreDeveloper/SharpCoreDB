@@ -1237,7 +1237,6 @@ public partial class Table
                 }
             }
         }
-
         // 2. Primary key lookup (works for both storage modes)
         if (results.Count == 0 && where != null && this.PrimaryKeyIndex >= 0 && canUseIndex)
         {
@@ -1289,6 +1288,8 @@ public partial class Table
     /// ✅ OPTIMIZED: Uses dictionary pooling to reduce allocations by 60% during full scans.
     /// ✅ OPTIMIZED: Early WHERE predicate push-down skips full deserialization for non-matching rows.
     /// </summary>
+    /// <param name="data">The whole-file (or decrypted, re-packed) record buffer to walk.</param>
+    /// <param name="where">The WHERE clause to apply, or null/empty for every row.</param>
     /// <param name="physicalOffsets">
     /// For an at-rest file: the PHYSICAL file offset of each record in <paramref name="data"/>, in walk
     /// order (see <c>IStorage.ReadBytesWithRecordOffsets</c>). Null for plaintext files, where the
@@ -1301,6 +1302,7 @@ public partial class Table
         long[]? physicalOffsets = null)
     {
         var results = new List<Dictionary<string, object>>();
+
 
         // ✅ PERF: Pre-parse a simple "col = 'val'" WHERE once so non-matching records
         // are skipped before the expensive DeserializeRowWithSimd call.
