@@ -838,6 +838,29 @@ answered explicitly — a process crash is already safe (the OS cache survives i
 open question and is what the WAL/`WalDurabilityMode` settings exist to answer. Because it changes when
 bytes reach the platter, it needs the owner's call and a crash-recovery test, not a unilateral edit.
 
+**The "just cache the handle" fix was tried, measured and reverted — it breaks readers.** The obvious way
+to remove the open cost without touching durability is a persistent write-through handle. It works
+(512 µs → 264 µs for a 64-byte record with `FileOptions.WriteThrough` unchanged) — but a **live write
+handle (`access=Write`) makes an ordinary reader fail**: `File.ReadAllBytes` asks for `FileShare.Read`,
+which does not permit our write access, so the data file becomes unreadable to any other process while the
+database is open. The suite caught it in **10 tests** — the encryption-coverage scan, the Known-Issues
+plaintext checks and the DDL drop tests, all of which read (or delete) the data file. That is *why* the
+append path opens per call: it is a constraint to design around, not a cost to optimise away.
+
+| variant (64-byte record, raw mode) | µs/record | durability | holds the file? | viable |
+|---|---:|---|---|---|
+| **today: open per record + `WriteThrough`** | **512** | per record | no | ✓ shipping |
+| cached write-through handle | 264 | per record | **yes** | ✗ blocks readers |
+| cached unbuffered stream + `WriteThrough` | 269 | per record | **yes** | ✗ blocks readers |
+| cached stream + `Flush(flushToDisk: true)` per record | 514 | per record (fsync) | yes | ✗ blocks readers |
+| cached buffered stream + `WriteThrough` | **4.5** | per 4 KB, not per record | yes | ✗ blocks readers *and* changes durability |
+
+**So the only remaining levers are (a) buffer appends and flush at a boundary — which needs the read path
+to see buffered appends (read-your-writes), i.e. real work — or (b) let the existing `WalDurabilityMode`
+govern the table append, which is the owner's decision.** Both need a crash-recovery test; neither should
+be a config flip. The room is large — 512 µs → 4.5 µs per row — but it is bought with durability, and that
+is not a trade to make silently on a database.
+
 INSERT is otherwise already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
 SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The remaining, ranked items:
 

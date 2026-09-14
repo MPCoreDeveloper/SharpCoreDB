@@ -308,9 +308,9 @@ public partial class Storage
                 FileOptions.None));
 
     /// <summary>
-    /// B7: performs an in-place overwrite of a length-prefixed record. Table files (.dat) use the
-    /// cached write handle; overflow-arena files (.ovf) open a short-lived stream because the
-    /// arena owns its own append/reuse streams and a lingering handle would conflict with them.
+    /// B7: performs an in-place overwrite of a length-prefixed record through the cached write handle
+    /// (table data files and the overflow arena alike — the older .ovf branch opened a stream per
+    /// overwrite, see plan §4a).
     /// </summary>
     private void WriteRecordInPlace(string path, long offset, ReadOnlySpan<byte> lengthPrefix, ReadOnlySpan<byte> record)
     {
@@ -407,6 +407,10 @@ public partial class Storage
         // Normal append (not in transaction) - write immediately
         // B7: FileShare.ReadWrite|Delete so the cached in-place-overwrite write handle and the
         // append path can coexist (a FileShare.Read open would fail while the write handle is open).
+        // NOTE: a CACHED write-through append handle is not an option — see plan §5: a live write handle
+        // (access=Write) makes an ordinary reader (File.ReadAllBytes, share=Read) fail with a sharing
+        // violation, which the suite caught in 10 tests. The per-call open is what keeps the file
+        // readable by other processes, and its cost is the remaining item on the INSERT path.
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
         long position = fs.Position;
 
