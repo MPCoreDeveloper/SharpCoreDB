@@ -1117,6 +1117,27 @@ Stage shares (at-rest): `index-maintenance` **58.6%** (42.2 ms, only **7 calls**
   UPDATE/DELETE phases;
 - the tombstone (1.2%) is confirmed as noise for the third time.
 
+**Verdict (2026-09-14): the two biggest DELETE costs contain no cheap win — the next step is a design
+decision.** Both were inspected after the split:
+- the **classification path is already lean**: `IsInsertStatement` is a span prefix check, `TryScanCanonicalDml`
+  is a quotes-aware span scan with no regex, and both `TryParseUpdateForBatch` and `TryParseDeleteForBatch` run
+  their cheap `UPDATE`/`DELETE` prefix check *before* the regex fallback. The measured 1.4 µs/statement is two
+  canonical scans plus per-table list bookkeeping plus the profiler's own two `Interlocked` calls — there is no
+  allocation or regex to delete. So a "prepared DELETE statement" path would buy far less than the 19–45% share
+  suggests, and is not the lever.
+- `HashIndex.RemoveBatchKeys` already defers duplicate-key removals and compacts in a single pass, and
+  `BTree.DeleteBulk` already sorts descending so consecutive deletes ride the rightmost leaf chain. The 42.2 ms
+  in **seven** calls is therefore most plausibly the **PK B-tree bulk delete itself** (10K individual deletes
+  with separator promotions/rebalances) — inherent to per-key deletion, not a fixable inefficiency.
+
+**The lever is to stop doing it per key**: write the tombstone and SKIP index maintenance, relying on machinery
+that already exists — readers treat the negative length prefix as a deleted record (`ReadBytesFrom` returns
+null, `ReadAllRecords` skips the slot) and a reopen/compaction rebuild drops the stale entries. That is the same
+"defer the maintenance" shape the update path already uses (`DeferredIndexUpdater`), and it could remove most of
+the 58.6%. It is deliberately NOT implemented here: it changes read-path behaviour for every index consumer
+(stale entries must be tolerated everywhere, including the whole-file slice fast paths) and the accumulation
+must be bounded by a rebuild trigger — that is a decision plus its own test matrix, not a micro-fix.
+
 **Instrumentation coverage (2026-09-14, §2).** Covered now: `Table.InsertBatch` (Validate — validation *and*
 serialization — plus RowLocate around the batch PK probes; the path had none), the fixed-width bulk-delete fast
 path (RowLocate / IndexMaintenance / IndexDecode / EngineWrite), bulk-update per-row hash-index maintenance
