@@ -2424,21 +2424,24 @@ public partial class Table
             return false;
         }
 
-        // Narrow, conservative gate: fixed-width columnar table with an explicit PK, plaintext
-        // records only (no per-record encryption magic — a raw contiguous read must equal the
-        // logical record bytes), no buffered overwrites for this file, and no CHECK constraints
-        // (mirrors the generic fastPatch gate).
+        // Narrow, conservative gate: fixed-width columnar table with an explicit PK, no buffered
+        // overwrites for this file, and no CHECK constraints (mirrors the generic fastPatch gate).
+        // Per-record encryption does NOT disqualify the path: an encrypted fixed-width record keeps a
+        // constant physical stride (its plaintext size plus [nonce(12)][tag(16)]), so the span is still
+        // read in ONE range and each payload is decrypted in memory, while the write goes through
+        // TryUpdateInPlaceSameLength — which encrypts on its own.
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.TableCheckConstraints.Count > 0 ||
             HasColumnCheckConstraints() ||
             this.storage is null ||
-            this.storage.AreRecordsEncrypted(DataFile) ||
             this.storage.HasBufferedOverwrite(DataFile))
         {
             return false;
         }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
 
         var pkName = this.Columns[this.PrimaryKeyIndex];
         var layout = GetFixedWidthLayout();
@@ -2522,7 +2525,7 @@ public partial class Table
 
         // Resolve every target record's position through the PK B-tree and read + verify the whole
         // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
-        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions, encrypted);
         if (raw is null)
         {
             return false;
@@ -3822,15 +3825,18 @@ public partial class Table
     /// with the whole span already in memory, decoding each record's fixed-width PK slot (~100 ns)
     /// is two orders of magnitude cheaper than ~10K tree searches and rejects the same batches
     /// (gaps/tombstones surface as prefix mismatches; a record whose PK differs from the requested
-    /// key falls back like the old per-key search miss). Returns the raw span bytes, or
-    /// <see langword="null"/> so the caller falls back to the generic per-row loop — nothing is
-    /// modified before this succeeds.
+    /// key falls back like the old per-key search miss). For an encrypted file the same range read
+    /// returns ciphertext, which is decrypted per record through
+    /// <c>IStorage.DecryptRecordPayload</c> and repacked as a plaintext span, so the caller's
+    /// slicing is identical in both modes. Returns the raw span bytes, or <see langword="null"/> so
+    /// the caller falls back to the generic per-row loop — nothing is modified before this succeeds.
     /// </summary>
     private byte[]? TryReadContiguousFixedWidthRecords(
         string[] keys,
         long stride,
         FixedWidthRecordLayout layout,
-        long[] positions)
+        long[] positions,
+        bool encrypted)
     {
         int count = keys.Length;
         if (this.PrimaryKeyIndex < 0)
@@ -3844,24 +3850,67 @@ public partial class Table
             return null;
         }
 
+        // Physical distance between two records: the plaintext stride, plus the GCM frame
+        // ([nonce(12)][tag(16)]) per record when the file is encrypted. Still constant, because a
+        // fixed-width record's plaintext length never changes — which is what keeps the equal-length
+        // in-place overwrite valid on the write side.
         long basePosition = first.Value;
+        long physicalStride = encrypted ? stride + AesGcmEncryption.OverheadSize : stride;
         long expected = basePosition;
         for (int i = 0; i < count; i++)
         {
             positions[i] = expected;
-            expected += stride;
+            expected += physicalStride;
         }
 
         long totalBytes = stride * count;
-        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        long physicalBytes = physicalStride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue || physicalBytes > int.MaxValue)
         {
             return null;
         }
 
-        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
-        if (raw is null || raw.Length < totalBytes)
+        var physical = this.storage.ReadBytesRange(DataFile, basePosition, (int)physicalBytes);
+        if (physical is null || physical.Length < physicalBytes)
         {
             return null;
+        }
+
+        byte[] raw;
+        if (encrypted)
+        {
+            // Repack the ciphertext span into a plaintext-laid-out buffer so every caller keeps
+            // slicing with the plaintext stride (i * stride + 4 + offset): ONE I/O read, one AEAD
+            // open per record, all in memory. A prefix that does not match the encrypted fixed-width
+            // layout (tombstone, mixed legacy file) or a payload that fails to decrypt rejects the
+            // whole batch — nothing has been modified yet.
+            raw = new byte[totalBytes];
+            for (int i = 0; i < count; i++)
+            {
+                int prefix = BinaryPrimitives.ReadInt32LittleEndian(
+                    physical.AsSpan((int)(i * physicalStride), 4));
+                if (prefix != layout.FixedSize + AesGcmEncryption.OverheadSize)
+                {
+                    return null; // tombstoned slot or layout mismatch -> generic per-row path
+                }
+
+                var cipher = new byte[prefix];
+                physical.AsSpan((int)(i * physicalStride) + 4, prefix).CopyTo(cipher);
+
+                var plain = this.storage.DecryptRecordPayload(cipher);
+                if (plain is null || plain.Length != layout.FixedSize)
+                {
+                    return null;
+                }
+
+                var target = raw.AsSpan((int)(i * stride));
+                BinaryPrimitives.WriteInt32LittleEndian(target, layout.FixedSize);
+                plain.CopyTo(target[4..]);
+            }
+        }
+        else
+        {
+            raw = physical;
         }
 
         int pkIdx = this.PrimaryKeyIndex;
@@ -3913,18 +3962,21 @@ public partial class Table
         }
 
         // Identical safety gate to the UPDATE fast path: fixed-width columnar table with an explicit
-        // PK, plaintext records only (no per-record encryption magic — a raw range read must equal
-        // the logical record bytes), and no buffered overwrites. DeleteMultiple loads every
+        // PK and no buffered overwrites. Per-record encryption is allowed — the span is read as one
+        // ciphertext range and repacked through DecryptRecordPayload (see
+        // TryReadContiguousFixedWidthRecords); the delete itself only removes index entries and writes
+        // a length-prefix marker, so no record payload is ever rewritten. DeleteMultiple loads every
         // registered hash index before calling this.
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.storage is null ||
-            this.storage.AreRecordsEncrypted(DataFile) ||
             this.storage.HasBufferedOverwrite(DataFile))
         {
             return false;
         }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
 
         var pkName = this.Columns[this.PrimaryKeyIndex];
         var layout = GetFixedWidthLayout();
@@ -3963,7 +4015,7 @@ public partial class Table
 
         // Resolve every target record's position through the PK B-tree and read + verify the whole
         // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
-        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions, encrypted);
         if (raw is null)
         {
             return false;

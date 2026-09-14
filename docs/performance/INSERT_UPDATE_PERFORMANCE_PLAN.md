@@ -403,10 +403,68 @@ fallback. That is the next work item, and it is now scoped to one method plus it
 
 ---
 
-### 1f. The next item, specified to the line *(hand-off design, 2026-09-13)*
+### 1f. The encryption-aware bulk path — implemented *(2026-09-13)*
 
-**Target:** make `TryBulkUpdateContiguousFixedWidth` work on encrypted records, so an at-rest database
+**Goal:** make `TryBulkUpdateContiguousFixedWidth` work on encrypted records, so an at-rest database
 regains the bulk path that §3-1e identified as the 5–7×.
+
+**Landed as:** one new `IStorage` member (`byte[]? DecryptRecordPayload(byte[] payload)`, default
+`null`, implemented by `Storage` as a passthrough to its private `DecryptRecord`); the plaintext-only
+preconditions dropped from *both* contiguous gates (`TryBulkUpdateContiguousFixedWidth` and
+`TryBulkDeleteContiguousFixedWidth`); and `TryReadContiguousFixedWidthRecords` taught the encrypted
+stride (`stride + AesGcmEncryption.OverheadSize`, i.e. +28 — constant, because a fixed-width record's
+plaintext length never changes). It reads the physical span once, then decrypts and repacks each record
+as `[len:4][plaintext]`, so every caller's slicing stays identical in both modes. The write side needed
+nothing: it already went through `TryUpdateInPlaceSameLength`, which encrypts — which is exactly why
+per-row in-place updates kept working at rest with 0% growth while the bulk path refused.
+
+**Verified:** `FixedWidthBulkUpdateTests` + `FixedWidthBulkDeleteTests` + `FixedWidthPatchTests` +
+`ReopenRoundTripMatrixTests` + `SingleFileDirectoryParityTests` = 44 tests, 0 failed. Two tests were
+rewritten to pin the new behaviour: `PerRecordEncryption_UsesContiguousFastPath_AndPersists` (the bulk
+counter advances on an at-rest table, and a reopen proves the patched records decrypt back to the new
+values) and `PerRecordEncryption_ContiguousDeletes_EngageBulkPath_AndSurviveReopen`.
+
+**A blocking, pre-existing defect surfaced while validating this — see §3-1g.**
+
+### 1g. A blocking, pre-existing defect: at-rest tables cannot be scanned *(found 2026-09-13)*
+
+While validating §3-1f, a full scan of an at-rest database returned **zero rows**. Isolated with a
+throwaway probe (insert → flush → query), both modes:
+
+| Case | plaintext | `EnableAtRestRecordEncryption = true` |
+|---|---|---|
+| `SELECT id`, in-session, 20 rows | 20 | **0** |
+| `SELECT id`, after reopen, 2000 rows | 2000 | **0** |
+| `SELECT COUNT(*)`, after reopen | 2000 | **0** |
+| one single-row DELETE → reopen → scan | 1999 | **0** |
+| 1000-row contiguous DELETE → reopen → scan | 1000 | **0** |
+
+The rows are not gone: PK lookups still resolve (after a reopen, `WHERE id = 1500` returns exactly one
+row, read off disk). Only the *walk* sees nothing.
+
+**Root cause:** the columnar full scan (`Table.Scanning.cs`, `ScanRowsWithSimd`) walks its whole-file
+snapshot from `filePosition = 0` and reads the first four bytes as a record length. On an at-rest file
+those bytes are the 8-byte encrypted-table magic header
+(`PersistenceConstants.EncryptedTableMagicLength`), so `recordLength` fails the `> MaxRecordSize`
+sanity check and the walk `break`s immediately → zero rows. `Storage.ReadAllRecords`
+(`Storage.Append.cs:1356`) already does this correctly — it skips the header and decrypts — but the
+scan does neither. Second consequence: hash indexes are rebuilt **from that scan**, so they come back
+empty after a reopen on an at-rest database (observed: `WHERE name = 'user1500'` empty after reopen,
+while `WHERE id = 1500` works).
+
+**Not a regression from §3-1f, and not from §3-1a:** the probe reproduces identically with this work
+stashed, and again with `src/` checked out at `8e6ab4fe` (before the read-encryption memoisation). The
+defect is older than this plan; it went unnoticed because §3-1c established that the *default* config
+stores records as plaintext, so almost nothing exercises `EnableAtRestRecordEncryption = true`.
+
+**Why it blocks §3-1c deliverable 2** (flip at-rest to the default): with this defect, making at-rest
+the default would break every scan, every `COUNT(*)` and every hash-index rebuild on reopen. Fix the
+scan first — skip `EncryptedTableMagicLength` when the file is encrypted and put every record payload
+through `DecryptRecordPayload` (exposed by §3-1f) — then turn the table above into permanent tests.
+
+---
+
+## 4. Phase 2 — the structural fix: in-place UPDATE on the SQL path
 
 **Where it stops today:** one precondition, `Table.CRUD.cs:2437` —
 `this.storage.AreRecordsEncrypted(DataFile) ||` — rejects the entire path. Everything after it is

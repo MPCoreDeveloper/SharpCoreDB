@@ -167,17 +167,31 @@ public interface IStorage
     /// <summary>
     /// Reads a raw contiguous byte range starting at <paramref name="offset"/> using the storage
     /// layer's cached file handle (no per-call handle open). Used by the fixed-width contiguous
-    /// UPDATE fast path, which only engages on plaintext files. Implementations that cannot serve a
-    /// raw range (encrypted layouts, mocks) return null so the caller falls back to per-record reads.
+    /// UPDATE/DELETE fast paths: on a plaintext file the range holds the logical records, and on an
+    /// encrypted file (<see cref="AreRecordsEncrypted"/>) it holds their ciphertext, which the caller
+    /// repacks with <see cref="DecryptRecordPayload"/>. Implementations that cannot serve a raw range
+    /// (mocks) return null so the caller falls back to per-record reads.
     /// </summary>
     byte[]? ReadBytesRange(string path, long offset, int length) => null;
 
     /// <summary>
     /// True when the file at <paramref name="path"/> stores per-record encrypted (ciphertext)
-    /// payloads (it carries the encrypted-table magic header). Raw range reads must never be used on
-    /// such files; the default returns false (plaintext / legacy layouts).
+    /// payloads (it carries the encrypted-table magic header). Such a file keeps a constant record
+    /// stride, so a raw range read stays usable as long as every payload is passed through
+    /// <see cref="DecryptRecordPayload"/> before it is interpreted. The default returns false
+    /// (plaintext / legacy layouts).
     /// </summary>
     bool AreRecordsEncrypted(string path) => false;
+
+    /// <summary>
+    /// Decrypts a single per-record payload — the bytes that FOLLOW the 4-byte length prefix, i.e.
+    /// <c>[nonce(12)][cipher][tag(16)]</c> — for callers that read a raw ciphertext span directly
+    /// (the fixed-width contiguous fast paths) instead of going through the per-record read path.
+    /// Returns the payload unchanged when record encryption is not enabled by the configuration, and
+    /// <see langword="null"/> when it is corrupt or legacy. The default returns null (plaintext /
+    /// mock storage), which makes the caller fall back to per-record reads.
+    /// </summary>
+    byte[]? DecryptRecordPayload(byte[] payload) => null;
 
     /// <summary>
     /// Marks the record whose 4-byte length prefix sits at <paramref name="offset"/> as deleted by

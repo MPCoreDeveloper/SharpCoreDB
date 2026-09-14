@@ -15,9 +15,10 @@ using Xunit;
 
 /// <summary>
 /// B9: single-pass contiguous DELETE fast path (Table.TryBulkDeleteContiguousFixedWidth). Strictly
-/// ascending `pk = literal` DELETEs on a plaintext fixed-width table with physically adjacent
-/// records remove every PK/hash-index entry in one pass (no per-row pread or full-row
-/// deserialization). Any other shape falls back to the generic loop and stays correct.
+/// ascending `pk = literal` DELETEs on a fixed-width table with physically adjacent records remove
+/// every PK/hash-index entry in one pass (no per-row pread or full-row deserialization). An at-rest
+/// database takes the same path: the span is read as ciphertext and every record is decrypted before
+/// its indexed columns are decoded. Any other shape falls back to the generic loop and stays correct.
 /// </summary>
 public sealed class FixedWidthBulkDeleteTests : IDisposable
 {
@@ -39,6 +40,9 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
 
     private IDatabase CreateDb(bool noEncrypt = true) => _factory.Create(_dirPath, "pw", isReadOnly: false,
         config: new DatabaseConfig { NoEncryptMode = noEncrypt });
+
+    private IDatabase CreateEncryptedDb() => _factory.Create(_dirPath, "pw", isReadOnly: false,
+        config: new DatabaseConfig { NoEncryptMode = false, EnableAtRestRecordEncryption = true });
 
     private static Table TableOf(IDatabase db, string tableName)
     {
@@ -443,6 +447,53 @@ public sealed class FixedWidthBulkDeleteTests : IDisposable
             Assert.Equal(2000L, Convert.ToInt64(scan[^1]["id"]));
             Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
             Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user500'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+    }
+
+    [Fact]
+    public void PerRecordEncryption_ContiguousDeletes_EngageBulkPath_AndSurviveReopen()
+    {
+        // The contiguous DELETE path used to refuse encrypted files (a plaintext-only gate). The span
+        // is now read once as ciphertext and repacked through DecryptRecordPayload; the delete itself
+        // only removes index entries and writes a length-prefix marker, so no record payload is ever
+        // rewritten — which is exactly what the reopen below verifies.
+        IDatabase? db = CreateEncryptedDb();
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
+            InsertDocs(db, 1, 2000);
+            db.Flush();
+
+            var table = TableOf(db, "docs");
+            Assert.True(table.IsFixedWidthRecords);
+            Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+            db.ExecuteBatchSQL(BuildDeletes(1, 1000));
+            db.Flush();
+            Assert.Equal(1, table.BulkContiguousDeleteBatches);
+
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user500'"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 1500"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE name = 'user1500'"));
+        }
+        finally { (db as IDisposable)?.Dispose(); }
+
+        // Reopen: the marker was written at the right physical offset for an encrypted file, so the
+        // deleted rows stay gone and the live rows stay readable through the PK B-tree.
+        // NOTE: only PK paths are asserted after a reopen. A whole-table scan of an at-rest table is
+        // broken for an unrelated, pre-existing reason (the columnar scan walks its file snapshot from
+        // offset 0 without skipping the 8-byte encrypted-table magic header, see plan §3-1g) and the
+        // hash indexes are rebuilt FROM that scan — so a hash lookup or a COUNT(*) here would measure
+        // that defect instead of this fast path. The in-session block above covers the hash indexes.
+        db = CreateEncryptedDb();
+        try
+        {
+            Assert.Empty(db.ExecuteQuery("SELECT id FROM docs WHERE id = 500"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 1500"));
+            Assert.Single(db.ExecuteQuery("SELECT id FROM docs WHERE id = 2000"));
         }
         finally { (db as IDisposable)?.Dispose(); }
     }

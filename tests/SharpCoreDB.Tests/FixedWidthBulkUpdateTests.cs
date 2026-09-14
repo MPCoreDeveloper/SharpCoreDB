@@ -16,9 +16,10 @@ using Xunit;
 
 /// <summary>
 /// B8: single-pass contiguous UPDATE fast path (Table.TryBulkUpdateContiguousFixedWidth). When a
-/// batch UPDATE hits a plaintext fixed-width table with strictly ascending `pk = literal` matches
-/// whose records are physically adjacent, the target records are read as one contiguous byte range
-/// and patched in memory. Every other shape must fall back to the generic per-row loop and stay
+/// batch UPDATE hits a fixed-width table with strictly ascending `pk = literal` matches whose records
+/// are physically adjacent, the target records are read as one contiguous byte range and patched in
+/// memory — on an at-rest database the span is ciphertext and each record is decrypted first, while
+/// the write re-encrypts. Every other shape must fall back to the generic per-row loop and stay
 /// correct.
 /// </summary>
 public sealed class FixedWidthBulkUpdateTests : IDisposable
@@ -236,23 +237,41 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
     }
 
     [Fact]
-    public void PerRecordEncryption_FallsBackToGenericLoop_AndStaysCorrect()
+    public void PerRecordEncryption_UsesContiguousFastPath_AndPersists()
     {
-        var db = CreateEncryptedDb();
+        // An at-rest database used to fall back to the generic per-row loop here (one B-tree search
+        // plus one read per key). An encrypted fixed-width record keeps a constant physical stride
+        // (plaintext size + [nonce(12)][tag(16)]), so the span is still read once and decrypted in
+        // memory before patching; the write goes through the encrypting in-place API, which the
+        // reopen below proves (a wrong re-encrypt would surface as an unreadable record).
+        IDatabase? db = CreateEncryptedDb();
         try
         {
             db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
-            InsertDocs(db, 1, 300);
+            InsertDocs(db, 1, 400);
             db.Flush();
 
             var table = TableOf(db, "docs");
+            Assert.True(table.IsFixedWidthRecords);
+            Assert.Equal(0, table.BulkContiguousUpdateBatches);
+
             db.ExecuteBatchSQL(BuildUpdates(1, 300, "score = 4.25"));
             db.Flush();
-            Assert.Equal(0, table.BulkContiguousUpdateBatches); // ciphertext records → generic loop
+            Assert.Equal(1, table.BulkContiguousUpdateBatches); // encrypted records → still one range read
 
             var rows = db.ExecuteQuery("SELECT score FROM docs WHERE id = 300");
             Assert.Single(rows);
             Assert.Equal(4.25, Convert.ToDouble(rows[0]["score"]));
+
+            // Reopen: patched rows decrypt back to the new value, rows outside the batch are untouched.
+            (db as IDisposable)?.Dispose();
+            db = CreateEncryptedDb();
+            var after = db.ExecuteQuery("SELECT score FROM docs WHERE id = 300");
+            Assert.Single(after);
+            Assert.Equal(4.25, Convert.ToDouble(after[0]["score"]));
+            var untouched = db.ExecuteQuery("SELECT score FROM docs WHERE id = 400");
+            Assert.Single(untouched);
+            Assert.Equal(200.0, Convert.ToDouble(untouched[0]["score"]));
         }
         finally { (db as IDisposable)?.Dispose(); }
     }

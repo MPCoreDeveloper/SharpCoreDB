@@ -169,6 +169,9 @@ public partial class Storage
         }
     }
 
+    /// <inheritdoc />
+    public byte[]? DecryptRecordPayload(byte[] payload) => DecryptRecord(payload);
+
     /// <summary>
     /// Detects whether <paramref name="path"/> is an encrypted per-record table file by
     /// checking for the 8-byte magic header. Missing/empty/short files → false.
