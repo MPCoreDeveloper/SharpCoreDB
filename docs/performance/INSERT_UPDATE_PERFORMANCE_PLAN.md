@@ -348,6 +348,48 @@ to the `comparative_*.json` evidence that earlier benchmark documents cite.
 
 ---
 
+### 1e. Why at-rest UPDATE costs 5–7× — diagnosed *(2026-09-13)*
+
+A targeted diagnosis on a fixed-width 2,000-row table (insert 2,000 rows, then `UPDATE ... WHERE id = k`
+through `ExecuteBatchSQL`), with `WritePathProfiler` enabled and the directory size sampled before and
+after the update phase:
+
+| config | update phase (2,000 rows) | bytes after insert → after update | growth |
+|---|---|---|---|
+| raw (`NoEncryptMode=true`) | 44.8 ms | 73,431 → 73,431 | **0%** |
+| default (`NoEncryptMode=false`) | 31.3 ms | 73,459 → 73,459 | **0%** |
+| at-rest (`+EnableAtRestRecordEncryption`) | **234.8 ms** | 185,475 → 185,475 | **0%** |
+
+Four conclusions, the second of which refutes the working hypothesis:
+
+1. **At-rest UPDATE is 5.2–7.5× slower** on this workload — the same direction and order as the
+   benchmark's 10.7–14.4× (§1d), on a much smaller table.
+2. **It is NOT write amplification.** File growth during the update phase is **0% in every
+   configuration**, so records are still patched in place. "Encrypted rows append a new version" is
+   therefore wrong, and so is the simpler story that the cost is row copying.
+3. **It is per-row fallback work.** `Table.UpdateMultiple` carries several fast paths that are
+   explicitly gated on *plaintext* records — `TryBulkUpdateContiguousFixedWidth` ("plaintext
+   fixed-width table with physically adjacent PK-ordered records"), `TryLoadWholeFileForRowAccess` /
+   `TrySlicePayloadFromFile` ("reading the small plaintext file once"), and `fastPatch` (raw bytes at
+   cached field offsets). With the per-record magic header present none of them can apply, so every
+   row falls through to the generic machinery: deserialize → patch → serialize → **encrypt** → write,
+   with per-record AEAD on top. That is the 5–7×.
+4. **The disk cost is real and separate:** the same data occupies **185,475 vs 73,459 bytes (2.5×)**
+   with per-record encryption — framing overhead paid on every record of a small-row table.
+
+**Actionable next step** (previously the vague "make the paths encryption-aware", now precise): teach
+the three plaintext-gated fast paths to operate on a decrypted record payload — decrypt once, apply
+the existing raw-byte patch, re-encrypt — instead of falling through to the generic per-row path.
+
+**Instrumentation gap this diagnosis exposed:** the profiler's UPDATE wiring sits on the single-row
+`Table.Update` path, but the batch workload goes through `Table.UpdateMultiple` (in `Table.CRUD.cs`,
+called from `Database.Batch.cs`), so the profile accounted for only ~4 ms of a 235 ms phase. Wiring
+`UpdateMultiple` and its fast-path decisions is the next instrumentation step; until then the
+profiler's UPDATE numbers describe the single-statement path only. (That is this plan's own §2 lesson
+repeating: instrument the path the workload actually takes.)
+
+---
+
 ## 4. Phase 2 — the structural fix: in-place UPDATE on the SQL path
 
 **Goal:** stop copying rows on update. Half of this already exists (`TryOverwriteFieldsInPlace`,
