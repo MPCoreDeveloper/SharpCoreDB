@@ -809,6 +809,40 @@ column's value, that maintenance is pure overhead.
 - **Evidence to collect first:** the §2 per-stage instrumentation will say whether this is 5% or 40%
   of the update cost. Do not do this before the instrumentation exists.
 
+**Verdict (2026-09-14): dropped — the premise does not hold on the acceptance workload.** The `--pk` UPDATE
+workload is `UPDATE docs SET score = <new> WHERE id = <pk>` on a table whose only explicit index is
+`idx_docs_name ON docs(name)`, and that update never changes `name` or `id` — so every index-maintenance call
+there *is* work for an unchanged value, i.e. exactly §4c's case. Two independent measurements on that shape
+(50K rows, 10K updates by PK, single batch transaction):
+
+| measurement | result |
+|---|---|
+| with `idx_docs_name` | 74,016 ops/s |
+| **without the index at all** (the ceiling §4c could reclaim) | 73,209 ops/s → **1.01×** |
+| `WritePathProfiler` stage profile | only `row-locate` recorded; `index-maint` never fires on the batch path |
+
+Removing the index completely moves throughput by ~1%, so the ceiling for "skip unchanged-value maintenance"
+is 1% here — and §2's instrumentation is not wired into the batch UPDATE path at all, so the per-row figures
+quoted earlier do not describe this workload. Not worth the risk, and not to be re-attempted without a shape
+where index maintenance actually dominates (many indexes, high-cardinality updates).
+
+**The same run established something bigger than §4c: the published comparison measures the wrong posture.**
+The at-rest posture costs ~2.5–2.9× on this exact workload, and the `--pk` harness has been reporting the
+**raw** posture, because `BuildConfig(engine)` defaults to `NoEncryptMode = true`:
+
+| arm (50K rows, 10K UPDATE by PK, same machine, same shape) | UPDATE ops/s |
+|---|---:|
+| SharpCoreDB, `NoEncryptMode = true` — what the harness publishes | 217,456 (harness arm: 234,394) |
+| SharpCoreDB, product default (at-rest records) | **74,016** |
+| SQLite reference | 279,003 |
+
+So the honest UPDATE gap is **~3.8× slower than SQLite in the default posture**, not the ~1.2× the raw arm
+suggests. The tax survives on a fixed-size-only table (0.40× vs 0.34× with TEXT), which rules out the overflow
+arena and points at the per-record GCM work itself. §0.1-6 already requires every target to carry the
+`NoEncryptMode` column beside it — the `--pk` runner does not, so making it report both postures, and
+attributing the GCM cost (per-record nonce generation / cipher instance vs raw AES throughput), is the next
+measurement task.
+
 ---
 
 ## 5. Phase 3 — INSERT: from competitive to ahead
