@@ -181,6 +181,15 @@ public partial class Storage
     {
         physicalOffsets = null;
 
+        // ✅ Buffered append mode: this path materialises the WHOLE file and hands out disk offsets
+        // (row-resolution fast paths slice it directly), so every pending buffered row must be on disk
+        // first. Only outside a transaction — inside one the buffer belongs to the transaction and
+        // flushing it here would make rollback impossible (callers use FlushTransactionBuffer for that).
+        if (!IsInTransaction && HasBufferedAppends(path))
+        {
+            FlushPendingAppends();
+        }
+
         if (!File.Exists(path))
         {
             return null;

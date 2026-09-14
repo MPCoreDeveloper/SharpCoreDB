@@ -147,6 +147,22 @@ public interface IStorage
     bool HasBufferedOverwriteAt(string path, long offset) => false;
 
     /// <summary>
+    /// True when an append is currently buffered for <paramref name="path"/> — i.e. a position returned
+    /// by <see cref="AppendBytes"/> that is not on disk yet (opt-in buffered append mode, or inside a
+    /// transaction). Whole-file fast paths must check this before slicing a disk snapshot, exactly like
+    /// <see cref="HasBufferedOverwrite"/>. Defaults to false (buffering is opt-in).
+    /// </summary>
+    bool HasBufferedAppends(string path) => false;
+
+    /// <summary>
+    /// Writes every pending buffered append to disk. Called by structural operations that rewrite or
+    /// replace a data file (compaction, fixed-width migration, overflow-arena compaction, DROP TABLE)
+    /// because offsets handed out while buffered only stay valid on the file they were computed for.
+    /// Default is a no-op (mock/alternative storages never buffer appends).
+    /// </summary>
+    void FlushPendingAppends() { }
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>

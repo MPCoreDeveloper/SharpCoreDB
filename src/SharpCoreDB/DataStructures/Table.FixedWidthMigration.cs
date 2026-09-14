@@ -133,6 +133,11 @@ public partial class Table
             if (records.Count > 0)
             {
                 storage.AppendBytesMultiple(tempPath, records);
+
+                // ✅ Buffered append mode: the swap below moves the temp file over the data file, so the
+                // migrated records must be on disk first (a buffered append would leave the temp file
+                // missing and flush into the moved-away path later).
+                storage.FlushPendingAppends();
             }
             else
             {

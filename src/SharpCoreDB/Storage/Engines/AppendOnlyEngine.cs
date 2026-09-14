@@ -350,7 +350,12 @@ public class AppendOnlyEngine : IStorageEngine
         ArgumentNullException.ThrowIfNull(activePositions);
         
         var filePath = GetTableFilePath(tableName);
-        
+
+        // ✅ Buffered append mode: rows appended this session may still be in memory. This method READS
+        // the file and then REPLACES it, so the buffer must be on disk first — flushing it afterwards
+        // would append the same rows a second time into the rewritten file. (No-op by default.)
+        storage.FlushPendingAppends();
+
         if (!File.Exists(filePath))
         {
             return 0; // No file to compact
@@ -441,6 +446,11 @@ public class AppendOnlyEngine : IStorageEngine
             if (activeRows.Count > 0)
             {
                 storage.AppendBytesMultiple(tempPath, activeRows);
+
+                // ✅ Buffered append mode: the swap below moves the temp file into place, so the rows must
+                // be on disk first (a buffered append would leave the temp file missing, and the pending
+                // rows would later flush into a path that no longer exists).
+                storage.FlushPendingAppends();
             }
             else
             {

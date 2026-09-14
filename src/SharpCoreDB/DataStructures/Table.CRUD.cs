@@ -2461,7 +2461,8 @@ public partial class Table
             this.TableCheckConstraints.Count > 0 ||
             HasColumnCheckConstraints() ||
             this.storage is null ||
-            this.storage.HasBufferedOverwrite(DataFile))
+            this.storage.HasBufferedOverwrite(DataFile) ||
+            this.storage.HasBufferedAppends(DataFile))
         {
             return false;
         }
@@ -3996,7 +3997,8 @@ public partial class Table
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.storage is null ||
-            this.storage.HasBufferedOverwrite(DataFile))
+            this.storage.HasBufferedOverwrite(DataFile) ||
+            this.storage.HasBufferedAppends(DataFile))
         {
             return false;
         }

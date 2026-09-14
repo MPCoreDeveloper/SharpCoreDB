@@ -762,7 +762,7 @@ Because "found by accident" is not a method, the remaining sites were then audit
 
 | site | frequency | verdict |
 |---|---|---|
-| `AppendBytes` (`FileMode.Append` + `FileOptions.WriteThrough`) | **once per single-row INSERT** | **hot — and a durability choice; moved to §5 as the first Phase 3 item with its measurement** |
+| `AppendBytes` (`FileMode.Append` + `FileOptions.WriteThrough`) | **once per single-row INSERT** | **resolved in §5: opt-in buffered appends (`EnableBufferedAppends`, default off) replace the per-row open with one flush per boundary — measured 25× end-to-end (732 → 18,775 INSERT/s)** |
 | `AppendBytesMultiple` | once per *batch* | fine (65 KB buffer, one write-through for the batch) |
 | `FlushBufferedAppends` | once per file per commit | fine |
 | `TryUpdateInPlaceSameLength`, `ReadBytesFrom`, `ReadBytesRange` | per record | fine — cached read handle already |
@@ -838,6 +838,33 @@ answered explicitly — a process crash is already safe (the OS cache survives i
 open question and is what the WAL/`WalDurabilityMode` settings exist to answer. Because it changes when
 bytes reach the platter, it needs the owner's call and a crash-recovery test, not a unilateral edit.
 
+**Decision taken (owner, option A): implemented — opt-in, off by default.** `DatabaseConfig.EnableBufferedAppends`
+routes single-row appends through the append buffer the transaction path already uses;
+`AppendBufferFlushThresholdBytes` (default 1 MB) and `AppendBufferFlushIntervalMs` (default 10 ms) bound the
+window, and every structural boundary flushes first: `Database.Flush()`, commit, `BeginTransaction`,
+compaction, fixed-width migration, overflow-arena compaction, `DROP TABLE`, dispose. Option (b) — letting
+`WalDurabilityMode` govern the table append — was **not** taken, because the project's own benchmark doc
+establishes that the mode is only honoured by `GroupCommitWal` (default off): it would have made the data file
+promise something the WAL itself does not.
+
+MEASURED end-to-end (2000 single-row `INSERT` statements through `ExecuteSQL`, Release build):
+
+| config | single-row INSERT ops/s | factor |
+|---|---:|---:|
+| `NoEncryptMode=true`, buffering off | 732 | — |
+| `NoEncryptMode=true`, buffering on | **18,775** | **25.6×** |
+| encrypted (default posture), buffering off | 974 | — |
+| encrypted (default posture), buffering on | **23,822** | **24.4×** |
+
+Honest residual: that is ~25×, not the 100×+ the storage-level ratio (477.97 µs → 0.43 µs/record) suggests,
+because the SQL/engine path (~50 µs/row: statement parse, plan-cache lookup, index updates) becomes the floor
+once the ~500 µs append is gone. The 0.43 µs/row ceiling stays reachable only through a batch API; lifting the
+single-statement path past ~20K rows/s is a separate item (prepared statements / statement cache), not part of
+this change.
+
+The default configuration is byte-for-byte unchanged, which
+`BufferedAppendTests.DefaultConfig_DoesNotBuffer_FirstInsertIsAlreadyOnDisk` pins.
+
 **The "just cache the handle" fix was tried, measured and reverted — it breaks readers.** The obvious way
 to remove the open cost without touching durability is a persistent write-through handle. It works
 (512 µs → 264 µs for a 64-byte record with `FileOptions.WriteThrough` unchanged) — but a **live write
@@ -855,19 +882,37 @@ append path opens per call: it is a constraint to design around, not a cost to o
 | cached stream + `Flush(flushToDisk: true)` per record | 514 | per record (fsync) | yes | ✗ blocks readers |
 | cached buffered stream + `WriteThrough` | **4.5** | per 4 KB, not per record | yes | ✗ blocks readers *and* changes durability |
 
-**So the only remaining levers are (a) buffer appends and flush at a boundary — which needs the read path
-to see buffered appends (read-your-writes), i.e. real work — or (b) let the existing `WalDurabilityMode`
-govern the table append, which is the owner's decision.** Both need a crash-recovery test; neither should
-be a config flip. The room is large — 512 µs → 4.5 µs per row — but it is bought with durability, and that
-is not a trade to make silently on a database.
+**What makes it safe.** The invariant: every position the engine handed out must be visible to every reader,
+and no structural operation may silently lose or duplicate it. Two mechanisms enforce it — an overlay for
+point reads, and a flush-first hook for everything that rewrites or replaces a file:
 
-The file-sharing constraint narrows the shape of (a): a *long-lived buffered stream* has the same problem
-as the cached handle, so the viable form is **buffer the records in memory and flush with a single
-open/write/close at the boundary** — exactly the shape the transaction path already uses
-(`bufferedAppends` + `FlushBufferedAppends`), where the handle is only live during the flush and readers
-are unaffected. The real work in (a) is therefore not the buffering, which exists, but read-your-writes:
-`ReadBytesFrom` does not consult buffered appends, so a row appended in buffered mode is invisible until
-the flush. That is the piece to design (and to decide on) before this item can move.
+| # | entry point | handling |
+|---|---|---|
+| 1 | `ReadBytesFrom` (PK point lookup) | overlay from a `position → payload` index over the buffer — the same shape that already existed for buffered *overwrites* |
+| 2 | `ReadAllRecords` (scans, index rebuild, arena reload) | on-disk walk + the buffered tail in offset order; also covers a file that does not exist yet because its first rows are still buffered |
+| 3 | `ReadBytesWithRecordOffsets` (whole-file snapshots) | flush first when outside a transaction (inside one the buffer belongs to the transaction and flushing it would break rollback) |
+| 4 | fixed-width bulk UPDATE/DELETE fast paths | bail to the safe per-record path, exactly like the existing `HasBufferedOverwrite` gate |
+| 5 | compaction, fixed-width migration, overflow-arena compaction | flush first — these REPLACE the file, so a later flush would append the same rows a second time |
+| 6 | `BeginTransaction` | flush first — `Rollback()` clears the buffer and would otherwise discard rows the caller already has |
+| 7 | `DROP TABLE` | flush first — otherwise the pending flush recreates the file the user just deleted |
+| 8 | threshold / age / `Database.Flush()` / dispose | the durability boundary; the age bound is "flushed by the next append", so the explicit boundaries never depend on a timer |
+
+Rows 1–2 and 5–8 have dedicated tests in `BufferedAppendTests`; rows 3–4 are guarded by paths the existing
+suite already exercises (every full-scan test goes through `ReadBytesWithRecordOffsets`, the fixed-width bulk
+update/delete tests through the gates), so they are listed here instead of assumed.
+
+**This work also found a pre-existing default-configuration bug, unrelated to buffering.**
+`CREATE TABLE; INSERT; DROP TABLE` failed on Windows with
+`IOException: The process cannot access the file ... because it is being used by another process` in the
+**default** configuration (at-rest encryption on), while the identical sequence passed with
+`NoEncryptMode=true`. The DROP path validated the data file by opening it with `FileShare.None`; on Windows an
+exclusive open is refused by *any* live handle — including the read handle SharpCoreDB caches for at-rest
+records — even though the `File.Delete` that follows succeeds with those handles present. The probe now asks
+for the sharing a delete actually needs (`FileShare.ReadWrite | FileShare.Delete`), so genuine locks still
+throw and are retried by the existing backoff loop, while a cached read handle no longer blocks DDL. Fixed in
+both the DROP TABLE path and the identical probe in the CREATE path. (The write-decision header probe was also
+moved to a short-lived open, so the first INSERT no longer pins a read handle on the data file for the
+lifetime of the database.)
 
 INSERT is otherwise already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
 SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The remaining, ranked items:

@@ -46,6 +46,22 @@ public partial class Storage
     private readonly Dictionary<string, List<(byte[] data, long position)>> bufferedAppends = new();
     private readonly Dictionary<string, long> cachedFileLengths = new();  // ✅ NEW: Cache file lengths
 
+    /// <summary>
+    /// Position → payload index over the rows currently in <see cref="bufferedAppends"/>, so a point
+    /// lookup that arrives before the flush returns the buffered row instead of reading past the end of
+    /// the file. Kept beside the ordered list (which the flush writes in append order) and lock-free for
+    /// readers, mirroring <c>bufferedOverwrites</c>. Mutated under <c>appendLock</c>.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<long, byte[]>> bufferedAppendLookup =
+        new(StringComparer.Ordinal);
+
+    // Bytes buffered since the last flush, and when the current buffer first grew. Together with
+    // DatabaseConfig.AppendBufferFlushThresholdBytes / AppendBufferFlushIntervalMs these bound the
+    // durability window and the memory footprint of the opt-in mode. Guarded by appendLock.
+    private long pendingAppendBytes;
+    private long appendBufferSinceTimestamp;
+
+
     // ✅ B7: Write-behind log for in-place overwrites made inside a transaction. The original
     // bytes stay on disk until commit (nothing is overwritten early), so rollback is simply
     // dropping this buffer — no undo data needs to be stored. On commit the buffered records
@@ -121,7 +137,7 @@ public partial class Storage
             return true; // Brand-new file → write the magic header + encrypted records.
         }
 
-        if (FileHasEncryptedHeader(path))
+        if (HeaderProbeForWriteDecision(path))
         {
             return true; // Existing encrypted per-record file → keep encrypting.
         }
@@ -136,6 +152,35 @@ public partial class Storage
 
         legacyPlaintextFiles.Add(path);
         return false; // Legacy plaintext file → never mix encrypted records into it.
+    }
+
+    /// <summary>
+    /// Same probe as <see cref="FileHasEncryptedHeader"/> but with a SHORT-LIVED open. Used only for the
+    /// once-per-path write decision (<see cref="DecideEncryptWrites"/>), never on a per-record path.
+    /// </summary>
+    /// <remarks>
+    /// The cached read handle that <see cref="FileHasEncryptedHeader"/> keeps would otherwise be created by
+    /// the first INSERT and then held for the lifetime of the Storage — and on Windows a live handle on a
+    /// data file makes the DROP TABLE path fail: its pre-delete probe opens the file with
+    /// <c>FileShare.None</c>, which cannot succeed while any other handle (even a read handle that permits
+    /// deletion) is open. The decision is memoised per path, so the extra open costs nothing per record,
+    /// while the per-record read probe still uses the cached handle it needs.
+    /// </remarks>
+    private static bool HeaderProbeForWriteDecision(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            Span<byte> header = stackalloc byte[PersistenceConstants.EncryptedTableMagicLength];
+            return fs.Read(header) == header.Length &&
+                header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
+        }
+        catch
+        {
+            // Missing/short/locked → not an encrypted table file (same answer as FileHasEncryptedHeader).
+            return false;
+        }
     }
 
     /// <summary>
@@ -171,6 +216,76 @@ public partial class Storage
 
     /// <inheritdoc />
     public byte[]? DecryptRecordPayload(byte[] payload) => DecryptRecord(payload);
+
+    /// <summary>
+    /// Looks up a not-yet-flushed buffered append by its physical position. Lock-free (the index is a
+    /// <see cref="ConcurrentDictionary{TKey,TValue}"/>), mirroring how buffered overwrites are read.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryGetBufferedAppend(string path, long offset, out byte[] payload)
+    {
+        if (bufferedAppendLookup.IsEmpty ||
+            !bufferedAppendLookup.TryGetValue(path, out var byOffset) ||
+            !byOffset.TryGetValue(offset, out payload!))
+        {
+            payload = null!;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the caller-owned plaintext of a buffered append. The buffer stores exactly what the flush
+    /// will write — ciphertext when this path encrypts writes (encrypt-then-buffer, same order as
+    /// <see cref="AppendBytes"/>) — so an encrypted file must be decrypted here.
+    /// </summary>
+    /// <remarks>
+    /// The on-disk magic-header probe is deliberately not used: a brand-new encrypted file may not exist
+    /// yet while its first records are buffered, so the probe would answer "plaintext" and hand out raw
+    /// ciphertext. The memoised per-file write decision answers the same question and is correct for a
+    /// file that does not exist yet (it will be created with the header on the flush).
+    /// </remarks>
+    private byte[]? DecryptBufferedAppendPayload(string path, byte[] payload)
+    {
+        if (UseRecordEncryption && ShouldEncryptWrites(path))
+        {
+            return DecryptRecord(payload);
+        }
+
+        // Copy: the buffer owns this array, and the caller owns the result (fast paths patch it in place).
+        var plaintext = new byte[payload.Length];
+        Buffer.BlockCopy(payload, 0, plaintext, 0, payload.Length);
+        return plaintext;
+    }
+
+    /// <summary>
+    /// Yields the not-yet-flushed buffered appends for <paramref name="path"/> in physical offset order,
+    /// decrypted for encrypted files. Empty when nothing is buffered — i.e. always, by default.
+    /// </summary>
+    private IEnumerable<(long RecordOffset, byte[] Data)> ReadBufferedAppends(string path)
+    {
+        if (bufferedAppendLookup.IsEmpty ||
+            !bufferedAppendLookup.TryGetValue(path, out var byOffset) ||
+            byOffset.IsEmpty)
+        {
+            yield break;
+        }
+
+        // Order by position: the index is a hash map, and callers (index rebuild, compaction, arena
+        // reload) depend on the same file order the flush will produce.
+        foreach (var offset in byOffset.Keys.OrderBy(static offset => offset))
+        {
+            if (byOffset.TryGetValue(offset, out var payload))
+            {
+                byte[]? record = DecryptBufferedAppendPayload(path, payload);
+                if (record is not null)
+                {
+                    yield return (offset, record);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Detects whether <paramref name="path"/> is an encrypted per-record table file by
@@ -384,24 +499,52 @@ public partial class Storage
         int recordLength = record.Length;
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER the append!
-        if (IsInTransaction)
+        // ✅ Buffered append mode (opt-in, off by default): the SAME buffer serves single-row appends
+        // outside a transaction — one open/write/close per flush boundary instead of a write-through
+        // open/close per row (~512 µs → ~4.5 µs per 64-byte row for the write itself). See
+        // DatabaseConfig.EnableBufferedAppends for the durability contract.
+        if (IsInTransaction || enableBufferedAppends)
         {
+            long futurePosition;
             lock (appendLock)
             {
+                bool bufferWasEmpty = bufferedAppends.Count == 0;
+
                 EnsureAppendInitialized(path, encryptWrites);
 
                 // ✅ OPTIMIZED: Use cached file length instead of recalculating
                 long currentFileLength = cachedFileLengths[path];
 
                 // This is where this data WILL be written when we flush
-                long futurePosition = currentFileLength;
+                futurePosition = currentFileLength;
 
                 // Buffer the append and update cached length
                 bufferedAppends[path].Add((record, futurePosition));
                 cachedFileLengths[path] = currentFileLength + 4 + recordLength;  // Update cache
 
-                return futurePosition;
+                // Read-your-writes: the row is not on disk yet, so the read paths must be able to find
+                // it by position (ReadBytesFrom) and in order (ReadAllRecords).
+                bufferedAppendLookup
+                    .GetOrAdd(path, static _ => new ConcurrentDictionary<long, byte[]>())
+                    [futurePosition] = record;
+
+                if (bufferWasEmpty)
+                {
+                    appendBufferSinceTimestamp = Environment.TickCount64;
+                }
+
+                pendingAppendBytes += 4 + recordLength;
+
+                // Opt-in auto-flush (byte threshold or max age) — bounds the durability window and the
+                // memory the buffer can hold. Never inside a transaction: a transaction owns its buffer
+                // until commit, and FlushTransactionBuffer() is its explicit intermediate flush.
+                if (!IsInTransaction && ShouldAutoFlushAppends())
+                {
+                    FlushBufferedAppends();
+                }
             }
+
+            return futurePosition;
         }
 
         // Normal append (not in transaction) - write immediately
@@ -588,6 +731,13 @@ public partial class Storage
 
         return BufferOrWriteOverwriteInPlace(path, offset, record);
     }
+
+    /// <inheritdoc />
+    public bool HasBufferedAppends(string path) =>
+        !bufferedAppendLookup.IsEmpty && bufferedAppendLookup.ContainsKey(path);
+
+    /// <inheritdoc />
+    public void FlushPendingAppends() => FlushBufferedAppends();
 
     /// <inheritdoc />
     public bool HasBufferedOverwrite(string path) =>
@@ -883,7 +1033,7 @@ public partial class Storage
             return Array.Empty<long>();
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER all appends!
-        if (IsInTransaction)
+        if (IsInTransaction || enableBufferedAppends)
         {
             var result = new long[dataBlocks.Count];  // ✅ FIXED: Renamed to 'result' to avoid variable name conflict
 
@@ -994,7 +1144,36 @@ public partial class Storage
             cachedFileLengths.Clear();
             headerPendingFiles.Clear();
             bufferedFileBaseLengths.Clear();
+
+            // ✅ Buffered append mode: the rows are on disk now, so the position index and the
+            // threshold counters reset with the buffer (a brand-new file's header was written above).
+            bufferedAppendLookup.Clear();
+            pendingAppendBytes = 0;
+            appendBufferSinceTimestamp = 0;
         }
+    }
+
+    /// <summary>
+    /// True when the opt-in append buffer has reached its byte threshold, or has been pending longer
+    /// than the configured interval. Only consulted outside a transaction, and only from the append
+    /// path — the time bound is therefore "flushed by the next append", not by a timer thread. The
+    /// explicit boundaries (commit, <c>Database.Flush()</c>, every structural operation, dispose) do
+    /// not depend on it.
+    /// </summary>
+    private bool ShouldAutoFlushAppends()
+    {
+        if (!enableBufferedAppends || pendingAppendBytes == 0)
+        {
+            return false;
+        }
+
+        if (appendBufferFlushThresholdBytes > 0 && pendingAppendBytes >= appendBufferFlushThresholdBytes)
+        {
+            return true;
+        }
+
+        return appendBufferFlushIntervalMs > 0 &&
+            Environment.TickCount64 - appendBufferSinceTimestamp >= appendBufferFlushIntervalMs;
     }
 
     /// <summary>
@@ -1086,6 +1265,9 @@ public partial class Storage
             headerPendingFiles.Clear(); // ✅ Clear pending header markers on rollback
             bufferedFileBaseLengths.Clear();
             bufferedTombstones.Clear(); // Rollback: discard pending commit-time tombstones
+            bufferedAppendLookup.Clear(); // Rollback: the buffered rows are discarded, so is the index
+            pendingAppendBytes = 0;
+            appendBufferSinceTimestamp = 0;
         }
     }
 
@@ -1298,6 +1480,13 @@ public partial class Storage
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[]? ReadBytesFrom(string path, long offset)
     {
+        // ✅ Buffered append mode: the row was appended in this session but not flushed yet, so its bytes
+        // exist only in the buffer — the disk read below would run past the end of the file/record.
+        if (TryGetBufferedAppend(path, offset, out var bufferedAppend))
+        {
+            return DecryptBufferedAppendPayload(path, bufferedAppend);
+        }
+
         // B7: inside a transaction, a buffered in-place overwrite takes precedence over the disk
         // version (the overwrite is written to disk only at commit). The buffer holds the payload
         // only (its length is the record's stored length).
@@ -1377,6 +1566,13 @@ public partial class Storage
     {
         if (!File.Exists(path))
         {
+            // ✅ Buffered append mode: a brand-new file has no bytes on disk while its first records are
+            // still buffered, so the buffered tail IS the whole table in that case.
+            foreach (var bufferedOnly in ReadBufferedAppends(path))
+            {
+                yield return bufferedOnly;
+            }
+
             yield break;
         }
 
@@ -1464,6 +1660,15 @@ public partial class Storage
 
             yield return (position, recordData);
             position += 4 + length;
+        }
+
+        // ✅ Buffered append mode: rows appended this session but not flushed yet are not on disk, so the
+        // walk above cannot see them. Their positions are strictly increasing and all above the flushed
+        // length, so appending them in offset order keeps this enumeration in file order — which the
+        // primary-key index rebuild and compaction depend on.
+        foreach (var bufferedTail in ReadBufferedAppends(path))
+        {
+            yield return bufferedTail;
         }
     }
 

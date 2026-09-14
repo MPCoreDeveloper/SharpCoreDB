@@ -307,12 +307,14 @@ public partial class SqlParser
                     {
                         try
                         {
-                            // ✅ VALIDATION: Verify file is not locked by opening exclusively first
-                            // This confirms the file handle is truly released by Dispose()
+                            // ✅ VALIDATION: verify the file can still be opened with the sharing a delete
+                            // needs — deliberately NOT FileShare.None (see the DROP TABLE path below: an
+                            // exclusive open is refused by any live handle, including SharpCoreDB's own
+                            // cached at-rest read handle, while File.Delete would succeed).
                             using (var testStream = new FileStream(
-                                fileToDelete, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                                fileToDelete, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete))
                             {
-                                // If we can open exclusively, file is not locked
+                                // If we can open it with delete sharing, the delete below can proceed.
                             }
                             
                             File.Delete(fileToDelete);
@@ -614,7 +616,12 @@ public partial class SqlParser
         
         var table = this.tables[tableName];
         var dataFile = table.DataFile;
-        
+
+        // ✅ Buffered append mode: the data file is deleted below, so any row still in the append buffer
+        // must be on disk first — otherwise the buffer would flush later and RECREATE a file the user
+        // just dropped. Flushing a table that is about to disappear is harmless. (No-op by default.)
+        table.Flush();
+
         // 🔥 CRITICAL: Clear ALL indexes FIRST to prevent any references to data
         table.ClearAllIndexes();
         
@@ -637,12 +644,16 @@ public partial class SqlParser
             {
                 try
                 {
-                    // ✅ VALIDATION: Verify file is not locked by opening exclusively first
-                    // This confirms the file handle is truly released by Dispose()
+                    // ✅ VALIDATION: verify the file can still be opened with the sharing a delete needs.
+                    // Deliberately NOT FileShare.None: on Windows any live handle — including the read
+                    // handle SharpCoreDB itself caches for at-rest record files — refuses an exclusive
+                    // open, so the probe failed for the DEFAULT configuration (encrypted records) with
+                    // "file is being used by another process" even though File.Delete below succeeds.
+                    // Genuine locks still throw here and are retried by the loop below.
                     using (var testStream = new FileStream(
-                        dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                        dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete))
                     {
-                        // If we can open exclusively, file is not locked
+                        // If we can open it with delete sharing, the delete below can proceed.
                     }
                     
                     File.Delete(dataFile);

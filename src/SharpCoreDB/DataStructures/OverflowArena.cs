@@ -205,6 +205,11 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
                 }
             }
 
+            // ✅ Buffered append mode: the arena file below is DELETED and the temp file moved over it, so
+            // the temp blocks must be on disk first (a buffered append would move nothing and then flush
+            // into the stale path). (No-op by default.)
+            _storage.FlushPendingAppends();
+
             if (File.Exists(_filePath))
             {
                 File.Delete(_filePath);
