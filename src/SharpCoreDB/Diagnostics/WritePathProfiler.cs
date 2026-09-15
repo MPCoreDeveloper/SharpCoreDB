@@ -113,17 +113,50 @@ public static class WritePathProfiler
         /// one-pass text scan and the per-row, per-column conversion) under a single number.
         /// </summary>
         RowBuild = 15,
+
+        /// <summary>
+        /// Non-unique hash-index maintenance — one <c>HashIndex.AddBatchKeys</c> call per loaded index per
+        /// batch. Split out of <see cref="IndexMaintenance"/> (2026-09-15) because that stage at 18.2% of a
+        /// multi-row INSERT covered three unrelated things (the per-row PK B-tree insert, this, and the
+        /// B-tree bulk index) and the largest of them cannot be optimised without knowing which it is.
+        /// </summary>
+        HashIndexMaint = 16,
     }
 
-    private const int StageCount = 16;
+    private const int StageCount = 17;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
+
+    /// <summary>
+    /// Allocated bytes attributed to each stage. Measured with
+    /// <see cref="GC.GetAllocatedBytesForCurrentThread"/> over the same regions as the timings, because the
+    /// multi-row INSERT was measured allocating <b>6.2 KB of garbage per row</b> (124 MB per 20,000-row
+    /// pass, 17 gen0 collections) while the stages involved only accounted for ~1.8 KB — and every
+    /// hand-measured suspect for the remainder (the PK key's <c>ToString</c>, the per-key index list, the
+    /// UTF-8 key buffer, per-record encryption) measured small or nil. Adding bytes to the existing stamps
+    /// is what turns that into attribution.
+    /// </summary>
+    private static readonly long[] AllocBytes = new long[StageCount];
+
+    /// <summary>
+    /// Per-thread stack of allocation checkpoints, pushed by <see cref="Stamp"/> and popped by
+    /// <see cref="Add"/>. A stack rather than a single slot because stages nest (<c>validate</c> contains
+    /// <c>encode</c> contains the arena stages), and each <see cref="Add"/> must close the checkpoint that
+    /// its own <see cref="Stamp"/> opened. Every call site is Stamp→Add inside one method on one thread, so
+    /// the pairing is LIFO; <see cref="Report"/> surfaces a leftover depth rather than hiding a mismatch.
+    /// </summary>
+    [ThreadStatic]
+    private static long[]? _allocCheckpoints;
+
+    [ThreadStatic]
+    private static int _allocDepth;
     private static readonly string[] StageNames =
     [
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
+        "hash-index",
     ];
 
     private static int _enabled;
@@ -158,6 +191,8 @@ public static class WritePathProfiler
     {
         Array.Clear(ElapsedTicks);
         Array.Clear(CallCounts);
+        Array.Clear(AllocBytes);
+        _allocDepth = 0; // drop any checkpoint a stage opened and never closed
     }
 
     /// <summary>
@@ -173,10 +208,29 @@ public static class WritePathProfiler
             return 0L;
         }
 
+        // Allocation checkpoint for this stage, taken at the same moment as the timestamp so the two can
+        // never disagree about which stage is open. The buffer grows with the stage nesting depth, never per
+        // call, so this allocates nothing on the hot path.
+        var checkpoints = _allocCheckpoints;
+        if (checkpoints is null)
+        {
+            checkpoints = new long[64];
+            _allocCheckpoints = checkpoints;
+        }
+        else if (_allocDepth == checkpoints.Length)
+        {
+            Array.Resize(ref checkpoints, checkpoints.Length * 2);
+            _allocCheckpoints = checkpoints;
+        }
+
+        checkpoints[_allocDepth++] = GC.GetAllocatedBytesForCurrentThread();
         return Stopwatch.GetTimestamp();
     }
 
-    /// <summary>Records the time spent since <paramref name="startTicks"/> in <paramref name="stage"/>.</summary>
+    /// <summary>
+    /// Records the time and the allocated bytes spent since <paramref name="startTicks"/> in
+    /// <paramref name="stage"/>, and closes the allocation checkpoint that <see cref="Stamp"/> opened.
+    /// </summary>
     public static void Add(Stage stage, long startTicks)
     {
         if (startTicks == 0L || Volatile.Read(ref _enabled) == 0)
@@ -192,6 +246,20 @@ public static class WritePathProfiler
 
         Interlocked.Add(ref ElapsedTicks[index], Stopwatch.GetTimestamp() - startTicks);
         Interlocked.Increment(ref CallCounts[index]);
+
+        // Close this stage's allocation checkpoint. GetAllocatedBytesForCurrentThread reads a thread-local
+        // counter, so only the calling thread's allocations are attributed: exact for the serial write path,
+        // and an under-count for the Parallel.For batch serialisation — which is why the column is labelled
+        // "B/call" and read as a floor rather than a total.
+        if (_allocDepth > 0 && _allocCheckpoints is not null)
+        {
+            long allocStart = _allocCheckpoints[--_allocDepth];
+            long delta = GC.GetAllocatedBytesForCurrentThread() - allocStart;
+            if (delta > 0)
+            {
+                Interlocked.Add(ref AllocBytes[index], delta);
+            }
+        }
     }
 
     /// <summary>Per-stage totals: elapsed milliseconds and call count, in stage order.</summary>
@@ -203,6 +271,24 @@ public static class WritePathProfiler
             rows.Add((
                 StageNames[i],
                 Volatile.Read(ref ElapsedTicks[i]) * 1000.0 / Stopwatch.Frequency,
+                Volatile.Read(ref CallCounts[i])));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Per-stage allocated bytes and call count, in stage order. Kept separate from <see cref="Snapshot"/>
+    /// so that method's tuple shape — and every existing caller — stays unchanged.
+    /// </summary>
+    public static IReadOnlyList<(string Stage, long AllocBytes, long Calls)> AllocationSnapshot()
+    {
+        var rows = new List<(string, long, long)>(StageCount);
+        for (int i = 0; i < StageCount; i++)
+        {
+            rows.Add((
+                StageNames[i],
+                Volatile.Read(ref AllocBytes[i]),
                 Volatile.Read(ref CallCounts[i])));
         }
 
@@ -225,21 +311,35 @@ public static class WritePathProfiler
             return "WritePathProfiler: no stages recorded (is it enabled?).";
         }
 
+        var allocByStage = AllocationSnapshot().ToDictionary(r => r.Stage, r => r.AllocBytes);
+
         double total = rows.Sum(r => r.TotalMs);
         var sb = new StringBuilder();
         sb.Append("WritePathProfiler: ")
           .Append(total.ToString("F1", CultureInfo.InvariantCulture))
           .AppendLine(" ms measured across stages");
-        sb.AppendLine("  stage              total ms     calls   share");
+        sb.AppendLine("  stage              total ms     calls   share     alloc MB      B/call");
 
         foreach ((string stage, double ms, long calls) in rows)
         {
+            long alloc = allocByStage.TryGetValue(stage, out var bytes) ? bytes : 0;
             sb.Append("  ")
               .Append(stage.PadRight(16))
               .Append(ms.ToString("F1", CultureInfo.InvariantCulture).PadLeft(10))
               .Append(calls.ToString("N0", CultureInfo.InvariantCulture).PadLeft(10))
               .Append((total <= 0 ? 0 : ms * 100.0 / total).ToString("F1", CultureInfo.InvariantCulture).PadLeft(8))
-              .AppendLine("%");
+              .Append('%')
+              .Append((alloc / (1024.0 * 1024.0)).ToString("N1", CultureInfo.InvariantCulture).PadLeft(13))
+              .Append((calls <= 0 ? 0 : alloc / calls).ToString("N0", CultureInfo.InvariantCulture).PadLeft(12))
+              .AppendLine();
+        }
+
+        // A non-zero depth means a Stamp had no matching Add on this thread, so the byte column is short by
+        // that stage's allocation. Say so rather than silently mis-attributing the next stage's bytes.
+        if (_allocDepth != 0)
+        {
+            sb.Append("  ⚠ allocation checkpoints left open: ").Append(_allocDepth)
+              .AppendLine(" — some Stamp had no matching Add on this thread");
         }
 
         return sb.ToString();

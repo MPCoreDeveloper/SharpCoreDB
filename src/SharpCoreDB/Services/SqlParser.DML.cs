@@ -353,6 +353,19 @@ public partial class SqlParser
                 break;
             }
         }
+        // Column mapping resolved once per statement. The previous form ran table.Columns.IndexOf(col) for
+        // every value of every row — a list scan per value — and the profiler measured this stage at
+        // 536 B/row and 7.4% of the pass.
+        int[]? insertColumnIndexes = null;
+        if (insertColumns is not null)
+        {
+            insertColumnIndexes = new int[insertColumns.Count];
+            for (int i = 0; i < insertColumns.Count; i++)
+            {
+                insertColumnIndexes[i] = table.Columns.IndexOf(insertColumns[i]);
+            }
+        }
+
         // Build one row from one VALUES tuple. Shared by the per-row loop and the batched fast path below so
         // the two cannot drift apart on value parsing, column mapping or internal-_rowid skipping.
         Dictionary<string, object> BuildRowFromValues(List<string> rowValues)
@@ -362,7 +375,10 @@ public partial class SqlParser
             // since it is handed native values. Stamped here so it can be told apart from the text scan.
             long buildStart = Diagnostics.WritePathProfiler.Stamp();
 
-            var row = new Dictionary<string, object>();
+            // Sized exactly rather than left at the default: the profiler attributed 536 B/row to this
+            // stage, and an unsized dictionary grew its bucket and entry arrays three times for a 6-value
+            // row. Capacity is a hint only — the comparer and every observable behaviour are unchanged.
+            var row = new Dictionary<string, object>(insertColumns?.Count ?? table.Columns.Count);
             if (insertColumns is null)
             {
                 int valueIdx = 0;
@@ -379,9 +395,8 @@ public partial class SqlParser
             {
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
-                    var col = insertColumns[i];
-                    var idx = table.Columns.IndexOf(col);
-                    row[col] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
+                    var idx = insertColumnIndexes![i];
+                    row[insertColumns[i]] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
                 }
             }
 

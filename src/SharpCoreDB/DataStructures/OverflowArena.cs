@@ -33,6 +33,16 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     // (lock-free single-key reads/writes), and the compound operations below hold _gate.
     private readonly ConcurrentDictionary<long, byte[]> _cache = new();
 
+    /// <summary>
+    /// Reusable scratch buffers for <see cref="WriteMany"/>, which the fixed-width codec calls once per
+    /// row. Safe as instance state because that method only touches them while holding <c>_gate</c> — and
+    /// they are cleared at that point, never after the lock is released: the arena is shared by the
+    /// <c>Parallel.For</c> serialisation path, so a finishing thread clearing them on its way out wiped the
+    /// list a second thread was still filling (caught by <c>OverflowArenaConcurrencyTests</c>).
+    /// </summary>
+    private readonly List<int> _appendIndexScratch = [];
+    private readonly List<byte[]> _appendPayloadScratch = [];
+
     // B6: freed block offsets grouped by their payload length, for exact-length in-place reuse.
     // Guarded by _gate (claim/release are compound operations).
     private readonly Dictionary<int, List<long>> _freeByLength = new();
@@ -196,11 +206,16 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
         EnsureLoaded();
 
         var offsets = new long[payloads.Count];
-        List<int>? appendIndexes = null;
-        List<byte[]>? appendPayloads = null;
 
         lock (_gate)
         {
+            // Scratch buffers rather than fresh lists: everything below runs under _gate, so these are
+            // single-threaded by construction. They are cleared again before the method returns so the
+            // payload references do not outlive the call.
+            List<int> appendIndexes = _appendIndexScratch;
+            List<byte[]> appendPayloads = _appendPayloadScratch;
+            appendIndexes.Clear();
+            appendPayloads.Clear();
             // Reuse first: an in-place overwrite of a freed block of the same length costs no append, so it
             // stays a per-value decision. Everything else is deferred into a single storage call below.
             for (int i = 0; i < payloads.Count; i++)
@@ -214,11 +229,11 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
                     continue;
                 }
 
-                (appendIndexes ??= []).Add(i);
-                (appendPayloads ??= []).Add(payload);
+                appendIndexes.Add(i);
+                appendPayloads.Add(payload);
             }
 
-            if (appendPayloads is not null)
+            if (appendPayloads.Count > 0)
             {
                 long appendStart = WritePathProfiler.Stamp();
                 var appended = _storage.AppendBytesMultiple(_filePath, appendPayloads);
@@ -226,7 +241,7 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
 
                 for (int k = 0; k < appended.Length; k++)
                 {
-                    int index = appendIndexes![k];
+                    int index = appendIndexes[k];
                     offsets[index] = appended[k];
                     _cache[appended[k]] = appendPayloads[k];
                 }

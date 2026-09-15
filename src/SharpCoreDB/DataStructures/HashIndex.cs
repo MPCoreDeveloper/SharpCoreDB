@@ -378,6 +378,31 @@ public class HashIndex : IDisposable
     }
 
     /// <summary>
+    /// Pre-sizes the key map before a bulk add. Without it the map grows its bucket and entry arrays
+    /// incrementally as keys arrive, and every growth rehashes the keys already present. On a 20,000-row
+    /// INSERT into 20,000 distinct keys the write-path profiler attributed ~950 B/row of garbage to this
+    /// index, most of it those reallocations. A capacity hint only: behaviour is unchanged, and a batch of
+    /// mostly duplicate keys merely over-reserves.
+    /// </summary>
+    private void EnsureKeyCapacity(int additionalKeys)
+    {
+        if (additionalKeys <= 0)
+        {
+            return;
+        }
+
+        _lock.EnterWriteLock();
+        try
+        {
+            _index.EnsureCapacity(_index.Count + additionalKeys);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Key-based overload of <see cref="AddBatch"/>: callers that already know each indexed key
     /// (e.g. an in-place UPDATE re-point) add all rows with one lock acquisition per index.
     /// </summary>
@@ -388,6 +413,12 @@ public class HashIndex : IDisposable
         if (keys.Length == 0)
         {
             return;
+        }
+
+        // The managed map benefits from a capacity hint; the native-memory backend does not use it.
+        if (!_useUnsafeEqualityIndex)
+        {
+            EnsureKeyCapacity(keys.Length);
         }
 
         // PERF: Non-unique unsafe path — batch keys, then a single UnsafeEqualityIndex acquisition.

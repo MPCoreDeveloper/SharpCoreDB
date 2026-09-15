@@ -779,7 +779,9 @@ public partial class Table
             UpdatePrimaryKeyIndex(validatedRows, positions);
 
             // Batch hash index updates — build dictionaries only when hash indexes exist.
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             UpdateHashIndexes(validatedRows, positions);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
 
             Interlocked.Add(ref _cachedRowCount, validatedRows.Length);
 
@@ -889,10 +891,12 @@ public partial class Table
             }
 
             // PERF: Batch hash index updates — single lock acquisition per index
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             foreach (var hashIndex in this.hashIndexes.Values)
             {
                 hashIndex.AddBatch(validatedRows, positions);
             }
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
 
             // Update cached row count
             Interlocked.Add(ref _cachedRowCount, validatedRows.Count);

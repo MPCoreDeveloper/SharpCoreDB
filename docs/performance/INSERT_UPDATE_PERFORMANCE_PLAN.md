@@ -144,6 +144,18 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    **Still not wired:** `wal-append` and `wal-flush` have no writer at all, and the stage report remains a
    sum of stages rather than wall time where they nest (the outer `validate`/`encode` wrap the arena stages,
    so the raw total exceeds the pass).
+   **Allocation attribution added (2026-09-15)** — the same `Stamp`/`Add` pair now also measures
+   `GC.GetAllocatedBytesForCurrentThread()` per stage, which is what a 6.2 KB/row measurement needed: the
+   time stages could not say where the garbage came from, and four hand-checked suspects (the PK key's
+   `ToString`, the per-key index list, the UTF-8 key buffer, per-record encryption) each measured small or
+   nil. It resolved the cost to `arena-write` **1,256 B/row** (for ~50 B of payload), `hash-index`
+   ~950 B/row (`Dictionary` growth), `parse` 962 B/row and `row-build` 536 B/row, and three of those four
+   are now reduced (see the CHANGELOG). The column is per-thread and therefore a **floor** — `Parallel.For`
+   serialisation allocates on workers this counter does not see — and the report prints a warning if any
+   checkpoint is left open rather than silently mis-attributing the next stage's bytes. **Next lever, by
+   measurement:** `arena-append` at **63.3 ms** is one `FileOptions.WriteThrough` open per row for the
+   overflow arena — the exact cost the append buffer removed for single-row INSERTs — but routing the arena
+   through that buffer changes its durability window, so it needs the same owner decision as §5 item 2.
    Guarded by `WritePathProfilerTests` (free when off, attributes real workload, report ordering).
 3. **Reconcile the two UPDATE harnesses** (§1.4) so absolute numbers are comparable across documents.
 4. **A regression gate.** The benchmark must be runnable as a non-gating (nightly/manual) CI job so

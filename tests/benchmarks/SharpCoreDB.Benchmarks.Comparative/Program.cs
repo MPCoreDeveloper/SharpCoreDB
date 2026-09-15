@@ -349,7 +349,18 @@ class Program
         services.AddSharpCoreDB();
         var sp = services.BuildServiceProvider();
         var factory = sp.GetRequiredService<DatabaseFactory>();
-        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
+        // Diagnostic: force the per-record at-rest encryption posture for THIS mode only, so cost and
+        // allocation can be attributed to it. Unset keeps the product default, so the headline number is
+        // unchanged by this switch existing.
+        static bool? MultiRowAtRestOverride() =>
+            Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ATREST") switch
+            {
+                "0" => false,
+                "1" => true,
+                _ => null,
+            };
+
+        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly, atRestRecords: MultiRowAtRestOverride());
 
         var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
         double[] times = new double[reps];
@@ -379,6 +390,8 @@ class Program
                 db.ExecuteSQL(CreateDocsIndexSql);
 
                 var sw = Stopwatch.StartNew();
+                long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
+                int gen0Before = GC.CollectionCount(0);
                 foreach (var stmt in statements)
                 {
                     db.ExecuteSQL(stmt);
@@ -386,8 +399,11 @@ class Program
 
                 sw.Stop();
                 var elapsed = sw.Elapsed.TotalSeconds;
+                long allocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+                int gen0 = GC.CollectionCount(0) - gen0Before;
                 var after = FileSizes(db);
                 Console.WriteLine($"    [diag] data file {after.DataBytes:N0} B · overflow arena {after.OvfBytes:N0} B (before: {before.DataBytes:N0}/{before.OvfBytes:N0})");
+                Console.WriteLine($"    [diag] allocated {allocBytes:N0} B ({allocBytes / Math.Max(1, inserts):N0} B/row) · gen0 collections {gen0}");
                 try { Directory.Delete(path, true); } catch { /* best-effort temp-dir cleanup */ }
                 return elapsed;
             }
