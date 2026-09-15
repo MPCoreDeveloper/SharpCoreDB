@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-09-15T15:46:21.2104164Z",
+  "engine": "AppendOnly",
+  "reps": 3,
+  "note": "One entry per arm: the median of that arm\u0027s reps, not a single rep.",
+  "raw": [
+    {
+      "InsertOpsPerSec": 140440,
+      "ReadOpsPerSec": 104216,
+      "UpdateOpsPerSec": 107082,
+      "DeleteOpsPerSec": 204393
+    }
+  ],
+  "default": [
+    {
+      "InsertOpsPerSec": 123493,
+      "ReadOpsPerSec": 81198,
+      "UpdateOpsPerSec": 77823,
+      "DeleteOpsPerSec": 98725
+    }
+  ]
+}

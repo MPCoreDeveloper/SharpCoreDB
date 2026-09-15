@@ -136,6 +136,25 @@ first attempt at that build optimization was aimed at the wrong phase until inst
 4. **A regression gate.** The benchmark must be runnable as a non-gating (nightly/manual) CI job so
    future work cannot silently regress INSERT/UPDATE the way UPDATE did between 2.0 and 2.1
    (26.5K vs 37.3K is inside the noise band, but the band is the problem).
+   **Implemented (2026-09-15).** `--gate` runs the §2 protocol above against a committed baseline
+   (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/baselines/dual-mode-baseline.json`) and exits
+   **0** (within tolerance), **1** (a metric regressed beyond `--gate-factor`, default **1.5**), or **2**
+   (too noisy to conclude — the per-metric rep spread exceeded 2.5×). It prints min–median–max per metric
+   before the verdict, because a run whose reps disagree by 4× cannot support a conclusion either way.
+   `.github/workflows/benchmarks.yml` runs it nightly and on `workflow_dispatch`; it is its own workflow,
+   so no branch-protection rule can require it and it can never block a merge.
+
+   **Why it was not optional.** It was written *because* one of these regressions had already happened
+   twice on this branch: the deferred-DELETE reconcile at `Table.Flush()` cost **4×** on random-key
+   DELETE (294,185 → 70,248 ops/sec) and all 2,321 tests stayed green. The 1.5× tolerance follows from
+   the same evidence — both real regressions were ≥2×, while the documented band is ±20%, so a tighter
+   factor would have fired on noise instead.
+
+   **Known limits, stated here rather than discovered later.** The committed baseline comes from one
+   machine and absolute ops/sec do not transfer, so on a GitHub-hosted runner (a different CPU every run)
+   the job is *trend* evidence, not a verdict; a fixed or self-hosted runner is required for the latter.
+   Re-recording is manual (`--write-baseline`) and reviewable, never automatic — a baseline recorded
+   *during* a regression silently blesses it for every later run.
 
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage
 instrumentation accounts for ≥90% of wall time in a write loop.
@@ -1148,12 +1167,13 @@ still cannot be read as wall time.
 
 ### 7a. Deferred index maintenance — implemented and measured *(2026-09-15)*
 
-The lever §7 identified is now built, behind `DatabaseConfig.EnableDeferredDeleteIndexes` (**opt-in,
-default `false`**). When enabled, a DELETE writes only the durable tombstone and *skips* the PK B-tree
+The lever §7 identified is now built, behind `DatabaseConfig.EnableDeferredDeleteIndexes` — and it is the
+**default** (opt-out). When enabled, a DELETE writes only the durable tombstone and *skips* the PK B-tree
 removal (`MarkPrimaryKeyIndexStale`) and the per-key hash removal; the PK B-tree is rebuilt from the data
-file (skipping tombstones) at a later boundary, and uniqueness is verified against the stored position
+file (skipping tombstones) at reopen, and uniqueness is verified against the stored position
 (`IsPrimaryKeyTaken`), so a tombstoned entry is treated as free. Point lookups already tolerated a
-tombstoned position (null read).
+tombstoned position (null read). The opt-out restores the eager behaviour and keeps
+`GetHashIndexStatistics` exact between deletes.
 
 **Three findings from building it, all measured:**
 
@@ -1164,7 +1184,7 @@ tombstoned position (null read).
 2. **An O(n) rebuild at `Table.Flush()` is also wrong.** `RebuildPrimaryKeyIndexFromDisk()` over the
    acceptance file measured **1380 ms (plaintext)** / **36 ms (at-rest)** for 20K records — the plaintext
    path pays ~69 µs/record, which dwarfs the batch win. The flush-time rebuild was removed; reconciliation
-   is now bounded by `DeferredDeleteIndexThreshold` (default 10,000, non-transactional only) and reopen.
+   happens only when `DeferredDeleteIndexThreshold` is crossed at a non-transactional delete, or at reopen.
 3. **The fix turns it into a win.** `--dual-mode` (random-key CRUD, `DELETE … WHERE name = 'User{i}'`,
    100K inserts / 10K deletes, medians of 3 alternating reps), deferral off → on. The same-session
    interleaved A/B on a quiet machine (2026-09-15) is the conservative figure:
@@ -1199,7 +1219,8 @@ plaintext **62,142 → 122,748 ops/s (2.0×)**, at-rest **43,250 → 53,333 ops/
 fixed-width fast path, which never reaches `DeleteRecordsCore`) — the lever targets the *random-key* path.
 On-disk behaviour and the default configuration are unchanged; `DeferredDeleteIndexTests` pins that
 deleted rows stay gone to every reader, a deleted PK can be re-INSERTed, nothing resurrects across a
-reopen, and the default is untouched. The full core suite is green (1864, 0 failed).
+reopen, and the default is untouched. All six suites are green: **core 1869, VectorSearch 248,
+EntityFrameworkCore 116, Functional.Linq2DB 24, Search 58, HybridSearch 6** (0 failed across all).
 
 ---
 

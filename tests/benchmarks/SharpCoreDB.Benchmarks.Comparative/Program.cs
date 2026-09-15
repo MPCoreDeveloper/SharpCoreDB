@@ -32,6 +32,12 @@ class Program
     const string BannerTop = "╔══════════════════════════════════════════════════════════╗";
     const string BannerBottom = "╚══════════════════════════════════════════════════════════╝";
     const string ResultsDirName = "results";
+    const string GateBaselineFolder = "baselines";
+    const string GateBaselineFile = "dual-mode-baseline.json";
+    const double GateDefaultFactor = 1.5;
+    const double GateNoisySpread = 2.5;
+    const int GateExitRegression = 1;
+    const int GateExitInconclusive = 2;
     const string BenchDbPassword = "bench123"; // NOSONAR:S2068 - throwaway local benchmark credential, not a real secret
     const string EmailColumn = "email";
     const string ScoreColumn = "score";
@@ -90,6 +96,21 @@ class Program
         if (args.Any(a => a.Equals("--dual-mode", StringComparison.OrdinalIgnoreCase)))
         {
             RunDualModeComparison(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --gate → the §2.4 write-path regression gate. Runs the same §2 protocol as
+        // --dual-mode and compares every operation against a committed baseline, exiting non-zero on a
+        // regression beyond the tolerance factor. --write-baseline re-records that baseline.
+        if (args.Any(a => a.Equals("--gate", StringComparison.OrdinalIgnoreCase))
+            || args.Any(a => a.Equals("--write-baseline", StringComparison.OrdinalIgnoreCase))
+            || args.Any(a => a.StartsWith("--gate-", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = RunRegressionGate(
+                ParseEngineType(args),
+                ParseGateFactor(args),
+                ParseGateBaseline(args),
+                args.Any(a => a.Equals("--write-baseline", StringComparison.OrdinalIgnoreCase)));
             return;
         }
 
@@ -1530,6 +1551,324 @@ class Program
         r.UpdateOpsPerSec,
         r.DeleteOpsPerSec,
     };
+
+    // ══════════════════════════════════════
+    // §2.4 — the write-path regression gate
+    // ══════════════════════════════════════
+
+    /// <summary>
+    /// The baseline shape written by <c>--write-baseline</c>. It is deliberately the same shape the
+    /// <c>--dual-mode</c> archive already uses (two arm arrays of per-operation ops/sec), so any archived
+    /// dual-mode run can also serve as a baseline via <c>--gate-baseline=&lt;path&gt;</c>.
+    /// </summary>
+    sealed class GateBaseline
+    {
+        public List<BenchmarkResult> Raw { get; set; } = [];
+        public List<BenchmarkResult> Default { get; set; } = [];
+    }
+
+    /// <summary>
+    /// The §2.4 regression gate: runs the accepted §2 protocol (the dual-mode arms, medians over
+    /// alternating reps) and compares every operation against a committed baseline, returning non-zero
+    /// when one has regressed beyond the tolerance factor.
+    /// <para>
+    /// It exists because a silent write-path regression has already shipped twice on this branch: the
+    /// UPDATE cost between 2.0 and 2.1 moved inside the noise band with nothing to catch it, and the first
+    /// version of the deferred-DELETE reconcile made random-key DELETE **4× slower** (294,185 → 70,248
+    /// ops/sec) while all 2,321 tests stayed green. Neither was visible without running this harness by hand.
+    /// </para>
+    /// <para>
+    /// The tolerance is deliberately generous. The machine's documented run-to-run band is ±20%, so a factor
+    /// near 1 would fire on noise; 1.5× still catches the regressions worth catching (both of the above were
+    /// ≥2×) without making the gate a coin flip. A failure means "look on a quiet machine", not "revert
+    /// immediately" — which is why this job is non-gating.
+    /// </para>
+    /// <para>
+    /// Options: <c>--gate-factor=&lt;double&gt;</c>, <c>--gate-baseline=&lt;path&gt;</c>, and
+    /// <c>--write-baseline</c> (re-records the committed baseline — an explicit, reviewable act, never
+    /// automatic).
+    /// </para>
+    /// </summary>
+    static int RunRegressionGate(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        double factor,
+        string? baselineArg,
+        bool writeBaseline,
+        int reps = 3)
+    {
+        const int Failed = -1;
+        const string RawArm = "raw";
+        const string DefaultArm = "default";
+
+        string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        string baselinePath = baselineArg is null
+            ? Path.Combine(projectDir, GateBaselineFolder, GateBaselineFile)
+            : Path.GetFullPath(baselineArg);
+
+        Console.WriteLine();
+        Console.WriteLine("━━━ Write-path regression gate (§2.4) ━━━");
+        Console.WriteLine($"  engine={engineType} · reps={reps} · tolerance={factor:0.00}x");
+        Console.WriteLine(writeBaseline
+            ? $"  recording baseline: {baselinePath}"
+            : $"  baseline:           {baselinePath}");
+        Console.WriteLine();
+
+        // The §2 protocol: the same alternating-rep arms the dual-mode comparison uses, so the two
+        // artefacts stay directly comparable and any archived dual-mode JSON is a valid baseline.
+        var raw = new List<BenchmarkResult>();
+        var deflt = new List<BenchmarkResult>();
+        for (int rep = 0; rep < reps; rep++)
+        {
+            if (rep % 2 == 0)
+            {
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed));
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed));
+            }
+            else
+            {
+                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed));
+                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed));
+            }
+
+            Console.WriteLine($"     rep {rep + 1}/{reps} complete");
+        }
+
+        if (raw.Any(static r => r.InsertOpsPerSec <= 0) || deflt.Any(static r => r.InsertOpsPerSec <= 0))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  GATE FAILED: an arm could not complete the workload (see the message above).");
+            return GateExitRegression;
+        }
+
+        var currentRaw = MedianOf(raw);
+        var currentDefault = MedianOf(deflt);
+
+        // §2 requires min–median–max, never a single run — and a run whose own reps disagree wildly
+        // cannot support any verdict, however it compares. So the spread is measured and reported first.
+        double worstSpread = Math.Max(MaxSpread(raw), MaxSpread(deflt));
+        Console.WriteLine();
+        Console.WriteLine($"  rep spread (max ÷ min across the {reps} reps — the run's own noise):");
+        Console.WriteLine($"    raw     {SpreadLine(raw)}");
+        Console.WriteLine($"    default {SpreadLine(deflt)}");
+        Console.WriteLine($"    worst   {worstSpread:F2}x   (a quiet machine sits near 1.0)");
+
+        if (worstSpread > GateNoisySpread)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE INCONCLUSIVE (exit {GateExitInconclusive}): the reps disagree by {worstSpread:F2}x, over the");
+            Console.WriteLine($"  {GateNoisySpread:F2}x limit, so this run measures the machine's load and not the code.");
+            Console.WriteLine("  Nothing is concluded. Re-run on a quiet machine.");
+            return GateExitInconclusive;
+        }
+
+        if (writeBaseline)
+        {
+            return WriteGateBaseline(baselinePath, engineType, reps, currentRaw, currentDefault);
+        }
+
+        return CompareAgainstBaseline(baselinePath, factor, currentRaw, currentDefault);
+    }
+
+    /// <summary>
+    /// Compares a run's medians against the baseline and reports the verdict. Split out of
+    /// <see cref="RunRegressionGate"/> so the recording half and the checking half stay readable.
+    /// </summary>
+    static int CompareAgainstBaseline(
+        string baselinePath,
+        double factor,
+        BenchmarkResult currentRaw,
+        BenchmarkResult currentDefault)
+    {
+        if (!File.Exists(baselinePath))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: no baseline at {baselinePath}");
+            Console.WriteLine("  Record one with --write-baseline on a quiet machine, then commit it.");
+            return GateExitRegression;
+        }
+
+        List<BenchmarkResult> baselineRaw;
+        List<BenchmarkResult> baselineDefault;
+        try
+        {
+            var payload = JsonSerializer.Deserialize<GateBaseline>(
+                File.ReadAllText(baselinePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            baselineRaw = payload?.Raw ?? [];
+            baselineDefault = payload?.Default ?? [];
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: could not read the baseline ({ex.GetType().Name}: {ex.Message}).");
+            return GateExitRegression;
+        }
+
+        if (baselineRaw.Count == 0 || baselineDefault.Count == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: the baseline at {baselinePath} carries no raw/default measurements.");
+            return GateExitRegression;
+        }
+
+        var baseRaw = MedianOf(baselineRaw);
+        var baseDefault = MedianOf(baselineDefault);
+
+        Console.WriteLine();
+        Console.WriteLine("  metric                   baseline     current    ratio   verdict");
+        bool regressed = false;
+        regressed |= GateRow("raw INSERT", baseRaw.InsertOpsPerSec, currentRaw.InsertOpsPerSec, factor);
+        regressed |= GateRow("raw READ", baseRaw.ReadOpsPerSec, currentRaw.ReadOpsPerSec, factor);
+        regressed |= GateRow("raw UPDATE", baseRaw.UpdateOpsPerSec, currentRaw.UpdateOpsPerSec, factor);
+        regressed |= GateRow("raw DELETE", baseRaw.DeleteOpsPerSec, currentRaw.DeleteOpsPerSec, factor);
+        regressed |= GateRow("default INSERT", baseDefault.InsertOpsPerSec, currentDefault.InsertOpsPerSec, factor);
+        regressed |= GateRow("default READ", baseDefault.ReadOpsPerSec, currentDefault.ReadOpsPerSec, factor);
+        regressed |= GateRow("default UPDATE", baseDefault.UpdateOpsPerSec, currentDefault.UpdateOpsPerSec, factor);
+        regressed |= GateRow("default DELETE", baseDefault.DeleteOpsPerSec, currentDefault.DeleteOpsPerSec, factor);
+        Console.WriteLine();
+        Console.WriteLine("  ratio = baseline ÷ current, so >1 is slower than the baseline.");
+        Console.WriteLine();
+
+        if (regressed)
+        {
+            Console.WriteLine($"  GATE FAILED: at least one metric is slower than baseline × {factor:0.00}.");
+            Console.WriteLine("  The band is ±20%, so re-run on a quiet machine before trusting a single");
+            Console.WriteLine("  failure — then fix the regression, or re-record the baseline on purpose.");
+            return GateExitRegression;
+        }
+
+        Console.WriteLine($"  GATE PASSED: nothing is slower than baseline × {factor:0.00}.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Median of each operation's ops/sec across an arm's reps, as a single result. Uses the upper-middle
+    /// element for an even rep count, matching the convention the PK harness already uses.
+    /// </summary>
+    static BenchmarkResult MedianOf(IReadOnlyList<BenchmarkResult> runs)
+    {
+        static int Median(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick)
+        {
+            var values = runs.Select(pick).Where(static v => v > 0).OrderBy(static v => v).ToArray();
+            return values.Length == 0 ? 0 : values[values.Length / 2];
+        }
+
+        return new BenchmarkResult
+        {
+            InsertOpsPerSec = Median(runs, static r => r.InsertOpsPerSec),
+            ReadOpsPerSec = Median(runs, static r => r.ReadOpsPerSec),
+            UpdateOpsPerSec = Median(runs, static r => r.UpdateOpsPerSec),
+            DeleteOpsPerSec = Median(runs, static r => r.DeleteOpsPerSec),
+        };
+    }
+
+    /// <summary>Prints one gate row. Returns true when the metric regressed beyond the tolerance.</summary>
+    static bool GateRow(string metric, int baseline, int current, double factor)
+    {
+        double ratio = baseline > 0 && current > 0 ? baseline / (double)current : 0;
+        bool regressed = ratio > factor;
+
+        // "watch" is the band below the tolerance: a 1.25×+ slowdown is worth a look even when it passes,
+        // because two of those in a row is how a regression arrives without ever tripping the gate.
+        string verdict = current <= 0 ? "FAILED" : regressed ? "REGRESSED" : ratio > 1.25 ? "watch" : "ok";
+        Console.WriteLine($"  {metric,-20} {baseline,10:N0} {current,11:N0} {ratio,7:F2}x   {verdict}");
+        return regressed;
+    }
+
+    /// <summary>One arm's per-metric rep spread, compact enough for a single console line.</summary>
+    static string SpreadLine(IReadOnlyList<BenchmarkResult> runs) =>
+        $"I {Spread(runs, static r => r.InsertOpsPerSec):F2}x   R {Spread(runs, static r => r.ReadOpsPerSec):F2}x   " +
+        $"U {Spread(runs, static r => r.UpdateOpsPerSec):F2}x   D {Spread(runs, static r => r.DeleteOpsPerSec):F2}x";
+
+    /// <summary>The worst of one arm's four per-metric rep spreads.</summary>
+    static double MaxSpread(IReadOnlyList<BenchmarkResult> runs) =>
+        Math.Max(
+            Math.Max(Spread(runs, static r => r.InsertOpsPerSec), Spread(runs, static r => r.ReadOpsPerSec)),
+            Math.Max(Spread(runs, static r => r.UpdateOpsPerSec), Spread(runs, static r => r.DeleteOpsPerSec)));
+
+    /// <summary>max ÷ min for one metric across an arm's reps; 1.0 when there is nothing to compare.</summary>
+    static double Spread(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick)
+    {
+        var values = runs.Select(pick).Where(static v => v > 0).ToArray();
+        return values.Length < 2 ? 1.0 : values.Max() / (double)values.Min();
+    }
+
+    /// <summary>
+    /// Records the baseline from this run's medians, in the archived dual-mode shape. One entry per arm —
+    /// the median of the reps — so the file stays small, is reviewable in a diff, and is re-readable by the
+    /// gate (and by anything that already reads a dual-mode result).
+    /// </summary>
+    static int WriteGateBaseline(
+        string path,
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        int reps,
+        BenchmarkResult raw,
+        BenchmarkResult deflt)
+    {
+        try
+        {
+            var payload = new
+            {
+                timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                engine = engineType.ToString(),
+                reps,
+                note = "One entry per arm: the median of that arm's reps, not a single rep.",
+                raw = new[] { ToRecord(raw) },
+                @default = new[] { ToRecord(deflt) },
+            };
+
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine();
+            Console.WriteLine($"  baseline recorded: {path}");
+            Console.WriteLine("  Review the diff before committing: a baseline recorded during a regression");
+            Console.WriteLine("  silently accepts that regression for every later run.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  COULD NOT RECORD BASELINE: {ex.GetType().Name}: {ex.Message}");
+            return GateExitRegression;
+        }
+    }
+
+    /// <summary>Reads <c>--gate-factor=&lt;double&gt;</c> (default 1.5); values below 1 are ignored.</summary>
+    static double ParseGateFactor(string[] args)
+    {
+        const string prefix = "--gate-factor=";
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && double.TryParse(arg[prefix.Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out var factor)
+                && factor >= 1.0)
+            {
+                return factor;
+            }
+        }
+
+        return GateDefaultFactor;
+    }
+
+    /// <summary>Reads <c>--gate-baseline=&lt;path&gt;</c>; null means the committed baseline.</summary>
+    static string? ParseGateBaseline(string[] args)
+    {
+        const string prefix = "--gate-baseline=";
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return arg[prefix.Length..];
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Runs one arm, turning a failure into a marked result instead of killing the run.</summary>
     static BenchmarkResult RunArm(
