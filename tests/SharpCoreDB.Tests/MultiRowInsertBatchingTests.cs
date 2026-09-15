@@ -38,11 +38,17 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
 {
     /// <summary>
     /// Rows per statement the tests use to exercise the batched path — comfortably above the parser's floor,
-    /// which is **2** (see the measurements recorded in <c>SqlParser.DML.ExecuteInsert</c>: batching wins
-    /// from the smallest multi-row statement upward, because it removes one write-through table append per
-    /// row against one transaction per statement).
+    /// which is **2** (see the measurements recorded in <c>SqlParser.DML.ExecuteInsert</c>: batching wins from
+    /// the smallest multi-row statement upward, because it removes one write-through table append per row
+    /// against one transaction per statement).
+    /// <para>
+    /// Deliberately small. These tests only need to exceed the floor to take the batched path, and this suite
+    /// runs collections in parallel: the earlier value of 1,200 was sized for a 1,000-row floor that no longer
+    /// exists, and it made every one of these tests perform seconds of heavy I/O alongside timing-sensitive
+    /// tests elsewhere in the suite.
+    /// </para>
     /// </summary>
-    private const int BatchedShapeRows = 1200;
+    private const int BatchedShapeRows = 20;
 
     private readonly DatabaseFactory _factory;
     private readonly string _dirPath;
@@ -223,11 +229,13 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
     public void MultiRowInsert_WithCheckConstraint_StillRejectsViolations_AtBatchedSizes()
     {
         var db = Open(NewDir("check_enforced"));
-        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER CHECK (score < 50))");
+        // The bound is low on purpose: the statement has to *contain* a violating row whatever size the
+        // helper generates (scores are `id % 100`), otherwise this test would pass for the wrong reason.
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER CHECK (score < 5))");
         Assert.False(TableOf(db).CanUseBatchedInsert);
 
-        // A statement at the batched-path size, carrying one violating row. The gate keeps the per-row loop,
-        // so the CHECK constraint must still throw — the guarantee the row-count floor must not erode.
+        // A statement at the batched-path size, carrying several violating rows. The gate keeps the per-row
+        // loop, so the CHECK constraint must still throw — the guarantee the row-count floor must not erode.
         Assert.ThrowsAny<Exception>(() => db.ExecuteSQL(MultiRowInsert(BatchedShapeRows + 10)));
         (db as IDisposable)?.Dispose();
     }

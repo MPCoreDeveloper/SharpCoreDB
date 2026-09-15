@@ -583,10 +583,39 @@ public partial class PageManager : IDisposable
     /// </summary>
     private static int GetUsedDataEnd(Page page)
     {
+        // Plain indexed loop with a bitwise flag test.
+        //
+        // This runs on every PageBased UPDATE — RecomputeFreeSpace calls it, and the growth path calls it a
+        // second time — across the page's entire slot list, so its per-slot cost sits on the hot path. The
+        // previous form used LINQ (`Where` with a lambda, then `Math.Max` per element) plus
+        // `RecordFlags.HasFlag`, and `Enum.HasFlag` boxes its receiver and its argument on every single call.
+        // `(flags & Deleted) == Deleted` is exactly what HasFlag means for a non-zero flag, without the
+        // allocation.
+        //
+        // Measured context (`--pk --engine=pagebased`): PageBased UPDATE 29,407 ops/s against 420,187 on the
+        // append-only path — 10.3× vs SQLite there against 0.6× (ahead) here — so this loop is where a
+        // PageBased UPDATE spends a suspicious amount of its time, twice over on the growth path.
+        //
+        // ⚠️ But this rewrite is NOT the fix, and the measurement says so: it moved PageBased UPDATE from
+        // 29,407 to 36,208 ops/s plaintext and 27,697 to 28,842 at-rest, i.e. inside this machine's ±20 %
+        // band. It is kept because removing a boxed `HasFlag` and a LINQ delegate per slot cannot be worse,
+        // not because it is a win. The dominant PageBased UPDATE cost is still unidentified — the next step
+        // is to profile that path rather than guess at it again.
         int dataEnd = 0;
-        foreach (var s in page.Slots.Where(s => !s.flags.HasFlag(RecordFlags.Deleted)))
+        var slots = page.Slots;
+        for (int i = 0; i < slots.Count; i++)
         {
-            dataEnd = Math.Max(dataEnd, s.offset + s.length);
+            var slot = slots[i];
+            if ((slot.flags & RecordFlags.Deleted) == RecordFlags.Deleted)
+            {
+                continue; // a deleted record does not extend the used data area
+            }
+
+            int end = slot.offset + slot.length;
+            if (end > dataEnd)
+            {
+                dataEnd = end;
+            }
         }
 
         return dataEnd;

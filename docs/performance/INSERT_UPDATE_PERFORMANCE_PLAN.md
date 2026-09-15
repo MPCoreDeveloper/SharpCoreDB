@@ -1158,9 +1158,53 @@ fast path, the bulk APIs and the provider materialization paths all have to reac
 
 ## 6. Phase 4 — PageBased engine to UPDATE/DELETE parity *(decided: parity)*
 
-`PageBased` UPDATE measures **~26K ops/s vs ~245K on the fixed-width Columnar path**, and the
-`CHANGELOG` hardened `Auto` routing so it is never selected implicitly — leaving a trap where a user
-who *explicitly* asks for `StorageEngineType.PageBased` silently gets a ~10× slower write path.
+**Measured 2026-09-15** (`--pk --engine=pagebased`, the harness this section names, against the same run's
+append-only columns). The trap is real, and it is **specific to UPDATE**:
+
+| arm (fixed-width plaintext) | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| PageBased | 107,200 | 226,847 | **29,407** | 242,215 |
+| append-only (default) | 108,649 | 113,540 | **420,187** | 223,207 |
+| SQLite | 188,906 | 94,800 | 270,573 | 379,152 |
+
+PageBased is **twice as fast at READ**, level at INSERT, slightly ahead at DELETE — and **14× slower at
+UPDATE** (10.3× vs SQLite, where append-only is 0.6×, i.e. ahead). The earlier "~26K vs ~245K" note had the
+right shape; this is the current numbers for it, and it re-scopes the work: parity here is an
+**UPDATE-only** package, not a general "PageBased is slow".
+
+**First attribution attempt — failed, and recorded so it is not repeated.** `PageManager.UpdateRecord` calls
+`RecomputeFreeSpace` twice on its growth path, and that calls `GetUsedDataEnd` — a LINQ scan with
+`RecordFlags.HasFlag` (which boxes) over every slot — so a plausible cause sat right there. Rewriting it as a
+plain indexed loop with a bitwise test moved UPDATE from **29,407 to 36,208** plaintext and **27,697 to
+28,842** at-rest, both **inside this machine's ±20 % band**. It is therefore *not* the dominant cost. The
+rewrite is kept — removing a boxed `HasFlag` and a LINQ delegate per slot cannot be worse — but it claims no
+win, and the comment in the code says so.
+
+**Next, and this time profile rather than guess.** The write-path profiler already carries the stages this
+needs (`row-locate`, `in-place-patch`, `engine-write`, `index-maint`), so the work is to print its report for
+the `--pk` harness — the treatment `--multirowinsert` already got — and read which stage the ~34 µs/update
+sits in.
+
+**Two code facts found while looking, which already re-scope the package** (both need profiling to
+quantify, but neither is a guess about the page manager's inner loop):
+
+1. **The PK-equality fast paths are switched off for PageBased.** `ResolveUpdateRows`
+   (`Table.CRUD.cs:1938`) and the delete-side twin (`:2134`) both open with
+   `StorageMode != StorageMode.PageBased && …` before the "single B-tree search + one read" path, and the
+   same guard appears at `:3153`, `:3309` and `:3461`. So a PageBased `UPDATE … WHERE id = ?` pays full-row
+   materialization plus a per-row re-search where append-only pays one search — on the batch shape that is
+   10,000 materializations against one contiguous pass.
+2. **A PageBased update can cost two writes.** `PageBasedEngine.Update` returns a *new* storage reference
+   when the record relocates (`PageBasedEngine.cs:172-174`), and `UpdateColumnarRow` (`:1791-1830`) treats
+   `TryUpdateInPlace == false` as "append a new version and re-point the indexes" — so a record that grows
+   out of its page is written once by the page manager's relocation *and* once by the table's `engine.Insert`.
+   Append-only never takes that branch for a fixed-width row because its position is stable.
+
+That points the parity work at **making position-based fast paths trustworthy under PageBased relocation**
+(either re-pointing the index as part of the page move, or keeping page records position-stable), rather
+than at the page manager's slot scans — which is what the first attempt looked at and what the numbers
+rejected. The `Auto`-routing constraint below is unchanged: parity is not a reason to make PageBased the
+implicit default.
 
 **Decision (§0.1-1): bring it to parity** — port the same in-place update/delete fast paths to
 PageBased. Its page structure is arguably the natural home for them (which is why it was built), and
