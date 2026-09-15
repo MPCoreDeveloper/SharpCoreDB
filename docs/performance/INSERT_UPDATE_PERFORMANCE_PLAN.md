@@ -1056,10 +1056,27 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    (20,000 rows, 1,000 rows/statement, 20 statements, median of 5, same machine, back-to-back, `src/`
    swapped between the two commits): **2,069.77 → 1,430.30 µs/row (1.45×; 483 → 699 rows/s)**, and the
    saving is exactly the append the change removed — which the profiler confirms.
-   ⚠️ **The floor is measured, not decorative.** Total time tracks the *statement count* as much as the row
-   count: 20 statements of 1,000 rows took 31.8 s, while **200 statements of 100 rows did not finish inside
-   300 s for the same 20,000 rows**. A per-statement cost therefore still dominates small statements, and
-   the break-even between 100 and 1,000 rows is **not measured** — see item 1b. Until it is, the floor stays.
+   ⚠️ **The floor is 2, and getting it right took a re-measurement.** The first version of this change used a
+   1,000-row floor, justified by a single observation that "200 statements of 100 rows did not finish inside
+   300 s" for the same 20,000 rows, read as per-statement work that scales with table size. Re-measured in
+   isolation that shape takes **40.5 s** — the 300 s reading was machine contention, not the code. With the
+   routing made observable (§5 item 1b's instrumentation), per-row cost turned out to be **flat in the
+   statement size on both paths**, so the high floor was silently withholding the win from ordinary
+   statements. Measured at 20,000 rows, `SHARPCOREDB_MULTIROW_REPS=1`, same machine:
+
+   | rows/statement | statements | path | total | µs/row |
+   |---:|---:|---|---:|---:|
+   | 2,000 | 10 | batched | 29.65 s | 1,483 |
+   | 1,000 | 20 | batched | 28.56 s | 1,428 |
+   | 500 | 40 | per-row loop | 41.52 s | 2,076 |
+   | 500 | 40 | **batched** (floor 2) | — | **1,420.80** |
+   | 100 | 200 | per-row loop | 40.46 s | 2,023 |
+   | 100 | 200 | **batched** (floor 2) | — | **1,428.73** |
+
+   The model is simply: the loop costs one arena append per variable-length value *plus* one write-through
+   table append per row; the batched path costs the arena appends and one append for the whole statement.
+   Only the engine transaction (opened once per statement) argues for any floor at all, and two rows is
+   where it is amortised.
 1b. **The overflow arena dominates the fixed-width INSERT path — both per value and per statement
    *(found 2026-09-15, partially attributed)*.**
    *Established.* (a) The arena is heavily used: on the `--multirowinsert` schema, 20,000 rows produce a
@@ -1072,21 +1089,39 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    `FileOptions.WriteThrough` append §5 measured at **477.97 µs/record**. Two or three overflow values per
    row therefore account for most of the per-row cost, and **`EnableBufferedAppends` does not cover the
    arena** — it only routes single-row appends to the table data file through the append buffer.
-   *Not yet attributed.* There is also a **per-statement cost proportional to table size**, which is what
-   makes small statements pathological — three points, same 20,000 rows: 10 statements of 2,000 rows =
-   **31.2 s**, 20 of 1,000 = **31.8 s**, and 200 of 100 = **>300 s**. That fits Σ(table size) over
-   statements (quadratic overall) rather than a flat per-statement fee. It sits inside the same `validate`
-   stamp, and the leading candidate is arena work that scales with the arena on each write (compaction or a
-   free-list pass) — the arena file is the bigger file, so an O(arena) step per statement would produce
-   exactly this curve. **This is a hypothesis; it has not been measured.**
+   *Now fully attributed (2026-09-15).* Instrumenting the arena and splitting the coarse stamp settled it.
+   Stage totals for one profiled pass of 20,000 rows in 20 statements (`SHARPCOREDB_MULTIROW_REPS=1`):
+
+   | stage | total | calls | share |
+   |---|---:|---:|---:|
+   | validate (outer stamp; wraps the two below) | 27,764.5 ms | 20 | 25.1 % |
+   | encode (serialization) | 27,761.6 ms | 20 | 25.0 % |
+   | arena-write (whole `Write` call) | 27,718.3 ms | 60,000 | 25.0 % |
+   | arena-append (the `AppendBytes` inside it) | **27,583.0 ms** | **60,000** | 24.9 % |
+   | validate-only (defaults, NOT NULL, coercion) | **2.9 ms** | 20 | 0.0 % |
+   | arena-load (`EnsureLoaded`) | **0.0 ms** | **1** | 0.0 % |
+
+   Three things fall out. **Exactly 60,000 arena writes for 20,000 rows — three per row** — so every one of
+   those TEXT columns overflows; nothing inlines, which is itself worth a look. **`arena-append` is 99.4 % of
+   `arena-write`**, and 27,583 / 60,000 = **0.4597 ms per value**, matching §5's 477.97 µs/record measurement
+   of the same call — so the cost is the per-value write-through *open*, not the free-list, the gate or the
+   cache. And **validation is free (2.9 ms) while the arena load runs exactly once**, which refutes the
+   per-statement hypothesis that was recorded here first: `arena-load` is instrumented precisely to prove
+   that, and "should be once" turned out to be "is once". The per-statement curve behind that hypothesis was
+   machine contention (see item 1), not code.
    **Why it matters:** the arena is a **larger lever than the append policy the plan has been focused on**,
    it needs **no format change**, and it explains why the non-PK benchmark shape (variable-length layout,
    values inline) inserts at ~7.7 µs/row while this fixed-width shape costs ~1.6 ms/row.
-   **Next, in order:** (i) instrument `OverflowArena.Write` to split its cost (free-list claim, offset
-   allocation, append, compaction) and attribute the per-statement slice; (ii) vary value length across the
-   inline threshold to confirm the per-value cliff and locate it; (iii) only then design the fix — extending
-   the append buffer to the arena is the obvious candidate for (b) if it can be done without changing what
-   is durable when.
+   **Next:** the fix is now narrow and specific — **stop paying a file open + `WriteThrough` per overflow
+   value**. The table data file already has the right machinery (`AppendBytesMultiple` one call per batch,
+   and `EnableBufferedAppends` for single rows); the arena calls only the per-value `AppendBytes`. Candidates
+   in order of preference: **(i)** accumulate a row's or a batch's arena blocks and write them with one
+   `AppendBytesMultiple`-style call — keeps the durability boundary where it is and needs no format change;
+   **(ii)** extend the append buffer to the arena; **(iii)** a cached write handle, which §5 rejected for the
+   data file because a live write handle blocks readers — that needs checking against the `.ovf`
+   specifically before it can be considered. Also worth measuring while there: whether the **inline
+   threshold** is too small, since all three TEXT columns overflowing means the fixed-width slot reserves
+   less than an ordinary value needs.
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.

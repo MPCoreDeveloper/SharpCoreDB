@@ -421,6 +421,11 @@ public partial class Table
     {
         // ✅ PERFORMANCE: Get column index cache once for entire batch
         // Step 1: Validate all rows and fill defaults (OUTSIDE LOCK)
+        // §2 instrumentation (2026-09-15): the caller's `validate` stamp covers validation *and*
+        // serialization, so it cannot say which half of a ~1.5 ms/row fixed-width INSERT is the cost. This
+        // splits it — validate-only here, encode below, and the arena stages inside the encoder.
+        long validateOnlyStart = Diagnostics.WritePathProfiler.Stamp();
+
         for (int rowIdx = 0; rowIdx < rows.Count; rowIdx++)
         {
             var row = rows[rowIdx];
@@ -470,9 +475,12 @@ public partial class Table
             }
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.ValidateOnly, validateOnlyStart);
+
         // Step 2: WP13 - serialize each row directly into an exact-size array.
         // (Previously: bulk buffer + ArrayPool.Rent + Span.ToArray() = double allocation
         // and an extra copy per row. SerializeRowExact allocates the final array once.)
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var serializedRows = new List<byte[]>(rows.Count);
         
         if (rows.Count > 10000)
@@ -484,6 +492,7 @@ public partial class Table
                 parallelResults[i] = SerializeRowExact(rows[i]);
             });
             
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
             return (parallelResults.ToList(), rows);
         }
         
@@ -493,6 +502,7 @@ public partial class Table
             serializedRows.Add(SerializeRowExact(rows[i]));
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         return (serializedRows, rows);
     }
 

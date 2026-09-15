@@ -37,11 +37,12 @@ using Xunit;
 public sealed class MultiRowInsertBatchingTests : IDisposable
 {
     /// <summary>
-    /// Must match the parser's floor: at or above this many rows in one statement the batched lowering is
-    /// taken (when the gate allows it). Below it the per-row loop is retained because per-statement cost
-    /// dominates — see the measurement recorded in <c>SqlParser.DML.ExecuteInsert</c>.
+    /// Rows per statement the tests use to exercise the batched path — comfortably above the parser's floor,
+    /// which is **2** (see the measurements recorded in <c>SqlParser.DML.ExecuteInsert</c>: batching wins
+    /// from the smallest multi-row statement upward, because it removes one write-through table append per
+    /// row against one transaction per statement).
     /// </summary>
-    private const int BatchedPathRowFloor = 1000;
+    private const int BatchedShapeRows = 1200;
 
     private readonly DatabaseFactory _factory;
     private readonly string _dirPath;
@@ -149,7 +150,7 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
         db.ExecuteSQL("CREATE INDEX idx_t_name ON t(name)");
 
-        int rows = BatchedPathRowFloor + 200;
+        int rows = BatchedShapeRows + 200;
         db.ExecuteSQL(MultiRowInsert(rows));
 
         Assert.Equal(rows, CountOf(db));
@@ -163,7 +164,7 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
     public void BatchedMultiRowInsert_SurvivesReopen()
     {
         var dir = NewDir("batched_reopen");
-        int rows = BatchedPathRowFloor + 100;
+        int rows = BatchedShapeRows + 100;
 
         var db = Open(dir);
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
@@ -182,7 +183,7 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
         var db = Open(NewDir("batched_returning"));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
 
-        int rows = BatchedPathRowFloor + 50;
+        int rows = BatchedShapeRows + 50;
         var returned = db.ExecuteQuery(MultiRowInsert(rows) + " RETURNING id, name");
 
         Assert.Equal(rows, returned.Count);
@@ -196,7 +197,7 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
         var db = Open(NewDir("batched_rowid"));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
 
-        int rows = BatchedPathRowFloor + 7;
+        int rows = BatchedShapeRows + 7;
         db.ExecuteSQL(MultiRowInsert(rows, firstId: 5000));
 
         // The batch core records the last storage POSITION with the database; the parser re-points it at the
@@ -211,7 +212,7 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
         var db = Open(NewDir("batched_duppk"));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
 
-        var statement = MultiRowInsert(BatchedPathRowFloor) + ", (1, 'dup', 1)";
+        var statement = MultiRowInsert(BatchedShapeRows) + ", (1, 'dup', 1)";
         Assert.ThrowsAny<Exception>(() => db.ExecuteSQL(statement));
         (db as IDisposable)?.Dispose();
     }
@@ -227,7 +228,28 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
 
         // A statement at the batched-path size, carrying one violating row. The gate keeps the per-row loop,
         // so the CHECK constraint must still throw — the guarantee the row-count floor must not erode.
-        Assert.ThrowsAny<Exception>(() => db.ExecuteSQL(MultiRowInsert(BatchedPathRowFloor + 10)));
+        Assert.ThrowsAny<Exception>(() => db.ExecuteSQL(MultiRowInsert(BatchedShapeRows + 10)));
+        (db as IDisposable)?.Dispose();
+    }
+
+    // ── The floor ───────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MultiRowInsert_FromTwoRowsUp_IsAtomicOnFailure()
+    {
+        var db = Open(NewDir("floor_two"));
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
+
+        // Which path ran is observable through atomicity, without touching any global state (the profiler is
+        // process-wide and another test class asserts on it): the batched core validates every row before
+        // writing any, so a statement whose *second* row violates the primary key inserts NOTHING, whereas the
+        // per-row loop would have left row 1 behind. The parser's floor is 2, so a two-row statement must take
+        // the batched path — this test fails if the floor is ever raised again, which is exactly the mistake
+        // it was written to prevent.
+        Assert.ThrowsAny<Exception>(() =>
+            db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES (1, 'a', 1), (1, 'b', 2)"));
+
+        Assert.Equal(0L, CountOf(db));
         (db as IDisposable)?.Dispose();
     }
 }

@@ -72,9 +72,41 @@ public static class WritePathProfiler
         /// an overflow-arena block (and decrypts it at rest), while the removal is a hashed bucket update.
         /// </summary>
         IndexDecode = 10,
+
+        /// <summary>
+        /// The whole <c>OverflowArena.Write</c> call: free-list claim, offset allocation, append and cache
+        /// record, under the arena gate. Added (2026-09-15) because the multi-row INSERT profiler attributed
+        /// 100% of its time to the coarse validate-and-serialize stamps, and the fixed-width layout routes
+        /// every variable-length value through the arena — so this is the stage that says whether the arena
+        /// is the cost.
+        /// </summary>
+        ArenaWrite = 11,
+
+        /// <summary>
+        /// The <c>IStorage.AppendBytes</c> call inside <see cref="ArenaWrite"/> — the part measured at
+        /// 477.97 µs/record because it opens the file with <c>FileOptions.WriteThrough</c> per call.
+        /// Separated from the rest of <see cref="ArenaWrite"/> so the free-list/lock/cache share of an arena
+        /// write is visible without it.
+        /// </summary>
+        ArenaAppend = 12,
+
+        /// <summary>
+        /// Loading the arena file into the payload cache (<c>OverflowArena.EnsureLoaded</c>). It is guarded by
+        /// a <c>_loaded</c> flag and so should appear once per arena instance — instrumented explicitly to
+        /// prove that, because an O(arena) step per statement would explain the per-statement cost the
+        /// multi-row INSERT benchmark measures, and "should be once" is not "is once".
+        /// </summary>
+        ArenaLoad = 13,
+
+        /// <summary>
+        /// Row validation alone — defaults, auto-generation, NOT NULL and type coercion — with serialization
+        /// excluded. Added (2026-09-15) because <see cref="Validate"/> covered both and therefore could not
+        /// answer which half of a 1.5 ms/row fixed-width INSERT was the cost.
+        /// </summary>
+        ValidateOnly = 14,
     }
 
-    private const int StageCount = 11;
+    private const int StageCount = 15;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -82,6 +114,7 @@ public static class WritePathProfiler
     [
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
+        "arena-write", "arena-append", "arena-load", "validate-only",
     ];
 
     private static int _enabled;

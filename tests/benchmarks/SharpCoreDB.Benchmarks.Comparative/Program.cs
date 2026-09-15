@@ -326,7 +326,7 @@ class Program
     static void RunMultiRowInsertMicroBenchmark()
     {
         const int inserts = 20_000;
-        const int reps = 5;
+        int reps = 5;
 
         // Rows per statement is the dimension that separates per-row cost from per-statement cost: at a
         // fixed row total, a constant per-row cost keeps rows/s flat, whereas anything super-linear in the
@@ -336,6 +336,13 @@ class Program
         if (int.TryParse(rowsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRows) && parsedRows > 0)
         {
             rowsPerStatement = parsedRows;
+        }
+
+        // Diagnostic runs only need the stage report, not five timed reps of a deliberately slow shape.
+        var repsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_REPS");
+        if (int.TryParse(repsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedReps) && parsedReps > 0)
+        {
+            reps = parsedReps;
         }
 
         var services = new ServiceCollection();

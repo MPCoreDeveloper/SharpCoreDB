@@ -391,19 +391,34 @@ public partial class SqlParser
         // Table.CanUseBatchedInsert — no CHECK constraint and no unique secondary index, neither of which
         // the batch core validates.
         //
-        // ⚠️ The row-count floor is MEASURED, not decorative. Batching opens an engine transaction, and on
-        // the 20,000-row multi-row-VALUES workload (`--multirowinsert`) the total time tracks the STATEMENT
-        // COUNT, not only the row count: 20 statements of 1,000 rows took 31.8 s, while 200 statements of
-        // 100 rows did not finish inside 300 s for exactly the same rows. So per-statement cost dominates
-        // small statements and the loop is retained for them. At 1,000 rows/statement the batched lowering
-        // measured 1,430 µs/row against 2,070 µs/row for the loop (1.45×, same machine, back-to-back), and
-        // that is the only size verified to win — hence the floor. The break-even between 100 and 1,000 rows
-        // is not yet measured; see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §5.
+        // ⚠️ The floor is MEASURED, not decorative. Batching opens an engine transaction, so it only pays
+        // once the per-row append it removes outweighs that fixed cost: the per-row path costs one arena
+        // append per variable-length value PLUS one write-through table append per row, while the batched
+        // path costs the arena appends and one batched append for the whole statement.
         //
-        // One observable difference when it does apply: a failure part-way through inserts NOTHING, because
-        // the batch core validates every row before writing any. The per-row loop leaves the rows it had
-        // already written in place. That matches SQLite, where one multi-row INSERT is one atomic unit.
-        const int MinRowsForBatchedInsert = 1000;
+        // Measured (`--multirowinsert`, 20,000 rows, `SHARPCOREDB_MULTIROW_REPS=1`, same machine):
+        //
+        //   rows/statement  statements  path     total     µs/row
+        //   2,000           10          batched  29.65 s   1,483
+        //   1,000           20          batched  28.56 s   1,428
+        //   500             40          loop     41.52 s   2,076
+        //   100             200         loop     40.46 s   2,023
+        //
+        // Per-row cost is flat in the statement size on both paths — the loop costs ~2.0 µs/row and the
+        // batched path ~1.43, i.e. the ~0.5 ms write-through table append per row that batching removes —
+        // so the win does not depend on statement length and only the transaction argues for a floor. Two
+        // rows is the smallest statement for which the transaction is amortised.
+        //
+        // ⚠️ History worth keeping: an earlier run of this work reported "200 statements of 100 rows did not
+        // finish inside 300 s" and that single point was used to justify a 1,000-row floor, on the theory
+        // that per-statement work scaled with table size. Re-measured in isolation it is 40.5 s — the 300 s
+        // reading was machine contention, not the code. The floor was lowered accordingly, because a floor
+        // that high silently withholds the win from ordinary statements.
+        //
+        // One observable difference when the fast path applies: a failure part-way through inserts NOTHING,
+        // because the batch core validates every row before writing any. The per-row loop leaves the rows it
+        // had already written in place. That matches SQLite, where one multi-row INSERT is one atomic unit.
+        const int MinRowsForBatchedInsert = 2;
         bool useBatchedInsert = allRowValues.Count >= MinRowsForBatchedInsert
             && tableAsTable is { CanUseBatchedInsert: true }
             && !HasTriggersFor(tableName, TriggerEvent.Insert);

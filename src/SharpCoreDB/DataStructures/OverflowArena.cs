@@ -4,6 +4,7 @@
 // </copyright>
 namespace SharpCoreDB.DataStructures;
 
+using SharpCoreDB.Diagnostics;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Collections.Concurrent;
@@ -104,6 +105,12 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
                 return;
             }
 
+            // §2 instrumentation (2026-09-15): the arena load is guarded by _loaded, so it *should* be one
+            // O(arena) pass per arena instance. It is stamped anyway because an O(arena) step per statement
+            // is one of the candidate explanations for the per-statement cost the multi-row INSERT benchmark
+            // measures, and "should be once" is not the same as "is once".
+            long loadStart = WritePathProfiler.Stamp();
+
             _cache.Clear();
             _freeByLength.Clear(); // in-memory free-list: rebuilt (empty) on a fresh session
 
@@ -116,6 +123,7 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
             }
 
             _loaded = true;
+            WritePathProfiler.Add(WritePathProfiler.Stage.ArenaLoad, loadStart);
         }
     }
 
@@ -129,6 +137,13 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     public long Write(byte[] payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
+
+        // §2 instrumentation (2026-09-15): a fixed-width table routes every variable-length value through
+        // here, and the multi-row INSERT profiler attributed 100% of its time to the coarse
+        // validate-and-serialize stamps without being able to say whether the arena was the cost. This stamp
+        // covers the whole call; the append inside it is stamped separately.
+        long arenaStart = WritePathProfiler.Stamp();
+
         EnsureLoaded();
 
         // The arena is shared mutable state: ValidateAndSerializeBatchOutsideLock serialises batches
@@ -140,11 +155,16 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
         {
             if (TryReuseFreeBlock(payload, out var reusedOffset))
             {
+                WritePathProfiler.Add(WritePathProfiler.Stage.ArenaWrite, arenaStart);
                 return reusedOffset;
             }
 
+            long appendStart = WritePathProfiler.Stamp();
             var offset = _storage.AppendBytes(_filePath, payload);
+            WritePathProfiler.Add(WritePathProfiler.Stage.ArenaAppend, appendStart);
+
             _cache[offset] = payload;
+            WritePathProfiler.Add(WritePathProfiler.Stage.ArenaWrite, arenaStart);
             return offset;
         }
     }
