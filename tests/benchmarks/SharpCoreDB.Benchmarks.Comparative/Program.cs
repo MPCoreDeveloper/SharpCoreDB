@@ -347,11 +347,27 @@ class Program
         var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
         double[] times = new double[reps];
 
+        // Diagnostics: whether the overflow arena is actually used for this schema, and how big the two files
+        // are. If the arena is in play, its per-value write cost is the leading explanation for the
+        // validate-and-serialize stamp; if it is not, the cost is somewhere else entirely.
+        static (long OvfBytes, long DataBytes) FileSizes(SharpCoreDB.Database db)
+        {
+            if (!db.TryGetTable("docs", out var t) || t is not SharpCoreDB.DataStructures.Table dt || string.IsNullOrEmpty(dt.DataFile))
+            {
+                return (0, 0);
+            }
+
+            var ovf = Path.ChangeExtension(dt.DataFile, ".ovf");
+            return (File.Exists(ovf) ? new FileInfo(ovf).Length : 0,
+                    File.Exists(dt.DataFile) ? new FileInfo(dt.DataFile).Length : 0);
+        }
+
         double RunPass()
         {
             var path = Path.Combine(Path.GetTempPath(), $"scdb-multirow-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(path, "pw", isReadOnly: false, config: config))
             {
+                var before = FileSizes(db);
                 db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
                 db.ExecuteSQL(CreateDocsIndexSql);
 
@@ -363,6 +379,8 @@ class Program
 
                 sw.Stop();
                 var elapsed = sw.Elapsed.TotalSeconds;
+                var after = FileSizes(db);
+                Console.WriteLine($"    [diag] data file {after.DataBytes:N0} B · overflow arena {after.OvfBytes:N0} B (before: {before.DataBytes:N0}/{before.OvfBytes:N0})");
                 try { Directory.Delete(path, true); } catch { /* best-effort temp-dir cleanup */ }
                 return elapsed;
             }

@@ -1060,21 +1060,33 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    count: 20 statements of 1,000 rows took 31.8 s, while **200 statements of 100 rows did not finish inside
    300 s for the same 20,000 rows**. A per-statement cost therefore still dominates small statements, and
    the break-even between 100 and 1,000 rows is **not measured** — see item 1b. Until it is, the floor stays.
-1b. **The overflow arena writes through per value — the actual INSERT bottleneck *(found 2026-09-15)*.**
-   `WritePathProfiler` attributes **100 % of the multi-row INSERT time to the `validate` stamp**, which
-   wraps validation *and* serialization (`Table.CRUD.cs` → `ValidateAndSerializeBatchOutsideLock`), at
-   **1.47 ms/row**. A fixed-width (PK) table serializes through `SerializeRowFixedWidth` →
-   `FixedWidthCodec.SerializeRow(…, GetOverflowArena())`, and **`OverflowArena.Write`
-   (`OverflowArena.cs:146`) calls `_storage.AppendBytes`** — the same open-per-call,
-   `FileOptions.WriteThrough` append §5 measured at **477.97 µs/record**. Every variable-length value
-   therefore costs a full file open + write-through + close; with ~3 TEXT values per row that *is* the
-   1.47 ms/row. **`EnableBufferedAppends` does not cover the arena** — it only routes single-row appends to
-   the table data file through the append buffer. Three consequences: this is a **larger lever than the
-   append policy the plan has been focused on**, it needs **no format change**, and it explains why the
-   non-PK benchmark shape (variable-length layout, values inline) inserts at ~7.7 µs/row while the
-   PK/fixed-width shape costs ~1.5 ms/row. **Next:** measure it directly (vary value length across the
-   inline threshold on a fixed-width table, to confirm the arena is the cost and find where the cliff is),
-   then extend the append buffer to the arena.
+1b. **The overflow arena dominates the fixed-width INSERT path — both per value and per statement
+   *(found 2026-09-15, partially attributed)*.**
+   *Established.* (a) The arena is heavily used: on the `--multirowinsert` schema, 20,000 rows produce a
+   **1,006,670 B `.ovf` against a 760,000 B data file** — the arena is the larger of the two, so values
+   genuinely overflow and every one of them is written there. (b) `WritePathProfiler` attributes **100 % of
+   the multi-row INSERT time to the `validate` stamp** (validation *and* serialization,
+   `Table.CRUD.cs` → `ValidateAndSerializeBatchOutsideLock`) — 1.47–1.59 ms/row across runs. (c) That
+   serialization goes `SerializeRowFixedWidth` → `FixedWidthCodec.SerializeRow(…, GetOverflowArena())`, and
+   **`OverflowArena.Write` (`OverflowArena.cs:146`) calls `_storage.AppendBytes`** — the same open-per-call,
+   `FileOptions.WriteThrough` append §5 measured at **477.97 µs/record**. Two or three overflow values per
+   row therefore account for most of the per-row cost, and **`EnableBufferedAppends` does not cover the
+   arena** — it only routes single-row appends to the table data file through the append buffer.
+   *Not yet attributed.* There is also a **per-statement cost proportional to table size**, which is what
+   makes small statements pathological — three points, same 20,000 rows: 10 statements of 2,000 rows =
+   **31.2 s**, 20 of 1,000 = **31.8 s**, and 200 of 100 = **>300 s**. That fits Σ(table size) over
+   statements (quadratic overall) rather than a flat per-statement fee. It sits inside the same `validate`
+   stamp, and the leading candidate is arena work that scales with the arena on each write (compaction or a
+   free-list pass) — the arena file is the bigger file, so an O(arena) step per statement would produce
+   exactly this curve. **This is a hypothesis; it has not been measured.**
+   **Why it matters:** the arena is a **larger lever than the append policy the plan has been focused on**,
+   it needs **no format change**, and it explains why the non-PK benchmark shape (variable-length layout,
+   values inline) inserts at ~7.7 µs/row while this fixed-width shape costs ~1.6 ms/row.
+   **Next, in order:** (i) instrument `OverflowArena.Write` to split its cost (free-list claim, offset
+   allocation, append, compaction) and attribute the per-statement slice; (ii) vary value length across the
+   inline threshold to confirm the per-value cliff and locate it; (iii) only then design the fix — extending
+   the append buffer to the arena is the obvious candidate for (b) if it can be done without changing what
+   is durable when.
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
