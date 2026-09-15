@@ -1178,6 +1178,23 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    statements are now cheaper per row than shorter ones), which is the signature of a superlinear term being
    removed. That leaves **2.4×** to the direct API, and what remains is the text-SQL work itself — building
    each literal string and coercing it to a typed value per column — which the direct API never pays.
+   **Item 4 — the `object[]` unification — was implemented, measured and REVERTED (2026-09-15), because the
+   measurement refuted the premise rather than confirming it.** The batched branch gained a second entry point
+   using the same `Table.InsertBatch(object[][], columnOrder)` the direct API uses, with the parser converting
+   literals straight into column-ordered arrays instead of a `Dictionary<string, object>` per row, and the
+   dictionary path kept wherever a post-insert read needs it (RETURNING; a PK or first-INTEGER column the
+   statement omits) — so no observable behaviour changed. It worked and did what it said: `row-build` fell from
+   536 to **144 B/row**, and in one comparable pair from 58.5 to 14.7 ms. **It did not pay.** Median
+   21.86 → **21.55 µs/row**, inside this machine's ±20 % band, while total allocation went **5,893 → 6,021
+   B/row** — because the table's `object[][]` entry point re-maps the statement's column order into a
+   full-table-order array, one extra `object[]` per row, which more than cancels the dictionary the builder no
+   longer allocates. A change that is neutral on throughput and deterministically worse on allocation is not
+   kept, so it was reverted and the finding kept instead. **The finding is the useful part: the row shape is
+   not the 2.4×.** The direct API goes through that same entry point and pays that same normalisation, and it
+   still measures 9.3 µs/row — so the gap is in what *only* the SQL path does: statement parsing (`parse`
+   measured 15.4 % of the pass at 1,000 rows/statement), literal coercion, per-statement dispatch, and the
+   WAL/metadata bookkeeping that item 1's `--pk-profile` work has started mapping. Aim the next attempt there,
+   not at the row type.
    Guarded by three scanner tests in `MultiRowInsertBatchingTests` (parens and commas inside string literals,
    whitespace/newline separators, trailing-separator stop).
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
@@ -1560,10 +1577,15 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    taken out of the per-statement cost, one single-row statement still costs **~115 µs**, and that is not the
    append — it is SQL dispatch, WAL and metadata. The profiler can attribute it now, which makes this the
    same investigation §5 item 1b/1c did for the multi-row shape, one level up.
-2. **The remaining text-SQL cost — §5 item 1c and item 4.** 2.4× to the direct API: literal building,
-   per-column coercion, and the `Dictionary<string, object>` row shape, which the direct API's `object[]`
-   path never pays. Extending that fast path to the SQL batch route is the concrete step; the blockers are
-   the batched branch's dictionary-shaped post-insert reads (`lastInsertedRow`, the `RETURNING` snapshots).
+2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
+   `object[]` unification was implemented (a second batched entry point using the direct API's
+   `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)
+   and then measured: `row-build` 536 → **144 B/row**, but median **21.86 → 21.55 µs/row** — inside the noise
+   band — while total allocation rose **5,893 → 6,021 B/row** because the table's array entry point re-maps the
+   statement's column order into a full-order row per row. Reverted, with the full reasoning in §5 item 1c.
+   **The 2.4× therefore lives in the SQL-only work:** statement parsing (15.4 % of the pass at 1,000
+   rows/statement), literal coercion, per-statement dispatch, and the WAL/metadata bookkeeping. Aim the next
+   attempt there rather than at the row type.
 3. **§6 PageBased UPDATE parity — profiled (2026-09-15), and the profile refuted both prior explanations.**
    Back to back under identical conditions the trap is 3.4× (AppendOnly 13.38 vs PageBased 45.84 µs/update),
    and **~75 % of the PageBased cost is in code with no stamp at all**: `in-place-patch`, `engine-write`,
