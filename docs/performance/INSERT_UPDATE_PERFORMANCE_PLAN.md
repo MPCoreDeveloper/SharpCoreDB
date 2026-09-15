@@ -131,6 +131,19 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    `commit`; enabled with `WritePathProfiler.Enable()` or `SHARPCOREDB_WRITE_PROFILE=1`; **zero cost
    when off** (`Stamp()` returns 0, `Add` no-ops before reading a timestamp). Wired so far on the
    UPDATE path in `Table.CRUD.cs`; the INSERT path and the WAL flush are the next wiring points.
+   **INSERT path wired (2026-09-15), and it moved attribution from ~19 % to ~89 % of a multi-row INSERT's
+   wall time.** Added: `engine-write` + `index-maint` + `commit` in the batch critical sections (only one of
+   the four had `engine-write`, and `index-maint`/`commit` had **no** writer anywhere), `parse` around the
+   `VALUES` scan, `row-build` around the parser's literal-to-typed conversion, `commit` around
+   `RunInStorageTransaction`'s `CommitSync`, and — from the storage work earlier the same day —
+   `arena-write`/`arena-append`/`arena-load`/`validate-only`. `row-build` is the one stage that had to be
+   **added**: folding it into `parse` would have merged two different costs under one number.
+   Result on the multi-row workload (20,000 rows, 1,000 rows/statement, one profiled pass): `validate`
+   34.2 %, **`index-maint` 18.2 %**, `row-build` 14.3 %, `parse` 10.7 %, `engine-write` 5.7 %, `commit` 4.3 %
+   (0.98 ms per statement — the flush boundary the storage transaction moved), `row-locate` 1.6 %.
+   **Still not wired:** `wal-append` and `wal-flush` have no writer at all, and the stage report remains a
+   sum of stages rather than wall time where they nest (the outer `validate`/`encode` wrap the arena stages,
+   so the raw total exceeds the pass).
    Guarded by `WritePathProfilerTests` (free when off, attributes real workload, report ordering).
 3. **Reconcile the two UPDATE harnesses** (§1.4) so absolute numbers are comparable across documents.
 4. **A regression gate.** The benchmark must be runnable as a non-gating (nightly/manual) CI job so

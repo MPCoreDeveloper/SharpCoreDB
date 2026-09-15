@@ -371,7 +371,15 @@ public partial class Table
         try
         {
             var positions = body();
+
+            // §2 instrumentation (2026-09-15): the commit is where the buffered appends are actually flushed,
+            // so it is a per-statement cost that had no attribution — the engine's own commit inside
+            // InsertBatchCriticalSection is skipped (`needsTransaction` is false) precisely because this
+            // transaction is already open, which the report confirmed by showing `commit` at 0 ms.
+            long commitStart = Diagnostics.WritePathProfiler.Stamp();
             openableStorage.CommitSync();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+
             return positions;
         }
         catch
@@ -748,6 +756,11 @@ public partial class Table
                 _database?.SetLastInsertRowId(positions[^1]);
             }
 
+            // §2 instrumentation (2026-09-15): index maintenance was invisible on this path, which is why
+            // attributing the remaining INSERT cost was guesswork. It covers the per-row PK B-tree insert,
+            // the batch hash-index update and the B-tree bulk index.
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
+
             if (StorageMode == StorageMode.Columnar)
             {
                 foreach (var col in this.registeredIndexes.Keys.Where(c => !this.loadedIndexes.Contains(c)))
@@ -770,9 +783,16 @@ public partial class Table
                 BulkIndexRowsInBTree(RowsToDictionaries(validatedRows), positions);
             }
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
             if (needsTransaction)
             {
+                // §2 instrumentation: `commit` existed in the stage enum with nothing writing it. This is the
+                // first site that does, on the batch-INSERT path — the stage that has to be measured before
+                // anything can be claimed about the transaction overhead per statement.
+                long commitStart = Diagnostics.WritePathProfiler.Stamp();
                 engine.CommitAsync().GetAwaiter().GetResult();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
             }
 
             return positions;
@@ -819,7 +839,11 @@ public partial class Table
         try
         {
             // ✅ ROUTE TO ENGINE: Single InsertBatch() call (within transaction)!
+            // §2 instrumentation (2026-09-15): none of the storage-side stages were wired on this path, so
+            // most of a multi-row INSERT's wall time had no attribution at all.
+            long engineStart = Diagnostics.WritePathProfiler.Stamp();
             long[] positions = engine.InsertBatch(Name, serializedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineStart);
 
             // ✅ NEW: Track last_insert_rowid() for SQLite compatibility (last row in batch)
             if (positions.Length > 0)
@@ -828,6 +852,10 @@ public partial class Table
             }
 
             // Update indexes
+            // §2 instrumentation (2026-09-15): the per-row PK B-tree insert and the batch hash-index update
+            // were invisible; they are the last plausible non-storage cost on this path.
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
+
             var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
@@ -866,10 +894,14 @@ public partial class Table
             // Bulk index in B-tree if indexes exist
             BulkIndexRowsInBTree(validatedRows, positions);
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
             // Commit transaction to flush all pages at once
             if (needsTransaction)
             {
+                long commitStart = Diagnostics.WritePathProfiler.Stamp();
                 engine.CommitAsync().GetAwaiter().GetResult();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
             }
 
             return positions;

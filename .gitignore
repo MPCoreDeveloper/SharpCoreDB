@@ -369,6 +369,12 @@ FodyWeavers.xsd
 
 # Test output logs
 test_out.txt
+
+# Local test-run output captured by hand (e.g. `SharpCoreDB.Tests > suite.txt`) — evidence, never source.
+# Their absence from this file is how a 464 KB test log nearly landed in a commit.
+suite.txt
+run-*.txt
+ci-suite-run.txt
 test_full_output.txt
 benchmark_output.txt
 

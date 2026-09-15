@@ -326,7 +326,11 @@ public partial class SqlParser
         // ──────────────────────────────────────────────────────────────────
         var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
         var valuesRest = rest[valuesStart..].Trim();
+        // §2 instrumentation (2026-09-15): the statement text had no attribution on this path at all. This
+        // covers the one-pass VALUES scan; the per-row, per-column literal conversion is RowBuild.
+        long parseStart = Diagnostics.WritePathProfiler.Stamp();
         List<List<string>> allRowValues = ParseMultiRowInsertValues(valuesRest);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Parse, parseStart);
         var tableAsTable = table as Table;
         bool skipInternalRowId = tableAsTable is { HasInternalRowId: true }
             && (insertColumns is null || !insertColumns.Contains(Constants.PersistenceConstants.InternalRowIdColumnName, StringComparer.OrdinalIgnoreCase));
@@ -353,6 +357,11 @@ public partial class SqlParser
         // the two cannot drift apart on value parsing, column mapping or internal-_rowid skipping.
         Dictionary<string, object> BuildRowFromValues(List<string> rowValues)
         {
+            // §2 instrumentation (2026-09-15): the literal → typed-value conversion plus the dictionary
+            // writes — the per-row, per-column cost of the SQL path that the direct batch API never pays,
+            // since it is handed native values. Stamped here so it can be told apart from the text scan.
+            long buildStart = Diagnostics.WritePathProfiler.Stamp();
+
             var row = new Dictionary<string, object>();
             if (insertColumns is null)
             {
@@ -376,6 +385,7 @@ public partial class SqlParser
                 }
             }
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowBuild, buildStart);
             return row;
         }
 

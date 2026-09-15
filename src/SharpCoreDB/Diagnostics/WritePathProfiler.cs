@@ -104,9 +104,18 @@ public static class WritePathProfiler
         /// answer which half of a 1.5 ms/row fixed-width INSERT was the cost.
         /// </summary>
         ValidateOnly = 14,
+
+        /// <summary>
+        /// Assembling a row dictionary from parsed SQL literals — the literal-to-typed-value conversion plus
+        /// the dictionary writes — on the SQL INSERT path. Added (2026-09-15) as the ONE stage that wiring the
+        /// batch-INSERT path needed beyond the ones that already existed: the statement-level work had no
+        /// attribution, and putting it under <see cref="Parse"/> would have merged two different costs (the
+        /// one-pass text scan and the per-row, per-column conversion) under a single number.
+        /// </summary>
+        RowBuild = 15,
     }
 
-    private const int StageCount = 15;
+    private const int StageCount = 16;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -114,7 +123,7 @@ public static class WritePathProfiler
     [
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
-        "arena-write", "arena-append", "arena-load", "validate-only",
+        "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
     ];
 
     private static int _enabled;
