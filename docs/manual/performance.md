@@ -170,6 +170,15 @@ db.UpdateMultiple("t",
     new Dictionary<string, object?> { ["id"] = 1 });    // where-clause (applies to all)
 ```
 
+**`DELETE` index maintenance is deferred by default (v2.1).** A DELETE writes only the durable
+tombstone and skips its per-key index removal; the primary-key B-tree is rebuilt from the data file
+(dropping tombstones) on reopen, or once `DeferredDeleteIndexThreshold` keys have accumulated. Readers
+are unaffected — a point lookup treats a tombstoned position as absent and a re-INSERT of a deleted key
+still succeeds. Measured on the random-key delete workload: DELETE **2.19×** faster plaintext and
+**1.19×** in the encrypted default. The observable difference is that `GetHashIndexStatistics` counts
+tombstoned entries until the index is rebuilt; set `DatabaseConfig.EnableDeferredDeleteIndexes = false`
+for the eager behaviour.
+
 ---
 
 ## 7.4 The v2.0 fast-path machinery (what changed)
@@ -264,6 +273,9 @@ parameter tuning (`M`, `efConstruction`, `efSearch`).
 | Knob | Effect |
 |------|--------|
 | `DatabaseConfig.NoEncryptMode = true` | Removes AES-256-GCM per-record cost (use on already-encrypted volumes / benchmarks) |
+| `DatabaseConfig.EnableDeferredDeleteIndexes` (default `true`) | Defers DELETE index maintenance to a rebuild at reopen/threshold — **2.19×** on random-key deletes. Set `false` for eager maintenance (keeps `GetHashIndexStatistics` exact between deletes) |
+| `DatabaseConfig.DeferredDeleteIndexThreshold` (default 10,000) | Deferred DELETE keys that may accumulate before the PK B-tree is rebuilt; `0` rebuilds at every delete |
+| `DatabaseConfig.EnableBufferedAppends` (default `false`) | Single-row INSERTs share the append buffer — one open/write/close per flush boundary instead of per row (**~512 µs → ~4.5 µs** per 64-byte record; **25×** end-to-end). Bounds via `AppendBufferFlushThresholdBytes` / `AppendBufferFlushIntervalMs` |
 | WAL durability batching (`Flush()` / `Commit(force: false)`) | Groups fsyncs; dramatically raises write throughput at the cost of a tiny durability window |
 | Append-only vs page-based storage engine | Choose per workload (append-heavy vs update-heavy) |
 | `STORAGE = COLUMNAR` | For analytic tables |
@@ -305,7 +317,8 @@ harness, and the two-run final ranges are recorded in §7.1.
 
 | Item | Expected win |
 |------|--------------|
-| **DELETE fast path + default-config overhead** | Close the remaining DELETE gap (~2.1–3.5x vs SQLite) and remove the `NoEncryptMode` file-level wrapper overhead (~1.3–1.6x on the pure default config) |
+| **DELETE fast path — landed (v2.1)** | Deferred index maintenance (default on) cut random-key DELETE to **2.19×**/1.19× (plaintext/encrypted); the remaining gap is the tombstone write plus per-statement overhead |
+| **Single-statement SQL ladder** | The SQL layer still adds ~25 µs/row over the direct API on one-row statements; the remaining cost is spread across per-statement parsing and plan-cache work |
 | **.NET 11 / C# 15** | Runtime-native async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 — free speedups in hot paths |
 | **AOT interface-dispatch improvements** | Faster interface-heavy storage paths under NativeAOT |
 
