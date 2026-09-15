@@ -6,6 +6,7 @@ namespace SharpCoreDB.DataStructures;
 
 using SharpCoreDB.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 
@@ -22,11 +23,27 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
 {
     private readonly IStorage _storage;
     private readonly string _filePath;
-    private readonly Dictionary<long, byte[]> _cache = new();
+
+    // THREAD SAFETY: the arena is written from the parallel row-serialization path —
+    // Table.ValidateAndSerializeBatchOutsideLock runs a Parallel.For over batches > 10,000 rows, and
+    // each variable-length value reaches Write() through FixedWidthCodec.WriteSlot. A plain
+    // Dictionary corrupted under that concurrency (measured: "concurrent update on a non-concurrent
+    // collection" for a fixed-width table with a TEXT column). _cache is therefore concurrent
+    // (lock-free single-key reads/writes), and the compound operations below hold _gate.
+    private readonly ConcurrentDictionary<long, byte[]> _cache = new();
+
     // B6: freed block offsets grouped by their payload length, for exact-length in-place reuse.
+    // Guarded by _gate (claim/release are compound operations).
     private readonly Dictionary<int, List<long>> _freeByLength = new();
+
+    /// <summary>Serialises the compound arena operations — free-list claim, offset allocation
+    /// (<see cref="IStorage.AppendBytes"/> returns the file offset, so two interleaved appends could
+    /// otherwise resolve to the same position) and the cache record — so parallel serialization
+    /// cannot corrupt or double-claim the shared state.</summary>
+    private readonly object _gate = new();
+
     private int _blockReuses;
-    private bool _loaded;
+    private volatile bool _loaded;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OverflowArena"/> class.
@@ -60,13 +77,16 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     {
         get
         {
-            int total = 0;
-            foreach (var list in _freeByLength.Values)
+            lock (_gate)
             {
-                total += list.Count;
-            }
+                int total = 0;
+                foreach (var list in _freeByLength.Values)
+                {
+                    total += list.Count;
+                }
 
-            return total;
+                return total;
+            }
         }
     }
 
@@ -77,18 +97,26 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
             return;
         }
 
-        _cache.Clear();
-        _freeByLength.Clear(); // in-memory free-list: rebuilt (empty) on a fresh session
-
-        // ReadAllRecords yields (physical length-prefix offset, record payload) for both legacy
-        // plaintext and per-record encrypted files (it handles the encryption magic header), so the
-        // arena offsets stored in fixed-width records always resolve.
-        foreach (var (offset, payload) in _storage.ReadAllRecords(_filePath))
+        lock (_gate)
         {
-            _cache[offset] = payload;
-        }
+            if (_loaded)
+            {
+                return;
+            }
 
-        _loaded = true;
+            _cache.Clear();
+            _freeByLength.Clear(); // in-memory free-list: rebuilt (empty) on a fresh session
+
+            // ReadAllRecords yields (physical length-prefix offset, record payload) for both legacy
+            // plaintext and per-record encrypted files (it handles the encryption magic header), so the
+            // arena offsets stored in fixed-width records always resolve.
+            foreach (var (offset, payload) in _storage.ReadAllRecords(_filePath))
+            {
+                _cache[offset] = payload;
+            }
+
+            _loaded = true;
+        }
     }
 
     /// <summary>
@@ -103,20 +131,29 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
         ArgumentNullException.ThrowIfNull(payload);
         EnsureLoaded();
 
-        if (TryReuseFreeBlock(payload, out var reusedOffset))
+        // The arena is shared mutable state: ValidateAndSerializeBatchOutsideLock serialises batches
+        // > 10,000 rows with Parallel.For, so concurrent Write calls reach here. The whole compound
+        // operation is serialised — free-list claim, offset allocation (AppendBytes returns the file
+        // offset, so two interleaved appends could otherwise resolve to the same position) and the
+        // cache record — so parallel serialization can neither corrupt nor double-claim it.
+        lock (_gate)
         {
-            return reusedOffset;
-        }
+            if (TryReuseFreeBlock(payload, out var reusedOffset))
+            {
+                return reusedOffset;
+            }
 
-        var offset = _storage.AppendBytes(_filePath, payload);
-        _cache[offset] = payload;
-        return offset;
+            var offset = _storage.AppendBytes(_filePath, payload);
+            _cache[offset] = payload;
+            return offset;
+        }
     }
 
     /// <summary>
     /// B6: attempts to reuse a freed block of the exact same payload length via an in-place
     /// overwrite. Returns false when no suitable block is free or the storage refuses the
     /// in-place write (e.g. inside a transaction) — the caller then appends.
+    /// Caller must hold <c>_gate</c> (the claim/release pair is compound).
     /// </summary>
     private bool TryReuseFreeBlock(byte[] payload, out long offset)
     {
@@ -166,13 +203,16 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
             return; // already freed (or unknown) — never double-track
         }
 
-        if (!_freeByLength.TryGetValue(payload.Length, out var offsets))
+        lock (_gate)
         {
-            offsets = [];
-            _freeByLength[payload.Length] = offsets;
-        }
+            if (!_freeByLength.TryGetValue(payload.Length, out var offsets))
+            {
+                offsets = [];
+                _freeByLength[payload.Length] = offsets;
+            }
 
-        offsets.Add(offset);
+            offsets.Add(offset);
+        }
     }
 
     /// <summary>
@@ -223,14 +263,18 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
             // The arena file was REPLACED — cached handles would keep reading the deleted one.
             _storage.InvalidateFileHandles(_filePath);
 
-            _cache.Clear();
-            foreach (var (newOffset, payload) in newCache)
+            lock (_gate)
             {
-                _cache[newOffset] = payload;
+                _cache.Clear();
+                foreach (var (newOffset, payload) in newCache)
+                {
+                    _cache[newOffset] = payload;
+                }
+
+                _freeByLength.Clear(); // freed blocks were dropped by the compact pass
+                _loaded = true;
             }
 
-            _freeByLength.Clear(); // freed blocks were dropped by the compact pass
-            _loaded = true;
             return mapping;
         }
         catch
@@ -243,7 +287,10 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     /// <inheritdoc />
     public void Dispose()
     {
-        _cache.Clear();
-        _freeByLength.Clear();
+        lock (_gate)
+        {
+            _cache.Clear();
+            _freeByLength.Clear();
+        }
     }
 }
