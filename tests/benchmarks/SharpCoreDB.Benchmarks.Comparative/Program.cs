@@ -443,8 +443,10 @@ class Program
             UseMemoryMapping = true,
             UseBufferedIO = true,
             EnableHashIndexes = true,
-            // Opt-in DELETE deferral (plan §7) — toggled via env so the same build can A/B it.
-            EnableDeferredDeleteIndexes = Environment.GetEnvironmentVariable("SHARPCOREDB_DEFER_DELETE_INDEXES") == "1",
+            // DELETE index maintenance (plan §7). Deferred maintenance is the PRODUCT DEFAULT since
+            // v2.1, so this arm follows the default unless the env var explicitly opts out — set
+            // SHARPCOREDB_DEFER_DELETE_INDEXES=0 to measure the eager behaviour.
+            EnableDeferredDeleteIndexes = Environment.GetEnvironmentVariable("SHARPCOREDB_DEFER_DELETE_INDEXES") != "0",
             EnableQueryCache = true,
             QueryCacheSize = 4096,
             EnableCompiledPlanCache = true,

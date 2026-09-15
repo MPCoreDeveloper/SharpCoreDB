@@ -1166,11 +1166,16 @@ tombstoned position (null read).
    path pays ~69 µs/record, which dwarfs the batch win. The flush-time rebuild was removed; reconciliation
    is now bounded by `DeferredDeleteIndexThreshold` (default 10,000, non-transactional only) and reopen.
 3. **The fix turns it into a win.** `--dual-mode` (random-key CRUD, `DELETE … WHERE name = 'User{i}'`,
-   100K inserts / 10K deletes, medians of 3), deferral off → on:
+   100K inserts / 10K deletes, medians of 3 alternating reps), deferral off → on. The same-session
+   interleaved A/B on a quiet machine (2026-09-15) is the conservative figure:
 
 | operation | raw | default (at-rest) |
 |---|---:|---:|
-| DELETE | 97,453 → **213,619** (**2.19×**) | 73,377 → **87,625** (**1.19×**) |
+| DELETE, same session | 124,844 → **222,752** (**1.78×**) | 84,937 → **100,605** (**1.18×**) |
+| DELETE, earlier cross-session runs | 97,453 → 213,619 (2.19×) | 73,377 → 87,625 (1.19×) |
+
+The plaintext multiplier is machine- and load-dependent (1.78×–2.19× across sessions), so the
+same-session pair is what the documentation quotes.
 
 A focused probe isolates the same effect on a smaller shape (20K rows, 10K deletes, one batch):
 plaintext **62,142 → 122,748 ops/s (2.0×)**, at-rest **43,250 → 53,333 ops/s (1.23×)**.
