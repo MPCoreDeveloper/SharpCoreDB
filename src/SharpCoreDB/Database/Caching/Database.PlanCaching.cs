@@ -158,12 +158,36 @@ public partial class Database
     /// Ensures different DML operations don't share cache entries.
     /// Example key: "INSERT INTO users VALUES|p:@name:String|INSERT"
     /// </summary>
+    /// <summary>
+    /// Per-command-type cache-key suffixes, built once. <see cref="BuildCacheKey"/> runs on every
+    /// DML ExecuteSQL, and deriving the suffix per call allocated two strings (ToString +
+    /// ToUpperInvariant) on top of the concatenation.
+    /// </summary>
+    private static readonly string[] CacheKeySuffixByCommandType = BuildCacheKeySuffixes();
+
+    private static string[] BuildCacheKeySuffixes()
+    {
+        var values = Enum.GetValues<SqlCommandType>();
+        int max = 0;
+        foreach (var value in values)
+        {
+            max = Math.Max(max, (int)value);
+        }
+
+        var map = new string[max + 1];
+        foreach (var value in values)
+        {
+            map[(int)value] = "|" + value.ToString().ToUpperInvariant();
+        }
+
+        return map;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string BuildCacheKey(string normalizedSql, Dictionary<string, object?>? parameters, SqlCommandType commandType)
     {
         var baseKey = QueryPlanCache.BuildKey(normalizedSql, parameters);
-        var cmdType = commandType.ToString().ToUpperInvariant();
-        return $"{baseKey}|{cmdType}";
+        return string.Concat(baseKey, CacheKeySuffixByCommandType[(int)commandType]);
     }
 
     /// <summary>

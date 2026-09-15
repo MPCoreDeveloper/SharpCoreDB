@@ -128,7 +128,27 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)
     {
-        this.Execute(sql, new Dictionary<string, object?>(), wal);
+        // Fast path for statements without parameters (the common ExecuteSQL call): tokenize through
+        // the query cache and dispatch directly. The previous form allocated an empty
+        // Dictionary<string, object?> per statement only to hand it to the binding layer, which skips
+        // binding entirely when the parameter set is empty.
+        string[] parts;
+        if (this.queryCache != null)
+        {
+            var entry = this.queryCache.GetOrAdd(sql, key => new QueryCache.CachedQuery
+            {
+                Sql = key,
+                Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                CachedAt = DateTime.UtcNow
+            });
+            parts = entry.Parts;
+        }
+        else
+        {
+            parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        this.ExecuteInternal(sql, parts, wal);
     }
 
     /// <inheritdoc />
