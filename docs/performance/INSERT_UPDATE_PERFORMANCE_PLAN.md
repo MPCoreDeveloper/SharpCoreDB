@@ -1076,8 +1076,9 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    The model is simply: the loop costs one arena append per variable-length value *plus* one write-through
    table append per row; the batched path costs the arena appends and one append for the whole statement.
    Only the engine transaction (opened once per statement) argues for any floor at all, and two rows is
-   where it is amortised. *(Taken further the same day by the storage-transaction fix in item 1b: the same
-   shape is now **54.26 µs/row** — 38× the loop it replaced.)*
+   where it is amortised. *(Taken further twice the same day — the storage-transaction fix in item 1b, then the
+   single-pass `VALUES` scanner in item 1c: the same shape is now **22.72 µs/row**, **91×** the loop it
+   replaced and 2.4× off the direct batch API's 9.3 µs/row on the same table.)*
 1b. **The overflow arena dominates the fixed-width INSERT path — both per value and per statement
    *(found 2026-09-15, partially attributed)*.**
    *Established.* (a) The arena is heavily used: on the `--multirowinsert` schema, 20,000 rows produce a
@@ -1137,6 +1138,23 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    rather than to batch the arena further, which could now save a few percent at most. Separately, the **inline
    threshold** is still evidently too small (all three TEXT columns overflow, none inlines), but the layout is
    fixed per schema, so that stays a format question and belongs with §4b.
+
+1c. **The multi-row `VALUES` scanner — the last non-storage overhead on this shape *(found and fixed
+   2026-09-15)*.** With storage out of the way (item 1b), the SQL path still ran at **47.74 µs/row** against
+   the direct batch API's **9.3 µs/row** on the same table, and the gap was superlinear in statement length:
+   1,000-row statements cost 47.74 µs/row while 100-row statements — *more* statements, less text each — cost
+   33.72. `ParseMultiRowInsertValues` advanced by re-slicing the remaining string per tuple
+   (`remaining = remaining[(closeParenIdx + 1)..].Trim()`), copying ~45 MB for a 1,000-tuple statement. It now
+   walks the statement once by index and parses each tuple straight out of it, using the existing depth- and
+   quote-aware scanner to find the closing paren; `ParseInsertValues` already accepted a `ReadOnlySpan<char>`,
+   so no tuple text is copied at all. Deliberately no more permissive than before — a trailing separator still
+   ends the scan rather than being silently ignored.
+   **Measured: 47.74 → 22.72 µs/row** at 1,000 rows/statement, and the length penalty **inverted** (longer
+   statements are now cheaper per row than shorter ones), which is the signature of a superlinear term being
+   removed. That leaves **2.4×** to the direct API, and what remains is the text-SQL work itself — building
+   each literal string and coercing it to a typed value per column — which the direct API never pays.
+   Guarded by three scanner tests in `MultiRowInsertBatchingTests` (parens and commas inside string literals,
+   whitespace/newline separators, trailing-separator stop).
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
@@ -1448,11 +1466,13 @@ the on-disk format, and together they produce the attribution the structural wor
 protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
 protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
 moved to deferred index maintenance, and the SQL multi-row INSERT now uses the batched core (§5 item 1).
-The live queue is therefore: **profile what the stage report does not cover** — §5 item 1b's remainder is now a
-much smaller target, because the arena is fixed (38× on the multi-row shape) and most of a row's wall time sits
-*outside* the instrumented stages: parse, `engine.InsertBatch`, index maintenance and commit. Then §6 (PageBased
-parity — measured and re-scoped, attribution still open), then §4b (two-region records, the only remaining
-format change, and the owner of the too-small inline threshold that item 1b turned up).
+The live queue is therefore: **what is left of the text-SQL cost, then the never-instrumented stages.** §5 items 1b
+and 1c took the multi-row shape from 2,069.77 to **22.72 µs/row** — 91× and 2.4× off the direct batch API's
+9.3 µs/row on the same table — so what remains there is literal building and per-column type coercion, and
+beyond it the stages that were never wired: `engine.InsertBatch`, PK/hash index maintenance and commit (the
+2026-09-14 note in §7 still stands: `WalAppend`/`WalFlush` exist in the enum but nothing writes them). Then §6
+(PageBased parity — measured and re-scoped, attribution still open), then §4b (two-region records, the only
+remaining format change, and the owner of the too-small inline threshold item 1b turned up).
 
 **One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
 changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /

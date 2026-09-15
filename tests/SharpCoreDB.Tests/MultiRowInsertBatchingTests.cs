@@ -240,6 +240,53 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
         (db as IDisposable)?.Dispose();
     }
 
+    // ── The VALUES scanner ──────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MultiRowInsert_ParsesParensAndCommasInsideStringLiterals()
+    {
+        var db = Open(NewDir("scanner_strings"));
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
+
+        // A tuple's closing paren is found by depth, ignoring parens inside quoted strings, and commas
+        // inside those strings stay part of the value. The scanner was rewritten to walk the statement
+        // once instead of re-slicing the remainder per tuple, so this is the case that pins it.
+        db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES (1, 'a,b)', 1), (2, 'c(d,e', 2)");
+
+        Assert.Equal(2L, CountOf(db));
+        Assert.Contains("a,b)", db.ExecuteQuery("SELECT name FROM t WHERE id = 1")[0].Values);
+        Assert.Contains("c(d,e", db.ExecuteQuery("SELECT name FROM t WHERE id = 2")[0].Values);
+        (db as IDisposable)?.Dispose();
+    }
+
+    [Fact]
+    public void MultiRowInsert_ToleratesWhitespaceAndNewlinesBetweenTuples()
+    {
+        var db = Open(NewDir("scanner_whitespace"));
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
+
+        // No space after VALUES, several spaces after a separator comma, and a newline as a separator: all
+        // of which the previous implementation absorbed with Trim() and the rewrite has to keep absorbing.
+        db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES(1, 'a', 1),  (2, 'b', 2),\n(3, 'c', 3)");
+
+        Assert.Equal(3L, CountOf(db));
+        (db as IDisposable)?.Dispose();
+    }
+
+    [Fact]
+    public void MultiRowInsert_TrailingSeparator_StopsWithoutThrowing()
+    {
+        var db = Open(NewDir("scanner_trailing"));
+        db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
+
+        // A trailing comma with no tuple after it ended the scan before this change and still does: the
+        // rewrite is deliberately no MORE permissive, so malformed input is not silently accepted.
+        db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES (1, 'a', 1),");
+
+        Assert.Equal(1L, CountOf(db));
+        (db as IDisposable)?.Dispose();
+    }
+
     // ── The floor ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]
