@@ -149,6 +149,15 @@ public partial class SqlParser
     internal void FireTriggers(string tableName, TriggerTiming timing, TriggerEvent triggerEvent,
         Dictionary<string, object>? newRow = null, Dictionary<string, object>? oldRow = null)
     {
+        // Fast path: no triggers are registered at all (the overwhelming majority of databases).
+        // FireTriggers runs twice per INSERT/UPDATE/DELETE, and the LINQ projection below allocates a
+        // list even when it matches nothing — so the count check happens before the lock and the
+        // projection, not after.
+        if (_triggers.Count == 0)
+        {
+            return;
+        }
+
         List<TriggerDefinition> matching;
         lock (_triggerLock)
         {

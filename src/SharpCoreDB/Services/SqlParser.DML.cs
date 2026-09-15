@@ -330,7 +330,25 @@ public partial class SqlParser
         var tableAsTable = table as Table;
         bool skipInternalRowId = tableAsTable is { HasInternalRowId: true }
             && (insertColumns is null || !insertColumns.Contains(Constants.PersistenceConstants.InternalRowIdColumnName, StringComparer.OrdinalIgnoreCase));
-        var insertedRows = new List<Dictionary<string, object>>();
+        // A per-row dictionary snapshot is only needed for RETURNING; the common INSERT without that
+        // clause used to copy every inserted row into a second dictionary (pure overhead — the row was
+        // just built and handed to table.Insert).
+        var needsReturning = returningColumns is not null;
+        List<Dictionary<string, object>>? returningRows = needsReturning ? [] : null;
+        int insertedCount = 0;
+        Dictionary<string, object>? lastInsertedRow = null;
+
+        // SQLite compatibility: last_insert_rowid reports the first INTEGER/Long column of the last
+        // inserted row. Resolve that column once per statement instead of a LINQ projection per call.
+        int firstIntColIdx = -1;
+        for (int i = 0; i < table.ColumnTypes.Count; i++)
+        {
+            if (table.ColumnTypes[i] is DataType.Integer or DataType.Long)
+            {
+                firstIntColIdx = i;
+                break;
+            }
+        }
         foreach (var rowValues in allRowValues)
         {
             var row = new Dictionary<string, object>();
@@ -360,23 +378,30 @@ public partial class SqlParser
             table.Insert(row);
 
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
-            insertedRows.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+            insertedCount++;
+            lastInsertedRow = row;
+            if (needsReturning)
+            {
+                returningRows!.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+            }
         }
-        _lastChanges = insertedRows.Count;
-        _totalChanges += insertedRows.Count;
-        if (insertedRows.Count > 0)
+        _lastChanges = insertedCount;
+        _totalChanges += insertedCount;
+        if (insertedCount > 0)
         {
             // SQLite compatibility: last_insert_rowid returns the first INTEGER column value
-            var lastRow = insertedRows[^1];
-            var firstIntCol = table.Columns
-                .Select((col, i) => (col, type: table.ColumnTypes[i]))
-                .FirstOrDefault(c => c.type == DataType.Integer || c.type == DataType.Long);
-            if (firstIntCol.col is not null && lastRow.TryGetValue(firstIntCol.col, out var idVal) && idVal is not null and not DBNull)
+            if (firstIntColIdx >= 0
+                && lastInsertedRow!.TryGetValue(table.Columns[firstIntColIdx], out var idVal)
+                && idVal is not null and not DBNull)
+            {
                 _lastInsertRowId = Convert.ToInt64(idVal);
+            }
             else
+            {
                 _lastInsertRowId++;
+            }
         }
-        if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedRows, returningColumns);
+        if (needsReturning) _pendingQueryResults = ProjectReturningRows(returningRows!, returningColumns!);
         wal?.Log(sqlWithoutReturning);
     }
 

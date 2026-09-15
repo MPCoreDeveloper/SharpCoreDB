@@ -653,9 +653,16 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="sql">The SQL command.</param>
     /// <returns>True if schema-changing command.</returns>
-    private static bool IsSchemaChangingCommand(string sql) =>
-        sql.TrimStart().ToUpperInvariant() is var upper &&
-        (upper.StartsWith("CREATE ") || upper.StartsWith("ALTER ") || upper.StartsWith("DROP "));
+    private static bool IsSchemaChangingCommand(string sql)
+    {
+        // Span-based ordinal check — the previous TrimStart().ToUpperInvariant() allocated a full
+        // uppercased copy of the statement on every ExecuteSQL call (measured as part of the
+        // per-statement SQL overhead; the statement text itself is already case-preserved).
+        var span = sql.AsSpan().TrimStart();
+        return span.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase)
+            || span.StartsWith("ALTER ", StringComparison.OrdinalIgnoreCase)
+            || span.StartsWith("DROP ", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Gets or creates the database-specific salt for key derivation.
