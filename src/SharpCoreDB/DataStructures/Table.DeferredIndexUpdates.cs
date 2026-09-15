@@ -94,8 +94,9 @@ public partial class Table
 
     /// <summary>
     /// Marks the PK B-tree stale because a deferred DELETE skipped its removal. The B-tree itself is
-    /// left untouched (so a rolled-back transaction needs no index rollback); the stale entries are
-    /// reconciled by <see cref="RebuildPrimaryKeyIndexIfStale"/> at a committed-data boundary or reopen.
+    /// left untouched — so a rolled-back transaction needs no index rollback — and the stale entries
+    /// are reconciled by <see cref="RebuildPrimaryKeyIndexIfThresholdExceeded"/> or, for free, by the
+    /// index rebuild a reopen performs.
     /// </summary>
     /// <param name="deletedCount">Number of primary keys deleted in this batch.</param>
     internal void MarkPrimaryKeyIndexStale(int deletedCount)
@@ -106,35 +107,21 @@ public partial class Table
 
     /// <summary>
     /// Rebuilds the PK B-tree when the pending deferred-delete count crossed
-    /// <see cref="DatabaseConfig.DeferredDeleteIndexThreshold"/>. Only safe once the tombstones are
-    /// durable (outside a transaction), so transactional batches defer to <c>Flush()</c>/reopen. Called
-    /// at the end of a delete once the tombstone has been written.
+    /// <see cref="DatabaseConfig.DeferredDeleteIndexThreshold"/>, called at the end of a delete once the
+    /// tombstone has been written. Only safe once the tombstones are durable (outside a transaction), so
+    /// a transactional batch leaves its entries stale until a reopen — see the threshold option's own
+    /// documentation for why the reconcile is deliberately not run at every <c>Flush()</c>.
     /// </summary>
     private void RebuildPrimaryKeyIndexIfThresholdExceeded()
     {
         if (!_pkIndexStale)
             return;
 
-        if (_pendingDeferredDeletes < (_config?.DeferredDeleteIndexThreshold ?? 10000))
+        if (_pendingDeferredDeletes < (_config?.DeferredDeleteIndexThreshold ?? 100000))
             return;
 
         if (storage is { IsInTransaction: true })
-            return; // buffered tombstones are not yet in the file; Flush()/reopen reconciles
-
-        RebuildPrimaryKeyIndexFromDisk();
-        _pkIndexStale = false;
-        _pendingDeferredDeletes = 0;
-    }
-
-    /// <summary>
-    /// Rebuilds the PK B-tree from the data file (skipping tombstones) if a deferred DELETE left it
-    /// stale. Called at committed-data boundaries and on reopen; the rebuild reads the authoritative
-    /// file, so it is correct regardless of any transaction rollback.
-    /// </summary>
-    public void RebuildPrimaryKeyIndexIfStale()
-    {
-        if (!_pkIndexStale)
-            return;
+            return; // buffered tombstones are not yet in the file; a reopen reconciles
 
         RebuildPrimaryKeyIndexFromDisk();
         _pkIndexStale = false;
