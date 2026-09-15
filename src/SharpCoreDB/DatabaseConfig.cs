@@ -142,12 +142,21 @@ public class DatabaseConfig
     /// <summary>
     /// Gets the number of deferred DELETE primary keys that may accumulate in the stale PK B-tree before
     /// it is rebuilt from the data file (dropping tombstoned entries). Only used when
-    /// <see cref="EnableDeferredDeleteIndexes"/> is enabled. The rebuild happens lazily at the next
-    /// non-transactional delete (or <c>Flush()</c>/reopen), so a large batch still defers its whole
-    /// B-tree maintenance while a long-running session stays bounded. Default 10,000. Set to 0 to
-    /// rebuild at every delete (effectively disabling the deferral).
+    /// <see cref="EnableDeferredDeleteIndexes"/> is enabled.
+    /// <para>
+    /// ⚠️ The rebuild is a full **O(n)** pass over the data file (`RebuildPrimaryKeyIndexFromDisk`), so
+    /// this is a **memory/latency safety valve, not a maintenance schedule**: each rebuild costs about
+    /// as much as rebuilding the whole PK index, and it only pays off when it is rare relative to the
+    /// deletes it covers. The default is therefore deliberately high (100,000). Measured: with a
+    /// threshold of 10,000 a single 10,000-delete batch triggered the rebuild and the random-key DELETE
+    /// workload fell from 222,752 to 70,248 ops/s — the deferral win is lost whenever the rebuild fires
+    /// at the same frequency as the deletes. Setting it to a small value is only sensible on a table
+    /// where the whole index is cheap to rebuild.
+    /// </para>
+    /// Staleness is also bounded by the table's own key count (a B-tree holds one entry per unique key),
+    /// and a reopen rebuilds the index for free, so the practical bound is "until the next reopen".
     /// </summary>
-    public int DeferredDeleteIndexThreshold { get; init; } = 10000;
+    public int DeferredDeleteIndexThreshold { get; init; } = 100000;
 
     /// <summary>
     /// Gets a value indicating whether batch encryption is enabled during bulk operations.

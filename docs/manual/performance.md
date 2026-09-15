@@ -180,12 +180,13 @@ db.UpdateMultiple("t",
 
 **`DELETE` index maintenance is deferred by default (v2.1).** A DELETE writes only the durable
 tombstone and skips its per-key index removal; the primary-key B-tree is rebuilt from the data file
-(dropping tombstones) on reopen, at `Flush()`, or once `DeferredDeleteIndexThreshold` keys have accumulated. Readers
-are unaffected — a point lookup treats a tombstoned position as absent and a re-INSERT of a deleted key
-still succeeds. Measured as a same-session interleaved A/B on the random-key delete workload: DELETE
-**1.78×** faster plaintext and **1.18×** in the encrypted default. The observable difference is that
-`GetHashIndexStatistics` counts tombstoned entries until the index is rebuilt; set
-`DatabaseConfig.EnableDeferredDeleteIndexes = false` for the eager behaviour.
+(dropping tombstones) on reopen — or, if `DeferredDeleteIndexThreshold` is crossed (default 100,000,
+deliberately high), at the next non-transactional delete. Readers are unaffected — a point lookup
+treats a tombstoned position as absent and a re-INSERT of a deleted key still succeeds. Measured as a
+same-session interleaved A/B on the random-key delete workload: DELETE **1.92×** faster plaintext and
+**1.33×** in the encrypted default. The observable difference is that `GetHashIndexStatistics` counts
+tombstoned entries until the index is rebuilt; set `DatabaseConfig.EnableDeferredDeleteIndexes = false`
+for the eager behaviour.
 
 ---
 
@@ -281,8 +282,8 @@ parameter tuning (`M`, `efConstruction`, `efSearch`).
 | Knob | Effect |
 |------|--------|
 | `DatabaseConfig.NoEncryptMode = true` | Removes AES-256-GCM per-record cost (use on already-encrypted volumes / benchmarks) |
-| `DatabaseConfig.EnableDeferredDeleteIndexes` (default `true`) | Defers DELETE index maintenance to a rebuild at reopen/threshold — **1.78×** on random-key deletes (same-session A/B). Set `false` for eager maintenance (keeps `GetHashIndexStatistics` exact between deletes) |
-| `DatabaseConfig.DeferredDeleteIndexThreshold` (default 10,000) | Deferred DELETE keys that may accumulate before the PK B-tree is rebuilt; `0` rebuilds at every delete |
+| `DatabaseConfig.EnableDeferredDeleteIndexes` (default `true`) | Defers DELETE index maintenance to the reopen rebuild — **1.92×** on random-key deletes (same-session A/B). Set `false` for eager maintenance (keeps `GetHashIndexStatistics` exact between deletes) |
+| `DatabaseConfig.DeferredDeleteIndexThreshold` (default 100,000) | Deferred DELETE keys that may accumulate before the PK B-tree is rebuilt. ⚠️ the rebuild is a **full O(n) index pass**, so keep it high relative to your delete rate — a low value cancels the deferral win (measured: **294K → 70K** ops/s when a 10,000-delete batch crossed a 10,000 threshold) |
 | `DatabaseConfig.EnableBufferedAppends` (default `false`) | Single-row INSERTs share the append buffer — one open/write/close per flush boundary instead of per row (**~512 µs → ~4.5 µs** per 64-byte record; **25×** end-to-end). Bounds via `AppendBufferFlushThresholdBytes` / `AppendBufferFlushIntervalMs` |
 | WAL durability batching (`Flush()` / `Commit(force: false)`) | Groups fsyncs; dramatically raises write throughput at the cost of a tiny durability window |
 | Append-only vs page-based storage engine | Choose per workload (append-heavy vs update-heavy) |

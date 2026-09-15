@@ -1171,11 +1171,26 @@ tombstoned position (null read).
 
 | operation | raw | default (at-rest) |
 |---|---:|---:|
-| DELETE, same session | 124,844 → **222,752** (**1.78×**) | 84,937 → **100,605** (**1.18×**) |
-| DELETE, earlier cross-session runs | 97,453 → 213,619 (2.19×) | 73,377 → 87,625 (1.19×) |
+| DELETE, same session (final) | 153,158 → **294,185** (**1.92×**) | 76,424 → **101,733** (**1.33×**) |
+| DELETE, earlier same-session A/B | 124,844 → 222,752 (1.78×) | 84,937 → 100,605 (1.18×) |
 
-The plaintext multiplier is machine- and load-dependent (1.78×–2.19× across sessions), so the
-same-session pair is what the documentation quotes.
+The plaintext multiplier is machine- and load-dependent (1.78×–1.92× across same-session A/Bs), so the
+low end is what the documentation quotes.
+
+**A third pitfall, found by measurement after the first two.** The obvious reconcile point is
+`Table.Flush()` — a committed-data boundary, and where the first version of this work put it. It is
+wrong. The reconcile is a full O(n) `RebuildPrimaryKeyIndexFromDisk`, and the transactional batch path
+would pay it once per batch — i.e. at the same frequency as the deletes the deferral skipped — so the
+deferral buys nothing and the rebuild is on top. Measured: DELETE raw **294,185 → 70,248 ops/s** with the
+Flush reconcile in place. It was reverted, and `DeferredDeleteIndexThreshold`'s default was raised to
+**100,000** for the same reason (the old 10,000 default is crossed by a single 10,000-delete batch, which
+is exactly the acceptance shape). What bounds the staleness is the table's own key count — a B-tree holds
+one entry per unique key — plus the free rebuild a reopen performs.
+
+**Open item (bounded reconcile).** Removing only the stale keys (`O(m log n)` instead of `O(n)`) would
+let a session reclaim memory without the O(n) pass. Note that it costs roughly the same as the *eager*
+per-key path, so it can bound memory but will not restore the throughput win — which is why the deferred
+design deliberately does no in-session maintenance at all.
 
 A focused probe isolates the same effect on a smaller shape (20K rows, 10K deletes, one batch):
 plaintext **62,142 → 122,748 ops/s (2.0×)**, at-rest **43,250 → 53,333 ops/s (1.23×)**.

@@ -211,15 +211,17 @@ public sealed class DeferredDeleteIndexTests : IDisposable
     }
 
     /// <summary>
-    /// A deferred DELETE inside a transaction cannot rebuild the PK B-tree mid-transaction (the
-    /// tombstones are still buffered), so the threshold bound is enforced at the committed-data
-    /// boundary — <c>Flush()</c> — and the counter resets there. Without that, a long-running session
-    /// doing batch deletes would carry its stale entries until a reopen.
+    /// A deferred DELETE inside a transaction cannot rebuild the PK B-tree mid-transaction (its
+    /// tombstones are still buffered), and the rebuild is a full O(n) pass — so it is deliberately NOT
+    /// run at every <c>Flush()</c>. Measured: reconciling at Flush cost more than the per-key
+    /// maintenance the deferral skipped (random-key DELETE 222,752 → 70,248 ops/s). The reconcile runs
+    /// at the next <em>non-transactional</em> delete once the threshold is crossed, and for free at
+    /// reopen.
     /// </summary>
     [Fact]
-    public void DeferredDeletes_BatchOverThreshold_ReconcileAtFlush()
+    public void DeferredDeletes_Reconcile_AtNextNonTransactionalDelete()
     {
-        var dir = NewDir("threshold_flush");
+        var dir = NewDir("threshold_reconcile");
         var db = OpenAndSeed(dir, new DatabaseConfig
         {
             NoEncryptMode = true,
@@ -230,16 +232,21 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         var table = Assert.IsType<SharpCoreDB.DataStructures.Table>(it);
         Assert.Equal(0, table.PendingDeferredDeleteCount);
 
-        // One transactional batch of 50 deletes > the threshold.
+        // One transactional batch of 50 deletes > the threshold: deferred, nothing reconciled.
         db.ExecuteBatchSQL(Deletes(Enumerable.Range(1, 50).Reverse()));
-        Assert.Equal(50, table.PendingDeferredDeleteCount); // deferred: nothing reconciled yet
+        Assert.Equal(50, table.PendingDeferredDeleteCount);
 
-        db.Flush(); // committed-data boundary
-        Assert.Equal(0, table.PendingDeferredDeleteCount);  // rebuilt from the data file
+        // Flush is a committed-data boundary, but the O(n) rebuild is deliberately not run there.
+        db.Flush();
+        Assert.Equal(50, table.PendingDeferredDeleteCount);
 
-        Assert.Equal(50L, CountOf(db));
+        // A non-transactional delete crosses the threshold and reconciles the stale entries.
+        db.ExecuteSQL("DELETE FROM t WHERE id = 51");
+        Assert.Equal(0, table.PendingDeferredDeleteCount);
+
+        Assert.Equal(49L, CountOf(db));
         Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 50"));
-        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 51"));
+        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 52"));
         (db as IDisposable)?.Dispose();
     }
 }
