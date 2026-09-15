@@ -151,6 +151,14 @@ the cached schema, index maintenance happens in keyed batches, and the WAL group
 batch into a single fsync. This is why SharpCoreDB inserts ~1.3–1.9x faster than LiteDB and
 within ~15% of SQLite.
 
+> **One statement per row is the slowest ladder.** Measured on one-row writes, a single
+> `ExecuteSQL("INSERT …")` costs **~25 µs/row more** than the equivalent `Table.Insert(dictionary)`
+> call — the SQL layer classifies, tokenizes, plan-caches and re-parses every statement. For per-row
+> writes prefer the Direct API or a batch; reserve one-statement-per-row SQL for the shapes that need
+> it. `DatabaseConfig.EnableBufferedAppends = true` additionally lets single-row INSERTs share one
+> append buffer (measured **25×** on 2,000 inserts), and `EnableDeferredDeleteIndexes` (default on)
+> covers the delete side.
+
 ### 7.3.3 Bulk update/delete
 
 For `UPDATE`/`DELETE` of many rows, **always batch** rather than one statement per row:
@@ -172,7 +180,7 @@ db.UpdateMultiple("t",
 
 **`DELETE` index maintenance is deferred by default (v2.1).** A DELETE writes only the durable
 tombstone and skips its per-key index removal; the primary-key B-tree is rebuilt from the data file
-(dropping tombstones) on reopen, or once `DeferredDeleteIndexThreshold` keys have accumulated. Readers
+(dropping tombstones) on reopen, at `Flush()`, or once `DeferredDeleteIndexThreshold` keys have accumulated. Readers
 are unaffected — a point lookup treats a tombstoned position as absent and a re-INSERT of a deleted key
 still succeeds. Measured as a same-session interleaved A/B on the random-key delete workload: DELETE
 **1.78×** faster plaintext and **1.18×** in the encrypted default. The observable difference is that
