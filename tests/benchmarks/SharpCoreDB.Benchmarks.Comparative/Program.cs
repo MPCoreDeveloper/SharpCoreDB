@@ -78,6 +78,16 @@ class Program
             return;
         }
 
+        // Optional: --pk-profile → the write-path profiler's stage report for the `--pk` harness's UPDATE
+        // arm, for one engine. Plan §6 (B2) asked for exactly this: the PageBased UPDATE trap (29,407 vs
+        // 420,187 ops/sec) has survived two code-reading guesses, so the attribution has to come from the
+        // instrumented stages and not from another plausible story — the treatment `--multirowinsert` gets.
+        if (args.Any(a => a.Equals("--pk-profile", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkUpdateProfile(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk → fair PK-based comparison: SharpCoreDB on a table with an
         // `id INTEGER PRIMARY KEY` (mirroring the SQLite harness schema) with UPDATE/DELETE by PK,
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
@@ -1166,7 +1176,8 @@ class Program
         bool useDefaultConfig = false,
         string? defaultVariant = null,
         bool noEncrypt = true,
-        bool? atRestRecords = null)
+        bool? atRestRecords = null,
+        bool profileUpdateArm = false)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -1247,6 +1258,15 @@ class Program
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
             // UPDATE by PK (single ExecuteBatchSQL transaction, like SQLite's single tx)
+            // --pk-profile turns the profiler on for THIS arm only: Reset clears whatever the INSERT/READ
+            // arms recorded (they run with it off unless the environment variable is set), so the printed
+            // report describes the UPDATE batch and nothing else. The timed arms never take this branch.
+            if (profileUpdateArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var updateStmts = new List<string>(UpdateCount);
             for (int i = 1; i <= UpdateCount; i++)
@@ -1261,6 +1281,15 @@ class Program
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            if (profileUpdateArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled UPDATE pass: {result.UpdateTime:F2}s "
+                    + $"({result.UpdateOpsPerSec:N0} ops/sec, {result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
 
             // DELETE by PK
             sw.Restart();
@@ -1327,6 +1356,27 @@ class Program
     /// <summary>
     /// Runs the fair PK scenario (SharpCoreDB vs SQLite) and prints the comparison.
     /// </summary>
+    /// <summary>
+    /// Plan §6 (B2): prints the write-path profiler's stage report for the exact UPDATE arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same 10,000
+    /// <c>UPDATE … WHERE id = ?</c> statements in one <c>ExecuteBatchSQL</c> transaction. No timed reps: the
+    /// question is where the ~34 µs/update goes, not how much of it there is, and the per-stage call counts
+    /// are what turn a plausible story into an attributable one.
+    /// </summary>
+    static void RunPkUpdateProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ UPDATE-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {UpdateCount:N0} UPDATE … WHERE id = ? statements in ONE ExecuteBatchSQL transaction, over {InsertCount:N0} rows");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileUpdateArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  UPDATE: {result.UpdateOpsPerSec:N0} ops/sec ({result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+        Console.WriteLine("  Run the same command with --engine=<the other engine> to read the two reports side by side.");
+    }
+
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
