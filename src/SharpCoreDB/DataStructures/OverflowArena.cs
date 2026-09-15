@@ -170,6 +170,74 @@ public sealed class OverflowArena : IDisposable, IOverflowArena
     }
 
     /// <summary>
+    /// Writes several payloads and returns their block offsets in the same order — the batched form of
+    /// <see cref="Write"/>. Freed blocks of the exact payload length are still reused in place, but every
+    /// payload that has to be appended goes out in ONE <c>AppendBytesMultiple</c> call rather than one
+    /// <c>AppendBytes</c> per value.
+    /// <para>
+    /// That single change is the point: <c>AppendBytes</c> opens the arena file with
+    /// <c>FileOptions.WriteThrough</c> on every call, which the write-path profiler measured at
+    /// **0.4597 ms per value** on the multi-row INSERT workload — with three variable-length columns that is
+    /// ~1.4 ms per row, i.e. ~97% of the INSERT. One call for the whole list removes all but one of those
+    /// opens.
+    /// </para>
+    /// </summary>
+    /// <param name="payloads">Payloads to write, in the order the returned offsets must follow.</param>
+    /// <returns>One block offset per payload, in the same order.</returns>
+    public long[] WriteMany(IReadOnlyList<byte[]> payloads)
+    {
+        ArgumentNullException.ThrowIfNull(payloads);
+        if (payloads.Count == 0)
+        {
+            return [];
+        }
+
+        long arenaStart = WritePathProfiler.Stamp();
+        EnsureLoaded();
+
+        var offsets = new long[payloads.Count];
+        List<int>? appendIndexes = null;
+        List<byte[]>? appendPayloads = null;
+
+        lock (_gate)
+        {
+            // Reuse first: an in-place overwrite of a freed block of the same length costs no append, so it
+            // stays a per-value decision. Everything else is deferred into a single storage call below.
+            for (int i = 0; i < payloads.Count; i++)
+            {
+                var payload = payloads[i];
+                ArgumentNullException.ThrowIfNull(payload);
+
+                if (TryReuseFreeBlock(payload, out var reusedOffset))
+                {
+                    offsets[i] = reusedOffset;
+                    continue;
+                }
+
+                (appendIndexes ??= []).Add(i);
+                (appendPayloads ??= []).Add(payload);
+            }
+
+            if (appendPayloads is not null)
+            {
+                long appendStart = WritePathProfiler.Stamp();
+                var appended = _storage.AppendBytesMultiple(_filePath, appendPayloads);
+                WritePathProfiler.Add(WritePathProfiler.Stage.ArenaAppend, appendStart);
+
+                for (int k = 0; k < appended.Length; k++)
+                {
+                    int index = appendIndexes![k];
+                    offsets[index] = appended[k];
+                    _cache[appended[k]] = appendPayloads[k];
+                }
+            }
+        }
+
+        WritePathProfiler.Add(WritePathProfiler.Stage.ArenaWrite, arenaStart);
+        return offsets;
+    }
+
+    /// <summary>
     /// B6: attempts to reuse a freed block of the exact same payload length via an in-place
     /// overwrite. Returns false when no suitable block is free or the storage refuses the
     /// in-place write (e.g. inside a transaction) — the caller then appends.

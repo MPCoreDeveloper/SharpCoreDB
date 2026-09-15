@@ -1112,16 +1112,23 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    **Why it matters:** the arena is a **larger lever than the append policy the plan has been focused on**,
    it needs **no format change**, and it explains why the non-PK benchmark shape (variable-length layout,
    values inline) inserts at ~7.7 µs/row while this fixed-width shape costs ~1.6 ms/row.
-   **Next:** the fix is now narrow and specific — **stop paying a file open + `WriteThrough` per overflow
-   value**. The table data file already has the right machinery (`AppendBytesMultiple` one call per batch,
-   and `EnableBufferedAppends` for single rows); the arena calls only the per-value `AppendBytes`. Candidates
-   in order of preference: **(i)** accumulate a row's or a batch's arena blocks and write them with one
-   `AppendBytesMultiple`-style call — keeps the durability boundary where it is and needs no format change;
-   **(ii)** extend the append buffer to the arena; **(iii)** a cached write handle, which §5 rejected for the
-   data file because a live write handle blocks readers — that needs checking against the `.ovf`
-   specifically before it can be considered. Also worth measuring while there: whether the **inline
-   threshold** is too small, since all three TEXT columns overflowing means the fixed-width slot reserves
-   less than an ordinary value needs.
+   **The per-value fix has landed (2026-09-15).** `IOverflowArena.WriteMany` takes a row's payloads at once:
+   freed blocks are still reused in place per value, and everything that must be appended goes out in one
+   `AppendBytesMultiple` call; `FixedWidthCodec.SerializeRow` collects the variable values, makes that single
+   call, and patches the offsets into the slots. Measured (20,000 rows, 1,000 rows/statement, median of 5):
+   **1,428 → 523.51 µs/row (2.73×)**, with the profiler's `arena-append` call count falling from 3 per row to
+   **exactly 1** and its per-call cost unchanged at 0.4625 ms — the whole gain is the two file opens per row
+   that are gone. `WriteMany` is a default interface member, so the single-file arena (in-memory blocks,
+   serialized as one provider block) is unaffected, and the one remaining `arena.Write` call site is a
+   single-value update path.
+   **What is left.** The open is now once per *row* rather than once per *value*, and at 0.4625 ms it is ~90 %
+   of the remaining ~524 µs/row. Batching it per *statement* instead — one append for a whole `INSERT` —
+   needs the collection to move up out of `SerializeRow` into `ValidateAndSerializeBatchOutsideLock` as a
+   two-phase serialize (buffer the rows, make one arena call, then patch every slot), and is worth roughly
+   another 10× on this path. The >10,000-row branch of that method serializes with `Parallel.For`, so a
+   shared collector there needs partitioning or a lock; the sequential branch is the easy half. Separately,
+   the **inline threshold** is evidently too small — all three TEXT columns overflow and none inlines — but
+   the layout is fixed per schema, so that is a format question and belongs with §4b.
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
@@ -1389,10 +1396,10 @@ the on-disk format, and together they produce the attribution the structural wor
 protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
 protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
 moved to deferred index maintenance, and the SQL multi-row INSERT now uses the batched core (§5 item 1).
-The live queue is therefore: **§5 item 1b** (the overflow arena's per-value write-through — the measured
-dominant INSERT cost, and the largest remaining lever that needs no format change), then **§5 item 1's
-unmeasured break-even** and the per-statement cost behind it, then §6 (PageBased parity) and §4b
-(two-region records, the only remaining format change).
+The live queue is therefore: **§5 item 1b's remainder** (the arena append is now once per row instead of
+once per value — 2.73× measured — and batching it per statement is worth roughly another 10× on that path),
+then §6 (PageBased parity), then §4b (two-region records, the only remaining format change — which also
+owns the too-small inline threshold item 1b turned up).
 
 **One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
 changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /

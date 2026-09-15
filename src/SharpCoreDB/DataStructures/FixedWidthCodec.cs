@@ -27,12 +27,34 @@ public static class FixedWidthCodec
         var buffer = new byte[layout.FixedSize];
         var span = buffer.AsSpan();
 
+        // Variable-length values are collected first and handed to the arena in ONE call, then their offsets
+        // are patched into the slots. The previous shape called arena.Write per value, and every one of those
+        // opens the arena file with FileOptions.WriteThrough (measured 0.4597 ms per value) — three TEXT
+        // columns meant three file opens per row, ~1.4 ms of the ~1.43 ms a fixed-width INSERT cost.
+        List<int>? variableColumns = null;
+        List<byte[]>? variablePayloads = null;
+
         for (int i = 0; i < columns.Count; i++)
         {
             var value = row.TryGetValue(columns[i], out var v) ? v : DBNull.Value;
-            WriteSlot(span.Slice(layout.Offsets[i], layout.SlotSizes[i]), layout.IsVariable[i], types[i], value, arena);
+            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+
+            if (!layout.IsVariable[i])
+            {
+                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
+            }
+            else if (value == null || value == DBNull.Value)
+            {
+                WriteNullVariableSlot(slot);
+            }
+            else
+            {
+                (variableColumns ??= []).Add(i);
+                (variablePayloads ??= []).Add(Table.EncodeVariablePayload(types[i], value));
+            }
         }
 
+        PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
         return buffer;
     }
 
@@ -46,37 +68,64 @@ public static class FixedWidthCodec
         var buffer = new byte[layout.FixedSize];
         var span = buffer.AsSpan();
 
+        List<int>? variableColumns = null;
+        List<byte[]>? variablePayloads = null;
+
         for (int i = 0; i < row.Length && i < types.Count; i++)
         {
-            WriteSlot(span.Slice(layout.Offsets[i], layout.SlotSizes[i]), layout.IsVariable[i], types[i], row[i], arena);
+            var value = row[i];
+            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+
+            if (!layout.IsVariable[i])
+            {
+                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
+            }
+            else if (value == null || value == DBNull.Value)
+            {
+                WriteNullVariableSlot(slot);
+            }
+            else
+            {
+                (variableColumns ??= []).Add(i);
+                (variablePayloads ??= []).Add(Table.EncodeVariablePayload(types[i], value));
+            }
         }
 
+        PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
         return buffer;
     }
 
-    /// <summary>
-    /// Writes one column value into its fixed-width slot: variable-length types store an out-of-line
-    /// arena block reference, fixed-size types store their payload inline.
-    /// </summary>
-    private static void WriteSlot(Span<byte> slot, bool isVariable, DataType type, object? value, IOverflowArena arena)
+    /// <summary>Writes the "no block" marker into a variable-length slot.</summary>
+    private static void WriteNullVariableSlot(Span<byte> slot)
     {
-        if (isVariable)
-        {
-            if (value == null || value == DBNull.Value)
-            {
-                slot[0] = 0;
-                BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
-                return;
-            }
+        slot[0] = 0;
+        BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+    }
 
-            var payload = Table.EncodeVariablePayload(type, value);
-            var offset = arena.Write(payload);
-            slot[0] = 1;
-            BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+    /// <summary>
+    /// Writes the collected variable-length payloads to the arena in a single call and stores each returned
+    /// offset in its column's slot. Does nothing when the row had no variable-length values.
+    /// </summary>
+    private static void PatchVariableOffsets(
+        Span<byte> span,
+        FixedWidthRecordLayout layout,
+        List<int>? variableColumns,
+        List<byte[]>? variablePayloads,
+        IOverflowArena arena)
+    {
+        if (variablePayloads is null)
+        {
             return;
         }
 
-        _ = Table.WriteTypedValueToSpan(slot, value, type);
+        var offsets = arena.WriteMany(variablePayloads);
+        for (int k = 0; k < offsets.Length; k++)
+        {
+            int column = variableColumns![k];
+            var slot = span.Slice(layout.Offsets[column], layout.SlotSizes[column]);
+            slot[0] = 1;
+            BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offsets[k]);
+        }
     }
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values ← arena).</summary>
