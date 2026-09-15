@@ -1214,6 +1214,34 @@ read-side work that buys nothing; Phases 2a/2b close the UPDATE gap. **Every num
 columns is a hypothesis to be measured under the §2 protocol, not a promise** — the vector-search work
 in this branch taught that lesson twice.
 
+### 8a. Where the targets stand after the v2.1 work *(measured 2026-09-15, quiet machine)*
+
+Both harnesses re-run on a quiet machine (the owner was away), so these are the least noise-contaminated
+figures the project has published for these shapes. `--pk` is the tuned harness; `--pk-default` is the
+**untuned product default** (pure `DatabaseConfig`), which is the number a new user actually gets.
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| `--pk` SharpCoreDB FW, plaintext | 108,649 | 113,540 | **420,187** | 223,207 |
+| `--pk` SharpCoreDB FW, at-rest (product default) | 88,352 | 69,228 | 290,981 | 185,052 |
+| `--pk` SQLite | 188,906 | 94,800 | 270,573 | 379,152 |
+| `--pk-default` SharpCoreDB (pure default) | 81,284 | 67,015 | 134,119 | 120,889 |
+| `--pk-default` SQLite | 128,121 | 80,594 | 219,141 | 255,780 |
+
+Gaps vs SQLite: `--pk` fixed-width plaintext **UPDATE 0.6× (ahead), READ 0.8× (ahead), DELETE 1.7×,
+INSERT 1.7×**; at-rest **UPDATE 0.9× (ahead), DELETE 2.0×, INSERT 2.1×**; pure default **UPDATE 1.6×,
+DELETE 2.1×, INSERT 1.6×, READ 1.2×**.
+
+Against the §8 targets on this run: **UPDATE ≥120K met (420K tuned / 291K at-rest / 134K pure default),
+DELETE ≥150K met tuned (223K / 185K; pure default 121K), INSERT ≥150K not met** (109K tuned plaintext,
+88K at-rest, 81K pure default). The INSERT target was set from a noisier machine; re-stating it on this
+run is a §2-protocol task, not a claim that the target moved.
+
+The two rows that were the plan's headline problem — UPDATE and DELETE — are now either ahead of SQLite
+or within ~2×, down from the ~7–10× and ~6–14× that opened this plan. The residual is concentrated in
+INSERT (per-record framing + the SQL ladder) and in the at-rest tax, both of which §3-1f/§4c and the
+`DeferredDeleteIndexes` work have already reduced but not eliminated.
+
 ---
 
 ## 9. Execution order and dependency graph
