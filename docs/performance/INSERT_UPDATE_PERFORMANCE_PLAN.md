@@ -1260,21 +1260,24 @@ against §8a's 109K), so it is the ratio and the shares that carry the signal:
 | AppendOnly | **13.38 µs** (74,757 ops/s) | ~79 % | `row-locate` 51.5 % (one call — the contiguous in-place path), `commit` 29.7 %, `parse` 18.8 % |
 | PageBased | **45.84 µs** (21,815 ops/s) | ~24 % | **`arena-write` 60.3 %**, `arena-append` 18.3 %, `parse` 17.3 %, `commit` 3.1 %, `row-locate` 1.0 % |
 
-**The trap reproduces (3.4× under identical conditions) and the profile answers the question it was asked —
-by refuting both stories that came before it and pointing at a third.** Four stages that should describe an
-update have **zero calls** on the PageBased arm: `in-place-patch`, `engine-write`, `index-maint` and
-`encode`/`validate`. So about **75 % of the 45.84 µs — roughly 34 µs/update — is in code with no stamp at
-all**, and the largest *measured* cost is the **overflow arena** at 6.81 µs/update allocating **2,829 B per
-update** (the INSERT path allocates ~1.1 KB per row). That is not the page manager's slot scans — the first
-attempt here already refuted those — and it is the first hard evidence for the second code fact recorded
-below, which was found by reading: a PageBased update re-serializes the **whole record**, so all three TEXT
-columns go back through the arena, and when the page manager relocates the record the indexes are re-pointed
-too — and neither the re-serialized record write nor the index re-point is instrumented on that path.
-**So the next step is not another hypothesis: it is to stamp the PageBased update path**
-(`UpdateColumnarRow`/`TryUpdateInPlace`, the relocation branch and its index re-point) the way the
-append-only batch path already is, and then read whether the remaining ~34 µs is the second write, the index
-re-point, or full-row materialization.
-
+**Instrumentation added, and what it forced me to correct (same day).** Five PageBased branches of the
+batch-update core (`Table.BatchUpdate.cs` — `UpdateBatch`, `UpdateBatchViaPrimaryKeyLookup`,
+`UpdateBatchViaBulkSelect` and both multi-column siblings) plus `UpdatePageBasedRow`
+(`Table.CRUD.cs:1934`) now carry `encode` / `in-place-patch` / `engine-write` / `index-maint` / `hash-index`
+stamps; all of them previously emitted nothing at all. **None of them fired for this arm, which is itself the
+answer.** The report shows 10,000 `parse` calls and a single `row-locate` call, so the batch is dispatched
+**per statement** into `SqlParser.ExecuteUpdate` → **`Table.UpdateAffectedCount`** (`Table.CRUD.cs:1730`) —
+not into the batch-update core. That also closes the loop on §6's first code fact against the current source:
+`UpdateAffectedCount` gates its contiguous fast path on `TryBulkUpdateContiguousFixedWidth` (which the
+`row-locate` stamp shows declining after 1.1 ms), its PK fast path on `StorageMode != StorageMode.PageBased`
+(`:2260`) and its raw-byte `fastPatch` on `StorageMode == StorageMode.Columnar` (`:2226`). On PageBased every
+one of the 10,000 statements therefore takes the **generic per-op route**: `SelectInternal` full
+materialization (`:2340`) plus a full re-serialize — and that re-serialize is where the measured
+**2,829 B/update** of arena traffic comes from, **2.6×** the INSERT path's ~1.1 KB per row for the same
+record. **What is still unstamped is now down to two named regions** in that route — the `SelectInternal`
+materialization at `:2340` and the post-patch write after it — and stamping those two is the remaining work
+before the last ~75 % can be split between materialization, serialization and the page write. The
+instrumentation added here stays: it covers real entry points that other shapes use, and both were blank.
 **Two code facts found while looking, which already re-scope the package** (both need profiling to
 quantify, but neither is a guess about the page manager's inner loop):
 

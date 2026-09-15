@@ -93,7 +93,9 @@ public partial class Table
                     }
 
                     // Serialize updated row
+                    long encStart = Diagnostics.WritePathProfiler.Stamp();
                     byte[] data = SerializeRowOptimized(row);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encStart);
 
                     serializedUpdates.Add((oldPosition, oldPkValue, -1, row, data));
                 }
@@ -107,13 +109,24 @@ public partial class Table
                     // no longer fits its page — the engine returns a new storage ref).
                     foreach (var (oldPos, oldPkValue, _, row, data) in serializedUpdates)
                     {
+                        // §6 instrumentation (2026-09-15): the PageBased UPDATE profile attributed only ~24 %
+                        // of its time, with engine-write and index-maint showing ZERO calls — so the page
+                        // write and the index re-point were invisible, and "is the second write the cost?"
+                        // could not be answered. Stamped here; the re-point stamp only runs on relocation,
+                        // which makes its call count the relocation count.
+                        long writeStart = Diagnostics.WritePathProfiler.Stamp();
                         long updatedPos = engine.Update(Name, oldPos, data);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
                         if (updatedPos != oldPos)
                         {
                             string? newPkValue = PrimaryKeyIndex >= 0
                                 ? row[Columns[PrimaryKeyIndex]]?.ToString()
                                 : null;
+
+                            long repointStart = Diagnostics.WritePathProfiler.Stamp();
                             RepointIndexesAfterRelocation(oldPos, updatedPos, oldPkValue, newPkValue);
+                            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                         }
 
                         updatedCount++;
@@ -331,10 +344,22 @@ public partial class Table
 
             // WP11: overwrite only the updated field in the existing row bytes when safe
             // (PageBased with stable fixed offsets) instead of re-serializing every column.
-            byte[] updatedData = StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased
-                && TryOverwriteFieldsInPlace(existingData, new Dictionary<string, object>(1) { [updateColumnName] = newValue }) is { } patched
-                ? patched
-                : SerializeRowOptimized(row);
+            // §6 instrumentation: the patch attempt and the fallback serialization are stamped separately,
+            // because "did the in-place path engage at all on PageBased?" is the question the parity work
+            // turns on — and a fallback that runs every row is itself the finding. Behaviour is unchanged:
+            // TryOverwriteFieldsInPlace is still only called for PageBased, and a null result still falls
+            // back to SerializeRowOptimized.
+            byte[]? patchedInPlace = null;
+            long patchStart = Diagnostics.WritePathProfiler.Stamp();
+            if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
+            {
+                patchedInPlace = TryOverwriteFieldsInPlace(existingData, new Dictionary<string, object>(1) { [updateColumnName] = newValue });
+            }
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
+            long encStart = Diagnostics.WritePathProfiler.Stamp();
+            byte[] updatedData = patchedInPlace ?? SerializeRowOptimized(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encStart);
             serializedData.Add((position, oldPkValue, updatedData, row));
         }
 
@@ -345,13 +370,22 @@ public partial class Table
             // no longer fits its page - the engine returns a new storage ref).
             foreach (var (pos, oldPkValue, data, row) in serializedData)
             {
+                // §6 instrumentation: the per-row page write (in-place or relocation) and, when the record
+                // moved, the index re-point — both invisible on this path before, which is why the PageBased
+                // UPDATE profile attributed only ~24 % of its time.
+                long writeStart = Diagnostics.WritePathProfiler.Stamp();
                 long updatedPos = engine.Update(Name, pos, data);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
                 if (updatedPos != pos)
                 {
                     string? newPkValue = PrimaryKeyIndex >= 0
                         ? row[Columns[PrimaryKeyIndex]]?.ToString()
                         : null;
+
+                    long repointStart = Diagnostics.WritePathProfiler.Stamp();
                     RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                 }
 
                 updatedCount++;
@@ -478,7 +512,9 @@ public partial class Table
                 row[updateColumnName] = newValue;
 
                 // Serialize updated row
+                long encStart = Diagnostics.WritePathProfiler.Stamp();
                 byte[] data = SerializeRowOptimized(row);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encStart);
                 serializedData.Add((oldPosition, oldPkValue, data, row));
             }
 
@@ -487,13 +523,20 @@ public partial class Table
             {
                 foreach (var (pos, oldPkValue, data, row) in serializedData)
                 {
+                    // §6 instrumentation: page write + relocation re-point, previously invisible here.
+                    long writeStart = Diagnostics.WritePathProfiler.Stamp();
                     long updatedPos = engine.Update(Name, pos, data);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
                     if (updatedPos != pos)
                     {
                         string? newPkValue = PrimaryKeyIndex >= 0
                             ? row[Columns[PrimaryKeyIndex]]?.ToString()
                             : null;
+
+                        long repointStart = Diagnostics.WritePathProfiler.Stamp();
                         RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                     }
 
                     totalUpdated++;
@@ -725,10 +768,19 @@ public partial class Table
 
             // WP11: overwrite only the updated fields in the existing row bytes when safe
             // (PageBased with stable fixed offsets) instead of re-serializing every column.
-            byte[] updatedData = StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased
-                && TryOverwriteFieldsInPlace(existingData, columnUpdates) is { } patched
-                ? patched
-                : SerializeRowOptimized(row);
+            // §6 instrumentation: patch attempt and fallback serialization separated, as in the
+            // single-column path — behaviour unchanged (a null patch still falls back to serializing).
+            byte[]? patchedInPlace = null;
+            long patchStart = Diagnostics.WritePathProfiler.Stamp();
+            if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
+            {
+                patchedInPlace = TryOverwriteFieldsInPlace(existingData, columnUpdates);
+            }
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
+            long encStart = Diagnostics.WritePathProfiler.Stamp();
+            byte[] updatedData = patchedInPlace ?? SerializeRowOptimized(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encStart);
             serializedData.Add((position, oldPkValue, updatedData, row));
         }
 
@@ -739,13 +791,20 @@ public partial class Table
             // no longer fits its page - the engine returns a new storage ref).
             foreach (var (pos, oldPkValue, data, row) in serializedData)
             {
+                // §6 instrumentation: page write + relocation re-point, previously invisible here.
+                long writeStart = Diagnostics.WritePathProfiler.Stamp();
                 long updatedPos = engine.Update(Name, pos, data);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
                 if (updatedPos != pos)
                 {
                     string? newPkValue = PrimaryKeyIndex >= 0
                         ? row[Columns[PrimaryKeyIndex]]?.ToString()
                         : null;
+
+                    long repointStart = Diagnostics.WritePathProfiler.Stamp();
                     RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                 }
 
                 updatedCount++;
@@ -871,7 +930,11 @@ public partial class Table
                 }
 
                 // Serialize updated row
+                // §6 instrumentation: this multi-column bulk path always re-serializes (it has no WP11
+                // patch attempt), which is itself worth seeing in the stage report.
+                long encStart = Diagnostics.WritePathProfiler.Stamp();
                 byte[] data = SerializeRowOptimized(row);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encStart);
                 serializedData.Add((oldPosition, oldPkValue, data, row));
             }
 
@@ -880,13 +943,20 @@ public partial class Table
             {
                 foreach (var (pos, oldPkValue, data, row) in serializedData)
                 {
+                    // §6 instrumentation: page write + relocation re-point, previously invisible here.
+                    long writeStart = Diagnostics.WritePathProfiler.Stamp();
                     long updatedPos = engine.Update(Name, pos, data);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
                     if (updatedPos != pos)
                     {
                         string? newPkValue = PrimaryKeyIndex >= 0
                             ? row[Columns[PrimaryKeyIndex]]?.ToString()
                             : null;
+
+                        long repointStart = Diagnostics.WritePathProfiler.Stamp();
                         RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                     }
 
                     totalUpdated++;

@@ -1942,18 +1942,34 @@ public partial class Table
         }
 
         var pkVal = oldPkValue ?? string.Empty;
+
+        // §6 instrumentation (2026-09-15): this method IS the PageBased UPDATE path, and the `--pk` profile
+        // attributed only ~24 % of its time because the method had no stamps at all — engine-write,
+        // index-maint, in-place-patch and encode all showed ZERO calls while ~34 µs/update sat in code the
+        // report could not see. The append-only sibling (UpdateColumnarRow) was already instrumented.
+        long locateStart = Diagnostics.WritePathProfiler.Stamp();
         var searchResult = this.Index.Search(pkVal);
         if (!searchResult.Found)
         {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
             return;
         }
 
         long position = searchResult.Value;
         byte[]? existingData = engine.Read(Name, position);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
+
         byte[] rowData;
+
+        // The WP11 patch attempt and the fallback serialization are stamped separately, so "did the in-place
+        // path engage at all on PageBased?" is answerable from the report rather than by reading the code —
+        // and a fallback that runs on every row is itself the finding.
+        long patchStart = Diagnostics.WritePathProfiler.Stamp();
         if (existingData != null && TryOverwriteFieldsInPlace(existingData, updates) is { } patched)
         {
             rowData = patched;
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
             if (engine.SupportsDeltaUpdates)
             {
                 // WP13: wire the schema-aware delta codec - record
@@ -1963,22 +1979,34 @@ public partial class Table
         }
         else
         {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
+            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = SerializeRowExact(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         }
 
+        long writeStart = Diagnostics.WritePathProfiler.Stamp();
         long newPosition = engine.Update(Name, position, rowData);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
 
         if (newPosition != position)
         {
             // Record was relocated to another page (growing record on a
             // full page): re-point the PK index and rebuild hash indexes.
             var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+
+            // Only reached on relocation, so this stage's call count IS the relocation count.
+            long repointStart = Diagnostics.WritePathProfiler.Stamp();
             RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
         }
         else
         {
             // In-place update keeps the position; move hash entries in place.
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             MoveHashIndexesInPlace(row, oldHashKeys, position);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
         }
     }
 
