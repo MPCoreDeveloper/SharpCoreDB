@@ -117,7 +117,7 @@
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.12" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="YesSql.Core" Version="6.0.0" />
     <PackageVersion Include="YesSql.Provider.Sqlite" Version="6.0.0" />
   </ItemGroup>
