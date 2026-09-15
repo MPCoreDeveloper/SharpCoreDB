@@ -1047,9 +1047,34 @@ lifetime of the database.)
 INSERT is otherwise already 73.5–84.3K (SQL) / 108.5–132.1K (Direct) / 125.8–138.4K (StructRow) against
 SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The remaining, ranked items:
 
-1. **Extend the StructRow insert path to the SQL INSERT path.** WP14 did this for the *batch* INSERT
-   (`object[]` rows, no per-row dictionary); the single/multi-row SQL INSERT still pays dictionary
-   allocation and column-name lookups.
+1. **Multi-row `INSERT … VALUES` → the batched core — IMPLEMENTED (2026-09-15).** The statement used to
+   lower to one `Table.Insert` call per row (a standalone write-through append each) and now routes to
+   `Table.InsertBatch` when nothing needs per-row semantics: no INSERT trigger, no CHECK constraint, no
+   unique secondary index, and no active batch update — the batch core implements none of those, and
+   `CancelBatchUpdate` depends on the per-row path recording every inserted PK. A **row-count floor of
+   1,000** keeps the per-row loop for small statements. Measured with the new `--multirowinsert` mode
+   (20,000 rows, 1,000 rows/statement, 20 statements, median of 5, same machine, back-to-back, `src/`
+   swapped between the two commits): **2,069.77 → 1,430.30 µs/row (1.45×; 483 → 699 rows/s)**, and the
+   saving is exactly the append the change removed — which the profiler confirms.
+   ⚠️ **The floor is measured, not decorative.** Total time tracks the *statement count* as much as the row
+   count: 20 statements of 1,000 rows took 31.8 s, while **200 statements of 100 rows did not finish inside
+   300 s for the same 20,000 rows**. A per-statement cost therefore still dominates small statements, and
+   the break-even between 100 and 1,000 rows is **not measured** — see item 1b. Until it is, the floor stays.
+1b. **The overflow arena writes through per value — the actual INSERT bottleneck *(found 2026-09-15)*.**
+   `WritePathProfiler` attributes **100 % of the multi-row INSERT time to the `validate` stamp**, which
+   wraps validation *and* serialization (`Table.CRUD.cs` → `ValidateAndSerializeBatchOutsideLock`), at
+   **1.47 ms/row**. A fixed-width (PK) table serializes through `SerializeRowFixedWidth` →
+   `FixedWidthCodec.SerializeRow(…, GetOverflowArena())`, and **`OverflowArena.Write`
+   (`OverflowArena.cs:146`) calls `_storage.AppendBytes`** — the same open-per-call,
+   `FileOptions.WriteThrough` append §5 measured at **477.97 µs/record**. Every variable-length value
+   therefore costs a full file open + write-through + close; with ~3 TEXT values per row that *is* the
+   1.47 ms/row. **`EnableBufferedAppends` does not cover the arena** — it only routes single-row appends to
+   the table data file through the append buffer. Three consequences: this is a **larger lever than the
+   append policy the plan has been focused on**, it needs **no format change**, and it explains why the
+   non-PK benchmark shape (variable-length layout, values inline) inserts at ~7.7 µs/row while the
+   PK/fixed-width shape costs ~1.5 ms/row. **Next:** measure it directly (vary value length across the
+   inline threshold on a fixed-width table, to confirm the arena is the cost and find where the cliff is),
+   then extend the append buffer to the arena.
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
@@ -1312,6 +1337,22 @@ security-consistency audit** — then §3-1a (the free read-side probing fix). T
 because until it is done, "encryption costs 1.3–1.6×" is a number without a meaning: we would be
 measuring the price of protection we have not established we actually get. None of these three changes
 the on-disk format, and together they produce the attribution the structural work needs.
+
+**Where we actually are (2026-09-15), so the slice above stays historical.** Phase 0 is done — the §2
+protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
+protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
+moved to deferred index maintenance, and the SQL multi-row INSERT now uses the batched core (§5 item 1).
+The live queue is therefore: **§5 item 1b** (the overflow arena's per-value write-through — the measured
+dominant INSERT cost, and the largest remaining lever that needs no format change), then **§5 item 1's
+unmeasured break-even** and the per-statement cost behind it, then §6 (PageBased parity) and §4b
+(two-region records, the only remaining format change).
+
+**One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
+changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /
+YesSql / Sync providers. A core win that a provider re-introduces as row-by-row overhead is not a win, so
+before any INSERT/UPDATE/DELETE number is published, re-run the comparative harness, `--pk`,
+`--pk-default` and the `--multirowinsert` mode added with §5 item 1, plus the provider test projects — and
+report the SQL, Direct and StructRow ladders **separately**, never as one number.
 
 ---
 

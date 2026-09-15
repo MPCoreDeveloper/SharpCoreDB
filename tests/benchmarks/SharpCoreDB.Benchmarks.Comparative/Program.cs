@@ -5,6 +5,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using BLite.Bson;
 using BLite.Core;
@@ -58,6 +59,15 @@ class Program
         if (args.Any(a => a.Equals("--inserttest", StringComparison.OrdinalIgnoreCase)))
         {
             RunInsertMicroBenchmark();
+            return;
+        }
+
+        // Optional: --multirowinsert → focused multi-row `INSERT … VALUES (…),(…)` micro-benchmark. This
+        // statement shape used to lower to one Table.Insert per row — one standalone write-through append
+        // each — and now routes to the batched core, so the mode exists to measure exactly that change.
+        if (args.Any(a => a.Equals("--multirowinsert", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunMultiRowInsertMicroBenchmark();
             return;
         }
 
@@ -304,6 +314,118 @@ class Program
             try { Directory.Delete(dbPath, true); }
             catch { /* best-effort temp-dir cleanup */ }
         }
+    }
+
+    /// <summary>
+    /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
+    /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
+    /// write-through append per row — and now routes to the batched core when the table has no per-row-only
+    /// semantics. Each repetition runs on a fresh database so append-only growth cannot skew it; min, median
+    /// and max are reported rather than a single run.
+    /// </summary>
+    static void RunMultiRowInsertMicroBenchmark()
+    {
+        const int inserts = 20_000;
+        const int reps = 5;
+
+        // Rows per statement is the dimension that separates per-row cost from per-statement cost: at a
+        // fixed row total, a constant per-row cost keeps rows/s flat, whereas anything super-linear in the
+        // statement length shows up as big statements costing more per row. Overridable for that bracket.
+        int rowsPerStatement = 1_000;
+        var rowsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ROWS");
+        if (int.TryParse(rowsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRows) && parsedRows > 0)
+        {
+            rowsPerStatement = parsedRows;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var sp = services.BuildServiceProvider();
+        var factory = sp.GetRequiredService<DatabaseFactory>();
+        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
+
+        var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
+        double[] times = new double[reps];
+
+        double RunPass()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"scdb-multirow-{Guid.NewGuid()}");
+            using (var db = (SharpCoreDB.Database)factory.Create(path, "pw", isReadOnly: false, config: config))
+            {
+                db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                db.ExecuteSQL(CreateDocsIndexSql);
+
+                var sw = Stopwatch.StartNew();
+                foreach (var stmt in statements)
+                {
+                    db.ExecuteSQL(stmt);
+                }
+
+                sw.Stop();
+                var elapsed = sw.Elapsed.TotalSeconds;
+                try { Directory.Delete(path, true); } catch { /* best-effort temp-dir cleanup */ }
+                return elapsed;
+            }
+        }
+
+        for (int r = 0; r < reps; r++)
+        {
+            times[r] = RunPass();
+        }
+
+        Array.Sort(times);
+        double median = times[reps / 2];
+
+        Console.WriteLine();
+        Console.WriteLine($"═══ Multi-row INSERT … VALUES micro-benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, {statements.Count} statements, median of {reps}) ═══");
+        Console.WriteLine($"  rows/s (median) : {inserts / median:N0}");
+        Console.WriteLine($"  min {times[0]:F3}s   median {median:F3}s   max {times[^1]:F3}s");
+        Console.WriteLine($"  median µs/row   : {median * 1_000_000 / inserts:F2}");
+        Console.WriteLine($"  median ms/statement : {median * 1000 / statements.Count:F2}");
+
+        // One further, untimed pass with the write-path profiler on, so the stage breakdown for this exact
+        // workload is available without perturbing the timings above.
+        SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+        SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+        double profiled = RunPass();
+        SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+        Console.WriteLine();
+        Console.WriteLine($"  profiled pass: {profiled:F3}s");
+        Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+    }
+
+    /// <summary>
+    /// Builds multi-row <c>INSERT … VALUES</c> statements carrying <paramref name="rowsPerStatement"/> tuples
+    /// each. Built once, outside the timed region, because it is caller work.
+    /// </summary>
+    static List<string> BuildMultiRowInsertStatements(int totalRows, int rowsPerStatement)
+    {
+        var statements = new List<string>((totalRows / rowsPerStatement) + 1);
+        var sb = new StringBuilder(rowsPerStatement * 96);
+
+        for (int start = 0; start < totalRows; start += rowsPerStatement)
+        {
+            int count = Math.Min(rowsPerStatement, totalRows - start);
+            sb.Clear();
+            sb.Append("INSERT INTO docs (id, name, email, age, score, data) VALUES ");
+
+            for (int i = 0; i < count; i++)
+            {
+                int id = start + i;
+                if (i > 0)
+                {
+                    sb.Append(',');
+                }
+
+                sb.Append('(').Append(id).Append(", 'User").Append(id)
+                    .Append("', 'user").Append(id).Append("@example.com', ").Append(id % 100)
+                    .Append(", ").Append(id).Append(".5, 'data-").Append(id).Append("')");
+            }
+
+            statements.Add(sb.ToString());
+        }
+
+        return statements;
     }
 
     /// <summary>

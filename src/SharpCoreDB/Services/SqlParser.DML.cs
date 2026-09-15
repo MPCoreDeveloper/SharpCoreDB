@@ -349,7 +349,9 @@ public partial class SqlParser
                 break;
             }
         }
-        foreach (var rowValues in allRowValues)
+        // Build one row from one VALUES tuple. Shared by the per-row loop and the batched fast path below so
+        // the two cannot drift apart on value parsing, column mapping or internal-_rowid skipping.
+        Dictionary<string, object> BuildRowFromValues(List<string> rowValues)
         {
             var row = new Dictionary<string, object>();
             if (insertColumns is null)
@@ -373,6 +375,52 @@ public partial class SqlParser
                     row[col] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
                 }
             }
+
+            return row;
+        }
+
+        // ─── Batched INSERT … VALUES ─────────────────────────────────────────
+        // One statement carrying N value tuples is a single write unit, but the per-row loop below pays a
+        // whole standalone append per row: Storage.AppendBytes opens the file and writes through per record
+        // (measured 477.97 µs/record, against 0.43 µs/record once rows share one append and one engine
+        // transaction). Handing the statement to Table.InsertBatch buys exactly that — one transaction, one
+        // batched append, batched PK/hash-index maintenance.
+        //
+        // It is only taken when nothing needs the per-row loop: no INSERT trigger (a BEFORE trigger may
+        // rewrite the row being inserted and an AFTER trigger must observe it), and — via
+        // Table.CanUseBatchedInsert — no CHECK constraint and no unique secondary index, neither of which
+        // the batch core validates.
+        //
+        // ⚠️ The row-count floor is MEASURED, not decorative. Batching opens an engine transaction, and on
+        // the 20,000-row multi-row-VALUES workload (`--multirowinsert`) the total time tracks the STATEMENT
+        // COUNT, not only the row count: 20 statements of 1,000 rows took 31.8 s, while 200 statements of
+        // 100 rows did not finish inside 300 s for exactly the same rows. So per-statement cost dominates
+        // small statements and the loop is retained for them. At 1,000 rows/statement the batched lowering
+        // measured 1,430 µs/row against 2,070 µs/row for the loop (1.45×, same machine, back-to-back), and
+        // that is the only size verified to win — hence the floor. The break-even between 100 and 1,000 rows
+        // is not yet measured; see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §5.
+        //
+        // One observable difference when it does apply: a failure part-way through inserts NOTHING, because
+        // the batch core validates every row before writing any. The per-row loop leaves the rows it had
+        // already written in place. That matches SQLite, where one multi-row INSERT is one atomic unit.
+        const int MinRowsForBatchedInsert = 1000;
+        bool useBatchedInsert = allRowValues.Count >= MinRowsForBatchedInsert
+            && tableAsTable is { CanUseBatchedInsert: true }
+            && !HasTriggersFor(tableName, TriggerEvent.Insert);
+        List<Dictionary<string, object>>? batchedRows = useBatchedInsert
+            ? new List<Dictionary<string, object>>(allRowValues.Count)
+            : null;
+
+        foreach (var rowValues in allRowValues)
+        {
+            var row = BuildRowFromValues(rowValues);
+
+            if (batchedRows is not null)
+            {
+                batchedRows.Add(row);
+                continue;
+            }
+
             FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
 
             table.Insert(row);
@@ -383,6 +431,46 @@ public partial class SqlParser
             if (needsReturning)
             {
                 returningRows!.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+            }
+        }
+
+        if (batchedRows is not null)
+        {
+            tableAsTable!.InsertBatch(batchedRows);
+            insertedCount = batchedRows.Count;
+            lastInsertedRow = batchedRows[^1];
+
+            // Table.InsertBatch's critical section leaves the last storage POSITION in the database
+            // (Table.CRUD.cs:715), whereas every per-row Insert leaves the row's primary key. Re-point it at
+            // the same value the per-row loop would have left, so IDatabase.GetLastInsertRowId() cannot
+            // quietly change meaning for this one statement shape. The no-PK case needs nothing — the
+            // position is exactly what Insert records there too.
+            int pkColIdx = tableAsTable.PrimaryKeyIndex;
+            if (pkColIdx >= 0
+                && lastInsertedRow.TryGetValue(table.Columns[pkColIdx], out var pkRowIdVal)
+                && pkRowIdVal is not null and not DBNull)
+            {
+                long? pkRowId = pkRowIdVal switch
+                {
+                    int i => i,
+                    long l => l,
+                    _ => null
+                };
+
+                if (pkRowId.HasValue)
+                {
+                    Database?.SetLastInsertRowId(pkRowId.Value);
+                }
+            }
+
+            if (needsReturning)
+            {
+                // Same shape as the per-row loop: the copy is taken after the insert, so the defaults the
+                // batch core filled into the dictionaries are visible to RETURNING.
+                foreach (var row in batchedRows)
+                {
+                    returningRows!.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+                }
             }
         }
         _lastChanges = insertedCount;

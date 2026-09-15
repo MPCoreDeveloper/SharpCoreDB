@@ -203,6 +203,36 @@ public partial class SqlParser
     }
 
     /// <summary>
+    /// True when at least one registered trigger could fire for the given table and event.
+    /// <para>
+    /// Used by the SQL multi-row INSERT fast path to stay off tables where per-row trigger semantics
+    /// matter: a BEFORE INSERT trigger can rewrite the row being inserted, and an AFTER INSERT trigger has
+    /// to observe it, so the rows cannot be handed to the batched core in one call.
+    /// </para>
+    /// </summary>
+    internal bool HasTriggersFor(string tableName, TriggerEvent triggerEvent)
+    {
+        if (_triggers.Count == 0)
+        {
+            return false;
+        }
+
+        lock (_triggerLock)
+        {
+            foreach (var trigger in _triggers.Values)
+            {
+                if (trigger.Event == triggerEvent
+                    && trigger.TableName.Equals(tableName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Gets all registered trigger names.
     /// </summary>
     public IReadOnlyList<string> GetTriggerNames()

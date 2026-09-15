@@ -243,6 +243,52 @@ public partial class Table
     }
 
     /// <summary>
+    /// True when <see cref="InsertBatch"/> is a drop-in for a loop of per-row <see cref="Insert"/> calls on
+    /// this table — i.e. when nothing in the table's schema relies on the per-row-only semantics that the
+    /// batch core does not implement.
+    /// <para>
+    /// What the batch core does NOT do: CHECK-constraint evaluation (per-column and table-level) and non-PK
+    /// unique-index enforcement. PK and NOT NULL validation <em>are</em> implemented on both paths, and the
+    /// batch core joins an open engine transaction rather than nesting one
+    /// (<c>InsertBatchCriticalSection</c>: <c>needsTransaction = !engine.IsInTransaction</c>).
+    /// </para>
+    /// <para>
+    /// The last condition is not about the schema. <see cref="Insert"/> records every inserted primary key
+    /// with the database (<c>RecordBatchInsert</c>) so <c>CancelBatchUpdate</c> can delete rows an aborted
+    /// batch update added — on append-only storage a transaction rollback alone does not remove them. The
+    /// batch core does not record them, so an active batch update keeps the per-row loop.
+    /// </para>
+    /// </summary>
+    internal bool CanUseBatchedInsert
+    {
+        get
+        {
+            if (this.TableCheckConstraints.Count > 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < this.ColumnCheckExpressions.Count; i++)
+            {
+                if (this.ColumnCheckExpressions[i] is not null)
+                {
+                    return false;
+                }
+            }
+
+            foreach (var metadata in this.registeredIndexes.Values)
+            {
+                if (metadata.IsUnique)
+                {
+                    return false;
+                }
+            }
+
+            return _database?.IsBatchUpdateActive != true;
+        }
+    }
+
+    /// <summary>
     /// Inserts multiple rows in a single batch operation.
     /// Routes to columnar or page-based storage ENGINE based on StorageMode.
     /// ✅ PHASE 1 OPTIMIZED: Bulk buffer allocation + minimized lock scope
