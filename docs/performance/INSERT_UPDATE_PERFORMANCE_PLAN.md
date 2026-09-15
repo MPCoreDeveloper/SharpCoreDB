@@ -1053,6 +1053,18 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
+   **Verified 2026-09-15 — the fsync is still paid, and it is not a setting.** Both append entry points
+   hard-code `FileOptions.WriteThrough` (`Storage.Append.cs:557` single-record, `:1051` batch), and
+   `WalDurabilityMode` is read by the WAL only (`Database.Core.cs:197`) — **never** by the table append
+   path. So `DurabilityMode.Async`, which is the default in the `HighPerformance`, `BulkImport`,
+   in-memory and platform presets (`DatabaseConfig.cs:415`, `:456`, `:540`, `:619`) is silently ignored
+   for single-row inserts: the caller asked for async durability and gets a synchronous write per row.
+   This is the same class of defect as the encryption-posture mismatch §3-1c found — a configuration
+   that promises something the code does not deliver — and it is worth fixing for that reason alone.
+   `EnableBufferedAppends` (item 1, opt-in) removes the per-row flush but does **not** make the append
+   path honour the mode. Honouring `Async` changes when bytes reach the platter, so it stays an owner
+   decision plus a crash-recovery test — a process crash is already safe (the OS cache survives it); the
+   open question is power loss — rather than a unilateral edit.
 3. **One serialization pass.** The `Table.CRUD.cs` comments already flag "typed column buffers to
    eliminate 75% of allocations" work; confirm with the instrumentation whether a row is encoded more
    than once on the batch path.
