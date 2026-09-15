@@ -185,7 +185,13 @@ public partial class Table
 
                 // ✅ NEW: Route through storage engine
                 var engine = GetOrCreateStorageEngine();
+
+                // §2 instrumentation (2026-09-15): this path had no engine-write stamp at all, so a
+                // standalone-statement run attributed only ~10 % of its ~110 µs/statement and the storage
+                // write was invisible on the one path where it is most of the remaining question.
+                long engineWriteStart = Diagnostics.WritePathProfiler.Stamp();
                 long position = engine.Insert(Name, rowData);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineWriteStart);
 
                 // ✅ NEW: Track last_insert_rowid() for SQLite compatibility.
                 // Store the auto-generated PRIMARY KEY value (not the storage position),

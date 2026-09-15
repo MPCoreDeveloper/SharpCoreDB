@@ -320,7 +320,11 @@ public partial class SqlParser
             _totalChanges += insertedFromSelect.Count;
             if (insertedFromSelect.Count > 0) _lastInsertRowId++;
             if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedFromSelect, returningColumns);
+            // §2 instrumentation: the INSERT … SELECT branch's per-statement WAL call, stamped like the
+            // VALUES path's so the two cannot disagree about what wal-append costs.
+            long walSelectStart = Diagnostics.WritePathProfiler.Stamp();
             wal?.Log(sqlWithoutReturning);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalAppend, walSelectStart);
             return;
         }
         // ──────────────────────────────────────────────────────────────────
@@ -530,7 +534,14 @@ public partial class SqlParser
             }
         }
         if (needsReturning) _pendingQueryResults = ProjectReturningRows(returningRows!, returningColumns!);
+
+        // §2 instrumentation (2026-09-15): `wal-append` existed in the stage enum with NO writer anywhere in
+        // the codebase, which is why a standalone-statement run left ~100 µs of a 109.91 µs per-statement cost
+        // unattributed with the storage write measured at 0.735 µs. This is the per-statement WAL call on the
+        // SQL path.
+        long walAppendStart = Diagnostics.WritePathProfiler.Stamp();
         wal?.Log(sqlWithoutReturning);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalAppend, walAppendStart);
     }
 
     /// <summary>

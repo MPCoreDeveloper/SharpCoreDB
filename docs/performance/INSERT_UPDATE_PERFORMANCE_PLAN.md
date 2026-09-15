@@ -1406,9 +1406,11 @@ must be bounded by a rebuild trigger — that is a decision plus its own test ma
 serialization — plus RowLocate around the batch PK probes; the path had none), the fixed-width bulk-delete fast
 path (RowLocate / IndexMaintenance / IndexDecode / EngineWrite), bulk-update per-row hash-index maintenance
 (IndexMaintenance), the batch dispatcher's statement classification (Parse) and the batch commit (Commit).
-Still uncovered, recorded honestly: the *second* batch dispatcher path, parser internals below the dispatcher,
-and `WalAppend`/`WalFlush` — those stages exist in the enum but nothing writes them yet, so a stage report
-still cannot be read as wall time.
+Still uncovered, recorded honestly: the *second* batch dispatcher path and parser internals below the
+dispatcher. **`WalAppend` is now wired (2026-09-15)** — the per-statement SQL `INSERT` path's `wal?.Log(…)`
+call, in both the VALUES and `INSERT … SELECT` branches — and it measured **0.025 µs/statement with zero
+allocation**, which refutes the per-statement-WAL-fsync hypothesis outright. `WalFlush` still has no writer:
+nothing on this path flushes the log per statement.
 
 ### 7a. Deferred index maintenance — implemented and measured *(2026-09-15)*
 
@@ -1575,8 +1577,17 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `EnableBufferedAppends` still the explicit opt-in. Coverage, the corrected trade, and the correction to
    this item's own arena premise are in §5 item 2. **What it exposed is the new top item:** with storage
    taken out of the per-statement cost, one single-row statement still costs **~115 µs**, and that is not the
-   append — it is SQL dispatch, WAL and metadata. The profiler can attribute it now, which makes this the
-   same investigation §5 item 1b/1c did for the multi-row shape, one level up.
+   append. **Profiled the same day — and it is not the WAL either.** On the standalone-statement shape (1 row
+   per statement, 20,000 statements) the storage write stamps at **0.735–0.945 µs/statement** and the WAL's
+   per-statement `Log` at **0.025 µs with zero allocation**, so neither the append nor a per-statement fsync
+   explains it. What *is* attributed comes to ~13 µs/statement: `arena-write` ~8.6 µs (serialization plus the
+   buffered per-payload append), `parse` 3.3 µs, `engine-write` 0.9 µs, `row-build` 0.4 µs, `wal-append`
+   0.03 µs. The rest — between ~48 and ~120 µs/statement depending on whether you read the profiled pass
+   (69 µs/statement) or the timed medians (134 µs) — sits in the **statement-dispatch machinery, outside the
+   table and outside the WAL**, which is precisely the coverage gap §7 already names: the second dispatcher
+   path and parser internals below the dispatcher. **Next action: stamp `Database.ExecuteSQL`'s per-statement
+   path** (classification, security validation, dispatch) — and reconcile why the profiled pass is *faster* per
+   statement than the timed medians, which is unexplained and may be warm-up rather than measurement error.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)
