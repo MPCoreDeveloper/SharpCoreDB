@@ -124,6 +124,27 @@ public class DatabaseConfig
     public int AppendBufferFlushIntervalMs { get; init; } = 10;
 
     /// <summary>
+    /// Gets a value indicating whether DELETE batches defer index maintenance until the batch's
+    /// commit/flush boundary. When <see langword="true"/>, a DELETE writes only the durable tombstone
+    /// and queues the primary-key / hash-index removals to be applied in one bulk pass at flush time
+    /// (mirroring the UPDATE path's <c>DeferredIndexUpdater</c>). Point lookups and scans already skip
+    /// tombstoned records, so a stale index entry is reconciled on read; uniqueness checks verify
+    /// liveness before rejecting a re-INSERT. Default <see langword="false"/>: indexes are updated
+    /// immediately, byte-for-byte identical to today.
+    /// </summary>
+    public bool EnableDeferredDeleteIndexes { get; init; } = false;
+
+    /// <summary>
+    /// Gets the number of deferred DELETE primary keys that may accumulate in the stale PK B-tree before
+    /// it is rebuilt from the data file (dropping tombstoned entries). Only used when
+    /// <see cref="EnableDeferredDeleteIndexes"/> is enabled. The rebuild happens lazily at the next
+    /// non-transactional delete (or <c>Flush()</c>/reopen), so a large batch still defers its whole
+    /// B-tree maintenance while a long-running session stays bounded. Default 10,000. Set to 0 to
+    /// rebuild at every delete (effectively disabling the deferral).
+    /// </summary>
+    public int DeferredDeleteIndexThreshold { get; init; } = 10000;
+
+    /// <summary>
     /// Gets a value indicating whether batch encryption is enabled during bulk operations.
     /// When true, rows are accumulated in plaintext and encrypted in 64KB batches.
     /// Expected gain: 6-10x faster than per-row encryption for bulk inserts.

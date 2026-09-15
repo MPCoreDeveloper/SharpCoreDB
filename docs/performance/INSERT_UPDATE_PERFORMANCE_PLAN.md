@@ -1146,6 +1146,41 @@ Still uncovered, recorded honestly: the *second* batch dispatcher path, parser i
 and `WalAppend`/`WalFlush` — those stages exist in the enum but nothing writes them yet, so a stage report
 still cannot be read as wall time.
 
+### 7a. Deferred index maintenance — implemented and measured *(2026-09-15)*
+
+The lever §7 identified is now built, behind `DatabaseConfig.EnableDeferredDeleteIndexes` (**opt-in,
+default `false`**). When enabled, a DELETE writes only the durable tombstone and *skips* the PK B-tree
+removal (`MarkPrimaryKeyIndexStale`) and the per-key hash removal; the PK B-tree is rebuilt from the data
+file (skipping tombstones) at a later boundary, and uniqueness is verified against the stored position
+(`IsPrimaryKeyTaken`), so a tombstoned entry is treated as free. Point lookups already tolerated a
+tombstoned position (null read).
+
+**Three findings from building it, all measured:**
+
+1. **Marking a loaded hash index stale is wrong here.** It made the *next* DELETE's
+   `EnsureAllRegisteredIndexesLoaded()` rebuild the index from the file — O(n) *per delete*. Measured
+   catastrophic: DELETE raw **97K → 1.4K ops/s**. The hash removal is now skipped without a stale mark;
+   the index keeps tombstone-tolerant stale entries and is rebuilt on reopen.
+2. **An O(n) rebuild at `Table.Flush()` is also wrong.** `RebuildPrimaryKeyIndexFromDisk()` over the
+   acceptance file measured **1380 ms (plaintext)** / **36 ms (at-rest)** for 20K records — the plaintext
+   path pays ~69 µs/record, which dwarfs the batch win. The flush-time rebuild was removed; reconciliation
+   is now bounded by `DeferredDeleteIndexThreshold` (default 10,000, non-transactional only) and reopen.
+3. **The fix turns it into a win.** `--dual-mode` (random-key CRUD, `DELETE … WHERE name = 'User{i}'`,
+   100K inserts / 10K deletes, medians of 3), deferral off → on:
+
+| operation | raw | default (at-rest) |
+|---|---:|---:|
+| DELETE | 97,453 → **213,619** (**2.19×**) | 73,377 → **87,625** (**1.19×**) |
+
+A focused probe isolates the same effect on a smaller shape (20K rows, 10K deletes, one batch):
+plaintext **62,142 → 122,748 ops/s (2.0×)**, at-rest **43,250 → 53,333 ops/s (1.23×)**.
+
+**Honest scope:** the `--pk` harness is unchanged by this (its ascending-PK DELETE rides the contiguous
+fixed-width fast path, which never reaches `DeleteRecordsCore`) — the lever targets the *random-key* path.
+On-disk behaviour and the default configuration are unchanged; `DeferredDeleteIndexTests` pins that
+deleted rows stay gone to every reader, a deleted PK can be re-INSERTed, nothing resurrects across a
+reopen, and the default is untouched. The full core suite is green (1864, 0 failed).
+
 ---
 
 ## 8. Acceptance targets

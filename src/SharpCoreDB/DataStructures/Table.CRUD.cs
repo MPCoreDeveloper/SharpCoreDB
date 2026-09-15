@@ -136,7 +136,7 @@ public partial class Table
                 if (this.PrimaryKeyIndex >= 0)
                 {
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    if (this.Index.Search(pkVal).Found)
+                    if (IsPrimaryKeyTaken(pkVal))
                         throw new InvalidOperationException("Primary key violation");
                 }
 
@@ -690,7 +690,7 @@ public partial class Table
             {
                 var row = validatedRows[rowIdx];
                 var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
+                if (IsPrimaryKeyTaken(pkVal))
                     throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
             }
         }
@@ -783,7 +783,7 @@ public partial class Table
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
             var pkVal = rows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-            if (this.Index.Search(pkVal).Found)
+            if (IsPrimaryKeyTaken(pkVal))
                 throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
         }
     }
@@ -895,7 +895,7 @@ public partial class Table
                 if (this.PrimaryKeyIndex >= 0)
                 {
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    if (this.Index.Search(pkVal).Found)
+                    if (IsPrimaryKeyTaken(pkVal))
                         throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
                 }
 
@@ -1002,7 +1002,7 @@ public partial class Table
             if (this.PrimaryKeyIndex >= 0)
             {
                 var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
+                if (IsPrimaryKeyTaken(pkVal))
                     throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
             }
 
@@ -2706,6 +2706,7 @@ public partial class Table
         // Primary-key B-tree cleanup: bulk-delete in descending key order (one pass through the
         // rightmost leaf path instead of arbitrary per-row order → fewer separator promotions).
         long indexStart = WritePathProfiler.Stamp();
+        bool deferIndexMaintenance = _config?.EnableDeferredDeleteIndexes == true;
         if (this.PrimaryKeyIndex >= 0)
         {
             var pkCol = this.Columns[this.PrimaryKeyIndex];
@@ -2718,32 +2719,49 @@ public partial class Table
                 }
             }
 
-            if (pkKeys.Count > 0)
+            if (deferIndexMaintenance)
+            {
+                // Deferred DELETE: the tombstone is the durable truth. Skip the per-key B-tree
+                // removal entirely and mark the PK index stale; it is rebuilt from the data file
+                // (skipping tombstones) at the next committed-data boundary or reopen. Point
+                // lookups tolerate a tombstoned position (null read) and uniqueness verifies
+                // liveness, so the stale entries are invisible to readers.
+                MarkPrimaryKeyIndexStale(pkKeys.Count);
+            }
+            else if (pkKeys.Count > 0)
             {
                 this.Index.DeleteBulk(pkKeys);
             }
         }
 
-        // Key-only hash-index cleanup: extract each indexed column's key once per row and
-        // remove all positions in a single lock per index.
+        // Storage positions of the deleted rows — needed both for the (optional) hash-index cleanup
+        // below and for the durable tombstone write that follows.
         var positions = new long[recordsToDelete.Count];
         for (int i = 0; i < recordsToDelete.Count; i++)
         {
             positions[i] = recordsToDelete[i].storagePosition;
         }
 
-        foreach (var kvp in this.hashIndexes)
+        // Key-only hash-index cleanup: extract each indexed column's key once per row and remove all
+        // positions in a single lock per index. When deferring, the removal is skipped entirely — the
+        // hash index keeps stale entries pointing at tombstones (point lookups skip them via a null
+        // read, and the index is rebuilt on reopen). It is deliberately NOT marked stale, because the
+        // next DELETE's EnsureAllRegisteredIndexesLoaded would otherwise rebuild it O(n) per delete.
+        if (!deferIndexMaintenance)
         {
-            if (!this.loadedIndexes.Contains(kvp.Key))
-                continue;
-
-            var keys = new object?[recordsToDelete.Count];
-            for (int i = 0; i < recordsToDelete.Count; i++)
+            foreach (var kvp in this.hashIndexes)
             {
-                recordsToDelete[i].row.TryGetValue(kvp.Key, out keys[i]);
-            }
+                if (!this.loadedIndexes.Contains(kvp.Key))
+                    continue;
 
-            kvp.Value.RemoveBatchKeys(keys, positions);
+                var keys = new object?[recordsToDelete.Count];
+                for (int i = 0; i < recordsToDelete.Count; i++)
+                {
+                    recordsToDelete[i].row.TryGetValue(kvp.Key, out keys[i]);
+                }
+
+                kvp.Value.RemoveBatchKeys(keys, positions);
+            }
         }
 
         WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, indexStart);
@@ -2795,6 +2813,10 @@ public partial class Table
         }
 
         Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
+
+        // Bound the deferred-DELETE staleness: once the tombstones are durable (outside a transaction)
+        // and the pending count crossed the configured threshold, rebuild the PK B-tree now.
+        RebuildPrimaryKeyIndexIfThresholdExceeded();
     }
 
     /// <summary>

@@ -443,6 +443,8 @@ class Program
             UseMemoryMapping = true,
             UseBufferedIO = true,
             EnableHashIndexes = true,
+            // Opt-in DELETE deferral (plan §7) — toggled via env so the same build can A/B it.
+            EnableDeferredDeleteIndexes = Environment.GetEnvironmentVariable("SHARPCOREDB_DEFER_DELETE_INDEXES") == "1",
             EnableQueryCache = true,
             QueryCacheSize = 4096,
             EnableCompiledPlanCache = true,
