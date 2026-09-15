@@ -121,9 +121,17 @@ public static class WritePathProfiler
         /// B-tree bulk index) and the largest of them cannot be optimised without knowing which it is.
         /// </summary>
         HashIndexMaint = 16,
+
+        /// <summary>
+        /// Validating a SQL statement before dispatch — the per-statement security and parameter check.
+        /// Added (2026-09-15) after a standalone-statement run measured the storage write at 0.8 µs and the WAL
+        /// at 0.02 µs while ~75 % of a warm ~60 µs/statement stayed unattributed; this is one of the two phases
+        /// below the table that had no stamp at all.
+        /// </summary>
+        StatementValidate = 17,
     }
 
-    private const int StageCount = 17;
+    private const int StageCount = 18;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -156,7 +164,7 @@ public static class WritePathProfiler
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
-        "hash-index",
+        "hash-index", "stmt-validate",
     ];
 
     private static int _enabled;

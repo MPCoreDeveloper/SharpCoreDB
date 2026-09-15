@@ -536,9 +536,9 @@ public partial class SqlParser
         if (needsReturning) _pendingQueryResults = ProjectReturningRows(returningRows!, returningColumns!);
 
         // §2 instrumentation (2026-09-15): `wal-append` existed in the stage enum with NO writer anywhere in
-        // the codebase, which is why a standalone-statement run left ~100 µs of a 109.91 µs per-statement cost
-        // unattributed with the storage write measured at 0.735 µs. This is the per-statement WAL call on the
-        // SQL path.
+        // the codebase, which is why a standalone-statement run left most of its per-statement cost
+        // unattributed while the storage write measured well under 1 µs. This is the per-statement WAL call
+        // on the SQL path.
         long walAppendStart = Diagnostics.WritePathProfiler.Stamp();
         wal?.Log(sqlWithoutReturning);
         Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalAppend, walAppendStart);

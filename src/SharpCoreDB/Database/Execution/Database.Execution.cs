@@ -79,11 +79,17 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
+        // §2 instrumentation (2026-09-15): on the standalone-statement shape the storage write measures 0.8 µs
+        // and the WAL 0.02 µs, so ~75 % of a warm ~60 µs/statement is unattributed and lives in the statement
+        // machinery below the table. This is one of the two phases that had no stamp at all.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         SqlQueryValidator.ValidateQuery(
             sql, 
             null, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
 
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
@@ -100,6 +106,10 @@ public partial class Database
         }
 
         // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
+        // §2 instrumentation: statement classification and plan resolution above the parser — the second phase
+        // below the table with no stamp. Placed after the SELECT branch's early return so it can never be left
+        // open, and Parse is reused because "resolving a statement's execution plan" is that stage's definition.
+        long dmlClassifyStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             GetOrAddPlan(sql, null, SqlCommandType.INSERT);
@@ -112,6 +122,9 @@ public partial class Database
         {
             GetOrAddPlan(sql, null, SqlCommandType.DELETE);
         }
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Parse, dmlClassifyStart);
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently

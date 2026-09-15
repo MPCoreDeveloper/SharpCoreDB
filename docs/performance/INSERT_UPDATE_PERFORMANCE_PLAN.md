@@ -1580,14 +1580,31 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    append. **Profiled the same day — and it is not the WAL either.** On the standalone-statement shape (1 row
    per statement, 20,000 statements) the storage write stamps at **0.735–0.945 µs/statement** and the WAL's
    per-statement `Log` at **0.025 µs with zero allocation**, so neither the append nor a per-statement fsync
-   explains it. What *is* attributed comes to ~13 µs/statement: `arena-write` ~8.6 µs (serialization plus the
-   buffered per-payload append), `parse` 3.3 µs, `engine-write` 0.9 µs, `row-build` 0.4 µs, `wal-append`
-   0.03 µs. The rest — between ~48 and ~120 µs/statement depending on whether you read the profiled pass
-   (69 µs/statement) or the timed medians (134 µs) — sits in the **statement-dispatch machinery, outside the
-   table and outside the WAL**, which is precisely the coverage gap §7 already names: the second dispatcher
-   path and parser internals below the dispatcher. **Next action: stamp `Database.ExecuteSQL`'s per-statement
-   path** (classification, security validation, dispatch) — and reconcile why the profiled pass is *faster* per
-   statement than the timed medians, which is unexplained and may be warm-up rather than measurement error.
+   explains it. What *is* attributed comes to **15.7 µs/statement** (~25 %): `arena-write` 6.5 µs
+   (serialization plus the buffered per-payload append), `parse` 2.5 µs, `engine-write` 0.8 µs, `row-build`
+   0.4 µs, `wal-append` 0.02 µs. **The warm median for this shape is 59.64 µs/statement**, so ~44 µs/statement
+   sits in the **statement-dispatch machinery, outside the table and outside the WAL** — precisely the coverage
+   gap §7 already names: the second dispatcher path and parser internals below the dispatcher. ⚠️ An earlier
+   version of this paragraph quoted 109.91–133.62 µs/statement and called the profiled pass "faster than the
+   medians, which is the wrong sign": those figures were **cold `SHARPCOREDB_MULTIROW_REPS=1` passes** (a
+   single first pass including JIT warm-up), which is the whole discrepancy. Measured warm, the median and the
+   profiled pass agree (59.6 vs 61.9 µs/statement), and the correction is recorded here rather than quietly
+   overwritten. **Done the same day, and it found the bucket.** `StatementValidate` is a new stage, and `Parse`
+   now also covers DML classification + plan resolution above the parser, so the two phases below the table with
+   no stamp are attributed. Measured warm (median of 5, 20,000 statements): the security/parameter validation is
+   **0.035 µs/statement — free**, refuting that candidate outright, while `parse` totals **23.3 µs/statement**
+   across two calls — **~21 µs of it inside `GetOrAddPlan`**, the plan-cache warm-up in `Database.Execution.cs`
+   (`Database.PlanCaching.cs:84`). That call's **return value is discarded** on the DML path, and because
+   `GetNormalizedSql` collapses whitespace but keeps literal *values*, statements differing only in their
+   literals — exactly what 20,000 distinct INSERTs are — miss the cache every time: a normalized copy, a cache
+   key, a `Split` of the whole statement, a `CachedQueryPlan` and a cache insert, per statement, for a plan
+   nothing reads. **That is the next target, and it is a design question rather than a micro-fix:** either
+   consume the returned plan, warm only statements that will repeat, or key DML by statement *shape* — the last
+   of which is sound only if the plan stops embedding literal tokens, since `CachedQueryPlan` is built from the
+   split tokens that include them. Attributed now: **~32 µs of a warm ~60 µs/statement (50 %, up from 25 %)**
+   — `parse` 23.3, `arena-write` 6.1, `row-build` 1.0, `engine-write` 0.7, `stmt-validate` 0.04, `wal-append`
+   0.02 — leaving ~28 µs in the `_walLock` region, `IsSchemaChangingCommand`, `Table.Insert`'s validation block
+   and the `_metadataDirty` bookkeeping.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)
