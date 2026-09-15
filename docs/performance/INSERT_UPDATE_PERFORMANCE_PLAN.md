@@ -1076,7 +1076,8 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    The model is simply: the loop costs one arena append per variable-length value *plus* one write-through
    table append per row; the batched path costs the arena appends and one append for the whole statement.
    Only the engine transaction (opened once per statement) argues for any floor at all, and two rows is
-   where it is amortised.
+   where it is amortised. *(Taken further the same day by the storage-transaction fix in item 1b: the same
+   shape is now **54.26 µs/row** — 38× the loop it replaced.)*
 1b. **The overflow arena dominates the fixed-width INSERT path — both per value and per statement
    *(found 2026-09-15, partially attributed)*.**
    *Established.* (a) The arena is heavily used: on the `--multirowinsert` schema, 20,000 rows produce a
@@ -1121,14 +1122,21 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    that are gone. `WriteMany` is a default interface member, so the single-file arena (in-memory blocks,
    serialized as one provider block) is unaffected, and the one remaining `arena.Write` call site is a
    single-value update path.
-   **What is left.** The open is now once per *row* rather than once per *value*, and at 0.4625 ms it is ~90 %
-   of the remaining ~524 µs/row. Batching it per *statement* instead — one append for a whole `INSERT` —
-   needs the collection to move up out of `SerializeRow` into `ValidateAndSerializeBatchOutsideLock` as a
-   two-phase serialize (buffer the rows, make one arena call, then patch every slot), and is worth roughly
-   another 10× on this path. The >10,000-row branch of that method serializes with `Parallel.For`, so a
-   shared collector there needs partitioning or a lock; the sequential branch is the easy half. Separately,
-   the **inline threshold** is evidently too small — all three TEXT columns overflow and none inlines — but
-   the layout is fixed per schema, so that is a format question and belongs with §4b.
+   **Resolved — and the per-value open was not the last layer *(2026-09-15)*.** After the `WriteMany` fix the
+   arena still cost 0.4625 ms per value, and the reason was *where* the appends happened:
+   `AppendBytes`/`AppendBytesMultiple` buffer only when `IsInTransaction`, and `InsertBatchCriticalSection`
+   opened an **engine** transaction, not a storage one — so every arena block was written with a write-through
+   open during serialization, while `Database.InsertBatch` (which wraps its call in `storage.BeginTransaction()`)
+   was fast on the very same schema. `Table.InsertBatch` now runs serialization *and* the critical section
+   inside a storage transaction when one is not already open, which is the boundary `Database.InsertBatch`
+   always had. Measured: **523.51 → 54.26 µs/row (9.65×)**, `arena-append` 9,653.8 → 20.4 ms (≈0.001 ms per
+   value). Cumulative for this shape: **2,069.77 → 54.26 µs/row (38×)**.
+   **The arena is no longer the bottleneck.** In the new stage report `encode` leads, `arena-append` is 25.0 ms
+   of a 905 ms pass (~2.8 %), and only ~19 % of wall time sits inside instrumented stages at all. So the next
+   step is to profile what is *outside* them — parse, `engine.InsertBatch`, PK/hash index maintenance, commit —
+   rather than to batch the arena further, which could now save a few percent at most. Separately, the **inline
+   threshold** is still evidently too small (all three TEXT columns overflow, none inlines), but the layout is
+   fixed per schema, so that stays a format question and belongs with §4b.
 2. **WAL flush policy.** Batch flushes are already collapsed to one fsync per batch; verify with the
    §2 instrumentation whether per-statement fsync is still paid on the non-batch SQL path, and expose
    an explicit `Synchronous`/group-commit setting rather than an implicit one.
@@ -1440,10 +1448,11 @@ the on-disk format, and together they produce the attribution the structural wor
 protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
 protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
 moved to deferred index maintenance, and the SQL multi-row INSERT now uses the batched core (§5 item 1).
-The live queue is therefore: **§5 item 1b's remainder** (the arena append is now once per row instead of
-once per value — 2.73× measured — and batching it per statement is worth roughly another 10× on that path),
-then §6 (PageBased parity), then §4b (two-region records, the only remaining format change — which also
-owns the too-small inline threshold item 1b turned up).
+The live queue is therefore: **profile what the stage report does not cover** — §5 item 1b's remainder is now a
+much smaller target, because the arena is fixed (38× on the multi-row shape) and most of a row's wall time sits
+*outside* the instrumented stages: parse, `engine.InsertBatch`, index maintenance and commit. Then §6 (PageBased
+parity — measured and re-scoped, attribution still open), then §4b (two-region records, the only remaining
+format change, and the owner of the too-small inline threshold that item 1b turned up).
 
 **One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
 changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /

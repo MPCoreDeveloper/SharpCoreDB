@@ -615,6 +615,11 @@ class Program
             // v2.1, so this arm follows the default unless the env var explicitly opts out — set
             // SHARPCOREDB_DEFER_DELETE_INDEXES=0 to measure the eager behaviour.
             EnableDeferredDeleteIndexes = Environment.GetEnvironmentVariable("SHARPCOREDB_DEFER_DELETE_INDEXES") != "0",
+            // Buffered appends (product default: off). This is the switch that decides whether an append —
+            // in the table file or in the overflow arena — does a write-through file open per value or
+            // shares one buffer, so the arms need to be able to turn it on. Set
+            // SHARPCOREDB_BUFFERED_APPENDS=1 to measure it.
+            EnableBufferedAppends = Environment.GetEnvironmentVariable("SHARPCOREDB_BUFFERED_APPENDS") == "1",
             EnableQueryCache = true,
             QueryCacheSize = 4096,
             EnableCompiledPlanCache = true,

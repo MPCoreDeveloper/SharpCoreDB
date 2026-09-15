@@ -304,29 +304,80 @@ public partial class Table
         if (rows.Count == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
-        // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
-        // §2 instrumentation: this path had NO stage coverage before (measured 2026-09-14), which is why
-        // attributing the at-rest INSERT tax needed ad-hoc probes instead of the profiler. This stamp covers
-        // validation *and* serialization (the method does both).
-        long validateStart = Diagnostics.WritePathProfiler.Stamp();
-        var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
-        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
+        // The storage transaction has to cover serialization, not just the critical section: a fixed-width
+        // table writes its variable-length values to the overflow arena *during* serialization, and an append
+        // outside a transaction is a write-through file open per value. See RunInStorageTransaction for the
+        // measurement behind this.
+        return RunInStorageTransaction(() =>
+        {
+            // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
+            // §2 instrumentation: this path had NO stage coverage before (measured 2026-09-14), which is why
+            // attributing the at-rest INSERT tax needed ad-hoc probes instead of the profiler. This stamp covers
+            // validation *and* serialization (the method does both).
+            long validateStart = Diagnostics.WritePathProfiler.Stamp();
+            var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
 
-        // ✅ PHASE 2A FRIDAY: Batch validate primary keys BEFORE critical section
-        // This improves cache locality and fails fast on duplicates
-        long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
-        ValidateBatchPrimaryKeysUpfront(validatedRows);
-        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
+            // ✅ PHASE 2A FRIDAY: Batch validate primary keys BEFORE critical section
+            // This improves cache locality and fails fast on duplicates
+            long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
+            ValidateBatchPrimaryKeysUpfront(validatedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
 
-        // ✅ MINIMAL LOCK: Only for PK check, engine insert, and index updates
-        this.rwLock.EnterWriteLock();
+            // ✅ MINIMAL LOCK: Only for PK check, engine insert, and index updates
+            this.rwLock.EnterWriteLock();
+            try
+            {
+                return InsertBatchCriticalSection(validatedRows, serializedRows);
+            }
+            finally
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Runs a batched insert inside a <b>storage</b> transaction when one is not already open.
+    /// <para>
+    /// The engine has its own transaction (started inside <c>InsertBatchCriticalSection</c>), but what decides
+    /// whether an append buffers or goes straight through the file is the <b>storage</b> transaction:
+    /// <c>IStorage.AppendBytes</c> and <c>AppendBytesMultiple</c> both check <c>IsInTransaction</c>, and outside
+    /// one an append is an open + <c>FileOptions.WriteThrough</c> + close per call (measured 477.97 µs/record).
+    /// That lands hardest on the overflow arena, which every variable-length value of a fixed-width table goes
+    /// through — three writes per row on the benchmark schema — and which is written during serialization, i.e.
+    /// before the critical section exists.
+    /// </para>
+    /// <para>
+    /// Measured on the SQL multi-row <c>INSERT … VALUES</c> workload (20,000 rows, 1,000 rows/statement): with
+    /// the arena appends write-through **523.51 µs/row**, with them buffered **52.66 µs/row** — 9.94×, and the
+    /// arena-append stage drops from 9,653.8 ms to 20.2 ms (0.4625 ms → ~0.001 ms per call).
+    /// </para>
+    /// <para>
+    /// This is not a new durability posture: <c>Database.InsertBatch</c> has always wrapped its call in
+    /// <c>storage.BeginTransaction()</c> / <c>CommitSync()</c> (<c>Database.Batch.cs:409</c>). The guard below
+    /// makes this a no-op when such a transaction is already open, so that caller keeps exactly the boundary it
+    /// had, and a batch that was atomic at the storage level stays atomic.
+    /// </para>
+    /// </summary>
+    private long[] RunInStorageTransaction(Func<long[]> body)
+    {
+        if (this.storage is not { IsInTransaction: false } openableStorage)
+        {
+            return body();
+        }
+
+        openableStorage.BeginTransaction();
         try
         {
-            return InsertBatchCriticalSection(validatedRows, serializedRows);
+            var positions = body();
+            openableStorage.CommitSync();
+            return positions;
         }
-        finally
+        catch
         {
-            this.rwLock.ExitWriteLock();
+            openableStorage.Rollback();
+            throw;
         }
     }
 
@@ -354,18 +405,23 @@ public partial class Table
         if (rows.Length == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
-        var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
-        ValidateBatchPrimaryKeysUpfront(validatedRows);
+        // Same reason as the dictionary overload: the arena writes happen during serialization, so the storage
+        // transaction has to start before it. See RunInStorageTransaction.
+        return RunInStorageTransaction(() =>
+        {
+            var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
+            ValidateBatchPrimaryKeysUpfront(validatedRows);
 
-        this.rwLock.EnterWriteLock();
-        try
-        {
-            return InsertBatchCriticalSection(validatedRows, serializedRows);
-        }
-        finally
-        {
-            this.rwLock.ExitWriteLock();
-        }
+            this.rwLock.EnterWriteLock();
+            try
+            {
+                return InsertBatchCriticalSection(validatedRows, serializedRows);
+            }
+            finally
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        });
     }
 
     /// <summary>
