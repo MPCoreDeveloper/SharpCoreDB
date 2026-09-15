@@ -31,6 +31,22 @@ public partial class Storage : IStorage
     // ~512 µs -> ~4.5 µs per 64-byte row for the write itself). Off by default: the trade is the
     // durability window, see DatabaseConfig.EnableBufferedAppends for the full contract.
     private readonly bool enableBufferedAppends;
+
+    /// <summary>
+    /// True when the configured durability asks for asynchronous writes (<see cref="DurabilityMode.Async"/>),
+    /// which the append path now honours instead of silently writing through per record. See
+    /// <see cref="BuffersAppends"/>.
+    /// </summary>
+    private readonly bool asyncAppends;
+
+    /// <summary>
+    /// True when appends made OUTSIDE a transaction are buffered instead of written through: either the
+    /// explicit <see cref="DatabaseConfig.EnableBufferedAppends"/> opt-in, or the <c>Async</c> durability the
+    /// caller configured. Both share one buffer, the same threshold/interval bounds and the same flush
+    /// boundaries. <c>FullSync</c> — the <see cref="DatabaseConfig"/> default — is unchanged, so the default
+    /// durability posture is untouched and nothing is buffered for callers who did not ask for it.
+    /// </summary>
+    private bool BuffersAppends => enableBufferedAppends || asyncAppends;
     private readonly long appendBufferFlushThresholdBytes;
     private readonly int appendBufferFlushIntervalMs;
     
@@ -63,6 +79,14 @@ public partial class Storage : IStorage
         this.enableBufferedAppends = config?.EnableBufferedAppends ?? false;
         this.appendBufferFlushThresholdBytes = Math.Max(0, config?.AppendBufferFlushThresholdBytes ?? 1024 * 1024);
         this.appendBufferFlushIntervalMs = Math.Max(0, config?.AppendBufferFlushIntervalMs ?? 10);
+
+        // §5 item 2 (A1): honour the durability the configuration already promises. `Async` is what the
+        // HighPerformance, BulkImport, in-memory and read-heavy presets set — each documented as trading
+        // durability for speed — yet the table append ignored the mode and wrote through per record, so a
+        // caller who explicitly asked for Async still paid a synchronous write per row. That is the same
+        // class of defect as the encryption-posture mismatch §3-1c found: a configuration that promises
+        // something the code does not deliver. `FullSync` keeps write-through per record.
+        this.asyncAppends = config?.WalDurabilityMode == DurabilityMode.Async;
         
         // Initialize batch encryption configuration
         this.enableBatchEncryption = (config?.EnableBatchEncryption ?? false) && !this.noEncryption;

@@ -1192,9 +1192,27 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
    This is the same class of defect as the encryption-posture mismatch §3-1c found — a configuration
    that promises something the code does not deliver — and it is worth fixing for that reason alone.
    `EnableBufferedAppends` (item 1, opt-in) removes the per-row flush but does **not** make the append
-   path honour the mode. Honouring `Async` changes when bytes reach the platter, so it stays an owner
-   decision plus a crash-recovery test — a process crash is already safe (the OS cache survives it); the
-   open question is power loss — rather than a unilateral edit.
+   path honour the mode. **Implemented (owner said do it, 2026-09-15): the mode now governs the append.**
+   `Async` engages the same append buffer as the explicit opt-in — one `BuffersAppends` predicate at both
+   append entry points plus the auto-flush bound — so the four presets that ask for asynchronous writes now
+   get them, while `WalDurabilityMode`'s default `FullSync` stays write-through per record and
+   `EnableBufferedAppends` stays the explicit route for a caller who keeps `FullSync`. Measured on 20,000
+   standalone single-row `INSERT` statements (1 row/statement, no batch, no transaction, same session):
+   **1,127.61 → 119.79 µs/row (887 → 8,348 rows/s, 9.4×)**, and because the fixed-width layout is the default
+   for an explicit `PRIMARY KEY` that includes the arena, whose per-value appends ride the same buffer.
+   **Correction to this item's premise:** it claimed the arena "pays the same write-through *open* per row".
+   It does not — the multi-row path runs in a storage transaction, so `IsInTransaction` was already true and
+   the arena was already buffered; the 63.3 ms `arena-append` in the batch report is per-payload *buffered*
+   work (`ConcurrentDictionary` insert, locks, length bookkeeping — ~1 µs per value), a different target.
+   **The trade, stated correctly:** with `Async`, rows still in the buffer are lost by a process crash *as
+   well as* by power loss, because they have not left managed memory — the sentence this replaced ("a process
+   crash is already safe, the OS cache survives it") describes the write-through path only, and believing it
+   about the buffered path is exactly the kind of half-truth this plan exists to avoid. What bounds the window
+   is the 1 MB / 10 ms auto-flush plus `Database.Flush()`, commit, `BeginTransaction` (flush-first, so a
+   rollback cannot discard pre-transaction rows), compaction, fixed-width migration, overflow-arena
+   compaction, `DROP TABLE` and dispose. Guarded by `AsyncDurabilityAppendTests` (12 cases, listed in the
+   CHANGELOG); a real power-cut test is not automatable in-process, so what is covered is every boundary that
+   keeps the window bounded.
 3. **One serialization pass.** The `Table.CRUD.cs` comments already flag "typed column buffers to
    eliminate 75% of allocations" work; confirm with the instrumentation whether a row is encoded more
    than once on the batch path.
@@ -1464,6 +1482,13 @@ or within ~2×, down from the ~7–10× and ~6–14× that opened this plan. The
 INSERT (per-record framing + the SQL ladder) and in the at-rest tax, both of which §3-1f/§4c and the
 `DeferredDeleteIndexes` work have already reduced but not eliminated.
 
+**Note added later the same day (§5 item 2):** these figures predate the change that made the append path
+honour `WalDurabilityMode`. The harness arm configuration sets `WalDurabilityMode = Async`, which the append
+path now obeys instead of writing through per record, so the INSERT columns above are **stale for the arms
+that declare `Async`** — measured on the same shape, honouring the mode moved standalone single-row INSERT
+from 1,127.61 to 119.79 µs/row. Re-running `--pk` / `--pk-default` / `--dual-mode` under the §2 protocol is
+the way to bring this table current, and until that run exists no INSERT figure here should be quoted.
+
 ---
 
 ## 9. Execution order and dependency graph
@@ -1502,12 +1527,15 @@ generating attributable: `arena-write` 1,256 B/row, `hash-index` ~950 B/row, `pa
 and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall time unchanged inside the noise band.
 **The open queue, in the order the measurements argue for:**
 
-1. **The append/durability decision — §5 item 2, and now the arena with it.** Both append entry points
-   hard-code `FileOptions.WriteThrough`, so `DurabilityMode.Async` (the default in the `HighPerformance`,
-   `BulkImport`, in-memory and platform presets) is silently ignored for single-row inserts, and the overflow
-   arena pays the same write-through open **per row** (`arena-append` 63.3 ms in the last report).
-   `EnableBufferedAppends` addresses the first case opt-in; honouring the mode, and routing the arena through
-   the buffer, changes when bytes reach the platter → owner decision plus a crash-recovery test.
+1. **The append/durability decision — §5 item 2 — DONE (2026-09-15).** `DurabilityMode.Async` now governs
+   the table append instead of being silently ignored, so the presets that ask for asynchronous writes get
+   buffered appends rather than a write-through open per record: **1,127.61 → 119.79 µs/row (9.4×)** on
+   20,000 standalone single-row INSERT statements, with `FullSync` (the default) unchanged and
+   `EnableBufferedAppends` still the explicit opt-in. Coverage, the corrected trade, and the correction to
+   this item's own arena premise are in §5 item 2. **What it exposed is the new top item:** with storage
+   taken out of the per-statement cost, one single-row statement still costs **~115 µs**, and that is not the
+   append — it is SQL dispatch, WAL and metadata. The profiler can attribute it now, which makes this the
+   same investigation §5 item 1b/1c did for the multi-row shape, one level up.
 2. **The remaining text-SQL cost — §5 item 1c and item 4.** 2.4× to the direct API: literal building,
    per-column coercion, and the `Dictionary<string, object>` row shape, which the direct API's `object[]`
    path never pays. Extending that fast path to the SQL batch route is the concrete step; the blockers are

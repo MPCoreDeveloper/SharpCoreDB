@@ -499,11 +499,12 @@ public partial class Storage
         int recordLength = record.Length;
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER the append!
-        // ✅ Buffered append mode (opt-in, off by default): the SAME buffer serves single-row appends
-        // outside a transaction — one open/write/close per flush boundary instead of a write-through
-        // open/close per row (~512 µs → ~4.5 µs per 64-byte row for the write itself). See
-        // DatabaseConfig.EnableBufferedAppends for the durability contract.
-        if (IsInTransaction || enableBufferedAppends)
+        // ✅ Buffered append mode: the SAME buffer serves single-row appends outside a transaction — one
+        // open/write/close per flush boundary instead of a write-through open/close per row (~512 µs →
+        // ~4.5 µs per 64-byte row for the write itself). Engaged by DatabaseConfig.EnableBufferedAppends
+        // (explicit opt-in) or by DatabaseConfig.WalDurabilityMode = Async, which the performance presets
+        // set and now actually get; see BuffersAppends for the durability contract.
+        if (IsInTransaction || BuffersAppends)
         {
             long futurePosition;
             lock (appendLock)
@@ -1033,7 +1034,7 @@ public partial class Storage
             return Array.Empty<long>();
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER all appends!
-        if (IsInTransaction || enableBufferedAppends)
+        if (IsInTransaction || BuffersAppends)
         {
             var result = new long[dataBlocks.Count];  // ✅ FIXED: Renamed to 'result' to avoid variable name conflict
 
@@ -1162,7 +1163,7 @@ public partial class Storage
     /// </summary>
     private bool ShouldAutoFlushAppends()
     {
-        if (!enableBufferedAppends || pendingAppendBytes == 0)
+        if (!BuffersAppends || pendingAppendBytes == 0)
         {
             return false;
         }

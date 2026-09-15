@@ -285,6 +285,23 @@ public class DatabaseConfig
     /// Gets the WAL durability mode.
     /// FullSync uses FileStream.Flush(true) for full durability.
     /// Async relies on OS buffering for better performance.
+    /// <para>
+    /// <b>What <c>Async</c> does to the table append (2026-09-15).</b> The append path now honours this
+    /// setting instead of unconditionally writing through per record: with <c>Async</c>, an append made
+    /// outside a transaction is buffered exactly as <see cref="EnableBufferedAppends"/> buffers it — same
+    /// buffer, same <see cref="AppendBufferFlushThresholdBytes"/> /
+    /// <see cref="AppendBufferFlushIntervalMs"/> bounds, same flush boundaries (<c>Database.Flush()</c>,
+    /// commit, <c>BeginTransaction</c>, compaction, fixed-width migration, overflow-arena compaction,
+    /// <c>DROP TABLE</c>, dispose). Measured on 20,000 standalone single-row <c>INSERT</c> statements:
+    /// <b>1,127.61 → 119.79 µs/row (9.4×)</b>. <c>FullSync</c> — this property's default — is unchanged and
+    /// still writes each row through immediately, so nothing is buffered unless it is asked for, and
+    /// <see cref="EnableBufferedAppends"/> remains the explicit route for a caller who wants buffering while
+    /// keeping <c>FullSync</c>.
+    /// </para>
+    /// <para>
+    /// <b>Trade:</b> buffered rows are lost by a crash — process kill as well as power loss — until a
+    /// boundary flushes them, so choose <c>Async</c> only where that window is acceptable.
+    /// </para>
     /// </summary>
     public DurabilityMode WalDurabilityMode { get; init; } = DurabilityMode.FullSync;
 
