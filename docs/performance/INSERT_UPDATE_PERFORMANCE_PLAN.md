@@ -1487,17 +1487,42 @@ because until it is done, "encryption costs 1.3–1.6×" is a number without a m
 measuring the price of protection we have not established we actually get. None of these three changes
 the on-disk format, and together they produce the attribution the structural work needs.
 
-**Where we actually are (2026-09-15), so the slice above stays historical.** Phase 0 is done — the §2
+**Where we actually are (2026-09-15, end of the insert/attribution session).** Phase 0 is done — the §2
 protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
 protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
-moved to deferred index maintenance, and the SQL multi-row INSERT now uses the batched core (§5 item 1).
-The live queue is therefore: **what is left of the text-SQL cost, then the never-instrumented stages.** §5 items 1b
-and 1c took the multi-row shape from 2,069.77 to **22.72 µs/row** — 91× and 2.4× off the direct batch API's
-9.3 µs/row on the same table — so what remains there is literal building and per-column type coercion, and
-beyond it the stages that were never wired: `engine.InsertBatch`, PK/hash index maintenance and commit (the
-2026-09-14 note in §7 still stands: `WalAppend`/`WalFlush` exist in the enum but nothing writes them). Then §6
-(PageBased parity — measured and re-scoped, attribution still open), then §4b (two-region records, the only
-remaining format change, and the owner of the too-small inline threshold item 1b turned up).
+moved to deferred index maintenance, and the SQL multi-row INSERT uses the batched core (§5 item 1), standing
+at **22.72 µs/row** against the direct batch API's 9.3 (**2.4×**, §5 item 1c).
+**The INSERT path is no longer unattributed.** The stages item 1b/1c flagged as never wired are now stamped —
+`engine.InsertBatch`, PK/hash index maintenance, commit, the statement-level `parse`, and a new `row-build`
+for literal conversion — which took measured attribution from ~19 % to **~89 %** of a multi-row pass, and the
+profiler also carries an **allocated-bytes column** per stage (thread-local checkpoints, LIFO-closed, with
+left-open checkpoints reported rather than hidden). That is what made the **6.2 KB/row** this path was
+generating attributable: `arena-write` 1,256 B/row, `hash-index` ~950 B/row, `parse` 962 B/row, `row-build`
+536 B/row — and three of the four are now reduced (`row-build` sizing and mapping, the arena scratch lists,
+and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall time unchanged inside the noise band.
+**The open queue, in the order the measurements argue for:**
+
+1. **The append/durability decision — §5 item 2, and now the arena with it.** Both append entry points
+   hard-code `FileOptions.WriteThrough`, so `DurabilityMode.Async` (the default in the `HighPerformance`,
+   `BulkImport`, in-memory and platform presets) is silently ignored for single-row inserts, and the overflow
+   arena pays the same write-through open **per row** (`arena-append` 63.3 ms in the last report).
+   `EnableBufferedAppends` addresses the first case opt-in; honouring the mode, and routing the arena through
+   the buffer, changes when bytes reach the platter → owner decision plus a crash-recovery test.
+2. **The remaining text-SQL cost — §5 item 1c and item 4.** 2.4× to the direct API: literal building,
+   per-column coercion, and the `Dictionary<string, object>` row shape, which the direct API's `object[]`
+   path never pays. Extending that fast path to the SQL batch route is the concrete step; the blockers are
+   the batched branch's dictionary-shaped post-insert reads (`lastInsertedRow`, the `RETURNING` snapshots).
+3. **§6 PageBased UPDATE parity** — measured and re-scoped to UPDATE-only (29,407 vs 420,187), with two
+   identified causes (the PK fast paths are switched off for PageBased; a relocating update can write twice).
+   The next step is the one §6 already names: print the profiler report for `--pk` and read which stage the
+   ~34 µs/update sits in.
+4. **§4b two-region records** — the only remaining format change, and it owns the too-small inline threshold
+   §5 item 1b turned up (all three TEXT columns overflow; nothing inlines).
+5. **Coverage still missing:** `WalAppend`/`WalFlush` have no writer at all, plus the second batch-dispatcher
+   path and parser internals below the dispatcher (§7, 2026-09-14 note).
+6. **The INSERT target (§8/§8a):** ≥150K not met — 109K tuned plaintext, 88K at-rest, 81K pure default. §8a
+   already records that the target was set on a noisier machine and that re-stating it under the §2 protocol
+   is a task, not a claim that the target moved.
 
 **One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
 changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /
