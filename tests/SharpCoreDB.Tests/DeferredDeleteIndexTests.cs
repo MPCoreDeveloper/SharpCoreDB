@@ -15,12 +15,15 @@ using System.Linq;
 using Xunit;
 
 /// <summary>
-/// Plan §7 (Phase 5) — <c>DatabaseConfig.EnableDeferredDeleteIndexes</c> (opt-in, default OFF).
+/// Plan §7 (Phase 5) — <c>DatabaseConfig.EnableDeferredDeleteIndexes</c>, which is ON by default (the
+/// explicit opt-out is covered below).
 /// A deferred DELETE writes the durable tombstone and defers index maintenance: the PK B-tree removal
-/// is applied in one bulk pass at the end of the batch, and loaded hash indexes are marked stale so
-/// they rebuild lazily from the data file (which skips tombstones). These tests pin the contract that
-/// makes that safe: rows are gone to every reader, a deleted primary key can be re-INSERTed, nothing
-/// resurrects across a reopen, and the DEFAULT configuration is unchanged.
+/// runs in one bulk pass once <c>DeferredDeleteIndexThreshold</c> is crossed, or for free on reopen, so
+/// between those points the B-tree holds entries whose target is a tombstone ("stale"). These tests pin
+/// the contract that makes that safe: rows are gone to every reader, a deleted primary key can be
+/// re-INSERTed through BOTH the single-row and the batch path (uniqueness checks are liveness-aware and
+/// never read the stale entry as live), nothing resurrects across a reopen, and the explicit opt-out
+/// restores the eager path.
 /// </summary>
 public sealed class DeferredDeleteIndexTests : IDisposable
 {
@@ -115,8 +118,10 @@ public sealed class DeferredDeleteIndexTests : IDisposable
     }
 
     /// <summary>
-    /// A deleted primary key must be re-INSERTable in a later statement: the deferred PK removal is
-    /// flushed before the write lock is released, so uniqueness checks never observe a stale entry.
+    /// A deleted primary key must be re-INSERTable in a later statement. The stale B-tree entry is not
+    /// reconciled here — reconciling at <c>Flush()</c> was measured slower than the per-key maintenance
+    /// the deferral skips — so this works because the uniqueness check is liveness-aware: it reads the
+    /// stored position and treats a tombstone as free.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -133,6 +138,57 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         db.ExecuteSQL("INSERT INTO t (id, name) VALUES (6, 'user6-again')");
 
         Assert.Equal(9L, CountOf(db)); // 10 - 3 + 2
+        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 5"));
+        (db as IDisposable)?.Dispose();
+    }
+
+    /// <summary>
+    /// The batch-INSERT path must apply the same liveness-aware uniqueness check as the single-row path.
+    /// Regression: <c>ValidateBatchPrimaryKeysUpfront</c> read the PK B-tree directly and treated a
+    /// tombstoned entry as a live key, so a delete followed by a <em>batch</em> re-INSERT of the same
+    /// primary key threw a false duplicate-key violation. Surfaced by
+    /// <c>SharpCoreDB.CQRS.Tests.SharpCoreDbOutboxStoreTests.RequeueDeadLetterAsync_MovesMessageFromDeadLetterToOutbox</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DeferredDelete_ReinsertDeletedPrimaryKey_InBatch_Succeeds(bool atRest)
+    {
+        var dir = NewDir(atRest ? "reinsert_batch_atrest" : "reinsert_batch_raw");
+        var db = OpenAndSeed(dir, Deferred(atRest), rows: 10);
+
+        db.ExecuteBatchSQL(Deletes(new[] { 5, 6, 7 }.Reverse()));
+
+        // The outbox-requeue shape: one batch carrying the re-INSERT of a just-deleted key. ExecuteBatchSQL
+        // routes INSERTs of any row count to InsertBatch → ValidateBatchPrimaryKeysUpfront.
+        db.ExecuteBatchSQL(new List<string>
+        {
+            "INSERT INTO t (id, name) VALUES (5, 'user5-again')",
+            "INSERT INTO t (id, name) VALUES (6, 'user6-again')",
+        });
+
+        Assert.Equal(9L, CountOf(db)); // 10 - 3 + 2
+        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 5"));
+        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 6"));
+        Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 7"));
+        (db as IDisposable)?.Dispose();
+    }
+
+    /// <summary>
+    /// Same, on the configuration a caller gets by default: deferred delete maintenance is ON by default
+    /// (<c>DatabaseConfig.EnableDeferredDeleteIndexes = true</c>), so the false duplicate-key conflict was
+    /// reachable without opting into anything.
+    /// </summary>
+    [Fact]
+    public void DeferredDelete_DefaultConfig_ReinsertInBatch_Succeeds()
+    {
+        var dir = NewDir("default_reinsert_batch");
+        var db = OpenAndSeed(dir, new DatabaseConfig { NoEncryptMode = true }, rows: 10);
+
+        db.ExecuteBatchSQL(Deletes(new[] { 5 }.Reverse()));
+        db.ExecuteBatchSQL(new List<string> { "INSERT INTO t (id, name) VALUES (5, 'user5-again')" });
+
+        Assert.Equal(10L, CountOf(db));
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 5"));
         (db as IDisposable)?.Dispose();
     }

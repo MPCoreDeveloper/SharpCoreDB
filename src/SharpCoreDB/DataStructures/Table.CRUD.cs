@@ -670,8 +670,14 @@ public partial class Table
 
         foreach (var pkString in incomingPks)
         {
-            var (found, _) = this.Index.Search(pkString);
-            if (found)
+            // Liveness-aware, like every other PK-uniqueness check in this class: with deferred DELETE
+            // maintenance the PK B-tree can hold an entry whose target is a tombstone, so a bare
+            // Index.Search().Found reports a false duplicate-key conflict. This surfaced as
+            // SharpCoreDB.CQRS.Tests.RequeueDeadLetterAsync throwing for a delete-then-reinsert of the
+            // same key. No reclaim is needed here — BTree.Insert overwrites the value of an existing key,
+            // so the stale entry is repointed at the new record — and the extra liveness read only happens
+            // for a key that is actually present, leaving the happy path unchanged.
+            if (IsPrimaryKeyTaken(pkString))
             {
                 throw new InvalidOperationException($"Duplicate key value '{pkString}' violates unique constraint on primary key");
             }
@@ -722,8 +728,8 @@ public partial class Table
          // This validates against existing data without per-row lookups
          foreach (var pkString in incomingPks)
          {
-             var (found, _) = this.Index.Search(pkString);
-             if (found)
+             // Liveness-aware — see the object[][] overload above and Table.DeferredIndexUpdates.IsPrimaryKeyTaken.
+             if (IsPrimaryKeyTaken(pkString))
              {
                  throw new InvalidOperationException(
                      $"Duplicate key value '{pkString}' violates unique constraint on primary key");
