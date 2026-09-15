@@ -826,6 +826,14 @@ public partial class Table : ITable, IDisposable
             // deletes, so non-transactional DELETE keeps the O(delete) tombstone path.
             CompactPendingDeletes();
 
+            // Deferred DELETE reconciliation. A deferred DELETE leaves stale entries in the PK B-tree,
+            // and a transactional batch cannot rebuild mid-transaction (the tombstones are still
+            // buffered), so without this call a long-running session doing batch deletes would carry
+            // its stale entries until a reopen. Flush is the committed-data boundary where the rebuild
+            // is valid; it is amortised because the counter resets, so the next rebuild waits for the
+            // next DeferredDeleteIndexThreshold's worth of deletes.
+            RebuildPrimaryKeyIndexIfThresholdExceeded();
+
             // Flush indexes
             if (indexManager != null)
             {

@@ -86,6 +86,13 @@ public partial class Table
     private int _pendingDeferredDeletes;
 
     /// <summary>
+    /// Gets the number of deferred DELETE keys accumulated since the last primary-key B-tree rebuild.
+    /// Zero when deferred maintenance is off, or once the counter crossed
+    /// <see cref="DatabaseConfig.DeferredDeleteIndexThreshold"/> and the rebuild ran.
+    /// </summary>
+    public int PendingDeferredDeleteCount => _pendingDeferredDeletes;
+
+    /// <summary>
     /// Marks the PK B-tree stale because a deferred DELETE skipped its removal. The B-tree itself is
     /// left untouched (so a rolled-back transaction needs no index rollback); the stale entries are
     /// reconciled by <see cref="RebuildPrimaryKeyIndexIfStale"/> at a committed-data boundary or reopen.

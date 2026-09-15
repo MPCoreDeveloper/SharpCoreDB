@@ -209,4 +209,37 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         Assert.Equal(15L, CountOf(db));
         (db as IDisposable)?.Dispose();
     }
+
+    /// <summary>
+    /// A deferred DELETE inside a transaction cannot rebuild the PK B-tree mid-transaction (the
+    /// tombstones are still buffered), so the threshold bound is enforced at the committed-data
+    /// boundary — <c>Flush()</c> — and the counter resets there. Without that, a long-running session
+    /// doing batch deletes would carry its stale entries until a reopen.
+    /// </summary>
+    [Fact]
+    public void DeferredDeletes_BatchOverThreshold_ReconcileAtFlush()
+    {
+        var dir = NewDir("threshold_flush");
+        var db = OpenAndSeed(dir, new DatabaseConfig
+        {
+            NoEncryptMode = true,
+            DeferredDeleteIndexThreshold = 10, // small so the test can cross it
+        }, rows: 100);
+
+        Assert.True(db.TryGetTable("t", out var it));
+        var table = Assert.IsType<SharpCoreDB.DataStructures.Table>(it);
+        Assert.Equal(0, table.PendingDeferredDeleteCount);
+
+        // One transactional batch of 50 deletes > the threshold.
+        db.ExecuteBatchSQL(Deletes(Enumerable.Range(1, 50).Reverse()));
+        Assert.Equal(50, table.PendingDeferredDeleteCount); // deferred: nothing reconciled yet
+
+        db.Flush(); // committed-data boundary
+        Assert.Equal(0, table.PendingDeferredDeleteCount);  // rebuilt from the data file
+
+        Assert.Equal(50L, CountOf(db));
+        Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 50"));
+        Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 51"));
+        (db as IDisposable)?.Dispose();
+    }
 }
