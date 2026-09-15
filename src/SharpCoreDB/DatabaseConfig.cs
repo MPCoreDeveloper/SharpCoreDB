@@ -124,15 +124,20 @@ public class DatabaseConfig
     public int AppendBufferFlushIntervalMs { get; init; } = 10;
 
     /// <summary>
-    /// Gets a value indicating whether DELETE batches defer index maintenance until the batch's
-    /// commit/flush boundary. When <see langword="true"/>, a DELETE writes only the durable tombstone
-    /// and queues the primary-key / hash-index removals to be applied in one bulk pass at flush time
-    /// (mirroring the UPDATE path's <c>DeferredIndexUpdater</c>). Point lookups and scans already skip
-    /// tombstoned records, so a stale index entry is reconciled on read; uniqueness checks verify
-    /// liveness before rejecting a re-INSERT. Default <see langword="false"/>: indexes are updated
-    /// immediately, byte-for-byte identical to today.
+    /// Gets a value indicating whether DELETE defers index maintenance. <b>Enabled by default.</b>
+    /// <para>
+    /// When on, a DELETE writes only the durable tombstone and skips the per-key PK B-tree removal and
+    /// the per-key hash-index removal. Point lookups already treat a tombstoned position as absent (a
+    /// null read) and insert-time uniqueness verifies the stored position is live before rejecting a
+    /// re-INSERT, so a stale index entry is invisible to callers. The PK B-tree is rebuilt from the data
+    /// file (dropping tombstoned entries) on reopen and when <see cref="DeferredDeleteIndexThreshold"/>
+    /// is crossed; hash indexes rebuild on reopen. Measured on the random-key DELETE workload:
+    /// <b>2.19x</b> (plaintext) / <b>1.19x</b> (encrypted default) throughput.
+    /// </para>
+    /// Set to <see langword="false"/> for the eager behaviour (every DELETE removes its index entries
+    /// immediately), which keeps <c>GetHashIndexStatistics</c> exact between deletes.
     /// </summary>
-    public bool EnableDeferredDeleteIndexes { get; init; } = false;
+    public bool EnableDeferredDeleteIndexes { get; init; } = true;
 
     /// <summary>
     /// Gets the number of deferred DELETE primary keys that may accumulate in the stale PK B-tree before

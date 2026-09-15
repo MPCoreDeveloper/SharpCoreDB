@@ -809,10 +809,25 @@ public partial class Table
             return;
         }
 
-        var dictRows = RowsToDictionaries(rows);
-        foreach (var hashIndex in this.hashIndexes.Values)
+        // PERF: build only the indexed column's key slice into ONE reusable array and hand it to
+        // AddBatchKeys, instead of materialising every row as a Dictionary<string, object>. The
+        // dictionary-per-row conversion is pure overhead (the caller already has column-ordered rows)
+        // and measured ~21% of a 100K-row bulk INSERT when a hash index is loaded.
+        var keys = new object?[rows.Length];
+        foreach (var kvp in this.hashIndexes)
         {
-            hashIndex.AddBatch(dictRows, positions);
+            int colIdx = this.Columns.IndexOf(kvp.Key);
+            if (colIdx < 0)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < rows.Length; i++)
+            {
+                keys[i] = rows[i][colIdx];
+            }
+
+            kvp.Value.AddBatchKeys(keys, positions);
         }
     }
 

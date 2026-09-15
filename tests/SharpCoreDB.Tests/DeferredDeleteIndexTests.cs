@@ -161,23 +161,52 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         (db as IDisposable)?.Dispose();
     }
 
-    // ── Default configuration is unchanged ──────────────────────────────────────────────────────
+    // ── Default = deferred; explicit opt-out = eager ────────────────────────────────────────────
 
     /// <summary>
-    /// Without <c>EnableDeferredDeleteIndexes</c> the batch DELETE takes the immediate index
-    /// maintenance path, byte-for-byte identical to before this feature existed.
+    /// The default configuration (<c>EnableDeferredDeleteIndexes = true</c>) defers hash-index
+    /// maintenance, leaving tombstone-tolerant stale entries in the index — yet every reader still
+    /// sees the deleted rows as gone (the position reads null).
     /// </summary>
     [Fact]
-    public void DefaultConfig_Delete_IsUnchanged()
+    public void DefaultConfig_DefersHashIndexMaintenance_ButReadersStayCorrect()
     {
-        var dir = NewDir("default");
+        var dir = NewDir("default_defer");
         var db = OpenAndSeed(dir, new DatabaseConfig { NoEncryptMode = true }, rows: 25);
+        Assert.True(db.TryGetTable("t", out var it));
+        var table = Assert.IsType<SharpCoreDB.DataStructures.Table>(it);
+        table.EnsureIndexLoaded("name");
+        Assert.Equal(25, table.GetHashIndexStatistics("name")!.Value.TotalRows);
 
         db.ExecuteBatchSQL(Deletes(Enumerable.Range(1, 10).Reverse()));
 
+        // Deferred: the index keeps the stale entries (bounded, reconciled on reopen) …
+        Assert.Equal(25, table.GetHashIndexStatistics("name")!.Value.TotalRows);
+        // … but every reader still sees the deletes as gone.
         Assert.Equal(15L, CountOf(db));
         Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 10"));
+        Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE name = 'user1'"));
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 11"));
+        (db as IDisposable)?.Dispose();
+    }
+
+    /// <summary>
+    /// Opting out (<c>EnableDeferredDeleteIndexes = false</c>) restores the eager path: every DELETE
+    /// removes its index entries immediately, so the hash index is exact between deletes.
+    /// </summary>
+    [Fact]
+    public void OptOut_ExplicitFalse_KeepsHashIndexExactAfterDelete()
+    {
+        var dir = NewDir("optout");
+        var db = OpenAndSeed(dir, new DatabaseConfig { NoEncryptMode = true, EnableDeferredDeleteIndexes = false }, rows: 25);
+        Assert.True(db.TryGetTable("t", out var it));
+        var table = Assert.IsType<SharpCoreDB.DataStructures.Table>(it);
+        table.EnsureIndexLoaded("name");
+
+        db.ExecuteBatchSQL(Deletes(Enumerable.Range(1, 10).Reverse()));
+
+        Assert.Equal(15, table.GetHashIndexStatistics("name")!.Value.TotalRows); // eager: removed immediately
+        Assert.Equal(15L, CountOf(db));
         (db as IDisposable)?.Dispose();
     }
 }
