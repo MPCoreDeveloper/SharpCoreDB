@@ -1397,9 +1397,27 @@ what the gates were protecting. And the engine primitive already existed — the
 `PageBasedEngine` implements (`PageBasedEngine.cs:179`) — so no engine work was needed. My earlier conclusion that a
 *m*issing engine primitive was the blocker was **wrong**, and checking it before writing an engine method is what
 avoided implementing something redundant; the correction is recorded here.
-**What remains is now a fresh profile, not a guess:** the patch removes the re-serialize, so the next question is how
-the remaining 5.3× splits between `parse`, the patch itself, the index re-pointing and `commit` — and secondarily
-whether the delete-side twins of these two gates (`:3329`, `:3485`, `:3637`) deserve the same treatment.
+**Re-profiled after the fix, and the cost changed identity (same day).** The same arm went from **350.7 ms attributed
+to 47.5 ms** — a 7.4× drop — and the stages that carried the cost are not the ones that carry it now:
+
+| stage | calls | share | µs/update |
+|---|---:|---:|---:|
+| `parse` | 10,000 | **83.2 %** | 3.95 |
+| `engine-write` | 10,000 | 9.7 % | 0.46 |
+| `in-place-patch` | 10,000 | 5.0 % | 0.24 |
+| `row-locate` | **1** | 1.9 % | — |
+| `commit` | 1 | 0.2 % | — |
+
+`encode`, `arena-write` and `arena-append` are **absent**, `in-place-patch` fires 10,000 times where it fired zero, and
+`row-locate` collapsed from 10,001 calls to **one**. The patch really did replace the re-serialize.
+**⚠️ One caveat the numbers force:** the profiled pass reads **30.10 µs/update** against the timed arm's **18 µs**
+(55,578 ops/s) — the profiled pass is now *slower* than the timed one, the opposite of the usual relationship. That means
+the profiler's own per-call overhead is a large share now that an update costs 18 µs instead of 47, so the
+sub-microsecond figures above are upper bounds and the honest claim is about *elimination*, not the exact split.
+**What the profile does establish:** the remaining per-update cost is no longer the serialize — it is `parse`
+(~4 µs/statement) plus the per-statement batch machinery and I/O around it. That is the same per-statement floor this
+program has now hit on three different shapes (single-row INSERT ~30 µs, multi-row dispatch, and now PageBased UPDATE),
+which makes the parser/dispatch floor the single most repeated finding in this document.
 
 **And §4b's remaining value is INSERT-only now, not shared.** The PageBased column no longer depends on it — the win
 here came from skipping the re-serialize, not from shrinking arena bytes — so §4b carries the INSERT ~24 % and its own
