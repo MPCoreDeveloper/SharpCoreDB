@@ -335,6 +335,20 @@ class Program
     }
 
     /// <summary>
+    /// Query-cache switch for every arm, from <c>SHARPCOREDB_QUERY_CACHE=off</c>. The multi-row arm's
+    /// statements carry distinct literals per row, so every cache lookup is a miss there; running it with the
+    /// cache off measures what the cache costs when it can never hit, which is the datum for whether a
+    /// never-repeating statement should be cached at all (plan §11). Missing or any other value keeps the
+    /// harness's tuned default. The config property is init-only, so this must be read in the object
+    /// initializer inside <see cref="BuildConfig"/> — assigning it after construction does not compile (CS8852).
+    /// </summary>
+    static bool QueryCacheOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_QUERY_CACHE");
+        return !(value is not null && value.Equals("off", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
     /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
     /// write-through append per row — and now routes to the batched core when the table has no per-row-only
@@ -663,7 +677,9 @@ class Program
             // shares one buffer, so the arms need to be able to turn it on. Set
             // SHARPCOREDB_BUFFERED_APPENDS=1 to measure it.
             EnableBufferedAppends = Environment.GetEnvironmentVariable("SHARPCOREDB_BUFFERED_APPENDS") == "1",
-            EnableQueryCache = true,
+            // Query cache (product default: on). Keyed by statement text, so it only pays for itself when
+            // statements repeat; set SHARPCOREDB_QUERY_CACHE=off to measure an all-miss workload (plan §11).
+            EnableQueryCache = QueryCacheOverride(),
             QueryCacheSize = 4096,
             EnableCompiledPlanCache = true,
             EnableBTreeSelection = true,

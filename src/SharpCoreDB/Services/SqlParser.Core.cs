@@ -139,10 +139,14 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         string[] parts;
         if (this.queryCache != null)
         {
-            var entry = this.queryCache.GetOrAdd(sql, key => new QueryCache.CachedQuery
+            // NOTE (2026-09-16): the factory is `static` and reads `key` rather than a captured `sql`. At this site
+            // the key *is* the statement text, so the two are interchangeable and the entry is a pure function of its
+            // key. A capturing lambda allocated a display class per call purely to build a value that already
+            // depended only on the key.
+            var entry = this.queryCache.GetOrAdd(sql, static key => new QueryCache.CachedQuery
             {
                 Sql = key,
-                Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                Parts = key.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
                 CachedAt = DateTime.UtcNow
             });
             parts = entry.Parts;
@@ -177,6 +181,11 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
             // per token). Parameterized queries embed distinct values into the text per call,
             // so the cached entry (keyed by the unbound SQL) may hold a different binding's
             // tokens — in that case the bound text is tokenized here (as before).
+            // NOTE (2026-09-16): this factory must keep capturing `sql` and cannot be `static`, because the key here
+            // is `originalSql ?? sql`: when parameters were bound, `sql` is the *bound* text while the key is the
+            // unbound template, so key and sql are not interchangeable at this site. (Consequence observed while
+            // making the other three sites static: a parameterized call can leave bound tokens cached under the
+            // template key. Recorded in plan §11 as observed, not changed here.)
             var entry = this.queryCache.GetOrAdd(originalSql ?? sql, key =>
                 new QueryCache.CachedQuery
                 {
@@ -233,12 +242,13 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
         // PERF: reuse the cache's tokenized Parts for non-parameterized queries (the cache key
         // is the SQL text itself); parameterized queries re-tokenize the bound text per call.
+        // (Static factory reading `key`: same reasoning as Execute(sql, wal) — the key is the SQL text here.)
         string[] parts = this.queryCache is not null && !hasParams
-            ? this.queryCache.GetOrAdd(sql, key =>
+            ? this.queryCache.GetOrAdd(sql, static key =>
                 new QueryCache.CachedQuery
                 {
                     Sql = key,
-                    Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                    Parts = key.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
                     CachedAt = DateTime.UtcNow
                 }).Parts
             : sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
@@ -262,12 +272,13 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         // ✅ CRITICAL FIX: Split on ALL whitespace (space, tab, newline, CR, etc.) to handle multi-line SQL correctly.
         // EF Core and other callers may pass SQL with newlines, which must be tokenized properly.
         // PERF: reuse the cache's tokenized Parts for non-parameterized queries (see ExecuteQuery above).
+        // (Static factory reading `key`: same reasoning as Execute(sql, wal) — the key is the SQL text here.)
         string[] parts = this.queryCache is not null && !hasParams
-            ? this.queryCache.GetOrAdd(sql, key =>
+            ? this.queryCache.GetOrAdd(sql, static key =>
                 new QueryCache.CachedQuery
                 {
                     Sql = key,
-                    Parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+                    Parts = key.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
                     CachedAt = DateTime.UtcNow
                 }).Parts
             : sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);

@@ -2163,10 +2163,33 @@ path 94,022 → 92,434 INSERT, and the `--pk` fair-PK fixed-width UPDATE 55,578 
 parameter or send one statement per batch, so the gate never fired. Nothing regressed; the win is confined to the
 shape that had the pathology.
 
-What remains in `stmt-split` is 4.85 µs and 1,174 B/call, unchanged in allocation: the `Trim()` plus `Split`, the
-per-call closure that builds the `CachedQuery`, and the dictionary insert. The closure is capturable-free (its body
-uses only `key`), so making it `static` is the next cheap step; the larger question — whether a statement that will
-never repeat should be cached at all — is a design change and is deliberately *not* made here.
+**The closure item is dead, and the delegate was never allocated.** All four cache factories were reviewed and the
+three whose key is literally `sql` were made `static` and switched to read `key`, so the entry is now provably a pure
+function of its key; the fourth keeps capturing `sql`, because its key is `originalSql ?? sql` and `sql` may be the
+*bound* text — that asymmetry, and the stale-token possibility it implies for a template key, is documented at the
+call site and observed rather than changed. Measured: **neutral** — 39,269 → 39,039 rows/s, and `stmt-split` stayed at
+exactly 1,174 B/call. The pinning of that allocation figure *is* the finding: only ~32 B of it was the display class,
+so the delegate was already elided, presumably because `GetOrAdd` is `[MethodImpl(AggressiveInlining)]` and the lambda
+therefore never escapes. The sentence earlier in this section claiming a per-call display-class allocation was wrong.
+
+**What the cache costs on an all-miss workload, measured with a switch rather than argued.** `BuildConfig` now reads
+`SHARPCOREDB_QUERY_CACHE=off` (the property is init-only, so it has to be set in the object initializer — assigning it
+after construction does not compile, CS8852). With one statement per row:
+
+| `SHARPCOREDB_MULTIROW_ROWS=1` | cache on | cache off |
+|---|---|---|
+| rows/s (three runs each) | 34,951 / 34,991 / 34,634 | 38,235 / 33,933 / 34,018 |
+| `stmt-split` | 68.1 ms, 1,174 B/call | **22.9 ms, 815 B/call** |
+
+The stage cost is real and unambiguous: bypassing the cache leaves 1.15 µs and 815 B per statement for `Trim()` plus
+`Split`, so the cache's own per-statement work is **2.26 µs and 359 B** — which also completes the original 25.3 µs
+accounting (21.9 µs of it was the `Count` gate, and this section's earlier ~0.2 µs estimate for the `Split` was low by
+5×). The **wall clock does not follow**: the first pair suggested +9.4%, and the three-run repeats show no difference
+(medians ~34,951 with the cache, ~34,018 without, inside this arm's ±8-10% spread). Two conclusions, both deliberately
+negative: allocation attributed to a stage is not necessarily on the critical path, so the per-stage figures overstate
+what is removable on this shape; and on this evidence the caching *policy* must not be changed — the cache pays for
+itself whenever statements repeat, and whether a never-repeating statement should be cached is a product question this
+shape cannot settle.
 
 
 
