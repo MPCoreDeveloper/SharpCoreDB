@@ -2088,7 +2088,27 @@ and **0.24×** on a PK-less, hash-predicate update. A PK-less schema is a legiti
 where this engine currently pays a re-serialize per update, and priority 1 is the package above rather than a claim.
 
 Then: **priority 2, INSERT** (0.54× fair-PK batch, 0.67× default SQL path, 0.92× StructRow, 0.85× Direct — decision 4
-wants this above parity, not near it) and **priority 3, PageBased UPDATE** (0.17×, decision 1 and §6). The at-rest
+wants this above parity, not near it) and **priority 3, PageBased UPDATE** (0.17×, decision 1 and §6).
+
+⚠️ **Priority 2's own named lever is eliminated before it was built, for a structural reason.** §9's item 2 has long
+carried "defer the per-row index maintenance to one bulk build" (hash-index 1.7 µs + index-maint 2.2 µs per row, 23 %
+of the budget), and the `BulkImport` preset's comment names the same thing. Two measurements and one reading remove it:
+
+- **The hash half is already measured as noise.** Timed, profiler-free, median of 5, multi-row batch shape:
+  **63,377 rows/s with hash indexes against 59,082 without** — inside the arm's ±10 % band and in the *wrong*
+  direction for a cost. Per-row hash maintenance is ≲ noise here.
+- **The index work is already per call, not per row.** `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls
+  `UpdatePrimaryKeyIndex(validatedRows, positions)` and `UpdateHashIndexes(validatedRows, positions)` **once for the
+  whole call**, and `BulkIndexRowsInBTree` is already bulk. The "per row" figures were taken on the
+  **1-row-per-statement** shape, where each row *is* its own call — so on every tracked arm (batched `InsertBatch`,
+  and the multi-row statement, which also batches per statement) there is nothing left to defer.
+
+**What the reading did surface, and it is a live per-row candidate on the tracked shape:** `RowsToDictionaries(validatedRows)`
+inside the same critical section allocates a `Dictionary<string, object>` **per row** purely to feed
+`BulkIndexRowsInBTree`, and it only runs when a B-tree exists — which the PK-bearing benchmark schema has. The
+`index-maint` stage's measured allocation (~1,032 B/call × 2 ≈ 2 KB/row) is consistent with it, against the harness's
+own **profiler-free** counter reading **4,937 B/row** on that shape. That is where priority 2 should point: allocation
+on the batch insert path, measured with the harness's `[diag]` counter rather than with stage times. The at-rest
 mutation tax (~2× on UPDATE/DELETE, §3-1f/§4c) applies to both tables and is accounted there rather than as an INSERT
 cost. Anything below this block that opens with DELETE as priority 1 is pre-deferred-index history, kept for the record.
 
