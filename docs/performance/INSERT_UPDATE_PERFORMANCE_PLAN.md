@@ -1613,6 +1613,21 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    bookkeeping. ⚠️ Per-stage figures on this shape swing by more than 2× between runs of the same build (the
    profiled pass measured `arena-write` at 130.6 ms and 366.8 ms on two of them), so only medians-of-5 are
    quoted as results and the stage numbers are read as ratios inside one report.
+   **Item 2 — the remaining candidates — closed the same way.** Stamping the single-row `Table.Insert`'s
+   validation block as `Validate` and its `SerializeRowExact` as `Encode` (neither had a stamp) settles two of
+   the four named candidates: **row validation is free — 0.19 µs/statement, 0 bytes allocated** — while the
+   serialization becomes visible at **4.9 µs/statement**, the largest attributed item on this shape, of which
+   `arena-write` is 4.4 µs. Final attribution on a clean run (profiled pass 39.5 µs/statement, warm median
+   41.89): `encode` 4.9, `parse` 1.6, `engine-write` 1.3, `row-build` 0.4, `validate` 0.19, `stmt-validate`
+   0.03, `wal-append` 0.02 — about **8.4 µs/statement (21 %)** — leaving **~31 µs/statement (79 %) in the
+   `_walLock` region, `IsSchemaChangingCommand` and the `_metadataDirty` bookkeeping**, none of which has a
+   stage. ⚠️ Absolute medians on this shape ranged 41.89–64.68 µs across this session's runs of *the same
+   build* (machine load), so cross-run median comparisons are not evidence; the stage *ratios within one
+   report* are.
+   **Also worth recording: three of the four plausible candidates for this cost are now measured dead** — the
+   storage write (0.7–1.3 µs), the WAL (0.02 µs) and row validation (0.19 µs) — and the only one that produced
+   a win was the plan-cache warm-up (removed, 21 µs → 3.5 µs of real parsing). The remaining bucket is lock
+   acquisition and per-statement metadata bookkeeping, which needs a stage before it can be measured.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)

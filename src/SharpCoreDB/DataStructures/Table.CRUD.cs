@@ -40,6 +40,12 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
+        // §2 instrumentation (2026-09-15): this single-row path had no row-validation stamp, so this whole block
+        // — defaults, auto-generation, type coercion, NOT NULL, unique and CHECK constraints — was part of the
+        // ~40 µs/statement the standalone-statement profile could not account for. Validate's definition is
+        // exactly this work.
+        long validateStart = Diagnostics.WritePathProfiler.Stamp();
+
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         for (int i = 0; i < this.Columns.Count; i++)
         {
@@ -125,8 +131,14 @@ public partial class Table
             }
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
+
         // Serialize row data (outside lock) - WP13: exact-size allocation, no pool + copy.
+        // §2 instrumentation: stamped here as well, because the arena stages attribute only the arena calls the
+        // codec makes, not the encoding work around them.
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var rowData = SerializeRowExact(row);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
         // ✅ MINIMAL CRITICAL SECTION: Lock only for PK check, insert, and index updates
         this.rwLock.EnterWriteLock();
