@@ -556,7 +556,10 @@ public partial class Storage
         // (access=Write) makes an ordinary reader (File.ReadAllBytes, share=Read) fail with a sharing
         // violation, which the suite caught in 10 tests. The per-call open is what keeps the file
         // readable by other processes, and its cost is the remaining item on the INSERT path.
+        long appendOpenStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.AppendOpen, appendOpenStart);
         long position = fs.Position;
 
         // ✅ Known Issue 1 FIX: brand-new encrypted files (position 0) receive the 8-byte
@@ -568,6 +571,7 @@ public partial class Storage
         }
 
         // Write length prefix (ciphertext length for encrypted files, data length otherwise)
+        long appendWriteStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         Span<byte> lengthBuffer = stackalloc byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
         fs.Write(lengthBuffer);
@@ -581,6 +585,9 @@ public partial class Storage
             int pageId = ComputePageId(path, position);
             this.pageCache.EvictPage(pageId);
         }
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.AppendWrite, appendWriteStart);
 
         return position;
     }
@@ -1050,7 +1057,20 @@ public partial class Storage
         // Normal batch append (not in transaction) - write immediately
         var positions = new long[dataBlocks.Count];
 
-        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 65536, FileOptions.WriteThrough);
+        // §11 (2026-09-16): size the write buffer to what is actually being written. A fixed 64 KiB buffer
+        // allocates 64 KiB per call whatever the payload, and the overflow arena calls this once per ROW with a
+        // single small block: measured 65,856 B allocated per call, 76,467 B per row and 244 gen0 collections
+        // per 20,000-row pass, against 4,371 B/call for the single-value path's 4 KiB buffer. The floor keeps
+        // small writes buffered and the cap preserves the coalescing that makes a genuine multi-row batch cheap.
+        long pendingBytes = 4L * (dataBlocks.Count + 1);
+        for (int i = 0; i < dataBlocks.Count; i++)
+        {
+            pendingBytes += dataBlocks[i]?.Length ?? 0;
+        }
+
+        int appendBufferSize = (int)Math.Clamp(pendingBytes, 4096L, 65536L);
+
+        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, appendBufferSize, FileOptions.WriteThrough);
 
         Span<byte> lengthBuffer = stackalloc byte[4];
 

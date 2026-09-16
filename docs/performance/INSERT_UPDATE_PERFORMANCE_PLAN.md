@@ -2228,6 +2228,42 @@ what is removable on this shape; and on this evidence the caching *policy* must 
 itself whenever statements repeat, and whether a never-repeating statement should be cached is a product question this
 shape cannot settle.
 
+**The write-through cliff, traced to its cause.** Two stages were added to split the append (open versus writes), and
+they inverted the hypothesis — the open allocates almost nothing:
+
+| stage | total ms | calls | alloc MB | B/call | µs/call |
+|---|---|---|---|---|---|
+| `append-open` | 2,906.9 | 20,000 | 4.8 | **250** | 145 |
+| `append-write` | 35.7 | 20,000 | 78.6 | **4,120** | 1.8 |
+
+So the payload write is 1.8 µs of a 542 µs append and the open is 145 µs; the remaining ~395 µs falls after the
+write stamp, which is the `using` disposal — for `FileOptions.WriteThrough` that is the flush to disk. The default
+posture's per-value cost is therefore **a durability decision, not a defect**: the fix for it is
+`EnableBufferedAppends` (34× here) or group commit, and a cached write handle is not available because ordinary
+readers fail against it with a sharing violation (ten tests).
+
+But the allocation was a defect, and the cross-check found it: `engine-write` allocates **4,371 B/call** while
+`arena-append` allocates **65,856 B/call** — the *same* `AppendBytes` method, so the overhead was not inherent to it.
+The arena uses the batched entry point, and its `FileStream` hard-coded **`bufferSize: 65536`**: a 64 KiB buffer
+allocated per call, on a path the overflow arena calls once per ROW with a single ~46-byte block. (It also explains
+the buffered regime's 850 B/call: when appends are buffered that branch is never taken.) Sizing the buffer to the
+payload, clamped to 4096..65536, is format-, durability- and sharing-neutral:
+
+| 1 row/statement, unbuffered | before | after |
+|---|---|---|
+| allocated per row (harness counter) | 76,462 B | **15,023 B** |
+| gen0 collections per pass | 244 | **49** |
+| total allocated per pass | 1.529 GB | **300 MB** |
+| `arena-append` | 65,856 B/call | **4,416 B/call** |
+| `arena-write` | 66,215 B/call | **4,775 B/call** |
+| wall, 1 rep | 925 rows/s | 899 rows/s |
+
+**The wall does not move, and that is the honest result.** This shape is bound by the open and the fsync, so
+removing 80% of its garbage buys nothing here — 195 fewer gen0 collections on a 20.75 s pass is a rounding error.
+The win is real for production: **5× less allocation and 5× fewer collections on the default posture**. The
+multi-row half is unaffected by construction — a 3,000-payload batch still clamps to 65,536 and keeps the
+coalescing that makes it cheap — and it measured 45,279 rows/s / 22.09 µs/row unbuffered with 4,943 B/row.
+
 
 
 

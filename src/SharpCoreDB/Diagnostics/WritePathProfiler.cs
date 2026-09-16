@@ -170,9 +170,23 @@ public static class WritePathProfiler
         /// <c>ExecuteInternal</c> are the remaining candidates for the un-stamped parser time.
         /// </summary>
         StmtSplit = 21,
+
+        /// <summary>
+        /// The per-call write-through <c>FileStream</c> open inside <c>Storage.AppendBytes</c>. Added (2026-09-16)
+        /// because the write-through append path allocates ~64 KB per call in the multi-row arm's own allocation
+        /// counter (76,467 B/row over a timed, profiler-free pass) and the code shows only a 4096-byte buffer, so the
+        /// question this settles is whether the cost is the open or the writes.
+        /// </summary>
+        AppendOpen = 22,
+
+        /// <summary>
+        /// The length-prefix write, payload write and page-cache eviction that follow the open in
+        /// <c>Storage.AppendBytes</c>; its sibling above covers the open itself.
+        /// </summary>
+        AppendWrite = 23,
     }
 
-    private const int StageCount = 22;
+    private const int StageCount = 24;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -206,6 +220,7 @@ public static class WritePathProfiler
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
         "hash-index", "stmt-validate", "dispatch", "table-batch", "classify", "stmt-split",
+        "append-open", "append-write",
     ];
 
     private static int _enabled;
