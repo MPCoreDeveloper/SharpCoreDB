@@ -1740,10 +1740,25 @@ disagree). Every figure is fair-shape — `WHERE id = @pk` for both engines, tun
    `TryResolvePkBatchSequentially` and the `wholeFile` shortcut all exist and are gated — not missing machinery.
    Target: ≤2.4 µs/op.
 2. **INSERT.** The per-row budget (§5) is validate 3.7 + encode 3.5 + arena-write 2.3 + index-maint 2.2 +
-   arena-append 1.9 + row-build 1.8 + hash-index 1.7 + commit 0.7 = 17.2 µs, which the 17.18 µs/row median
-   independently confirms. Two groups are directly addressable: the deferrable index work (index-maint + hash-index
-   = 3.9 µs, 23 %) and the overflow-arena round-trip for short TEXT (4.2 µs, 24 % — what §4b's two-region record
-   exists to remove).
+   arena-append 1.9 + row-build 1.8 + commit 0.7 = 17.2 µs, which the 17.18 µs/row median independently confirms.
+   ⚠️ **Corrected twice on this item, and the second correction changes the target.** First: `index-maint`
+   (2.2 µs) *contains* the `hash-index` stamp (1.7 µs) — `HashIndex.Add` is stamped inside that region — so the
+   index cost is **2.2 µs / 13 %**, not the 3.9 / 23 % an earlier version of this item claimed. Second, and more
+   important: **the report's stages nest**, so no share column can be summed and no per-row budget can be built by
+   adding the rows up. `validate` (3.7 µs/row) is the *outer bracket* around `validate-only` (0.2) and `encode`
+   (3.5) — the identity is exact in the measurement (74.4 ms = 4.1 + 70.4, same 20 calls, same allocation). The
+   same is true of `dispatch` (12.75 µs/row, 37.5 %), which brackets the entire statement.
+   **The honest leaf budget for a multi-row pass, per row:** `encode` 3.5 (which itself contains `arena-write` 2.3
+   and `arena-append` 1.9), `index-maint` 2.2 (contains `hash-index` 1.7), `row-build` 1.8, `parse` 2.4, `commit`
+   0.7, row validation 0.2 — roughly **11.5 µs of the 17.18 µs median, leaving ~5.7 µs/row (33 %) unattributed
+   inside `dispatch`.** That is the same envelope gap the single-row shape shows (~30 µs/statement, §9 item 2),
+   now visible on both shapes and for the same reason.
+   **So the first INSERT job is to split `dispatch` on the batch shape, not to attack serialization:** encode is
+   ~20 %, while the unattributed third is larger. Note also that batch row validation is *not* an anomaly — 0.2
+   µs/row matches the single-row path's 0.19 µs; the earlier text here compared the bracket with the leaf.
+   **After that:** `encode` (20 %, where the arena round-trip lives — §4b's target) and `index-maint` (13 %, with
+   the caveat that `BTree.InsertBulk` is a plain `Insert` loop despite its doc comment, and a full
+   `RebuildAllIndexesFromFile` is not an option — §7a pitfall 2 measured 1380 ms for 20K records).
 3. **PageBased UPDATE (§6).** Largest deficit anywhere (8.7–10.2×), unchanged package: the PK-equality fast paths
    are switched off for PageBased at `:2134`, `:2260`, `:2266`, `:3153`, `:3309`, `:3461`, and a relocated record can
    be written twice.

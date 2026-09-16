@@ -484,7 +484,13 @@ public class DatabaseConfig
         // Disable query cache (bulk import doesn't repeat queries)
         EnableQueryCache = false,
         
-        // Hash indexes enabled but will be built AFTER import
+        // Hash indexes are enabled. This comment previously claimed they "will be built AFTER import" — they are
+        // not: nothing in the engine defers the build, so the per-row hash maintenance is paid on every INSERT
+        // even in this preset. Measured on the multi-row batch path (2026-09-16), per row: `hash-index` 1.7 µs
+        // (10 % of the 17.2 µs/row budget) and `index-maint` (the PK B-tree insert) 2.2 µs (13 %). Deferring both
+        // to a single bulk build is priority 2 of the plan's re-derived order (§9) and the machinery for it exists
+        // — RebuildHashIndex / RebuildAllIndexesFromFile, plus ValidateBatchPrimaryKeysUpfront for the uniqueness
+        // the index would otherwise enforce — but it is NOT implemented, so this preset must not claim it.
         EnableHashIndexes = true,
         
         // ✅ VERY LARGE buffers for bulk import
