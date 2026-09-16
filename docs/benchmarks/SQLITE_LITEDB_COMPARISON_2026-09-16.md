@@ -126,6 +126,40 @@ the deltas below measure code changes rather than a regime change. The competito
   PageBased write trap this document's PageBased section describes, now confirmed within one regime and one
   session instead of across runs — and it is where the remaining SQL-path UPDATE work should be aimed.
 
+## Refresh, 2026-09-16 18:21 — after the §4b inline-capacity default
+
+Same explicit regime as the 16:00 refresh (`SHARPCOREDB_BUFFERED_APPENDS=1`, `SHARPCOREDB_WAL_DURABILITY=fullsync`),
+but every fixed-width table now uses the **shipped default inline capacity of 16**. This is therefore not like-for-like
+with the tables above in the sense that matters: **the record layout itself changed**, and the deltas below are the
+layout's, not a machine's. SQLite's control columns stayed within 3 % on the first run (its DELETE swings ±12 %
+run-to-run, which is worth remembering when reading the fourth column).
+
+**AppendOnly, fair PK, fixed-width plaintext** (median of 3 per run; three runs shown because the DELETE column moves):
+
+| run | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| 16:00 (capacity 0) | 102,833 | 110,366 | 391,668 | 878,487 |
+| 18:21 (capacity 16) | 125,152 | 112,580 | 359,262 | 691,037 |
+| 18:2x rep 1 | 131,345 | 129,038 | 358,537 | 684,106 |
+| 18:2x rep 2 | 135,233 | 123,891 | 373,371 | 516,819 |
+
+**PageBased, fair PK, fixed-width plaintext:**
+
+| run | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| 16:00 (capacity 0) | 114,605 | 239,370 | 52,904 | 302,154 |
+| 18:21 (capacity 16) | **193,413** | **300,864** | **61,860** | 307,762 |
+
+**The layout change is a trade, and it should be read as one.** Inlining short values removes an overflow-arena write
+per short variable-length value, which is why INSERT improves sharply on every arm — AppendOnly +22 % to +32 % on the
+fixed-width arm, +35 % legacy, +46 % at-rest, and **PageBased INSERT reaches parity with SQLite (1.0×, from 1.7×)**,
+with its READ up 26 % and UPDATE up 17 % too. The cost is space (every variable-length column reserves `2 + 16` bytes
+per record — 760,000 → 1,840,000 B on the benchmark schema) and, now measurably, **the AppendOnly DELETE column**:
+878,487 (capacity 0) against a 516,819–691,037 cluster at capacity 16, i.e. roughly **−20 % to −40 %**, with UPDATE
+about 7 % down. Bigger records mean more bytes per delete, so the direction is explicable; whether it is worth the
+INSERT gain is a trade the owner should see rather than have decided by a default. **Follow-up: re-examine the
+AppendOnly delete path against the larger record before treating this as settled.**
+
 ## Findings
 
 1. **Against LiteDB, SharpCoreDB wins every operation in both engines** — 1.2–1.8× on INSERT, 5.3–7.3× on READ,

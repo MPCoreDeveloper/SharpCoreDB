@@ -1902,6 +1902,31 @@ fair-PK table is **1.29× ahead** and **2.19× ahead**. Both are "by PK" runs, s
 layout-dependent, not a missing mechanism. **Reconciling the two tables is priority 1 in §9 and is a diagnosis
 before it is a fix** — the fair-PK columns are won *on this shape* and must not be reported as "UPDATE/DELETE won".
 
+### 8c. After the §4b inline-capacity default *(measured 2026-09-16 18:21, same explicit regime as §8b)*
+
+Every fixed-width table now uses the shipped **inline capacity 16**, so this is a **layout change**, not a machine
+change: its deltas are the layout's. Fair PK, fixed-width plaintext, AppendOnly, median of 3 per run, three runs
+because the DELETE column moves:
+
+| run | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| §8b (capacity 0) | 102,833 | 110,366 | 391,668 | 878,487 |
+| 18:21 (capacity 16) | 125,152 | 112,580 | 359,262 | 691,037 |
+| 18:2x rep 1 | 131,345 | 129,038 | 358,537 | 684,106 |
+| 18:2x rep 2 | 135,233 | 123,891 | 373,371 | 516,819 |
+
+PageBased gained too and crossed SQLite on INSERT: 114,605 → **193,413** (1.0× SQLite, was 1.7×), READ 239,370 →
+300,864, UPDATE 52,904 → 61,860, DELETE 302,154 → 307,762.
+
+**So the default is a trade, and §9's ranking has to absorb it.** The insert-side gains are large and tight
+(+20 % to +46 % across arms), which improves priority 2 directly — the fixed-width INSERT gap moved from 1.9× behind
+SQLite to 1.5×. The costs are (a) space, 2.4× on the benchmark schema's table file, and (b) a **measured AppendOnly
+DELETE regression**: 878,487 at capacity 0 against a 516,819–691,037 cluster now, with UPDATE about 7 % down.
+⚠️ **That regression becomes a new priority-1 candidate alongside the PK-less UPDATE** — it is the one column this
+change made worse, and it is explicable (larger records, more bytes per delete) rather than mysterious. The DELETE
+column is also intrinsically noisy (SQLite's own reference swings ±12 % run to run), so any fix must be judged on a
+rep ladder rather than a single run, which is why three runs are tabulated above.
+
 ---
 
 ## 9. Execution order and dependency graph
