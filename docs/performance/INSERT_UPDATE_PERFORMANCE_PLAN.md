@@ -869,16 +869,19 @@ from payload bytes* and then **freed it**. That is why the mutation test failed 
 treats only flag 1 as an offset, writes the new value into the slot when it fits (skipping the arena entirely), and
 the inline writer zeroes its unused tail so a shorter value cannot leave the previous value's bytes behind. With the
 inline capacity off nothing writes flag 2, so this is a no-op for the default layout — and the mutation test passes.
-**What is still open: one test, and it is narrowed to config propagation.** The record *is* written correctly — the
-raw data file reads `… 02 00 00 00 00 05 00 73 68 6F 72 74`, i.e. flag 2, unused offset, length 5, `"short"` — and
-the reopened table reports `IsFixedWidthRecords: true`, but the value comes back **`DBNull`**. That is precisely what
-`TryReadVariableSlot` returns when it *skips* the inline branch (`layout.InlineValueBytes == 0`), reads the unused
-offset `0` and finds no arena block. So the reopened table holds a configuration with `FixedWidthRecordLayout = true`
-and `FixedWidthInlineValueBytes = 0` — two properties of the *same* config disagreeing, which means the open path
-does not hand the caller's configuration to the table that serves queries. Ruled out by reading: `new DatabaseConfig`
-appears nowhere in the open path except `PlatformHelper`, and the only `Table` construction site is
-`DirectoryTableFactory.CreateTable`, which takes the config from *its* caller — so the remaining question is which
-caller runs during open, and that is the next place to look. The test carries this as its skip reason.
+**Three probes later (2026-09-16), the cause is elsewhere — and the earlier theories are refuted, so they are
+recorded as refuted.** (1) *Config propagation is not the problem*: a temporary probe in
+`DirectoryTableFactory.CreateTable` showed **every** construction receiving `fixedWidth=True inlineBytes=16`,
+including the reopen path's. (2) *The reopened table is not built by the factory*: with the probe in place the reopen
+phase produced **no** `CreateTable` line at all yet `TryGetTable("t")` succeeded — so the table is restored from
+somewhere other than `DirectoryTableFactory`, which is the only `new Table(…)` site in the codebase. (3) *The
+restored layout is correct and the reader works*: a row inserted **after** reopen reads back perfectly
+(`'fresh'`), while only the record written **before** the reopen comes back `DBNull`. Therefore this is not a layout,
+encoding or configuration problem — it is about **locating or reading a pre-existing record after open**, which is a
+much smaller and better-defined question than the one this section started with, and it does not endanger the
+encoding. The plan's persistence map still stands (`<name>.dat` + `.meta`; no stored schema for directory tables), so
+the remaining work is to find the restore path that serves queries after open and see what it does with a record
+whose slots were written in the inline encoding.
 **The persistence map, so this is not re-derived:** in *directory* mode a table is `<name>.dat` plus a `.meta`
 sidecar (`FileStreamManager.cs:178`, `DirectoryStorageProvider.cs:425`); `TableSchemaDefinition` is constructed at DDL
 time and applied, never stored; `TableMetadataDto` is written (`Database.Core.cs:533`) but has **no reader anywhere in

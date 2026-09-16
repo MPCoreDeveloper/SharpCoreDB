@@ -99,7 +99,7 @@ public sealed class FixedWidthInlineValueTests : IDisposable
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE name = 'User2'"));
     }
 
-    [Fact(Skip = "§4b open item, narrowed (2026-09-16): the record IS written inline (the raw file shows flag 2, length 5, 'short') and the reopened table reports IsFixedWidthRecords=True, but the value comes back DBNull — which is what the reader returns when it SKIPS the inline branch (layout.InlineValueBytes == 0), reads the unused offset 0 and gets no arena block. So the reopened table's configuration lacks FixedWidthInlineValueBytes while still carrying FixedWidthRecordLayout=true: config propagation in the open path, not the encoding. Acceptance criterion before enabling this feature.")]
+    [Fact(Skip = "§4b open item, re-narrowed (2026-09-16) after three probes refuted the earlier theories: the row IS written inline, the reopened table reports IsFixedWidthRecords=True, every table construction receives the right configuration (fixedWidth=True, inlineBytes=16), the reopen does NOT construct its table through DirectoryTableFactory at all, and a row inserted AFTER reopen reads back correctly. So the restored layout is inline-aware and the reader works — only the record written BEFORE the reopen is misread, coming back DBNull. That is about locating/reading a pre-existing record after open, not about the layout or the encoding. Acceptance criterion before enabling this feature.")]
     public async Task Reopen_KeepsInlineAndOverflowValues()
     {
         await using (var db = Open("reopen"))
