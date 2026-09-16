@@ -16,6 +16,28 @@ All engines: WAL mode, each engine's own optimal batch settings
 CPU. The AppendOnly table is a **median of 3 consecutive runs**; the PageBased table is **one run** and is
 labelled as such throughout.
 
+> ⚠️ **Read this first: the DML columns in this job are not like-for-like.** The default job's SharpCoreDB arms
+> declare **no primary key** (`Program.cs:738`, `:858`, `:977`), so their UPDATE/DELETE run
+> `UPDATE docs SET score = … WHERE name = 'User…'` — a predicate on a **non-key** column — while the SQLite arm of
+> the same job targets `id INTEGER PRIMARY KEY` (`:1073-1074`), an **INTEGER PRIMARY KEY = rowid**, i.e. an in-place
+> page edit. The harness says so itself (`:906`: *"UpdateByPrimaryKey requires a PK column, so we use the SQL
+> path"*). The resulting gap is not an engine property — on the fair-PK job, where **both** engines run
+> `WHERE id = @pk`, the same UPDATE column measures SharpCoreDB **385,668** against SQLite **325,813**.
+>
+> The comparable view — both engines on `WHERE id = @pk`, tuned, plaintext, `--pk` job, median of 3, current build:
+>
+> | database | INSERT | READ | UPDATE | DELETE |
+> |---|---:|---:|---:|---:|
+> | SharpCoreDB (fixed-width, plaintext) | 97,316 | **120,166** | **385,668** | 213,727 |
+> | SQLite | 196,404 | 101,695 | 325,813 | 418,093 |
+> | ratio | 0.50× | **1.18× (ahead)** | **1.18× (ahead)** | 0.51× |
+>
+> On the fair shape SharpCoreDB **already wins READ and UPDATE** and is ~2× behind on INSERT and DELETE. The
+> tables below measure a different, less favourable SharpCoreDB usage and are kept because they are what this
+> harness has always published — but they must not be quoted as an engine-to-engine verdict. Note also that even
+> the fair-PK INSERT is not route-symmetric: SharpCoreDB issues a batch of SQL *literals* (parsed per row) while the
+> SQLite arm reuses one prepared statement inside a transaction.
+
 ## AppendOnly engine — median of 3 (ops/sec)
 
 | database | INSERT | READ | UPDATE | DELETE |
