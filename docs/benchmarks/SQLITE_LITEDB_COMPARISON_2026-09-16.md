@@ -112,5 +112,7 @@ side.
   `FullSync` — are measured separately in plan §8a (`--pk-default`, `--dual-mode`), where the encryption tax is
   ~1.12× on INSERT/READ and ~2× on UPDATE/DELETE.
 - **These columns measure single-row UPDATE/DELETE by PK.** The batched multi-row INSERT path is measured by
-  `--multirowinsert` — 17.18 µs/row / 58,205 rows/s, plan §8a.
+  `--multirowinsert` — 1,000 rows/statement: 17.65 µs/row / 56,672 rows/s; and one statement per row
+  (`SHARPCOREDB_MULTIROW_ROWS=1`), which is the shape that exposed the query-cache capacity-gate defect:
+  **25.47 µs/row / 39,269 rows/s, up from 57.70 µs/row / 17,332 rows/s** (2.27×, plan §11).
 - PageBased is one run, not a median; treat those four columns as indicative.

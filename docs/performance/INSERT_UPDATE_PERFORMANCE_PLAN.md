@@ -2133,8 +2133,40 @@ that this codebase has already removed elsewhere for exactly this reason:
 - the `upper` full-statement copy feeding the AST-routing `upper.Contains(...)` tests
   (`SqlParser.DML.cs:106-110`).
 
-The next step is to stamp that region the same way *before* changing it — and to check for a partner gate in
-the sense of §2's pairing lesson, since a "no change" on one half is not a verdict on the pair.
+**The ToUpperInvariant theory in the paragraph above was refuted by measurement, and so was the dispatcher.** Stamping
+the two parser classification sites under the same `classify` stage gave 0.03 µs/call over 40,004 calls with zero
+allocation, so the three uppercased copies per statement are real but negligible — acting on that reading alone would
+have been wrong, which is why the region was stamped first. The new `stmt-split` stage settled it in one run:
+
+| stage | total ms | calls | share | alloc MB | B/call |
+|---|---|---|---|---|---|
+| stmt-split | **506.4** | 20,002 | 27.1% | 22.4 | 1,175 |
+| classify | 1.2 | 40,004 | 0.1% | 0.0 | 0 |
+
+25.3 of the 26.2 µs was tokenisation — but a `Split` of a ~120-character statement costs ~0.2 µs, so the cost had to
+be the query-cache lookup that the same stamp wraps. It was: `QueryCache.GetOrAdd` read
+`ConcurrentDictionary.Count` on every miss, and `Count` takes the dictionary's locks and counts every entry. With
+20,000 distinct statements every miss paid a full locked count of a ~1,024-entry dictionary. Replaced with an
+`Interlocked` counter (incremented on a successful `TryAdd`, decremented per successful eviction, reset in `Clear`);
+`GetStatistics` still reports the dictionary's real count.
+
+| measurement (1 row/statement, 20,000 statements) | before | after |
+|---|---|---|
+| rows/s (median of 5) | 17,332 | **39,269** |
+| µs/row | 57.70 | **25.47** |
+| `stmt-split` | 506.4 ms (25.3 µs/stmt) | **97.0 ms (4.85 µs/stmt)** |
+| `dispatch` | 881.7 ms | **484.6 ms** |
+| measured across stages | 1867.2 ms | **1150.5 ms** |
+
+Neutral on every tracked arm — the batched shape (1,000 rows/statement) 58,205 → 56,672 rows/s, the default job's SQL
+path 94,022 → 92,434 INSERT, and the `--pk` fair-PK fixed-width UPDATE 55,578 → 56,885 — because those bind by
+parameter or send one statement per batch, so the gate never fired. Nothing regressed; the win is confined to the
+shape that had the pathology.
+
+What remains in `stmt-split` is 4.85 µs and 1,174 B/call, unchanged in allocation: the `Trim()` plus `Split`, the
+per-call closure that builds the `CachedQuery`, and the dictionary insert. The closure is capturable-free (its body
+uses only `key`), so making it `static` is the next cheap step; the larger question — whether a statement that will
+never repeat should be cached at all — is a design change and is deliberately *not* made here.
 
 
 
