@@ -654,32 +654,128 @@ public partial class SqlParser
     private static List<string> ParseInsertValues(ReadOnlySpan<char> valuesStr)
     {
         List<string> values = [];
-        var currentValue = new StringBuilder();
-        bool inQuotes = false;
 
-        foreach (char c in valuesStr)
+        // (2026-09-16, plan §9 priority 2 lever 1) Literals are sliced out of the statement instead of being
+        // appended to a StringBuilder one character at a time. Measured, that per-character build is the parse
+        // stage's dominant cost on the 1,000-row-statement shape (3.33 µs/row, ~1 KB/row allocated).
+        //
+        // The four rules reproduced here are pinned by InsertValuesParsingTests:
+        //   1. a quote toggles and is DROPPED, unless the previously *appended* character was a backslash — the
+        //      check is against the accumulated content, not the source text, so a dropped quote does not update it;
+        //   2. a comma splits only outside quotes;
+        //   3. every literal is Trimmed;
+        //   4. a literal whose content is empty is not emitted at all, so `(1,)` yields one value while `(1, )`
+        //      yields an empty one.
+        //
+        // A literal is slice-expressible exactly when at most one quote pair toggles inside it. An interior
+        // toggling quote — `'it''s'` → `its` — is *dropped* by rule 1, which no contiguous slice can express, so
+        // such a literal falls back to the character loop this method used to run for everything. That loop is
+        // kept below as the reference; it is the slow path, not a second interpretation of the rules.
+        int index = 0;
+        int length = valuesStr.Length;
+
+        while (index < length)
         {
-            if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
+            int literalStart = index;
+            int contentStart = index;
+            int contentEnd = -1;
+            int toggles = 0;
+            bool inQuotes = false;
+            char lastAppended = '\0';
+            bool terminatedByComma = false;
+
+            while (index < length)
             {
-                inQuotes = !inQuotes;
-                continue;  // Skip quote character itself
+                char c = valuesStr[index];
+
+                if (c == '\'' && lastAppended != '\\')
+                {
+                    toggles++;
+                    if (toggles == 1) { contentStart = index + 1; inQuotes = true; }
+                    else if (toggles == 2) { contentEnd = index; inQuotes = false; }
+
+                    index++;
+                    continue;   // a dropped quote must not become the last appended character
+                }
+
+                if (c == ',' && !inQuotes)
+                {
+                    terminatedByComma = true;
+                    break;
+                }
+
+                lastAppended = c;
+                index++;
             }
 
-            if (c == ',' && !inQuotes)
+            // Rule 4, corrected by the suites: an interior literal is emitted **unconditionally** at its comma —
+            // `('', 2)` stores an empty string — and only the *trailing* literal is suppressed when it has no text
+            // at all. So `(1,)` yields one value, `(1, )` yields an empty one, and `('')` as the last literal
+            // yields none while `('', 2)` yields an empty string.
+            // The flag is set where the comma is *seen*; deriving it afterwards from `index < length` was wrong,
+            // because a literal whose closing quote is the tuple's last character also ends with index == length.
+
+            if (toggles == 0)
             {
-                values.Add(currentValue.ToString().Trim());
-                currentValue.Clear();
+                var literal = valuesStr[literalStart..index];
+                if (literal.Length > 0 || terminatedByComma)
+                {
+                    values.Add(literal.Trim().ToString());
+                }
+            }
+            else if (toggles == 2 && contentEnd >= contentStart)
+            {
+                var literal = valuesStr[contentStart..contentEnd];
+                if (literal.Length > 0 || terminatedByComma)
+                {
+                    values.Add(literal.Trim().ToString());
+                }
             }
             else
             {
-                currentValue.Append(c);
+                var fallback = BuildLiteralByAppending(valuesStr[literalStart..index], terminatedByComma);
+                if (fallback is not null)
+                {
+                    values.Add(fallback);
+                }
+            }
+
+            if (index < length)
+            {
+                index++;    // step over the separating comma
             }
         }
 
-        if (currentValue.Length > 0)
-            values.Add(currentValue.ToString().Trim());
-
         return values;
+
+        // The reference implementation, used only for literals a slice cannot express: one with an interior
+        // toggling quote, or an unterminated one. It is byte-for-byte the behaviour this method had before the
+        // fast path existed, including emitting nothing when the accumulated content is empty.
+        static string? BuildLiteralByAppending(ReadOnlySpan<char> text, bool terminatedByComma)
+        {
+            var currentValue = new StringBuilder();
+            bool inQuotes = false;
+
+            foreach (char c in text)
+            {
+                if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (c == ',' && !inQuotes)
+                {
+                    break;
+                }
+
+                currentValue.Append(c);
+            }
+
+            // Emitted whenever the literal ended at a comma, even with nothing accumulated (an empty string);
+            // suppressed only for an empty trailing literal.
+            return currentValue.Length == 0 && !terminatedByComma ? null : currentValue.ToString().Trim();
+        }
     }
 
     /// <summary>
