@@ -162,9 +162,17 @@ public static class WritePathProfiler
         /// stamp. Both answer the same question, so they share one stage.
         /// </summary>
         Classify = 20,
+
+        /// <summary>
+        /// Tokenising a statement into its parts. Added (2026-09-16) alongside <see cref="Classify"/> to split the
+        /// remainder of the single-row-statement profile: <c>Classify</c> measured 0.03 µs/statement and is excluded,
+        /// so tokenisation (a whole-statement <c>Split</c> plus the query-cache lookup) and the word extraction inside
+        /// <c>ExecuteInternal</c> are the remaining candidates for the un-stamped parser time.
+        /// </summary>
+        StmtSplit = 21,
     }
 
-    private const int StageCount = 21;
+    private const int StageCount = 22;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -197,7 +205,7 @@ public static class WritePathProfiler
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
-        "hash-index", "stmt-validate", "dispatch", "table-batch", "classify",
+        "hash-index", "stmt-validate", "dispatch", "table-batch", "classify", "stmt-split",
     ];
 
     private static int _enabled;

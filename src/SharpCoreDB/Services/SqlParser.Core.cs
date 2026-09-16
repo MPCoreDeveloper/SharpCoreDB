@@ -132,6 +132,10 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         // the query cache and dispatch directly. The previous form allocated an empty
         // Dictionary<string, object?> per statement only to hand it to the binding layer, which skips
         // binding entirely when the parameter set is empty.
+        // §11 instrumentation (2026-09-16): tokenisation is the last un-stamped region on the single-row path.
+        // `classify` measured 0.03 µs/statement and is excluded, so this split (a whole-statement Split plus the
+        // query-cache lookup) and the word extraction in ExecuteInternal are the remaining candidates.
+        long splitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         string[] parts;
         if (this.queryCache != null)
         {
@@ -147,6 +151,9 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtSplit, splitStart);
 
         this.ExecuteInternal(sql, parts, wal);
     }

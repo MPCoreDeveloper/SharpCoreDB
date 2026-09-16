@@ -100,17 +100,21 @@ public partial class SqlParser
         if (HasActualParameters(sql))
             return true;
 
+        // §11 instrumentation (2026-09-16): the full-statement ToUpperInvariant below is one of the three uppercased
+        // copies per statement still left in the parser — the same defect Database.Core.cs already removed from
+        // IsSchemaChangingCommand, there for exactly this reason. Stamped before changing it.
+        long classifyStart = Diagnostics.WritePathProfiler.Stamp();
         var upper = sql.ToUpperInvariant();
 
         // Only route true complex constructs (subqueries, set ops). Plain JOINs handled by legacy path.
-        if (upper.Contains(" UNION ") || upper.Contains(" INTERSECT ") || upper.Contains(" EXCEPT "))
-            return true;
+        var needsAst = upper.Contains(" UNION ") || upper.Contains(" INTERSECT ") || upper.Contains(" EXCEPT ");
 
         // Derived table / subquery - must be (SELECT...), not a function call like UNIXEPOCH(...)
-        if (upper.Contains("(SELECT") || upper.Contains("( SELECT"))
-            return true;
+        if (!needsAst && (upper.Contains("(SELECT") || upper.Contains("( SELECT")))
+            needsAst = true;
 
-        return false;
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
+        return needsAst;
     }
 
     /// <summary>
@@ -127,9 +131,14 @@ public partial class SqlParser
         if (parts.Length == 0)
             throw new InvalidOperationException("SQL statement is empty");
 
+        // §11 instrumentation (2026-09-16): the two uppercased word copies the dispatch switch needs.
+        long classifyStart = Diagnostics.WritePathProfiler.Stamp();
+
         // ✅ C# 14: Use pattern matching with ordinal string comparison
         var firstWord = parts[0].ToUpperInvariant();
         var secondWord = parts.Length > 1 ? parts[1].ToUpperInvariant() : string.Empty;
+
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
 
         // Route to appropriate handler based on command type using modern switch
         // ✅ C# 14: Tuple pattern matching for SQL command dispatch

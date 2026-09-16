@@ -17,6 +17,21 @@ public class QueryCache
     private readonly int maxSize;
     private long hits = 0;
     private long misses = 0;
+
+    /// <summary>
+    /// Approximate live entry count, maintained with <see cref="Interlocked"/> so the capacity gate in
+    /// <see cref="GetOrAdd"/> does not have to read <c>cache.Count</c>.
+    /// </summary>
+    /// <remarks>
+    /// Measured (2026-09-16): <c>ConcurrentDictionary.Count</c> is not O(1) — it takes the dictionary's locks and
+    /// counts every entry. With the gate reading it on every miss, a write workload whose statements all differ (one
+    /// statement per row, distinct literals) made the gate alone cost 25.3 µs/statement: the profile attributed 25.3
+    /// of the 26.2 µs of unaccounted dispatch time to the tokenisation region, which is 96% of the whole hole, while
+    /// the actual tokenising <c>Split</c> is ~0.2 µs. This counter is only a gate; <see cref="GetStatistics"/>
+    /// still reports the dictionary's real count.
+    /// </remarks>
+    private int entryCount;
+
     private readonly ConcurrentDictionary<string, string> resultCache = new();
 
     /// <summary>
@@ -74,14 +89,19 @@ public class QueryCache
 
         Interlocked.Increment(ref this.misses);
 
-        // Check cache size before adding
-        if (this.cache.Count >= this.maxSize)
+        // Capacity gate. Reads the Interlocked counter, never cache.Count: Count is O(entries) under the
+        // dictionary's locks, and the old form paid that on every miss.
+        if (Volatile.Read(ref this.entryCount) >= this.maxSize)
         {
             this.EvictLeastUsed();
         }
 
         var query = factory(sql);
-        this.cache.TryAdd(sql, query);
+        if (this.cache.TryAdd(sql, query))
+        {
+            Interlocked.Increment(ref this.entryCount);
+        }
+
         return query;
     }
 
@@ -105,6 +125,7 @@ public class QueryCache
     {
         this.cache.Clear();
         this.resultCache.Clear();
+        Interlocked.Exchange(ref this.entryCount, 0);
         Interlocked.Exchange(ref this.hits, 0);
         Interlocked.Exchange(ref this.misses, 0);
     }
@@ -139,7 +160,10 @@ public class QueryCache
 
         foreach (var key in leastUsed)
         {
-            this.cache.TryRemove(key, out _);
+            if (this.cache.TryRemove(key, out _))
+            {
+                Interlocked.Decrement(ref this.entryCount);
+            }
         }
     }
 }
