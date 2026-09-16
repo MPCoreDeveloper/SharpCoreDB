@@ -1769,6 +1769,32 @@ disagree). Every figure is fair-shape — `WHERE id = @pk` for both engines, tun
       962 KB per statement — and `BuildRowFromValues` then converts each literal to a typed value. Fusing them,
       i.e. scanning the VALUES text straight into the typed row, removes the per-literal strings and the per-row
       list. This is the largest single lever on the INSERT path.
+      **Design settled; the implementation is deliberately left to its own verified unit (2026-09-16).** The
+      win is the *scan*, not the conversion: `ParseInsertValues` (`SqlParser.DML.cs:654`) appends **one character
+      at a time** to a `StringBuilder` for every literal, and `ParseMultiRowInsertValues` allocates a
+      `List<string>` per tuple — on the 1,000-row statement shape that per-character build is the parse stage's
+      dominant cost. **The obvious shortcut is wrong, and is recorded so it is not taken:**
+      `Database.Batch.cs:238` already has a span-based `ParseValueFast(ReadOnlySpan<char>, DataType)`, but it is
+      *not* equivalent to `SqlParser.ParseValue` — it returns `0` / `0.0` / `DateTime.MinValue` on a parse failure
+      instead of throwing the actionable overflow message (Known Issue 6), it does not handle
+      `Blob` / `Ulid` / `Guid` / `RowRef` / `Vector`, and it strips only `'…'` where the string version loops over
+      both `'…'` and `"…"`. Reusing it would be a behaviour regression, so a fused scanner must keep calling
+      `SqlParser.ParseValue`.
+      The rules a slice-based scan has to reproduce **exactly** — all four are observable, and none is obvious on
+      a fast read of the method:
+      1. a single quote toggles quote state and is **dropped**, unless the previously *appended* character was a
+         backslash — the escape check is against the builder's content, not against the source text, so a dropped
+         quote does not update it;
+      2. a comma splits only outside quotes;
+      3. every literal is `Trim()`ed;
+      4. a literal with **no text at all is not emitted**, so `(1,)` yields one value and — the surprising one —
+         `('')` yields none, which makes an empty string INSERT as `NULL`.
+      A slice-based scan is provably equivalent when every literal is either unquoted or is exactly one surrounding
+      quote pair with no interior quote; interior quotes are *dropped* by the current code, which no slice can
+      express, so those literals must fall back to the character loop. That is the shape the implementation should
+      take. It was **not** landed here on purpose: it is a rewrite of a value parser whose edge cases only the four
+      rules above and the SQL suites pin, and it deserves its own unit with those rules as tests rather than an
+      edit at the end of a long session. No INSERT number changed in this session as a result.
    2. **`encode` 3.28 (25 %)** — the serializer, whose arena round-trip (`arena-write` 2.26 + `arena-append` 1.79)
       is exactly what §4b's two-region record exists to remove.
    3. **`hash-index` 1.93 (14 %)** — per-row hash adds. The PK B-tree's own share of `index-maint` is only
