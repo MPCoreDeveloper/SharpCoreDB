@@ -1618,13 +1618,18 @@ protocol-compliant rather than trend-only:
 
 | operation | raw (plaintext opt-out) | default (encrypted) | raw/default |
 |---|---:|---:|---:|
-| INSERT | 90,664 | 81,247 | 1.12× |
-| READ | 78,401 | 70,867 | 1.11× |
-| UPDATE | 102,727 | 45,056 | **2.28×** |
-| DELETE | 216,402 | 68,142 | **3.18×** |
+| INSERT | 140,299 | 124,727 | 1.12× |
+| READ | 103,749 | 77,099 | 1.35× |
+| UPDATE | 120,674 | 61,388 | **1.97×** |
+| DELETE | 209,087 | 94,508 | **2.21×** |
 
-The split is the useful part: the encrypted default costs ~11–12 % on the append-and-scan operations and
-**2.3–3.2× on the mutating ones**. That is the physically expected shape — appends write ciphertext
+⚠️ Both columns are re-measured on the post-(a) build, because the raw arm runs `BuildConfig` and was therefore
+buffering appends when this table was first taken — the default arm is `FullSync` and was never affected. The arm
+is also intrinsically noisy: the default column's own reps ranged 75.1–108.6 K on INSERT in one run, so read the
+multiplier rather than the columns. Per §2 a ratio from one run is evidence about that run.
+
+The split is the useful part: the encrypted default costs ~12–35 % on the append-and-scan operations and
+**~2× on the mutating ones**. That is the physically expected shape — appends write ciphertext
 sequentially, whereas an update or delete reads a page, decrypts, modifies it and re-encrypts — and it means the
 encryption tax is a **mutation tax**, so it belongs in the §4/§6 accounting rather than in the INSERT budget. It
 also explains most of the `--pk-default` gap: that arm is Columnar *and* encrypted, and its UPDATE/DELETE
