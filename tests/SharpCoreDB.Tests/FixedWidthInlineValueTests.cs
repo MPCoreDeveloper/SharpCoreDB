@@ -168,11 +168,11 @@ public sealed class FixedWidthInlineValueTests : IDisposable
     }
 
     /// <summary>
-    /// Pins the shipped default and the escape hatch. Both layouts are first-class now: the capacity is persisted per
-    /// table on <b>both</b> paths — the multi-file metadata DTO and the single-file <c>TableMetadataEntry</c> (carved
-    /// out of its reserved bytes, so older files read 0 = the historical layout) — so a reopened database always
-    /// decodes with the capacity its records were written with, never with whatever this config now says. 16 is the
-    /// owner's default; 0 restores the historical layout byte for byte.
+    /// Pins the shipped default and the escape hatch. Both layouts are first-class: the capacity is persisted per table
+    /// on <b>both</b> paths — the multi-file metadata DTO and the single-file <c>TableMetadataEntry</c> (carved out of
+    /// its reserved bytes, so older files read 0 = the historical layout) — so a reopened database always decodes with
+    /// the capacity its records were written with, never with whatever this config now says. 16 is the owner's default;
+    /// 0 restores the historical layout byte for byte.
     /// </summary>
     [Fact]
     public void Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout()

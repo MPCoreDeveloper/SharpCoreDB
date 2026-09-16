@@ -182,6 +182,16 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    Re-recording is manual (`--write-baseline`) and reviewable, never automatic — a baseline recorded
    *during* a regression silently blesses it for every later run.
 
+   ⚠️ **The baseline is stale as of 2026-09-16 and could not be re-recorded that day.** It is dated 09/15, i.e. before
+   the query-cache gate fix, the 64 KiB append-buffer fix and the §4b inline-capacity default, so the nightly job is
+   comparing today's build against a pre-change baseline. Two `--write-baseline` attempts both returned
+   **INCONCLUSIVE (exit 2)** — rep spreads of **2.97×** and **2.77×** against the 2.5× limit, on a machine that had
+   been running benchmarks all session — and the gate **refused to write**, which is the correct behaviour: "a
+   baseline recorded *during* a regression silently blesses it for every later run" applies equally to a baseline
+   recorded on a loaded machine. **Open item: re-record on a quiet machine** (`--write-baseline`, then commit the
+   JSON). Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE reps
+   swing nearly 3× run to run, so that arm can only be judged on a rep ladder.
+
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage
 instrumentation accounts for ≥90% of wall time in a write loop.
 
@@ -1926,6 +1936,19 @@ DELETE regression**: 878,487 at capacity 0 against a 516,819–691,037 cluster n
 change made worse, and it is explicable (larger records, more bytes per delete) rather than mysterious. The DELETE
 column is also intrinsically noisy (SQLite's own reference swings ±12 % run to run), so any fix must be judged on a
 rep ladder rather than a single run, which is why three runs are tabulated above.
+
+⚠️ **The upgrade path for existing data is attempted and still open.** New tables get the inline layout on both storage
+paths, but an existing fixed-width table keeps its stored 0 and **nothing rewrites it** — `MigrateToFixedWidth` covers
+legacy→fixed-width, not fixed-width→inline, so "open and it upgrades" is only half true today. An attempt on
+2026-09-16 added `Table.MigrateToInlineCapacity(int)` (deliberately the same shape as `MigrateToFixedWidth`: read every
+row, drop the arena, re-serialize under the new capacity, swap the data file in atomically, rebuild the indexes) and
+fired it from the open path when a writable Columnar table's stored capacity was below the configured one, persisting
+the new value through the existing `migratedAnyTable` → `SaveMetadata()` route. **It was reverted because it failed its
+own test:** the in-session write and read at capacity 0 passed, but after reopening with capacity 16 the row was *not
+found* by `SELECT * FROM t WHERE id = 1`. Note that `ValueOf`-style assertions return `null` for both "no row" and
+"misdecoded value", so the first thing a retry must do is separate those two — assert the row count and the PK index
+*before* asserting the value, because the migration's index rebuild (or the order of the swap against it) is the prime
+suspect. The reverted tree is green and the attempt is in the revert commit.
 
 ---
 
