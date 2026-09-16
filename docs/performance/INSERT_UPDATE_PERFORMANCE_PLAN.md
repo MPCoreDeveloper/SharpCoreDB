@@ -1961,6 +1961,19 @@ Read with `SqlParser.DDL.cs:392-407`, which grants the fixed-width layout only t
 declared PRIMARY KEY**, and the default job's schema declares none — so it runs legacy variable-length records. The
 probe confirms it: `IsFixedWidthRecords=False` by default, `True` only when forced.
 
+The second half of the same experiment (harness switch `SHARPCOREDB_INLINE_BYTES=16`, the value that inlines this
+schema's short TEXT columns) tests whether the fixed-width penalty here is the overflow arena:
+
+| mode | resolved layout | INSERT | READ | UPDATE | DELETE |
+|---|---|---:|---:|---:|---:|
+| legacy (the default job) | False | 78,796 | 67,290 | **61,340** | 122,942 |
+| legacy + inline (control: inert on legacy) | False | 97,494 | 78,902 | 56,646 | 124,780 |
+| forced fixed-width + inline | True | 70,370 | 70,313 | **48,351** | 70,252 |
+
+It does not recover the penalty — and the control row is why the INSERT swing from 78,796 to 97,494 (same
+configuration, different run) must be read as this arm's noise, not as an effect: on this shape the only stable signal
+is that **forced fixed-width UPDATE sits ~20 % below legacy across two turns**, not that any single number is precise.
+
 Three conclusions, and the second is the important one:
 
 1. **The entry-point candidate is eliminated.** Both arms issue their updates through `ExecuteBatchSQL`; the
@@ -1970,12 +1983,21 @@ Three conclusions, and the second is the important one:
    default job's UPDATE **67,177 → 50,998** and its INSERT **87,586 → 66,583** (−24 % each), because with
    `FixedWidthInlineValueBytes = 0` every TEXT value takes an overflow-arena write. ⚠️ **So nobody may "fix" this by
    flipping the layout default** — on this shape that is a measured regression.
-3. **The fix is a package.** In-place patching must be extended to **non-PK-located** updates (locate through the
-   hash index, then patch the changed fixed-width slot, which is length-preserving for the same reason §6's gate was
-   safe), and it must land **together with §4b's inline capacity**, because that is what removes the arena tax the
-   fixed-width layout introduces here. This is the third appearance of the pairing lesson: with a PK predicate the
-   layout is worth 4.1×, with a hash predicate it is worth −1.3×, and neither number is achievable without the other
-   half of its pair.
+3. **The fix is not the layout and not §4b — both halves of that guess are measured dead on this shape.** Running the
+   forced fixed-width job with `FixedWidthInlineValueBytes = 16` (the value that inlines this schema's short TEXT
+   columns) left UPDATE at **48,351** against the legacy arm's **61,340**, so the inline capacity does *not* recover
+   the fixed-width penalty: the penalty is the wider record plus the re-serialize, not the arena traffic. §4b stays an
+   **INSERT-only lever**, as its own measurements already said. The remaining candidate is to **extend in-place
+   patching to non-PK-located updates on the layout that is actually faster here**: locate through the hash index,
+   then overwrite when the changed field's encoded width is unchanged — the storage primitive
+   `IStorageEngine.TryUpdateInPlaceSameLength` already exists, and the fixed-width path proves the safety argument.
+   On the legacy layout that is a length check on the re-serialized record rather than a fixed slot, i.e. a **new
+   capability rather than a gate to relax**, so **priority 1 is now: instrument the default job's UPDATE to find out
+   whether any in-place route is taken at all**, exactly as §6 did for PageBased.
+
+   ⚠️ **The pairing lesson survives, but with a different partner.** With a PK predicate the layout is worth 4.1×;
+   with a hash predicate, −1.3×. So the layout flip remains a *pair* with the predicate gate — it is just not a pair
+   with the inline capacity, which is what this run was built to test.
 
 **Until that package exists, the honest reading of the comparison table is per-shape**, and the plan should say so
 rather than let the headline 0.24× stand unqualified: the same engine is **1.29× ahead** of SQLite on PK-bound UPDATE

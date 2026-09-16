@@ -360,6 +360,22 @@ class Program
         Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_FIXEDWIDTH") == "1";
 
     /// <summary>
+    /// Overrides <see cref="DatabaseConfig.FixedWidthInlineValueBytes"/> from <c>SHARPCOREDB_INLINE_BYTES</c>.
+    /// Diagnostic only (plan §4b and §9 priority 1): a fixed-width record sends every variable-length value to the
+    /// overflow arena unless its slot can hold the value inline, which is why forcing the layout on the PK-less
+    /// document-CRUD job measured <em>worse</em> there. This switch quantifies that half of the package in isolation.
+    /// Default 0 keeps the historical layout byte for byte, and the property is inert on legacy variable-length
+    /// tables, so it only bites when <c>SHARPCOREDB_MAIN_FIXEDWIDTH</c> is also set.
+    /// </summary>
+    static int InlineBytesOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_INLINE_BYTES");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+            ? parsed
+            : 0;
+    }
+
+    /// <summary>
     /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
     /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
     /// write-through append per row — and now routes to the batched core when the table has no per-row-only
@@ -660,6 +676,9 @@ class Program
             // records; the fixed-width arm forces FixedWidthRecordLayout.
             AutoFixedWidthRecords = !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
+            // §4b inline capacity — diagnostic (SHARPCOREDB_INLINE_BYTES). Off (0) by default so every published
+            // number below keeps the historical layout.
+            FixedWidthInlineValueBytes = InlineBytesOverride(),
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,
             HighSpeedInsertMode = true,
