@@ -631,7 +631,17 @@ class Program
             EnableAdaptiveWalBatching = false,
             HighSpeedInsertMode = true,
             GroupCommitSize = 1000,
-            WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+            // §5 item 2 (A1) made `Async` govern the *table append* as well as the WAL, through
+            // Storage.BuffersAppends (enableBufferedAppends || asyncAppends). This tuned arm has always
+            // declared Async, so after A1 it also buffers the version append an UPDATE falls back to. That is
+            // the named suspect for the UPDATE ratio regression the 2026-09-16 §8a re-run flagged (fixed-width
+            // UPDATE was 0.6x ahead of SQLite on 2026-09-15 and 1.24x behind on 2026-09-16, while SQLite's own
+            // UPDATE rose 6%). Set SHARPCOREDB_WAL_DURABILITY=fullsync to run the identical arm with
+            // write-through appends, which isolates that one variable. Note SHARPCOREDB_BUFFERED_APPENDS is NOT
+            // the lever: it only *enables* EnableBufferedAppends, and the || above is already true here.
+            WalDurabilityMode = Environment.GetEnvironmentVariable("SHARPCOREDB_WAL_DURABILITY") == "fullsync"
+                ? SharpCoreDB.Services.DurabilityMode.FullSync
+                : SharpCoreDB.Services.DurabilityMode.Async,
             EnablePageCache = true,
             PageCacheCapacity = 10_000,
             UseMemoryMapping = true,

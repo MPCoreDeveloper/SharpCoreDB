@@ -1550,10 +1550,43 @@ is the **ratio** — which is what the §2 protocol says to use, and why every r
 **And the ratio flags something real: tuned FW UPDATE went from 0.6× (ahead of SQLite) to 1.24× (behind).**
 SQLite's UPDATE *rose* 6 % across the two runs while the FW arm *fell* 45 % (420,187 → 230,722), so this is not
 the reference drifting upward — it is a relative regression on the UPDATE arm, and it is now the first thing to
-bisect. The cheapest test needs one run and no code: the harness already has the A/B built in — re-run `--pk`
-with `SHARPCOREDB_BUFFERED_APPENDS=0`, which reverts the append path to writing through, and see whether the FW
-UPDATE column returns to ~420K. If it does, append buffering is the cause and the fix is to narrow
-`BuffersAppends` so it governs appends without also governing the version append an update falls back to.
+bisect. The lever is **not** `SHARPCOREDB_BUFFERED_APPENDS` — that switch only *enables*
+`EnableBufferedAppends` (`Program.cs:648`), and `BuffersAppends` is `enableBufferedAppends || asyncAppends`
+(`Storage.Core.cs:49`), so on an arm whose config already declares `Async` it changes nothing. The lever is the
+**durability mode the arm declares** (`Program.cs:634`), which A1 made decide the append behaviour, and it is now
+overridable: `SHARPCOREDB_WAL_DURABILITY=fullsync` runs the identical tuned arm with write-through appends, so
+one run isolates that single variable. If the FW UPDATE column returns to ~420K under `fullsync`, A1's
+`asyncAppends` term is the cause and the fix is to narrow `BuffersAppends` so it governs appends without also
+governing the version append an update falls back to.
+
+**Measured — it is A1, and the twist matters more than the UPDATE column.** Running the identical tuned `--pk`
+arm with `SHARPCOREDB_WAL_DURABILITY=fullsync` (write-through appends; everything else identical, same build,
+isolated, medians of 3) turns the table over:
+
+| `--pk` FW plaintext | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| `Async` (A1 term on — shipped) | 81,344 | 110,162 | 230,722 | 168,804 |
+| `FullSync` (write-through) | 99,575 | 113,800 | **356,135** | 216,909 |
+| SQLite (same run) | 173,369 | 98,112 | 271,025 | 410,030 |
+
+UPDATE recovers **+54 %** and goes from 1.24× *behind* SQLite to 0.8× *ahead* — the 2026-09-15 posture — and the
+reference differs by only 5 % between runs, so this is not drift. **But INSERT also recovers 22 % (81.3K → 99.6K)
+and DELETE 28 %.** Buffered table appends are therefore not merely neutral for mutations; on this workload they
+cost on *every* phase, the append included — the opposite of what A1 measured (9.4× on standalone single-row
+INSERT, 1,127.61 → 119.79 µs/row). The difference is what the two shapes do between appends: A1's standalone
+shape appends and measures throughput, whereas `--pk` interleaves reads (a PK probe per statement, then the
+READ/UPDATE/DELETE phases), so deferred bytes have to be made visible to the next read. **The mechanism to
+confirm is that each read forces a flush** — at which point the buffer has bought a deferred flush and lost the
+batching it was supposed to win.
+
+**Consequence for the product:** `WalDurabilityMode` is named for the WAL, and A1 made it silently govern
+table-file appends too; the evidence says that scope is too broad. The two honest options are **(a)** drop the
+`|| asyncAppends` term so `Async` means the WAL only and table appends are buffered solely on the explicit
+`EnableBufferedAppends` opt-in, or **(b)** keep it but scope it to genuinely bulk appends (where nothing reads
+in between) and not the single-record appends a mixed workload interleaves with reads. Which is right depends on
+whether `Async` is meant as a durability statement or a performance hint; the numbers are the same either way,
+and the 12 `AsyncDurabilityAppendTests` stay valid under both, because they assert only that the append
+*honours* the configured mode — which is true, and remains the defect A1 correctly fixed.
 
 **`--dual-mode` (same protocol, medians of 3, rep-interleaved)** — the encryption comparison, now
 protocol-compliant rather than trend-only:
