@@ -1433,6 +1433,44 @@ call, in both the VALUES and `INSERT … SELECT` branches — and it measured **
 allocation**, which refutes the per-statement-WAL-fsync hypothesis outright. `WalFlush` still has no writer:
 nothing on this path flushes the log per statement.
 
+**Closed (2026-09-16): the contiguous fast path was the one route that ignored the deferral, and honouring it is
+worth ~4×.** §7's verdict above said "the lever is to stop doing it per key" and §7a built it — but
+`TryBulkDeleteContiguousFixedWidth` (`Table.CRUD.cs:4277`), the path an **ascending** batch of PK-literal deletes
+takes on a fixed-width table (precisely the `--pk` harness's shape), still ran the eager work unconditionally: it
+always removed the PK entries and always decoded + removed every loaded hash index, while every other route went
+through `DeleteRecordsCore`'s deferred branch. A new `--pk-profile-delete` arm (`--pk-profile`'s twin) shows why
+that mattered — AppendOnly, fixed-width, 10,000 `DELETE FROM docs WHERE id = ?` in one `ExecuteBatchSQL`:
+
+| stage | calls | share | µs/delete |
+|---|---:|---:|---:|
+| `index-maint` | 7 | **42.6 %** | 3.63 |
+| `index-decode` | 6 | **26.9 %** | 2.29 |
+| `parse` | 10,000 | 17.3 % | 1.47 |
+| `commit` | 1 | 10.8 % | 0.92 |
+| `engine-write` | **1** | 1.7 % | 0.15 |
+| `row-locate` | **1** | 0.7 % | 0.06 |
+
+The one-call `row-locate` and `engine-write` settle the route question — the fast path *was* running for the whole
+batch, so the deficit was never routing (that hypothesis is refuted here so it is not retried). It was the 69.5 %
+of the batch spent on index work the product's own default declares optional — the same cost §7 had measured at
+58.6–81.9 % two releases earlier, on a route that had not been brought under the deferral. The fast path now
+mirrors `DeleteRecordsCore`: `MarkPrimaryKeyIndexStale` instead of `Index.DeleteBulk`, and the hash decode +
+removal skipped entirely — deliberately without a stale mark, for §7a's measured reason. Result on the fair PK
+shape, fixed-width plaintext, median of 3:
+
+| `--pk` FW plaintext | before | after | SQLite (same run) | gap |
+|---|---:|---:|---:|---|
+| DELETE | 213,727 (4.68 µs) | **859,387 (1.16 µs)** | 389,389 | 0.51× → **2.2× ahead** |
+| DELETE, legacy layout | 127,545 | 359,376 | 389,389 | 0.31× → 0.92× |
+| DELETE, at-rest | 207,695 | 413,840 | 389,389 | 0.51× → **1.06× ahead** |
+
+**The DELETE target of §8 falls in the process:** ≥150K is measured at 859K tuned, 414K at-rest and 359K legacy.
+All nine suites stay green (2,455 tests, 0 failed), and the newly-deferred route is pinned by
+`Deferred_ContiguousFixedWidthBatchDelete_DefersIndexMaintenance_AndKeepsTheContract`, which asserts both that the
+fast path engaged (`BulkContiguousDeleteBatches == 1`) and that the deferred contract survives on it — every
+pre-existing test in that file drives its batch **descending**, which the fast path rejects (it requires strictly
+ascending keys), so the route had never been covered.
+
 ### 7a. Deferred index maintenance — implemented and measured *(2026-09-15)*
 
 The lever §7 identified is now built, behind `DatabaseConfig.EnableDeferredDeleteIndexes` — and it is the

@@ -4347,65 +4347,87 @@ public partial class Table
             return false;
         }
 
-        // Remove PK entries (the keys are the WHERE literals) in one sorted bulk pass and then every
-        // loaded hash-index entry, decoding only the indexed columns from the raw fixed-width records
-        // (no full-row deserialization). Variable values resolve through the overflow arena, mirroring
-        // the fixed-width codec used by the generic path.
+        // Index maintenance — and under the product default it is SKIPPED here too, exactly as DeleteRecordsCore
+        // skips it. Measured on this path (2026-09-16, --pk DELETE arm, 10,000 statements, profiled pass):
+        // the PK bulk removal and the per-row hash decode+removal are 42.6 % and 26.9 % of the attributed time
+        // — 3.63 and 2.29 µs/delete — while `EnableDeferredDeleteIndexes` (default: on) declares both optional.
+        // The tombstone is the durable truth: a point lookup treats a tombstoned position as a null read,
+        // insert-time uniqueness verifies the stored position is live before rejecting a re-INSERT, and the PK
+        // B-tree is rebuilt from the data file (skipping tombstones) at the next committed-data boundary or on
+        // reopen. Skipping the hash removal is deliberately NOT paired with marking the hash index stale, for the
+        // reason DeleteRecordsCore gives: the next DELETE's EnsureAllRegisteredIndexesLoaded would otherwise
+        // rebuild it O(n) per delete.
+        bool deferIndexMaintenance = _config?.EnableDeferredDeleteIndexes == true;
+
         long deletePkIndexStart = WritePathProfiler.Stamp();
-        this.Index.DeleteBulk(keys);
+        if (deferIndexMaintenance)
+        {
+            MarkPrimaryKeyIndexStale(keys.Length);
+        }
+        else
+        {
+            this.Index.DeleteBulk(keys);
+        }
+
         WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, deletePkIndexStart);
 
-        var arena = GetOverflowArena();
-        foreach (var (colName, hashIdx) in this.hashIndexes)
+        if (!deferIndexMaintenance)
         {
-            int colIdx = -1;
-            for (int c = 0; c < this.Columns.Count; c++)
+            // Remove every loaded hash-index entry, decoding only the indexed columns from the raw fixed-width
+            // records (no full-row deserialization). Variable values resolve through the overflow arena,
+            // mirroring the fixed-width codec used by the generic path.
+            var arena = GetOverflowArena();
+            foreach (var (colName, hashIdx) in this.hashIndexes)
             {
-                if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
+                int colIdx = -1;
+                for (int c = 0; c < this.Columns.Count; c++)
                 {
-                    colIdx = c;
-                    break;
-                }
-            }
-
-            if (colIdx < 0)
-            {
-                continue;
-            }
-
-            var type = this.ColumnTypes[colIdx];
-            var decoded = new object?[count];
-
-            // §2 split: the DECODE (per row, per index — an arena read per variable value) is measured
-            // separately from the REMOVAL, because they have completely different fixes.
-            long decodeStart = WritePathProfiler.Stamp();
-            for (int i = 0; i < count; i++)
-            {
-                var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
-                var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
-                if (layout.IsVariable[colIdx])
-                {
-                    if (slot[0] == 0)
+                    if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
                     {
-                        decoded[i] = null;
-                        continue;
+                        colIdx = c;
+                        break;
                     }
-
-                    var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                    var block = arena.Read(blockOffset);
-                    decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
                 }
-                else
+
+                if (colIdx < 0)
                 {
-                    decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                    continue;
                 }
+
+                var type = this.ColumnTypes[colIdx];
+                var decoded = new object?[count];
+
+                // §2 split: the DECODE (per row, per index — an arena read per variable value) is measured
+                // separately from the REMOVAL, because they have completely different fixes.
+                long decodeStart = WritePathProfiler.Stamp();
+                for (int i = 0; i < count; i++)
+                {
+                    var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
+                    var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                    if (layout.IsVariable[colIdx])
+                    {
+                        if (slot[0] == 0)
+                        {
+                            decoded[i] = null;
+                            continue;
+                        }
+
+                        var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+                        var block = arena.Read(blockOffset);
+                        decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
+                    }
+                    else
+                    {
+                        decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                    }
+                }
+
+                WritePathProfiler.Add(WritePathProfiler.Stage.IndexDecode, decodeStart);
+
+                long removeStart = WritePathProfiler.Stamp();
+                hashIdx.RemoveBatchKeys(decoded, positions);
+                WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, removeStart);
             }
-
-            WritePathProfiler.Add(WritePathProfiler.Stage.IndexDecode, decodeStart);
-
-            long removeStart = WritePathProfiler.Stamp();
-            hashIdx.RemoveBatchKeys(decoded, positions);
-            WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, removeStart);
         }
 
         if (this.storage is { IsInTransaction: true })

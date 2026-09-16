@@ -54,6 +54,21 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         EnableDeferredDeleteIndexes = true,
     };
 
+    /// <summary>
+    /// The same deferral on a <b>fixed-width</b> table, which is what makes the contiguous bulk-delete fast path
+    /// eligible at all (`TryBulkDeleteContiguousFixedWidth` requires `_fixedWidthRecords` and
+    /// `StorageMode == Columnar`). Used by the contiguous-route test below; the other tests in this file use
+    /// <see cref="Deferred"/> and therefore exercise the generic route.
+    /// </summary>
+    private static DatabaseConfig DeferredFixedWidth(bool atRest) => new()
+    {
+        NoEncryptMode = !atRest,
+        EnableAtRestRecordEncryption = atRest,
+        EnableDeferredDeleteIndexes = true,
+        FixedWidthRecordLayout = true,
+        AutoFixedWidthRecords = false,
+    };
+
     private IDatabase Open(string dir, DatabaseConfig config) =>
         _factory.Create(dir, "pw", isReadOnly: false, config: config);
 
@@ -304,5 +319,52 @@ public sealed class DeferredDeleteIndexTests : IDisposable
         Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 50"));
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 52"));
         (db as IDisposable)?.Dispose();
+    }
+
+    /// <summary>
+    /// The contiguous fixed-width DELETE fast path is reached only by an <b>ascending</b> batch of PK-literal
+    /// deletes on a fixed-width table — the shape the `--pk` harness uses — and until 2026-09-16 it was the one
+    /// delete route that ignored <see cref="DatabaseConfig.EnableDeferredDeleteIndexes"/>: it removed the PK
+    /// entries and decoded + removed every loaded hash index unconditionally, which is 42.6 % + 26.9 % of that
+    /// batch's attributed time (plan §7). It now defers like every other route. This test pins both facts — the
+    /// fast path engaged, and the deferred contract intact on it: rows gone to readers, the deleted key free to
+    /// re-INSERT (liveness-aware uniqueness, with the stale entry still in the B-tree), and nothing resurrecting
+    /// on reopen. Every other test in this file drives its batch <i>descending</i>, which the fast path rejects
+    /// (it requires strictly ascending keys), so the route was previously uncovered.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Deferred_ContiguousFixedWidthBatchDelete_DefersIndexMaintenance_AndKeepsTheContract(bool atRest)
+    {
+        var dir = NewDir(atRest ? "contiguous_atrest" : "contiguous_raw");
+        await using (var db = Open(dir, DeferredFixedWidth(atRest)))
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+            db.ExecuteBatchSQL(Inserts(1, 40));
+            db.Flush();
+
+            // Ascending PK-literal deletes in one batch: the contiguous fast path's exact shape.
+            db.ExecuteBatchSQL(Deletes(Enumerable.Range(11, 10)));
+
+            Assert.True(db.TryGetTable("t", out var table));
+            Assert.Equal(1, ((SharpCoreDB.DataStructures.Table)table).BulkContiguousDeleteBatches);
+            Assert.Equal(30L, CountOf(db));
+            Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 15"));
+
+            // The deferred contract on this route: uniqueness is liveness-aware, so a deleted PK is free again
+            // while its stale B-tree entry is still present.
+            db.ExecuteSQL("INSERT INTO t VALUES (15, 'reinserted')");
+            Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE id = 15"));
+
+            // A later statement still resolves the other tombstoned keys through those stale entries.
+            Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 12"));
+            db.Flush();
+        }
+
+        await using var reopened = Open(dir, DeferredFixedWidth(atRest));
+        Assert.Equal(31L, CountOf(reopened));
+        Assert.Single(reopened.ExecuteQuery("SELECT * FROM t WHERE id = 15"));
+        Assert.Empty(reopened.ExecuteQuery("SELECT * FROM t WHERE id = 12"));
     }
 }

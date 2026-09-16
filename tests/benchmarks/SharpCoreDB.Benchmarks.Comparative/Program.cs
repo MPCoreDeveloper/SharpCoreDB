@@ -88,6 +88,14 @@ class Program
             return;
         }
 
+        // Optional: --pk-profile-delete → the same treatment for the DELETE arm (plan §9 priority 1), because
+        // the DELETE column is the one this session re-scoped the append-only work onto.
+        if (args.Any(a => a.Equals("--pk-profile-delete", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkDeleteProfile(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk → fair PK-based comparison: SharpCoreDB on a table with an
         // `id INTEGER PRIMARY KEY` (mirroring the SQLite harness schema) with UPDATE/DELETE by PK,
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
@@ -1186,7 +1194,8 @@ class Program
         string? defaultVariant = null,
         bool noEncrypt = true,
         bool? atRestRecords = null,
-        bool profileUpdateArm = false)
+        bool profileUpdateArm = false,
+        bool profileDeleteArm = false)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -1301,6 +1310,18 @@ class Program
             }
 
             // DELETE by PK
+            // --pk-profile-delete turns the profiler on for THIS arm only, exactly as --pk-profile does for
+            // UPDATE, and Reset clears the INSERT/READ/UPDATE stamps so the report describes the DELETE batch
+            // and nothing else. Plan §9 priority 1 is this column (0.51× SQLite), and the call counts are the
+            // question: the contiguous fixed-width delete fast path buffers its tombstones in ONE stamped
+            // region, so a single `engine-write` call means the fast path ran for the whole batch while 10,000
+            // means it fell through to the per-statement generic route.
+            if (profileDeleteArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var deleteStmts = new List<string>(DeleteCount);
             for (int i = 1; i <= DeleteCount; i++)
@@ -1314,6 +1335,15 @@ class Program
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+
+            if (profileDeleteArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled DELETE pass: {result.DeleteTime:F2}s "
+                    + $"({result.DeleteOpsPerSec:N0} ops/sec, {result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
         }
         finally
         {
@@ -1384,6 +1414,28 @@ class Program
         Console.WriteLine();
         Console.WriteLine($"  UPDATE: {result.UpdateOpsPerSec:N0} ops/sec ({result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
         Console.WriteLine("  Run the same command with --engine=<the other engine> to read the two reports side by side.");
+    }
+
+    /// <summary>
+    /// Plan §9 priority 1: prints the write-path profiler's stage report for the exact DELETE arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same 10,000
+    /// <c>DELETE FROM docs WHERE id = ?</c> statements in one <c>ExecuteBatchSQL</c> transaction. The call
+    /// counts carry the answer: <c>TryBulkDeleteContiguousFixedWidth</c> buffers its tombstones in a single
+    /// stamped region, so <b>one</b> <c>engine-write</c> call means the contiguous fast path ran once for the
+    /// whole batch, while <b>10,000</b> means the batch fell through to the per-statement generic route.
+    /// </summary>
+    static void RunPkDeleteProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ DELETE-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {DeleteCount:N0} DELETE FROM docs WHERE id = ? statements in ONE ExecuteBatchSQL transaction, over {InsertCount:N0} rows");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileDeleteArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  DELETE: {result.DeleteOpsPerSec:N0} ops/sec ({result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+        Console.WriteLine("  One engine-write call = the contiguous fast path ran once for the batch; 10,000 = per-statement fallback.");
     }
 
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
